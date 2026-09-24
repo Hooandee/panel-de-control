@@ -47,6 +47,7 @@ public static class Program
             var tdpServer = new TdpControlPipeServer(
                 TdpControlPipeServer.PackagedPipeName,
                 new ServiceTdpClient(),
+                new PackagedWidgetClientValidator(),
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();

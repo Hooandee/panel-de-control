@@ -385,4 +385,6 @@
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>Não foi possível ler a taxa de atualização</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Mudar a tela para {0} Hz</value></data>
   <data name="PerformancePending" xml:space="preserve"><value>Limite de FPS e escala: em breve no Windows</value></data>
+  <data name="FanOne" xml:space="preserve"><value>Ventoinha 1</value></data>
+  <data name="FanTwo" xml:space="preserve"><value>Ventoinha 2</value></data>
 </root>

@@ -429,4 +429,6 @@
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>No se pudo leer la frecuencia de la pantalla</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Cambiar la pantalla a {0} Hz</value></data>
   <data name="PerformancePending" xml:space="preserve"><value>Límite de FPS y escalado: pendiente en Windows</value></data>
+  <data name="FanOne" xml:space="preserve"><value>Ventilador 1</value></data>
+  <data name="FanTwo" xml:space="preserve"><value>Ventilador 2</value></data>
 </root>

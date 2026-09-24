@@ -60,7 +60,7 @@ public static class SectionCatalog
         {
             new BlockDefinition("tdp", "BlockTdp", "", implementedOnWindows: true),
             new BlockDefinition("energy", "BlockEnergy", "", implementedOnWindows: true),
-            new BlockDefinition("steamPerformance", "BlockSteamPerformance", ""),
+            new BlockDefinition("steamPerformance", "BlockSteamPerformance", "", implementedOnWindows: true),
             new BlockDefinition("autoTdp", "BlockAutoTdp", ""),
         }),
         new SectionDefinition("system", "System", 0xFF647084, "", new[]
@@ -82,7 +82,7 @@ public static class SectionCatalog
         }),
         new SectionDefinition("fans", "Fans", 0xFF39796E, "", new[]
         {
-            new BlockDefinition("fanRpm", "BlockFanRpm", ""),
+            new BlockDefinition("fanRpm", "BlockFanRpm", "", implementedOnWindows: true),
             new BlockDefinition("temps", "BlockTemps", "", implementedOnWindows: true),
             new BlockDefinition("curve", "BlockFanCurve", ""),
         }),

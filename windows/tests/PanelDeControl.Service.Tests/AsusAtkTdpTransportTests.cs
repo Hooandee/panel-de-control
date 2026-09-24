@@ -46,6 +46,7 @@ public sealed class AsusAtkTdpTransportTests
     }
 
     [Theory]
+    [InlineData(0x00010000u)]
     [InlineData(0x00000019u)]
     [InlineData(0x00030019u)]
     [InlineData(0xFFFFFFFFu)]

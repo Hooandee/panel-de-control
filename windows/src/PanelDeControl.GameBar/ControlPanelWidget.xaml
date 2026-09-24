@@ -445,6 +445,33 @@
                 </StackPanel>
             </Border>
 
+            <Border x:Name="FanCard" Tag="fans.fanRpm" Style="{StaticResource PdcCardStyle}">
+                <StackPanel>
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="16" Glyph="&#xE9CA;" Foreground="{StaticResource PdcAccentBrush}" />
+                        <TextBlock x:Name="FanTitle" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
+                    </Grid>
+                    <Grid Margin="0,14,0,0" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="FanOneLabel" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
+                            <TextBlock x:Name="FanOneValue" Margin="0,4,0,0" Text="—" FontSize="32" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        </StackPanel>
+                        <StackPanel x:Name="FanTwoPanel" Grid.Column="1">
+                            <TextBlock x:Name="FanTwoLabel" Style="{StaticResource PdcCaptionStyle}" FontSize="13" />
+                            <TextBlock x:Name="FanTwoValue" Margin="0,4,0,0" Text="—" FontSize="32" FontWeight="Light" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <Grid x:Name="TempsBlock" Tag="fans.temps" Margin="0,0,0,12" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

@@ -385,4 +385,6 @@
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>Impossibile leggere la frequenza dello schermo</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Imposta lo schermo a {0} Hz</value></data>
   <data name="PerformancePending" xml:space="preserve"><value>Limite FPS e scalatura: in arrivo su Windows</value></data>
+  <data name="FanOne" xml:space="preserve"><value>Ventola 1</value></data>
+  <data name="FanTwo" xml:space="preserve"><value>Ventola 2</value></data>
 </root>

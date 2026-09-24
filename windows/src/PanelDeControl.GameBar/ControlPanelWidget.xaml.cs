@@ -79,8 +79,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private bool tdpConflict;
     private int tdpMinimumWatts;
     private int tdpMaximumWatts;
-    private int selectedTdpWatts;
-    private int? confirmedTdpWatts;
+    private readonly TdpPresentationState tdpPresentation = new();
     private CancellationTokenSource? tdpDebounce;
     private static readonly TimeSpan TdpDebounceDelay = TimeSpan.FromMilliseconds(350);
     private bool? confirmedExperimentalTdpEnabled;
@@ -574,6 +573,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
         SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
         SystemBatteryDetail.Text = PowerDrawDetail.Text;
+        ApplyFan(FanOneValue, snapshot, "fan.cpu.rpm");
+        ApplyFan(FanTwoValue, snapshot, "fan.gpu.rpm");
+        FanTwoPanel.Visibility = FindReading(snapshot, "fan.gpu.rpm") is null ? Visibility.Collapsed : Visibility.Visible;
         ApplyTemperature(CpuTemperatureValue, snapshot, "cpu.temperature");
         CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
         ApplyTemperature(GpuTemperatureValue, snapshot, "gpu.temperature");
@@ -759,7 +761,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         var watts = (int)Math.Round(args.NewValue);
-        selectedTdpWatts = watts;
+        tdpPresentation.Select(watts, tdpMinimumWatts, tdpMaximumWatts);
         UpdatePowerArc();
         tdpDebounce?.Cancel();
         var debounce = tdpDebounce = new CancellationTokenSource();
@@ -797,10 +799,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
-        selectedTdpWatts = Math.Min(
-            Math.Max(requestedWatts, tdpMinimumWatts),
-            tdpMaximumWatts);
-        SetTdpSliderValue(selectedTdpWatts);
+        tdpPresentation.Select(requestedWatts, tdpMinimumWatts, tdpMaximumWatts);
+        SetTdpSliderValue(tdpPresentation.SelectedWatts);
         UpdatePowerArc();
         PowerStatus.Text = Localized("StatusApplying");
         var generation = ++tdpGeneration;
@@ -808,7 +808,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         UpdateTdpControlAvailability();
         try
         {
-            var response = await tdpClient.SetAsync(selectedTdpWatts);
+            var response = await tdpClient.SetAsync(tdpPresentation.SelectedWatts);
             if (!disposed && generation == tdpGeneration)
             {
                 ApplyTdpResponse(response);
@@ -849,31 +849,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             applyingTdpReadback = false;
         }
 
-        confirmedTdpWatts = response.Status switch
-        {
-            ControlStatus.Applied => response.AppliedWatts,
-            ControlStatus.Available when tdpReady && !tdpConflict => confirmedTdpWatts,
-            _ => null,
-        };
+        tdpPresentation.Observe(response);
 
         if (tdpReady)
         {
             tdpMinimumWatts = response.MinimumWatts!.Value;
             tdpMaximumWatts = response.MaximumWatts!.Value;
-            selectedTdpWatts = Math.Min(
-                Math.Max(
-                    response.AppliedWatts ??
-                    response.TargetWatts ??
-                    response.DefaultWatts ??
-                    selectedTdpWatts,
-                    tdpMinimumWatts),
-                tdpMaximumWatts);
             applyingTdpReadback = true;
             try
             {
                 TdpSlider.Minimum = tdpMinimumWatts;
                 TdpSlider.Maximum = tdpMaximumWatts;
-                TdpSlider.Value = selectedTdpWatts;
+                TdpSlider.Value = tdpPresentation.SelectedWatts;
             }
             finally
             {
@@ -939,7 +926,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void UpdatePowerArc()
     {
-        PowerValue.Text = confirmedTdpWatts is int watts ? $"{watts} W" : "—";
+        PowerValue.Text = tdpPresentation.AppliedWatts is int watts ? $"{watts} W" : "—";
         PowerLimits.Text = string.Format(
             Localized("PowerLimitsFormat"),
             tdpMinimumWatts,
@@ -1180,6 +1167,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PerformanceTitle.Text = Localized("BlockSteamPerformanceTitle");
         RefreshRateLabel.Text = Localized("RefreshRateLabel");
         PerformancePending.Text = Localized("PerformancePending");
+        FanTitle.Text = Localized("BlockFanRpmTitle");
+        FanOneLabel.Text = Localized("FanOne");
+        FanTwoLabel.Text = Localized("FanTwo");
         var library = BlockLibrary.Children
             .OfType<FrameworkElement>()
             .Where(element => element.Tag is string)
@@ -1378,7 +1368,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (tdpReady)
         {
             mode = HeroMode.Tdp;
-            value = confirmedTdpWatts ?? selectedTdpWatts;
+            value = tdpPresentation.AppliedWatts ?? tdpPresentation.SelectedWatts;
         }
         else if (lastDrawOnAc && lastBatteryLevel is double level)
         {
@@ -1489,9 +1479,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = PowerArc.Fraction(watts, tdpMinimumWatts, scaleMaximum);
         var color = ToColor(PowerArc.ColorFor(fraction));
         PowerDrawValue.Text = watts.ToString("0");
-        PowerArcFill.Data = CreatePowerArcGeometry(confirmedTdpWatts.HasValue ? fraction : 0);
+        PowerArcFill.Data = CreatePowerArcGeometry(tdpPresentation.AppliedWatts.HasValue ? fraction : 0);
         PowerArcFill.Stroke = new SolidColorBrush(color);
-        if (confirmedTdpWatts is null)
+        if (tdpPresentation.AppliedWatts is null)
         {
             PowerZoneLabel.Text = Localized("TdpUnconfirmed");
             PowerZoneLabel.Foreground = ResourceBrush("PdcTextMutedBrush");
@@ -1524,16 +1514,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ChargerBand.Data = scaleMaximum > tdpMaximumWatts
             ? CreateArcSegmentGeometry(FractionOf(tdpMaximumWatts), 1)
             : null;
-        BoostArc.Data = confirmedTdpWatts is int applied && lastDrawWatts is double draw && draw > applied + 0.5
+        BoostArc.Data = tdpPresentation.AppliedWatts is int applied && lastDrawWatts is double draw && draw > applied + 0.5
             ? CreateArcSegmentGeometry(FractionOf(applied), FractionOf(Math.Min(draw, scaleMaximum)))
             : null;
-        if (confirmedTdpWatts == selectedTdpWatts)
+        if (tdpPresentation.AppliedWatts == tdpPresentation.SelectedWatts)
         {
             TdpMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
-        var point = PowerArc.PointAt(FractionOf(selectedTdpWatts), ArcCenterX, ArcCenterY, ArcRadius);
+        var point = PowerArc.PointAt(FractionOf(tdpPresentation.SelectedWatts), ArcCenterX, ArcCenterY, ArcRadius);
         Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
         Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
         TdpMarker.Visibility = Visibility.Visible;
@@ -1617,6 +1607,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         });
         geometry.Figures.Add(figure);
         return geometry;
+    }
+
+    private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)
+    {
+        var reading = FindReading(snapshot, id);
+        var available = reading?.Status == ReadingStatus.Available && reading.Value.HasValue;
+        target.Text = Format(snapshot, id, "0", "RPM");
+        target.FontSize = available ? 32 : 15;
+        target.Foreground = ResourceBrush(available ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
     }
 
     private static void ApplyTemperature(TextBlock target, HardwareSnapshot snapshot, string id)
