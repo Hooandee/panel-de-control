@@ -176,6 +176,24 @@ public sealed class AsusSensorSnapshotProviderTests
     }
 
     [Fact]
+    public void SlowLhmWithinItsOwnBudgetKeepsLoadsBesideAsusReadings()
+    {
+        var local = new CallbackSnapshot(() =>
+        {
+            Thread.Sleep(80);
+            return new HardwareSnapshot(Now, "ROG Xbox Ally X", new[] {
+                TelemetryReading.Available("cpu.load", "CPU", 42, "%", "lhm") });
+        });
+        var provider = new AsusSensorSnapshotProvider(local, new Identity(), new Transport(), new Clock(),
+            TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(2));
+
+        var snapshot = provider.Capture();
+
+        Assert.Equal(42, Reading(snapshot, "cpu.load").Value);
+        Assert.Equal(3800, Reading(snapshot, "fan.cpu.rpm").Value);
+    }
+
+    [Fact]
     public void SlowBaselineOnOtherMachineRetainsItsOriginalBehavior()
     {
         var local = new CallbackSnapshot(() =>
@@ -185,7 +203,7 @@ public sealed class AsusSensorSnapshotProviderTests
                 TelemetryReading.Available("cpu.load", "CPU", 42, "%", "lhm") });
         });
         var provider = new AsusSensorSnapshotProvider(local, new Identity("ROG Ally RC71L_RC71L", "RC71L"),
-            new Transport(), new Clock(), TimeSpan.FromMilliseconds(20));
+            new Transport(), new Clock(), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(20));
         Assert.Equal(42, Reading(provider.Capture(), "cpu.load").Value);
     }
 
@@ -225,7 +243,7 @@ public sealed class AsusSensorSnapshotProviderTests
     }
 
     private static AsusSensorSnapshotProvider Create(IHardwareSnapshotProvider local, IAsusSensorTransport transport,
-        IDeviceIdentityReader? identity = null) => new(local, identity ?? new Identity(), transport, new Clock(), TimeSpan.FromMilliseconds(150));
+        IDeviceIdentityReader? identity = null) => new(local, identity ?? new Identity(), transport, new Clock(), TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(150));
     private static TelemetryReading Reading(HardwareSnapshot s, string id) => Assert.Single(s.Readings, r => r.Id == id);
     private static TelemetryReading Missing(string id, string error) => TelemetryReading.Unavailable(id, id, "°C", ReadingStatus.Unavailable, error);
     private sealed class Clock : IClock { public DateTimeOffset UtcNow => Now; }
