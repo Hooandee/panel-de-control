@@ -66,7 +66,7 @@ public sealed class TdpControlServiceTests
     }
 
     [Fact]
-    public void ArmouryCrateBlocksBeforePowerOrFirmwareAccess()
+    public void ArmouryCrateBlocksFirmwareAccessAndReportsTheFreshPowerSource()
     {
         var power = new FakePowerSource(AcPowerState.External);
         var transport = new FakeTransport();
@@ -79,7 +79,7 @@ public sealed class TdpControlServiceTests
 
         Assert.Equal(ControlStatus.Rejected, response.Status);
         Assert.Equal("armoury_crate_running", response.ErrorCode);
-        Assert.Equal(readsBeforeSet, power.ReadCount);
+        Assert.Equal(readsBeforeSet + 1, power.ReadCount);
         Assert.Empty(transport.Writes);
     }
 
@@ -116,6 +116,95 @@ public sealed class TdpControlServiceTests
         Assert.Equal("firmware_rejected", response.ErrorCode);
         Assert.Null(response.AppliedWatts);
         Assert.Single(transport.Writes);
+        Assert.Empty(transport.Reads);
+    }
+
+    [Theory]
+    [InlineData(AsusTdpRegister.Sppt, 2)]
+    [InlineData(AsusTdpRegister.Fppt, 3)]
+    public void RejectionAfterAnAcceptedWriteReportsPartialFirmwareChanges(
+        AsusTdpRegister rejectedRegister,
+        int attemptedWrites)
+    {
+        var transport = new FakeTransport();
+        transport.WriteResults[rejectedRegister] = AsusTdpWriteResult.Rejected;
+        var control = Create(transport: transport);
+        control.EnableExperimental();
+
+        var response = control.Set(25);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.Equal("firmware_partially_applied", response.ErrorCode);
+        Assert.Equal(25, response.RequestedWatts);
+        Assert.Equal(25, response.TargetWatts);
+        Assert.Null(response.AppliedWatts);
+        Assert.Equal(ExpectedRegisters.Take(attemptedWrites),
+            transport.Writes.Select(write => write.Register));
+        Assert.Empty(transport.Reads);
+    }
+
+    [Theory]
+    [InlineData(false, AcPowerState.Battery, 25, false)]
+    [InlineData(false, AcPowerState.External, 35, true)]
+    [InlineData(false, AcPowerState.Unknown, 25, null)]
+    [InlineData(true, AcPowerState.Battery, 25, false)]
+    [InlineData(true, AcPowerState.External, 35, true)]
+    [InlineData(true, AcPowerState.Unknown, 25, null)]
+    public void EarlyRejectionReportsTheFreshPowerCeiling(
+        bool experimentalEnabled,
+        AcPowerState powerState,
+        int maximumWatts,
+        bool? externalPower)
+    {
+        var power = new FakePowerSource(AcPowerState.External);
+        var transport = new FakeTransport();
+        var control = Create(power: power,
+            rival: new FakeArmouryCrateGuard { Running = true },
+            transport: transport);
+        if (experimentalEnabled)
+        {
+            control.EnableExperimental();
+        }
+        power.State = powerState;
+
+        var response = control.Set(40);
+
+        Assert.Equal(ControlStatus.Rejected, response.Status);
+        Assert.Equal(experimentalEnabled
+            ? "armoury_crate_running" : "experimental_tdp_disabled", response.ErrorCode);
+        Assert.Equal(7, response.MinimumWatts);
+        Assert.Equal(maximumWatts, response.MaximumWatts);
+        Assert.Equal(externalPower, response.ExternalPower);
+        Assert.Null(response.TargetWatts);
+        Assert.Null(response.AppliedWatts);
+        Assert.Empty(transport.Writes);
+        Assert.Empty(transport.Reads);
+    }
+
+    [Fact]
+    public void AvailabilityNeverPresentsTheCatalogDefaultAsObservedWatts()
+    {
+        var transport = new FakeTransport();
+        foreach (var register in ExpectedRegisters)
+        {
+            transport.ReadResults[register] = AsusTdpReadResult.Unavailable;
+        }
+        var control = Create(transport: transport);
+
+        var responses = new[]
+        {
+            control.Get(),
+            control.EnableExperimental(),
+            control.DisableExperimental(),
+        };
+
+        foreach (var response in responses)
+        {
+            Assert.Equal(ControlStatus.Available, response.Status);
+            Assert.Null(response.AppliedWatts);
+            Assert.Null(response.DefaultWatts);
+        }
+        Assert.Empty(transport.Writes);
         Assert.Empty(transport.Reads);
     }
 

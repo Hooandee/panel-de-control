@@ -12,6 +12,7 @@ public sealed class TdpControlPipeServer
 
     private readonly string pipeName;
     private readonly ITdpControlProxy proxy;
+    private readonly IPipeClientValidator clientValidator;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly TimeSpan operationTimeout;
     private Task<TdpControlResponse>? activeOperation;
@@ -19,11 +20,13 @@ public sealed class TdpControlPipeServer
     public TdpControlPipeServer(
         string pipeName,
         ITdpControlProxy proxy,
+        IPipeClientValidator clientValidator,
         Func<string, NamedPipeServerStream> pipeFactory,
         TimeSpan? operationTimeout = null)
     {
         this.pipeName = pipeName;
         this.proxy = proxy;
+        this.clientValidator = clientValidator;
         this.pipeFactory = pipeFactory;
         this.operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(7);
         if (this.operationTimeout <= TimeSpan.Zero)
@@ -54,6 +57,11 @@ public sealed class TdpControlPipeServer
             .ConfigureAwait(false);
         using var clientRelease = PipeClientRelease.For(server);
         await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+        if (!clientValidator.IsTrusted(server))
+        {
+            return;
+        }
+
         using var reader = new StreamReader(
             server,
             new UTF8Encoding(false),
