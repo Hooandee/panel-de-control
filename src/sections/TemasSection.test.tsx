@@ -35,6 +35,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     }],
     operation: null,
     recoveryBlocked: false,
+    recoveryKeptCurrent: false,
     error: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}), refreshPublication: vi.fn(async () => {}),
@@ -84,6 +85,13 @@ describe("TemasSection", () => {
     expect(screen.getByText("themes.catalog.unavailable")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.remote.retry" }));
     expect(refreshPublication).toHaveBeenCalledOnce();
+  });
+
+  it("shows a non-blocking notice when the previous theme state was kept as current", () => {
+    mocks.controller = controller({ recoveryKeptCurrent: true });
+    render(<TemasSection />);
+    expect(screen.getByText("themes.recovery.keptCurrent").getAttribute("role")).toBe("status");
+    expect(screen.queryByText("themes.recovery.blocked")).toBeNull();
   });
 
   it("keeps cached cards visible with an offline banner", () => {

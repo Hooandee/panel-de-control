@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## [0.55.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.4...panel-de-control-v0.55.0) (2026-09-23)
+
+### Español
+
+* **Potencia en Steam Deck:** En el modo Personalizado del impulso, SlowPPT y FastPPT pueden subir hasta 29 y 30 W. Si tu Deck no tiene overclock, verás un aviso al pasar de 15 W, porque para aprovecharlo hace falta una BIOS modificada. El TDP, los presets y el Auto-TDP siguen limitados al máximo de tu Deck.
+* **Temas:** Si la instalación o la activación de un tema se interrumpe, los temas ya no se quedan bloqueados en la comprobación. Panel de Control aparta lo que quedó a medias y puedes volver a instalar o cambiar de tema. Si no puede recuperar el estado anterior de los temas, mantiene el actual y te lo indica.
+
+### English
+
+* **Power on Steam Deck:** In the custom boost mode, SlowPPT and FastPPT can now go up to 29 and 30 W. If your Deck is not overclocked, a notice appears above 15 W, since a modified BIOS is needed to make use of it. TDP, presets and Auto-TDP stay capped at your Deck's maximum.
+* **Themes:** If a theme install or activation is interrupted, themes no longer stay blocked on the check. Panel de Control sets aside what was left half done and you can install or switch themes again. If it cannot restore the previous theme state, it keeps the current one and lets you know.
+
+### Italiano
+
+* **Potenza su Steam Deck:** Nella modalità personalizzata del boost, SlowPPT e FastPPT possono ora arrivare a 29 e 30 W. Se la tua Deck non è in overclock, sopra i 15 W compare un avviso, perché per sfruttarlo serve un BIOS modificato. TDP, preset e Auto-TDP restano limitati al massimo della tua Deck.
+* **Temi:** Se l'installazione o l'attivazione di un tema si interrompe, i temi non restano più bloccati nella verifica. Panel de Control mette da parte ciò che è rimasto a metà e puoi di nuovo installare o cambiare tema. Se non riesce a ripristinare lo stato precedente dei temi, mantiene quello attuale e te lo segnala.
+
+### Deutsch
+
+* **Leistung auf dem Steam Deck:** Im benutzerdefinierten Boost-Modus können SlowPPT und FastPPT jetzt bis 29 und 30 W gehen. Ist dein Deck nicht übertaktet, erscheint über 15 W ein Hinweis, denn dafür ist ein modifiziertes BIOS nötig. TDP, Voreinstellungen und Auto-TDP bleiben auf das Maximum deines Decks begrenzt.
+* **Themes:** Wird die Installation oder Aktivierung eines Themes unterbrochen, bleiben Themes nicht mehr bei der Prüfung blockiert. Panel de Control legt das Halbfertige beiseite, und du kannst wieder Themes installieren oder wechseln. Lässt sich der vorherige Theme-Zustand nicht wiederherstellen, bleibt der aktuelle erhalten und du wirst darauf hingewiesen.
+
+### Português (Brasil)
+
+* **Potência no Steam Deck:** No modo personalizado do boost, SlowPPT e FastPPT agora podem chegar a 29 e 30 W. Se o seu Deck não tiver overclock, aparece um aviso acima de 15 W, porque é preciso uma BIOS modificada para aproveitar. TDP, predefinições e Auto-TDP continuam limitados ao máximo do seu Deck.
+* **Temas:** Se a instalação ou a ativação de um tema for interrompida, os temas não ficam mais travados na verificação. O Painel de Controle deixa de lado o que ficou pela metade e você pode instalar ou trocar de tema de novo. Se não conseguir restaurar o estado anterior dos temas, mantém o atual e avisa você.
+
 ## [0.54.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.3...panel-de-control-v0.54.4) (2026-09-23)
 
 

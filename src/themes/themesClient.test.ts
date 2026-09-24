@@ -147,6 +147,33 @@ describe("ThemesClient", () => {
     expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
   });
 
+  it("unblocks and tells the user when the previous theme state could not be restored", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    let abandoned = false;
+    let unblocked = false;
+    deps.activator.reconcilePendingRecovery = vi.fn(async () => {
+      if (!unblocked) throw new ThemeActivationError("rollback_failed", "still recovering", true);
+      return INSTALLED_READY;
+    });
+    deps.activator.takeAbandonedRecovery = vi.fn(() => {
+      const value = abandoned;
+      abandoned = false;
+      return value;
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+    expect(client.getSnapshot()).toMatchObject({ recoveryBlocked: true, recoveryKeptCurrent: false });
+
+    abandoned = true;
+    unblocked = true;
+    await client.refresh();
+
+    expect(client.getSnapshot()).toMatchObject({ recoveryBlocked: false, recoveryKeptCurrent: true, error: null });
+    await expect(client.uninstall("example-theme")).resolves.toBe(true);
+    expect(client.getSnapshot().recoveryKeptCurrent).toBe(false);
+  });
+
   it("keeps a confirmed uninstall successful when receipt cleanup fails", async () => {
     const deps = dependencies();
     deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);

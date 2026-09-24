@@ -76,6 +76,9 @@ _REMOTE_TARGET_NAMES = frozenset({
 })
 _CSS_LOADER_STATE_FILES = {"config_ROOT.json", "config_USER.json"}
 _TRANSACTION_PREFIX = ".panel-theme-transaction-"
+_QUARANTINE_PREFIX = ".panel-theme-quarantine-"
+_QUARANTINE_RECORD = "quarantine.json"
+_MAX_QUARANTINED = 3
 _MUTATION_LOCK_NAME = ".panel-theme-install.lock"
 _TRANSACTION_TOKEN = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
 _INSTALL_LOCK = threading.RLock()
@@ -1246,15 +1249,91 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _active_transaction(themes_root: Path) -> bool:
+def _quarantined_transactions(parent: Path) -> list[Path]:
+    return sorted(
+        (path for path in parent.glob(f"{_QUARANTINE_PREFIX}*") if path.is_dir() and not path.is_symlink()),
+        key=lambda path: path.name,
+    )
+
+
+def _quarantined_theme(work: Path) -> tuple[str, str] | None:
+    try:
+        journal = _read_json(work / "transaction.json", "invalid_transaction")
+    except ThemePackageError:
+        return None
+    theme_id = journal.get("themeId")
+    theme_name = journal.get("themeName")
+    if (
+        not isinstance(theme_id, str)
+        or not _SAFE_ID.fullmatch(theme_id)
+        or not isinstance(theme_name, str)
+        or not theme_name.strip()
+        or Path(theme_name).name != theme_name
+    ):
+        return None
+    return theme_id, theme_name
+
+
+def _reconcile_quarantined_receipt(themes_root: Path, receipts_path: Path | None, work: Path) -> None:
+    identity = _quarantined_theme(work)
+    if receipts_path is None or identity is None:
+        return
+    theme_id, theme_name = identity
+    destination = themes_root / theme_name
+    try:
+        if not destination.exists() and not destination.is_symlink():
+            _replace_receipt(receipts_path, theme_id, None)
+            return
+        _, receipt = _installed_identity(destination, theme_id, theme_name)
+        _replace_receipt(receipts_path, theme_id, receipt)
+    except (ThemePackageError, OSError):
+        return
+
+
+def _quarantine_transaction(
+    work: Path,
+    reason: str,
+    themes_root: Path,
+    receipts_path: Path | None,
+) -> None:
+    """Moves an unrecoverable transaction aside, keeping its files, so it stops blocking installs.
+
+    The installed theme folder is never touched; only Panel's receipt is aligned with what is
+    really on disk. If the move itself fails the old blocking behaviour is kept.
+    """
+    parent = work.parent
+    existing = _quarantined_transactions(parent)
+    sequence = int(existing[-1].name[len(_QUARANTINE_PREFIX):].split("-", 1)[0]) + 1 if existing else 1
+    destination = parent / f"{_QUARANTINE_PREFIX}{sequence:08d}-{secrets.token_hex(4)}"
+    try:
+        _durable_replace(work, destination)
+    except OSError as error:
+        raise ThemePackageError(
+            "invalid_journal",
+            "A theme transaction journal requires recovery",
+        ) from error
+    try:
+        (destination / _QUARANTINE_RECORD).write_text(
+            json.dumps({"reason": reason}, sort_keys=True),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+    _reconcile_quarantined_receipt(themes_root, receipts_path, destination)
+    for stale in _quarantined_transactions(parent)[:-_MAX_QUARANTINED]:
+        try:
+            _durable_remove_tree(stale)
+        except OSError:
+            continue
+
+
+def _active_transaction(themes_root: Path, receipts_path: Path | None = None) -> bool:
     for work in themes_root.parent.glob(f"{_TRANSACTION_PREFIX}*"):
         try:
             journal = _read_transaction(work)
-        except ThemePackageError as error:
-            raise ThemePackageError(
-                "invalid_journal",
-                "A theme transaction journal requires recovery",
-            ) from error
+        except ThemePackageError:
+            _quarantine_transaction(work, "unreadable_journal", themes_root, receipts_path)
+            continue
         if journal["state"] not in ("acknowledged", "committed"):
             return True
         try:
@@ -1272,7 +1351,7 @@ def discard_orphaned_theme_receipt(
     root = Path(themes_root)
     receipt_store = Path(receipts_path)
     with _mutation_lock(root):
-        if _active_transaction(root):
+        if _active_transaction(root, receipt_store):
             raise ThemePackageError(
                 "transaction_active",
                 "A theme transaction is active",
@@ -1320,7 +1399,7 @@ def prepare_theme_archive(
 
     with _mutation_lock(root):
         css_loader_owner = _ensure_themes_root(root)
-        if _active_transaction(root):
+        if _active_transaction(root, receipt_store):
             raise ThemePackageError("transaction_busy", "Another theme installation is pending")
         destination = root / theme_name
         _verify_owned_destination(destination, theme_id, theme_name)
@@ -1654,11 +1733,9 @@ def recover_theme_transactions(
         for work in sorted(root.parent.glob(f"{_TRANSACTION_PREFIX}*")):
             try:
                 journal = _read_transaction(work)
-            except ThemePackageError as error:
-                raise ThemePackageError(
-                    "invalid_journal",
-                    "A theme transaction journal requires recovery",
-                ) from error
+            except ThemePackageError:
+                _quarantine_transaction(work, "unreadable_journal", root, receipt_store)
+                continue
             try:
                 requires_acknowledgement = _recover_transaction(
                     work,
@@ -1669,10 +1746,8 @@ def recover_theme_transactions(
             except ThemePackageError as error:
                 if error.code not in ("identity_mismatch", "invalid_transaction"):
                     raise
-                raise ThemePackageError(
-                    "invalid_journal",
-                    "A theme transaction journal requires recovery",
-                ) from error
+                _quarantine_transaction(work, "unverifiable_transaction", root, receipt_store)
+                continue
             if requires_acknowledgement:
                 try:
                     current = _read_transaction(work)
@@ -1683,6 +1758,25 @@ def recover_theme_transactions(
                     ) from error
                 pending.append(_pending_recovery(work, current, root))
     return pending
+
+
+def theme_transaction_diagnostics(themes_root: str | Path) -> dict[str, object]:
+    parent = Path(themes_root).parent
+    pending: list[str] = []
+    for work in sorted(parent.glob(f"{_TRANSACTION_PREFIX}*")):
+        try:
+            pending.append(str(_read_transaction(work)["state"]))
+        except ThemePackageError:
+            pending.append("unreadable")
+    quarantined = _quarantined_transactions(parent)
+    last: dict[str, object] | None = None
+    if quarantined:
+        try:
+            record = _read_json(quarantined[-1] / _QUARANTINE_RECORD, "invalid_transaction")
+            last = {"reason": str(record.get("reason", "unknown"))}
+        except ThemePackageError:
+            last = {"reason": "unknown"}
+    return {"pending": pending, "quarantined": len(quarantined), "last_quarantine": last}
 
 
 def list_theme_extensions(

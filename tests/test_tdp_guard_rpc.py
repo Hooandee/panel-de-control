@@ -2047,7 +2047,7 @@ def _use_real_steamdeck_backend(plugin, root, slow, fast):
         pytest.param(25, 30, (25, 29), (25, 25), 25, id="overclocked"),
     ],
 )
-def test_steamdeck_caps_every_product_rail_to_the_detected_ceiling(
+def test_steamdeck_caps_derived_boost_rails_to_the_detected_ceiling(
     plugin,
     tmp_path,
     slow_ppt,
@@ -2058,6 +2058,11 @@ def test_steamdeck_caps_every_product_rail_to_the_detected_ceiling(
 ):
     directory = _use_real_steamdeck_backend(plugin, tmp_path, slow_ppt, fast_ppt)
     plugin._tdp_profiles.set_levels("global", requested[0], *requested)
+    plugin._tdp_profiles.set_boost_mode("global", "auto")
+    plugin._tdp_profiles.set_pl1("global", requested[0])
+    derived = plugin._tdp_profiles.effective(None)
+    requested = (derived["pl2"], derived["pl3"])
+    expected_target = (min(requested[0], ceiling), min(requested[1], ceiling))
 
     command = plugin._capture_tdp_command("manual", on_ac=True)
     result = plugin._execute_tdp_command(command)
@@ -2077,6 +2082,47 @@ def test_steamdeck_caps_every_product_rail_to_the_detected_ceiling(
     assert state["ppt"]["visual_max"] == 30
     for cap_file, watts in zip(("power1_cap", "power2_cap"), expected_target):
         assert (directory / cap_file).read_text().strip() == str(watts * 1_000_000)
+
+
+@pytest.mark.parametrize(
+    ("slow_ppt", "fast_ppt", "requested"),
+    [
+        pytest.param(15, 15, (14, 17), id="stock"),
+        pytest.param(25, 30, (25, 29), id="overclocked"),
+    ],
+)
+def test_steamdeck_custom_boost_rails_reach_the_driver_maximum(
+    plugin,
+    tmp_path,
+    slow_ppt,
+    fast_ppt,
+    requested,
+):
+    directory = _use_real_steamdeck_backend(plugin, tmp_path, slow_ppt, fast_ppt)
+    plugin._tdp_profiles.set_levels("global", requested[0], *requested)
+
+    command = plugin._capture_tdp_command("manual", on_ac=True)
+    result = plugin._execute_tdp_command(command)
+    state = plugin._tdp_state(plugin._observe_tdp_sync())
+
+    driver_limits = {"pl2": {"min": 3, "max": 29}, "pl3": {"min": 3, "max": 30}}
+    assert command.safe_bounds == driver_limits
+    assert result.ok is True
+    assert plugin._tdp_targets.target == dict(zip(("pl2", "pl3"), requested))
+    assert state["level_limits"] == driver_limits
+    assert state["limits"]["max"] == slow_ppt
+    for cap_file, watts in zip(("power1_cap", "power2_cap"), requested):
+        assert (directory / cap_file).read_text().strip() == str(watts * 1_000_000)
+
+
+def test_steamdeck_custom_boost_rails_stay_capped_while_auto_tdp_owns_power(plugin, tmp_path):
+    _use_real_steamdeck_backend(plugin, tmp_path, 15, 15)
+    plugin._tdp_profiles.set_levels("global", 14, 14, 17)
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+
+    state = plugin._tdp_state(plugin._observe_tdp_sync())
+
+    assert state["level_limits"] == {"pl2": {"min": 3, "max": 15}, "pl3": {"min": 3, "max": 15}}
 
 
 def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):

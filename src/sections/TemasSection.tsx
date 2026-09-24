@@ -72,6 +72,12 @@ export function TemasSection() {
           <div style={{ ...theme.card, padding: theme.space.md, color: theme.color.textMuted }}>{t("themes.catalog.empty")}</div>
         ) : null}
 
+        {controller.recoveryKeptCurrent && !controller.error ? (
+          <div role="status" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
+            {t("themes.recovery.keptCurrent")}
+          </div>
+        ) : null}
+
         {controller.error ? (
           <div role="alert" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
             {t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}
