@@ -26,6 +26,8 @@ public static class Program
             new LibreHardwareReader(),
             new PowerStatusReader(),
             sensorAccess);
+        var sensors = new AsusSensorSnapshotProvider(
+            collector, identityReader, new AsusAtkSensorTransport(), clock);
         var inventory = new CapabilityInventoryCollector(
             clock,
             identityReader,
@@ -36,7 +38,7 @@ public static class Program
                 sensorAccess));
         var server = new SnapshotPipeServer(
             ServicePipeSecurity.PipeName,
-            collector,
+            sensors,
             ServicePipeSecurity.Create,
             inventoryProvider: inventory);
         var tdpControl = new TdpControlService(

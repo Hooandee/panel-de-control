@@ -16,7 +16,7 @@ public static class SensorPlausibility
             // Missing ring0 access yields zeroed registers, so an exact 0 °C is not a reading.
             SensorKind.Temperature => reading > 0 && reading <= MaxTemperatureCelsius,
             SensorKind.Load or SensorKind.Level => reading >= 0 && reading <= 100,
-            SensorKind.Fan => reading >= 0 && reading <= 100_000,
+            SensorKind.Fan => reading >= 0 && reading <= 10_000,
             SensorKind.Power => reading >= -1_000 && reading <= 1_000,
             _ => false,
         };
