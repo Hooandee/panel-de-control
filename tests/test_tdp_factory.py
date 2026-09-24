@@ -1657,3 +1657,50 @@ def test_custom_rearm_is_not_selected_for_other_legion_go_s_dmi(tmp_path):
     backend = select_backend(_p("legion_go_s"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
 
     assert "custom_rearm" not in backend.diagnostics()
+
+
+_AMD_RYZENADJ_KEYS = (
+    "rog_xbox_ally_x",
+    "rog_xbox_ally",
+    "rog_ally_x",
+    "rog_ally",
+    "legion_go_2",
+    "legion_go_s",
+    "legion_go",
+    "onexplayer_apex",
+    "onexplayer_superx",
+    "zotac_gaming_zone",
+    "rog_flow_z13",
+    "onexplayer_f1",
+    "ayaneo_3",
+    "aokzoe_a1x",
+    "gpd_win_mini_2025",
+    "msi_claw_a8",
+    "onexplayer_f1pro",
+    "gpd_win5",
+    "gpd_win_max_2",
+)
+
+
+@pytest.mark.parametrize("key", _AMD_RYZENADJ_KEYS)
+def test_every_ryzenadj_handheld_keeps_auto_tdp(tmp_path, key):
+    backend = select_backend(
+        _p(key),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert backend.auto_tdp_supported is True
+    assert backend.auto_tdp_safe is True
+
+
+def test_generic_amd_ryzenadj_keeps_auto_tdp(tmp_path):
+    backend = select_backend(
+        GENERIC,
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert backend.auto_tdp_safe is True
