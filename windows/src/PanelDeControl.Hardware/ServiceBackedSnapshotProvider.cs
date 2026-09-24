@@ -14,6 +14,10 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
         "gpu.load",
         "fan.cpu.rpm",
         "fan.gpu.rpm",
+        BatteryHealth.DesignCapacityId,
+        BatteryHealth.FullCapacityId,
+        BatteryHealth.HealthId,
+        BatteryHealth.CyclesId,
     };
 
     private readonly IHardwareSnapshotProvider local;
@@ -112,9 +116,12 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
 
     private static bool IsPlausible(TelemetryReading reading)
     {
-        var kind = reading.Id.EndsWith(".temperature", StringComparison.Ordinal)
-            ? SensorKind.Temperature
-            : reading.Id.EndsWith(".rpm", StringComparison.Ordinal) ? SensorKind.Fan : SensorKind.Load;
+        var batteryKind = BatteryHealth.KindOf(reading.Id);
+        var kind = batteryKind != SensorKind.Unknown
+            ? batteryKind
+            : reading.Id.EndsWith(".temperature", StringComparison.Ordinal)
+                ? SensorKind.Temperature
+                : reading.Id.EndsWith(".rpm", StringComparison.Ordinal) ? SensorKind.Fan : SensorKind.Load;
         return SensorPlausibility.IsPlausible(kind, reading.Value);
     }
 }

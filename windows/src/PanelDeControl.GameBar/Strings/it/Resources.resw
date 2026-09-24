@@ -377,7 +377,6 @@
   <data name="BlockUpdatesDesc" xml:space="preserve"><value>Cerca e installa nuove versioni.</value></data>
   <data name="BlockPending" xml:space="preserve"><value>In arrivo su Windows</value></data>
   <data name="TdpUnconfirmed" xml:space="preserve"><value>Non confermato</value></data>
-  <data name="BatteryHealthPending" xml:space="preserve"><value>Salute e limite di carica: in arrivo su Windows</value></data>
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo attuale {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Limite di potenza sperimentale</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Sceglie i watt e li applica dopo la conferma del dispositivo</value></data>
@@ -387,4 +386,9 @@
   <data name="PerformancePending" xml:space="preserve"><value>Limite FPS e scalatura: in arrivo su Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventola 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventola 2</value></data>
+  <data name="ChargeLimitPending" xml:space="preserve"><value>Limite di carica: in arrivo su Windows</value></data>
+  <data name="BatteryHealthLabel" xml:space="preserve"><value>Salute</value></data>
+  <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacità</value></data>
+  <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cicli</value></data>
+  <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
 </root>

@@ -18,6 +18,9 @@ public enum SensorKind
     Level,
     Power,
     Fan,
+    Capacity,
+    Cycles,
+    Health,
 }
 
 public sealed class SensorCandidate
