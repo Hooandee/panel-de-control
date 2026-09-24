@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.55.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.0...panel-de-control-v0.55.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **tdp:** restore Auto-TDP on RyzenAdj handhelds ([#756](https://github.com/Hooandee/panel-de-control/issues/756)) ([1778a28](https://github.com/Hooandee/panel-de-control/commit/1778a28ea1a6b9d6accdb524cedec58e1af7b174))
+
 ## [0.55.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.4...panel-de-control-v0.55.0) (2026-09-23)
 
 ### Español
