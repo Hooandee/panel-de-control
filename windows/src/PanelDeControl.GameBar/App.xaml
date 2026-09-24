@@ -8,36 +8,35 @@
                 <ResourceDictionary Source="ms-appx:///Theme/PdcTokens.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <FontFamily x:Key="PdcIconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
-            <SolidColorBrush x:Key="PdcTrackBrush" Color="{StaticResource PdcHairlineColor}" />
-            <LinearGradientBrush x:Key="PdcCardBorderBrush" StartPoint="0,0" EndPoint="0,1" Opacity="0.35">
-                <GradientStop Offset="0" Color="{StaticResource PdcTextMutedColor}" />
-                <GradientStop Offset="1" Color="Transparent" />
-            </LinearGradientBrush>
+            <FontFamily x:Key="PdcDisplayFontFamily">Segoe UI Variable Display, Segoe UI Variable</FontFamily>
+            <CornerRadius x:Key="PdcRadiusSurface">20</CornerRadius>
+            <CornerRadius x:Key="PdcRadiusInset">14</CornerRadius>
+            <SolidColorBrush x:Key="PdcLayerBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.045" />
+            <SolidColorBrush x:Key="PdcLayerStrongBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.1" />
+            <SolidColorBrush x:Key="PdcTrackBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.08" />
+
             <Style x:Key="PdcCardStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusCard}" />
-                <Setter Property="Padding" Value="16" />
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusSurface}" />
+                <Setter Property="Padding" Value="18,16" />
                 <Setter Property="Margin" Value="0,0,0,12" />
             </Style>
             <Style x:Key="PdcTileStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusTile}" />
-                <Setter Property="Padding" Value="12" />
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusSurface}" />
+                <Setter Property="Padding" Value="18,16" />
             </Style>
-            <Style x:Key="PdcPillStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcHairlineBrush}" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
-                <Setter Property="Padding" Value="10,4" />
+            <Style x:Key="PdcTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
             </Style>
             <Style x:Key="PdcCaptionStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
-                <Setter Property="FontSize" Value="{StaticResource PdcFontCaption}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="CharacterSpacing" Value="60" />
+                <Setter Property="FontSize" Value="12" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
             </Style>
             <Style x:Key="PdcBodyStyle" TargetType="TextBlock">
@@ -51,32 +50,126 @@
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
             </Style>
             <Style x:Key="PdcValueStyle" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+                <Setter Property="FontFamily" Value="{StaticResource PdcDisplayFontFamily}" />
                 <Setter Property="FontSize" Value="{StaticResource PdcFontValue}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontWeight" Value="SemiLight" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
                 <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
             </Style>
             <Style x:Key="PdcInlineValueStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
-                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontSize" Value="17" />
+                <Setter Property="FontWeight" Value="Normal" />
             </Style>
-            <Style x:Key="PdcTabButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusControl}" />
-                <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
-                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="4,6" />
+            <ControlTemplate x:Key="PdcSoftButtonTemplate" TargetType="Button">
+                <Grid x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.06" Duration="0:0:0.12" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.12" Duration="0" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Content" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0" />
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <Rectangle x:Name="Wash" Fill="{StaticResource PdcTextPrimaryBrush}" Opacity="0" />
+                    <ContentPresenter
+                        x:Name="Content"
+                        Padding="{TemplateBinding Padding}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        Foreground="{TemplateBinding Foreground}"
+                        FontSize="{TemplateBinding FontSize}"
+                        FontWeight="{TemplateBinding FontWeight}" />
+                </Grid>
+            </ControlTemplate>
+            <Style x:Key="PdcSoftButtonStyle" TargetType="Button">
+                <Setter Property="Template" Value="{StaticResource PdcSoftButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="IsTabStop" Value="True" />
             </Style>
-            <Style x:Key="PdcChipButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{StaticResource PdcHairlineBrush}" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusControl}" />
+            <Style x:Key="PdcTabButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusInset}" />
+                <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="4,8" />
+            </Style>
+            <Style x:Key="PdcSegmentButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
                 <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="4,6" />
+                <Setter Property="Padding" Value="4,9" />
+            </Style>
+            <Style x:Key="PdcChipButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="4,7" />
+            </Style>
+            <Style x:Key="PdcSliderStyle" TargetType="Slider">
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="IsTabStop" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Slider">
+                            <Grid x:Name="Root" Background="Transparent">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver" />
+                                        <VisualState x:Name="Pressed" />
+                                        <VisualState x:Name="Disabled">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HorizontalTemplate" Storyboard.TargetProperty="Opacity" To="0.4" Duration="0" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid x:Name="HorizontalTemplate" MinHeight="36">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle x:Name="HorizontalTrackRect" Grid.ColumnSpan="3" Height="6" RadiusX="3" RadiusY="3" Fill="{StaticResource PdcTrackBrush}" />
+                                    <Rectangle x:Name="HorizontalDecreaseRect" Height="6" RadiusX="3" RadiusY="3" Fill="{TemplateBinding Foreground}" />
+                                    <Thumb x:Name="HorizontalThumb" Grid.Column="1" Width="22" Height="22" DataContext="{TemplateBinding Value}" AutomationProperties.AccessibilityView="Raw">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Fill="{StaticResource PdcTextPrimaryBrush}" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                                <Grid x:Name="VerticalTemplate" Visibility="Collapsed">
+                                    <Rectangle x:Name="VerticalTrackRect" />
+                                    <Rectangle x:Name="VerticalDecreaseRect" />
+                                    <Thumb x:Name="VerticalThumb" />
+                                </Grid>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>
