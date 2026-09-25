@@ -38,7 +38,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-luminous-atlas",
       "cssLoaderName": "Hooandee Luminous Atlas",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "displayName": {
         "es": "Luminous Atlas",
         "en": "Luminous Atlas",
@@ -52,9 +52,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.0.1/theme.zip",
-        "size": 56169,
-        "sha256": "ecd55ce7c8400facbf7ab196a08c586306bc9e2dc2e9a844bcc337db922fdef7"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.1.0/theme.zip",
+        "size": 57880,
+        "sha256": "71205d90808ef6b1adf981e2b76148f02814d98a6ac075c34942fafa3f636e2a"
       },
       "minimumVersions": {
         "panel": "0.56.0",
