@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-luminous-atlas",
+  "cssLoaderName": "Hooandee Luminous Atlas",
+  "version": "1.0.0",
+  "displayName": {
+    "es": "Luminous Atlas",
+    "en": "Luminous Atlas",
+    "it": "Luminous Atlas"
+  },
+  "description": {
+    "es": "Un tema táctico inspirado en los menús de atlas y mapas de los RPG de estrategia. Pergamino verde oscuro, tinta marfil y marcos de latón, con portadas personalizables, menú de acceso rápido y elementos dinámicos.",
+    "en": "A tactical theme inspired by the atlas and map menus of strategy RPGs. Dark green parchment, ivory ink and brass frames, with customizable covers, a quick access menu and dynamic elements.",
+    "it": "Un tema tattico ispirato ai menu da atlante e mappa dei giochi di ruolo strategici. Pergamena verde scura, inchiostro avorio e cornici d'ottone, con copertine personalizzabili, menu di accesso rapido ed elementi dinamici."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.0.0/theme.zip",
+    "size": 56151,
+    "sha256": "90d6e0db7785c701268bd246823090a6c9f0320d394f73afe4af5092463442d2"
+  },
+  "minimumVersions": {
+    "panel": "0.56.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  }
+}
