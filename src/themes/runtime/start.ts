@@ -1,6 +1,17 @@
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
-import { ThemeExtensionRuntimeHost } from "./extensionHost";
+import {
+  ThemeExtensionRuntimeHost,
+  type ThemeExtensionQamAccess,
+} from "./extensionHost";
+import {
+  createThemeLibraryAccess,
+  type ThemeExtensionLibraryAccess,
+} from "./libraryAccess";
+import {
+  createThemeNavigationAccess,
+  type ThemeExtensionNavigationAccess,
+} from "./navigationAccess";
 
 interface RuntimeManagerLike {
   reconcile(snapshot: CssLoaderSnapshot): void;
@@ -128,17 +139,42 @@ interface ThemesRuntimeClient {
 interface ThemesRuntimeOptions {
   client: ThemesRuntimeClient;
   getSteamDocument(): Document | null;
-  createManager?(doc: Document): RuntimeManagerLike;
+  getQamDocument?(): Document | null;
+  subscribeQamDocument?(listener: (doc: Document) => void): () => void;
+  library?: Readonly<ThemeExtensionLibraryAccess>;
+  navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  createManager?(
+    doc: Document,
+    qam?: Readonly<ThemeExtensionQamAccess>,
+    library?: Readonly<ThemeExtensionLibraryAccess>,
+    navigation?: Readonly<ThemeExtensionNavigationAccess>,
+  ): RuntimeManagerLike;
 }
 
 export function startThemesRuntime({
   client,
   getSteamDocument,
+  getQamDocument,
+  subscribeQamDocument,
+  library = createThemeLibraryAccess(),
+  navigation = createThemeNavigationAccess(),
   createManager,
 }: ThemesRuntimeOptions): () => void {
+  const qam = getQamDocument && subscribeQamDocument
+    ? Object.freeze({
+      getDocument: getQamDocument,
+      subscribe: subscribeQamDocument,
+    })
+    : undefined;
   const bridge = createSteamRuntimeBridge(
     getSteamDocument,
-    createManager,
+    (doc) => createManager?.(doc, qam, library, navigation) ?? new ThemeExtensionRuntimeHost({
+      client: createThemeExtensionClient(),
+      doc,
+      qam,
+      library,
+      navigation,
+    }),
     () => { void client.refresh(); },
   );
   const reconcile = () => bridge.reconcile(client.getSnapshot().snapshot);

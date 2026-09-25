@@ -17,15 +17,22 @@ const DESCRIPTOR = {
 describe("theme extension RPC parser", () => {
   it("accepts exact bounded descriptors and payloads", () => {
     expect(parseThemeExtensionDescriptors([DESCRIPTOR])).toEqual([DESCRIPTOR]);
+    expect(parseThemeExtensionDescriptors([{ ...DESCRIPTOR, abiVersion: 2 }]))
+      .toEqual([{ ...DESCRIPTOR, abiVersion: 2 }]);
     expect(parseThemeExtensionPayload({ ...DESCRIPTOR, source: "module.exports = {};" }))
       .toEqual({ ...DESCRIPTOR, source: "module.exports = {};" });
+    expect(parseThemeExtensionPayload({
+      ...DESCRIPTOR,
+      abiVersion: 2,
+      source: "module.exports = {};",
+    })).toEqual({ ...DESCRIPTOR, abiVersion: 2, source: "module.exports = {};" });
   });
 
   it.each([
     { ...DESCRIPTOR, path: "/private/theme.js" },
     { ...DESCRIPTOR, url: "https://attacker.invalid/theme.js" },
     { ...DESCRIPTOR, version: "v1.2.3" },
-    { ...DESCRIPTOR, abiVersion: 2 },
+    { ...DESCRIPTOR, abiVersion: 3 },
     { ...DESCRIPTOR, sha256: "A".repeat(64) },
     { ...DESCRIPTOR, cssLoaderName: "Example/Theme" },
     { ...DESCRIPTOR, cssLoaderName: "Example\\Theme" },

@@ -41,6 +41,7 @@ _REMOTE_REQUIRED_FILES = {"theme.json", "panel-theme.json"}
 _REMOTE_ASSET_SUFFIXES = _REMOTE_ALLOWED_SUFFIXES - {".css", ".json", ".txt"}
 _REMOTE_ASSET_SUFFIXES.discard(".js")
 _MAX_EXTENSION_BYTES = 2 * 1024 * 1024
+_SUPPORTED_EXTENSION_ABI_VERSIONS = frozenset({1, 2})
 _MAX_RECEIPTS = 32
 _MAX_FILES = 2_048
 _MAX_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
@@ -55,6 +56,8 @@ _MAX_REMOTE_PATCHES = 64
 _MAX_REMOTE_PATCH_VALUES = 64
 _MAX_REMOTE_TARGETS = 8
 _MAX_REMOTE_TEXT_BYTES = 4096
+_PATCH_LABEL_LOCALES = frozenset({"es", "en", "it", "de", "pt-BR"})
+_MAX_PATCH_LABEL_CHARS = 120
 _REMOTE_MANIFEST_VERSION = 9
 _REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
     "name",
@@ -582,6 +585,75 @@ def _validate_remote_content(
     _validate_css_resources(source, packaged_css, packaged_assets, theme_name)
 
 
+def _localized_label(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        locale: text
+        for locale, text in value.items()
+        if locale in _PATCH_LABEL_LOCALES
+        and isinstance(text, str)
+        and text.strip()
+        and len(text) <= _MAX_PATCH_LABEL_CHARS
+        and not any(ord(character) < 32 or ord(character) == 127 for character in text)
+    }
+
+
+def _patch_label_key(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= _MAX_PATCH_LABEL_CHARS
+
+
+def _bounded_patch_labels(value: object) -> bool:
+    return isinstance(value, dict) and len(value) <= _MAX_REMOTE_PATCHES
+
+
+# Translated names for a theme's CSS Loader options; the internal names stay the keys because
+# CSS Loader stores the user's choices under them. Entries or languages this Panel does not
+# understand are dropped, so a newer theme never loses its install or runtime over a label.
+def _usable_patch_labels(value: object) -> dict[str, Any]:
+    if not _bounded_patch_labels(value):
+        return {}
+    labels: dict[str, Any] = {}
+    for patch, entry in value.items():
+        if not _patch_label_key(patch) or not isinstance(entry, dict):
+            continue
+        usable: dict[str, Any] = {}
+        name = _localized_label(entry.get("name"))
+        if name:
+            usable["name"] = name
+        values = entry.get("values")
+        if isinstance(values, dict) and len(values) <= _MAX_REMOTE_PATCH_VALUES:
+            options = {
+                option: label
+                for option, label in ((option, _localized_label(raw)) for option, raw in values.items())
+                if _patch_label_key(option) and label
+            }
+            if options:
+                usable["values"] = options
+        if usable:
+            labels[patch] = usable
+    return labels
+
+
+def theme_patch_labels(themes_root: Path, theme_id: str, theme_name: str) -> dict[str, Any]:
+    if (
+        not isinstance(theme_id, str)
+        or not _SAFE_ID.fullmatch(theme_id)
+        or not isinstance(theme_name, str)
+        or not theme_name.strip()
+        or Path(theme_name).name != theme_name
+        or theme_name in {".", ".."}
+    ):
+        return {}
+    try:
+        panel = _read_existing_manifest(themes_root / theme_name / "panel-theme.json")
+        if panel.get("schemaVersion") != 2 or panel.get("catalogId") != theme_id or "labels" not in panel:
+            return {}
+        return _usable_patch_labels(panel["labels"])
+    except ThemePackageError:
+        return {}
+
+
 def _extension_receipt(
     source: Path,
     theme_id: str,
@@ -591,18 +663,22 @@ def _extension_receipt(
 ) -> dict[str, object] | None:
     if panel.get("schemaVersion") != 2 or panel.get("catalogId") != theme_id:
         raise ThemePackageError("identity_mismatch", "Theme package marker is invalid")
+    if "labels" in panel and not _bounded_patch_labels(panel["labels"]):
+        raise ThemePackageError("identity_mismatch", "Theme patch labels are invalid")
+    keys = set(panel) - {"labels"}
     extension = panel.get("extension")
     if extension is None:
-        if set(panel) != {"schemaVersion", "catalogId"}:
+        if keys != {"schemaVersion", "catalogId"}:
             raise ThemePackageError("identity_mismatch", "Theme package marker is invalid")
         if (source / "panel-extension.js").exists():
             raise ThemePackageError("unsafe_archive", "Theme extension is not declared")
         return None
     if (
-        set(panel) != {"schemaVersion", "catalogId", "extension"}
+        keys != {"schemaVersion", "catalogId", "extension"}
         or not isinstance(extension, dict)
         or set(extension) != {"abiVersion", "entrypoint", "size", "sha256"}
-        or extension.get("abiVersion") != 1
+        or type(extension.get("abiVersion")) is not int
+        or extension["abiVersion"] not in _SUPPORTED_EXTENSION_ABI_VERSIONS
         or extension.get("entrypoint") != "panel-extension.js"
         or not isinstance(extension.get("size"), int)
         or isinstance(extension.get("size"), bool)
@@ -628,7 +704,7 @@ def _extension_receipt(
         "catalogId": theme_id,
         "cssLoaderName": theme_name,
         "version": version,
-        "abiVersion": 1,
+        "abiVersion": extension["abiVersion"],
         "entrypoint": "panel-extension.js",
         "size": extension["size"],
         "sha256": extension["sha256"],
@@ -923,7 +999,8 @@ def _validated_receipt(value: object) -> dict[str, object] | None:
         or Path(theme_name).name != theme_name
         or not isinstance(version, str)
         or not _SEMVER.fullmatch(version)
-        or value.get("abiVersion") != 1
+        or type(value.get("abiVersion")) is not int
+        or value["abiVersion"] not in _SUPPORTED_EXTENSION_ABI_VERSIONS
         or value.get("entrypoint") != "panel-extension.js"
         or not isinstance(size, int)
         or isinstance(size, bool)

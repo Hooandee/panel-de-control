@@ -41,6 +41,10 @@ export const prepareRemoteThemeInstall = callable<[
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
+export const getThemePatchLabels = callable<[
+  catalogId: string,
+  cssLoaderName: string,
+], unknown>("get_theme_patch_labels");
 export const loadThemeExtension = callable<[
   catalogId: string,
   version: string,

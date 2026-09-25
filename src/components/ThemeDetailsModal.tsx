@@ -7,6 +7,8 @@ import { theme } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
 import { themeCoverFor } from "../themes/themePresentation";
+import { labelsForPatch } from "../themes/themePatchLabels";
+import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
 import { ThemePatchControl } from "./ThemePatchControl";
@@ -230,6 +232,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingThemeConfirmation | null>(null);
   const [failedCover, setFailedCover] = useState<string>();
   const card = controller.cards.find((candidate) => candidate.id === themeId);
+  const patchLabels = useThemePatchLabels(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousInstalledRef = useRef<boolean | undefined>(undefined);
@@ -517,7 +520,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                       <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
                         {group.patches.map((patch) => (
                           <div key={patch.name} role="listitem">
-                            <ThemePatchControl patch={patch} disabled={actionsBlocked} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
+                            <ThemePatchControl patch={patch} labels={labelsForPatch(patchLabels, patch.name, lang)} disabled={actionsBlocked} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
                           </div>
                         ))}
                       </div>
