@@ -55,7 +55,8 @@ type ExtensionLogCode =
   | "extension_payload_mismatch"
   | "extension_evaluation_failed"
   | "extension_mount_failed"
-  | "extension_dispose_failed";
+  | "extension_dispose_failed"
+  | "extension_release_failed";
 
 interface ThemeExtensionRuntimeHostOptions {
   client: ThemeExtensionClient;
@@ -76,6 +77,37 @@ interface RuntimeSelection {
 class ThemeExtensionPayloadMismatchError extends Error {}
 
 const HOST_DESCRIPTOR: Readonly<ThemeExtensionHostDescriptor> = Object.freeze({ abiVersion: 1 });
+
+// Steam's global button handlers consume input for the whole UI; a theme that throws in mount or in
+// its disposer must not leave a capture or a QAM subscription behind.
+class MountScope {
+  private readonly releases = new Set<() => void>();
+
+  constructor(private readonly log: (code: ExtensionLogCode) => void) {}
+
+  track(release: () => void): () => void {
+    if (typeof release !== "function") return () => {};
+    let active = true;
+    const once = () => {
+      if (!active) return;
+      active = false;
+      this.releases.delete(once);
+      release();
+    };
+    this.releases.add(once);
+    return once;
+  }
+
+  releaseAll(): void {
+    for (const release of [...this.releases].reverse()) {
+      try {
+        release();
+      } catch {
+        this.log("extension_release_failed");
+      }
+    }
+  }
+}
 
 function exactKeys(value: object, expected: readonly string[]): boolean {
   const keys = Object.keys(value);
@@ -290,6 +322,7 @@ export class ThemeExtensionRuntimeHost {
       return;
     }
     if (!this.isCurrent(selection.fingerprint, generation)) return;
+    const scope = new MountScope(this.log);
     try {
       const sharedContext = {
         theme: freezeTheme(selection.theme),
@@ -301,12 +334,31 @@ export class ThemeExtensionRuntimeHost {
         stop = extension.mount(Object.freeze(sharedContext));
       } else {
         if (!this.qam) throw new Error("QAM access is unavailable");
-        stop = extension.mount(Object.freeze({
+        const qam = this.qam;
+        const navigation = this.navigation;
+        const context = Object.freeze({
           ...sharedContext,
-          qam: this.qam,
+          qam: Object.freeze({
+            getDocument: qam.getDocument,
+            subscribe: (listener: (doc: Document) => void) => scope.track(qam.subscribe(listener)),
+          }),
           ...(this.library ? { library: this.library } : {}),
-          ...(this.navigation ? { navigation: this.navigation } : {}),
-        }));
+          ...(navigation ? {
+            navigation: Object.freeze({
+              focus: navigation.focus,
+              capture: (handler: Parameters<typeof navigation.capture>[0]) => scope.track(navigation.capture(handler)),
+            }),
+          } : {}),
+        });
+        const themeStop = extension.mount(context);
+        if (typeof themeStop !== "function") throw new Error("Theme extension disposer is invalid");
+        stop = () => {
+          try {
+            themeStop();
+          } finally {
+            scope.releaseAll();
+          }
+        };
       }
       if (typeof stop !== "function") throw new Error("Theme extension disposer is invalid");
       if (!this.isCurrent(selection.fingerprint, generation)) {
@@ -321,6 +373,7 @@ export class ThemeExtensionRuntimeHost {
       this.activeFingerprint = selection.fingerprint;
       this.pendingFingerprint = null;
     } catch {
+      scope.releaseAll();
       if (this.isCurrent(selection.fingerprint, generation)) {
         this.pendingFingerprint = null;
         this.log("extension_mount_failed");

@@ -227,6 +227,69 @@ describe("ThemeExtensionRuntimeHost", () => {
     host.dispose();
   });
 
+  it.each([
+    ["mount throws after taking them", "mount"],
+    ["the disposer forgets and throws", "dispose"],
+    ["the theme simply never releases them", "forget"],
+  ])("releases QAM subscriptions and navigation captures when %s", async (_case, failure) => {
+    const stopCapture = vi.fn();
+    const stopSubscribe = vi.fn();
+    const navigation = { focus: vi.fn(() => true), capture: vi.fn(() => stopCapture) };
+    const qam = { getDocument: () => document, subscribe: vi.fn(() => stopSubscribe) };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam,
+      navigation,
+      log: () => {},
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          context.qam.subscribe(() => {});
+          context.navigation?.capture(() => {});
+          if (failure === "mount") throw new Error("mount failed");
+          return () => { if (failure === "dispose") throw new Error("dispose failed"); };
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    if (failure !== "mount") {
+      expect(stopCapture).not.toHaveBeenCalled();
+      host.dispose();
+    }
+
+    expect(stopCapture).toHaveBeenCalledOnce();
+    expect(stopSubscribe).toHaveBeenCalledOnce();
+    host.dispose();
+    expect(stopCapture).toHaveBeenCalledOnce();
+  });
+
+  it("does not release twice what the theme already released", async () => {
+    const stopCapture = vi.fn();
+    const navigation = { focus: vi.fn(() => true), capture: vi.fn(() => stopCapture) };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      navigation,
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          const release = context.navigation?.capture(() => {});
+          return () => release?.();
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    host.dispose();
+
+    expect(stopCapture).toHaveBeenCalledOnce();
+  });
+
   it("retries a transient descriptor failure when the active inventory is unchanged", async () => {
     const extensions = client();
     extensions.list = vi.fn()

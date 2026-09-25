@@ -48,19 +48,30 @@ def test_labels_of_another_catalog_id_or_an_unsafe_name_are_not_served(tmp_path)
 
 @pytest.mark.parametrize("labels", [
     [],
-    {"Patch": []},
-    {"Patch": {"name": {"fr": "Nom"}}},
-    {"Patch": {"name": {"en": ""}}},
-    {"Patch": {"name": {"en": "x" * 121}}},
-    {"Patch": {"name": {"en": 3}}},
-    {"Patch": {"title": {"en": "Name"}}},
-    {"Patch": {"values": {"A": {"en": "\u0000"}}}},
-    {"": {"name": {"en": "Name"}}},
+    "labels",
     {f"Patch {index}": {"name": {"en": "Name"}} for index in range(65)},
 ])
-def test_prepare_rejects_malformed_patch_labels(tmp_path, labels):
+def test_prepare_rejects_labels_that_are_not_a_bounded_object(tmp_path, labels):
     archive, descriptor = package(tmp_path, marker_patch={"labels": labels})
     themes, receipts = paths(tmp_path)
 
     with pytest.raises(theme_packages.ThemePackageError):
         theme_packages.prepare_theme_archive(archive, descriptor, themes, receipts_path=receipts)
+
+
+def test_malformed_entries_and_unknown_languages_are_dropped_without_blocking_the_theme(tmp_path):
+    themes = install(tmp_path, {
+        "Good": {"name": {"en": "Good", "fr": "Bon"}, "values": {"A": {"de": "a", "xx": "?"}, "B": {"fr": "b"}}},
+        "Blank": {"name": {"en": ""}},
+        "Long": {"name": {"en": "x" * 121}},
+        "Number": {"name": {"en": 3}},
+        "Control": {"name": {"en": "\u0000"}},
+        "Other": {"title": {"en": "Name"}},
+        "List": [],
+        "": {"name": {"en": "Name"}},
+    })
+
+    assert theme_packages.theme_patch_labels(themes, THEME_ID, THEME_NAME) == {
+        "Good": {"name": {"en": "Good"}, "values": {"A": {"de": "a"}}},
+    }
+    assert theme_packages.list_theme_extensions(*paths(tmp_path))[0]["catalogId"] == THEME_ID

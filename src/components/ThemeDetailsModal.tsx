@@ -232,6 +232,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingThemeConfirmation | null>(null);
   const [failedCover, setFailedCover] = useState<string>();
   const card = controller.cards.find((candidate) => candidate.id === themeId);
+  const patchLabels = useThemePatchLabels(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousInstalledRef = useRef<boolean | undefined>(undefined);
@@ -278,7 +279,6 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const description = localizePublishedText(card.release.description, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
   const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
-  const patchLabels = useThemePatchLabels(card.id, card.cssLoaderTheme?.name, card.installedVersion);
   const fullSizeLayout = card.installed && groups.length > 0;
   const availableCover = themeCoverFor(card.release);
   const cover = availableCover === failedCover ? undefined : availableCover;

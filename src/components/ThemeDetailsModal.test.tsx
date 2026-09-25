@@ -39,7 +39,10 @@ vi.mock("./ThemePatchControl", () => ({
     <button disabled={disabled} onClick={() => onChange("No")}>{labels?.name ?? patch.name}</button>
   ),
 }));
-vi.mock("../themes/useThemePatchLabels", () => ({ useThemePatchLabels: () => mocks.patchLabels }));
+vi.mock("../themes/useThemePatchLabels", async () => {
+  const { useState } = await import("react");
+  return { useThemePatchLabels: () => useState(() => mocks.patchLabels)[0] };
+});
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
 
 import { ThemeDetailsModal } from "./ThemeDetailsModal";
@@ -96,6 +99,15 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 
 describe("ThemeDetailsModal", () => {
   afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
+
+  it("keeps working when its card disappears while the catalog refreshes", () => {
+    mocks.controller = installedController();
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    mocks.controller = { ...mocks.controller, cards: [] };
+    expect(() => view.rerender(<ThemeDetailsModal themeId="example-theme" />)).not.toThrow();
+    expect(screen.getByText("themes.details.unavailable")).toBeTruthy();
+  });
 
   it("names an installed theme's options with the labels it ships, in the Panel language", () => {
     mocks.patchLabels = { Motion: { name: { en: "Floating covers", es: "Flotación" }, values: {} } };
