@@ -18,6 +18,13 @@ public readonly record struct NativePowerModes(Guid? Actual, Guid? Effective);
 
 public sealed class PowerStatusReader : IPowerStatusReader
 {
+    private readonly IBatteryHealthSource batteryHealth;
+
+    public PowerStatusReader(IBatteryHealthSource? batteryHealth = null)
+    {
+        this.batteryHealth = batteryHealth ?? new WmiBatteryHealthSource();
+    }
+
     public IReadOnlyList<TelemetryReading> Read()
     {
         if (!OperatingSystem.IsWindows())
@@ -33,6 +40,7 @@ public sealed class PowerStatusReader : IPowerStatusReader
         return Map(new NativePowerStatus(status.AcLineStatus, status.BatteryLifePercent))
             .Concat(MapEnergy(ReadBatteryState()))
             .Concat(MapModes(ReadPowerModes()))
+            .Concat(batteryHealth.Read())
             .ToArray();
     }
 

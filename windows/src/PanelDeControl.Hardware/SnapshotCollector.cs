@@ -44,6 +44,10 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         new("battery.time_remaining", "Autonomía", "min"),
         new("power.mode", "Modo de energía", "mode"),
         new("power.mode_effective", "Modo de energía", "mode"),
+        new(BatteryHealth.DesignCapacityId, "Capacidad de diseño", "mWh"),
+        new(BatteryHealth.FullCapacityId, "Capacidad actual", "mWh"),
+        new(BatteryHealth.HealthId, "Salud", "%"),
+        new(BatteryHealth.CyclesId, "Ciclos", "cycles"),
     };
 
     private readonly IClock clock;

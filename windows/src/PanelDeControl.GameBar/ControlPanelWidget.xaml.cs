@@ -573,6 +573,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
         SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
         SystemBatteryDetail.Text = PowerDrawDetail.Text;
+        ApplyBatteryHealth(snapshot);
         ApplyFan(FanOneValue, snapshot, "fan.cpu.rpm");
         ApplyFan(FanTwoValue, snapshot, "fan.gpu.rpm");
         FanTwoPanel.Visibility = FindReading(snapshot, "fan.gpu.rpm") is null ? Visibility.Collapsed : Visibility.Visible;
@@ -1163,7 +1164,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
         SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
-        SystemBatteryPending.Text = Localized("BatteryHealthPending");
+        SystemBatteryPending.Text = Localized("ChargeLimitPending");
+        BatteryHealthLabel.Text = Localized("BatteryHealthLabel");
+        BatteryCapacityLabel.Text = Localized("BatteryCapacityLabel");
+        BatteryCyclesLabel.Text = Localized("BatteryCyclesLabel");
         PerformanceTitle.Text = Localized("BlockSteamPerformanceTitle");
         RefreshRateLabel.Text = Localized("RefreshRateLabel");
         PerformancePending.Text = Localized("PerformancePending");
@@ -1607,6 +1611,29 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         });
         geometry.Figures.Add(figure);
         return geometry;
+    }
+
+    private void ApplyBatteryHealth(HardwareSnapshot snapshot)
+    {
+        var health = FindReading(snapshot, BatteryHealth.HealthId);
+        BatteryHealthValue.Text = Format(snapshot, BatteryHealth.HealthId, "0", "%");
+        BatteryHealthValue.Foreground = health?.Status == ReadingStatus.Available && health.Value is double percent
+            ? new SolidColorBrush(BatteryColorFor(percent))
+            : ResourceBrush("PdcTextMutedBrush");
+        var full = FindReading(snapshot, BatteryHealth.FullCapacityId);
+        var design = FindReading(snapshot, BatteryHealth.DesignCapacityId);
+        BatteryCapacityValue.Text = full?.Value is double charged && design?.Value is double designed &&
+            full.Status == ReadingStatus.Available && design.Status == ReadingStatus.Available
+                ? string.Format(Localized("BatteryCapacityFormat"), charged / 1000, designed / 1000)
+                : StatusText(full);
+        var cycles = FindReading(snapshot, BatteryHealth.CyclesId);
+        BatteryCyclesValue.Text = cycles?.Status == ReadingStatus.Available && cycles.Value is double count
+            ? count.ToString("0")
+            : StatusText(cycles);
+        foreach (var value in new[] { BatteryHealthValue, BatteryCapacityValue, BatteryCyclesValue })
+        {
+            value.FontSize = value.Text.Any(char.IsDigit) ? 20 : 13;
+        }
     }
 
     private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)

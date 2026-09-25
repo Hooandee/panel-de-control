@@ -18,6 +18,9 @@ public static class SensorPlausibility
             SensorKind.Load or SensorKind.Level => reading >= 0 && reading <= 100,
             SensorKind.Fan => reading >= 0 && reading <= 10_000,
             SensorKind.Power => reading >= -1_000 && reading <= 1_000,
+            SensorKind.Capacity => reading >= 1_000 && reading <= 500_000,
+            SensorKind.Cycles => reading >= 1 && reading <= 20_000,
+            SensorKind.Health => reading >= 1 && reading <= 150,
             _ => false,
         };
     }
