@@ -37,13 +37,17 @@ export type ThemeExtensionMountContext =
   | ThemeExtensionMountContextV1
   | ThemeExtensionMountContextV2;
 
+export type ThemeExtensionSurface = "home" | "keyboard";
+
 export interface ThemeExtensionExportV1 {
   abiVersion: 1;
+  surface?: "keyboard";
   mount(context: ThemeExtensionMountContextV1): () => void;
 }
 
 export interface ThemeExtensionExportV2 {
   abiVersion: 2;
+  surface?: "keyboard";
   mount(context: ThemeExtensionMountContextV2): () => void;
 }
 
@@ -72,7 +76,12 @@ interface ThemeExtensionRuntimeHostOptions {
 interface RuntimeSelection {
   descriptor: ThemeExtensionDescriptor;
   theme: CssLoaderTheme;
+  key: string;
   fingerprint: string;
+}
+
+interface ActiveRuntime {
+  stop: () => void;
 }
 
 class ThemeExtensionPayloadMismatchError extends Error {}
@@ -135,7 +144,8 @@ export function evaluateThemeExtensionBundle(source: string): ThemeExtensionExpo
     || extension === null
     || Array.isArray(extension)
     || !Object.isFrozen(extension)
-    || !exactKeys(extension, ["abiVersion", "mount"])
+    || !(exactKeys(extension, ["abiVersion", "mount"])
+      || (exactKeys(extension, ["abiVersion", "mount", "surface"]) && Reflect.get(extension, "surface") === "keyboard"))
     || (Reflect.get(extension, "abiVersion") !== 1 && Reflect.get(extension, "abiVersion") !== 2)
     || typeof Reflect.get(extension, "mount") !== "function"
   ) throw new Error("Theme extension export is invalid");
@@ -155,6 +165,10 @@ function themeFingerprint(theme: CssLoaderTheme): string {
     .map((patch) => [patch.name, patch.value] as const)
     .sort(([left], [right]) => left.localeCompare(right, "en"));
   return JSON.stringify({ version: theme.version, patches });
+}
+
+function surfaceOf(extension: ThemeExtensionExport): ThemeExtensionSurface {
+  return extension.surface === "keyboard" ? "keyboard" : "home";
 }
 
 function descriptorKey(descriptor: ThemeExtensionDescriptor): string {
@@ -185,9 +199,11 @@ export class ThemeExtensionRuntimeHost {
   private snapshot: CssLoaderSnapshot = { status: "missing", themes: [] };
   private readonly payloads = new Map<string, ThemeExtensionPayload>();
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
-  private activeFingerprint: string | null = null;
-  private pendingFingerprint: string | null = null;
-  private stopActive: (() => void) | null = null;
+  private readonly active = new Map<string, ActiveRuntime>();
+  private readonly pending = new Map<string, number>();
+  private readonly surfaces = new Map<string, ThemeExtensionSurface>();
+  private readonly classifying = new Set<string>();
+  private readonly unclassifiable = new Set<string>();
   private generation = 0;
   private disposed = false;
 
@@ -223,6 +239,7 @@ export class ThemeExtensionRuntimeHost {
   reconcile(snapshot: CssLoaderSnapshot): void {
     if (this.disposed) return;
     this.snapshot = snapshot;
+    this.unclassifiable.clear();
     if (snapshot.status !== "ready" || !snapshot.themes.some((theme) => theme.enabled)) {
       this.invalidatePending();
       this.stop();
@@ -268,41 +285,85 @@ export class ThemeExtensionRuntimeHost {
 
   private reconcileSelection(): void {
     if (this.disposed || this.descriptors === null) return;
-    const selection = this.select();
-    if (!selection) {
-      this.invalidatePending();
-      this.stop();
-      return;
-    }
-    if (
-      selection.fingerprint === this.activeFingerprint
-      || selection.fingerprint === this.pendingFingerprint
-    ) return;
-    this.invalidatePending();
-    this.stop();
-    this.pendingFingerprint = selection.fingerprint;
-    const generation = this.generation;
-    void this.mount(selection, generation);
-  }
-
-  private select(): RuntimeSelection | null {
-    if (this.snapshot.status !== "ready" || this.descriptors === null) return null;
-    const matches: Array<{ descriptor: ThemeExtensionDescriptor; theme: CssLoaderTheme }> = [];
-    for (const theme of this.snapshot.themes) {
-      if (!theme.enabled) continue;
-      for (const descriptor of this.descriptors) {
-        if (descriptor.cssLoaderName === theme.name && descriptor.version === theme.version) {
-          matches.push({ descriptor, theme });
-        }
+    const candidates = this.candidates();
+    if (candidates.length > 1) {
+      const unknown = candidates.filter((candidate) => (
+        !this.surfaces.has(candidate.key) && !this.unclassifiable.has(candidate.key)
+      ));
+      if (unknown.length > 0) {
+        for (const candidate of unknown) void this.classify(candidate);
+        return;
       }
     }
-    if (matches.length !== 1) return null;
-    const [{ descriptor, theme }] = matches;
-    return {
-      descriptor,
-      theme,
-      fingerprint: `${descriptorKey(descriptor)}\0${themeFingerprint(theme)}`,
-    };
+    const desired = this.desired(candidates);
+    for (const fingerprint of [...this.active.keys()]) {
+      if (!desired.has(fingerprint)) this.stop(fingerprint);
+    }
+    for (const fingerprint of [...this.pending.keys()]) {
+      if (!desired.has(fingerprint)) this.pending.delete(fingerprint);
+    }
+    for (const selection of desired.values()) {
+      if (this.active.has(selection.fingerprint) || this.pending.has(selection.fingerprint)) continue;
+      const generation = ++this.generation;
+      this.pending.set(selection.fingerprint, generation);
+      void this.mount(selection, generation);
+    }
+  }
+
+  private candidates(): RuntimeSelection[] {
+    if (this.snapshot.status !== "ready" || this.descriptors === null) return [];
+    const selections: RuntimeSelection[] = [];
+    for (const theme of this.snapshot.themes) {
+      if (!theme.enabled) continue;
+      const matches = this.descriptors.filter((descriptor) => (
+        descriptor.cssLoaderName === theme.name && descriptor.version === theme.version
+      ));
+      if (matches.length !== 1) continue;
+      const [descriptor] = matches;
+      const key = descriptorKey(descriptor);
+      selections.push({ descriptor, theme, key, fingerprint: `${key}\0${themeFingerprint(theme)}` });
+    }
+    return selections;
+  }
+
+  // One runtime per surface: two home themes with runtimes stay CSS-only, as before surfaces existed.
+  private desired(candidates: readonly RuntimeSelection[]): Map<string, RuntimeSelection> {
+    const desired = new Map<string, RuntimeSelection>();
+    if (candidates.length === 1) {
+      desired.set(candidates[0].fingerprint, candidates[0]);
+      return desired;
+    }
+    const bySurface = new Map<ThemeExtensionSurface, RuntimeSelection[]>();
+    for (const candidate of candidates) {
+      const surface = this.surfaces.get(candidate.key);
+      if (!surface) continue;
+      bySurface.set(surface, [...(bySurface.get(surface) ?? []), candidate]);
+    }
+    for (const group of bySurface.values()) {
+      if (group.length === 1) desired.set(group[0].fingerprint, group[0]);
+    }
+    return desired;
+  }
+
+  private async classify(selection: RuntimeSelection): Promise<void> {
+    if (this.classifying.has(selection.key)) return;
+    this.classifying.add(selection.key);
+    try {
+      const payload = await this.load(selection.descriptor);
+      if (this.disposed) return;
+      const extension = this.evaluate(payload.source);
+      if (extension.abiVersion !== payload.abiVersion) throw new Error("Theme extension ABI does not match its receipt");
+      this.surfaces.set(selection.key, surfaceOf(extension));
+    } catch (error) {
+      if (this.disposed) return;
+      this.unclassifiable.add(selection.key);
+      this.log(error instanceof ThemeExtensionPayloadMismatchError
+        ? "extension_payload_mismatch"
+        : "extension_evaluation_failed");
+    } finally {
+      this.classifying.delete(selection.key);
+    }
+    this.reconcileSelection();
   }
 
   private async mount(selection: RuntimeSelection, generation: number): Promise<void> {
@@ -311,7 +372,7 @@ export class ThemeExtensionRuntimeHost {
       payload = await this.load(selection.descriptor);
     } catch (error) {
       if (this.isCurrent(selection.fingerprint, generation)) {
-        this.pendingFingerprint = null;
+        this.pending.delete(selection.fingerprint);
         this.log(error instanceof ThemeExtensionPayloadMismatchError
           ? "extension_payload_mismatch"
           : "extension_load_failed");
@@ -325,9 +386,10 @@ export class ThemeExtensionRuntimeHost {
       if (extension.abiVersion !== payload.abiVersion) {
         throw new Error("Theme extension ABI does not match its receipt");
       }
+      this.surfaces.set(selection.key, surfaceOf(extension));
     } catch {
       if (this.isCurrent(selection.fingerprint, generation)) {
-        this.pendingFingerprint = null;
+        this.pending.delete(selection.fingerprint);
         this.log("extension_evaluation_failed");
       }
       return;
@@ -384,13 +446,12 @@ export class ThemeExtensionRuntimeHost {
         }
         return;
       }
-      this.stopActive = stop;
-      this.activeFingerprint = selection.fingerprint;
-      this.pendingFingerprint = null;
+      this.active.set(selection.fingerprint, { stop });
+      this.pending.delete(selection.fingerprint);
     } catch {
       scope.releaseAll();
       if (this.isCurrent(selection.fingerprint, generation)) {
-        this.pendingFingerprint = null;
+        this.pending.delete(selection.fingerprint);
         this.log("extension_mount_failed");
       }
     }
@@ -417,25 +478,26 @@ export class ThemeExtensionRuntimeHost {
 
   private isCurrent(fingerprint: string, generation: number): boolean {
     return !this.disposed
-      && this.generation === generation
-      && this.pendingFingerprint === fingerprint
-      && this.select()?.fingerprint === fingerprint;
+      && this.pending.get(fingerprint) === generation
+      && this.desired(this.candidates()).has(fingerprint);
   }
 
   private invalidatePending(): void {
     this.generation += 1;
-    this.pendingFingerprint = null;
+    this.pending.clear();
   }
 
-  private stop(): void {
-    const stop = this.stopActive;
-    this.stopActive = null;
-    this.activeFingerprint = null;
-    if (!stop) return;
-    try {
-      stop();
-    } catch {
-      this.log("extension_dispose_failed");
+  private stop(fingerprint?: string): void {
+    const targets = fingerprint === undefined ? [...this.active.keys()] : [fingerprint];
+    for (const target of targets) {
+      const runtime = this.active.get(target);
+      if (!runtime) continue;
+      this.active.delete(target);
+      try {
+        runtime.stop();
+      } catch {
+        this.log("extension_dispose_failed");
+      }
     }
   }
 }
