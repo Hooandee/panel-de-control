@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.56.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.1...panel-de-control-v0.56.0) (2026-09-25)
+
+
+### Español
+
+* **Temas:** Llega Luminous Atlas, un tema con una estética muy distinta a la de Steam, elementos dinámicos, menú de acceso rápido para cada juego y un montón de opciones para personalizarlo a tu gusto. Lo encontrarás en la sección Temas.
+
+### English
+
+* **Themes:** Luminous Atlas arrives, a theme that looks nothing like stock Steam, with dynamic elements, a quick access menu for every game and plenty of options to make it your own. You will find it in the Themes section.
+
+### Italiano
+
+* **Temi:** Arriva Luminous Atlas, un tema con un'estetica molto diversa da quella di Steam, elementi dinamici, un menu di accesso rapido per ogni gioco e tantissime opzioni per personalizzarlo a tuo gusto. Lo trovi nella sezione Temi.
+
+### Deutsch
+
+* **Themes:** Luminous Atlas ist da, ein Theme mit einem ganz anderen Look als Steam, dynamischen Elementen, einem Schnellzugriffsmenü für jedes Spiel und jeder Menge Optionen, um es nach deinem Geschmack anzupassen. Du findest es im Bereich Themes.
+
+### Português (Brasil)
+
+* **Temas:** Chegou o Luminous Atlas, um tema com um visual bem diferente do Steam, elementos dinâmicos, menu de acesso rápido para cada jogo e um monte de opções para personalizar do seu jeito. Você o encontra na seção Temas.
+
 ## [0.55.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.0...panel-de-control-v0.55.1) (2026-09-24)
 
 

@@ -26,4 +26,46 @@ describe("groupThemePatches", () => {
         ["compatibility", ["Navigation compatibility"]],
       ]);
   });
+
+  it("groups cover shape with the grid and floating covers with animations", () => {
+    const groups = groupThemePatches([patch("Forma de las portadas"), patch("Flotación de los juegos")]);
+
+    expect(groups.map((group) => [group.id, group.patches.map((item) => item.name)]))
+      .toEqual([
+        ["grid", ["Forma de las portadas"]],
+        ["animations", ["Flotación de los juegos"]],
+      ]);
+  });
+
+  it("gathers every Hooandee theme's section toggles at the end", () => {
+    const groups = groupThemePatches([
+      patch("Estilizar Inicio"),
+      patch("Posición de la parrilla"),
+      patch("Estilizar QAM y Decky"),
+    ], "hooandee-luminous-atlas");
+
+    expect(groups[groups.length - 1]).toEqual({
+      id: "sections",
+      patches: [patch("Estilizar Inicio"), patch("Estilizar QAM y Decky")],
+    });
+  });
+
+  it("drops a Hooandee theme's CSS Loader heading, since Panel titles its own groups", () => {
+    const heading: CssLoaderPatch = { name: "Secciones", defaultValue: "Secciones", value: "Secciones", options: ["Secciones"], type: "none", rawType: "none" };
+    const groups = groupThemePatches([heading, patch("Estilizar Inicio")], "hooandee-luminous-atlas");
+
+    expect(groups).toEqual([{ id: "sections", patches: [patch("Estilizar Inicio")] }]);
+  });
+
+  it("keeps a third-party theme's headings visible", () => {
+    const heading: CssLoaderPatch = { name: "Colors", defaultValue: "-", value: "-", options: ["-"], type: "none", rawType: "none" };
+
+    expect(groupThemePatches([heading], "someone-else")).toEqual([{ id: "appearance", patches: [heading] }]);
+  });
+
+  it("does not treat a third-party theme's toggles as sections", () => {
+    const groups = groupThemePatches([patch("Estilizar Inicio")], "someone-else");
+
+    expect(groups.map((group) => group.id)).toEqual(["appearance"]);
+  });
 });

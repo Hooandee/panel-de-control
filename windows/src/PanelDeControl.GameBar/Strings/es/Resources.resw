@@ -421,7 +421,6 @@
   <data name="BlockUpdatesDesc" xml:space="preserve"><value>Busca e instala nuevas versiones.</value></data>
   <data name="BlockPending" xml:space="preserve"><value>Pendiente en Windows</value></data>
   <data name="TdpUnconfirmed" xml:space="preserve"><value>Sin confirmar</value></data>
-  <data name="BatteryHealthPending" xml:space="preserve"><value>Salud y límite de carga: pendiente en Windows</value></data>
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo actual {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Límite de potencia experimental</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Elige los vatios y los aplica tras confirmarlos con el equipo</value></data>
@@ -431,4 +430,18 @@
   <data name="PerformancePending" xml:space="preserve"><value>Límite de FPS y escalado: pendiente en Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventilador 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventilador 2</value></data>
+  <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost del procesador</value></data>
+  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Activado</value></data>
+  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Desactivado</value></data>
+  <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost del procesador</value></data>
+  <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Rendimiento máximo</value></data>
+  <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Estado máximo del procesador</value></data>
+  <data name="CpuWindowsNote" xml:space="preserve"><value>SMT y núcleos activos solo se cambian desde la BIOS en Windows.</value></data>
+  <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows no permite cambiar el plan de energía</value></data>
+  <data name="CpuUnavailable" xml:space="preserve"><value>No se pudo leer el plan de energía</value></data>
+  <data name="ChargeLimitPending" xml:space="preserve"><value>Límite de carga: pendiente en Windows</value></data>
+  <data name="BatteryHealthLabel" xml:space="preserve"><value>Salud</value></data>
+  <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacidad</value></data>
+  <data name="BatteryCyclesLabel" xml:space="preserve"><value>Ciclos</value></data>
+  <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
 </root>

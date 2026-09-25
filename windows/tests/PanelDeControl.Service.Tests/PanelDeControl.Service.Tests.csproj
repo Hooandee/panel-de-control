@@ -14,4 +14,7 @@
     </PackageReference>
     <ProjectReference Include="../../src/PanelDeControl.Service/PanelDeControl.Service.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -23,10 +23,11 @@ def package(
     stray_js: bool = False,
     version: str = THEME_VERSION,
     extension_source: bytes = EXTENSION,
+    abi_version: int = 1,
 ):
     archive = root / "theme.zip"
     extension = {
-        "abiVersion": 1,
+        "abiVersion": abi_version,
         "entrypoint": "panel-extension.js",
         "size": len(extension_source),
         "sha256": hashlib.sha256(extension_source).hexdigest(),
@@ -107,6 +108,36 @@ def test_commit_persists_a_validated_receipt_and_serves_only_its_exact_extension
     }
 
 
+def test_commit_persists_and_serves_an_abi_v2_extension(tmp_path: Path):
+    extension = b"module.exports=Object.freeze({abiVersion:2,mount(){return()=>{}}});\n"
+    archive, descriptor = package(
+        tmp_path,
+        extension_source=extension,
+        abi_version=2,
+    )
+    themes, receipts = paths(tmp_path)
+
+    prepared = theme_packages.prepare_theme_archive(
+        archive, descriptor, themes, receipts_path=receipts
+    )
+    theme_packages.commit_theme_install(
+        prepared["transaction"], themes, receipts_path=receipts
+    )
+
+    assert theme_packages.list_theme_extensions(themes, receipts) == [{
+        "catalogId": THEME_ID,
+        "cssLoaderName": THEME_NAME,
+        "version": THEME_VERSION,
+        "abiVersion": 2,
+        "entrypoint": "panel-extension.js",
+        "size": len(extension),
+        "sha256": hashlib.sha256(extension).hexdigest(),
+    }]
+    assert theme_packages.load_theme_extension(
+        THEME_ID, THEME_VERSION, themes, receipts
+    )["abiVersion"] == 2
+
+
 def test_uncommitted_and_rolled_back_extensions_never_gain_a_receipt(tmp_path: Path):
     archive, descriptor = package(tmp_path)
     themes, receipts = paths(tmp_path)
@@ -126,7 +157,7 @@ def test_uncommitted_and_rolled_back_extensions_never_gain_a_receipt(tmp_path: P
     [
         {"schemaVersion": 1},
         {"runtime": {"moduleId": "private"}},
-        {"extension": {"abiVersion": 2, "entrypoint": "panel-extension.js", "size": len(EXTENSION), "sha256": hashlib.sha256(EXTENSION).hexdigest()}},
+        {"extension": {"abiVersion": 3, "entrypoint": "panel-extension.js", "size": len(EXTENSION), "sha256": hashlib.sha256(EXTENSION).hexdigest()}},
         {"extension": {"abiVersion": 1, "entrypoint": "other.js", "size": len(EXTENSION), "sha256": hashlib.sha256(EXTENSION).hexdigest()}},
         {"extension": {"abiVersion": 1, "entrypoint": "panel-extension.js", "size": len(EXTENSION), "sha256": "0" * 64}},
     ],

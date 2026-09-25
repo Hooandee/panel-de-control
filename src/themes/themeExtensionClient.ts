@@ -1,8 +1,10 @@
+export type ThemeExtensionAbiVersion = 1 | 2;
+
 export interface ThemeExtensionDescriptor {
   catalogId: string;
   cssLoaderName: string;
   version: string;
-  abiVersion: 1;
+  abiVersion: ThemeExtensionAbiVersion;
   sha256: string;
 }
 
@@ -64,7 +66,9 @@ function descriptor(value: unknown): ThemeExtensionDescriptor {
   if (typeof input.version !== "string" || !STABLE_VERSION.test(input.version)) {
     throw new Error("Theme extension version is invalid");
   }
-  if (input.abiVersion !== 1) throw new Error("Theme extension ABI is unsupported");
+  if (input.abiVersion !== 1 && input.abiVersion !== 2) {
+    throw new Error("Theme extension ABI is unsupported");
+  }
   if (typeof input.sha256 !== "string" || !SHA256.test(input.sha256)) {
     throw new Error("Theme extension hash is invalid");
   }
@@ -72,7 +76,7 @@ function descriptor(value: unknown): ThemeExtensionDescriptor {
     catalogId: input.catalogId,
     cssLoaderName: safeCssLoaderName(input.cssLoaderName),
     version: input.version,
-    abiVersion: 1,
+    abiVersion: input.abiVersion,
     sha256: input.sha256,
   };
 }

@@ -46,6 +46,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly BrightnessControlClient brightnessClient = new();
     private readonly TdpControlClient tdpClient = new();
     private readonly RefreshRateClient refreshClient = new();
+    private readonly CpuControlClient cpuClient = new();
+    private CancellationTokenSource? cpuDebounce;
+    private bool cpuRefreshInProgress;
+    private bool cpuWritePending;
+    private bool cpuReady;
+    private bool applyingCpuReadback;
+    private long cpuGeneration;
     private bool refreshRefreshInProgress;
     private bool refreshWritePending;
     private long refreshControlGeneration;
@@ -308,7 +315,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ApplyVolumeWhenReadyAsync(currentRefreshGeneration),
             ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
             ApplyTdpWhenReadyAsync(currentRefreshGeneration),
-            ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration));
+            ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration),
+            ApplyCpuWhenReadyAsync(currentRefreshGeneration));
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -475,6 +483,138 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private async Task ApplyCpuWhenReadyAsync(long currentRefreshGeneration)
+    {
+        if (cpuRefreshInProgress || cpuWritePending || disposed)
+        {
+            return;
+        }
+
+        cpuRefreshInProgress = true;
+        var generation = cpuGeneration;
+        try
+        {
+            var response = await cpuClient.GetAsync();
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration &&
+                !cpuWritePending &&
+                generation == cpuGeneration)
+            {
+                ApplyCpuResponse(response);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                cpuRefreshInProgress = false;
+            }
+        }
+    }
+
+    private void ApplyCpuResponse(CpuControlResponse response)
+    {
+        cpuReady = response.BoostEnabled.HasValue && response.MaximumStatePercent.HasValue;
+        applyingCpuReadback = true;
+        try
+        {
+            if (response.BoostEnabled is bool boost)
+            {
+                CpuBoostToggle.IsOn = boost;
+            }
+
+            if (response.MaximumStatePercent is int percent)
+            {
+                CpuMaximumStateSlider.Value = percent;
+                CpuMaximumStateValue.Text = $"{percent} %";
+            }
+            else
+            {
+                CpuMaximumStateValue.Text = "—";
+            }
+        }
+        finally
+        {
+            applyingCpuReadback = false;
+        }
+
+        CpuBoostToggle.IsEnabled = cpuReady && !cpuWritePending;
+        CpuMaximumStateSlider.IsEnabled = cpuReady && !cpuWritePending;
+        CpuControlStatus.Text = response.Status switch
+        {
+            ControlStatus.Available => string.Empty,
+            ControlStatus.Applied => Localized("StatusVerified"),
+            ControlStatus.Unverifiable => Localized("StatusNotVerified"),
+            ControlStatus.PermissionRequired => Localized("CpuPermissionRequired"),
+            ControlStatus.Rejected => Localized("StatusRejected"),
+            _ => Localized("CpuUnavailable"),
+        };
+    }
+
+    private async void CpuBoostToggle_Toggled(object sender, RoutedEventArgs args)
+    {
+        if (disposed || applyingCpuReadback || !cpuReady || cpuWritePending)
+        {
+            return;
+        }
+
+        var enable = CpuBoostToggle.IsOn;
+        await WriteCpuAsync(() => cpuClient.SetBoostAsync(enable));
+    }
+
+    private async void CpuMaximumStateSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs args)
+    {
+        if (disposed || applyingCpuReadback || !cpuReady)
+        {
+            return;
+        }
+
+        var percent = (int)Math.Round(args.NewValue);
+        CpuMaximumStateValue.Text = $"{percent} %";
+        cpuDebounce?.Cancel();
+        var debounce = cpuDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), debounce.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        await WriteCpuAsync(() => cpuClient.SetMaximumStateAsync(percent));
+    }
+
+    private async Task WriteCpuAsync(Func<Task<CpuControlResponse>> write)
+    {
+        if (cpuWritePending)
+        {
+            return;
+        }
+
+        cpuWritePending = true;
+        var generation = ++cpuGeneration;
+        CpuControlStatus.Text = Localized("StatusApplying");
+        CpuBoostToggle.IsEnabled = false;
+        CpuMaximumStateSlider.IsEnabled = false;
+        try
+        {
+            var response = await write();
+            if (!disposed && generation == cpuGeneration)
+            {
+                cpuWritePending = false;
+                ApplyCpuResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == cpuGeneration)
+            {
+                cpuWritePending = false;
+            }
+        }
+    }
+
     private void ApplyRefreshRateResponse(RefreshRateResponse response)
     {
         var rates = response.Supported.ToArray();
@@ -573,6 +713,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
         SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
         SystemBatteryDetail.Text = PowerDrawDetail.Text;
+        ApplyBatteryHealth(snapshot);
         ApplyFan(FanOneValue, snapshot, "fan.cpu.rpm");
         ApplyFan(FanTwoValue, snapshot, "fan.gpu.rpm");
         FanTwoPanel.Visibility = FindReading(snapshot, "fan.gpu.rpm") is null ? Visibility.Collapsed : Visibility.Visible;
@@ -1163,9 +1304,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
         SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
-        SystemBatteryPending.Text = Localized("BatteryHealthPending");
+        SystemBatteryPending.Text = Localized("ChargeLimitPending");
+        BatteryHealthLabel.Text = Localized("BatteryHealthLabel");
+        BatteryCapacityLabel.Text = Localized("BatteryCapacityLabel");
+        BatteryCyclesLabel.Text = Localized("BatteryCyclesLabel");
         PerformanceTitle.Text = Localized("BlockSteamPerformanceTitle");
         RefreshRateLabel.Text = Localized("RefreshRateLabel");
+        CpuControlTitle.Text = Localized("BlockCpuTitle");
+        CpuControlNote.Text = Localized("CpuWindowsNote");
         PerformancePending.Text = Localized("PerformancePending");
         FanTitle.Text = Localized("BlockFanRpmTitle");
         FanOneLabel.Text = Localized("FanOne");
@@ -1609,6 +1755,29 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return geometry;
     }
 
+    private void ApplyBatteryHealth(HardwareSnapshot snapshot)
+    {
+        var health = FindReading(snapshot, BatteryHealth.HealthId);
+        BatteryHealthValue.Text = Format(snapshot, BatteryHealth.HealthId, "0", "%");
+        BatteryHealthValue.Foreground = health?.Status == ReadingStatus.Available && health.Value is double percent
+            ? new SolidColorBrush(BatteryColorFor(percent))
+            : ResourceBrush("PdcTextMutedBrush");
+        var full = FindReading(snapshot, BatteryHealth.FullCapacityId);
+        var design = FindReading(snapshot, BatteryHealth.DesignCapacityId);
+        BatteryCapacityValue.Text = full?.Value is double charged && design?.Value is double designed &&
+            full.Status == ReadingStatus.Available && design.Status == ReadingStatus.Available
+                ? string.Format(Localized("BatteryCapacityFormat"), charged / 1000, designed / 1000)
+                : StatusText(full);
+        var cycles = FindReading(snapshot, BatteryHealth.CyclesId);
+        BatteryCyclesValue.Text = cycles?.Status == ReadingStatus.Available && cycles.Value is double count
+            ? count.ToString("0")
+            : StatusText(cycles);
+        foreach (var value in new[] { BatteryHealthValue, BatteryCapacityValue, BatteryCyclesValue })
+        {
+            value.FontSize = value.Text.Any(char.IsDigit) ? 20 : 13;
+        }
+    }
+
     private static void ApplyFan(TextBlock target, HardwareSnapshot snapshot, string id)
     {
         var reading = FindReading(snapshot, id);
@@ -1986,6 +2155,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         refreshRefreshInProgress = false;
         refreshWritePending = false;
         refreshControlGeneration++;
+        cpuRefreshInProgress = false;
+        cpuWritePending = false;
+        cpuGeneration++;
+        cpuDebounce?.Cancel();
+        cpuDebounce = null;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
         CancelPendingBrightnessWrite();

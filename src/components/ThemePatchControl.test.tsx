@@ -47,6 +47,31 @@ describe("ThemePatchControl", () => {
     expect(onChange).toHaveBeenCalledWith("No");
   });
 
+  it("shows translated names while CSS Loader keeps receiving the internal values", () => {
+    const onChange = vi.fn();
+    const labels = { name: "Grid position", option: (value: string) => ({ Alta: "Top", Centro: "Center", Baja: "Bottom" })[value] ?? value };
+    render(<ThemePatchControl patch={{ ...basePatch, name: "Posición de la parrilla", type: "slider", value: "Centro", options: ["Alta", "Centro", "Baja"] }} labels={labels} onChange={onChange} />);
+
+    expect(screen.getByText("Grid position")).toBeTruthy();
+    expect(screen.getByText("Center")).toBeTruthy();
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "0" } });
+    expect(onChange).toHaveBeenCalledWith("Alta");
+  });
+
+  it("translates dropdown options and checkbox names", () => {
+    const onChange = vi.fn();
+    const labels = { name: "Header content", option: (value: string) => ({ Completo: "Full", Oculto: "Hidden" })[value] ?? value };
+    render(<ThemePatchControl patch={{ ...basePatch, name: "Contenido del header", type: "dropdown", value: "Completo", options: ["Completo", "Oculto"], rawType: "dropdown" }} labels={labels} onChange={onChange} />);
+
+    expect(screen.getByRole("option", { name: "Hidden" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Oculto" } });
+    expect(onChange).toHaveBeenCalledWith("Oculto");
+    cleanup();
+
+    render(<ThemePatchControl patch={{ ...basePatch, name: "Menú rápido", type: "checkbox", value: "Yes", options: ["No", "Yes"], rawType: "checkbox" }} labels={{ name: "Quick menu", option: (value) => value }} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "Quick menu" })).toBeTruthy();
+  });
+
   it("gives editable controls one shared Panel surface", () => {
     const onChange = vi.fn();
     render(<ThemePatchControl patch={{ ...basePatch, name: "Animated grid", type: "checkbox", value: "Yes", options: ["No", "Yes"], rawType: "checkbox" }} onChange={onChange} />);

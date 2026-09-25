@@ -43,6 +43,7 @@ import { configureThemePublicationCheckHost } from "./themes/remotePublicationCl
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
+import { getQamDocument, onQamDocument } from "./qamDocument";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -139,6 +140,8 @@ export default definePlugin(() => {
   const stopThemesRuntime = startThemesRuntime({
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
+    getQamDocument,
+    subscribeQamDocument: onQamDocument,
   });
 
   return {

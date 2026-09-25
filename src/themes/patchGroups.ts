@@ -17,25 +17,16 @@ const GROUP_ORDER: readonly ThemePatchGroupId[] = [
 ];
 
 const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | "sections">, RegExp>> = {
-  grid: /grid|parrilla|cover|carátula|caratula|column|row|fila|library|biblioteca|card|tarjeta/,
-  animations: /anim|motion|movimiento|transition|transición|transicion|spring|parallax/,
+  grid: /grid|parrilla|cover|portada|carátula|caratula|column|row|fila|library|biblioteca|card|tarjeta/,
+  animations: /anim|motion|movimiento|flota|float|transition|transición|transicion|spring|parallax/,
   performance: /performance|rendimiento|quality|calidad|blur|desenfoque|effect|efecto|fps|budget/,
   compatibility: /compat|navigation|navegación|navegacion|fallback|legacy|steam|decky/,
 };
 
-const GALLERY_SECTION_PATCHES = new Set([
-  "Estilizar Inicio",
-  "Estilizar Biblioteca y parrilla",
-  "Estilizar detalles del juego",
-  "Estilizar Ajustes",
-  "Estilizar Descargas",
-  "Estilizar multimedia y logros",
-  "Estilizar menús y barras",
-  "Estilizar notificaciones",
-]);
+const SECTION_PATCH_PREFIX = "Estilizar ";
 
 function groupForPatch(patch: CssLoaderPatch, themeId?: string): ThemePatchGroupId {
-  if (themeId === "hooandee-gallery" && patch.type === "checkbox" && GALLERY_SECTION_PATCHES.has(patch.name)) {
+  if (themeId?.startsWith("hooandee-") && patch.type === "checkbox" && patch.name.startsWith(SECTION_PATCH_PREFIX)) {
     return "sections";
   }
   const name = patch.name.toLocaleLowerCase();
@@ -47,7 +38,11 @@ function groupForPatch(patch: CssLoaderPatch, themeId?: string): ThemePatchGroup
 
 export function groupThemePatches(patches: readonly CssLoaderPatch[], themeId?: string): ThemePatchGroup[] {
   const grouped = new Map(GROUP_ORDER.map((id) => [id, [] as CssLoaderPatch[]]));
-  for (const patch of patches) grouped.get(groupForPatch(patch, themeId))?.push(patch);
+  const hooandeeTheme = themeId?.startsWith("hooandee-") ?? false;
+  for (const patch of patches) {
+    if (hooandeeTheme && patch.type === "none") continue;
+    grouped.get(groupForPatch(patch, themeId))?.push(patch);
+  }
   return GROUP_ORDER
     .map((id) => ({ id, patches: grouped.get(id) ?? [] }))
     .filter((group) => group.patches.length > 0);
