@@ -266,6 +266,33 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(stopCapture).toHaveBeenCalledOnce();
   });
 
+  it("releases at once a capture a theme takes after it was unmounted", async () => {
+    const stopCapture = vi.fn();
+    const navigation = { focus: vi.fn(() => true), capture: vi.fn(() => stopCapture) };
+    let late: ThemeExtensionMountContextV2["navigation"];
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      navigation,
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          late = context.navigation;
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    host.dispose();
+    late?.capture(() => {});
+
+    expect(navigation.capture).toHaveBeenCalledOnce();
+    expect(stopCapture).toHaveBeenCalledOnce();
+  });
+
   it("does not release twice what the theme already released", async () => {
     const stopCapture = vi.fn();
     const navigation = { focus: vi.fn(() => true), capture: vi.fn(() => stopCapture) };

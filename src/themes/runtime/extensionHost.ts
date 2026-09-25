@@ -82,11 +82,20 @@ const HOST_DESCRIPTOR: Readonly<ThemeExtensionHostDescriptor> = Object.freeze({ 
 // its disposer must not leave a capture or a QAM subscription behind.
 class MountScope {
   private readonly releases = new Set<() => void>();
+  private closed = false;
 
   constructor(private readonly log: (code: ExtensionLogCode) => void) {}
 
   track(release: () => void): () => void {
     if (typeof release !== "function") return () => {};
+    if (this.closed) {
+      try {
+        release();
+      } catch {
+        this.log("extension_release_failed");
+      }
+      return () => {};
+    }
     let active = true;
     const once = () => {
       if (!active) return;
@@ -99,6 +108,7 @@ class MountScope {
   }
 
   releaseAll(): void {
+    this.closed = true;
     for (const release of [...this.releases].reverse()) {
       try {
         release();
