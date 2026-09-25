@@ -56,6 +56,8 @@ _MAX_REMOTE_PATCHES = 64
 _MAX_REMOTE_PATCH_VALUES = 64
 _MAX_REMOTE_TARGETS = 8
 _MAX_REMOTE_TEXT_BYTES = 4096
+_PATCH_LABEL_LOCALES = frozenset({"es", "en", "it", "de", "pt-BR"})
+_MAX_PATCH_LABEL_CHARS = 120
 _REMOTE_MANIFEST_VERSION = 9
 _REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
     "name",
@@ -583,6 +585,68 @@ def _validate_remote_content(
     _validate_css_resources(source, packaged_css, packaged_assets, theme_name)
 
 
+def _localized_label(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and bool(value)
+        and set(value) <= _PATCH_LABEL_LOCALES
+        and all(
+            isinstance(text, str)
+            and text.strip()
+            and len(text) <= _MAX_PATCH_LABEL_CHARS
+            and not any(ord(character) < 32 or ord(character) == 127 for character in text)
+            for text in value.values()
+        )
+    )
+
+
+def _patch_label_key(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= _MAX_PATCH_LABEL_CHARS
+
+
+# Translated names for a theme's CSS Loader options; the internal names stay the keys because
+# CSS Loader stores the user's choices under them.
+def _validated_patch_labels(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or len(value) > _MAX_REMOTE_PATCHES:
+        raise ThemePackageError("identity_mismatch", "Theme patch labels are invalid")
+    for patch, entry in value.items():
+        if (
+            not _patch_label_key(patch)
+            or not isinstance(entry, dict)
+            or not entry
+            or not set(entry) <= {"name", "values"}
+            or ("name" in entry and not _localized_label(entry["name"]))
+        ):
+            raise ThemePackageError("identity_mismatch", "Theme patch labels are invalid")
+        values = entry.get("values")
+        if values is not None and (
+            not isinstance(values, dict)
+            or len(values) > _MAX_REMOTE_PATCH_VALUES
+            or not all(_patch_label_key(option) and _localized_label(label) for option, label in values.items())
+        ):
+            raise ThemePackageError("identity_mismatch", "Theme patch labels are invalid")
+    return value
+
+
+def theme_patch_labels(themes_root: Path, theme_id: str, theme_name: str) -> dict[str, Any]:
+    if (
+        not isinstance(theme_id, str)
+        or not _SAFE_ID.fullmatch(theme_id)
+        or not isinstance(theme_name, str)
+        or not theme_name.strip()
+        or Path(theme_name).name != theme_name
+        or theme_name in {".", ".."}
+    ):
+        return {}
+    try:
+        panel = _read_existing_manifest(themes_root / theme_name / "panel-theme.json")
+        if panel.get("schemaVersion") != 2 or panel.get("catalogId") != theme_id or "labels" not in panel:
+            return {}
+        return _validated_patch_labels(panel["labels"])
+    except ThemePackageError:
+        return {}
+
+
 def _extension_receipt(
     source: Path,
     theme_id: str,
@@ -592,15 +656,18 @@ def _extension_receipt(
 ) -> dict[str, object] | None:
     if panel.get("schemaVersion") != 2 or panel.get("catalogId") != theme_id:
         raise ThemePackageError("identity_mismatch", "Theme package marker is invalid")
+    if "labels" in panel:
+        _validated_patch_labels(panel["labels"])
+    keys = set(panel) - {"labels"}
     extension = panel.get("extension")
     if extension is None:
-        if set(panel) != {"schemaVersion", "catalogId"}:
+        if keys != {"schemaVersion", "catalogId"}:
             raise ThemePackageError("identity_mismatch", "Theme package marker is invalid")
         if (source / "panel-extension.js").exists():
             raise ThemePackageError("unsafe_archive", "Theme extension is not declared")
         return None
     if (
-        set(panel) != {"schemaVersion", "catalogId", "extension"}
+        keys != {"schemaVersion", "catalogId", "extension"}
         or not isinstance(extension, dict)
         or set(extension) != {"abiVersion", "entrypoint", "size", "sha256"}
         or type(extension.get("abiVersion")) is not int

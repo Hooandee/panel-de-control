@@ -1452,6 +1452,23 @@ class Plugin:
             )
             raise RuntimeError("extension_unavailable") from None
 
+    async def get_theme_patch_labels(self, catalog_id: str, css_loader_name: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.theme_patch_labels(
+                    self._themes_root(),
+                    catalog_id,
+                    css_loader_name,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Theme patch labels unavailable (%s)",
+                type(error).__name__,
+            )
+            return {}
+
     async def load_theme_extension(self, catalog_id: str, version: str) -> dict:
         self._init()
         if (

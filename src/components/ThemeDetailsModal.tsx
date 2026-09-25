@@ -7,6 +7,8 @@ import { theme } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
 import { themeCoverFor } from "../themes/themePresentation";
+import { labelsForPatch } from "../themes/themePatchLabels";
+import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
 import { ThemePatchControl } from "./ThemePatchControl";
@@ -276,6 +278,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const description = localizePublishedText(card.release.description, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
   const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
+  const patchLabels = useThemePatchLabels(card.id, card.cssLoaderTheme?.name, card.installedVersion);
   const fullSizeLayout = card.installed && groups.length > 0;
   const availableCover = themeCoverFor(card.release);
   const cover = availableCover === failedCover ? undefined : availableCover;
@@ -517,7 +520,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                       <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
                         {group.patches.map((patch) => (
                           <div key={patch.name} role="listitem">
-                            <ThemePatchControl patch={patch} disabled={actionsBlocked} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
+                            <ThemePatchControl patch={patch} labels={labelsForPatch(patchLabels, patch.name, lang)} disabled={actionsBlocked} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
                           </div>
                         ))}
                       </div>

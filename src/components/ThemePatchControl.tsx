@@ -2,10 +2,12 @@ import { DropdownItem, SliderField, ToggleField } from "@decky/ui";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { CssLoaderPatch } from "../themes/cssLoaderTypes";
+import type { PatchLabels } from "../themes/themePatchLabels";
 import { theme } from "../theme";
 
 interface Props {
   patch: CssLoaderPatch;
+  labels?: PatchLabels;
   disabled?: boolean;
   onChange(value: string): void;
 }
@@ -51,11 +53,11 @@ function PatchSurface({
   );
 }
 
-function ReadOnlyPatch({ patch, value = patch.rawType }: { patch: CssLoaderPatch; value?: string }) {
+function ReadOnlyPatch({ label, value }: { label: string; value: string }) {
   return (
     <PatchSurface>
       <div style={readOnlyStyle}>
-        <span data-pdc-theme-patch-primary style={{ color: theme.color.textPrimary, fontSize: theme.font.body }}>{patch.name}</span>
+        <span data-pdc-theme-patch-primary style={{ color: theme.color.textPrimary, fontSize: theme.font.body }}>{label}</span>
         <span data-pdc-theme-patch-muted style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>{value}</span>
       </div>
     </PatchSurface>
@@ -74,13 +76,14 @@ function isEditablePatch(patch: CssLoaderPatch): boolean {
   return false;
 }
 
-export function ThemePatchControl({ patch, disabled = false, onChange }: Props) {
-  const label = patch.name;
+export function ThemePatchControl({ patch, labels, disabled = false, onChange }: Props) {
+  const label = labels?.name ?? patch.name;
+  const optionLabel = (value: string) => labels?.option(value) ?? value;
   if (!isEditablePatch(patch)) {
     const value = patch.type === "none" || patch.type === "unsupported"
       ? patch.rawType
-      : patch.value;
-    return <ReadOnlyPatch patch={patch} value={value} />;
+      : optionLabel(patch.value);
+    return <ReadOnlyPatch label={label} value={value} />;
   }
 
   if (patch.type === "checkbox") {
@@ -102,7 +105,7 @@ export function ThemePatchControl({ patch, disabled = false, onChange }: Props) 
       <PatchSurface disabled={disabled}>
         <DropdownItem
           label={label}
-          rgOptions={patch.options.map((option) => ({ label: option, data: option }))}
+          rgOptions={patch.options.map((option) => ({ label: optionLabel(option), data: option }))}
           selectedOption={patch.value}
           disabled={disabled}
           bottomSeparator="none"
@@ -114,7 +117,7 @@ export function ThemePatchControl({ patch, disabled = false, onChange }: Props) 
 
   if (patch.type === "slider") {
     const selectedIndex = patch.options.indexOf(patch.value);
-    const selectedLabel = patch.options[selectedIndex];
+    const selectedLabel = optionLabel(patch.options[selectedIndex]);
     return (
       <PatchSurface disabled={disabled} slider>
         <SliderField
@@ -141,5 +144,5 @@ export function ThemePatchControl({ patch, disabled = false, onChange }: Props) 
     );
   }
 
-  return <ReadOnlyPatch patch={patch} />;
+  return <ReadOnlyPatch label={label} value={patch.rawType} />;
 }

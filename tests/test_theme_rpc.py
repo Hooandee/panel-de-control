@@ -551,3 +551,23 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "activation_pending": False,
         "activation_quarantined": True,
     }
+
+
+def test_patch_labels_rpc_reads_the_installed_theme_and_never_raises(theme_rpc, monkeypatch):
+    main, plugin, fake = theme_rpc
+    themes_root = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes"
+    calls = []
+    monkeypatch.setattr(
+        main.theme_packages,
+        "theme_patch_labels",
+        lambda root, catalog_id, name: calls.append((root, catalog_id, name)) or {"A": {"name": {"en": "B"}}},
+    )
+
+    assert asyncio.run(plugin.get_theme_patch_labels("example-theme", "Example Theme")) == {"A": {"name": {"en": "B"}}}
+    assert calls == [(themes_root, "example-theme", "Example Theme")]
+
+    def fail(*_args):
+        raise OSError("disk")
+
+    monkeypatch.setattr(main.theme_packages, "theme_patch_labels", fail)
+    assert asyncio.run(plugin.get_theme_patch_labels("example-theme", "Example Theme")) == {}

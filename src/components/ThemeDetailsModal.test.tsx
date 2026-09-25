@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   focusElement: vi.fn((element: HTMLElement | null) => element?.focus()),
   navigate: vi.fn(),
   showModal: vi.fn(),
+  patchLabels: {} as Record<string, unknown>,
 }));
 vi.mock("@decky/ui", () => ({
   ModalRoot: ({ children, onCancel, onEscKeypress, bAllowFullSize }: { children?: ReactNode; onCancel?: () => void; onEscKeypress?: () => void; bAllowFullSize?: boolean }) => (
@@ -34,10 +35,11 @@ vi.mock("@decky/ui", () => ({
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string) => key }) }));
 vi.mock("./ThemePatchControl", () => ({
-  ThemePatchControl: ({ patch, disabled, onChange }: { patch: { name: string }; disabled?: boolean; onChange(value: string): void }) => (
-    <button disabled={disabled} onClick={() => onChange("No")}>{patch.name}</button>
+  ThemePatchControl: ({ patch, labels, disabled, onChange }: { patch: { name: string }; labels?: { name: string }; disabled?: boolean; onChange(value: string): void }) => (
+    <button disabled={disabled} onClick={() => onChange("No")}>{labels?.name ?? patch.name}</button>
   ),
 }));
+vi.mock("../themes/useThemePatchLabels", () => ({ useThemePatchLabels: () => mocks.patchLabels }));
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
 
 import { ThemeDetailsModal } from "./ThemeDetailsModal";
@@ -93,7 +95,15 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 }
 
 describe("ThemeDetailsModal", () => {
-  afterEach(() => { cleanup(); mocks.controller = null; vi.clearAllMocks(); });
+  afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
+
+  it("names an installed theme's options with the labels it ships, in the Panel language", () => {
+    mocks.patchLabels = { Motion: { name: { en: "Floating covers", es: "Flotación" }, values: {} } };
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByRole("button", { name: "Floating covers" })).toBeTruthy();
+  });
 
   it("keeps published details visible and offers Decky Store when CSS Loader is missing", () => {
     mocks.controller = controller();
