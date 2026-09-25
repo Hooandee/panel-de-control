@@ -410,6 +410,57 @@
                 </StackPanel>
             </Border>
 
+            <Border x:Name="CpuControlCard" Tag="system.cpu" Style="{StaticResource PdcCardStyle}">
+                <StackPanel>
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon FontFamily="{StaticResource PdcIconFontFamily}" FontSize="16" Glyph="&#xE950;" Foreground="{StaticResource PdcAccentBrush}" />
+                        <TextBlock x:Name="CpuControlTitle" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource PdcTitleStyle}" />
+                    </Grid>
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Uid="CpuBoostLabel" VerticalAlignment="Center" Style="{StaticResource PdcBodyStyle}" />
+                        <ToggleSwitch
+                            x:Name="CpuBoostToggle"
+                            x:Uid="CpuBoostToggle"
+                            Grid.Column="1"
+                            MinWidth="0"
+                            IsEnabled="False"
+                            IsTabStop="True"
+                            Toggled="CpuBoostToggle_Toggled" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Uid="CpuMaximumStateLabel" VerticalAlignment="Center" Style="{StaticResource PdcBodyStyle}" />
+                        <TextBlock x:Name="CpuMaximumStateValue" Grid.Column="1" Text="—" FontSize="20" Style="{StaticResource PdcValueStyle}" />
+                    </Grid>
+                    <Slider
+                        x:Name="CpuMaximumStateSlider"
+                        x:Uid="CpuMaximumStateSlider"
+                        Margin="0,4,0,0"
+                        Minimum="5"
+                        Maximum="100"
+                        StepFrequency="5"
+                        SmallChange="5"
+                        IsEnabled="False"
+                        IsTabStop="True"
+                        Style="{StaticResource PdcSliderStyle}"
+                        Foreground="{StaticResource PdcAccentBrush}"
+                        ValueChanged="CpuMaximumStateSlider_ValueChanged" />
+                    <TextBlock x:Name="CpuControlStatus" AutomationProperties.LiveSetting="Polite" Style="{StaticResource PdcCaptionStyle}" />
+                    <TextBlock x:Name="CpuControlNote" Margin="0,10,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
+                </StackPanel>
+            </Border>
+
             <Border x:Name="BrightnessCard" Tag="system.brightness" Style="{StaticResource PdcCardStyle}">
                 <StackPanel>
                     <Grid ColumnSpacing="10">

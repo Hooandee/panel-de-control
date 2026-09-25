@@ -431,4 +431,13 @@
   <data name="PerformancePending" xml:space="preserve"><value>Límite de FPS y escalado: pendiente en Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventilador 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventilador 2</value></data>
+  <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost del procesador</value></data>
+  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Activado</value></data>
+  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Desactivado</value></data>
+  <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost del procesador</value></data>
+  <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Rendimiento máximo</value></data>
+  <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Estado máximo del procesador</value></data>
+  <data name="CpuWindowsNote" xml:space="preserve"><value>SMT y núcleos activos solo se cambian desde la BIOS en Windows.</value></data>
+  <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows no permite cambiar el plan de energía</value></data>
+  <data name="CpuUnavailable" xml:space="preserve"><value>No se pudo leer el plan de energía</value></data>
 </root>

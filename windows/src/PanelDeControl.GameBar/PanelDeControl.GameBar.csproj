@@ -54,6 +54,7 @@
     </Compile>
     <Compile Include="BrightnessControlClient.cs" />
     <Compile Include="RefreshRateClient.cs" />
+    <Compile Include="CpuControlClient.cs" />
     <Compile Include="CrashLog.cs" />
     <Compile Include="HardwareBrokerLauncher.cs" />
     <Compile Include="InventoryClient.cs" />
