@@ -7,28 +7,23 @@
 
 ### Español
 
-* **Temas:** Llega Luminous Atlas, un tema con una estética muy distinta a la de Steam, elementos dinámicos, menú de acceso rápido para cada juego y portadas personalizables. Lo encontrarás en la sección Temas.
-* **Ajustes de los temas:** Las opciones de los temas Hooandee aparecen con su nombre en tu idioma y ordenadas por grupos, con las secciones que puedes activar o desactivar juntas al final.
+* **Temas:** Llega Luminous Atlas, un tema con una estética muy distinta a la de Steam, elementos dinámicos, menú de acceso rápido para cada juego y un montón de opciones para personalizarlo a tu gusto. Lo encontrarás en la sección Temas.
 
 ### English
 
-* **Themes:** Luminous Atlas arrives, a theme that looks nothing like stock Steam, with dynamic elements, a quick access menu for every game and customizable covers. You will find it in the Themes section.
-* **Theme settings:** Hooandee theme options show their names in your language and are sorted into groups, with the sections you can turn on or off together at the end.
+* **Themes:** Luminous Atlas arrives, a theme that looks nothing like stock Steam, with dynamic elements, a quick access menu for every game and plenty of options to make it your own. You will find it in the Themes section.
 
 ### Italiano
 
-* **Temi:** Arriva Luminous Atlas, un tema con un'estetica molto diversa da quella di Steam, elementi dinamici, un menu di accesso rapido per ogni gioco e copertine personalizzabili. Lo trovi nella sezione Temi.
-* **Impostazioni dei temi:** Le opzioni dei temi Hooandee mostrano il loro nome nella tua lingua e sono ordinate per gruppi, con le sezioni che puoi attivare o disattivare raccolte alla fine.
+* **Temi:** Arriva Luminous Atlas, un tema con un'estetica molto diversa da quella di Steam, elementi dinamici, un menu di accesso rapido per ogni gioco e tantissime opzioni per personalizzarlo a tuo gusto. Lo trovi nella sezione Temi.
 
 ### Deutsch
 
-* **Themes:** Luminous Atlas ist da, ein Theme mit einem ganz anderen Look als Steam, dynamischen Elementen, einem Schnellzugriffsmenü für jedes Spiel und anpassbaren Covern. Du findest es im Bereich Themes.
-* **Theme-Einstellungen:** Die Optionen der Hooandee-Themes zeigen ihren Namen in deiner Sprache und sind nach Gruppen geordnet, die Bereiche, die du ein- oder ausschalten kannst, stehen gesammelt am Ende.
+* **Themes:** Luminous Atlas ist da, ein Theme mit einem ganz anderen Look als Steam, dynamischen Elementen, einem Schnellzugriffsmenü für jedes Spiel und jeder Menge Optionen, um es nach deinem Geschmack anzupassen. Du findest es im Bereich Themes.
 
 ### Português (Brasil)
 
-* **Temas:** Chegou o Luminous Atlas, um tema com um visual bem diferente do Steam, elementos dinâmicos, menu de acesso rápido para cada jogo e capas personalizáveis. Você o encontra na seção Temas.
-* **Ajustes dos temas:** As opções dos temas Hooandee aparecem com o nome no seu idioma e organizadas por grupos, com as seções que você pode ativar ou desativar reunidas no final.
+* **Temas:** Chegou o Luminous Atlas, um tema com um visual bem diferente do Steam, elementos dinâmicos, menu de acesso rápido para cada jogo e um monte de opções para personalizar do seu jeito. Você o encontra na seção Temas.
 
 ## [0.55.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.0...panel-de-control-v0.55.1) (2026-09-24)
 
