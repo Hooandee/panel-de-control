@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.56.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.1...panel-de-control-v0.56.0) (2026-09-25)
+
+
+### Features
+
+* **themes:** translated theme options, ABI 2 theme runtimes and Luminous Atlas cover ([#735](https://github.com/Hooandee/panel-de-control/issues/735)) ([3f5ea3a](https://github.com/Hooandee/panel-de-control/commit/3f5ea3adcb7c245313c018d9d1c112b39c390c34))
+
 ## [0.55.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.0...panel-de-control-v0.55.1) (2026-09-24)
 
 
