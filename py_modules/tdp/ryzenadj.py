@@ -15,6 +15,7 @@ _SLOW_RE = re.compile(r"PPT LIMIT SLOW\s*\|\s*([\d.]+)", re.IGNORECASE)
 
 # Readback slack (W): the STAPM readback rounds, so treat a near-match as applied.
 _READBACK_TOLERANCE_W = 2
+_UNREADABLE_READS_TO_HIDE_AUTO = 2
 
 
 def _unreadable(applied):
@@ -136,7 +137,14 @@ class RyzenadjBackend(TDPBackend):
         self.low_battery_hold_strategy = (
             "primary" if self._require_readback else None
         )
-        self.auto_tdp_safe = self._require_readback
+        self.auto_tdp_safe = self._require_readback or not self._power_only_retry
+        self._unreadable_reads = 0
+        self._auto_readback = (
+            "required" if self._require_readback
+            else "unsupported" if self._power_only_retry
+            else "unknown"
+        )
+        self._auto_readback_limits = None
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
@@ -682,10 +690,24 @@ class RyzenadjBackend(TDPBackend):
 
     def observe(self) -> TdpObservation:
         if not self._require_readback:
-            return super().observe()
+            return self._observe_normal()
         snapshot = self._read_snapshot(require_zero_exit=True)
         if snapshot is None:
             return TdpObservation(readable=False)
+        return self._snapshot_observation(snapshot)
+
+    def _observe_normal(self) -> TdpObservation:
+        exit_ok, out = self._read_info_result() if self.supported else (False, None)
+        if out is None:
+            return TdpObservation(readable=self.readback)
+        snapshot = self._note_auto_readback(out, exit_ok)
+        if snapshot is not None:
+            return self._snapshot_observation(snapshot)
+        applied = _parse_stapm(out)
+        surfaces = {self.name: {"pl1": RailReading(applied)}} if applied is not None else {}
+        return TdpObservation(readable=self.readback, surfaces=surfaces)
+
+    def _snapshot_observation(self, snapshot) -> TdpObservation:
         return TdpObservation(
             readable=True,
             surfaces={
@@ -697,8 +719,28 @@ class RyzenadjBackend(TDPBackend):
             },
         )
 
+    def _note_auto_readback(self, out: str, exit_ok: bool) -> dict[str, int] | None:
+        # Auto-TDP only needs the STAPM readback to confirm each step; FAST/SLOW, when
+        # reported, are observed too. A failed or empty read keeps the last verdict, and
+        # one odd read without STAPM is not enough to hide Auto.
+        if self._power_only_retry or not exit_ok or not out.strip():
+            return None
+        if _unreadable(_parse_stapm(out)):
+            self._unreadable_reads += 1
+            if self._unreadable_reads >= _UNREADABLE_READS_TO_HIDE_AUTO:
+                self._auto_readback = "unreadable"
+                self._auto_readback_limits = None
+                self.auto_tdp_safe = False
+            return None
+        self._unreadable_reads = 0
+        snapshot = _parse_snapshot(out)
+        self._auto_readback = "three_rail" if snapshot is not None else "stapm_only"
+        self._auto_readback_limits = dict(snapshot) if snapshot is not None else None
+        self.auto_tdp_safe = True
+        return snapshot
+
     def auto_physical_levels(self, levels: dict) -> dict[str, int]:
-        if not self._require_readback:
+        if not self._require_readback and self._auto_readback != "three_rail":
             return super().auto_physical_levels(levels)
         return {
             rail: int(levels[rail])
@@ -715,6 +757,12 @@ class RyzenadjBackend(TDPBackend):
                 else None
             ),
             "readback_state": self._readback_state,
+            "auto_readback": self._auto_readback,
+            "auto_readback_limits": (
+                dict(self._auto_readback_limits)
+                if self._auto_readback_limits is not None
+                else None
+            ),
             "last_readback_failure": self._last_readback_failure,
             "low_battery_hold_active": self._hold_recovery_target is not None,
         }
@@ -815,8 +863,12 @@ class RyzenadjBackend(TDPBackend):
     def _read_applied(self, *, require_zero_exit: bool = False) -> int | None:
         if not self.supported:
             return None
-        out = self._read_info(require_zero_exit=require_zero_exit)
-        return _parse_stapm(out) if out is not None else None
+        exit_ok, out = self._read_info_result()
+        if out is None or (require_zero_exit and not exit_ok):
+            return None
+        if not self._require_readback:
+            self._note_auto_readback(out, exit_ok)
+        return _parse_stapm(out)
 
     def _read_snapshot(self, *, require_zero_exit: bool = False):
         if not self.supported:
@@ -825,6 +877,12 @@ class RyzenadjBackend(TDPBackend):
         return _parse_snapshot(out) if out is not None else None
 
     def _read_info(self, *, require_zero_exit: bool = False) -> str | None:
+        exit_ok, out = self._read_info_result()
+        if require_zero_exit and not exit_ok:
+            return None
+        return out
+
+    def _read_info_result(self) -> tuple[bool, str | None]:
         try:
             res = self._runner(
                 [self._bin, "-i"],
@@ -834,7 +892,5 @@ class RyzenadjBackend(TDPBackend):
                 env=_clean_env(),
             )
         except (OSError, subprocess.SubprocessError):
-            return None
-        if require_zero_exit and getattr(res, "returncode", 0):
-            return None
-        return getattr(res, "stdout", "") or ""
+            return False, None
+        return not getattr(res, "returncode", 0), getattr(res, "stdout", "") or ""

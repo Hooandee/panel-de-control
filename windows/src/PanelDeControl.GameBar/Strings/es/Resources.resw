@@ -19,7 +19,7 @@
     <value>No hay un dispositivo de audio predeterminado</value>
   </data>
   <data name="BatteryLabel.Text" xml:space="preserve">
-    <value>BATERÍA</value>
+    <value>Batería</value>
   </data>
   <data name="BrightnessAvailable" xml:space="preserve">
     <value>Panel integrado disponible</value>
@@ -31,7 +31,7 @@
     <value>No se pudo controlar el brillo del panel integrado</value>
   </data>
   <data name="BrightnessLabel.Text" xml:space="preserve">
-    <value>BRILLO DEL PANEL INTEGRADO</value>
+    <value>Brillo</value>
   </data>
   <data name="BrightnessMismatch" xml:space="preserve">
     <value>El cambio no coincide con el valor leído</value>
@@ -112,7 +112,7 @@
     <value>Comprobando el equipo…</value>
   </data>
   <data name="DiagnosticsToggle.Content" xml:space="preserve">
-    <value>DIAGNÓSTICO</value>
+    <value>Diagnóstico</value>
   </data>
   <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Mostrar u ocultar el diagnóstico del equipo</value>
@@ -133,7 +133,7 @@
     <value>Comprobando estado de silencio…</value>
   </data>
   <data name="MuteLabel.Text" xml:space="preserve">
-    <value>SILENCIAR</value>
+    <value>Silencio</value>
   </data>
   <data name="MutePermission" xml:space="preserve">
     <value>Windows requiere permiso para silenciar el audio</value>
@@ -204,14 +204,11 @@
   <data name="StatusVerified" xml:space="preserve">
     <value>Cambio aplicado y verificado</value>
   </data>
-  <data name="TelemetryConnected" xml:space="preserve">
-    <value>Telemetría Windows conectada</value>
-  </data>
   <data name="VolumeAvailable" xml:space="preserve">
     <value>Audio predeterminado disponible</value>
   </data>
   <data name="VolumeLabel.Text" xml:space="preserve">
-    <value>VOLUMEN DEL SISTEMA</value>
+    <value>Volumen</value>
   </data>
   <data name="VolumePermission" xml:space="preserve">
     <value>Windows requiere permiso para controlar el audio</value>
@@ -226,7 +223,7 @@
     <value>Comprobando audio predeterminado…</value>
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
-    <value>TDP EXPERIMENTAL</value>
+    <value>Control experimental</value>
   </data>
   <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve">
     <value>Apagado</value>
@@ -244,7 +241,7 @@
     <value>Recuperación del fabricante sin verificar: reinicia Windows o vuelve a abrir Armoury Crate para devolverle el control.</value>
   </data>
   <data name="PowerApplied" xml:space="preserve">
-    <value>Aplicado y confirmado en PL1, SPPT y FPPT</value>
+    <value>Aplicado y confirmado</value>
   </data>
   <data name="PowerArmouryConflict" xml:space="preserve">
     <value>Cierra Armoury Crate antes de cambiar el límite de potencia</value>
@@ -256,7 +253,7 @@
     <value>Comprobando el control experimental de potencia…</value>
   </data>
   <data name="PowerLabel.Text" xml:space="preserve">
-    <value>LÍMITE DE POTENCIA</value>
+    <value>Límite de potencia</value>
   </data>
   <data name="PowerLimits.Text" xml:space="preserve">
     <value>—</value>
@@ -271,7 +268,7 @@
     <value>Ajustar el TDP experimental a {0} vatios</value>
   </data>
   <data name="PowerReadbackHint.Text" xml:space="preserve">
-    <value>El readback DSTS es candidato y sigue sin validar en RC73XA.</value>
+    <value>La confirmación del límite aún no está validada en este equipo.</value>
   </data>
   <data name="PowerRejected" xml:space="preserve">
     <value>El firmware rechazó el cambio de potencia</value>
@@ -285,83 +282,32 @@
   <data name="PowerStatus.Text" xml:space="preserve">
     <value>Comprobando el control experimental de potencia…</value>
   </data>
-  <data name="PowerStepHint.Text" xml:space="preserve">
-    <value>Paso de 1 W</value>
-  </data>
   <data name="PowerUnsupported" xml:space="preserve">
     <value>Disponible solo en el perfil ROG Xbox Ally X</value>
   </data>
   <data name="PowerUnverifiable" xml:space="preserve">
-    <value>Enviado, pero DSTS no confirmó los tres límites</value>
-  </data>
-  <data name="TdpDecreaseButton.Content" xml:space="preserve">
-    <value>−</value>
-  </data>
-  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
-    <value>Escribe un vatio menos en PL1, SPPT y FPPT</value>
-  </data>
-  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Reducir TDP experimental</value>
-  </data>
-  <data name="TdpIncreaseButton.Content" xml:space="preserve">
-    <value>+</value>
-  </data>
-  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
-    <value>Escribe un vatio más en PL1, SPPT y FPPT</value>
-  </data>
-  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Aumentar TDP experimental</value>
-  </data>
-  <data name="ExperimentalBadge.Text" xml:space="preserve">
-    <value>EXPERIMENTAL</value>
-  </data>
-  <data name="TabPowerLabel.Text" xml:space="preserve">
-    <value>Potencia</value>
-  </data>
-  <data name="TabPower.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Pestaña Potencia</value>
-  </data>
-  <data name="TabSystemLabel.Text" xml:space="preserve">
-    <value>Sistema</value>
-  </data>
-  <data name="TabSystem.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Pestaña Sistema</value>
-  </data>
-  <data name="TabSensorsLabel.Text" xml:space="preserve">
-    <value>Sensores</value>
-  </data>
-  <data name="TabSensors.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Pestaña Sensores</value>
-  </data>
-  <data name="TabSettingsLabel.Text" xml:space="preserve">
-    <value>Ajustes</value>
-  </data>
-  <data name="TabSettings.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Pestaña Ajustes</value>
+    <value>Enviado, pero el equipo no lo confirmó</value>
   </data>
   <data name="AccentLabel.Text" xml:space="preserve">
-    <value>COLOR DE ACENTO</value>
+    <value>Color de acento</value>
   </data>
   <data name="AccentSwatchAutomation" xml:space="preserve">
     <value>Color de acento {0} de {1}</value>
   </data>
   <data name="PowerZoneSave" xml:space="preserve">
-    <value>AHORRO</value>
+    <value>Ahorro</value>
   </data>
   <data name="PowerZoneEco" xml:space="preserve">
-    <value>ECO</value>
+    <value>Eco</value>
   </data>
   <data name="PowerZoneBalanced" xml:space="preserve">
-    <value>EQUILIBRADO</value>
+    <value>Equilibrado</value>
   </data>
   <data name="PowerZoneHot" xml:space="preserve">
-    <value>ALTO</value>
+    <value>Alto</value>
   </data>
   <data name="PowerZoneTurbo" xml:space="preserve">
-    <value>TURBO</value>
-  </data>
-  <data name="EnergyLabel.Text" xml:space="preserve">
-    <value>CONSUMO DEL SISTEMA</value>
+    <value>Turbo</value>
   </data>
   <data name="PowerDrawOnAc" xml:space="preserve">
     <value>Con cargador: el consumo solo se mide a batería</value>
@@ -390,7 +336,99 @@
   <data name="PowerModeEffectiveFormat" xml:space="preserve">
     <value>Ahora en {0}</value>
   </data>
-  <data name="HeaderSubtitle.Text" xml:space="preserve">
-    <value>Windows · Xbox Game Bar</value>
-  </data>
+  <data name="HeroBattery" xml:space="preserve"><value>Batería</value></data>
+  <data name="NavPower" xml:space="preserve"><value>Potencia</value></data>
+  <data name="NavPowerDesc" xml:space="preserve"><value>Rendimiento y consumo del dispositivo.</value></data>
+  <data name="NavSystem" xml:space="preserve"><value>Sistema</value></data>
+  <data name="NavSystemDesc" xml:space="preserve"><value>Controles y estado general del sistema.</value></data>
+  <data name="NavDisplay" xml:space="preserve"><value>Pantalla</value></data>
+  <data name="NavDisplayDesc" xml:space="preserve"><value>Ajustes disponibles de imagen y pantalla.</value></data>
+  <data name="NavFans" xml:space="preserve"><value>Ventiladores</value></data>
+  <data name="NavFansDesc" xml:space="preserve"><value>Estado térmico y opciones de ventilación.</value></data>
+  <data name="NavAudio" xml:space="preserve"><value>Sonido</value></data>
+  <data name="NavAudioDesc" xml:space="preserve"><value>Controles disponibles de sonido.</value></data>
+  <data name="NavControllers" xml:space="preserve"><value>Mandos</value></data>
+  <data name="NavControllersDesc" xml:space="preserve"><value>Estado y opciones disponibles del mando.</value></data>
+  <data name="NavHud" xml:space="preserve"><value>HUD</value></data>
+  <data name="NavHudDesc" xml:space="preserve"><value>Información y diseño de la interfaz en juego.</value></data>
+  <data name="NavLaunch" xml:space="preserve"><value>Parámetros</value></data>
+  <data name="NavLaunchDesc" xml:space="preserve"><value>Inicio y compatibilidad de los juegos.</value></data>
+  <data name="NavCleaner" xml:space="preserve"><value>Limpieza</value></data>
+  <data name="NavCleanerDesc" xml:space="preserve"><value>Revisa y libera espacio usado por Steam.</value></data>
+  <data name="NavThemes" xml:space="preserve"><value>Temas</value></data>
+  <data name="NavThemesDesc" xml:space="preserve"><value>Apariencia del Panel de Control.</value></data>
+  <data name="NavSettings" xml:space="preserve"><value>Ajustes</value></data>
+  <data name="NavSettingsDesc" xml:space="preserve"><value>Personalización, actualizaciones e información.</value></data>
+  <data name="BlockTdpTitle" xml:space="preserve"><value>Límite de potencia</value></data>
+  <data name="BlockTdpDesc" xml:space="preserve"><value>Ajusta los vatios del procesador.</value></data>
+  <data name="BlockEnergyTitle" xml:space="preserve"><value>Energía</value></data>
+  <data name="BlockEnergyDesc" xml:space="preserve"><value>Consumo, carga y actividad del equipo.</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Rendimiento en juego</value></data>
+  <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>Límite de FPS, frecuencia de pantalla y ajustes por juego.</value></data>
+  <data name="BlockAutoTdpTitle" xml:space="preserve"><value>TDP automático</value></data>
+  <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Ajusta la potencia solo, según los FPS del juego.</value></data>
+  <data name="BlockEcoTitle" xml:space="preserve"><value>Modo Eco</value></data>
+  <data name="BlockEcoDesc" xml:space="preserve"><value>Reduce consumo y ruido cuando no hace falta potencia.</value></data>
+  <data name="BlockBatteryTitle" xml:space="preserve"><value>Batería</value></data>
+  <data name="BlockBatteryDesc" xml:space="preserve"><value>Nivel, salud y límite de carga.</value></data>
+  <data name="BlockCpuTitle" xml:space="preserve"><value>CPU</value></data>
+  <data name="BlockCpuDesc" xml:space="preserve"><value>Núcleos, SMT y boost del procesador.</value></data>
+  <data name="BlockGpuTitle" xml:space="preserve"><value>Frecuencia de GPU</value></data>
+  <data name="BlockGpuDesc" xml:space="preserve"><value>Fija o limita la frecuencia gráfica.</value></data>
+  <data name="BlockBrightnessTitle" xml:space="preserve"><value>Brillo</value></data>
+  <data name="BlockBrightnessDesc" xml:space="preserve"><value>Brillo del panel integrado.</value></data>
+  <data name="BlockVolumeTitle" xml:space="preserve"><value>Volumen</value></data>
+  <data name="BlockVolumeDesc" xml:space="preserve"><value>Volumen y silencio del sistema.</value></data>
+  <data name="BlockRgbTitle" xml:space="preserve"><value>Luces RGB</value></data>
+  <data name="BlockRgbDesc" xml:space="preserve"><value>Color y efectos de los mandos.</value></data>
+  <data name="BlockOledTitle" xml:space="preserve"><value>Look OLED</value></data>
+  <data name="BlockOledDesc" xml:space="preserve"><value>Negros más profundos y color más vivo.</value></data>
+  <data name="BlockColorTitle" xml:space="preserve"><value>Color</value></data>
+  <data name="BlockColorDesc" xml:space="preserve"><value>Calibración y ambientes de color.</value></data>
+  <data name="BlockHdrTitle" xml:space="preserve"><value>HDR</value></data>
+  <data name="BlockHdrDesc" xml:space="preserve"><value>Activa y ajusta el HDR.</value></data>
+  <data name="BlockNightTitle" xml:space="preserve"><value>Modo nocturno</value></data>
+  <data name="BlockNightDesc" xml:space="preserve"><value>Luz más cálida para descansar la vista.</value></data>
+  <data name="BlockFanRpmTitle" xml:space="preserve"><value>Ventiladores</value></data>
+  <data name="BlockFanRpmDesc" xml:space="preserve"><value>Revoluciones de cada ventilador.</value></data>
+  <data name="BlockTempsTitle" xml:space="preserve"><value>Temperaturas</value></data>
+  <data name="BlockTempsDesc" xml:space="preserve"><value>Temperatura y carga de CPU y GPU.</value></data>
+  <data name="BlockFanCurveTitle" xml:space="preserve"><value>Curva de ventilador</value></data>
+  <data name="BlockFanCurveDesc" xml:space="preserve"><value>Define cómo sube el ventilador con la temperatura.</value></data>
+  <data name="BlockEqualizerTitle" xml:space="preserve"><value>Ecualizador</value></data>
+  <data name="BlockEqualizerDesc" xml:space="preserve"><value>Ajusta graves, medios y agudos.</value></data>
+  <data name="BlockControllerManagerTitle" xml:space="preserve"><value>Gestor del mando</value></data>
+  <data name="BlockControllerManagerDesc" xml:space="preserve"><value>Quién controla el mando y en qué modo.</value></data>
+  <data name="BlockRemapTitle" xml:space="preserve"><value>Remapeo</value></data>
+  <data name="BlockRemapDesc" xml:space="preserve"><value>Cambia la función de cada botón.</value></data>
+  <data name="BlockControllerSettingsTitle" xml:space="preserve"><value>Ajustes del mando</value></data>
+  <data name="BlockControllerSettingsDesc" xml:space="preserve"><value>Sensibilidad, zonas muertas y vibración.</value></data>
+  <data name="BlockMagicModulesTitle" xml:space="preserve"><value>Magic Modules</value></data>
+  <data name="BlockMagicModulesDesc" xml:space="preserve"><value>Módulos intercambiables de AYANEO.</value></data>
+  <data name="BlockHudOverlayTitle" xml:space="preserve"><value>HUD en juego</value></data>
+  <data name="BlockHudOverlayDesc" xml:space="preserve"><value>FPS, temperaturas y consumo encima del juego.</value></data>
+  <data name="BlockLaunchOptionsTitle" xml:space="preserve"><value>Parámetros de lanzamiento</value></data>
+  <data name="BlockLaunchOptionsDesc" xml:space="preserve"><value>Opciones de arranque por juego.</value></data>
+  <data name="BlockSteamCacheTitle" xml:space="preserve"><value>Caché de Steam</value></data>
+  <data name="BlockSteamCacheDesc" xml:space="preserve"><value>Revisa y libera la caché de sombreadores.</value></data>
+  <data name="BlockAccentTitle" xml:space="preserve"><value>Color de acento</value></data>
+  <data name="BlockAccentDesc" xml:space="preserve"><value>Color que acompaña a toda la interfaz.</value></data>
+  <data name="BlockDiagnosticsTitle" xml:space="preserve"><value>Diagnóstico</value></data>
+  <data name="BlockDiagnosticsDesc" xml:space="preserve"><value>Qué detecta el servicio en este equipo.</value></data>
+  <data name="BlockReportsTitle" xml:space="preserve"><value>Informes</value></data>
+  <data name="BlockReportsDesc" xml:space="preserve"><value>Envía un informe cuando algo falla.</value></data>
+  <data name="BlockUpdatesTitle" xml:space="preserve"><value>Actualizaciones</value></data>
+  <data name="BlockUpdatesDesc" xml:space="preserve"><value>Busca e instala nuevas versiones.</value></data>
+  <data name="BlockPending" xml:space="preserve"><value>Pendiente en Windows</value></data>
+  <data name="TdpUnconfirmed" xml:space="preserve"><value>Sin confirmar</value></data>
+  <data name="BatteryHealthPending" xml:space="preserve"><value>Salud y límite de carga: pendiente en Windows</value></data>
+  <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo actual {0:0.0} W</value></data>
+  <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Límite de potencia experimental</value></data>
+  <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Elige los vatios y los aplica tras confirmarlos con el equipo</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Frecuencia de pantalla</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>No se pudo leer la frecuencia de la pantalla</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Cambiar la pantalla a {0} Hz</value></data>
+  <data name="PerformancePending" xml:space="preserve"><value>Límite de FPS y escalado: pendiente en Windows</value></data>
+  <data name="FanOne" xml:space="preserve"><value>Ventilador 1</value></data>
+  <data name="FanTwo" xml:space="preserve"><value>Ventilador 2</value></data>
 </root>

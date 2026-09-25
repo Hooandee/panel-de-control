@@ -6,6 +6,12 @@ namespace PanelDeControl.Core.Tests;
 public sealed class SensorPlausibilityTests
 {
     [Theory]
+    [InlineData(SensorKind.Fan, 0, true)]
+    [InlineData(SensorKind.Fan, 10_000, true)]
+    [InlineData(SensorKind.Fan, 10_001, false)]
+    [InlineData(SensorKind.Fan, -1, false)]
+    [InlineData(SensorKind.Fan, double.NaN, false)]
+    [InlineData(SensorKind.Fan, double.PositiveInfinity, false)]
     [InlineData(SensorKind.Temperature, 0.5, true)]
     [InlineData(SensorKind.Temperature, 125, true)]
     [InlineData(SensorKind.Temperature, 0, false)]

@@ -55,12 +55,7 @@ def test_unsupported_when_binary_missing():
     assert b.set_tdp(15, ac=True).ok is False
 
 
-def test_auto_tdp_requires_strict_three_rail_readback():
-    normal = RyzenadjBackend(
-        FALLBACK,
-        resolve=lambda: "/usr/bin/ryzenadj",
-        runner=FakeRun(),
-    )
+def test_strict_backend_offers_auto_tdp_before_any_readback():
     strict = RyzenadjBackend(
         FALLBACK,
         resolve=lambda: "/usr/bin/ryzenadj",
@@ -68,8 +63,71 @@ def test_auto_tdp_requires_strict_three_rail_readback():
         require_readback=True,
     )
 
-    assert normal.auto_tdp_safe is False
     assert strict.auto_tdp_safe is True
+
+
+def test_normal_backend_offers_auto_tdp_from_startup():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(),
+    )
+
+    assert backend.auto_tdp_supported is True
+    assert backend.auto_tdp_safe is True
+    assert backend.diagnostics()["auto_readback"] == "unknown"
+
+
+def test_normal_backend_with_stapm_only_readback_keeps_auto_on_the_primary_rail():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(info=INFO_OUTPUT),
+    )
+
+    observation = backend.observe()
+
+    assert set(observation.surfaces[backend.name]) == {"pl1"}
+    assert backend.auto_tdp_safe is True
+    assert backend.diagnostics()["auto_readback"] == "stapm_only"
+    assert backend.auto_physical_levels({
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }) == {"pl1": 15}
+
+
+def test_normal_backend_without_stapm_readback_hides_auto_tdp():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(info=_unreadable_info()),
+    )
+
+    backend.observe()
+    assert backend.auto_tdp_safe is True
+
+    backend.observe()
+
+    assert backend.auto_tdp_safe is False
+    assert backend.diagnostics()["auto_readback"] == "unreadable"
+
+
+def test_normal_backend_recovers_auto_tdp_when_stapm_readback_returns():
+    fake = FakeRun(info=_unreadable_info())
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+    )
+    backend.observe()
+    backend.observe()
+    assert backend.auto_tdp_safe is False
+    fake._info = _snapshot_info(15)
+
+    assert backend.set_tdp(15, ac=True).ok is True
+    assert backend.auto_tdp_safe is True
+    assert backend.diagnostics()["auto_readback"] == "three_rail"
 
 
 def test_strict_auto_observation_exposes_hidden_boost_rail_drift():
@@ -95,7 +153,45 @@ def test_strict_auto_observation_exposes_hidden_boost_rail_drift():
     }) == {"pl1": 18, "pl2": 18, "pl3": 18}
 
 
-def test_non_strict_observation_keeps_the_existing_primary_only_contract():
+def test_failed_limit_read_keeps_the_last_auto_verdict():
+    fake = FakeRun(info=_snapshot_info(18))
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+    )
+    backend.observe()
+    fake._info = "ryzenadj: unable to init\n"
+    fake._rc = 1
+
+    backend.observe()
+
+    assert backend.auto_tdp_safe is True
+    assert backend.diagnostics()["auto_readback"] == "three_rail"
+    assert backend.diagnostics()["auto_readback_limits"] == {
+        "stapm": 18,
+        "fast": 18,
+        "slow": 18,
+    }
+
+
+def test_gpd_recovery_reports_auto_readback_as_unsupported():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(info=_snapshot_info(18)),
+        power_only_retry=True,
+    )
+
+    observation = backend.observe()
+
+    assert set(observation.surfaces[backend.name]) == {"pl1"}
+    assert backend.auto_tdp_supported is False
+    assert backend.auto_tdp_safe is False
+    assert backend.diagnostics()["auto_readback"] == "unsupported"
+
+
+def test_normal_observation_exposes_hidden_boost_rail_drift():
     backend = RyzenadjBackend(
         FALLBACK,
         resolve=lambda: "/usr/bin/ryzenadj",
@@ -103,8 +199,39 @@ def test_non_strict_observation_keeps_the_existing_primary_only_contract():
     )
 
     observation = backend.observe()
+    rails = observation.surfaces[backend.name]
+
+    assert {rail: reading.applied_w for rail, reading in rails.items()} == {
+        "pl1": 18,
+        "pl2": 24,
+        "pl3": 26,
+    }
+    assert backend.auto_physical_levels({
+        "pl1": 18,
+        "pl2": 18,
+        "pl3": 18,
+    }) == {"pl1": 18, "pl2": 18, "pl3": 18}
+    assert backend.physical_levels({
+        "pl1": 18,
+        "pl2": 18,
+        "pl3": 18,
+    }) == {"pl1": 18}
+
+
+def test_normal_backend_losing_boost_readback_falls_back_to_primary_levels():
+    fake = FakeRun(info=_snapshot_info(18))
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+    )
+    backend.observe()
+    fake._info = INFO_OUTPUT
+
+    observation = backend.observe()
 
     assert set(observation.surfaces[backend.name]) == {"pl1"}
+    assert backend.auto_tdp_safe is True
     assert backend.auto_physical_levels({
         "pl1": 18,
         "pl2": 18,

@@ -17,7 +17,7 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
     private readonly string pipeName;
     private readonly ITdpControlEndpoint endpoint;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
-    private readonly ITdpClientValidator clientValidator;
+    private readonly IPipeClientValidator clientValidator;
     private readonly TimeSpan operationTimeout;
     private readonly TimeSpan commandReadTimeout;
     private Task<TdpControlResponse>? activeOperation;
@@ -26,7 +26,7 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
         string pipeName,
         ITdpControlEndpoint endpoint,
         Func<string, NamedPipeServerStream> pipeFactory,
-        ITdpClientValidator clientValidator,
+        IPipeClientValidator clientValidator,
         TimeSpan? operationTimeout = null,
         TimeSpan? commandReadTimeout = null)
     {
