@@ -152,6 +152,26 @@ public sealed class ServiceBackedSnapshotProviderTests
         Assert.DoesNotContain(snapshot.Readings, r => r.Id == "fan.cpu.rpm");
     }
 
+    [Fact]
+    public void ServiceBatteryHealthFillsInWhenTheCompanionLacksPermission()
+    {
+        var provider = Provider(
+            Local(TelemetryReading.Unavailable(BatteryHealth.HealthId, "Salud", "%", ReadingStatus.PermissionRequired, "battery_health_permission_required")),
+            Received(Now.AddSeconds(-1), TelemetryReading.Available(BatteryHealth.HealthId, "Salud", 91, "%", "service/wmi")));
+
+        Assert.Equal(91, Single(provider.Capture(), BatteryHealth.HealthId).Value);
+    }
+
+    [Fact]
+    public void ImplausibleServiceCapacityNeverReplacesTheLocalReading()
+    {
+        var provider = Provider(
+            Local(TelemetryReading.Available(BatteryHealth.DesignCapacityId, "Capacidad de diseño", 80_000, "mWh", "local")),
+            Received(Now.AddSeconds(-1), TelemetryReading.Available(BatteryHealth.DesignCapacityId, "Capacidad de diseño", 3, "mWh", "service")));
+
+        Assert.Equal(80_000, Single(provider.Capture(), BatteryHealth.DesignCapacityId).Value);
+    }
+
     private static ServiceBackedSnapshotProvider Provider(HardwareSnapshot local, ServiceSnapshotResult service)
     {
         return new ServiceBackedSnapshotProvider(new FixedProvider(local), new FixedSource(service), new FixedClock());

@@ -353,7 +353,26 @@
                         <TextBlock x:Name="SystemBatteryValue" Grid.Column="2" Text="—" FontSize="22" Style="{StaticResource PdcValueStyle}" />
                     </Grid>
                     <TextBlock x:Name="SystemBatteryDetail" Margin="0,6,0,0" Style="{StaticResource PdcCaptionStyle}" />
-                    <TextBlock x:Name="SystemBatteryPending" Margin="0,4,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
+                    <Grid Margin="0,14,0,0" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="BatteryHealthLabel" Style="{StaticResource PdcCaptionStyle}" />
+                            <TextBlock x:Name="BatteryHealthValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock x:Name="BatteryCapacityLabel" Style="{StaticResource PdcCaptionStyle}" />
+                            <TextBlock x:Name="BatteryCapacityValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock x:Name="BatteryCyclesLabel" Style="{StaticResource PdcCaptionStyle}" />
+                            <TextBlock x:Name="BatteryCyclesValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="SystemBatteryPending" Margin="0,12,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
                 </StackPanel>
             </Border>
 

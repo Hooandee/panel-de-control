@@ -377,7 +377,6 @@
   <data name="BlockUpdatesDesc" xml:space="preserve"><value>Procura e instala novas versões.</value></data>
   <data name="BlockPending" xml:space="preserve"><value>Em breve no Windows</value></data>
   <data name="TdpUnconfirmed" xml:space="preserve"><value>Não confirmado</value></data>
-  <data name="BatteryHealthPending" xml:space="preserve"><value>Saúde e limite de carga: em breve no Windows</value></data>
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo atual {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Limite de potência experimental</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Escolhe os watts e aplica após o aparelho confirmar</value></data>
@@ -396,4 +395,9 @@
   <data name="CpuWindowsNote" xml:space="preserve"><value>SMT e núcleos ativos só mudam pela BIOS no Windows.</value></data>
   <data name="CpuPermissionRequired" xml:space="preserve"><value>O Windows não permite mudar o plano de energia</value></data>
   <data name="CpuUnavailable" xml:space="preserve"><value>Não foi possível ler o plano de energia</value></data>
+  <data name="ChargeLimitPending" xml:space="preserve"><value>Limite de carga: em breve no Windows</value></data>
+  <data name="BatteryHealthLabel" xml:space="preserve"><value>Saúde</value></data>
+  <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacidade</value></data>
+  <data name="BatteryCyclesLabel" xml:space="preserve"><value>Ciclos</value></data>
+  <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
 </root>
