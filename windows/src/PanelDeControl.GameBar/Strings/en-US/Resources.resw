@@ -430,6 +430,15 @@
   <data name="PerformancePending" xml:space="preserve"><value>FPS limit and scaling: coming to Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Fan 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Fan 2</value></data>
+  <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Processor boost</value></data>
+  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>On</value></data>
+  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Off</value></data>
+  <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Processor boost</value></data>
+  <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Maximum performance</value></data>
+  <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Maximum processor state</value></data>
+  <data name="CpuWindowsNote" xml:space="preserve"><value>SMT and active cores can only be changed from the BIOS on Windows.</value></data>
+  <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows does not allow changing the power plan</value></data>
+  <data name="CpuUnavailable" xml:space="preserve"><value>The power plan could not be read</value></data>
   <data name="ChargeLimitPending" xml:space="preserve"><value>Charge limit: coming to Windows</value></data>
   <data name="BatteryHealthLabel" xml:space="preserve"><value>Health</value></data>
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacity</value></data>

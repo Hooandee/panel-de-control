@@ -386,6 +386,15 @@
   <data name="PerformancePending" xml:space="preserve"><value>Limite FPS e scalatura: in arrivo su Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventola 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventola 2</value></data>
+  <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost del processore</value></data>
+  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Attivo</value></data>
+  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Disattivato</value></data>
+  <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost del processore</value></data>
+  <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Prestazioni massime</value></data>
+  <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Stato massimo del processore</value></data>
+  <data name="CpuWindowsNote" xml:space="preserve"><value>SMT e core attivi si cambiano solo dal BIOS su Windows.</value></data>
+  <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows non consente di cambiare il piano energetico</value></data>
+  <data name="CpuUnavailable" xml:space="preserve"><value>Impossibile leggere il piano energetico</value></data>
   <data name="ChargeLimitPending" xml:space="preserve"><value>Limite di carica: in arrivo su Windows</value></data>
   <data name="BatteryHealthLabel" xml:space="preserve"><value>Salute</value></data>
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacità</value></data>

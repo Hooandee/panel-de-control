@@ -67,7 +67,7 @@ public static class SectionCatalog
         {
             new BlockDefinition("eco", "BlockEco", ""),
             new BlockDefinition("battery", "BlockBattery", "", implementedOnWindows: true),
-            new BlockDefinition("cpu", "BlockCpu", ""),
+            new BlockDefinition("cpu", "BlockCpu", "", implementedOnWindows: true),
             new BlockDefinition("gpu", "BlockGpu", ""),
             new BlockDefinition("brightness", "BlockBrightness", "", implementedOnWindows: true),
             new BlockDefinition("volume", "BlockVolume", "", implementedOnWindows: true),
