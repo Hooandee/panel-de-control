@@ -1171,7 +1171,7 @@ class Plugin:
         activation = self._theme_activation_recovery_path()
         return {
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
-            "activation_pending": activation.exists(),
+            "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
         }
 
@@ -1372,7 +1372,7 @@ class Plugin:
                 )
             )
         except theme_activation.ThemeActivationJournalError as error:
-            decky.logger.warning("Theme activation journal rejected (%s)", error.code)
+            decky.logger.warning("Theme activation journal rejected (%s): %s", error.code, error)
             return {"ok": False, "code": error.code}
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Theme activation journal failed: %s", type(error).__name__)

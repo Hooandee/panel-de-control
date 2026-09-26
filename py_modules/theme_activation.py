@@ -3,16 +3,16 @@ import os
 import stat
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 
 
 _SCHEMA_VERSION = 1
-_MAX_JOURNAL_BYTES = 512 * 1024
-_MAX_THEMES = 128
-_MAX_PATCHES = 128
-_MAX_OPTIONS = 128
-_MAX_TEXT_BYTES = 4096
+_MAX_JOURNAL_BYTES = 2 * 1024 * 1024
+# CSS Loader calls time out within seconds; past this an unsettled mutation belongs to a frontend
+# that was unloaded mid-operation and will never settle it.
+_UNSETTLED_MUTATION_TTL_S = 120
 _lock = threading.RLock()
 
 
@@ -33,14 +33,6 @@ def _boot_id():
         return None
 
 
-def _text(value, *, non_empty=False):
-    return (
-        isinstance(value, str)
-        and (not non_empty or bool(value.strip()))
-        and len(value.encode("utf-8")) <= _MAX_TEXT_BYTES
-    )
-
-
 def _exact_keys(value, required, optional=()):
     return isinstance(value, dict) and set(value) in (
         set(required),
@@ -48,93 +40,79 @@ def _exact_keys(value, required, optional=()):
     )
 
 
-def _valid_patch(value):
-    if not _exact_keys(value, {
-        "name",
-        "defaultValue",
-        "value",
-        "options",
-        "type",
-        "rawType",
-    }):
-        return False
-    options = value["options"]
-    return (
-        _text(value["name"], non_empty=True)
-        and _text(value["defaultValue"])
-        and _text(value["value"])
-        and isinstance(options, list)
-        and len(options) <= _MAX_OPTIONS
-        and all(_text(option) for option in options)
-        and _text(value["type"], non_empty=True)
-        and _text(value["rawType"], non_empty=True)
-    )
+def _named(value):
+    return isinstance(value, dict) and isinstance(value.get("name"), str) and bool(value["name"].strip())
 
 
-def _valid_theme(value):
-    if not _exact_keys(value, {
-        "id",
-        "name",
-        "displayName",
-        "version",
-        "author",
-        "enabled",
-        "patches",
-    }):
-        return False
-    patches = value["patches"]
+def _strings(value, keys):
+    return all(isinstance(value.get(key), str) for key in keys)
+
+
+def _normalize_patch(value):
     if (
-        not _text(value["id"])
-        or not _text(value["name"], non_empty=True)
-        or not _text(value["displayName"])
-        or not _text(value["version"])
-        or not _text(value["author"])
-        or not isinstance(value["enabled"], bool)
-        or not isinstance(patches, list)
-        or len(patches) > _MAX_PATCHES
-        or not all(_valid_patch(patch) for patch in patches)
+        not _named(value)
+        or not _strings(value, ("defaultValue", "value", "type", "rawType"))
+        or not isinstance(value.get("options"), list)
+        or not all(isinstance(option, str) for option in value["options"])
     ):
-        return False
-    patch_names = [patch["name"] for patch in patches]
-    return len(patch_names) == len(set(patch_names))
+        return None
+    return {
+        "name": value["name"],
+        "defaultValue": value["defaultValue"],
+        "value": value["value"],
+        "options": value["options"],
+        "type": value["type"],
+        "rawType": value["rawType"],
+    }
 
 
+def _normalize_theme(value):
+    if (
+        not _named(value)
+        or not _strings(value, ("id", "displayName", "version", "author"))
+        or not isinstance(value.get("enabled"), bool)
+        or not isinstance(value.get("patches"), list)
+    ):
+        return None
+    patches = [_normalize_patch(patch) for patch in value["patches"]]
+    if any(patch is None for patch in patches):
+        return None
+    return {
+        "id": value["id"],
+        "name": value["name"],
+        "displayName": value["displayName"],
+        "version": value["version"],
+        "author": value["author"],
+        "enabled": value["enabled"],
+        "patches": patches,
+    }
+
+
+# Snapshots mirror whatever third-party themes CSS Loader has installed, so only the fields the
+# restore path reads are checked; anything stricter rejects valid community themes.
 def _parse_snapshot(snapshot):
-    snapshot_keys = set(snapshot) if isinstance(snapshot, dict) else set()
     if (
         not isinstance(snapshot, dict)
-        or not {"status", "themes"}.issubset(snapshot_keys)
-        or not snapshot_keys.issubset(
-            {"status", "themes", "pluginVersion", "backendVersion"}
-        )
+        or snapshot.get("status") != "ready"
+        or not isinstance(snapshot.get("themes"), list)
     ):
         raise ThemeActivationJournalError(
             "invalid_snapshot",
             "Theme activation snapshot has an invalid shape",
         )
-    themes = snapshot["themes"]
-    if (
-        snapshot["status"] != "ready"
-        or not isinstance(themes, list)
-        or len(themes) > _MAX_THEMES
-        or not all(_valid_theme(theme) for theme in themes)
-    ):
+    themes = [_normalize_theme(theme) for theme in snapshot["themes"]]
+    invalid = sum(theme is None for theme in themes)
+    if invalid:
         raise ThemeActivationJournalError(
             "invalid_snapshot",
-            "Theme activation snapshot is invalid",
-        )
-    theme_names = [theme["name"] for theme in themes]
-    if len(theme_names) != len(set(theme_names)):
-        raise ThemeActivationJournalError(
-            "invalid_snapshot",
-            "Theme activation snapshot contains duplicate themes",
+            f"Theme activation snapshot has {invalid} malformed theme(s)",
         )
     normalized = {"status": "ready", "themes": themes}
     encoded = json.dumps(normalized, separators=(",", ":")).encode("utf-8")
     if len(encoded) > _MAX_JOURNAL_BYTES:
         raise ThemeActivationJournalError(
             "invalid_snapshot",
-            "Theme activation snapshot is too large",
+            f"Theme activation snapshot is too large ({len(encoded)} bytes)",
         )
     return normalized
 
@@ -288,9 +266,18 @@ def begin_theme_activation(snapshot, journal_path):
     return {"ok": True, "code": "prepared", "transaction": transaction}
 
 
+def _journal_age_s(path: Path):
+    try:
+        return time.time() - path.stat().st_mtime
+    except OSError:
+        return None
+
+
 def get_theme_activation_recovery(journal_path):
+    path = Path(journal_path)
     with _lock:
-        journal = _read_journal_or_quarantine(Path(journal_path))
+        journal = _read_journal_or_quarantine(path)
+        age = _journal_age_s(path)
     if journal is None or journal["phase"] == "completed":
         return None
     boot_id = _boot_id()
@@ -300,6 +287,7 @@ def get_theme_activation_recovery(journal_path):
         "recoverable": (
             journal["phase"] == "settled"
             or (boot_id is not None and journal["boot_id"] != boot_id)
+            or (age is not None and age > _UNSETTLED_MUTATION_TTL_S)
         ),
     }
 
@@ -353,3 +341,12 @@ def acknowledge_theme_activation(transaction, journal_path):
             "phase": "completed",
         })
     return {"ok": True, "code": "acknowledged"}
+
+
+def theme_activation_phase(journal_path):
+    try:
+        with _lock:
+            journal = _read_journal(Path(journal_path))
+    except ThemeActivationJournalError:
+        return "invalid"
+    return None if journal is None else journal["phase"]

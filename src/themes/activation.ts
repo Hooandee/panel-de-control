@@ -117,7 +117,13 @@ function sameSnapshotState(
   return JSON.stringify(comparable(initial, true)) === JSON.stringify(comparable(actual, false));
 }
 
+function isUnsettledMutation(error: unknown): boolean {
+  return typeof error === "object" && error !== null
+    && (error as { code?: unknown }).code === "mutation_unsettled";
+}
+
 interface ActivationRecovery {
+  journal: ThemeActivationJournal;
   transaction: string;
   initial: CssLoaderReadySnapshot;
   status: "needed" | "pending" | "ready";
@@ -261,15 +267,19 @@ export class ThemeActivator {
       try {
         durable = await this.journal.pending();
       } catch (error) {
-        const detail = error instanceof Error ? `: ${error.message}` : "";
-        throw new ThemeActivationError(
-          "rollback_failed",
-          `Theme activation recovery could not be inspected${detail}`,
-          true,
-        );
+        if (isUnsettledMutation(error)) {
+          throw new ThemeActivationError(
+            "rollback_failed",
+            "A previous CSS Loader mutation may still be running",
+            true,
+          );
+        }
+        console.warn("Theme activation recovery could not be inspected; continuing without it", error);
+        return null;
       }
       if (!durable) return null;
       recovery = {
+        journal: this.journal,
         transaction: durable.transaction,
         initial: durable.snapshot,
         status: "needed",
@@ -325,7 +335,7 @@ export class ThemeActivator {
     try {
       const current = await this.adapter.inspect();
       requireReady(current);
-      await this.journal.acknowledge(recovery.transaction);
+      await recovery.journal.acknowledge(recovery.transaction);
       if (this.pendingRecovery === recovery) this.pendingRecovery = null;
       this.recoveryAbandoned = true;
       return current;
@@ -394,7 +404,7 @@ export class ThemeActivator {
 
   private async performRecovery(recovery: ActivationRecovery): Promise<CssLoaderReadySnapshot> {
     await this.adapter.waitForPendingMutation();
-    await this.journal.settle(recovery.transaction);
+    await recovery.journal.settle(recovery.transaction);
     const restored = await this.adapter.restoreThemeSnapshot(recovery.initial);
     if (!this.isFullyRestored(recovery.initial, restored)) {
       throw new Error("The restored CSS Loader state does not match the activation snapshot");
@@ -409,30 +419,32 @@ export class ThemeActivator {
     return sameSnapshotState(initial, statesOf(initial), candidate);
   }
 
+  // Nothing has changed yet, so a durable recovery point that cannot be written only loses
+  // crash-restart protection; the in-session rollback still guards this operation.
   private async beginOperation(initial: CssLoaderReadySnapshot): Promise<ActivationRecovery> {
+    let journal = this.journal;
+    let transaction: string;
     try {
-      const transaction = await this.journal.begin(initial);
-      const recovery: ActivationRecovery = {
-        transaction,
-        initial: structuredClone(initial),
-        status: "needed",
-        failures: 0,
-      };
-      this.pendingRecovery = recovery;
-      return recovery;
+      transaction = await journal.begin(initial);
     } catch (error) {
-      const detail = error instanceof Error ? `: ${error.message}` : "";
-      throw new ThemeActivationError(
-        "rollback_failed",
-        `Theme activation could not create a durable recovery point${detail}`,
-        true,
-      );
+      console.warn("Theme activation continues without a durable recovery point", error);
+      journal = new MemoryThemeActivationJournal();
+      transaction = await journal.begin(initial);
     }
+    const recovery: ActivationRecovery = {
+      journal,
+      transaction,
+      initial: structuredClone(initial),
+      status: "needed",
+      failures: 0,
+    };
+    this.pendingRecovery = recovery;
+    return recovery;
   }
 
   private async completeSuccessfulOperation(recovery: ActivationRecovery): Promise<void> {
-    await this.journal.settle(recovery.transaction);
-    await this.journal.acknowledge(recovery.transaction);
+    await recovery.journal.settle(recovery.transaction);
+    await recovery.journal.acknowledge(recovery.transaction);
     if (this.pendingRecovery === recovery) this.pendingRecovery = null;
   }
 
@@ -444,7 +456,7 @@ export class ThemeActivator {
       recovery.status = "needed";
       throw new Error("Theme activation recovery verification failed");
     }
-    await this.journal.acknowledge(recovery.transaction);
+    await recovery.journal.acknowledge(recovery.transaction);
     if (this.pendingRecovery === recovery) this.pendingRecovery = null;
     return snapshot;
   }

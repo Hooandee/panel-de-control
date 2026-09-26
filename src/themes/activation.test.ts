@@ -96,6 +96,52 @@ describe("ThemeActivator", () => {
     expect(snapshot.themes.find((item) => item.name === "Third Party")?.enabled).toBe(true);
   });
 
+  it("still activates when the durable recovery point cannot be written", async () => {
+    const journal: ThemeActivationJournal = {
+      begin: async () => { throw new Error("invalid_snapshot"); },
+      pending: async () => null,
+      settle: async () => { throw new Error("unexpected settle"); },
+      acknowledge: async () => { throw new Error("unexpected acknowledge"); },
+    };
+    const adapter = new Adapter([theme("Example Theme", false), theme("Third Party", true)]);
+    const activator = new ThemeActivator(adapter, journal);
+
+    const snapshot = await activator.activate("example-theme", CATALOG);
+
+    expect(snapshot.themes.find((item) => item.name === "Example Theme")?.enabled).toBe(true);
+    await expect(activator.deactivate("example-theme", CATALOG)).resolves.toMatchObject({ status: "ready" });
+  });
+
+  it("still rolls back in-session when only the durable recovery point failed", async () => {
+    const journal: ThemeActivationJournal = {
+      begin: async () => { throw new Error("invalid_snapshot"); },
+      pending: async () => null,
+      settle: async () => undefined,
+      acknowledge: async () => undefined,
+    };
+    const adapter = new Adapter(
+      [theme("Example Theme", false), theme("Third Party", true)],
+      (_name, _enabled, themes) => { themes[1].enabled = false; },
+    );
+
+    await expect(new ThemeActivator(adapter, journal).activate("example-theme", CATALOG))
+      .rejects.toMatchObject({ code: "activation_failed", restorationFailed: false });
+    expect(adapter.themes.map((item) => item.enabled)).toEqual([false, true]);
+  });
+
+  it("does not block theme changes when the recovery journal cannot be read", async () => {
+    const journal: ThemeActivationJournal = {
+      begin: async () => "token",
+      pending: async () => { throw new Error("malformed_response"); },
+      settle: async () => undefined,
+      acknowledge: async () => undefined,
+    };
+    const activator = new ThemeActivator(new Adapter([theme("Example Theme", false)]), journal);
+
+    await expect(activator.reconcilePendingRecovery()).resolves.toBeNull();
+    await expect(activator.activate("example-theme", CATALOG)).resolves.toMatchObject({ status: "ready" });
+  });
+
   it("rejects identities that disappeared from the latest publication", async () => {
     const activator = new ThemeActivator(new Adapter([theme("Example Theme", true)]));
 
@@ -277,7 +323,11 @@ describe("ThemeActivator", () => {
         return "durable-token";
       },
       pending: async () => {
-        if (durable && !recoverable) throw new Error("mutation_unsettled");
+        if (durable && !recoverable) {
+          throw Object.assign(new Error("A previous CSS Loader mutation may still be running"), {
+            code: "mutation_unsettled",
+          });
+        }
         return durable ? structuredClone(durable) : null;
       },
       settle: async (transaction) => {
