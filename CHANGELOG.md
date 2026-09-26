@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.56.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.0...panel-de-control-v0.56.1) (2026-09-26)
+
+
+### Español
+
+* **Temas:** Aplicar un tema ya no falla con el aviso «La recuperación de temas está bloqueada». Pasaba cuando había instalado algún tema de la comunidad con muchas opciones o con un formato poco habitual, y bloqueaba todos los temas aunque no se hubiera cambiado nada. Recargar Panel a mitad de un cambio tampoco deja los temas bloqueados hasta reiniciar.
+
+### English
+
+* **Themes:** Applying a theme no longer fails with the "Theme recovery is blocked" warning. It happened when a community theme with lots of options or an unusual format was installed, and it locked every theme even though nothing had changed. Reloading Panel in the middle of a change no longer leaves themes locked until a reboot either.
+
+### Italiano
+
+* **Temi:** Applicare un tema non fallisce più con l'avviso «Il ripristino dei temi è bloccato». Succedeva quando era installato un tema della community con molte opzioni o con un formato poco comune, e bloccava tutti i temi anche se non era cambiato nulla. Anche ricaricare Panel a metà di una modifica non lascia più i temi bloccati fino al riavvio.
+
+### Deutsch
+
+* **Themes:** Ein Theme anzuwenden schlägt nicht mehr mit der Meldung „Die Theme-Wiederherstellung ist blockiert“ fehl. Das passierte, wenn ein Community-Theme mit vielen Optionen oder einem ungewöhnlichen Format installiert war, und blockierte alle Themes, obwohl sich nichts geändert hatte. Auch wenn Panel mitten in einer Änderung neu geladen wird, bleiben die Themes nicht mehr bis zum Neustart gesperrt.
+
+### Português (Brasil)
+
+* **Temas:** Aplicar um tema não falha mais com o aviso «A recuperação de temas está bloqueada». Acontecia quando havia algum tema da comunidade instalado com muitas opções ou com um formato pouco comum, e bloqueava todos os temas mesmo sem nada ter mudado. Recarregar o Panel no meio de uma mudança também não deixa mais os temas bloqueados até reiniciar.
+
 ## [0.56.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.1...panel-de-control-v0.56.0) (2026-09-25)
 
 
