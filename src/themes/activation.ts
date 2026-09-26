@@ -121,9 +121,9 @@ function journalErrorCode(error: unknown): unknown {
   return typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
 }
 
-// Codes for which the backend wrote nothing durable, so an in-memory journal cannot leave an
-// orphan recovery that would later restore an outdated snapshot.
-const NON_DURABLE_BEGIN_FAILURES = new Set([
+// Only failures where the backend wrote nothing: any other fallback could leave an orphaned
+// journal that later restores an outdated snapshot.
+const NON_DURABLE_BEGIN_FAILURES = new Set<unknown>([
   "invalid_snapshot",
   "boot_identity_unavailable",
   "backend_unavailable",
@@ -427,15 +427,13 @@ export class ThemeActivator {
     return sameSnapshotState(initial, statesOf(initial), candidate);
   }
 
-  // Nothing has changed yet, so a durable recovery point that cannot be written only loses
-  // crash-restart protection; the in-session rollback still guards this operation.
   private async beginOperation(initial: CssLoaderReadySnapshot): Promise<ActivationRecovery> {
     let journal = this.journal;
     let transaction: string;
     try {
       transaction = await journal.begin(initial);
     } catch (error) {
-      if (!NON_DURABLE_BEGIN_FAILURES.has(journalErrorCode(error) as string)) {
+      if (!NON_DURABLE_BEGIN_FAILURES.has(journalErrorCode(error))) {
         const detail = error instanceof Error ? `: ${error.message}` : "";
         throw new ThemeActivationError(
           "busy",

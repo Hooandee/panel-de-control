@@ -10,8 +10,7 @@ from pathlib import Path
 
 _SCHEMA_VERSION = 1
 _MAX_JOURNAL_BYTES = 2 * 1024 * 1024
-# CSS Loader calls time out within seconds; past this an unsettled mutation belongs to a frontend
-# that was unloaded mid-operation and will never settle it.
+# Far beyond any CSS Loader call timeout: an older unsettled journal was left by an unloaded frontend.
 _UNSETTLED_MUTATION_TTL_S = 120
 _lock = threading.RLock()
 
@@ -90,8 +89,6 @@ def _normalize_theme(value):
     }
 
 
-# Snapshots mirror whatever third-party themes CSS Loader has installed, so only the fields the
-# restore path reads are checked; anything stricter rejects valid community themes.
 def _parse_snapshot(snapshot):
     if (
         not isinstance(snapshot, dict)
@@ -103,11 +100,10 @@ def _parse_snapshot(snapshot):
             "Theme activation snapshot has an invalid shape",
         )
     themes = [_normalize_theme(theme) for theme in snapshot["themes"]]
-    invalid = sum(theme is None for theme in themes)
-    if invalid:
+    if any(theme is None for theme in themes):
         raise ThemeActivationJournalError(
             "invalid_snapshot",
-            f"Theme activation snapshot has {invalid} malformed theme(s)",
+            "Theme activation snapshot has a malformed theme",
         )
     normalized = {"status": "ready", "themes": themes}
     encoded = json.dumps(normalized, separators=(",", ":")).encode("utf-8")
@@ -207,11 +203,12 @@ def _read_journal(path: Path):
             "transaction",
             "phase",
             "boot_id",
+            "started_monotonic_ns",
             "snapshot",
-        }, {"started_monotonic_ns"})
+        })
         or journal["phase"] not in ("mutating", "settled")
         or not _validate_transaction(journal["boot_id"])
-        or not isinstance(journal.get("started_monotonic_ns", 0), int)
+        or not isinstance(journal["started_monotonic_ns"], int)
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -270,23 +267,12 @@ def begin_theme_activation(snapshot, journal_path):
     return {"ok": True, "code": "prepared", "transaction": transaction}
 
 
-def _journal_age_s(journal, path: Path):
-    started = journal.get("started_monotonic_ns")
-    if isinstance(started, int):
-        return (time.monotonic_ns() - started) / 1e9
-    try:
-        return time.time() - path.stat().st_mtime
-    except OSError:
-        return None
-
-
 def get_theme_activation_recovery(journal_path):
-    path = Path(journal_path)
     with _lock:
-        journal = _read_journal_or_quarantine(path)
+        journal = _read_journal_or_quarantine(Path(journal_path))
     if journal is None or journal["phase"] == "completed":
         return None
-    age = _journal_age_s(journal, path)
+    age_s = (time.monotonic_ns() - journal["started_monotonic_ns"]) / 1e9
     boot_id = _boot_id()
     return {
         "transaction": journal["transaction"],
@@ -294,7 +280,7 @@ def get_theme_activation_recovery(journal_path):
         "recoverable": (
             journal["phase"] == "settled"
             or (boot_id is not None and journal["boot_id"] != boot_id)
-            or (age is not None and age > _UNSETTLED_MUTATION_TTL_S)
+            or age_s > _UNSETTLED_MUTATION_TTL_S
         ),
     }
 

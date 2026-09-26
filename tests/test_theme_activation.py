@@ -169,16 +169,16 @@ def test_unsettled_ttl_ignores_wall_clock_jumps(tmp_path):
     assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
 
 
-def test_legacy_unsettled_journal_without_monotonic_start_uses_file_age(tmp_path):
+def test_journal_from_an_older_version_is_quarantined_instead_of_blocking(tmp_path):
     path = tmp_path / "activation.json"
     theme_activation.begin_theme_activation(snapshot(), path)
     journal = json.loads(path.read_text())
     del journal["started_monotonic_ns"]
     path.write_text(json.dumps(journal))
-    stale = path.stat().st_mtime - theme_activation._UNSETTLED_MUTATION_TTL_S - 1
-    os.utime(path, (stale, stale))
 
-    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is True
+    assert theme_activation.get_theme_activation_recovery(path) is None
+    assert path.with_name("activation.json.quarantined").is_file()
+    assert theme_activation.begin_theme_activation(snapshot(), path)["code"] == "prepared"
 
 
 def test_activation_recovery_quarantines_corrupt_persistent_state(tmp_path):
