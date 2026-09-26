@@ -108,6 +108,9 @@ def test_activation_recovery_rejects_overwriting_a_pending_transaction(tmp_path)
         lambda value: value["themes"][0].update(enabled=1),
         lambda value: value["themes"][0]["patches"][0].update(options=["ok", 1]),
         lambda value: value["themes"][0].update(name=" "),
+        lambda value: value["themes"][0]["patches"].append(
+            dict(value["themes"][0]["patches"][0])
+        ),
     ],
 )
 def test_activation_recovery_rejects_malformed_snapshots(tmp_path, mutate):
@@ -142,11 +145,36 @@ def test_activation_recovery_accepts_any_well_typed_community_theme(tmp_path):
     assert len(stored["themes"][0]["patches"][0]["options"]) == 500
 
 
-def test_unsettled_mutation_from_an_unloaded_frontend_becomes_recoverable(tmp_path):
+def test_unsettled_mutation_from_an_unloaded_frontend_becomes_recoverable(tmp_path, monkeypatch):
     path = tmp_path / "activation.json"
     theme_activation.begin_theme_activation(snapshot(), path)
     assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
 
+    started = json.loads(path.read_text())["started_monotonic_ns"]
+    monkeypatch.setattr(
+        theme_activation.time,
+        "monotonic_ns",
+        lambda: started + (theme_activation._UNSETTLED_MUTATION_TTL_S + 1) * 1_000_000_000,
+    )
+
+    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is True
+
+
+def test_unsettled_ttl_ignores_wall_clock_jumps(tmp_path):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    stale = path.stat().st_mtime - theme_activation._UNSETTLED_MUTATION_TTL_S - 1
+    os.utime(path, (stale, stale))
+
+    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
+
+
+def test_legacy_unsettled_journal_without_monotonic_start_uses_file_age(tmp_path):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    journal = json.loads(path.read_text())
+    del journal["started_monotonic_ns"]
+    path.write_text(json.dumps(journal))
     stale = path.stat().st_mtime - theme_activation._UNSETTLED_MUTATION_TTL_S - 1
     os.utime(path, (stale, stale))
 

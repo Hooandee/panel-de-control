@@ -55,8 +55,7 @@ function parsePatch(value: unknown): CssLoaderPatch | null {
     || typeof value.value !== "string"
     || !Array.isArray(value.options)
     || !value.options.every((option) => typeof option === "string")
-    || !nonEmptyString(value.type)
-    || !PATCH_TYPES.has(value.type as CssLoaderPatchType)
+    || typeof value.type !== "string"
     || typeof value.rawType !== "string"
   ) return null;
   return {
@@ -64,7 +63,9 @@ function parsePatch(value: unknown): CssLoaderPatch | null {
     defaultValue: value.defaultValue,
     value: value.value,
     options: value.options,
-    type: value.type as CssLoaderPatchType,
+    type: PATCH_TYPES.has(value.type as CssLoaderPatchType)
+      ? value.type as CssLoaderPatchType
+      : "unsupported",
     rawType: value.rawType,
   };
 }

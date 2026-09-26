@@ -117,10 +117,18 @@ function sameSnapshotState(
   return JSON.stringify(comparable(initial, true)) === JSON.stringify(comparable(actual, false));
 }
 
-function isUnsettledMutation(error: unknown): boolean {
-  return typeof error === "object" && error !== null
-    && (error as { code?: unknown }).code === "mutation_unsettled";
+function journalErrorCode(error: unknown): unknown {
+  return typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
 }
+
+// Codes for which the backend wrote nothing durable, so an in-memory journal cannot leave an
+// orphan recovery that would later restore an outdated snapshot.
+const NON_DURABLE_BEGIN_FAILURES = new Set([
+  "invalid_snapshot",
+  "boot_identity_unavailable",
+  "backend_unavailable",
+  "journal_failed",
+]);
 
 interface ActivationRecovery {
   journal: ThemeActivationJournal;
@@ -267,7 +275,7 @@ export class ThemeActivator {
       try {
         durable = await this.journal.pending();
       } catch (error) {
-        if (isUnsettledMutation(error)) {
+        if (journalErrorCode(error) === "mutation_unsettled") {
           throw new ThemeActivationError(
             "rollback_failed",
             "A previous CSS Loader mutation may still be running",
@@ -427,6 +435,13 @@ export class ThemeActivator {
     try {
       transaction = await journal.begin(initial);
     } catch (error) {
+      if (!NON_DURABLE_BEGIN_FAILURES.has(journalErrorCode(error) as string)) {
+        const detail = error instanceof Error ? `: ${error.message}` : "";
+        throw new ThemeActivationError(
+          "busy",
+          `Theme activation recovery point is not ready${detail}`,
+        );
+      }
       console.warn("Theme activation continues without a durable recovery point", error);
       journal = new MemoryThemeActivationJournal();
       transaction = await journal.begin(initial);

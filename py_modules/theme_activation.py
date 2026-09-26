@@ -77,6 +77,8 @@ def _normalize_theme(value):
     patches = [_normalize_patch(patch) for patch in value["patches"]]
     if any(patch is None for patch in patches):
         return None
+    if len({patch["name"] for patch in patches}) != len(patches):
+        return None
     return {
         "id": value["id"],
         "name": value["name"],
@@ -206,9 +208,10 @@ def _read_journal(path: Path):
             "phase",
             "boot_id",
             "snapshot",
-        })
+        }, {"started_monotonic_ns"})
         or journal["phase"] not in ("mutating", "settled")
         or not _validate_transaction(journal["boot_id"])
+        or not isinstance(journal.get("started_monotonic_ns", 0), int)
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -261,12 +264,16 @@ def begin_theme_activation(snapshot, journal_path):
             "transaction": transaction,
             "phase": "mutating",
             "boot_id": boot_id,
+            "started_monotonic_ns": time.monotonic_ns(),
             "snapshot": snapshot,
         })
     return {"ok": True, "code": "prepared", "transaction": transaction}
 
 
-def _journal_age_s(path: Path):
+def _journal_age_s(journal, path: Path):
+    started = journal.get("started_monotonic_ns")
+    if isinstance(started, int):
+        return (time.monotonic_ns() - started) / 1e9
     try:
         return time.time() - path.stat().st_mtime
     except OSError:
@@ -277,9 +284,9 @@ def get_theme_activation_recovery(journal_path):
     path = Path(journal_path)
     with _lock:
         journal = _read_journal_or_quarantine(path)
-        age = _journal_age_s(path)
     if journal is None or journal["phase"] == "completed":
         return None
+    age = _journal_age_s(journal, path)
     boot_id = _boot_id()
     return {
         "transaction": journal["transaction"],

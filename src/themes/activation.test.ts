@@ -81,6 +81,10 @@ class Adapter implements ThemeActivationAdapter {
   async waitForPendingMutation(): Promise<void> {}
 }
 
+function journalError(code: string): Error {
+  return Object.assign(new Error(code), { code });
+}
+
 const CATALOG = [release("example-theme", "Example Theme"), release("second-theme", "Second Theme")];
 
 describe("ThemeActivator", () => {
@@ -98,7 +102,7 @@ describe("ThemeActivator", () => {
 
   it("still activates when the durable recovery point cannot be written", async () => {
     const journal: ThemeActivationJournal = {
-      begin: async () => { throw new Error("invalid_snapshot"); },
+      begin: async () => { throw journalError("invalid_snapshot"); },
       pending: async () => null,
       settle: async () => { throw new Error("unexpected settle"); },
       acknowledge: async () => { throw new Error("unexpected acknowledge"); },
@@ -114,7 +118,7 @@ describe("ThemeActivator", () => {
 
   it("still rolls back in-session when only the durable recovery point failed", async () => {
     const journal: ThemeActivationJournal = {
-      begin: async () => { throw new Error("invalid_snapshot"); },
+      begin: async () => { throw journalError("invalid_snapshot"); },
       pending: async () => null,
       settle: async () => undefined,
       acknowledge: async () => undefined,
@@ -127,6 +131,20 @@ describe("ThemeActivator", () => {
     await expect(new ThemeActivator(adapter, journal).activate("example-theme", CATALOG))
       .rejects.toMatchObject({ code: "activation_failed", restorationFailed: false });
     expect(adapter.themes.map((item) => item.enabled)).toEqual([false, true]);
+  });
+
+  it("never falls back to memory while a durable recovery may still exist", async () => {
+    const journal: ThemeActivationJournal = {
+      begin: async () => { throw journalError("recovery_pending"); },
+      pending: async () => null,
+      settle: async () => undefined,
+      acknowledge: async () => undefined,
+    };
+    const adapter = new Adapter([theme("Example Theme", false)]);
+
+    await expect(new ThemeActivator(adapter, journal).activate("example-theme", CATALOG))
+      .rejects.toMatchObject({ code: "busy", restorationFailed: false });
+    expect(adapter.writes).toEqual([]);
   });
 
   it("does not block theme changes when the recovery journal cannot be read", async () => {
