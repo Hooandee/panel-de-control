@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -106,7 +107,10 @@ def test_activation_recovery_rejects_overwriting_a_pending_transaction(tmp_path)
         lambda value: value.update(status="missing"),
         lambda value: value["themes"][0].update(enabled=1),
         lambda value: value["themes"][0]["patches"][0].update(options=["ok", 1]),
-        lambda value: value["themes"][0].update(extra="hidden"),
+        lambda value: value["themes"][0].update(name=" "),
+        lambda value: value["themes"][0]["patches"].append(
+            dict(value["themes"][0]["patches"][0])
+        ),
     ],
 )
 def test_activation_recovery_rejects_malformed_snapshots(tmp_path, mutate):
@@ -117,6 +121,64 @@ def test_activation_recovery_rejects_malformed_snapshots(tmp_path, mutate):
         theme_activation.begin_theme_activation(value, tmp_path / "activation.json")
 
     assert invalid.value.code == "invalid_snapshot"
+
+
+def test_activation_recovery_accepts_any_well_typed_community_theme(tmp_path):
+    path = tmp_path / "activation.json"
+    value = snapshot()
+    theme = value["themes"][0]
+    theme["dependencies"] = {"Other": {}}
+    theme["author"] = "x" * 10_000
+    patch = theme["patches"][0]
+    patch["components"] = []
+    patch["rawType"] = ""
+    patch["options"] = [f"Option {index}" for index in range(500)]
+    value["themes"].append(json.loads(json.dumps(value["themes"][0])))
+    value["pluginVersion"] = "2.1.2"
+
+    theme_activation.begin_theme_activation(value, path)
+    stored = theme_activation.get_theme_activation_recovery(path)["snapshot"]
+
+    assert len(stored["themes"]) == 2
+    assert "dependencies" not in stored["themes"][0]
+    assert "components" not in stored["themes"][0]["patches"][0]
+    assert len(stored["themes"][0]["patches"][0]["options"]) == 500
+
+
+def test_unsettled_mutation_from_an_unloaded_frontend_becomes_recoverable(tmp_path, monkeypatch):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
+
+    started = json.loads(path.read_text())["started_monotonic_ns"]
+    monkeypatch.setattr(
+        theme_activation.time,
+        "monotonic_ns",
+        lambda: started + (theme_activation._UNSETTLED_MUTATION_TTL_S + 1) * 1_000_000_000,
+    )
+
+    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is True
+
+
+def test_unsettled_ttl_ignores_wall_clock_jumps(tmp_path):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    stale = path.stat().st_mtime - theme_activation._UNSETTLED_MUTATION_TTL_S - 1
+    os.utime(path, (stale, stale))
+
+    assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
+
+
+def test_journal_from_an_older_version_is_quarantined_instead_of_blocking(tmp_path):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    journal = json.loads(path.read_text())
+    del journal["started_monotonic_ns"]
+    path.write_text(json.dumps(journal))
+
+    assert theme_activation.get_theme_activation_recovery(path) is None
+    assert path.with_name("activation.json.quarantined").is_file()
+    assert theme_activation.begin_theme_activation(snapshot(), path)["code"] == "prepared"
 
 
 def test_activation_recovery_quarantines_corrupt_persistent_state(tmp_path):

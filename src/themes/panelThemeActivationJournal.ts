@@ -55,16 +55,17 @@ function parsePatch(value: unknown): CssLoaderPatch | null {
     || typeof value.value !== "string"
     || !Array.isArray(value.options)
     || !value.options.every((option) => typeof option === "string")
-    || !nonEmptyString(value.type)
-    || !PATCH_TYPES.has(value.type as CssLoaderPatchType)
-    || !nonEmptyString(value.rawType)
+    || typeof value.type !== "string"
+    || typeof value.rawType !== "string"
   ) return null;
   return {
     name: value.name,
     defaultValue: value.defaultValue,
     value: value.value,
     options: value.options,
-    type: value.type as CssLoaderPatchType,
+    type: PATCH_TYPES.has(value.type as CssLoaderPatchType)
+      ? value.type as CssLoaderPatchType
+      : "unsupported",
     rawType: value.rawType,
   };
 }
@@ -108,7 +109,6 @@ function parseReadySnapshot(value: unknown): CssLoaderReadySnapshot | null {
   ) return null;
   const themes = value.themes.map(parseTheme);
   if (!themes.every((theme): theme is CssLoaderTheme => theme !== null)) return null;
-  if (new Set(themes.map((theme) => theme.name)).size !== themes.length) return null;
   return {
     status: "ready",
     themes,
