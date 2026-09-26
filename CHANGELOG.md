@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.56.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.0...panel-de-control-v0.56.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **themes:** stop blocking theme changes when the recovery point fails ([#770](https://github.com/Hooandee/panel-de-control/issues/770)) ([2c7da66](https://github.com/Hooandee/panel-de-control/commit/2c7da663067389612b8734ec0c0e70d8d1aef40f))
+
 ## [0.56.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.1...panel-de-control-v0.56.0) (2026-09-25)
 
 
