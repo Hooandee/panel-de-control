@@ -5,7 +5,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-gallery",
       "cssLoaderName": "Hooandee Gallery",
-      "version": "0.9.50",
+      "version": "0.9.52",
       "displayName": {
         "es": "Hooandee",
         "en": "Hooandee",
@@ -19,9 +19,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.50/theme.zip",
-        "size": 145261,
-        "sha256": "0511339042fe78a50f9bf089bcae33a2d506ae2eaa33a8421f4d59f634dce453"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.52/theme.zip",
+        "size": 146806,
+        "sha256": "178b4c9bd3ada10eeef9d9633cc0cf00813b12e5fa977bfeccb027319654ba4e"
       },
       "minimumVersions": {
         "panel": "0.38.0",
@@ -29,9 +29,9 @@
         "cssLoaderBackend": 9
       },
       "notes": {
-        "es": "Inicio va mucho más fluido: el carrusel se dibuja aparte y ya no frena la navegación. Hay opciones nuevas para ocultar las noticias de Inicio y para dejar quietas las portadas. Si Inicio falla en algún dispositivo, activar Modo de rendimiento, al final de los ajustes, vuelve al carrusel de Steam.",
-        "en": "Home feels much smoother: the carousel is drawn on its own and no longer slows navigation down. New options hide the Home news and keep the covers still. If Home misbehaves on a device, turning on Performance mode, at the end of the settings, brings back Steam's carousel.",
-        "it": "La Home è molto più fluida: il carosello viene disegnato a parte e non rallenta più la navigazione. Nuove opzioni nascondono le novità della Home e fermano le copertine. Se la Home dà problemi su un dispositivo, attivare la Modalità prestazioni, in fondo alle impostazioni, riporta il carosello di Steam."
+        "es": "Los juegos que no son de Steam y los de emuladores se ven bien: su fondo personalizado, también en PNG, sale difuminado como el de cualquier juego de Steam. Si un juego solo tiene portada, se usa de fondo en Inicio y en la ficha, y el nombre ya no queda tapado por el botón Jugar.",
+        "en": "Non-Steam and emulator games look right: their custom background, PNG included, is blurred like any Steam game's. When a game only has a cover, it becomes the background on Home and on the game page, and the name no longer hides behind the Play button.",
+        "it": "I giochi non Steam e quelli degli emulatori si vedono bene: lo sfondo personalizzato, anche in PNG, viene sfocato come quello di qualsiasi gioco Steam. Se un gioco ha solo la copertina, diventa lo sfondo nella Home e nella scheda, e il nome non resta più nascosto dietro il pulsante Gioca."
       }
     },
     {
