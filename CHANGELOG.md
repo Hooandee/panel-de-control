@@ -5,9 +5,30 @@
 ## [0.57.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.1...panel-de-control-v0.57.0) (2026-09-27)
 
 
-### Features
+### Español
 
-* tease keyboard themes and Ambient as coming soon ([#778](https://github.com/Hooandee/panel-de-control/issues/778)) ([b613b10](https://github.com/Hooandee/panel-de-control/commit/b613b10c34c59def2e56e15f94ddef4faa19213c))
+* **Temas:** La sección Temas se divide en dos pestañas, Sistema y Teclados. En Sistema siguen los temas de siempre, y Teclados enseña lo que viene: temas para el teclado en pantalla de Steam, con diseño propio, efectos al pulsar y sonido.
+* **Ambiente:** Nueva sección con un adelanto de lo que llega pronto: fondos propios en Inicio, música, radio y vídeos en un mini reproductor flotante que sigue sonando mientras juegas.
+
+### English
+
+* **Themes:** The Themes section is split into two tabs, System and Keyboards. System keeps the themes you already know, and Keyboards gives a first look at what's coming: themes for Steam's on-screen keyboard, with their own look, press effects and sound.
+* **Ambient:** A new section with a sneak peek of what's on the way: custom Home backgrounds, music, radio and videos in a floating mini player that keeps playing while you game.
+
+### Italiano
+
+* **Temi:** La sezione Temi ora ha due schede, Sistema e Tastiere. In Sistema trovi i temi di sempre, mentre Tastiere mostra cosa sta per arrivare: temi per la tastiera su schermo di Steam, con aspetto proprio, effetti alla pressione e suoni.
+* **Atmosfera:** Una nuova sezione con un'anteprima di ciò che arriverà presto: sfondi personalizzati per la Home, musica, radio e video in un mini lettore fluttuante che continua a suonare mentre giochi.
+
+### Deutsch
+
+* **Themes:** Der Bereich Themes hat jetzt zwei Tabs, System und Tastaturen. Unter System findest du die gewohnten Themes, und Tastaturen zeigt, was als Nächstes kommt: Themes für die Bildschirmtastatur von Steam, mit eigenem Look, Effekten beim Drücken und Sound.
+* **Ambiente:** Ein neuer Bereich mit einem Vorgeschmack auf das, was bald kommt: eigene Hintergründe für die Startseite, Musik, Radio und Videos in einem schwebenden Mini-Player, der auch beim Spielen weiterläuft.
+
+### Português (Brasil)
+
+* **Temas:** A seção Temas agora tem duas abas, Sistema e Teclados. Em Sistema ficam os temas de sempre, e Teclados mostra o que vem por aí: temas para o teclado na tela do Steam, com visual próprio, efeitos ao tocar e som.
+* **Ambiente:** Nova seção com uma prévia do que chega em breve: fundos personalizados no Início, música, rádio e vídeos em um mini player flutuante que continua tocando enquanto você joga.
 
 ## [0.56.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.0...panel-de-control-v0.56.1) (2026-09-26)
 
