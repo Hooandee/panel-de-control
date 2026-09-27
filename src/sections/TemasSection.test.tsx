@@ -8,12 +8,16 @@ import type { ThemesController } from "../themes/useThemes";
 const mocks = vi.hoisted(() => ({ controller: null as ThemesController | null, navigate: vi.fn(), open: vi.fn() }));
 vi.mock("@decky/ui", () => ({
   PanelSectionRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Focusable: ({ children, onClick, role, "aria-selected": selected, "aria-label": label }: { children?: ReactNode; onClick?: () => void; role?: string; "aria-selected"?: boolean; "aria-label"?: string }) => (
+    <div role={role} aria-selected={selected} aria-label={label} onClick={onClick}>{children}</div>
+  ),
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   Navigation: { Navigate: mocks.navigate },
 }));
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../components/ThemeCard", () => ({ ThemeCard: ({ card, onOpen }: { card: { id: string }; onOpen(): void }) => <button onClick={onOpen}>{card.id}</button> }));
 vi.mock("../components/ThemeDetailsModal", () => ({ openThemeDetailsModal: mocks.open }));
+vi.mock("../assets/keyboards-preview.jpg", () => ({ default: "keyboards-preview.jpg" }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 
 import { TemasSection } from "./TemasSection";
@@ -102,5 +106,21 @@ describe("TemasSection", () => {
     render(<TemasSection />);
     expect(screen.getByText("themes.remote.cached")).toBeTruthy();
     expect(screen.getByRole("button", { name: "example-theme" })).toBeTruthy();
+  });
+
+  it("opens on the system themes and teases keyboards behind their own tab", () => {
+    mocks.controller = controller();
+    render(<TemasSection />);
+
+    expect(screen.getByRole("tab", { name: "themes.tab.system" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: "example-theme" })).toBeTruthy();
+    expect(screen.queryByText("comingSoon.badge")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "themes.tab.keyboards" }));
+
+    expect(screen.queryByRole("button", { name: "example-theme" })).toBeNull();
+    expect(screen.getByText("themes.keyboards.title")).toBeTruthy();
+    expect(screen.getByText("comingSoon.badge")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "themes.keyboards.imageAlt" }).getAttribute("src")).toBe("keyboards-preview.jpg");
   });
 });

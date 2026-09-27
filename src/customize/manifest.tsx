@@ -4,7 +4,7 @@ import {
   LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive,
-  LuMonitorCog,
+  LuMonitorCog, LuImage,
 } from "react-icons/lu";
 import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
@@ -34,21 +34,14 @@ export interface SubitemMeta extends ItemMeta {
   capability?: "chargeLimit";
 }
 
-/** The tab that can never be hidden — the escape hatch back to the customization
- *  editor. Single source of truth for both the shell and the editor. */
 export const PINNED_TAB = "settings";
 
-/** Potencia is never auto-hidden: its master switch being off drops it to a
- *  monitor-only view, not gone. Still hidable explicitly from the editor. */
+// With its master switch off Potencia becomes monitor-only, so it is never auto-hidden.
 export const POWER_TAB = "power";
 
 const ICON = 15;
 
-/**
- * The tabs (id + label + icon), in DEFAULT order. Kept here — decoupled from the
- * section Components in registry.tsx — so both the registry AND the customization
- * editor read the same tab metadata without a circular import.
- */
+// Kept apart from the section components so the editor can read tabs without a circular import.
 export const TABS: TabMeta[] = [
   { id: "power", labelKey: "nav.power", descriptionKey: "nav.power.desc", accent: "#287d8c", icon: (size) => <LuGauge size={size} />, learningTags: ["tdp"] },
   { id: "system", labelKey: "nav.system", descriptionKey: "nav.system.desc", accent: "#647084", icon: (size) => <LuSlidersHorizontal size={size} /> },
@@ -59,6 +52,7 @@ export const TABS: TabMeta[] = [
   { id: "hud", labelKey: "nav.hud", descriptionKey: "nav.hud.desc", accent: "#3e7e5e", icon: (size) => <LuLayoutDashboard size={size} /> },
   { id: "params", labelKey: "nav.params", descriptionKey: "nav.params.desc", accent: "#955e44", icon: (size) => <LuRocket size={size} /> },
   { id: "cleaner", labelKey: "nav.cleaner", descriptionKey: "nav.cleaner.desc", accent: "#507e86", icon: (size) => <LuHardDrive size={size} /> },
+  { id: "ambient", labelKey: "nav.ambient", descriptionKey: "nav.ambient.desc", accent: "#5f7fb0", icon: (size) => <LuImage size={size} /> },
   { id: "themes", labelKey: "nav.themes", descriptionKey: "nav.themes.desc", accent: "#925783", icon: (size) => <LuPaintbrush size={size} /> },
   { id: "settings", labelKey: "nav.settings", descriptionKey: "nav.settings.desc", accent: "#626b73", icon: (size) => <LuSettings size={size} /> },
 ];
@@ -122,11 +116,6 @@ export function customizationBlocks(
   ));
 }
 
-/**
- * Fixed sub-items WITHIN a block that the user can HIDE (only hide — they're a
- * fixed part of their block, not reorderable). Keyed by block id. Section render
- * code drops them with subitemHidden(layout.subitems, <block>, <sub-item id>).
- */
 export const SUBITEMS: Record<string, SubitemMeta[]> = {
   battery: [
     { id: "health", labelKey: "system.battery.healthGroup", icon: <LuHeartPulse size={ICON} /> },
@@ -146,16 +135,10 @@ export function subitemsFor(blockId: string, chargeLimitSupported: boolean): Sub
   );
 }
 
-/** Default block-id order for a section (empty for sections without blocks). */
 export function blockOrder(sectionId: string, desktopMode = false): string[] {
   return blocksForSection(sectionId, desktopMode).map((b) => b.id);
 }
 
-/**
- * Blocks a custom view can pick, per section. Superset of SECTION_BLOCKS: adds the
- * fixed cores that aren't reorderable in their own tab but CAN be placed in a view
- * (Potencia's TDP arc). Used only by the custom-view editor's block picker.
- */
 export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   ...SECTION_BLOCKS,
   power: [

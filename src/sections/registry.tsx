@@ -11,6 +11,7 @@ import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
 import { LimpiezaSection } from "./LimpiezaSection";
+import { AmbienteSection } from "./AmbienteSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
 import { buildSections } from "./registryModel";
@@ -27,9 +28,6 @@ registerDisplayBlocks();
 registerMandosBlocks();
 registerPowerBlocks();
 
-// Section body per tab id. The tab metadata (order, label, icon) lives in the
-// customization manifest (TABS) so the editor can read it without importing the
-// section components (which would cycle back through here).
 const COMPONENTS: Record<string, FC> = {
   power: PotenciaSection,
   system: SistemaSection,
@@ -40,13 +38,9 @@ const COMPONENTS: Record<string, FC> = {
   hud: HudSection,
   params: ParametrosSection,
   cleaner: LimpiezaSection,
+  ambient: AmbienteSection,
   themes: TemasSection,
   settings: AjustesSection,
 };
 
-/**
- * The control-center sections, in default tab order. Single source of truth: the
- * TabBar and the body both read from here. Built from the manifest's TABS +
- * COMPONENTS above — add a section by adding a TABS entry and a component here.
- */
 export const SECTIONS: SectionDef[] = buildSections(TABS, COMPONENTS);
