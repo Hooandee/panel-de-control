@@ -15,6 +15,7 @@ import {
   listThemeExtensions,
   loadThemeExtension,
   prepareRemoteThemeInstall,
+  recordThemeFailure,
   rollbackThemeInstall,
   settleThemeActivation,
 } from "./api";
@@ -38,7 +39,7 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
-import { createProductionThemesDependencies } from "./themes/themesClient";
+import { configureThemeFailureReporter, createProductionThemesDependencies } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
@@ -89,6 +90,9 @@ export default definePlugin(() => {
     list: listThemeExtensions,
     load: loadThemeExtension,
   });
+  const releaseThemeFailureReporter = configureThemeFailureReporter(
+    ({ operation, code, message }) => recordThemeFailure(operation, code, message),
+  );
   const themesClient = getThemesClient(createProductionThemesDependencies());
   let qamRuntime: ReturnType<typeof startPluginQamRuntime> | null = null;
   let dismounted = false;
@@ -172,6 +176,7 @@ export default definePlugin(() => {
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
       releaseThemeExtensionHost();
+      releaseThemeFailureReporter();
       releaseCssLoaderHost();
     },
   };

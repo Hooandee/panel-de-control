@@ -4,6 +4,7 @@ import { ThemeActivationError, ThemeActivator, type ThemeActivationAdapter } fro
 import { CssLoaderOperationError, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import type { CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
+import { ThemeInstallError } from "./panelThemeInstaller";
 import { ThemesClient, type ThemesDependencies } from "./themesClient";
 
 const RELEASE: PublishedThemeRelease = {
@@ -497,5 +498,78 @@ describe("ThemesClient", () => {
     await expect(client.activate("example-theme")).resolves.toBe(false);
     expect(deps.installer.prepare).not.toHaveBeenCalled();
     expect(deps.activator.activate).not.toHaveBeenCalled();
+  });
+  it("releases an install rollback that CSS Loader keeps failing to reconcile", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure });
+    deps.installer.pendingRecoveries = vi.fn(async () => [
+      { transaction: "stuck", themeName: "Example Theme", previousVersion: "1.0.0" },
+    ]);
+    deps.adapter.reconcileRecoveredThemes = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader changed another theme during reload");
+    });
+    const client = new ThemesClient(deps);
+
+    await client.refresh();
+    await client.refresh();
+    expect(deps.installer.acknowledgeRollback).not.toHaveBeenCalled();
+    expect(client.getSnapshot()).toMatchObject({ errorCode: "verification_failed", recoveryKeptCurrent: false });
+
+    await client.refresh();
+
+    expect(deps.installer.acknowledgeRollback).toHaveBeenCalledWith("stuck");
+    expect(reportFailure.mock.calls.map(([failure]) => failure.code)).toEqual([
+      "verification_failed",
+      "released_after_mismatch",
+    ]);
+    expect(client.getSnapshot()).toMatchObject({ error: null, errorCode: null, recoveryKeptCurrent: true });
+    deps.installer.pendingRecoveries = vi.fn(async () => []);
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(true);
+  });
+
+  it("never releases an install rollback the backend refuses to recover", async () => {
+    const deps = dependencies();
+    deps.installer.pendingRecoveries = vi.fn(async () => {
+      throw new ThemeInstallError("invalid_journal", "A theme transaction journal requires recovery");
+    });
+    const client = new ThemesClient(deps);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) await client.refresh();
+
+    expect(deps.installer.acknowledgeRollback).not.toHaveBeenCalled();
+    expect(client.getSnapshot()).toMatchObject({
+      recoveryBlocked: true,
+      recoveryKeptCurrent: false,
+      errorCode: "invalid_journal",
+    });
+  });
+
+  it("reports the failing operation and its code for diagnostics", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure });
+    deps.adapter.reloadTheme = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not register Example Theme v1.2.3");
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(false);
+
+    expect(reportFailure).toHaveBeenCalledWith({
+      operation: "installing",
+      code: "verification_failed",
+      message: "CSS Loader did not register Example Theme v1.2.3",
+    });
+    expect(client.getSnapshot().errorCode).toBe("verification_failed");
+  });
+
+  it("keeps working when failure reporting itself fails", async () => {
+    const deps = dependencies({ reportFailure: vi.fn(() => { throw new Error("rpc down"); }) });
+    deps.adapter.reloadTheme = vi.fn(async () => { throw new Error("reload failed"); });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(false);
+    expect(client.getSnapshot()).toMatchObject({ error: "reload failed", errorCode: "unknown" });
   });
 });

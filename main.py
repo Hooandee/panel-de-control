@@ -176,6 +176,12 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
+_THEME_FAILURE_OPERATIONS = frozenset({
+    "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
+})
+_THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+_THEME_FAILURE_MESSAGE_CHARS = 240
+_THEME_FAILURE_HISTORY = 5
 
 
 @dataclass(frozen=True)
@@ -1173,7 +1179,41 @@ class Plugin:
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
+            "recent_failures": [dict(entry) for entry in self._theme_failures()],
         }
+
+    def _theme_failures(self) -> deque:
+        failures = getattr(self, "_theme_failure_history", None)
+        if failures is None:
+            failures = deque(maxlen=_THEME_FAILURE_HISTORY)
+            self._theme_failure_history = failures
+        return failures
+
+    async def record_theme_failure(self, operation: str, code: str, message: str) -> bool:
+        operation = operation if operation in _THEME_FAILURE_OPERATIONS else "unknown"
+        code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
+        message = " ".join(str(message).split())[:_THEME_FAILURE_MESSAGE_CHARS]
+        failures = self._theme_failures()
+        last = failures[-1] if failures else None
+        if (
+            last is not None
+            and last["operation"] == operation
+            and last["code"] == code
+            and getattr(self, "_theme_failure_last_message", None) == message
+        ):
+            last["count"] += 1
+            return True
+        failures.append({"operation": operation, "code": code, "count": 1})
+        self._theme_failure_last_message = message
+        decky.logger.warning(
+            "Theme operation failed %s",
+            json.dumps(
+                {"operation": operation, "code": code, "message": message},
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ),
+        )
+        return True
 
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)

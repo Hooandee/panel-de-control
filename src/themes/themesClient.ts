@@ -1,5 +1,9 @@
 import { ThemeActivationError, ThemeActivator } from "./activation";
-import { CssLoaderAdapter, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
+import {
+  CssLoaderAdapter,
+  CssLoaderOperationError,
+  type CssLoaderReadySnapshot,
+} from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
@@ -50,11 +54,18 @@ export interface ThemesActivator {
   takeAbandonedRecovery?(): boolean;
 }
 
+export interface ThemeFailureReport {
+  operation: ThemesOperation["kind"];
+  code: string;
+  message: string;
+}
+
 export interface ThemesDependencies {
   adapter: ThemesAdapter;
   installer: ThemesInstaller;
   activator: ThemesActivator;
   publication?: ThemePublicationClient;
+  reportFailure?: (failure: ThemeFailureReport) => void;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
@@ -80,15 +91,28 @@ export interface ThemesClientSnapshot {
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
+  errorCode: string | null;
   publication: ThemePublicationState;
 }
 
 let productionDependencies: ThemesDependencies | undefined;
+let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
+
+export function configureThemeFailureReporter(
+  reporter: (failure: ThemeFailureReport) => unknown,
+): () => void {
+  failureReporter = reporter;
+  return () => {
+    if (failureReporter === reporter) failureReporter = undefined;
+  };
+}
 const BLOCKING_RECOVERY_CODES = new Set([
   "invalid_journal",
   "rollback_failed",
   "rollback_verification_failed",
 ]);
+const MAX_INSTALL_RECONCILE_FAILURES = 3;
+const ANSWERED_CSS_LOADER_CODES = new Set(["mutation_failed", "verification_failed"]);
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
@@ -98,12 +122,26 @@ export function createProductionThemesDependencies(): ThemesDependencies {
     installer: createPanelThemeInstaller(),
     activator: new ThemeActivator(adapter, createPanelThemeActivationJournal()),
     publication: createRemotePublicationClient(),
+    reportFailure: (failure) => {
+      void Promise.resolve(failureReporter?.(failure)).catch(() => undefined);
+    },
   };
   return productionDependencies;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Theme operation failed";
+}
+
+function errorCode(error: unknown): string {
+  const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  return typeof code === "string" && code.length > 0 ? code : "unknown";
+}
+
+// The backend already restored the files; a CSS Loader that answers but never matches the
+// expected inventory would otherwise block every theme operation forever.
+function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
+  return error instanceof CssLoaderOperationError && ANSWERED_CSS_LOADER_CODES.has(error.code);
 }
 
 function blocksThemeRecovery(error: unknown): boolean {
@@ -123,6 +161,7 @@ export class ThemesClient {
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
+    errorCode: null,
     publication: { status: "unchecked" },
   };
   private readonly subscriptions = new Map<symbol, {
@@ -140,6 +179,8 @@ export class ThemesClient {
   private publicationRequestSequence = 0;
   private publicationPromise: Promise<void> | null = null;
   private publicationResolvedAtMs: number | undefined;
+  private installReconcileFailures = 0;
+  private lastReportedFailure: string | null = null;
 
   constructor(readonly dependencies: ThemesDependencies) {}
 
@@ -216,7 +257,7 @@ export class ThemesClient {
           recoveryBlocked: recoveryError === undefined
             ? false
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
-          error: recoveryError === undefined ? null : errorMessage(recoveryError),
+          ...this.failurePatch("recovering", recoveryError),
         });
       }
     } catch (inspectionError) {
@@ -230,7 +271,9 @@ export class ThemesClient {
           recoveryBlocked: recoveryError === undefined
             ? this.current.recoveryBlocked
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
-          error: errorMessage(recoveryError ?? inspectionError),
+          ...(recoveryError === undefined
+            ? { error: errorMessage(inspectionError), errorCode: errorCode(inspectionError) }
+            : this.failurePatch("recovering", recoveryError)),
         });
       }
     } finally {
@@ -432,7 +475,7 @@ export class ThemesClient {
 
   private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
     if (request !== this.requestSequence) return;
-    this.update({ snapshot, error: null });
+    this.update({ snapshot, error: null, errorCode: null });
   }
 
   private reconcileRefreshTimer(): void {
@@ -468,10 +511,21 @@ export class ThemesClient {
       return activationRecovery;
     }
     const before = activationRecovery ?? await this.dependencies.adapter.requireReady();
-    const reconciled = await this.dependencies.adapter.reconcileRecoveredThemes(recoveries, before);
+    let reconciled: CssLoaderReadySnapshot;
+    try {
+      reconciled = await this.dependencies.adapter.reconcileRecoveredThemes(recoveries, before);
+    } catch (error) {
+      if (!cssLoaderAnsweredWithMismatch(error)) throw error;
+      this.installReconcileFailures += 1;
+      if (this.installReconcileFailures < MAX_INSTALL_RECONCILE_FAILURES) throw error;
+      this.report("recovering", error, "released_after_mismatch");
+      reconciled = await this.dependencies.adapter.requireReady();
+      this.update({ recoveryKeptCurrent: true });
+    }
     for (const recovery of recoveries) {
       await this.dependencies.installer.acknowledgeRollback(recovery.transaction);
     }
+    this.installReconcileFailures = 0;
     this.recoveryChecked = true;
     return reconciled;
   }
@@ -483,7 +537,7 @@ export class ThemesClient {
     if (this.operationLocked || this.current.recoveryBlocked) return false;
     this.operationLocked = true;
     const request = ++this.requestSequence;
-    this.update({ loading: false, operation, error: null, recoveryKeptCurrent: false });
+    this.update({ loading: false, operation, error: null, errorCode: null, recoveryKeptCurrent: false });
     try {
       await this.reconcilePendingRecovery();
       this.publishSnapshot(request, await run());
@@ -503,7 +557,7 @@ export class ThemesClient {
         this.update({
           snapshot: reconciled,
           recoveryBlocked: this.current.recoveryBlocked || blocksThemeRecovery(operationError),
-          error: errorMessage(operationError),
+          ...this.failurePatch(operation.kind, operationError),
         });
       }
       return false;
@@ -511,6 +565,32 @@ export class ThemesClient {
       this.operationLocked = false;
       if (request === this.requestSequence) this.update({ operation: null });
     }
+  }
+
+  private failurePatch(
+    operation: ThemesOperation["kind"],
+    error: unknown,
+  ): Pick<ThemesClientSnapshot, "error" | "errorCode"> {
+    if (error === undefined) {
+      this.lastReportedFailure = null;
+      return { error: null, errorCode: null };
+    }
+    this.report(operation, error);
+    return { error: errorMessage(error), errorCode: errorCode(error) };
+  }
+
+  private report(operation: ThemesOperation["kind"], error: unknown, code = errorCode(error)): void {
+    const failure: ThemeFailureReport = {
+      operation,
+      code,
+      message: errorMessage(error),
+    };
+    const key = JSON.stringify(failure);
+    if (key === this.lastReportedFailure) return;
+    this.lastReportedFailure = key;
+    try {
+      this.dependencies.reportFailure?.(failure);
+    } catch {}
   }
 
   private update(patch: Partial<ThemesClientSnapshot>): void {

@@ -22,6 +22,7 @@ export interface ThemesController {
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
+  errorCode: string | null;
   publication: ThemePublicationState;
   refresh(): Promise<void>;
   refreshPublication(): Promise<void>;

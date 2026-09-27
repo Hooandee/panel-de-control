@@ -66,6 +66,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
+    errorCode: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
@@ -499,10 +500,15 @@ describe("ThemeDetailsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
     fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
-    mocks.controller = installedController({ error: "CSS Loader did not confirm removal", uninstall });
+    mocks.controller = installedController({
+      error: "CSS Loader did not confirm removal",
+      errorCode: "verification_failed",
+      uninstall,
+    });
     view.rerender(<ThemeDetailsModal themeId="example-theme" />);
 
     expect(screen.getByRole("alert").textContent).toContain("themes.operation.failed");
+    expect(screen.getByRole("alert").textContent).toContain("themes.operation.code");
     expect((screen.getByRole("button", { name: "themes.action.delete" }) as HTMLButtonElement).disabled).toBe(false);
   });
 

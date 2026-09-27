@@ -40,6 +40,7 @@ vi.mock("./api", () => ({
   setUiPrefs: prefs.set,
   acknowledgeThemeActivation: vi.fn(),
   acknowledgeThemeInstallRollback: vi.fn(),
+  recordThemeFailure: vi.fn(),
   beginThemeActivation: vi.fn(),
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),
@@ -97,7 +98,10 @@ vi.mock("./themes/panelThemeActivationJournal", () => ({
 vi.mock("./themes/remotePublicationClient", () => ({ configureThemePublicationCheckHost: () => () => {} }));
 vi.mock("./themes/themeExtensionClient", () => ({ configureThemeExtensionRpcHost: () => () => {} }));
 vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
-vi.mock("./themes/themesClient", () => ({ createProductionThemesDependencies: () => ({}) }));
+vi.mock("./themes/themesClient", () => ({
+  configureThemeFailureReporter: () => () => undefined,
+  createProductionThemesDependencies: () => ({}),
+}));
 vi.mock("./themes/useThemes", () => ({ getThemesClient: () => ({}) }));
 
 import { discardThemeExtensionReceipt } from "./api";

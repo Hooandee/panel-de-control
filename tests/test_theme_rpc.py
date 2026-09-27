@@ -550,6 +550,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         },
         "activation_phase": None,
         "activation_quarantined": True,
+        "recent_failures": [],
     }
 
 
@@ -571,3 +572,44 @@ def test_patch_labels_rpc_reads_the_installed_theme_and_never_raises(theme_rpc, 
 
     monkeypatch.setattr(main.theme_packages, "theme_patch_labels", fail)
     assert asyncio.run(plugin.get_theme_patch_labels("example-theme", "Example Theme")) == {}
+
+
+def test_theme_failures_reach_the_log_and_report_bounded_and_sanitized(theme_rpc):
+    main, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    assert asyncio.run(plugin.record_theme_failure(
+        "installing", "verification_failed", "CSS Loader changed another theme\nduring reload",
+    )) is True
+    assert asyncio.run(plugin.record_theme_failure(
+        "installing", "verification_failed", "CSS Loader changed another theme\nduring reload",
+    )) is True
+    assert asyncio.run(plugin.record_theme_failure("<script>", "Bad Code!", "x" * 5000)) is True
+    for index in range(10):
+        asyncio.run(plugin.record_theme_failure("recovering", f"code_{index}", "again"))
+
+    assert len(warnings) == 12
+    assert warnings[0] == (
+        'Theme operation failed {"operation":"installing","code":"verification_failed",'
+        '"message":"CSS Loader changed another theme during reload"}'
+    )
+    assert '"operation":"unknown","code":"unknown"' in warnings[1]
+    assert len(warnings[1]) < 400
+    failures = plugin._theme_report_diagnostics()["recent_failures"]
+    assert len(failures) == 5
+    assert failures[-1] == {"operation": "recovering", "code": "code_9", "count": 1}
+
+
+def test_theme_failure_counts_repeats_without_logging_them_again(theme_rpc):
+    _, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    for _ in range(3):
+        asyncio.run(plugin.record_theme_failure("recovering", "verification_failed", "same"))
+
+    assert len(warnings) == 1
+    assert plugin._theme_report_diagnostics()["recent_failures"] == [
+        {"operation": "recovering", "code": "verification_failed", "count": 3},
+    ]

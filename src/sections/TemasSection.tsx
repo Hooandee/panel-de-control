@@ -104,6 +104,11 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
     {controller.error ? (
       <div role="alert" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
         {t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}
+        {controller.errorCode ? (
+          <div style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("themes.operation.code", { code: controller.errorCode })}
+          </div>
+        ) : null}
       </div>
     ) : null}
 
