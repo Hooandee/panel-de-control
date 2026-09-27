@@ -72,6 +72,35 @@ describe("PanelThemeActivationJournal", () => {
     await expect(journal.pending()).resolves.toEqual({ transaction: "token", snapshot: SNAPSHOT });
   });
 
+  it("loads every community snapshot shape the backend accepts", async () => {
+    const community = {
+      ...SNAPSHOT.themes[0],
+      author: "x".repeat(10_000),
+      patches: [{
+        ...SNAPSHOT.themes[0].patches[0],
+        type: "colorpicker",
+        rawType: "",
+        options: Array.from({ length: 500 }, (_, index) => `Option ${index}`),
+      }],
+    };
+    const journal = new PanelThemeActivationJournal(host({
+      pending: vi.fn(async () => ({
+        ok: true,
+        code: "ready",
+        recovery: {
+          transaction: "token",
+          recoverable: true,
+          snapshot: { status: "ready", themes: [community, community] },
+        },
+      })),
+    }));
+
+    const recovery = await journal.pending();
+
+    expect(recovery?.snapshot.themes).toHaveLength(2);
+    expect(recovery?.snapshot.themes[0].patches[0]).toMatchObject({ type: "unsupported", rawType: "" });
+  });
+
   it("fails closed on a malformed durable snapshot", async () => {
     const journal = new PanelThemeActivationJournal(host({
       pending: vi.fn(async () => ({
