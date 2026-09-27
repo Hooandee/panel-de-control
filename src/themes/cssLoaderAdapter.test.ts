@@ -119,21 +119,30 @@ describe("CssLoaderAdapter.inspect", () => {
     ]);
   });
 
-  it("fails closed when CSS Loader returns malformed themes", async () => {
+  it("fails closed when CSS Loader does not return a theme list", async () => {
+    const adapter = new CssLoaderAdapter(host({ call: vi.fn(async () => ({ themes: [] })) }));
+
+    await expect(adapter.inspect()).resolves.toEqual({
+      status: "error",
+      themes: [],
+      error: { code: "malformed_response", message: "CSS Loader returned an invalid theme list" },
+    });
+  });
+
+  it("isolates malformed entries instead of hiding every other theme", async () => {
+    const other = { ...RAW_THEME, id: "Other", name: "Other" };
     const adapter = new CssLoaderAdapter(host({
-      call: vi.fn(async () => [{ name: 42 }]),
+      call: vi.fn(async () => [{ name: 42 }, { ...other, enabled: "yes" }, RAW_THEME]),
     }));
 
     const snapshot = await adapter.inspect();
 
-    expect(snapshot).toEqual({
-      status: "error",
-      themes: [],
-      error: { code: "malformed_response", message: "CSS Loader returned an invalid theme at index 0" },
-    });
+    expect(snapshot.status).toBe("ready");
+    expect(snapshot.themes.map((theme) => theme.name)).toEqual(["Example Theme"]);
+    expect(snapshot.unreadable).toEqual(["", "Other"]);
   });
 
-  it("fails closed when CSS Loader returns ambiguous theme or patch names", async () => {
+  it("marks ambiguous theme or patch names unreadable and never guesses between them", async () => {
     const duplicateTheme = new CssLoaderAdapter(host({
       call: vi.fn(async () => [RAW_THEME, { ...RAW_THEME, id: "duplicate-id" }]),
     }));
@@ -144,13 +153,11 @@ describe("CssLoaderAdapter.inspect", () => {
       }]),
     }));
 
-    await expect(duplicateTheme.inspect()).resolves.toMatchObject({
-      status: "error",
-      error: { code: "malformed_response" },
+    await expect(duplicateTheme.inspect()).resolves.toEqual({
+      status: "ready", themes: [], unreadable: ["Example Theme"],
     });
-    await expect(duplicatePatch.inspect()).resolves.toMatchObject({
-      status: "error",
-      error: { code: "malformed_response" },
+    await expect(duplicatePatch.inspect()).resolves.toEqual({
+      status: "ready", themes: [], unreadable: ["Example Theme"],
     });
   });
 
@@ -426,18 +433,60 @@ describe("CssLoaderAdapter mutations", () => {
     );
   });
 
-  it("rejects a reset that reports any theme load failure", async () => {
+  it("tolerates a reset failure of a third-party theme that was already broken", async () => {
+    let version = "0.5.0";
     const call = vi.fn(async (method: string) => {
-      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
-      if (method === "reset") return { fails: [["Third Party Theme", "invalid manifest"]] };
+      if (method === "get_themes") return [{ ...RAW_THEME, version }];
+      if (method === "reset") {
+        version = "0.6.0";
+        return { fails: [["Third Party Theme", "invalid manifest"]] };
+      }
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
     const before = await adapter.requireReady();
 
-    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
-      code: "mutation_failed",
-      message: "CSS Loader could not reload Third Party Theme: invalid manifest",
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).resolves.toMatchObject({
+      status: "ready",
+    });
+  });
+
+  it("rejects a reset that fails to load the target or a theme that was loaded before", async () => {
+    const other = { ...RAW_THEME, id: "Other", name: "Other" };
+    for (const failed of ["Example Theme", "Other"]) {
+      const call = vi.fn(async (method: string) => {
+        if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }, other];
+        if (method === "reset") return { fails: [[failed, "invalid manifest"]] };
+        throw new Error(`Unexpected method: ${method}`);
+      });
+      const adapter = new CssLoaderAdapter(host({ call }));
+      const before = await adapter.requireReady();
+
+      await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
+        code: "mutation_failed",
+        message: `CSS Loader could not reload ${failed}: invalid manifest`,
+      });
+    }
+  });
+
+  it("accepts a third-party theme updated on disk while keeping its activation", async () => {
+    const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: true };
+    let reset = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return reset
+        ? [{ ...RAW_THEME, version: "0.6.0" }, { ...thirdParty, version: "1.5.0", patches: [] }]
+        : [{ ...RAW_THEME, version: "0.5.0" }, thirdParty];
+      if (method === "reset") {
+        reset = true;
+        return { fails: [] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).resolves.toMatchObject({
+      status: "ready",
     });
   });
 

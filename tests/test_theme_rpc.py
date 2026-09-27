@@ -551,6 +551,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "activation_phase": None,
         "activation_quarantined": True,
         "recent_failures": [],
+        "unreadable_theme_folders": 0,
     }
 
 
@@ -613,3 +614,22 @@ def test_theme_failure_counts_repeats_without_logging_them_again(theme_rpc):
     assert plugin._theme_report_diagnostics()["recent_failures"] == [
         {"operation": "recovering", "code": "verification_failed", "count": 3},
     ]
+
+
+def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
+    _, plugin, _ = theme_rpc
+    root = plugin._themes_root()
+    for name, manifest in (
+        ("Good", '{"name":"Good"}'),
+        ("Private Broken Name", "{ not json"),
+        ("List Manifest", "[]"),
+    ):
+        (root / name).mkdir(parents=True)
+        (root / name / "theme.json").write_text(manifest, encoding="utf-8")
+    (root / "No Manifest").mkdir()
+    (root / "STORE").write_text("x", encoding="utf-8")
+
+    diagnostics = plugin._theme_report_diagnostics()
+
+    assert diagnostics["unreadable_theme_folders"] == 2
+    assert "Private Broken Name" not in str(diagnostics)

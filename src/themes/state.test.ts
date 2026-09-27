@@ -71,6 +71,15 @@ describe("deriveThemeCards", () => {
     });
   });
 
+  it("never offers to install over a catalog theme CSS Loader could not read", () => {
+    const [card] = deriveThemeCards(publication(), {
+      status: "ready", themes: [], unreadable: ["Example Theme"],
+    });
+
+    expect(card).toMatchObject({ installed: false, installable: false });
+    expect(card.targetVersion).toBeUndefined();
+  });
+
   it("keeps releases for a newer Panel visible but not installable", () => {
     const state = publication();
     if (state.status !== "published") throw new Error("fixture");

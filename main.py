@@ -182,6 +182,8 @@ _THEME_FAILURE_OPERATIONS = frozenset({
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
+_THEME_FOLDER_SCAN_LIMIT = 200
+_THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -1180,7 +1182,28 @@ class Plugin:
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
             "recent_failures": [dict(entry) for entry in self._theme_failures()],
+            "unreadable_theme_folders": self._unreadable_theme_folders(),
         }
+
+    def _unreadable_theme_folders(self) -> int:
+        unreadable = 0
+        try:
+            folders = [entry for entry in self._themes_root().iterdir() if entry.is_dir()]
+        except OSError:
+            return 0
+        for folder in folders[:_THEME_FOLDER_SCAN_LIMIT]:
+            manifest = folder / "theme.json"
+            if not manifest.is_file():
+                continue
+            try:
+                if manifest.stat().st_size > _THEME_MANIFEST_SCAN_BYTES:
+                    unreadable += 1
+                    continue
+                if not isinstance(json.loads(manifest.read_text(encoding="utf-8")), dict):
+                    unreadable += 1
+            except (OSError, ValueError):
+                unreadable += 1
+        return unreadable
 
     def _theme_failures(self) -> deque:
         failures = getattr(self, "_theme_failure_history", None)

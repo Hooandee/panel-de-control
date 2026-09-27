@@ -35,5 +35,6 @@ export interface CssLoaderErrorInfo {
 export interface CssLoaderSnapshot {
   status: CssLoaderStatus;
   themes: readonly CssLoaderTheme[];
+  unreadable?: readonly string[];
   error?: CssLoaderErrorInfo;
 }
