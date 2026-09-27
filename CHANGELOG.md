@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.57.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.1...panel-de-control-v0.57.0) (2026-09-27)
+
+
+### Features
+
+* tease keyboard themes and Ambient as coming soon ([#778](https://github.com/Hooandee/panel-de-control/issues/778)) ([b613b10](https://github.com/Hooandee/panel-de-control/commit/b613b10c34c59def2e56e15f94ddef4faa19213c))
+
 ## [0.56.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.0...panel-de-control-v0.56.1) (2026-09-26)
 
 
