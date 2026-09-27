@@ -8,8 +8,8 @@ vi.mock("../system/pdcStorage", () => ({
 import { DICTS, translateForLang } from "./index";
 
 const GENERIC_THEME_NAMESPACES = new Set([
-  "action", "catalog", "cssLoader", "delete", "details", "engine", "group", "install", "loading",
-  "operation", "patches", "recovery", "remote", "retry", "state", "title",
+  "action", "catalog", "cssLoader", "delete", "details", "engine", "group", "install", "keyboards", "loading",
+  "operation", "patches", "recovery", "remote", "retry", "state", "tab", "title",
   "update", "version",
 ]);
 
