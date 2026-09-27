@@ -9,13 +9,12 @@ import { ThemeCard } from "../components/ThemeCard";
 import { openThemeDetailsModal } from "../components/ThemeDetailsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { useThemes } from "../themes/useThemes";
-
-type ThemesTab = "system" | "keyboards";
+import { useThemes, type ThemesController } from "../themes/useThemes";
 
 export function TemasSection() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<ThemesTab>("system");
+  const controller = useThemes();
+  const [tab, setTab] = useState<"system" | "keyboards">("system");
   return (
     <PanelSectionRow>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
@@ -23,26 +22,18 @@ export function TemasSection() {
           label={t("nav.themes")}
           tabs={[{ value: "system", label: t("themes.tab.system") }, { value: "keyboards", label: t("themes.tab.keyboards") }]}
           value={tab}
-          onChange={(value) => setTab(value as ThemesTab)}
+          onChange={setTab}
         />
-        {tab === "system" ? (
-          <SystemThemes />
-        ) : (
-          <ComingSoonCard
-            image={keyboardsPreview}
-            imageAlt={t("themes.keyboards.imageAlt")}
-            title={t("themes.keyboards.title")}
-            body={t("themes.keyboards.body")}
-          />
-        )}
+        {tab === "system"
+          ? <SystemThemes controller={controller} />
+          : <ComingSoonCard image={keyboardsPreview} keyPrefix="themes.keyboards" />}
       </div>
     </PanelSectionRow>
   );
 }
 
-function SystemThemes() {
+function SystemThemes({ controller }: { controller: ThemesController }) {
   const { t } = useI18n();
-  const controller = useThemes();
   const publication = controller.publication;
   const catalogLoading = publication.status === "unchecked" || publication.status === "checking";
   const catalogUnavailable = publication.status === "disabled"
