@@ -11,6 +11,7 @@ import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
 import { LimpiezaSection } from "./LimpiezaSection";
+import { AmbienteSection } from "./AmbienteSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
 import { buildSections } from "./registryModel";
@@ -40,6 +41,7 @@ const COMPONENTS: Record<string, FC> = {
   hud: HudSection,
   params: ParametrosSection,
   cleaner: LimpiezaSection,
+  ambient: AmbienteSection,
   themes: TemasSection,
   settings: AjustesSection,
 };
