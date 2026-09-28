@@ -802,6 +802,7 @@ def test_low_battery_hold_off_does_not_read_battery_or_add_writes(plugin, monkey
         "read",
         lambda: (_ for _ in ()).throw(AssertionError("battery read while disabled")),
     )
+    plugin._low_battery_watch_at = float("inf")
     plugin._settings["low_battery_tdp_hold"] = False
     plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
     plugin._tdp_backend.set_levels_calls = 0
@@ -1297,6 +1298,7 @@ def test_string_false_does_not_enable_low_battery_hold(plugin, monkeypatch):
         "read",
         lambda: (_ for _ in ()).throw(AssertionError("invalid bool read battery")),
     )
+    plugin._low_battery_watch_at = float("inf")
     plugin._settings["low_battery_tdp_hold"] = "false"
     plugin._tdp_backend.set_levels_calls = 0
 
@@ -2364,3 +2366,43 @@ def test_guard_only_touches_tdp(plugin, monkeypatch):
     plugin._tdp_guard_tick(now=10.75)
     assert calls == []
     assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_guard_logs_low_battery_threshold_crossings_once(plugin, monkeypatch):
+    main_module = sys.modules["main"]
+    on_ac = {"value": False}
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": on_ac["value"])
+    percent = {"value": 25}
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": percent["value"], "status": "Discharging"},
+    )
+
+    def crossings():
+        return [
+            json.loads(args[1])
+            for args in plugin._test_logs["info"]
+            if args and args[0] == "Low battery TDP threshold %s"
+        ]
+
+    plugin._tdp_guard_tick(now=10.0)
+    percent["value"] = 20
+    plugin._tdp_guard_tick(now=30.0)
+    assert crossings() == []
+
+    plugin._tdp_guard_tick(now=71.0)
+    plugin._tdp_guard_tick(now=140.0)
+    on_ac["value"] = True
+    plugin._tdp_guard_tick(now=210.0)
+
+    logged = crossings()
+    assert [entry["below"] for entry in logged] == [True, False]
+    entering = logged[0]
+    assert entering["battery_percent"] == 20
+    assert entering["on_ac"] is False
+    assert entering["hold_enabled"] is False
+    assert entering["hold_reason"] in {"disabled", "unsupported"}
+    assert set(entering["requested"]) >= {"pl1"}
+    assert "observation" in entering
+    assert logged[1]["on_ac"] is True
