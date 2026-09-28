@@ -1523,3 +1523,68 @@ def test_failed_immediate_rollback_keeps_the_backup_for_startup_recovery(tmp_pat
     monkeypatch.setattr(theme_packages.os, "replace", original_replace)
     assert _recover_theme_transactions(themes_root) == []
     assert marker.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("with_extension", [False, True])
+def test_install_repairs_a_panel_theme_whose_manifest_was_corrupted(tmp_path, with_extension):
+    extension = EXTENSION_SOURCE if with_extension else None
+    archive, descriptor = _write_package(tmp_path, version="1.2.2", extension_source=extension)
+    themes_root = tmp_path / "themes"
+    first = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(first["transaction"], themes_root)
+    installed = themes_root / THEME_NAME
+    (installed / "theme.json").write_text("{ corrupted", encoding="utf-8")
+    (installed / "config_USER.json").write_text('{"active": true}', encoding="utf-8")
+
+    archive, descriptor = _write_package(tmp_path, extension_source=extension)
+    repaired = _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert repaired["ok"] is True
+    assert json.loads((installed / "theme.json").read_text(encoding="utf-8"))["version"] == THEME_VERSION
+    assert (installed / "config_USER.json").read_text(encoding="utf-8") == '{"active": true}'
+    assert _commit_theme_install(repaired["transaction"], themes_root) == {
+        "ok": True, "code": "committed",
+    }
+
+
+def test_rolled_back_repair_keeps_the_corrupted_tree_aside_and_unchanged(tmp_path):
+    archive, descriptor = _write_package(tmp_path, version="1.2.2")
+    themes_root = tmp_path / "themes"
+    first = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(first["transaction"], themes_root)
+    installed = themes_root / THEME_NAME
+    (installed / "theme.json").write_text("{ corrupted", encoding="utf-8")
+
+    archive, descriptor = _write_package(tmp_path)
+    repaired = _prepare_theme_archive(archive, descriptor, themes_root)
+    _rollback_theme_install(repaired["transaction"], themes_root)
+
+    assert not installed.exists()
+    [aside] = list(tmp_path.glob(".panel-theme-corrupted-*"))
+    assert (aside / "theme.json").read_text(encoding="utf-8") == "{ corrupted"
+    recoveries = _recover_theme_transactions(themes_root)
+    assert [item["previous_version"] for item in recoveries] == [None]
+    assert theme_packages.theme_transaction_diagnostics(themes_root)["set_aside"] == 1
+
+
+@pytest.mark.parametrize("marker", [
+    None,
+    "{ broken",
+    json.dumps({"schemaVersion": 2, "catalogId": "someone-else"}),
+])
+def test_install_never_overwrites_an_unreadable_folder_it_cannot_prove_is_panel_owned(
+    tmp_path, marker,
+):
+    archive, descriptor = _write_package(tmp_path)
+    themes_root = tmp_path / "themes"
+    installed = themes_root / THEME_NAME
+    installed.mkdir(parents=True)
+    (installed / "theme.json").write_text("{ corrupted", encoding="utf-8")
+    if marker is not None:
+        (installed / "panel-theme.json").write_text(marker, encoding="utf-8")
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert error.value.code == "identity_mismatch"
+    assert (installed / "theme.json").read_text(encoding="utf-8") == "{ corrupted"

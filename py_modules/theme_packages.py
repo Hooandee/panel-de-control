@@ -82,6 +82,7 @@ _TRANSACTION_PREFIX = ".panel-theme-transaction-"
 _QUARANTINE_PREFIX = ".panel-theme-quarantine-"
 _QUARANTINE_RECORD = "quarantine.json"
 _MAX_QUARANTINED = 3
+_CORRUPTED_PREFIX = ".panel-theme-corrupted-"
 _MUTATION_LOCK_NAME = ".panel-theme-install.lock"
 _TRANSACTION_TOKEN = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
 _INSTALL_LOCK = threading.RLock()
@@ -877,6 +878,52 @@ def _read_existing_manifest(path: Path) -> dict[str, Any]:
     return _read_json(path, "identity_mismatch")
 
 
+def _is_corrupted_panel_install(installed: Path, theme_id: str) -> bool:
+    """A Panel marker for this exact theme next to an unreadable manifest is ours to repair."""
+    if installed.is_symlink() or not installed.is_dir():
+        return False
+    try:
+        marker = _read_existing_manifest(installed / "panel-theme.json")
+    except ThemePackageError:
+        return False
+    if marker.get("schemaVersion") != 2 or marker.get("catalogId") != theme_id:
+        return False
+    try:
+        _read_existing_manifest(installed / "theme.json")
+    except ThemePackageError:
+        return True
+    return False
+
+
+def _set_aside_installs(parent: Path) -> list[Path]:
+    return sorted(
+        (path for path in parent.glob(f"{_CORRUPTED_PREFIX}*") if path.is_dir() and not path.is_symlink()),
+        key=lambda path: path.name,
+    )
+
+
+def _set_aside_corrupted_install(installed: Path) -> Path:
+    """Moves a Panel install CSS Loader can no longer read out of the themes folder.
+
+    Its unreadable manifest cannot be authenticated as a transaction's previous tree, so it is
+    kept aside (never deleted) and the repair proceeds as a fresh install.
+    """
+    parent = installed.parent.parent
+    existing = _set_aside_installs(parent)
+    sequence = int(existing[-1].name[len(_CORRUPTED_PREFIX):].split("-", 1)[0]) + 1 if existing else 1
+    aside = parent / f"{_CORRUPTED_PREFIX}{sequence:08d}-{secrets.token_hex(4)}"
+    try:
+        _durable_replace(installed, aside)
+    except OSError as error:
+        raise ThemePackageError("install_failed", "Unreadable theme could not be set aside") from error
+    for stale in _set_aside_installs(parent)[:-_MAX_QUARANTINED]:
+        try:
+            _durable_remove_tree(stale)
+        except OSError:
+            continue
+    return aside
+
+
 def _verify_owned_destination(installed: Path, theme_id: str, theme_name: str) -> None:
     if not installed.exists():
         return
@@ -1479,6 +1526,9 @@ def prepare_theme_archive(
         if _active_transaction(root, receipt_store):
             raise ThemePackageError("transaction_busy", "Another theme installation is pending")
         destination = root / theme_name
+        css_loader_state_source = destination
+        if _is_corrupted_panel_install(destination, theme_id):
+            css_loader_state_source = _set_aside_corrupted_install(destination)
         _verify_owned_destination(destination, theme_id, theme_name)
         previous_version: str | None = None
         previous_receipt: dict[str, object] | None = None
@@ -1491,6 +1541,7 @@ def prepare_theme_archive(
             (item for item in persisted_receipts if item["catalogId"] == theme_id),
             None,
         )
+
         if not destination.exists() and persisted_previous is not None:
             _replace_receipt(receipt_store, theme_id, None)
             persisted_previous = None
@@ -1528,7 +1579,7 @@ def prepare_theme_archive(
                 theme_name,
             )
             new_receipt = _validate_identity(extracted, theme_id, theme_name, version)
-            _preserve_css_loader_state(destination, extracted)
+            _preserve_css_loader_state(css_loader_state_source, extracted)
             _set_tree_ownership(extracted, css_loader_owner.st_uid, css_loader_owner.st_gid)
             _fsync_tree(extracted)
             journal = {
@@ -1853,7 +1904,12 @@ def theme_transaction_diagnostics(themes_root: str | Path) -> dict[str, object]:
             last = {"reason": str(record.get("reason", "unknown"))}
         except ThemePackageError:
             last = {"reason": "unknown"}
-    return {"pending": pending, "quarantined": len(quarantined), "last_quarantine": last}
+    return {
+        "pending": pending,
+        "quarantined": len(quarantined),
+        "last_quarantine": last,
+        "set_aside": len(_set_aside_installs(parent)),
+    }
 
 
 def list_theme_extensions(

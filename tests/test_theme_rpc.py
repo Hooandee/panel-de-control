@@ -547,6 +547,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
             "pending": [],
             "quarantined": 1,
             "last_quarantine": {"reason": "unreadable_journal"},
+            "set_aside": 0,
         },
         "activation_phase": None,
         "activation_quarantined": True,

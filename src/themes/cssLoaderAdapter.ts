@@ -216,8 +216,8 @@ export class CssLoaderAdapter {
           "CSS Loader returned an invalid theme list",
         );
       }
-      // One broken third-party theme must not hide or block every other theme: unreadable
-      // entries are left out and named so a catalog theme among them stays read-only.
+      // One broken theme must not hide or block every other theme: unreadable entries are left
+      // out, so a broken catalog theme reads as not installed and a reinstall can repair it.
       const byName = new Map<string, CssLoaderTheme>();
       const unreadable = new Set<string>();
       for (const rawTheme of rawThemes) {

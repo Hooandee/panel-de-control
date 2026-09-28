@@ -77,10 +77,9 @@ export function deriveThemeCards(
   const installed = snapshot.status === "ready"
     ? new Map(snapshot.themes.map((theme) => [theme.name, theme]))
     : new Map<string, CssLoaderTheme>();
-  const unreadable = new Set(snapshot.status === "ready" ? snapshot.unreadable ?? [] : []);
   return usableThemes(publication).map((release) => {
     const cssLoaderTheme = installed.get(release.cssLoaderName);
-    const installable = release.compatibility === "compatible" && !unreadable.has(release.cssLoaderName);
+    const installable = release.compatibility === "compatible";
     const targetVersion = installable ? release.publishedVersion : undefined;
     const comparison = cssLoaderTheme && targetVersion
       ? compareVersions(cssLoaderTheme.version, targetVersion)
