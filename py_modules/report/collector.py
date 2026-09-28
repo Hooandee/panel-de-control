@@ -288,11 +288,6 @@ def _plugin_manifest_field(folder: str, filename: str, key: str) -> str | None:
 
 
 def decky_plugins(plugins_dir: str | None) -> dict:
-    """Name every installed Decky plugin and its version.
-
-    Another plugin writing the same power rails, fans or audio graph looks like a
-    Panel de Control defect from inside the bundle unless it is listed here.
-    """
     empty = {"status": "unavailable", "plugins": [], "truncated": False}
     if not isinstance(plugins_dir, str) or not plugins_dir:
         return empty

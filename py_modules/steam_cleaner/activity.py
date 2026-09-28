@@ -3,6 +3,9 @@ import re
 from pathlib import Path
 
 SHADER_CACHE = re.compile(r"(/[^\0]*?/steamapps/shadercache/([0-9]{1,10}))(?=/|\0|$)")
+PROCESS_NAME = re.compile(r"[a-z0-9._+-]{1,16}")
+ACTIVITY_CAUSES = ("proc_unreadable", "environ_too_large", "unidentified", "fd_unreadable", "unreadable")
+MAX_CAUSES = 8
 
 
 def shader_processing(process, environment):
@@ -15,10 +18,6 @@ def shader_processing(process, environment):
         arguments = b""
     sources = (environment.get(b"MESA_GLSL_CACHE_DIR", b""), arguments)
     return {match for source in sources for match in SHADER_CACHE.findall(os.fsdecode(source))}
-
-
-ACTIVITY_CAUSES = ("proc_unreadable", "environ_too_large", "unidentified", "fd_unreadable", "unreadable")
-MAX_CAUSES = 8
 
 
 def process_name(process):
@@ -37,7 +36,7 @@ def activity_causes(result):
         {"cause": item["cause"], "process": item["process"]}
         for item in causes[:MAX_CAUSES]
         if isinstance(item, dict) and item.get("cause") in ACTIVITY_CAUSES
-        and isinstance(item.get("process"), str) and re.fullmatch(r"[a-z0-9._+-]{1,16}", item["process"])
+        and isinstance(item.get("process"), str) and PROCESS_NAME.fullmatch(item["process"])
     ]
 
 
