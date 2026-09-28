@@ -352,7 +352,10 @@ export class ThemesClient {
     return this.mutate(
       { kind: "activating", themeId },
       async () => this.handOffSections(
-        await this.dependencies.activator.activate(themeId, themes),
+        await this.reclaimSections(
+          await this.dependencies.activator.activate(themeId, themes),
+          target.cssLoaderName,
+        ),
         target.cssLoaderName,
       ),
     );
@@ -601,6 +604,26 @@ export class ThemesClient {
         others: [...new Set(applied.map((ref) => displayName(ref.themeName)))],
       };
     }
+    return after;
+  }
+
+  // Activating a theme means using it whole: sections it had handed to another theme come back
+  // before it takes over whatever still overlaps.
+  private async reclaimSections(snapshot: CssLoaderSnapshot, themeName: string): Promise<CssLoaderSnapshot> {
+    if (snapshot.status !== "ready") return snapshot;
+    const handoffs = this.readHandoffs();
+    const given = Object.keys(handoffs)
+      .map((key) => key.split("\u0000"))
+      .filter(([name]) => name === themeName)
+      .map(([name, patchName]) => ({ themeName: name, patchName }));
+    if (given.length === 0) return snapshot;
+    const theme = snapshot.themes.find((candidate) => candidate.name === themeName);
+    const plan = given.filter((ref) => {
+      const patch = theme?.patches.find((candidate) => candidate.name === ref.patchName);
+      return patch?.value === "No" && patch.options.includes("Yes");
+    });
+    const { snapshot: after } = await this.applySectionValues(snapshot, plan, "Yes");
+    this.forgetHandoffs(given);
     return after;
   }
 

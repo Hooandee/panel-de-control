@@ -629,6 +629,22 @@ describe("ThemesClient", () => {
       expect(stored()).toEqual({});
     });
 
+    it("gives an activated theme back the sections it had handed to another theme", async () => {
+      const { deps, value, stored } = world(true);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+      await client.setPatch("hooandee-gallery", "Estilizar Inicio", "Yes");
+      expect(value("Atlas", "Estilizar Inicio")).toBe("No");
+      await client.deactivate("hooandee-atlas");
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Atlas", "Estilizar Inicio")).toBe("Yes");
+      expect(value("Gallery", "Estilizar Inicio")).toBe("No");
+      expect(stored()).toEqual({ "Gallery\u0000Estilizar Inicio": "Atlas" });
+    });
+
     it("lets a section be taken back by turning it on in the other theme", async () => {
       const { deps, value } = world(true);
       const client = new ThemesClient(deps);
