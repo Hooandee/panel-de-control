@@ -209,26 +209,14 @@ export class CssLoaderAdapter {
           "CSS Loader returned an invalid theme list",
         );
       }
-      // One broken theme must not hide or block every other theme: unreadable entries are left
-      // out, so a broken catalog theme reads as not installed and a reinstall can repair it.
       const byName = new Map<string, CssLoaderTheme>();
-      const unreadable = new Set<string>();
-      for (const rawTheme of rawThemes) {
-        const theme = normalizeTheme(rawTheme);
-        if (!theme) {
-          const name = isRecord(rawTheme) && typeof rawTheme.name === "string" ? rawTheme.name : "";
-          unreadable.add(name);
-        } else if (byName.has(theme.name) || unreadable.has(theme.name)) {
-          byName.delete(theme.name);
-          unreadable.add(theme.name);
-        } else {
-          byName.set(theme.name, theme);
-        }
+      const ambiguous = new Set<string>();
+      for (const theme of rawThemes.map(normalizeTheme)) {
+        if (!theme || ambiguous.has(theme.name)) continue;
+        if (byName.delete(theme.name)) ambiguous.add(theme.name);
+        else byName.set(theme.name, theme);
       }
-      const themes = [...byName.values()];
-      return unreadable.size > 0
-        ? { status: "ready", themes, unreadable: [...unreadable] }
-        : { status: "ready", themes };
+      return { status: "ready", themes: [...byName.values()] };
     } catch (error) {
       return {
         status: "error",
@@ -269,9 +257,7 @@ export class CssLoaderAdapter {
     }
   }
 
-  // CSS Loader lists every folder it could not load, including third-party themes broken on disk
-  // regardless of Panel; only a failure of a theme Panel is installing or restoring invalidates
-  // the reset, and the other failures are left out of the readback comparison.
+  // `fails` also lists third-party folders that were already broken on disk.
   private async resetThemes(protectedThemeNames: ReadonlySet<string>): Promise<ReadonlySet<string>> {
     const result = await this.callMutationWithTimeout(this.reloadTimeoutMs, "reset");
     if (
@@ -288,8 +274,8 @@ export class CssLoaderAdapter {
         "CSS Loader returned an invalid result for reset",
       );
     }
-    const protectedFailure = (result.fails as [string, string][])
-      .find(([themeName]) => protectedThemeNames.has(themeName));
+    const fails = result.fails as [string, string][];
+    const protectedFailure = fails.find(([themeName]) => protectedThemeNames.has(themeName));
     if (protectedFailure) {
       const [themeName, reason] = protectedFailure;
       throw new CssLoaderOperationError(
@@ -297,7 +283,7 @@ export class CssLoaderAdapter {
         `CSS Loader could not reload ${themeName}: ${reason}`,
       );
     }
-    return new Set((result.fails as [string, string][]).map(([themeName]) => themeName));
+    return new Set(fails.map(([themeName]) => themeName));
   }
 
   async setThemeState(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot> {
@@ -445,14 +431,13 @@ export class CssLoaderAdapter {
     const excluded = new Set(
       typeof excludedThemeNames === "string" ? [excludedThemeNames] : excludedThemeNames,
     );
-    // A third-party theme whose files changed on disk reloads with its own new patch set; only
-    // its presence and activation can be held to the previous state.
-    const afterByName = new Map(after.themes.map((theme) => [theme.name, theme]));
+    const versions = (themes: readonly CssLoaderTheme[]) => new Map(themes.map((theme) => [theme.name, theme.version]));
+    const beforeVersions = versions(before.themes);
+    const afterVersions = versions(after.themes);
     const relevant = (themes: readonly CssLoaderTheme[]) => themes
       .filter((theme) => !excluded.has(theme.name))
       .map((theme) => {
-        const sameVersion = afterByName.get(theme.name)?.version === theme.version
-          && before.themes.find((candidate) => candidate.name === theme.name)?.version === theme.version;
+        const sameVersion = beforeVersions.get(theme.name) === afterVersions.get(theme.name);
         return {
           name: theme.name,
           enabled: theme.enabled,

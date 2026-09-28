@@ -15,8 +15,12 @@ import {
   type ThemePublicationClient,
 } from "./remotePublicationClient";
 import {
+  handoffsGivenBy,
   planSectionHandoff,
+  planSectionReclaim,
   planSectionRestore,
+  SECTION_OFF,
+  SECTION_ON,
   sectionHandoffKey,
   sectionKeyOf,
   type SectionHandoffs,
@@ -118,8 +122,17 @@ export interface ThemesClientSnapshot {
   publication: ThemePublicationState;
 }
 
+const BLOCKING_RECOVERY_CODES = new Set([
+  "invalid_journal",
+  "rollback_failed",
+  "rollback_verification_failed",
+]);
+const ANSWERED_CSS_LOADER_CODES = new Set(["mutation_failed", "verification_failed"]);
+const MAX_INSTALL_RECONCILE_FAILURES = 3;
+
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
+let sectionHandoffStore: SectionHandoffStore | undefined;
 
 export function configureThemeFailureReporter(
   reporter: (failure: ThemeFailureReport) => unknown,
@@ -129,36 +142,13 @@ export function configureThemeFailureReporter(
     if (failureReporter === reporter) failureReporter = undefined;
   };
 }
-const BLOCKING_RECOVERY_CODES = new Set([
-  "invalid_journal",
-  "rollback_failed",
-  "rollback_verification_failed",
-]);
-const MAX_INSTALL_RECONCILE_FAILURES = 3;
-let sectionHandoffStorage: { read(): string | null; write(value: string): void } | undefined;
 
-export function configureSectionHandoffStorage(
-  storage: { read(): string | null; write(value: string): void },
-): () => void {
-  sectionHandoffStorage = storage;
+export function configureSectionHandoffStore(store: SectionHandoffStore): () => void {
+  sectionHandoffStore = store;
   return () => {
-    if (sectionHandoffStorage === storage) sectionHandoffStorage = undefined;
+    if (sectionHandoffStore === store) sectionHandoffStore = undefined;
   };
 }
-
-function parseSectionHandoffs(raw: string | null): SectionHandoffs {
-  if (!raw) return {};
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ));
-  } catch {
-    return {};
-  }
-}
-const ANSWERED_CSS_LOADER_CODES = new Set(["mutation_failed", "verification_failed"]);
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
@@ -172,8 +162,8 @@ export function createProductionThemesDependencies(): ThemesDependencies {
       void Promise.resolve(failureReporter?.(failure)).catch(() => undefined);
     },
     sectionHandoffs: {
-      read: () => parseSectionHandoffs(sectionHandoffStorage?.read() ?? null),
-      write: (handoffs) => sectionHandoffStorage?.write(JSON.stringify(handoffs)),
+      read: () => sectionHandoffStore?.read() ?? {},
+      write: (handoffs) => sectionHandoffStore?.write(handoffs),
     },
   };
   return productionDependencies;
@@ -188,8 +178,6 @@ function errorCode(error: unknown): string {
   return typeof code === "string" && code.length > 0 ? code : "unknown";
 }
 
-// The backend already restored the files; a CSS Loader that answers but never matches the
-// expected inventory would otherwise block every theme operation forever.
 function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
   return error instanceof CssLoaderOperationError && ANSWERED_CSS_LOADER_CODES.has(error.code);
 }
@@ -539,38 +527,24 @@ export class ThemesClient {
   }
 
   private readHandoffs(): SectionHandoffs {
-    try {
-      return this.dependencies.sectionHandoffs?.read() ?? {};
-    } catch {
-      return {};
-    }
+    return this.dependencies.sectionHandoffs?.read() ?? {};
   }
 
   private writeHandoffs(handoffs: SectionHandoffs): void {
-    try {
-      this.dependencies.sectionHandoffs?.write(handoffs);
-    } catch {}
+    this.dependencies.sectionHandoffs?.write(handoffs);
   }
 
   private forgetHandoffs(refs: readonly SectionPatchRef[]): void {
     const handoffs = { ...this.readHandoffs() };
-    let changed = false;
-    for (const ref of refs) {
-      const key = sectionHandoffKey(ref);
-      if (key in handoffs) {
-        delete handoffs[key];
-        changed = true;
-      }
-    }
-    if (changed) this.writeHandoffs(handoffs);
+    const keys = refs.map(sectionHandoffKey).filter((key) => key in handoffs);
+    keys.forEach((key) => delete handoffs[key]);
+    if (keys.length > 0) this.writeHandoffs(handoffs);
   }
 
-  // Section handoffs are a courtesy on top of a confirmed operation: a failure is reported and the
-  // confirmed snapshot is kept, never turned into a failure of the operation itself.
   private async applySectionValues(
     snapshot: CssLoaderSnapshot,
     refs: readonly SectionPatchRef[],
-    value: "Yes" | "No",
+    value: typeof SECTION_ON | typeof SECTION_OFF,
   ): Promise<{ snapshot: CssLoaderSnapshot; applied: SectionPatchRef[] }> {
     let current = snapshot;
     const applied: SectionPatchRef[] = [];
@@ -593,7 +567,7 @@ export class ThemesClient {
     if (snapshot.status !== "ready") return snapshot;
     const plan = planSectionHandoff(snapshot.themes, ownerName, this.hooandeeThemeNames(), onlyPatchName);
     if (plan.length === 0) return snapshot;
-    const { snapshot: after, applied } = await this.applySectionValues(snapshot, plan, "No");
+    const { snapshot: after, applied } = await this.applySectionValues(snapshot, plan, SECTION_OFF);
     if (applied.length > 0) {
       const handoffs = { ...this.readHandoffs() };
       for (const ref of applied) handoffs[sectionHandoffKey(ref)] = ownerName;
@@ -607,34 +581,24 @@ export class ThemesClient {
     return after;
   }
 
-  // Activating a theme means using it whole: sections it had handed to another theme come back
-  // before it takes over whatever still overlaps.
   private async reclaimSections(snapshot: CssLoaderSnapshot, themeName: string): Promise<CssLoaderSnapshot> {
-    if (snapshot.status !== "ready") return snapshot;
     const handoffs = this.readHandoffs();
-    const given = Object.keys(handoffs)
-      .map((key) => key.split("\u0000"))
-      .filter(([name]) => name === themeName)
-      .map(([name, patchName]) => ({ themeName: name, patchName }));
-    if (given.length === 0) return snapshot;
-    const theme = snapshot.themes.find((candidate) => candidate.name === themeName);
-    const plan = given.filter((ref) => {
-      const patch = theme?.patches.find((candidate) => candidate.name === ref.patchName);
-      return patch?.value === "No" && patch.options.includes("Yes");
-    });
-    const { snapshot: after } = await this.applySectionValues(snapshot, plan, "Yes");
+    const given = handoffsGivenBy(handoffs, themeName);
+    if (given.length === 0 || snapshot.status !== "ready") return snapshot;
+    const plan = planSectionReclaim(snapshot.themes, handoffs, themeName);
+    const { snapshot: after } = await this.applySectionValues(snapshot, plan, SECTION_ON);
     this.forgetHandoffs(given);
     return after;
   }
 
   private async restoreSections(snapshot: CssLoaderSnapshot, leavingOwner: string): Promise<CssLoaderSnapshot> {
     const handoffs = this.readHandoffs();
-    const owned = Object.entries(handoffs).filter(([, owner]) => owner === leavingOwner);
+    const owned = Object.keys(handoffs).filter((key) => handoffs[key] === leavingOwner);
     if (owned.length === 0 || snapshot.status !== "ready") return snapshot;
     const plan = planSectionRestore(snapshot.themes, handoffs, leavingOwner);
-    const { snapshot: after } = await this.applySectionValues(snapshot, plan, "Yes");
+    const { snapshot: after } = await this.applySectionValues(snapshot, plan, SECTION_ON);
     const remaining = { ...handoffs };
-    for (const [key] of owned) delete remaining[key];
+    owned.forEach((key) => delete remaining[key]);
     this.writeHandoffs(remaining);
     return after;
   }

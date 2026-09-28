@@ -879,7 +879,6 @@ def _read_existing_manifest(path: Path) -> dict[str, Any]:
 
 
 def _is_corrupted_panel_install(installed: Path, theme_id: str) -> bool:
-    """A Panel marker for this exact theme next to an unreadable manifest is ours to repair."""
     if installed.is_symlink() or not installed.is_dir():
         return False
     try:
@@ -895,32 +894,35 @@ def _is_corrupted_panel_install(installed: Path, theme_id: str) -> bool:
     return False
 
 
-def _set_aside_installs(parent: Path) -> list[Path]:
+def _numbered_directories(parent: Path, prefix: str) -> list[Path]:
     return sorted(
-        (path for path in parent.glob(f"{_CORRUPTED_PREFIX}*") if path.is_dir() and not path.is_symlink()),
+        (path for path in parent.glob(f"{prefix}*") if path.is_dir() and not path.is_symlink()),
         key=lambda path: path.name,
     )
 
 
-def _set_aside_corrupted_install(installed: Path) -> Path:
-    """Moves a Panel install CSS Loader can no longer read out of the themes folder.
+def _next_numbered_directory(parent: Path, prefix: str) -> Path:
+    existing = _numbered_directories(parent, prefix)
+    sequence = int(existing[-1].name[len(prefix):].split("-", 1)[0]) + 1 if existing else 1
+    return parent / f"{prefix}{sequence:08d}-{secrets.token_hex(4)}"
 
-    Its unreadable manifest cannot be authenticated as a transaction's previous tree, so it is
-    kept aside (never deleted) and the repair proceeds as a fresh install.
-    """
-    parent = installed.parent.parent
-    existing = _set_aside_installs(parent)
-    sequence = int(existing[-1].name[len(_CORRUPTED_PREFIX):].split("-", 1)[0]) + 1 if existing else 1
-    aside = parent / f"{_CORRUPTED_PREFIX}{sequence:08d}-{secrets.token_hex(4)}"
-    try:
-        _durable_replace(installed, aside)
-    except OSError as error:
-        raise ThemePackageError("install_failed", "Unreadable theme could not be set aside") from error
-    for stale in _set_aside_installs(parent)[:-_MAX_QUARANTINED]:
+
+def _prune_numbered_directories(parent: Path, prefix: str) -> None:
+    for stale in _numbered_directories(parent, prefix)[:-_MAX_QUARANTINED]:
         try:
             _durable_remove_tree(stale)
         except OSError:
             continue
+
+
+def _set_aside_corrupted_install(installed: Path) -> Path:
+    parent = installed.parent.parent
+    aside = _next_numbered_directory(parent, _CORRUPTED_PREFIX)
+    try:
+        _durable_replace(installed, aside)
+    except OSError as error:
+        raise ThemePackageError("install_failed", "Unreadable theme could not be set aside") from error
+    _prune_numbered_directories(parent, _CORRUPTED_PREFIX)
     return aside
 
 
@@ -1374,10 +1376,7 @@ def _hash_file(path: Path) -> str:
 
 
 def _quarantined_transactions(parent: Path) -> list[Path]:
-    return sorted(
-        (path for path in parent.glob(f"{_QUARANTINE_PREFIX}*") if path.is_dir() and not path.is_symlink()),
-        key=lambda path: path.name,
-    )
+    return _numbered_directories(parent, _QUARANTINE_PREFIX)
 
 
 def _quarantined_theme(work: Path) -> tuple[str, str] | None:
@@ -1426,9 +1425,7 @@ def _quarantine_transaction(
     really on disk. If the move itself fails the old blocking behaviour is kept.
     """
     parent = work.parent
-    existing = _quarantined_transactions(parent)
-    sequence = int(existing[-1].name[len(_QUARANTINE_PREFIX):].split("-", 1)[0]) + 1 if existing else 1
-    destination = parent / f"{_QUARANTINE_PREFIX}{sequence:08d}-{secrets.token_hex(4)}"
+    destination = _next_numbered_directory(parent, _QUARANTINE_PREFIX)
     try:
         _durable_replace(work, destination)
     except OSError as error:
@@ -1444,11 +1441,7 @@ def _quarantine_transaction(
     except OSError:
         pass
     _reconcile_quarantined_receipt(themes_root, receipts_path, destination)
-    for stale in _quarantined_transactions(parent)[:-_MAX_QUARANTINED]:
-        try:
-            _durable_remove_tree(stale)
-        except OSError:
-            continue
+    _prune_numbered_directories(parent, _QUARANTINE_PREFIX)
 
 
 def _active_transaction(themes_root: Path, receipts_path: Path | None = None) -> bool:
@@ -1908,7 +1901,7 @@ def theme_transaction_diagnostics(themes_root: str | Path) -> dict[str, object]:
         "pending": pending,
         "quarantined": len(quarantined),
         "last_quarantine": last,
-        "set_aside": len(_set_aside_installs(parent)),
+        "set_aside": len(_numbered_directories(parent, _CORRUPTED_PREFIX)),
     }
 
 

@@ -1181,7 +1181,10 @@ class Plugin:
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
-            "recent_failures": [dict(entry) for entry in self._theme_failures()],
+            "recent_failures": [
+                {key: entry[key] for key in ("operation", "code", "count")}
+                for entry in self._theme_failures()
+            ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
         }
 
@@ -1196,13 +1199,12 @@ class Plugin:
             if not manifest.is_file():
                 continue
             try:
-                if manifest.stat().st_size > _THEME_MANIFEST_SCAN_BYTES:
-                    unreadable += 1
-                    continue
-                if not isinstance(json.loads(manifest.read_text(encoding="utf-8")), dict):
-                    unreadable += 1
+                readable = manifest.stat().st_size <= _THEME_MANIFEST_SCAN_BYTES and isinstance(
+                    json.loads(manifest.read_text(encoding="utf-8")), dict
+                )
             except (OSError, ValueError):
-                unreadable += 1
+                readable = False
+            unreadable += not readable
         return unreadable
 
     def _theme_failures(self) -> deque:
@@ -1217,24 +1219,14 @@ class Plugin:
         code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
         message = " ".join(str(message).split())[:_THEME_FAILURE_MESSAGE_CHARS]
         failures = self._theme_failures()
-        last = failures[-1] if failures else None
-        if (
-            last is not None
-            and last["operation"] == operation
-            and last["code"] == code
-            and getattr(self, "_theme_failure_last_message", None) == message
-        ):
-            last["count"] += 1
+        entry = {"operation": operation, "code": code, "message": message}
+        if failures and {key: failures[-1][key] for key in entry} == entry:
+            failures[-1]["count"] += 1
             return True
-        failures.append({"operation": operation, "code": code, "count": 1})
-        self._theme_failure_last_message = message
+        failures.append({**entry, "count": 1})
         decky.logger.warning(
             "Theme operation failed %s",
-            json.dumps(
-                {"operation": operation, "code": code, "message": message},
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ),
+            json.dumps(entry, separators=(",", ":"), ensure_ascii=False),
         )
         return True
 

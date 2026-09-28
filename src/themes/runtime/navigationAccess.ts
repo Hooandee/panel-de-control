@@ -55,8 +55,7 @@ function getSteamNavigationController(): NavigationController | null | undefined
 const MAX_SEARCHED_NODES = 20_000;
 const GAMEPAD_FOCUS_SOURCE = 3;
 
-// Current Steam builds dropped FocusNavController.FocusElement and ignore DOM focus(); the only
-// way to move gamepad focus is through the navigation node that owns the element.
+// Steam no longer exposes FocusElement and ignores DOM focus(); only the owning node moves focus.
 function findNavigationNode(tree: NavigationTree, element: HTMLElement): NavigationNode | null {
   const pending: unknown[] = [tree];
   const seen = new Set<unknown>();

@@ -629,7 +629,6 @@ class SteamCleanerService:
         )
 
     def _removable_drive(self, root):
-        """The drive directory of a library under a removable-media root, e.g. /run/media/deck/SD."""
         for base in REMOVABLE_MEDIA_ROOTS:
             base_path = Path(base)
             if not root.is_relative_to(base_path) or root == base_path:

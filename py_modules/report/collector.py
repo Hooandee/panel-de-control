@@ -154,7 +154,7 @@ _DECKY_ORIGIN = re.compile(r"(?:localhost|127\.0\.0\.1):1337(?P<path>/[^\s?#)\"'
 _FRONTEND_EXCEPTION_TYPE = re.compile(
     r"Uncaught(?: \(in promise\))? (?P<error>TypeError|ReferenceError|SyntaxError|RangeError|Error)\b"
 )
-# Plugin folder names are user-controlled text, so only these fixed slugs ever leave the device.
+# Plugin folder names are user text: only these fixed slugs leave the device.
 _KNOWN_FRONTEND_ORIGINS = {
     "paneldecontrol": "panel",
     "cssloader": "css_loader",

@@ -39,8 +39,9 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
-  configureSectionHandoffStorage,
+  configureSectionHandoffStore,
   configureThemeFailureReporter,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
@@ -97,9 +98,9 @@ export default definePlugin(() => {
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
-  const releaseSectionHandoffStorage = configureSectionHandoffStorage({
-    read: () => readString("pdc:themeSectionHandoffs"),
-    write: (value) => writeString("pdc:themeSectionHandoffs", value),
+  const releaseSectionHandoffStore = configureSectionHandoffStore({
+    read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),
+    write: (handoffs) => writeString("pdc:themeSectionHandoffs", JSON.stringify(handoffs)),
   });
   const themesClient = getThemesClient(createProductionThemesDependencies());
   let qamRuntime: ReturnType<typeof startPluginQamRuntime> | null = null;
@@ -185,7 +186,7 @@ export default definePlugin(() => {
       releaseThemePublicationHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
-      releaseSectionHandoffStorage();
+      releaseSectionHandoffStore();
       releaseCssLoaderHost();
     },
   };

@@ -8,6 +8,7 @@ export interface SectionPatchRef {
 }
 
 const SECTION_PREFIX = "estilizar ";
+const HANDOFF_SEPARATOR = "\u0000";
 const SECTION_KEYS: readonly (readonly [RegExp, string])[] = [
   [/\binicio\b/, "home"],
   [/\bbiblioteca\b/, "library"],
@@ -21,8 +22,8 @@ const SECTION_KEYS: readonly (readonly [RegExp, string])[] = [
   [/\bpanel de control\b/, "panel"],
   [/\bmando\b/, "controller"],
 ];
-const ON = "Yes";
-const OFF = "No";
+export const SECTION_ON = "Yes";
+export const SECTION_OFF = "No";
 
 export function sectionKeyOf(patchName: string): string | null {
   const normalized = patchName.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -32,11 +33,33 @@ export function sectionKeyOf(patchName: string): string | null {
 }
 
 export function sectionHandoffKey({ themeName, patchName }: SectionPatchRef): string {
-  return `${themeName}\u0000${patchName}`;
+  return `${themeName}${HANDOFF_SEPARATOR}${patchName}`;
 }
 
-// Two Hooandee themes styling the same Steam section overwrite each other's geometry, so each
-// section is styled by one theme at a time; mixing means taking different sections from each.
+function refOfKey(key: string): SectionPatchRef {
+  const [themeName, patchName] = key.split(HANDOFF_SEPARATOR);
+  return { themeName, patchName };
+}
+
+export function parseSectionHandoffs(raw: string | null): SectionHandoffs {
+  if (!raw) return {};
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ));
+  } catch {
+    return {};
+  }
+}
+
+function switchable(themes: readonly CssLoaderTheme[], ref: SectionPatchRef, from: string, to: string): boolean {
+  const patch = themes.find((theme) => theme.name === ref.themeName)?.patches
+    .find((candidate) => candidate.name === ref.patchName);
+  return patch?.value === from && patch.options.includes(to);
+}
+
 export function planSectionHandoff(
   themes: readonly CssLoaderTheme[],
   ownerName: string,
@@ -46,7 +69,7 @@ export function planSectionHandoff(
   const owner = themes.find((theme) => theme.name === ownerName);
   if (!owner?.enabled || !hooandeeThemes.has(ownerName)) return [];
   const owned = new Set(owner.patches
-    .filter((patch) => patch.value === ON && (onlyPatchName === undefined || patch.name === onlyPatchName))
+    .filter((patch) => patch.value === SECTION_ON && (onlyPatchName === undefined || patch.name === onlyPatchName))
     .map((patch) => sectionKeyOf(patch.name))
     .filter((key): key is string => key !== null));
   if (owned.size === 0) return [];
@@ -55,7 +78,7 @@ export function planSectionHandoff(
     .flatMap((theme) => theme.patches
       .filter((patch) => {
         const key = sectionKeyOf(patch.name);
-        return key !== null && owned.has(key) && patch.value === ON && patch.options.includes(OFF);
+        return key !== null && owned.has(key) && patch.value === SECTION_ON && patch.options.includes(SECTION_OFF);
       })
       .map((patch) => ({ themeName: theme.name, patchName: patch.name })));
 }
@@ -65,10 +88,20 @@ export function planSectionRestore(
   handoffs: SectionHandoffs,
   leavingOwner: string,
 ): SectionPatchRef[] {
-  return Object.entries(handoffs).flatMap(([key, owner]) => {
-    if (owner !== leavingOwner) return [];
-    const [themeName, patchName] = key.split("\u0000");
-    const patch = themes.find((theme) => theme.name === themeName)?.patches.find((candidate) => candidate.name === patchName);
-    return patch?.value === OFF && patch.options.includes(ON) ? [{ themeName, patchName }] : [];
-  });
+  return Object.entries(handoffs)
+    .filter(([, owner]) => owner === leavingOwner)
+    .map(([key]) => refOfKey(key))
+    .filter((ref) => switchable(themes, ref, SECTION_OFF, SECTION_ON));
+}
+
+export function handoffsGivenBy(handoffs: SectionHandoffs, themeName: string): SectionPatchRef[] {
+  return Object.keys(handoffs).map(refOfKey).filter((ref) => ref.themeName === themeName);
+}
+
+export function planSectionReclaim(
+  themes: readonly CssLoaderTheme[],
+  handoffs: SectionHandoffs,
+  themeName: string,
+): SectionPatchRef[] {
+  return handoffsGivenBy(handoffs, themeName).filter((ref) => switchable(themes, ref, SECTION_OFF, SECTION_ON));
 }

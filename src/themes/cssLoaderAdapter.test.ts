@@ -139,10 +139,9 @@ describe("CssLoaderAdapter.inspect", () => {
 
     expect(snapshot.status).toBe("ready");
     expect(snapshot.themes.map((theme) => theme.name)).toEqual(["Example Theme"]);
-    expect(snapshot.unreadable).toEqual(["", "Other"]);
   });
 
-  it("marks ambiguous theme or patch names unreadable and never guesses between them", async () => {
+  it("leaves out ambiguous theme or patch names instead of guessing between them", async () => {
     const duplicateTheme = new CssLoaderAdapter(host({
       call: vi.fn(async () => [RAW_THEME, { ...RAW_THEME, id: "duplicate-id" }]),
     }));
@@ -153,12 +152,8 @@ describe("CssLoaderAdapter.inspect", () => {
       }]),
     }));
 
-    await expect(duplicateTheme.inspect()).resolves.toEqual({
-      status: "ready", themes: [], unreadable: ["Example Theme"],
-    });
-    await expect(duplicatePatch.inspect()).resolves.toEqual({
-      status: "ready", themes: [], unreadable: ["Example Theme"],
-    });
+    await expect(duplicateTheme.inspect()).resolves.toEqual({ status: "ready", themes: [] });
+    await expect(duplicatePatch.inspect()).resolves.toEqual({ status: "ready", themes: [] });
   });
 
   it("turns transport failures into an honest error state", async () => {
