@@ -26,7 +26,7 @@ class SteamCleanerError(Exception):
 KINDS = ("shadercache", "compatdata")
 MAX_ENTRIES = 10_000
 REASONS = {
-    "coverage_incomplete", "library_unavailable", "symlink", "unsafe_path",
+    "coverage_incomplete", "library_unavailable", "library_disconnected", "symlink", "unsafe_path",
     "path_changed", "mount_point", "runtime", "activity_unknown", "active_game",
     "size_unknown", "cancelled", "io_error", "busy", "closed", "invalid_selection",
     "stale_scan", "invalid_plan", "expired_plan", "prefix_confirmation_required",
@@ -37,6 +37,7 @@ REASONS = {
 EVENTS = {"started", "completed", "prepared", "deleted", "skipped", "error", "interrupted"}
 PHASES = {"idle", "scan", "prepare", "execute"}
 SOURCES = {"library_index", "library", "manifest", "shortcuts", "measure", "history"}
+REMOVABLE_MEDIA_ROOTS = ("/run/media", "/media", "/mnt")
 VDF_ERRORS = {"empty", "malformed_vdf", "duplicate_vdf_key", "oversized_vdf", "unicode", "appid_mismatch"}
 
 
@@ -208,7 +209,12 @@ class SteamCleanerService:
                         shortcuts_complete = False
                 except (OSError, filesystem.UnsafePath) as error:
                     critical_complete = False
-                    library["reason"] = "symlink" if any(path.is_symlink() for path in (steamapps, *steamapps.parents)) else "library_unavailable"
+                    if any(path.is_symlink() for path in (steamapps, *steamapps.parents)):
+                        library["reason"] = "symlink"
+                    elif isinstance(error, FileNotFoundError) and self._drive_disconnected(root, mounts):
+                        library["reason"] = "library_disconnected"
+                    else:
+                        library["reason"] = "library_unavailable"
                     self._scan_issue("library", library["reason"], error, library["id"])
                 libraries.append(library)
             for root, library in zip(roots, libraries):
@@ -622,9 +628,29 @@ class SteamCleanerService:
             for mount in mounts
         )
 
+    def _removable_drive(self, root):
+        """The drive directory of a library under a removable-media root, e.g. /run/media/deck/SD."""
+        for base in REMOVABLE_MEDIA_ROOTS:
+            base_path = Path(base)
+            if not root.is_relative_to(base_path) or root == base_path:
+                continue
+            parts = root.relative_to(base_path).parts
+            if parts[0] == self._home.name and len(parts) > 1:
+                return base_path / parts[0] / parts[1]
+            return base_path / parts[0]
+        return None
+
+    def _drive_disconnected(self, root, mounts):
+        drive = self._removable_drive(root)
+        return drive is not None and (not drive.exists() or (bool(mounts) and str(drive) not in mounts))
+
     def _library_label(self, root, mounts, index):
+        drive = self._removable_drive(root)
         containing = [mount for mount in mounts if mount != "/" and (str(root) == mount or str(root).startswith(mount + os.sep))]
-        name = Path(max(containing, key=len)).name if containing else root.name
+        if drive is not None:
+            name = drive.name
+        else:
+            name = Path(max(containing, key=len)).name if containing else root.name
         if name == self._home.name or name in ("", ".", "/", "home", "Users", "root"):
             return f"Steam {index + 1}"
         return clean_name(name) or f"Steam {index + 1}"

@@ -202,7 +202,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
         </div> : !hasScanData ? <CleanerAction label={t("cleaner.scan")} primary onActivate={() => { setSelected(new Set()); void controller.scan(); }}><LuRefreshCw size={16} />{t("cleaner.scan")}</CleanerAction> : null}
         {calculatingGames && installedMetadata.map((game) => <LoadingGameRow key={game.appid} game={game} />)}
         {state?.scan_id && !state.coverage_complete && <Notice warning>{t("cleaner.coverageIncomplete")}</Notice>}
-        {state?.libraries.filter((library) => !library.available).map((library) => <Notice key={library.id} warning>{library.label} · {t(cleanerReasonKey(library.reason))}</Notice>)}
+        {state?.libraries.filter((library) => !library.available).map((library) => <Notice key={library.id} warning={library.reason !== "library_disconnected"}>{library.label} · {t(cleanerReasonKey(library.reason))}</Notice>)}
         {state && state.status !== "idle" && !loading && !busy && !state.available && <Notice>{t("cleaner.unavailable")}</Notice>}
         {result && !busy && <div style={{ ...theme.card, ...column, padding: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: theme.font.body, fontWeight: 600 }}>
