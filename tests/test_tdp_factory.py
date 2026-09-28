@@ -591,6 +591,8 @@ def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
     lock = backend.diagnostics()["transaction_lock"]
     assert lock["state"] == "rollback_failed"
     assert lock["custom_rearm_attempted"] is True
+    assert lock["recovery_failures"] == 2
+    assert lock["locked_s"] >= 0
     with open(lock_path) as handle:
         assert json.load(handle)["custom_rearm_attempted"] is True
     assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_not_recovered"

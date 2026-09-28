@@ -137,6 +137,8 @@ class FirmwareAttrBackend(TDPBackend):
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
         self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._runtime_lock_payload = self._safety_lock.load_payload()
+        self._locked_since = time.monotonic() if self._runtime_lock_payload else None
+        self._recovery_failures = 0
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
             or self._runtime_lock_payload.get("state")
@@ -412,6 +414,7 @@ class FirmwareAttrBackend(TDPBackend):
             self._write_circuit_open = detail
             if purpose == "transaction":
                 self._runtime_lock_payload = payload
+                self._recovery_failures += 1
                 self._safety_lock.persist_payload(payload)
             else:
                 self._owned_payload = payload
@@ -425,6 +428,8 @@ class FirmwareAttrBackend(TDPBackend):
             return {"ok": False, "detail": detail}
         if purpose == "transaction":
             self._runtime_lock_payload = None
+            self._locked_since = None
+            self._recovery_failures = 0
         else:
             self._owned_payload = None
             self._owns_state = False
@@ -961,6 +966,8 @@ class FirmwareAttrBackend(TDPBackend):
                 if self._rollback_rearmed:
                     lock_payload["custom_rearm_attempted"] = True
                 self._runtime_lock_payload = lock_payload
+                if self._locked_since is None:
+                    self._locked_since = time.monotonic()
                 if not self._safety_lock.persist_payload(lock_payload):
                     self._write_circuit_open += "; runtime lock persistence failed"
             elif not self._safety_lock.clear():
@@ -1085,6 +1092,13 @@ class FirmwareAttrBackend(TDPBackend):
                 key: self._runtime_lock_payload.get(key)
                 for key in ("state", "snapshot", "profile", "custom_rearm_attempted")
             }
+            if self._locked_since is not None:
+                diagnostics["transaction_lock"]["locked_s"] = round(
+                    time.monotonic() - self._locked_since
+                )
+                diagnostics["transaction_lock"]["recovery_failures"] = (
+                    self._recovery_failures
+                )
         if self._trust_live_bounds:
             diagnostics["live_bounds_valid"] = {
                 rail: self._validated_live_bounds(attr) is not None
