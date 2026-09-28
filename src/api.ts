@@ -58,6 +58,9 @@ export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_instal
 export const acknowledgeThemeInstallRollback = callable<[transaction: string], unknown>(
   "acknowledge_theme_install_rollback",
 );
+export const recordUiDiagnostic = callable<[
+  area: string, code: string, detail: string,
+], boolean>("record_ui_diagnostic");
 export const recordThemeFailure = callable<[
   operation: string, code: string, message: string,
 ], boolean>("record_theme_failure");

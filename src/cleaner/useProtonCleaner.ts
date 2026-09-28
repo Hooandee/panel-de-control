@@ -6,6 +6,7 @@ import {
   prepareProtonCleaner,
   scanProtonCleaner,
 } from "../api";
+import { recordUiDiagnostic } from "../system/uiDiagnostics";
 import { cleanerErrorCode } from "./errors";
 import type { ProtonResult, ProtonState } from "./protonTypes";
 
@@ -30,7 +31,7 @@ export function useProtonCleaner() {
         setError(null);
       }
     } catch (failure) {
-      if (mounted.current && revision === epoch.current) setError(cleanerErrorCode(failure));
+      recordUiDiagnostic("proton", cleanerErrorCode(failure), "refresh");
     }
   }, []);
 
@@ -69,7 +70,7 @@ export function useProtonCleaner() {
       const next = await scanProtonCleaner();
       if (mounted.current && revision === epoch.current) setState(next);
     } catch (failure) {
-      if (mounted.current && revision === epoch.current) setError(cleanerErrorCode(failure));
+      recordUiDiagnostic("proton", cleanerErrorCode(failure), "scan");
     } finally {
       finish(revision);
     }

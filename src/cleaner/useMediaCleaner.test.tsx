@@ -110,6 +110,6 @@ describe("media cleaner controller", () => {
     await act(() => result.current.scan());
 
     expect(result.current.items).toEqual([]);
-    expect(result.current.error).toBe("media_unavailable");
+    expect(result.current.error).toBeNull();
   });
 });

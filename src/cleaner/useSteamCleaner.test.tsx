@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CleanerEntry, CleanerPlan, CleanerResult, CleanerState } from "./types";
 
 const api = vi.hoisted(() => ({ state: vi.fn(), scan: vi.fn(), prepare: vi.fn(), execute: vi.fn(), cancel: vi.fn() }));
+const diagnostics = vi.hoisted(() => ({ record: vi.fn() }));
+vi.mock("../system/uiDiagnostics", () => ({ recordUiDiagnostic: diagnostics.record }));
 vi.mock("../api", () => ({ getSteamCleanerState: api.state, scanSteamCleaner: api.scan, prepareSteamCleaner: api.prepare, executeSteamCleaner: api.execute, cancelSteamCleaner: api.cancel }));
 import { useSteamCleaner } from "./useSteamCleaner";
 
@@ -119,14 +121,33 @@ describe("Steam Cleaner controller", () => {
     expect(result.current.result).toEqual(partial);
   });
 
-  it("keeps the inventory and exposes only a normalized code on RPC failure", async () => {
+  it("keeps a failed scan out of sight and records only its normalized code", async () => {
     api.scan.mockRejectedValue(new Error("RuntimeError: unsafe_path /home/private-user/data"));
     const { result } = renderHook(useSteamCleaner);
     await waitFor(() => expect(result.current.loading).toBe(false));
     await act(() => result.current.scan());
-    expect(result.current.error).toBe("unsafe_path");
+    expect(result.current.error).toBeNull();
+    expect(diagnostics.record).toHaveBeenCalledWith("cleaner", "unsafe_path", "scan");
     expect(result.current.state?.entries).toEqual([entry]);
     expect(api.execute).not.toHaveBeenCalled();
+  });
+
+  it("still surfaces a failure of the cleanup the user asked for", async () => {
+    api.prepare.mockRejectedValue(new Error("RuntimeError: partial_delete"));
+    const { result } = renderHook(useSteamCleaner);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.prepare(["entry"]));
+    expect(result.current.error).toBe("partial_delete");
+  });
+
+  it("clears a cleanup failure once the state is refreshed", async () => {
+    api.prepare.mockRejectedValue(new Error("RuntimeError: partial_delete"));
+    const { result } = renderHook(useSteamCleaner);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.prepare(["entry"]));
+    expect(result.current.error).toBe("partial_delete");
+    await act(() => result.current.refresh());
+    expect(result.current.error).toBeNull();
   });
 
   it("does not let an old progress read overwrite execution readback", async () => {

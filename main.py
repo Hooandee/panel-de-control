@@ -182,6 +182,8 @@ _THEME_FAILURE_OPERATIONS = frozenset({
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media)$")
+_UI_DIAGNOSTIC_HISTORY = 20
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
@@ -1214,6 +1216,32 @@ class Plugin:
             self._theme_failure_history = failures
         return failures
 
+    def _ui_diagnostics(self) -> deque:
+        entries = getattr(self, "_ui_diagnostic_history", None)
+        if entries is None:
+            entries = deque(maxlen=_UI_DIAGNOSTIC_HISTORY)
+            self._ui_diagnostic_history = entries
+        return entries
+
+    def _ui_diagnostics_snapshot(self) -> list[dict]:
+        return [{key: entry[key] for key in ("area", "code", "count")} for entry in self._ui_diagnostics()]
+
+    async def record_ui_diagnostic(self, area: str, code: str, detail: str = "") -> bool:
+        area = area if isinstance(area, str) and _UI_DIAGNOSTIC_AREA.match(area) else "unknown"
+        code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
+        detail = " ".join(str(detail).split())[:_THEME_FAILURE_MESSAGE_CHARS]
+        entries = self._ui_diagnostics()
+        entry = {"area": area, "code": code, "detail": detail}
+        if entries and {key: entries[-1][key] for key in entry} == entry:
+            entries[-1]["count"] += 1
+            return True
+        entries.append({**entry, "count": 1})
+        decky.logger.warning(
+            "UI diagnostic %s",
+            json.dumps(entry, separators=(",", ":"), ensure_ascii=False),
+        )
+        return True
+
     async def record_theme_failure(self, operation: str, code: str, message: str) -> bool:
         operation = operation if operation in _THEME_FAILURE_OPERATIONS else "unknown"
         code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
@@ -1900,6 +1928,7 @@ class Plugin:
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
+            "ui_diagnostics": self._ui_diagnostics_snapshot(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname

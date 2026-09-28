@@ -67,7 +67,7 @@ export const MediaCleanerView: FC<{ controller: MediaCleanerController }> = ({ c
   const allRecommendedSelected = recommended.length > 0 && recommended.every((item) => selected.has(item.id));
 
   return <div style={cleanerColumn}>
-    {controller.error && <CleanerNotice warning>{t(`cleaner.reason.${controller.error}`)}</CleanerNotice>}
+    {controller.error === "media_delete_failed" && <CleanerNotice warning>{t("cleaner.reason.media_delete_failed")}</CleanerNotice>}
     {controller.result && <CleanerResult
       bytes={formatBytes(controller.result.bytesRemoved, lang)}
       failed={controller.result.items.some((item) => item.status === "error")}

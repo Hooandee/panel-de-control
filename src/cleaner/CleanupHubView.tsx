@@ -25,9 +25,9 @@ export const CleanupHubView: FC<{
   const { t, lang } = useI18n();
   const [tab, setTab] = useState<CleanupTab>("games");
   const summaries = [
-    { tab: "games" as const, bytes: (games.state?.totals.shadercache ?? 0) + (games.state?.totals.compatdata ?? 0), loading: games.loading || games.pending === "scan", unknown: (games.state?.totals.unknown ?? 0) > 0 || games.state?.coverage_complete === false, icon: LuGamepad2 },
-    { tab: "media" as const, bytes: media.items.reduce((sum, item) => sum + (item.bytes ?? 0), 0), loading: media.loading, unknown: media.error !== null || media.items.some((item) => item.bytes === null), icon: LuImages },
-    { tab: "proton" as const, bytes: proton.state?.totals.bytes ?? 0, loading: proton.loading || proton.pending === "scan", unknown: (proton.state?.totals.unknown ?? 0) > 0 || proton.state?.coverage_complete === false, icon: LuAtom },
+    { tab: "games" as const, bytes: (games.state?.totals.shadercache ?? 0) + (games.state?.totals.compatdata ?? 0), loading: games.loading || games.pending === "scan", icon: LuGamepad2 },
+    { tab: "media" as const, bytes: media.items.reduce((sum, item) => sum + (item.bytes ?? 0), 0), loading: media.loading, icon: LuImages },
+    { tab: "proton" as const, bytes: proton.state?.totals.bytes ?? 0, loading: proton.loading || proton.pending === "scan", icon: LuAtom },
   ];
 
   return <PanelSectionRow>
@@ -41,9 +41,9 @@ export const CleanupHubView: FC<{
           <div style={{ width: 34 }}><CleanerButton label={t("cleaner.scanAgain")} disabled={refreshing} onActivate={onRefresh} style={{ minHeight: 32, padding: 7, background: "transparent", boxShadow: "none" }}><LuRefreshCw size={15} /></CleanerButton></div>
         </div>
         <div role="tablist" aria-label={t("cleaner.categories")} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 7, marginTop: 12 }}>
-          {summaries.map(({ tab: category, bytes, loading, unknown = false, icon: Icon }) => <CleanerButton key={category} role="tab" label={t(`cleaner.tab.${category}`)} selected={tab === category} onActivate={() => setTab(category)} style={{ ...theme.tile, minHeight: 58, padding: "9px 8px", alignItems: "stretch", justifyContent: "center", flexDirection: "column", gap: 4 }}>
+          {summaries.map(({ tab: category, bytes, loading, icon: Icon }) => <CleanerButton key={category} role="tab" label={t(`cleaner.tab.${category}`)} selected={tab === category} onActivate={() => setTab(category)} style={{ ...theme.tile, minHeight: 58, padding: "9px 8px", alignItems: "stretch", justifyContent: "center", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, ...cleanerCaption }}><Icon size={13} color={theme.color.accent} /><span>{t(`cleaner.tab.${category}`)}</span></div>
-            <div style={{ fontSize: loading || unknown ? 12 : 14, fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>{loading ? t("cleaner.calculating") : unknown ? t("cleaner.sizeUnknown") : formatBytes(bytes, lang)}</div>
+            <div style={{ fontSize: loading ? 12 : 14, fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>{loading ? t("cleaner.calculating") : formatBytes(bytes, lang)}</div>
           </CleanerButton>)}
         </div>
       </div>

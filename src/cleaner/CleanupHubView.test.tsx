@@ -89,15 +89,15 @@ it("shows installed Proton tools while their sizes are calculated", () => {
   expect(screen.getAllByText("cleaner.calculating").length).toBeGreaterThan(0);
 });
 
-it("shows an honest unknown total and warning when Proton coverage is incomplete", () => {
+it("shows the measured Proton total without a coverage warning", () => {
   const p = proton();
   if (!p.state) throw new Error("missing test state");
   p.state = { ...p.state, coverage_complete: false, totals: { bytes: 50, unknown: 1 } };
   render(<CleanupHubView games={games()} media={media()} proton={p} onRefresh={vi.fn()} refreshing={false} />);
 
-  expect(screen.getByText("cleaner.sizeUnknown").style.fontSize).toBe("12px");
+  expect(screen.queryByText("cleaner.sizeUnknown")).toBeNull();
   fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.proton" }));
-  expect(screen.getByText("cleaner.proton.coverageIncomplete")).toBeTruthy();
+  expect(screen.queryByText("cleaner.proton.coverageIncomplete")).toBeNull();
 });
 
 it("explains captures that Steam has not associated with a game", () => {
@@ -111,10 +111,10 @@ it("explains captures that Steam has not associated with a game", () => {
   expect(screen.getByRole("checkbox", { name: "cleaner.media.select cleaner.media.unassociated" })).toBeTruthy();
 });
 
-it("does not present a partial media total as final", () => {
+it("keeps showing what was measured when some capture sources failed", () => {
   const m = media();
-  m.error = "media_incomplete";
+  m.error = null;
   render(<CleanupHubView games={games()} media={m} proton={proton()} onRefresh={vi.fn()} refreshing={false} />);
 
-  expect(screen.getByText("cleaner.sizeUnknown")).toBeTruthy();
+  expect(screen.queryByText("cleaner.sizeUnknown")).toBeNull();
 });
