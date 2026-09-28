@@ -54,7 +54,10 @@ def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
         or _read_dmi(root, "product_name").casefold() != "83n0"
     ):
         return {}
-    return {"readback_settle_delays": (0.25, 0.50, 1.0, 2.0)}
+    return {
+        "readback_settle_delays": (0.25, 0.50, 1.0, 2.0),
+        "rearm_custom_on_unapplied_writes": True,
+    }
 
 
 def lenovo_legion_firmware_attr_quirks(device, root: str = "/") -> dict:

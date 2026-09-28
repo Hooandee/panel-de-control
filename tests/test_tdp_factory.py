@@ -456,6 +456,173 @@ def test_exact_legion_go_2_83n0_recovers_delayed_persisted_transaction(
     assert settle_delays == [0.25, 0.5, 1.0, 2.0]
 
 
+def _go_2_firmware_out_of_custom(backend, root, rail_writes_fail=False):
+    # PDC-ZHMT: the gamezone profile still reads "custom" while the firmware runs its
+    # performance preset and drops rail writes until the profile leaves and re-enters.
+    profile_path = os.path.join(
+        root, "sys/class/platform-profile/platform-profile-0/profile",
+    )
+    firmware = {"armed": False, "left_custom": False, "profiles": [], "arms": True}
+    original_write = backend._write
+
+    def firmware_write(path, value):
+        backend._last_write_error = None
+        if path == profile_path:
+            firmware["profiles"].append(str(value))
+            if str(value) != "custom":
+                firmware["left_custom"] = True
+            elif firmware["left_custom"] and firmware["arms"]:
+                firmware["armed"] = True
+            return original_write(path, value)
+        if firmware["armed"]:
+            return original_write(path, value)
+        for attr, preset in zip(
+            ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"), (23, 19, 38),
+        ):
+            _set_fw_current(root, attr, preset)
+        if rail_writes_fail:
+            backend._last_write_error = "EBUSY"
+            return False
+        return True
+
+    backend._write = firmware_write
+    return firmware
+
+
+def test_exact_legion_go_2_83n0_rearms_custom_when_firmware_left_it(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    firmware = _go_2_firmware_out_of_custom(backend, root)
+    lock_path = os.path.join(root, "run/panel-de-control/firmware-lenovo-wmi-other.lock")
+
+    result = backend.set_levels(18, 18, 18, ac=True)
+
+    assert result.ok is True
+    assert backend.read_applied() == 18
+    assert firmware["profiles"] == ["custom", "balanced", "custom"]
+    assert backend.read_profile() == "custom"
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
+    assert backend.diagnostics()["custom_rearm"] == {
+        "last": "recovered",
+        "return_pending": False,
+    }
+
+
+@pytest.mark.parametrize("rail_writes_fail", [True, False])
+def test_exact_legion_go_2_83n0_recovers_lock_by_rearming_custom(
+    tmp_path,
+    monkeypatch,
+    rail_writes_fail,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={
+            "firmware-attr:lenovo-wmi-other/pl1": 35,
+            "firmware-attr:lenovo-wmi-other/pl2": 37,
+            "firmware-attr:lenovo-wmi-other/pl3": 45,
+        },
+    )
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert backend.ready() is False
+    assert backend.diagnostics()["transaction_lock"]["snapshot"] == {
+        "firmware-attr:lenovo-wmi-other/pl1": 35,
+        "firmware-attr:lenovo-wmi-other/pl2": 37,
+        "firmware-attr:lenovo-wmi-other/pl3": 45,
+    }
+    firmware = _go_2_firmware_out_of_custom(
+        backend, root, rail_writes_fail=rail_writes_fail,
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "no firmware recovery pending"}
+    assert {rail: reading.applied_w for rail, reading in (
+        backend.observe().surfaces[backend.name].items()
+    )} == {"pl1": 35, "pl2": 37, "pl3": 45}
+    assert firmware["profiles"][-2:] == ["balanced", "custom"]
+    assert backend.read_profile() == "custom"
+    assert backend.ready() is True
+    assert not os.path.exists(lock_path)
+    assert "transaction_lock" not in backend.diagnostics()
+    assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_recovered"
+
+
+def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={
+            "firmware-attr:lenovo-wmi-other/pl1": 35,
+            "firmware-attr:lenovo-wmi-other/pl2": 37,
+            "firmware-attr:lenovo-wmi-other/pl3": 45,
+        },
+    )
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    firmware = _go_2_firmware_out_of_custom(backend, root, rail_writes_fail=True)
+    firmware["arms"] = False
+
+    first = backend.recover_runtime_transaction()
+    backend._last_custom_rearm_at = None
+    second = backend.recover_runtime_transaction()
+
+    assert first["ok"] is False
+    assert "pl1!EBUSY" in first["detail"]
+    assert "custom re-arm not confirmed" in first["detail"]
+    assert "custom re-arm" not in second["detail"]
+    assert firmware["profiles"].count("balanced") == 1
+    assert backend.ready() is False
+    assert os.path.exists(lock_path)
+    lock = backend.diagnostics()["transaction_lock"]
+    assert lock["state"] == "rollback_failed"
+    assert lock["custom_rearm_attempted"] is True
+    with open(lock_path) as handle:
+        assert json.load(handle)["custom_rearm_attempted"] is True
+    assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_not_recovered"
+
+
+def test_exact_legion_go_2_83n0_partial_convergence_does_not_rearm(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    profiles = []
+    pl1 = backend._attr("ppt_pl1_spl")
+    original_write = backend._write
+
+    def pl1_only(path, value):
+        if path.endswith("/profile"):
+            profiles.append(str(value))
+            return original_write(path, value)
+        return original_write(path, value) if path == pl1 or value != 18 else True
+
+    backend._write = pl1_only
+
+    result = backend.set_levels(18, 18, 18, ac=True)
+
+    assert result.ok is False
+    assert "balanced" not in profiles
+    assert backend.diagnostics()["custom_rearm"]["last"] is None
+
+
 def test_legion_go_2_83n1_keeps_existing_strict_readback(tmp_path):
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N1", "custom")
@@ -467,6 +634,7 @@ def test_legion_go_2_83n1_keeps_existing_strict_readback(tmp_path):
     )
 
     assert backend.diagnostics()["readback_settle_ms"] == 0
+    assert "custom_rearm" not in backend.diagnostics()
 
 
 def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write(tmp_path):

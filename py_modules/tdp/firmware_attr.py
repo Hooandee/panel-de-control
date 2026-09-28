@@ -88,6 +88,7 @@ class FirmwareAttrBackend(TDPBackend):
         optional_rails=None,
         probe_live_max_on_ac=False,
         rearm_custom_on_ignored_writes=False,
+        rearm_custom_on_unapplied_writes=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -105,9 +106,13 @@ class FirmwareAttrBackend(TDPBackend):
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
-        self._rearm_custom_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
+        self._rearm_custom_on_unapplied_writes = bool(rearm_custom_on_unapplied_writes)
+        self._custom_rearm_enabled = (
+            bool(rearm_custom_on_ignored_writes) or self._rearm_custom_on_unapplied_writes
+        )
         self._last_custom_rearm_at = None
         self._last_custom_rearm = None
+        self._rollback_rearmed = False
         self._custom_return_pending = False
         self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -296,35 +301,66 @@ class FirmwareAttrBackend(TDPBackend):
         snapshot,
         profile,
         restore_rails=True,
+        allow_rearm=True,
     ):
+        self._rollback_rearmed = False
         write_failures = []
         if restore_rails:
             for surface, rail, path in reversed(surfaces):
                 if not self._write(path, snapshot[path]):
-                    write_failures.append(self._surface_label(surface, rail))
+                    write_failures.append(self._failed_write_label(surface, rail))
         if self._pp_dir and not self._write(
             os.path.join(self._pp_dir, "profile"),
             profile,
         ):
             write_failures.append("platform-profile")
 
+        mismatches = self._settled_snapshot_mismatches(
+            surfaces, snapshot, profile, compare_values=restore_rails,
+        )
+        if (
+            mismatches
+            and restore_rails
+            and allow_rearm
+            and self._rearm_custom_on_unapplied_writes
+            and self._custom_rearm_allowed(profile)
+        ):
+            self._rollback_rearmed = True
+            rearmed = self._rearm_custom(
+                surfaces,
+                {rail: snapshot[path] for _surface, rail, path in surfaces},
+            )
+            self._last_custom_rearm = "rollback_not_recovered"
+            if rearmed:
+                mismatches = self._settled_snapshot_mismatches(
+                    surfaces, snapshot, profile,
+                )
+                if not mismatches:
+                    self._last_custom_rearm = "rollback_recovered"
+                    return True, []
+            write_failures.append("custom re-arm not confirmed")
+        if not mismatches and profile == "custom":
+            self._custom_return_pending = False
+        return not mismatches, write_failures + mismatches
+
+    def _settled_snapshot_mismatches(
+        self,
+        surfaces,
+        snapshot,
+        profile,
+        compare_values=True,
+    ):
         mismatches = self._snapshot_mismatches(
-            surfaces,
-            snapshot,
-            profile,
-            compare_values=restore_rails,
+            surfaces, snapshot, profile, compare_values=compare_values,
         )
         for delay in self._readback_settle_delays:
             if not mismatches:
                 break
             time.sleep(delay)
             mismatches = self._snapshot_mismatches(
-                surfaces,
-                snapshot,
-                profile,
-                compare_values=restore_rails,
+                surfaces, snapshot, profile, compare_values=compare_values,
             )
-        return not mismatches, write_failures + mismatches
+        return mismatches
 
     def _restore_payload(self, purpose):
         payload = self._runtime_lock_payload
@@ -366,10 +402,13 @@ class FirmwareAttrBackend(TDPBackend):
             snapshot,
             profile,
             restore_rails=not profile_owns_rails,
+            allow_rearm=not payload.get("custom_rearm_attempted"),
         )
         if not recovered:
             detail = f"firmware {purpose} recovery failed: " + ", ".join(problems)
             payload = {**payload, "state": "rollback_failed", "detail": detail}
+            if self._rollback_rearmed:
+                payload["custom_rearm_attempted"] = True
             self._write_circuit_open = detail
             if purpose == "transaction":
                 self._runtime_lock_payload = payload
@@ -497,10 +536,24 @@ class FirmwareAttrBackend(TDPBackend):
             for surface, rail, path in surfaces
         )
 
+    def _writes_unapplied(self, observation, surfaces, snapshot, targets):
+        observed = observation.surfaces
+        changing = [
+            (surface, rail)
+            for surface, rail, path in surfaces
+            if snapshot[path] != targets[rail]
+        ]
+        return bool(changing) and all(
+            (reading := observed.get(surface, {}).get(rail)) is not None
+            and reading.applied_w is not None
+            and reading.applied_w != targets[rail]
+            for surface, rail in changing
+        )
+
     def _custom_rearm_allowed(self, previous_profile):
         choices = self.profile_choices()
         return (
-            self._rearm_custom_on_ignored_writes
+            self._custom_rearm_enabled
             and previous_profile == "custom"
             and "custom" in choices
             and any(choice != "custom" for choice in choices)
@@ -844,7 +897,13 @@ class FirmwareAttrBackend(TDPBackend):
             not failed
             and mismatches
             and self._custom_rearm_allowed(previous_profile)
-            and self._writes_ignored(observation, surfaces, snapshot, targets)
+            and (
+                (
+                    self._rearm_custom_on_unapplied_writes
+                    and self._writes_unapplied(observation, surfaces, snapshot, targets)
+                )
+                or self._writes_ignored(observation, surfaces, snapshot, targets)
+            )
         ):
             rearmed = self._rearm_custom(surfaces, targets)
             observation = self.observe()
@@ -899,6 +958,8 @@ class FirmwareAttrBackend(TDPBackend):
                     "state": "rollback_failed",
                     "detail": rollback_detail,
                 }
+                if self._rollback_rearmed:
+                    lock_payload["custom_rearm_attempted"] = True
                 self._runtime_lock_payload = lock_payload
                 if not self._safety_lock.persist_payload(lock_payload):
                     self._write_circuit_open += "; runtime lock persistence failed"
@@ -1007,7 +1068,7 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
-        if self._rearm_custom_on_ignored_writes:
+        if self._custom_rearm_enabled:
             diagnostics["custom_rearm"] = {
                 "last": self._last_custom_rearm,
                 "return_pending": self._custom_return_pending,
@@ -1019,6 +1080,11 @@ class FirmwareAttrBackend(TDPBackend):
             )
         if self._write_circuit_open is not None:
             diagnostics["write_circuit_open"] = self._write_circuit_open
+        if isinstance(self._runtime_lock_payload, dict):
+            diagnostics["transaction_lock"] = {
+                key: self._runtime_lock_payload.get(key)
+                for key in ("state", "snapshot", "profile", "custom_rearm_attempted")
+            }
         if self._trust_live_bounds:
             diagnostics["live_bounds_valid"] = {
                 rail: self._validated_live_bounds(attr) is not None
