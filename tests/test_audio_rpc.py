@@ -606,3 +606,15 @@ def test_audio_transitions_reach_the_log(tmp_path, monkeypatch):
     assert any('"action":"apply"' in line and '"route":"speaker"' in line for line in transitions)
     assert any('"action":"test_start"' in line and '"sample":"voice"' in line for line in transitions)
     assert any('"action":"test_stop"' in line for line in transitions)
+    assert any('"action":"enabled"' in line for line in transitions)
+
+
+def test_audio_recovery_after_failed_applies_reaches_the_log(tmp_path, monkeypatch):
+    fake = _FakePipeWireEq(apply_ok=False)
+    p, _ = _make_plugin(tmp_path, monkeypatch, audio=fake)
+    lines = []
+    monkeypatch.setattr(sys.modules["decky"].logger, "info", lambda *args, **kwargs: lines.append(args[0] % args[1:]))
+    asyncio.run(p.set_audio_enabled(True))
+    fake._apply_ok = True
+    p._reapply_audio_sync()
+    assert any('"action":"recovered"' in line and '"failures":1' in line for line in lines)

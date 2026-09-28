@@ -11125,6 +11125,8 @@ class Plugin:
                 detail = diagnostics() if callable(diagnostics) else {"ok": False}
                 self._record_audio_apply_failure(detail)
             else:
+                if self._audio_apply_failures:
+                    self._log_audio_transition("recovered", failures=self._audio_apply_failures)
                 self._audio_apply_failures = 0
                 self._audio_runtime_expected = True
                 diagnostics = getattr(self._audio, "apply_diagnostics", None)
@@ -11278,6 +11280,7 @@ class Plugin:
         self._init()
         self._settings["audio_eq_enabled"] = bool(enabled)
         self._store.save(self._settings)
+        self._log_audio_transition("enabled" if enabled else "disabled")
         if enabled:
             self._reapply_audio()
         else:
