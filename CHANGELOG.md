@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.57.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.0...panel-de-control-v0.57.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* stop themes, the QAM and cleanup from failing without a reason ([#783](https://github.com/Hooandee/panel-de-control/issues/783)) ([8de2b75](https://github.com/Hooandee/panel-de-control/commit/8de2b753c01316b6704954070ebb7821e158fbe8))
+
 ## [0.57.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.1...panel-de-control-v0.57.0) (2026-09-27)
 
 
