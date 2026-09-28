@@ -164,6 +164,10 @@ _KNOWN_FRONTEND_ORIGINS = {
     "protondbdecky": "protondb_badges",
     "hltbfordeck": "hltb",
 }
+# Private Steam branches can carry arbitrary names: only these slugs leave the device.
+_STEAM_BRANCH_SLUGS = (("preview", "preview"), ("beta", "beta"), ("stable", "stable"))
+_STEAM_MANIFEST_VERSION = re.compile(r'"version"\s+"(?P<version>\d{1,12})"')
+_MAX_STEAM_PACKAGE_BYTES = 4096
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
@@ -191,6 +195,81 @@ def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
         if newline != -1:
             text = text[newline + 1:]
     return text, len(raw)
+
+
+def _head_regular_file(path: str, n: int) -> str:
+    # O_NONBLOCK keeps a FIFO planted in Steam's package dir from stalling the loop.
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("not_regular")
+        raw = os.read(fd, n)
+    finally:
+        os.close(fd)
+    return raw.decode("utf-8", "replace")
+
+
+def _steam_branch_slug(raw: str) -> str:
+    name = raw.strip().lower()
+    if not name:
+        return "default"
+    for needle, slug in _STEAM_BRANCH_SLUGS:
+        if needle in name:
+            return slug
+    return "other"
+
+
+def _steam_manifest_version(package: str, branch_name: str) -> int | None:
+    try:
+        manifests = [
+            name for name in os.listdir(package)
+            if name.startswith("steam_client_") and name.endswith(".manifest")
+        ]
+    except OSError:
+        return None
+    wanted = f"steam_client_{branch_name}_" if branch_name else None
+    matching = [name for name in manifests if wanted and name.startswith(wanted)]
+    if len(matching) != 1:
+        matching = manifests if len(manifests) == 1 else []
+    if not matching:
+        return None
+    try:
+        text = _head_regular_file(os.path.join(package, matching[0]), _MAX_STEAM_PACKAGE_BYTES)
+    except (OSError, ValueError):
+        return None
+    match = _STEAM_MANIFEST_VERSION.search(text)
+    return int(match.group("version")) if match else None
+
+
+def steam_client_diagnostics(steam_root: str | None) -> dict:
+    """Name the Steam client branch and build that the frontend runs on.
+
+    Third-party Decky plugins break on Steam beta builds before stable, so a
+    frontend failure is only attributable once the client channel is known.
+    """
+    unavailable = {"status": "unavailable", "branch": "unknown", "version": None}
+    if not isinstance(steam_root, str) or not steam_root:
+        return unavailable
+    package = os.path.join(steam_root, "package")
+    if not os.path.isdir(package):
+        return unavailable
+    branch_name = ""
+    branch = "default"
+    try:
+        raw = _head_regular_file(os.path.join(package, "beta"), _MAX_STEAM_PACKAGE_BYTES)
+        branch_name = raw.strip()
+        branch = _steam_branch_slug(raw)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError):
+        branch = "unknown"
+    return {
+        "status": "captured",
+        "branch": branch,
+        "version": _steam_manifest_version(package, branch_name),
+    }
 
 
 def _frontend_signal(line: str) -> tuple[str | None, bool]:

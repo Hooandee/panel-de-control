@@ -2160,6 +2160,13 @@ class Plugin:
             kernel = f"{u.sysname} {u.release}"
         except Exception:  # noqa: BLE001
             pass
+        home = getattr(decky, "DECKY_USER_HOME", None)
+        try:
+            steam_client = report_collector.steam_client_diagnostics(
+                os.path.join(home, ".local", "share", "Steam") if home else None
+            )
+        except Exception:  # noqa: BLE001
+            steam_client = {"status": "unavailable", "branch": "unknown", "version": None}
         return {
             "plugin_version": read_version(),
             "decky_version": getattr(decky, "DECKY_VERSION", None),
@@ -2170,6 +2177,7 @@ class Plugin:
             "os": os_name,
             "platform": dict(self._platform),
             "kernel": kernel,
+            "steam_client": steam_client,
         }
 
     def _report_stores(self) -> dict:
