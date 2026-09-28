@@ -389,3 +389,13 @@ def test_desktop_restore_succeeds_with_a_locked_surface(tmp_path, monkeypatch):
     assert restored["ok"] is True
     with open(os.path.join(mmio, "constraint_0_power_limit_uw")) as handle:
         assert int(handle.read()) == 125_000_000
+
+
+def test_single_surface_rapl_still_requires_the_write(tmp_path, monkeypatch):
+    import tdp.intel_rapl as rapl_mod
+    from tdp.types import TdpLimits
+    _rapl(str(tmp_path), pl1_w=20)
+    backend = rapl_mod.IntelRaplBackend(TdpLimits(8, 17, 30, 35), root=str(tmp_path))
+    monkeypatch.setattr(rapl_mod.IntelRaplBackend, "_write", lambda self, path, value: False)
+
+    assert backend.set_tdp(20, True).ok is False

@@ -81,6 +81,7 @@ class IntelRaplBackend(TDPBackend):
         self.supported = self._dir is not None
         # The package obeys the lowest PL1 of MMIO and MSR; writing one surface
         # while the other stays lower "confirms" a limit the CPU never reaches.
+        self._sync_surfaces = bool(sync_surfaces)
         self._pl1_dirs = (
             [d for d in (os.path.join(root, _POWERCAP, base) for _l, base in _RAPL_SURFACES)
              if os.path.exists(os.path.join(d, "constraint_0_power_limit_uw"))]
@@ -432,13 +433,15 @@ class IntelRaplBackend(TDPBackend):
                 )
         target = self._write_limits.clamp(watts, ac)
         # A BIOS-locked surface refuses the write but still counts: the package
-        # obeys the lowest PL1, so success is judged on that effective value.
-        for directory in self._pl1_dirs:
-            self._write(self._pl1_path(directory), target * 1_000_000)
+        # obeys the lowest PL1, so with several surfaces success is judged on that
+        # effective value. A single surface keeps requiring the write itself.
+        written = [self._write(self._pl1_path(directory), target * 1_000_000)
+                   for directory in self._pl1_dirs]
         applied = self.read_applied()
         # RAPL quantizes the limit to the package power-unit granularity, so the
         # readback can round to target±1 W even on a good write — accept ±1 W.
-        success = applied is not None and abs(applied - target) <= 1
+        success = (applied is not None and abs(applied - target) <= 1
+                   and (self._sync_surfaces or all(written)))
         detail = "" if success else f"write not confirmed (wanted {target}, read {applied})"
         return TdpResult(target, applied, success, detail)
 
