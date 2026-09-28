@@ -34,9 +34,12 @@ def handoff_cpu_ceiling_w(state, boot_id=None) -> int | None:
     if not boot_id or state.get("boot_id") != boot_id or not isinstance(baseline, dict):
         return None
     cpu_uw = baseline.get("cpu_uw")
-    if isinstance(cpu_uw, int) and not isinstance(cpu_uw, bool) and cpu_uw > 0:
-        return cpu_uw // 1_000_000
-    return None
+    if not isinstance(cpu_uw, dict):
+        return None
+    watts = [value // 1_000_000 for value in cpu_uw.values()
+             if isinstance(value, int) and not isinstance(value, bool)
+             and 0 < value // 1_000_000 <= 500]
+    return min(watts) if watts else None
 
 
 class DesktopPowerCoordinator:
@@ -104,8 +107,12 @@ class DesktopPowerCoordinator:
             <= {"cpu_w", "cpu_uw", "cpu_policy", "gpu_uw"}
         ):
             return False
-        if baseline.get("cpu_uw") is not None and not cls._valid_positive_int(
-                baseline.get("cpu_uw")):
+        cpu_uw = baseline.get("cpu_uw")
+        if cpu_uw is not None and not (
+            isinstance(cpu_uw, dict) and cpu_uw
+            and all(isinstance(k, str) and cls._valid_positive_int(v)
+                    for k, v in cpu_uw.items())
+        ):
             return False
         cpu_w = baseline.get("cpu_w")
         policy = baseline.get("cpu_policy")

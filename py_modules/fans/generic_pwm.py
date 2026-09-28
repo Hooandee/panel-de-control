@@ -20,7 +20,7 @@ from fans.software_loop import _HWMON, SoftwareLoopBackend
 
 _ENABLE_MANUAL = 1
 _ENABLE_AUTO = 2
-_GPU_DRIVER_CHIPS = frozenset({"amdgpu", "radeon", "nouveau", "i915", "xe"})
+GPU_DRIVER_CHIPS = frozenset({"amdgpu", "radeon", "nouveau", "i915", "xe"})
 
 
 class GenericPwmFanBackend(SoftwareLoopBackend):
@@ -38,7 +38,7 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
 
     def _find_chip(self):
         for d in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
-            if _read(os.path.join(d, "name")) in _GPU_DRIVER_CHIPS:
+            if _read(os.path.join(d, "name")) in GPU_DRIVER_CHIPS:
                 continue
             fans = []
             for enable_path in sorted(glob.glob(os.path.join(d, "pwm[0-9]*_enable"))):

@@ -167,7 +167,10 @@ export const AjustesSection: FC = () => {
         {!desktopActive && coolerBoost !== null && device?.cooler_max != null && (
           <ToggleField
             label={t("settings.cooler")}
-            description={t("settings.cooler.desc", { max: device.cooler_max })}
+            description={t(
+              device.cooler_charger_only ? "settings.cooler.charger.desc" : "settings.cooler.desc",
+              { max: device.cooler_max, safe: device.tdp_max_charger },
+            )}
             checked={coolerBoost}
             onChange={onToggleCoolerBoost}
             bottomSeparator="none"

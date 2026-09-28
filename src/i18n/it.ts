@@ -815,6 +815,7 @@ export const it: Record<string, string> = {
   "settings.battmax.desc": "Consente di aumentare il TDP fino al massimo del dispositivo anche a batteria. Offre più potenza, ma scarica la batteria molto più rapidamente.",
   "settings.cooler": "Sistema di raffreddamento esterno collegato",
   "settings.cooler.desc": "Attivalo solo se hai collegato il sistema di raffreddamento esterno o la batteria esterna: aumenta il limite TDP fino a {max} W. Non attivarlo senza il sistema di raffreddamento esterno, perché il dispositivo potrebbe surriscaldarsi.",
+  "settings.cooler.charger.desc": "Solo con il dissipatore esterno collegato e il caricatore inserito: consente fino a {max} W. Preset e Auto-TDP restano a {safe} W. Senza il dissipatore non attivarlo, il dispositivo si surriscalderebbe.",
   "settings.experimentalTdp": "Sblocca {max} W sperimentali",
   "settings.experimentalTdp.desc": "Solo con alimentazione collegata e controllo manuale. Il produttore dichiara fino a {safe} W; {max} W non è convalidato ufficialmente e può generare più calore.",
   "settings.experimentalTdp.applyFailed": "Non è stato possibile confermare la modifica della potenza. Lo stato precedente resta attivo; riprova prima di scollegare l'alimentazione.",

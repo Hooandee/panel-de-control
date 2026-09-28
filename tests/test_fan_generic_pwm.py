@@ -233,7 +233,7 @@ def test_factory_null_when_nothing(tmp_path):
 
 
 def test_discrete_gpu_fan_is_never_driven(tmp_path):
-    # PDC-GWEV: a Z590 desktop's only pwm+tach chip was the dGPU's amdgpu hwmon.
+    # A desktop whose only pwm+tach chip is the dGPU's amdgpu hwmon.
     # The graphics firmware owns that fan; the generic loop must leave it alone.
     for idx, driver in enumerate(("amdgpu", "radeon", "nouveau", "i915", "xe")):
         _mk_pwm_chip(str(tmp_path), idx=idx, name=driver)

@@ -55,6 +55,9 @@ class DeviceProfile:
     tdp_presets: tuple = field(default_factory=tuple)
     # Ceiling unlocked when the user confirms the external cooler is attached (Win 5).
     cooler_max: Optional[int] = None
+    # The cooler ceiling applies on the charger only and never to presets or Auto-TDP
+    # (an accessory that cannot be detected and adds no battery).
+    cooler_charger_only: bool = False
     # Unsupported-by-OEM ceiling exposed only after an explicit warning. This never
     # raises the battery, preset, or Auto-TDP ceilings.
     experimental_tdp_max_ac: Optional[int] = None
@@ -157,7 +160,7 @@ DEVICE_TABLE = (
                   dmi_matches=(DmiMatch(
                       "ONEXPLAYER X2Mini PRO", "ONE-NETBOOK", ("ONEXPLAYER X2Mini PRO",)),),
                   experimental=True, panel="oled", display_refresh_hz=144,
-                  charger_only_extra=True, cooler_max=120),
+                  charger_only_extra=True, cooler_max=120, cooler_charger_only=True),
     # Intel rates Arc G3 Extreme at 8-35 W; the same chip runs at 45 W in the
     # OneXFly Apex Air, offered only as a warned, charger-only opt-in.
     DeviceProfile("onexplayer_3", "OneXPlayer 3", "Intel Arc G3 Extreme", "intel",

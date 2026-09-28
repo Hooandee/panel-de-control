@@ -261,3 +261,21 @@ def test_driver_stays_loaded_when_fans_could_not_be_released(monkeypatch):
 
     assert plugin._board_fans.calls == ["kept"]
     assert plugin._settings["board_fan_driver"] is True
+
+
+def test_a_crashing_release_counts_as_not_released(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["board_fan_driver"] = True
+
+    def boom():
+        raise OSError("ec busy")
+
+    plugin._fan_ctrl.restore_auto = boom
+    plugin._board_fans.release_failed = lambda: (plugin._board_fans.calls.append("kept")
+                                                 or {**plugin._board_fans.state(),
+                                                     "channels": 3,
+                                                     "loaded_by_panel": ["nct6775"]})
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+    assert plugin._board_fans.calls == ["kept"]

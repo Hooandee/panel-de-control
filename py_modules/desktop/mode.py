@@ -68,10 +68,12 @@ def migrate_desktop_defaults(settings: dict, device) -> bool:
     if recognised_desktop_migration_pending(settings, device):
         return False
     changed = False
-    if key != "desktop_pc" and "_desktop_pc_prev_tdp_control" in settings:
-        previous = settings.pop("_desktop_pc_prev_tdp_control")
+    if key != "desktop_pc" and settings.get("_desktop_pc_seeded") is True:
+        previous = settings.get("_desktop_pc_prev_tdp_control")
         if isinstance(previous, bool):
             settings["tdp_control_enabled"] = previous
+        settings["_desktop_pc_seeded"] = False
+        settings["_desktop_pc_prev_tdp_control"] = None
         settings["desktop_power_mode"] = "free"
         changed = True
     if (
@@ -87,9 +89,11 @@ def migrate_desktop_defaults(settings: dict, device) -> bool:
             settings["tdp_control_enabled"] = previous
         changed = True
     if key == "desktop_pc":
-        if "_desktop_pc_prev_tdp_control" in settings:
+        if settings.get("_desktop_pc_seeded") is True:
             return changed
-        settings["_desktop_pc_prev_tdp_control"] = settings.get("tdp_control_enabled", True)
+        previous = settings.get("tdp_control_enabled", True)
+        settings["_desktop_pc_seeded"] = True
+        settings["_desktop_pc_prev_tdp_control"] = previous if isinstance(previous, bool) else True
         settings["desktop_power_mode"] = "free"
         settings["tdp_control_enabled"] = False
         return True

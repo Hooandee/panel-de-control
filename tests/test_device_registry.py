@@ -433,7 +433,7 @@ def _mk_host(root, chassis, supplies=()):
 
 @pytest.mark.parametrize("chassis", ("3", "6", "7", "35", "1", "2"))
 def test_batteryless_non_portable_host_is_a_firmware_owned_desktop(tmp_path, chassis):
-    # PDC-GWEV / PDC-PAE4 / PDC-5MVY: desktops whose only batteries are controllers.
+    # Desktops whose only batteries belong to controllers.
     profile = _mk_host(tmp_path, chassis, supplies=(
         ("nintendo_switch_controller_battery_0003", "Battery", "Device"),
         ("hidpp_battery_0", "Battery", "Device"),

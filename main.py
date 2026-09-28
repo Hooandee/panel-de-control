@@ -256,6 +256,8 @@ DEFAULTS = {
     # Manual opt-in for generic Linux desktops. Validated desktop hardware such as
     # Fremont enables the topology automatically, but still starts in pass-through.
     "desktop_mode_enabled": False,
+    "_desktop_pc_seeded": False,
+    "_desktop_pc_prev_tdp_control": None,
     "desktop_power_mode": "free",
     "desktop_cpu_w": 23,
     "desktop_gpu_w": 80,
@@ -3132,9 +3134,9 @@ class Plugin:
         driver = self._board_fans
         try:
             released = self._fan_ctrl.restore_auto()
+            released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
         except Exception:  # noqa: BLE001
-            released = None
-        released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+            released_ok = False
         if enabled:
             state = driver.load(only)
         elif released_ok:
@@ -3181,10 +3183,6 @@ class Plugin:
                                   env=clean_env()).returncode == 0
         except Exception:  # noqa: BLE001
             return False
-
-    async def get_board_fan_state(self) -> dict:
-        self._init()
-        return await self._offload_call(self._board_fan_state)
 
     async def set_board_fan_enabled(self, enabled: bool) -> dict:
         """Opt in to loading the motherboard's fan driver (desktop PCs only)."""
@@ -5032,7 +5030,8 @@ class Plugin:
         lim = self._tdp_backend.get_limits().unlocked(unlock)
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
-            lim = lim.with_cooler(cooler_max)
+            lim = (lim.with_ac_max(cooler_max) if getattr(self._device, "cooler_charger_only", False)
+                   else lim.with_cooler(cooler_max))
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
@@ -5051,7 +5050,12 @@ class Plugin:
     def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
         limits = self._limits() if limits is None else limits
-        if not (
+        manual_cooler = bool(
+            getattr(self._device, "cooler_charger_only", False)
+            and self._device.cooler_max
+            and self._settings.get("cooler_boost", False)
+        )
+        if not manual_cooler and not (
             self._device.experimental_tdp_max_ac
             and self._settings.get("experimental_tdp_unlock") is True
         ):

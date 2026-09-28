@@ -879,6 +879,7 @@ export const de: Record<string, string> = {
   "settings.battmax.desc": "Erlaubt auch im Akkubetrieb die maximale TDP des Geräts. Das bringt mehr Leistung, entlädt den Akku aber deutlich schneller.",
   "settings.cooler": "Externe Kühlung angeschlossen",
   "settings.cooler.desc": "Aktiviere diese Option nur, wenn das externe Kühlsystem oder der externe Akku angeschlossen ist. Dadurch steigt das TDP-Limit auf bis zu {max} W. Ohne externe Kühlung kann das Gerät überhitzen.",
+  "settings.cooler.charger.desc": "Nur mit angeschlossenem externem Kühler und eingestecktem Netzteil: erlaubt bis zu {max} W. Voreinstellungen und Auto-TDP bleiben bei {safe} W. Ohne den Kühler nicht aktivieren, das Gerät würde überhitzen.",
   "settings.experimentalTdp": "Experimentelle {max} W freischalten",
   "settings.experimentalTdp.desc": "Nur am Netzteil und bei manueller Steuerung. Der Hersteller gibt bis zu {safe} W an. {max} W sind nicht offiziell validiert und können mehr Wärme erzeugen.",
   "settings.experimentalTdp.applyFailed": "Die Leistungsänderung konnte nicht bestätigt werden. Der vorherige Zustand bleibt erhalten. Versuche es erneut, bevor du das Netzteil trennst.",

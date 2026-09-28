@@ -115,6 +115,8 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // The cooler ceiling is charger-only and never reaches presets or Auto-TDP.
+  cooler_charger_only?: boolean;
   experimental_tdp_max_ac: number | null;
   // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
   // launch-options upscaler gating (FSR4 = rdna3/rdna4).

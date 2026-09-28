@@ -140,6 +140,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             ),
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
             write_max_ac=device.experimental_tdp_max_ac,
+            sync_surfaces=device.key in ("onexplayer_3", "desktop_pc"),
         )
 
     def deck():
@@ -159,7 +160,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         return AmdDptcBackend(
             fallback,
             root=root,
-            write_max=device.cooler_max,
+            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )
@@ -173,7 +174,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         )
 
     def alib():
-        return AlibBackend(fallback, root=root, write_max=device.cooler_max)
+        return AlibBackend(fallback, root=root,
+                           write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max)
 
     # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
     # first, then the acpi_call ALIB path when ryzenadj is absent.
@@ -223,6 +225,14 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     return [dptc, asus, lenovo, msi, *amd_tail]
 
 
+def _charger_write_max(device) -> int | None:
+    ceilings = [getattr(device, "experimental_tdp_max_ac", None)]
+    if getattr(device, "cooler_charger_only", False):
+        ceilings.append(device.cooler_max)
+    ceilings = [value for value in ceilings if value]
+    return max(ceilings) if ceilings else None
+
+
 _DESKTOP_MIN_W = 15
 
 
@@ -250,9 +260,9 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
         )
         return RyzenadjBackend(
             fallback,
-            write_max=device.cooler_max,
+            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
             write_max_ac=(
-                None if gpd_recovery else device.experimental_tdp_max_ac
+                None if gpd_recovery else _charger_write_max(device)
             ),
             power_only_retry=gpd_recovery,
             require_readback=strict_readback,

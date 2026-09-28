@@ -879,6 +879,7 @@ export const ptBR: Record<string, string> = {
   "settings.battmax.desc": "Permite aumentar o TDP até o máximo do dispositivo também na bateria. Oferece mais desempenho, mas a bateria acaba muito mais rápido.",
   "settings.cooler": "Cooler externo conectado",
   "settings.cooler.desc": "Ative apenas quando o cooler externo ou a bateria externa estiverem conectados. Aumenta o limite de TDP para {max} W. Sem o cooler, o dispositivo pode superaquecer.",
+  "settings.cooler.charger.desc": "Somente com o resfriador externo conectado e o carregador ligado: permite até {max} W. Predefinições e Auto-TDP ficam em {safe} W. Sem o resfriador, não ative, o dispositivo superaqueceria.",
   "settings.experimentalTdp": "Desbloquear {max} W experimentais",
   "settings.experimentalTdp.desc": "Somente com alimentação CA e controle manual. O fabricante indica até {safe} W; {max} W não é oficialmente validado e pode gerar mais calor.",
   "settings.experimentalTdp.applyFailed": "A alteração de energia não pôde ser confirmada. O estado anterior permanece; tente novamente antes de desconectar a energia CA.",

@@ -12,9 +12,10 @@ import platform
 import subprocess
 import time
 
+from fans.generic_pwm import GPU_DRIVER_CHIPS
+
 _HWMON = "sys/class/hwmon"
 CANDIDATES = ("nct6775", "nct6683", "it87", "f71882fg", "w83627ehf")
-_GPU_DRIVER_CHIPS = frozenset({"amdgpu", "radeon", "nouveau", "i915", "xe"})
 
 
 def _read(path: str) -> str:
@@ -36,7 +37,7 @@ def board_fan_channels(root: str = "/") -> int:
     """Board fan channels with the full manual interface (pwm, mode and tach)."""
     count = 0
     for directory in sorted(glob.glob(os.path.join(root, _HWMON, "hwmon*"))):
-        if _read(os.path.join(directory, "name")) in _GPU_DRIVER_CHIPS:
+        if _read(os.path.join(directory, "name")) in GPU_DRIVER_CHIPS:
             continue
         for enable in glob.glob(os.path.join(directory, "pwm[0-9]*_enable")):
             index = os.path.basename(enable)[len("pwm"):-len("_enable")]
