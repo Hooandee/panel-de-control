@@ -431,14 +431,14 @@ class IntelRaplBackend(TDPBackend):
                     "RAPL AutoTDP state could not be restored",
                 )
         target = self._write_limits.clamp(watts, ac)
-        ok = all([self._write(self._pl1_path(d), target * 1_000_000) for d in self._pl1_dirs])
-        readings = [self._read_int(self._pl1_path(d)) for d in self._pl1_dirs]
+        # A BIOS-locked surface refuses the write but still counts: the package
+        # obeys the lowest PL1, so success is judged on that effective value.
+        for directory in self._pl1_dirs:
+            self._write(self._pl1_path(directory), target * 1_000_000)
         applied = self.read_applied()
         # RAPL quantizes the limit to the package power-unit granularity, so the
         # readback can round to target±1 W even on a good write — accept ±1 W.
-        success = ok and bool(readings) and all(
-            value is not None and abs(round(value / 1_000_000) - target) <= 1
-            for value in readings)
+        success = applied is not None and abs(applied - target) <= 1
         detail = "" if success else f"write not confirmed (wanted {target}, read {applied})"
         return TdpResult(target, applied, success, detail)
 
@@ -468,7 +468,9 @@ class IntelRaplBackend(TDPBackend):
         ok = True
         for name, value in captured.items():
             path = self._pl1_path(by_name[name])
-            ok = self._write(path, int(value)) and self._read_int(path) == int(value) and ok
+            if self._read_int(path) != int(value):
+                self._write(path, int(value))
+            ok = self._read_int(path) == int(value) and ok
         return ok
 
     def _read_constraint_w(self, index):

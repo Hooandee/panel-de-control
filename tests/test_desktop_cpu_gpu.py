@@ -327,3 +327,65 @@ def test_desktop_ceiling_is_the_lowest_active_surface(tmp_path):
     mmio = os.path.join(str(tmp_path), "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0")
     _w(os.path.join(mmio, "constraint_0_power_limit_uw"), "4095875000")
     assert firmware_pl1_ceiling_w(str(tmp_path)) == 65
+
+
+class _LockedMsr:
+    """Model a BIOS-locked MSR surface: its PL1 write is refused with EACCES."""
+
+    def __init__(self, monkeypatch, locked_path):
+        import tdp.intel_rapl as rapl
+        real = rapl.IntelRaplBackend._write
+
+        def write(backend, path, value):
+            if path == locked_path:
+                return False
+            return real(backend, path, value)
+
+        monkeypatch.setattr(rapl.IntelRaplBackend, "_write", write)
+
+
+def _two_surfaces(root, msr_w, mmio_w):
+    msr = _rapl(root, pl1_w=msr_w)
+    mmio = os.path.join(root, "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0")
+    _w(os.path.join(mmio, "name"), "package-0")
+    _w(os.path.join(mmio, "constraint_0_power_limit_uw"), str(mmio_w * 1_000_000))
+    return msr, mmio
+
+
+def test_locked_msr_still_applies_limits_below_it(tmp_path, monkeypatch):
+    from device_profiles import DEVICE_TABLE
+    msr, _mmio = _two_surfaces(str(tmp_path), msr_w=25, mmio_w=15)
+    _LockedMsr(monkeypatch, os.path.join(msr, "constraint_0_power_limit_uw"))
+    oxp3 = next(p for p in DEVICE_TABLE if p.key == "onexplayer_3")
+    backend = select_backend(oxp3, root=str(tmp_path))
+
+    assert backend.set_tdp(20, True).ok is True
+    assert backend.read_applied() == 20
+    result = backend.set_tdp(30, True)
+    assert result.ok is False
+    assert result.applied_w == 25
+
+
+def test_desktop_restore_succeeds_with_a_locked_surface(tmp_path, monkeypatch):
+    from desktop.power import DesktopPowerCoordinator
+
+    class NoGpu:
+        supported = False
+
+        def state(self):
+            return {"supported": False, "current_w": None, "min_w": None,
+                    "max_w": None, "default_w": None}
+
+    msr, mmio = _two_surfaces(str(tmp_path), msr_w=125, mmio_w=125)
+    _LockedMsr(monkeypatch, os.path.join(msr, "constraint_0_power_limit_uw"))
+    cpu = select_backend(dataclasses.replace(DESKTOP_PC, vendor="intel"), root=str(tmp_path))
+    coordinator = DesktopPowerCoordinator(cpu, NoGpu(), persist_state=lambda _s: None,
+                                          boot_id="boot", device_key="desktop_pc",
+                                          firmware_relative=True)
+
+    assert coordinator.apply("silent")["ok"] is True
+    assert cpu.read_applied() == 62
+    restored = coordinator.apply("free")
+    assert restored["ok"] is True
+    with open(os.path.join(mmio, "constraint_0_power_limit_uw")) as handle:
+        assert int(handle.read()) == 125_000_000
