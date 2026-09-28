@@ -9,6 +9,7 @@ from report.collector import (
     kernel_logs,
     redact_obj,
     redact_text,
+    steam_client_diagnostics,
     sysfs_snapshot,
     tail_logs,
 )
@@ -477,6 +478,103 @@ def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     assert diagnostics["files"][0]["status"] == "unreadable"
     assert diagnostics["signals"] == []
 
+
+# ---- steam_client_diagnostics ---------------------------------------------
+def _steam_package(tmp_path, beta=None, manifests=None):
+    package = tmp_path / "Steam" / "package"
+    package.mkdir(parents=True)
+    if beta is not None:
+        (package / "beta").write_text(beta)
+    for name, version in (manifests or {}).items():
+        # Real manifests list every package after the version, so it sits far from the tail.
+        packages = "".join(f'\t"pkg{i}"\n\t{{\n\t\t"file"\t\t"x.zip"\n\t}}\n' for i in range(400))
+        (package / f"steam_client_{name}.manifest").write_text(
+            f'"ubuntu12"\n{{\n\t"version"\t\t"{version}"\n{packages}}}\n'
+        )
+    return str(tmp_path / "Steam")
+
+
+def test_steam_client_names_branch_slug_and_its_manifest_version(tmp_path):
+    root = _steam_package(
+        tmp_path,
+        beta="steamdeck_publicbeta\n",
+        manifests={
+            "steamdeck_stable_ubuntu12": "1788652215",
+            "steamdeck_publicbeta_ubuntu12": "1790000000",
+        },
+    )
+
+    assert steam_client_diagnostics(root) == {
+        "status": "captured",
+        "branch": "beta",
+        "version": 1790000000,
+    }
+
+
+def test_steam_client_classifies_branches_into_fixed_slugs(tmp_path):
+    cases = {
+        "steamdeck_stable": "stable",
+        "steamdeck_beta": "beta",
+        "publicbeta": "beta",
+        "steamdeck_preview": "preview",
+        "": "default",
+        "password=hunter2": "other",
+    }
+    for index, (raw, slug) in enumerate(cases.items()):
+        root = _steam_package(tmp_path / str(index), beta=raw)
+        diagnostics = steam_client_diagnostics(root)
+        assert diagnostics["branch"] == slug
+        assert "hunter2" not in str(diagnostics)
+
+
+def test_steam_client_without_beta_file_is_the_default_branch(tmp_path):
+    root = _steam_package(tmp_path, manifests={"ubuntu12": "1788652215"})
+
+    assert steam_client_diagnostics(root) == {
+        "status": "captured",
+        "branch": "default",
+        "version": 1788652215,
+    }
+
+
+def test_steam_client_is_unavailable_without_a_package_dir(tmp_path):
+    assert steam_client_diagnostics(str(tmp_path / "missing")) == {
+        "status": "unavailable",
+        "branch": "unknown",
+        "version": None,
+    }
+    assert steam_client_diagnostics(None)["status"] == "unavailable"
+
+
+def test_steam_client_ignores_ambiguous_or_malformed_manifests(tmp_path):
+    ambiguous = _steam_package(
+        tmp_path / "a",
+        beta="steamdeck_stable",
+        manifests={"one_ubuntu12": "1", "two_ubuntu12": "2"},
+    )
+    assert steam_client_diagnostics(ambiguous)["version"] is None
+
+    malformed = _steam_package(tmp_path / "b", beta="steamdeck_stable")
+    (tmp_path / "b" / "Steam" / "package" / "steam_client_steamdeck_stable_ubuntu12.manifest"
+     ).write_text('"version" "not-a-number"')
+    assert steam_client_diagnostics(malformed)["version"] is None
+
+
+def test_steam_client_does_not_follow_a_symlinked_beta_file(tmp_path):
+    root = _steam_package(tmp_path)
+    secret = tmp_path / "secret"
+    secret.write_text("steamdeck_beta")
+    (tmp_path / "Steam" / "package" / "beta").symlink_to(secret)
+
+    assert steam_client_diagnostics(root)["branch"] == "unknown"
+
+
+
+def test_steam_client_rejects_a_fifo_without_blocking(tmp_path):
+    root = _steam_package(tmp_path)
+    os.mkfifo(tmp_path / "Steam" / "package" / "beta")
+
+    assert steam_client_diagnostics(root)["branch"] == "unknown"
 
 # ---- build_bundle ---------------------------------------------------------
 def test_build_bundle_shape_and_redaction():
