@@ -1232,3 +1232,66 @@ def test_unload_restores_hhd(Plugin, fake_hhd):
     assert fake_hhd.value is False
     asyncio.run(p._unload())
     assert fake_hhd.value is True
+
+
+def test_report_environment_names_the_steam_client_channel(Plugin, monkeypatch, tmp_path):
+    import main as main_mod
+
+    package = tmp_path / ".local" / "share" / "Steam" / "package"
+    package.mkdir(parents=True)
+    (package / "beta").write_text("steamdeck_publicbeta")
+    (package / "steam_client_steamdeck_publicbeta_ubuntu12.manifest").write_text(
+        '"ubuntu12"\n{\n\t"version"\t\t"1790000000"\n}\n'
+    )
+    monkeypatch.setattr(main_mod.decky, "DECKY_USER_HOME", str(tmp_path), raising=False)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["steam_client"] == {
+        "status": "captured",
+        "branch": "beta",
+        "version": 1790000000,
+    }
+
+
+def test_report_environment_lists_installed_decky_plugins(Plugin, monkeypatch, tmp_path):
+    import main as main_mod
+
+    other = tmp_path / "homebrew" / "plugins" / "PowerTools"
+    other.mkdir(parents=True)
+    (other / "plugin.json").write_text('{"name": "PowerTools"}')
+    (other / "package.json").write_text('{"version": "2.0.3"}')
+    monkeypatch.delenv("DECKY_HOME", raising=False)
+    monkeypatch.setattr(main_mod.decky, "DECKY_USER_HOME", str(tmp_path), raising=False)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["decky_plugins"]["plugins"] == [
+        {"name": "PowerTools", "version": "2.0.3"},
+    ]
+
+
+def test_report_environment_survives_a_failing_plugin_listing(Plugin, monkeypatch):
+    import main as main_mod
+
+    def boom(_root):
+        raise RuntimeError("listing")
+
+    monkeypatch.setattr(main_mod.report_collector, "decky_plugins", boom)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["decky_plugins"]["status"] == "unavailable"
+
+
+def test_report_environment_survives_a_failing_steam_client_probe(Plugin, monkeypatch):
+    import main as main_mod
+
+    def boom(_root):
+        raise RuntimeError("probe")
+
+    monkeypatch.setattr(main_mod.report_collector, "steam_client_diagnostics", boom)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["steam_client"]["status"] == "unavailable"

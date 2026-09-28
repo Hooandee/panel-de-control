@@ -846,3 +846,96 @@ def test_manifest_diagnostic_names_the_parse_failure_class(tmp_path):
     issues = [event for event in reloaded.diagnostics()["events"] if event.get("source") == "manifest"]
 
     assert {issue.get("vdf_error") for issue in issues} == {"empty", "duplicate_vdf_key"}
+
+
+def removable_media(tmp_path, monkeypatch, mounts=()):
+    base = tmp_path / "run" / "media"
+    base.mkdir(parents=True)
+    monkeypatch.setattr("steam_cleaner.service.REMOVABLE_MEDIA_ROOTS", (str(base),))
+    monkeypatch.setattr(
+        "steam_cleaner.filesystem.mount_points",
+        lambda: {"/", str(tmp_path / "run"), *map(str, mounts)},
+    )
+    return base
+
+
+@pytest.mark.parametrize("relative", ["mmcblk0p1", "{user}/SDCARD/SteamLibrary"])
+def test_library_on_an_unplugged_drive_is_named_after_the_drive(tmp_path, monkeypatch, relative):
+    home, steam = make_steam(tmp_path)
+    relative = relative.format(user=home.name)
+    data(steam)
+    base = removable_media(tmp_path, monkeypatch)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" {{ "path" "{base / relative}" }} }}')
+
+    state = service(home).inventory()
+
+    missing = state["libraries"][1]
+    assert missing["available"] is False
+    assert missing["reason"] == "library_disconnected"
+    assert missing["label"] == ("mmcblk0p1" if relative == "mmcblk0p1" else "SDCARD")
+    assert state["coverage_complete"] is False
+    assert state["entries"][0]["blocked_reason"] == "coverage_incomplete"
+
+
+def test_connected_drive_without_its_library_stays_unavailable(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    data(steam)
+    drive = tmp_path / "run" / "media" / home.name / "SDCARD"
+    removable_media(tmp_path, monkeypatch, mounts=[drive])
+    drive.mkdir(parents=True)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" {{ "path" "{drive / "SteamLibrary"}" }} }}')
+
+    state = service(home).inventory()
+
+    assert state["libraries"][1]["reason"] == "library_unavailable"
+    assert state["libraries"][1]["label"] == "SDCARD"
+
+
+def test_disconnected_library_diagnostic_keeps_the_reason_without_paths(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    data(steam)
+    base = removable_media(tmp_path, monkeypatch)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" {{ "path" "{base / "mmcblk0p1"}" }} }}')
+    cleaner = service(home)
+
+    cleaner.inventory()
+
+    [issue] = [event for event in cleaner.diagnostics()["events"] if event.get("source") == "library"]
+    assert issue["reason"] == "library_disconnected"
+    assert "mmcblk0p1" not in json.dumps(issue)
+
+
+def test_deeper_mount_keeps_its_own_name_and_stays_connected(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    data(steam)
+    disk = tmp_path / "run" / "media" / "disks" / "ssd1"
+    removable_media(tmp_path, monkeypatch, mounts=[disk])
+    disk.mkdir(parents=True)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" {{ "path" "{disk / "SteamLibrary"}" }} }}')
+
+    state = service(home).inventory()
+
+    assert state["libraries"][1]["label"] == "ssd1"
+    assert state["libraries"][1]["reason"] == "library_unavailable"
+
+
+def test_scan_records_why_every_game_stays_blocked(tmp_path):
+    from report.collector import steam_cleaner_snapshot
+
+    home, steam = make_steam(tmp_path)
+    for appid in ("10", "20"):
+        manifest(steam, appid)
+        data(steam, appid=appid)
+    settings = tmp_path / "settings"
+    unknown = {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unidentified", "process": "wineserver"}]}
+    cleaner = service(home, state_dir=str(settings), activity_provider=lambda: unknown)
+    cleaner.inventory()
+    completed = [event for event in cleaner.diagnostics()["events"] if event["event"] == "completed"][-1]
+    assert completed["blocked"] == {"activity_unknown": 2}
+    assert completed["activity"] == [{"cause": "unidentified", "process": "wineserver"}]
+    reloaded = service(home, state_dir=str(settings)).diagnostics()
+    reloaded_completed = [event for event in reloaded["events"] if event["event"] == "completed"][-1]
+    assert reloaded_completed["blocked"] == {"activity_unknown": 2}
+    assert reloaded_completed["activity"] == completed["activity"]
+    reported = [event for event in steam_cleaner_snapshot(reloaded)["events"] if event["event"] == "completed"][-1]
+    assert reported["activity"] == completed["activity"]

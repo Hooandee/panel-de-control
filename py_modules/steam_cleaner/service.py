@@ -8,12 +8,13 @@ import stat
 import threading
 import time
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
 
 from . import filesystem, vdf
-from .activity import process_activity
+from .activity import activity_causes, process_activity
 from .media_diagnostics import SteamMediaDiagnostics
 
 
@@ -26,7 +27,7 @@ class SteamCleanerError(Exception):
 KINDS = ("shadercache", "compatdata")
 MAX_ENTRIES = 10_000
 REASONS = {
-    "coverage_incomplete", "library_unavailable", "symlink", "unsafe_path",
+    "coverage_incomplete", "library_unavailable", "library_disconnected", "symlink", "unsafe_path",
     "path_changed", "mount_point", "runtime", "activity_unknown", "active_game",
     "size_unknown", "cancelled", "io_error", "busy", "closed", "invalid_selection",
     "stale_scan", "invalid_plan", "expired_plan", "prefix_confirmation_required",
@@ -37,6 +38,7 @@ REASONS = {
 EVENTS = {"started", "completed", "prepared", "deleted", "skipped", "error", "interrupted"}
 PHASES = {"idle", "scan", "prepare", "execute"}
 SOURCES = {"library_index", "library", "manifest", "shortcuts", "measure", "history"}
+REMOVABLE_MEDIA_ROOTS = ("/run/media", "/media", "/mnt")
 VDF_ERRORS = {"empty", "malformed_vdf", "duplicate_vdf_key", "oversized_vdf", "unicode", "appid_mismatch"}
 
 
@@ -208,7 +210,12 @@ class SteamCleanerService:
                         shortcuts_complete = False
                 except (OSError, filesystem.UnsafePath) as error:
                     critical_complete = False
-                    library["reason"] = "symlink" if any(path.is_symlink() for path in (steamapps, *steamapps.parents)) else "library_unavailable"
+                    if any(path.is_symlink() for path in (steamapps, *steamapps.parents)):
+                        library["reason"] = "symlink"
+                    elif isinstance(error, FileNotFoundError) and self._drive_disconnected(root, mounts):
+                        library["reason"] = "library_disconnected"
+                    else:
+                        library["reason"] = "library_unavailable"
                     self._scan_issue("library", library["reason"], error, library["id"])
                 libraries.append(library)
             for root, library in zip(roots, libraries):
@@ -320,7 +327,8 @@ class SteamCleanerService:
                     entries=entries, libraries=libraries, totals=totals,
                     progress={"processed": len(entries), "total": len(entries)},
                 )
-            self._event("completed", operation_id, "scan", scan_id=self._state["scan_id"], count=len(entries), duration_ms=int((time.monotonic() - started) * 1000), reason="cancelled" if self._cancelled.is_set() else None)
+            blocked = Counter(entry["blocked_reason"] for entry in entries if entry["blocked_reason"] in REASONS)
+            self._event("completed", operation_id, "scan", scan_id=self._state["scan_id"], count=len(entries), duration_ms=int((time.monotonic() - started) * 1000), reason="cancelled" if self._cancelled.is_set() else None, blocked=dict(blocked) or None, activity=activity["causes"] or None)
             return self.get_state()
 
     def prepare(self, scan_id, entry_ids):
@@ -587,12 +595,12 @@ class SteamCleanerService:
         try:
             result = self._activity_provider()
             if not isinstance(result, dict) or result.get("complete") is not True or not isinstance(result.get("appids"), (list, set, tuple)) or not isinstance(result.get("paths"), (list, set, tuple)):
-                return {"complete": False, "appids": [], "paths": []}
+                return {"complete": False, "appids": [], "paths": [], "causes": activity_causes(result)}
             if any(not str(value).isdecimal() for value in result["appids"]) or any(not isinstance(value, str) or not os.path.isabs(value) for value in result["paths"]):
-                return {"complete": False, "appids": [], "paths": []}
-            return {"complete": True, "appids": {str(value) for value in result["appids"]}, "paths": result["paths"]}
+                return {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
+            return {"complete": True, "appids": {str(value) for value in result["appids"]}, "paths": result["paths"], "causes": []}
         except Exception:
-            return {"complete": False, "appids": [], "paths": []}
+            return {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
 
     def _activity_reason(self, entry, activity):
         if not activity["complete"]:
@@ -622,9 +630,36 @@ class SteamCleanerService:
             for mount in mounts
         )
 
+    def _removable_drive(self, root):
+        for base in REMOVABLE_MEDIA_ROOTS:
+            base_path = Path(base)
+            if not root.is_relative_to(base_path) or root == base_path:
+                continue
+            parts = root.relative_to(base_path).parts
+            if parts[0] == self._home.name and len(parts) > 1:
+                return base_path / parts[0] / parts[1]
+            return base_path / parts[0]
+        return None
+
+    def _specific_mount(self, root, mounts):
+        generic = {"/", *REMOVABLE_MEDIA_ROOTS, *(str(Path(base) / self._home.name) for base in REMOVABLE_MEDIA_ROOTS)}
+        generic.update(str(Path(base).parent) for base in REMOVABLE_MEDIA_ROOTS)
+        containing = [
+            mount for mount in mounts
+            if mount not in generic and (str(root) == mount or str(root).startswith(mount + os.sep))
+        ]
+        return max(containing, key=len) if containing else None
+
+    def _drive_disconnected(self, root, mounts):
+        drive = self._removable_drive(root)
+        if drive is None or self._specific_mount(root, mounts):
+            return False
+        return not drive.exists() or bool(mounts)
+
     def _library_label(self, root, mounts, index):
-        containing = [mount for mount in mounts if mount != "/" and (str(root) == mount or str(root).startswith(mount + os.sep))]
-        name = Path(max(containing, key=len)).name if containing else root.name
+        mount = self._specific_mount(root, mounts)
+        drive = self._removable_drive(root)
+        name = Path(mount).name if mount else drive.name if drive is not None else root.name
         if name == self._home.name or name in ("", ".", "/", "home", "Users", "root"):
             return f"Steam {index + 1}"
         return clean_name(name) or f"Steam {index + 1}"
@@ -691,6 +726,14 @@ class SteamCleanerService:
                 for key in ("count", "duration_ms"):
                     if type(item.get(key)) is int and 0 <= item[key] <= 10**12:
                         result[key] = item[key]
+                if isinstance(item.get("blocked"), dict):
+                    blocked = {reason: count for reason, count in item["blocked"].items() if reason in REASONS and type(count) is int and 0 < count <= MAX_ENTRIES}
+                    if blocked:
+                        result["blocked"] = blocked
+                if isinstance(item.get("activity"), list):
+                    causes = activity_causes({"causes": item["activity"]})
+                    if causes:
+                        result["activity"] = causes
                 allowed.append(result)
             self._diagnostic["events"] = allowed
             if allowed:

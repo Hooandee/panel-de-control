@@ -21,6 +21,7 @@ export interface ThemeExtensionMountContextV1 {
   document: Document;
   host: Readonly<ThemeExtensionHostDescriptor>;
   qam?: never;
+  navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
 }
 
 export interface ThemeExtensionMountContextV2 {
@@ -341,7 +342,11 @@ export class ThemeExtensionRuntimeHost {
       };
       let stop: () => void;
       if (extension.abiVersion === 1) {
-        stop = extension.mount(Object.freeze(sharedContext));
+        const navigation = this.navigation;
+        stop = extension.mount(Object.freeze({
+          ...sharedContext,
+          ...(navigation ? { navigation: Object.freeze({ focus: navigation.focus }) } : {}),
+        }));
       } else {
         if (!this.qam) throw new Error("QAM access is unavailable");
         const qam = this.qam;

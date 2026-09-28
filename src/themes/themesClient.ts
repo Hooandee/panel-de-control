@@ -1,5 +1,9 @@
 import { ThemeActivationError, ThemeActivator } from "./activation";
-import { CssLoaderAdapter, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
+import {
+  CssLoaderAdapter,
+  CssLoaderOperationError,
+  type CssLoaderReadySnapshot,
+} from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
@@ -10,6 +14,18 @@ import {
   createRemotePublicationClient,
   type ThemePublicationClient,
 } from "./remotePublicationClient";
+import {
+  handoffsGivenBy,
+  planSectionHandoff,
+  planSectionReclaim,
+  planSectionRestore,
+  SECTION_OFF,
+  SECTION_ON,
+  sectionHandoffKey,
+  sectionKeyOf,
+  type SectionHandoffs,
+  type SectionPatchRef,
+} from "./sectionOwnership";
 import { deriveThemeCards } from "./state";
 import type { ThemeInstallRequest } from "./types";
 
@@ -22,7 +38,10 @@ export interface ThemesAdapter {
     expectedVersion: string,
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
-  restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
+  restoreThemeSnapshot(
+    expected: CssLoaderReadySnapshot,
+    restoredThemeNames?: readonly string[],
+  ): Promise<CssLoaderReadySnapshot>;
   reconcileRecoveredThemes(
     recoveries: readonly { themeName: string; previousVersion: string | null }[],
     before: CssLoaderReadySnapshot,
@@ -50,11 +69,29 @@ export interface ThemesActivator {
   takeAbandonedRecovery?(): boolean;
 }
 
+export interface SectionHandoffStore {
+  read(): SectionHandoffs;
+  write(handoffs: SectionHandoffs): void;
+}
+
+export interface SectionHandoffNotice {
+  owner: string;
+  others: string[];
+}
+
+export interface ThemeFailureReport {
+  operation: ThemesOperation["kind"];
+  code: string;
+  message: string;
+}
+
 export interface ThemesDependencies {
   adapter: ThemesAdapter;
   installer: ThemesInstaller;
   activator: ThemesActivator;
   publication?: ThemePublicationClient;
+  reportFailure?: (failure: ThemeFailureReport) => void;
+  sectionHandoffs?: SectionHandoffStore;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
@@ -80,15 +117,38 @@ export interface ThemesClientSnapshot {
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
+  errorCode: string | null;
+  sectionHandoff: SectionHandoffNotice | null;
   publication: ThemePublicationState;
 }
 
-let productionDependencies: ThemesDependencies | undefined;
 const BLOCKING_RECOVERY_CODES = new Set([
   "invalid_journal",
   "rollback_failed",
   "rollback_verification_failed",
 ]);
+const ANSWERED_CSS_LOADER_CODES = new Set(["mutation_failed", "verification_failed"]);
+const MAX_INSTALL_RECONCILE_FAILURES = 3;
+
+let productionDependencies: ThemesDependencies | undefined;
+let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
+let sectionHandoffStore: SectionHandoffStore | undefined;
+
+export function configureThemeFailureReporter(
+  reporter: (failure: ThemeFailureReport) => unknown,
+): () => void {
+  failureReporter = reporter;
+  return () => {
+    if (failureReporter === reporter) failureReporter = undefined;
+  };
+}
+
+export function configureSectionHandoffStore(store: SectionHandoffStore): () => void {
+  sectionHandoffStore = store;
+  return () => {
+    if (sectionHandoffStore === store) sectionHandoffStore = undefined;
+  };
+}
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
@@ -98,12 +158,28 @@ export function createProductionThemesDependencies(): ThemesDependencies {
     installer: createPanelThemeInstaller(),
     activator: new ThemeActivator(adapter, createPanelThemeActivationJournal()),
     publication: createRemotePublicationClient(),
+    reportFailure: (failure) => {
+      void Promise.resolve(failureReporter?.(failure)).catch(() => undefined);
+    },
+    sectionHandoffs: {
+      read: () => sectionHandoffStore?.read() ?? {},
+      write: (handoffs) => sectionHandoffStore?.write(handoffs),
+    },
   };
   return productionDependencies;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Theme operation failed";
+}
+
+function errorCode(error: unknown): string {
+  const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  return typeof code === "string" && code.length > 0 ? code : "unknown";
+}
+
+function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
+  return error instanceof CssLoaderOperationError && ANSWERED_CSS_LOADER_CODES.has(error.code);
 }
 
 function blocksThemeRecovery(error: unknown): boolean {
@@ -123,6 +199,8 @@ export class ThemesClient {
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
+    errorCode: null,
+    sectionHandoff: null,
     publication: { status: "unchecked" },
   };
   private readonly subscriptions = new Map<symbol, {
@@ -140,6 +218,9 @@ export class ThemesClient {
   private publicationRequestSequence = 0;
   private publicationPromise: Promise<void> | null = null;
   private publicationResolvedAtMs: number | undefined;
+  private installReconcileFailures = 0;
+  private pendingSectionHandoff: SectionHandoffNotice | null = null;
+  private lastReportedFailure: string | null = null;
 
   constructor(readonly dependencies: ThemesDependencies) {}
 
@@ -216,7 +297,7 @@ export class ThemesClient {
           recoveryBlocked: recoveryError === undefined
             ? false
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
-          error: recoveryError === undefined ? null : errorMessage(recoveryError),
+          ...this.failurePatch("recovering", recoveryError),
         });
       }
     } catch (inspectionError) {
@@ -230,7 +311,9 @@ export class ThemesClient {
           recoveryBlocked: recoveryError === undefined
             ? this.current.recoveryBlocked
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
-          error: errorMessage(recoveryError ?? inspectionError),
+          ...(recoveryError === undefined
+            ? { error: errorMessage(inspectionError), errorCode: errorCode(inspectionError) }
+            : this.failurePatch("recovering", recoveryError)),
         });
       }
     } finally {
@@ -256,7 +339,13 @@ export class ThemesClient {
     }
     return this.mutate(
       { kind: "activating", themeId },
-      () => this.dependencies.activator.activate(themeId, themes),
+      async () => this.handOffSections(
+        await this.reclaimSections(
+          await this.dependencies.activator.activate(themeId, themes),
+          target.cssLoaderName,
+        ),
+        target.cssLoaderName,
+      ),
     );
   };
 
@@ -265,9 +354,13 @@ export class ThemesClient {
     if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
       return Promise.resolve(false);
     }
+    const leaving = themes.find((theme) => theme.catalogId === themeId)!.cssLoaderName;
     return this.mutate(
       { kind: "deactivating", themeId },
-      () => this.dependencies.activator.deactivate(themeId, themes),
+      async () => this.restoreSections(
+        await this.dependencies.activator.deactivate(themeId, themes),
+        leaving,
+      ),
     );
   };
 
@@ -324,7 +417,7 @@ export class ThemesClient {
             );
           }
           try {
-            await this.dependencies.adapter.restoreThemeSnapshot(before);
+            await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
           } catch (restoreError) {
             throw new ThemeInstallError(
               "rollback_verification_failed",
@@ -352,7 +445,7 @@ export class ThemesClient {
         try {
           await this.dependencies.installer.discardReceipt(card.release.catalogId);
         } catch {}
-        return after;
+        return this.restoreSections(after, card.release.cssLoaderName);
       },
     );
   };
@@ -420,9 +513,95 @@ export class ThemesClient {
     if (!entry) return Promise.resolve(false);
     return this.mutate(
       { kind: "saving", themeId, patchName },
-      () => this.dependencies.adapter.setPatchValue(entry.cssLoaderName, patchName, value),
+      async () => {
+        const after = await this.dependencies.adapter.setPatchValue(entry.cssLoaderName, patchName, value);
+        if (sectionKeyOf(patchName) === null) return after;
+        this.forgetHandoffs([{ themeName: entry.cssLoaderName, patchName }]);
+        return this.handOffSections(after, entry.cssLoaderName, patchName);
+      },
     );
   };
+
+  private hooandeeThemeNames(): ReadonlySet<string> {
+    return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));
+  }
+
+  private readHandoffs(): SectionHandoffs {
+    return this.dependencies.sectionHandoffs?.read() ?? {};
+  }
+
+  private writeHandoffs(handoffs: SectionHandoffs): void {
+    this.dependencies.sectionHandoffs?.write(handoffs);
+  }
+
+  private forgetHandoffs(refs: readonly SectionPatchRef[]): void {
+    const handoffs = { ...this.readHandoffs() };
+    const keys = refs.map(sectionHandoffKey).filter((key) => key in handoffs);
+    keys.forEach((key) => delete handoffs[key]);
+    if (keys.length > 0) this.writeHandoffs(handoffs);
+  }
+
+  private async applySectionValues(
+    snapshot: CssLoaderSnapshot,
+    refs: readonly SectionPatchRef[],
+    value: typeof SECTION_ON | typeof SECTION_OFF,
+  ): Promise<{ snapshot: CssLoaderSnapshot; applied: SectionPatchRef[] }> {
+    let current = snapshot;
+    const applied: SectionPatchRef[] = [];
+    for (const ref of refs) {
+      try {
+        current = await this.dependencies.adapter.setPatchValue(ref.themeName, ref.patchName, value);
+        applied.push(ref);
+      } catch (error) {
+        this.report("saving", error, "section_handoff_failed");
+      }
+    }
+    return { snapshot: current, applied };
+  }
+
+  private async handOffSections(
+    snapshot: CssLoaderSnapshot,
+    ownerName: string,
+    onlyPatchName?: string,
+  ): Promise<CssLoaderSnapshot> {
+    if (snapshot.status !== "ready") return snapshot;
+    const plan = planSectionHandoff(snapshot.themes, ownerName, this.hooandeeThemeNames(), onlyPatchName);
+    if (plan.length === 0) return snapshot;
+    const { snapshot: after, applied } = await this.applySectionValues(snapshot, plan, SECTION_OFF);
+    if (applied.length > 0) {
+      const handoffs = { ...this.readHandoffs() };
+      for (const ref of applied) handoffs[sectionHandoffKey(ref)] = ownerName;
+      this.writeHandoffs(handoffs);
+      const displayName = (name: string) => after.themes.find((theme) => theme.name === name)?.displayName ?? name;
+      this.pendingSectionHandoff = {
+        owner: displayName(ownerName),
+        others: [...new Set(applied.map((ref) => displayName(ref.themeName)))],
+      };
+    }
+    return after;
+  }
+
+  private async reclaimSections(snapshot: CssLoaderSnapshot, themeName: string): Promise<CssLoaderSnapshot> {
+    const handoffs = this.readHandoffs();
+    const given = handoffsGivenBy(handoffs, themeName);
+    if (given.length === 0 || snapshot.status !== "ready") return snapshot;
+    const plan = planSectionReclaim(snapshot.themes, handoffs, themeName);
+    const { snapshot: after } = await this.applySectionValues(snapshot, plan, SECTION_ON);
+    this.forgetHandoffs(given);
+    return after;
+  }
+
+  private async restoreSections(snapshot: CssLoaderSnapshot, leavingOwner: string): Promise<CssLoaderSnapshot> {
+    const handoffs = this.readHandoffs();
+    const owned = Object.keys(handoffs).filter((key) => handoffs[key] === leavingOwner);
+    if (owned.length === 0 || snapshot.status !== "ready") return snapshot;
+    const plan = planSectionRestore(snapshot.themes, handoffs, leavingOwner);
+    const { snapshot: after } = await this.applySectionValues(snapshot, plan, SECTION_ON);
+    const remaining = { ...handoffs };
+    owned.forEach((key) => delete remaining[key]);
+    this.writeHandoffs(remaining);
+    return after;
+  }
 
   private currentPublicationThemes(): readonly PublishedThemeRelease[] {
     return this.current.publication.status === "published" || this.current.publication.status === "cached"
@@ -432,7 +611,9 @@ export class ThemesClient {
 
   private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
     if (request !== this.requestSequence) return;
-    this.update({ snapshot, error: null });
+    const sectionHandoff = this.pendingSectionHandoff;
+    this.pendingSectionHandoff = null;
+    this.update({ snapshot, error: null, errorCode: null, sectionHandoff });
   }
 
   private reconcileRefreshTimer(): void {
@@ -468,10 +649,21 @@ export class ThemesClient {
       return activationRecovery;
     }
     const before = activationRecovery ?? await this.dependencies.adapter.requireReady();
-    const reconciled = await this.dependencies.adapter.reconcileRecoveredThemes(recoveries, before);
+    let reconciled: CssLoaderReadySnapshot;
+    try {
+      reconciled = await this.dependencies.adapter.reconcileRecoveredThemes(recoveries, before);
+    } catch (error) {
+      if (!cssLoaderAnsweredWithMismatch(error)) throw error;
+      this.installReconcileFailures += 1;
+      if (this.installReconcileFailures < MAX_INSTALL_RECONCILE_FAILURES) throw error;
+      this.report("recovering", error, "released_after_mismatch");
+      reconciled = await this.dependencies.adapter.requireReady();
+      this.update({ recoveryKeptCurrent: true });
+    }
     for (const recovery of recoveries) {
       await this.dependencies.installer.acknowledgeRollback(recovery.transaction);
     }
+    this.installReconcileFailures = 0;
     this.recoveryChecked = true;
     return reconciled;
   }
@@ -483,7 +675,15 @@ export class ThemesClient {
     if (this.operationLocked || this.current.recoveryBlocked) return false;
     this.operationLocked = true;
     const request = ++this.requestSequence;
-    this.update({ loading: false, operation, error: null, recoveryKeptCurrent: false });
+    this.pendingSectionHandoff = null;
+    this.update({
+      loading: false,
+      operation,
+      error: null,
+      errorCode: null,
+      recoveryKeptCurrent: false,
+      sectionHandoff: null,
+    });
     try {
       await this.reconcilePendingRecovery();
       this.publishSnapshot(request, await run());
@@ -503,7 +703,7 @@ export class ThemesClient {
         this.update({
           snapshot: reconciled,
           recoveryBlocked: this.current.recoveryBlocked || blocksThemeRecovery(operationError),
-          error: errorMessage(operationError),
+          ...this.failurePatch(operation.kind, operationError),
         });
       }
       return false;
@@ -511,6 +711,32 @@ export class ThemesClient {
       this.operationLocked = false;
       if (request === this.requestSequence) this.update({ operation: null });
     }
+  }
+
+  private failurePatch(
+    operation: ThemesOperation["kind"],
+    error: unknown,
+  ): Pick<ThemesClientSnapshot, "error" | "errorCode"> {
+    if (error === undefined) {
+      this.lastReportedFailure = null;
+      return { error: null, errorCode: null };
+    }
+    this.report(operation, error);
+    return { error: errorMessage(error), errorCode: errorCode(error) };
+  }
+
+  private report(operation: ThemesOperation["kind"], error: unknown, code = errorCode(error)): void {
+    const failure: ThemeFailureReport = {
+      operation,
+      code,
+      message: errorMessage(error),
+    };
+    const key = JSON.stringify(failure);
+    if (key === this.lastReportedFailure) return;
+    this.lastReportedFailure = key;
+    try {
+      this.dependencies.reportFailure?.(failure);
+    } catch {}
   }
 
   private update(patch: Partial<ThemesClientSnapshot>): void {

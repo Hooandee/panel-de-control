@@ -547,9 +547,12 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
             "pending": [],
             "quarantined": 1,
             "last_quarantine": {"reason": "unreadable_journal"},
+            "set_aside": 0,
         },
         "activation_phase": None,
         "activation_quarantined": True,
+        "recent_failures": [],
+        "unreadable_theme_folders": 0,
     }
 
 
@@ -571,3 +574,82 @@ def test_patch_labels_rpc_reads_the_installed_theme_and_never_raises(theme_rpc, 
 
     monkeypatch.setattr(main.theme_packages, "theme_patch_labels", fail)
     assert asyncio.run(plugin.get_theme_patch_labels("example-theme", "Example Theme")) == {}
+
+
+def test_theme_failures_reach_the_log_and_report_bounded_and_sanitized(theme_rpc):
+    main, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    assert asyncio.run(plugin.record_theme_failure(
+        "installing", "verification_failed", "CSS Loader changed another theme\nduring reload",
+    )) is True
+    assert asyncio.run(plugin.record_theme_failure(
+        "installing", "verification_failed", "CSS Loader changed another theme\nduring reload",
+    )) is True
+    assert asyncio.run(plugin.record_theme_failure("<script>", "Bad Code!", "x" * 5000)) is True
+    for index in range(10):
+        asyncio.run(plugin.record_theme_failure("recovering", f"code_{index}", "again"))
+
+    assert len(warnings) == 12
+    assert warnings[0] == (
+        'Theme operation failed {"operation":"installing","code":"verification_failed",'
+        '"message":"CSS Loader changed another theme during reload"}'
+    )
+    assert '"operation":"unknown","code":"unknown"' in warnings[1]
+    assert len(warnings[1]) < 400
+    failures = plugin._theme_report_diagnostics()["recent_failures"]
+    assert len(failures) == 5
+    assert failures[-1] == {"operation": "recovering", "code": "code_9", "count": 1}
+
+
+def test_theme_failure_counts_repeats_without_logging_them_again(theme_rpc):
+    _, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    for _ in range(3):
+        asyncio.run(plugin.record_theme_failure("recovering", "verification_failed", "same"))
+
+    assert len(warnings) == 1
+    assert plugin._theme_report_diagnostics()["recent_failures"] == [
+        {"operation": "recovering", "code": "verification_failed", "count": 3},
+    ]
+
+
+def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
+    _, plugin, _ = theme_rpc
+    root = plugin._themes_root()
+    for name, manifest in (
+        ("Good", '{"name":"Good"}'),
+        ("Private Broken Name", "{ not json"),
+        ("List Manifest", "[]"),
+    ):
+        (root / name).mkdir(parents=True)
+        (root / name / "theme.json").write_text(manifest, encoding="utf-8")
+    (root / "No Manifest").mkdir()
+    (root / "STORE").write_text("x", encoding="utf-8")
+
+    diagnostics = plugin._theme_report_diagnostics()
+
+    assert diagnostics["unreadable_theme_folders"] == 2
+    assert "Private Broken Name" not in str(diagnostics)
+
+
+def test_ui_diagnostics_reach_the_log_and_report_without_free_text_in_the_report(theme_rpc):
+    _, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    for _ in range(3):
+        asyncio.run(plugin.record_ui_diagnostic("cleaner", "coverage_incomplete", "scan"))
+    asyncio.run(plugin.record_ui_diagnostic("<script>", "Bad!", "x" * 900))
+    for index in range(25):
+        asyncio.run(plugin.record_ui_diagnostic("proton", f"code_{index}", ""))
+
+    assert warnings[0] == 'UI diagnostic {"area":"cleaner","code":"coverage_incomplete","detail":"scan"}'
+    assert '"area":"unknown","code":"unknown"' in warnings[1] and len(warnings[1]) < 320
+    diagnostics = plugin._ui_diagnostics_snapshot()
+    assert len(diagnostics) == 20
+    assert diagnostics[-1] == {"area": "proton", "code": "code_24", "count": 1}
+    assert all("detail" not in entry for entry in diagnostics)

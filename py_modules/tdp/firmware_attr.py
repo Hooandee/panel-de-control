@@ -27,6 +27,7 @@ _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 _CUSTOM_REARM_COOLDOWN_S = 60.0
 _CUSTOM_RETURN_DELAYS_S = (0.0, 0.25, 0.5, 1.0)
+_HANDOFF_RETRY_S = (30.0, 60.0, 120.0, 300.0)
 
 
 def _normalise_rail_floors(values):
@@ -88,6 +89,8 @@ class FirmwareAttrBackend(TDPBackend):
         optional_rails=None,
         probe_live_max_on_ac=False,
         rearm_custom_on_ignored_writes=False,
+        rearm_custom_on_unapplied_writes=False,
+        firmware_handoff_profile=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -105,9 +108,15 @@ class FirmwareAttrBackend(TDPBackend):
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
-        self._rearm_custom_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
+        self._rearm_custom_on_unapplied_writes = bool(rearm_custom_on_unapplied_writes)
+        self._custom_rearm_enabled = (
+            bool(rearm_custom_on_ignored_writes) or self._rearm_custom_on_unapplied_writes
+        )
         self._last_custom_rearm_at = None
         self._last_custom_rearm = None
+        self._rollback_rearmed = False
+        self._handoff_profile = firmware_handoff_profile
+        self._handoff = None
         self._custom_return_pending = False
         self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -132,6 +141,7 @@ class FirmwareAttrBackend(TDPBackend):
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
         self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._runtime_lock_payload = self._safety_lock.load_payload()
+        self._recovery_failures = 0
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
             or self._runtime_lock_payload.get("state")
@@ -296,35 +306,67 @@ class FirmwareAttrBackend(TDPBackend):
         snapshot,
         profile,
         restore_rails=True,
+        allow_rearm=True,
     ):
+        self._rollback_rearmed = False
         write_failures = []
         if restore_rails:
             for surface, rail, path in reversed(surfaces):
                 if not self._write(path, snapshot[path]):
-                    write_failures.append(self._surface_label(surface, rail))
+                    write_failures.append(self._failed_write_label(surface, rail))
         if self._pp_dir and not self._write(
             os.path.join(self._pp_dir, "profile"),
             profile,
         ):
             write_failures.append("platform-profile")
 
+        mismatches = self._settled_snapshot_mismatches(
+            surfaces, snapshot, profile, compare_values=restore_rails,
+        )
+        if (
+            mismatches
+            and all("=unavailable" not in mismatch for mismatch in mismatches)
+            and restore_rails
+            and allow_rearm
+            and self._rearm_custom_on_unapplied_writes
+            and self._custom_rearm_allowed(profile)
+        ):
+            self._rollback_rearmed = True
+            rearmed = self._rearm_custom(
+                surfaces,
+                {rail: snapshot[path] for _surface, rail, path in surfaces},
+            )
+            self._last_custom_rearm = "rollback_not_recovered"
+            if rearmed:
+                mismatches = self._settled_snapshot_mismatches(
+                    surfaces, snapshot, profile,
+                )
+                if not mismatches:
+                    self._last_custom_rearm = "rollback_recovered"
+                    return True, []
+            write_failures.append("custom re-arm not confirmed")
+        if not mismatches and profile == "custom":
+            self._custom_return_pending = False
+        return not mismatches, write_failures + mismatches
+
+    def _settled_snapshot_mismatches(
+        self,
+        surfaces,
+        snapshot,
+        profile,
+        compare_values=True,
+    ):
         mismatches = self._snapshot_mismatches(
-            surfaces,
-            snapshot,
-            profile,
-            compare_values=restore_rails,
+            surfaces, snapshot, profile, compare_values=compare_values,
         )
         for delay in self._readback_settle_delays:
             if not mismatches:
                 break
             time.sleep(delay)
             mismatches = self._snapshot_mismatches(
-                surfaces,
-                snapshot,
-                profile,
-                compare_values=restore_rails,
+                surfaces, snapshot, profile, compare_values=compare_values,
             )
-        return not mismatches, write_failures + mismatches
+        return mismatches
 
     def _restore_payload(self, purpose):
         payload = self._runtime_lock_payload
@@ -366,14 +408,28 @@ class FirmwareAttrBackend(TDPBackend):
             snapshot,
             profile,
             restore_rails=not profile_owns_rails,
+            allow_rearm=not payload.get("custom_rearm_attempted"),
         )
         if not recovered:
             detail = f"firmware {purpose} recovery failed: " + ", ".join(problems)
             payload = {**payload, "state": "rollback_failed", "detail": detail}
+            if self._rollback_rearmed:
+                payload["custom_rearm_attempted"] = True
             self._write_circuit_open = detail
             if purpose == "transaction":
                 self._runtime_lock_payload = payload
+                self._recovery_failures += 1
                 self._safety_lock.persist_payload(payload)
+                rearm_pending = (
+                    self._rearm_custom_on_unapplied_writes
+                    and profile == "custom"
+                    and not payload.get("custom_rearm_attempted")
+                )
+                if not rearm_pending and self._hand_off_to_firmware():
+                    return {
+                        "ok": True,
+                        "detail": f"firmware handed off to {self._handoff_profile}",
+                    }
             else:
                 self._owned_payload = payload
                 self._ownership_recovery_pending = True
@@ -386,6 +442,7 @@ class FirmwareAttrBackend(TDPBackend):
             return {"ok": False, "detail": detail}
         if purpose == "transaction":
             self._runtime_lock_payload = None
+            self._recovery_failures = 0
         else:
             self._owned_payload = None
             self._owns_state = False
@@ -393,7 +450,39 @@ class FirmwareAttrBackend(TDPBackend):
         self._write_circuit_open = None
         return {"ok": True, "detail": f"firmware {purpose} recovered"}
 
+    def _hand_off_to_firmware(self):
+        profile = self._handoff_profile
+        if not self._pp_dir or profile not in self.profile_choices():
+            return False
+        self._write(os.path.join(self._pp_dir, "profile"), profile)
+        if self.read_profile() != profile:
+            return False
+        surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
+        if any(self._read_int(path) is None for _surface, _rail, path in surfaces):
+            return False
+        if not self._safety_lock.clear():
+            return False
+        self._runtime_lock_payload = None
+        self._recovery_failures = 0
+        self._write_circuit_open = None
+        self._custom_return_pending = False
+        self._schedule_handoff_retry()
+        return True
+
+    def _schedule_handoff_retry(self):
+        attempts = 0 if self._handoff is None else self._handoff["attempts"] + 1
+        delay = _HANDOFF_RETRY_S[min(attempts, len(_HANDOFF_RETRY_S) - 1)]
+        self._handoff = {"attempts": attempts, "retry_at": time.monotonic() + delay}
+
+    def _handoff_retry_waiting(self):
+        return self._handoff is not None and time.monotonic() < self._handoff["retry_at"]
+
+    def expedite_handoff_retry(self):
+        if self._handoff is not None:
+            self._handoff["retry_at"] = 0.0
+
     def recover_runtime_transaction(self):
+        result = {"ok": True, "detail": "no firmware recovery pending"}
         if self._runtime_lock_payload is not None:
             self._refresh_recovery_capabilities()
             recovered = self._restore_payload(
@@ -401,9 +490,11 @@ class FirmwareAttrBackend(TDPBackend):
             )
             if not recovered["ok"]:
                 return recovered
+            if self._handoff is not None:
+                result = recovered
         if self._ownership_recovery_pending:
             return self._restore_payload("ownership")
-        return {"ok": True, "detail": "no firmware recovery pending"}
+        return result
 
     def relinquish_ownership(self):
         if self._runtime_lock_payload is not None:
@@ -497,10 +588,34 @@ class FirmwareAttrBackend(TDPBackend):
             for surface, rail, path in surfaces
         )
 
+    def _writes_not_taken(self, observation, surfaces, snapshot, targets):
+        if self._rearm_custom_on_unapplied_writes:
+            return self._writes_unapplied(observation, surfaces, snapshot, targets)
+        return self._writes_ignored(observation, surfaces, snapshot, targets)
+
+    def _writes_unapplied(self, observation, surfaces, snapshot, targets):
+        observed = observation.surfaces
+        changing = [
+            (surface, rail)
+            for surface, rail, path in surfaces
+            if snapshot[path] != targets[rail]
+        ]
+        return bool(changing) and all(
+            (reading := observed.get(surface, {}).get(rail)) is not None
+            and reading.applied_w is not None
+            and reading.applied_w != targets[rail]
+            and not (
+                reading.max_w is not None
+                and targets[rail] > reading.max_w
+                and reading.applied_w == reading.max_w
+            )
+            for surface, rail in changing
+        )
+
     def _custom_rearm_allowed(self, previous_profile):
         choices = self.profile_choices()
         return (
-            self._rearm_custom_on_ignored_writes
+            self._custom_rearm_enabled
             and previous_profile == "custom"
             and "custom" in choices
             and any(choice != "custom" for choice in choices)
@@ -734,6 +849,14 @@ class FirmwareAttrBackend(TDPBackend):
                 False,
                 "firmware ownership recovery pending",
             )
+        requested = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
+        if self._handoff_retry_waiting():
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                f"firmware handed off to {self._handoff_profile}; retry pending",
+            )
         if self._custom_return_pending and not self._return_to_custom():
             return TdpResult(
                 pl1,
@@ -749,10 +872,9 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails
         ):
             return TdpResult(pl1, self.read_applied(), False, "firmware live bounds invalid")
-        values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         attrs = dict(_RAIL_ATTRS)
         targets = {
-            rail: self._clamp_live(values[rail], attrs[rail], ac=ac)
+            rail: self._clamp_live(requested[rail], attrs[rail], ac=ac)
             for rail in self._rails
         }
         surfaces = self._transaction_surfaces(targets)
@@ -788,6 +910,7 @@ class FirmwareAttrBackend(TDPBackend):
         lock_payload = {
             "state": "transaction_pending",
             "detail": "firmware transaction pending",
+            "locked_at": round(time.time()),
             "snapshot": {
                 self._surface_label(surface, rail): snapshot[path]
                 for surface, rail, path in surfaces
@@ -844,7 +967,7 @@ class FirmwareAttrBackend(TDPBackend):
             not failed
             and mismatches
             and self._custom_rearm_allowed(previous_profile)
-            and self._writes_ignored(observation, surfaces, snapshot, targets)
+            and self._writes_not_taken(observation, surfaces, snapshot, targets)
         ):
             rearmed = self._rearm_custom(surfaces, targets)
             observation = self.observe()
@@ -899,6 +1022,8 @@ class FirmwareAttrBackend(TDPBackend):
                     "state": "rollback_failed",
                     "detail": rollback_detail,
                 }
+                if self._rollback_rearmed:
+                    lock_payload["custom_rearm_attempted"] = True
                 self._runtime_lock_payload = lock_payload
                 if not self._safety_lock.persist_payload(lock_payload):
                     self._write_circuit_open += "; runtime lock persistence failed"
@@ -919,6 +1044,11 @@ class FirmwareAttrBackend(TDPBackend):
                 if applied_w is not None
                 else None
             )
+            if self._handoff is not None or (
+                self._handoff_profile is not None
+                and previous_profile == self._handoff_profile
+            ):
+                self._schedule_handoff_retry()
             failure_kind = (
                 "target_not_applied"
                 if not failed
@@ -945,6 +1075,7 @@ class FirmwareAttrBackend(TDPBackend):
                 self._write_circuit_open,
             )
         self._runtime_lock_payload = None
+        self._handoff = None
         if self._restore_on_release:
             self._owns_state = True
         return TdpResult(
@@ -1007,10 +1138,16 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
-        if self._rearm_custom_on_ignored_writes:
+        if self._custom_rearm_enabled:
             diagnostics["custom_rearm"] = {
                 "last": self._last_custom_rearm,
                 "return_pending": self._custom_return_pending,
+            }
+        if self._handoff is not None:
+            diagnostics["firmware_handoff"] = {
+                "profile": self._handoff_profile,
+                "attempts": self._handoff["attempts"],
+                "retry_in_s": max(0, round(self._handoff["retry_at"] - time.monotonic())),
             }
         if self._restore_on_release:
             diagnostics["owns_state"] = self._owns_state
@@ -1019,6 +1156,17 @@ class FirmwareAttrBackend(TDPBackend):
             )
         if self._write_circuit_open is not None:
             diagnostics["write_circuit_open"] = self._write_circuit_open
+        if isinstance(self._runtime_lock_payload, dict):
+            lock = {
+                key: self._runtime_lock_payload[key]
+                for key in ("state", "snapshot", "profile", "custom_rearm_attempted")
+                if key in self._runtime_lock_payload
+            }
+            locked_at = self._runtime_lock_payload.get("locked_at")
+            if isinstance(locked_at, (int, float)):
+                lock["locked_s"] = max(0, round(time.time() - locked_at))
+            lock["recovery_failures"] = self._recovery_failures
+            diagnostics["transaction_lock"] = lock
         if self._trust_live_bounds:
             diagnostics["live_bounds_valid"] = {
                 rail: self._validated_live_bounds(attr) is not None

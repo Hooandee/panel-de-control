@@ -5,10 +5,12 @@ from report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
+    decky_plugins,
     frontend_crash_diagnostics,
     kernel_logs,
     redact_obj,
     redact_text,
+    steam_client_diagnostics,
     sysfs_snapshot,
     tail_logs,
 )
@@ -417,6 +419,35 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     assert all("line" not in signal for signal in diagnostics["signals"])
 
 
+def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[0927/140000.000:INFO:CONSOLE(2)] "Uncaught TypeError: x is not a function", '
+        "source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js?v=1 (2)\n"
+        '[0927/140001.000:INFO:CONSOLE(9)] "Uncaught (in promise) ReferenceError: y", '
+        "source: http://127.0.0.1:1337/plugins/SteamGridDB/dist/index.js (9)\n"
+        '[0927/140002.000:INFO:CONSOLE(3)] "Uncaught TypeError: z", '
+        "source: http://localhost:1337/plugins/password=hunter2/dist/index.js (3)\n"
+        '[0927/140003.000:INFO:CONSOLE(4)] "Uncaught SyntaxError: w", '
+        "source: http://localhost:1337/frontend/index.js (4)\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "TypeError", "origin": "panel"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "ReferenceError", "origin": "steamgriddb"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "TypeError", "origin": "other_plugin"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "SyntaxError", "origin": "decky"},
+    ]
+    assert "hunter2" not in str(diagnostics)
+
+
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     tmp_path,
     monkeypatch,
@@ -448,6 +479,103 @@ def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     assert diagnostics["files"][0]["status"] == "unreadable"
     assert diagnostics["signals"] == []
 
+
+# ---- steam_client_diagnostics ---------------------------------------------
+def _steam_package(tmp_path, beta=None, manifests=None):
+    package = tmp_path / "Steam" / "package"
+    package.mkdir(parents=True)
+    if beta is not None:
+        (package / "beta").write_text(beta)
+    for name, version in (manifests or {}).items():
+        # Real manifests list every package after the version, so it sits far from the tail.
+        packages = "".join(f'\t"pkg{i}"\n\t{{\n\t\t"file"\t\t"x.zip"\n\t}}\n' for i in range(400))
+        (package / f"steam_client_{name}.manifest").write_text(
+            f'"ubuntu12"\n{{\n\t"version"\t\t"{version}"\n{packages}}}\n'
+        )
+    return str(tmp_path / "Steam")
+
+
+def test_steam_client_names_branch_slug_and_its_manifest_version(tmp_path):
+    root = _steam_package(
+        tmp_path,
+        beta="steamdeck_publicbeta\n",
+        manifests={
+            "steamdeck_stable_ubuntu12": "1788652215",
+            "steamdeck_publicbeta_ubuntu12": "1790000000",
+        },
+    )
+
+    assert steam_client_diagnostics(root) == {
+        "status": "captured",
+        "branch": "beta",
+        "version": 1790000000,
+    }
+
+
+def test_steam_client_classifies_branches_into_fixed_slugs(tmp_path):
+    cases = {
+        "steamdeck_stable": "stable",
+        "steamdeck_beta": "beta",
+        "publicbeta": "beta",
+        "steamdeck_preview": "preview",
+        "": "default",
+        "password=hunter2": "other",
+    }
+    for index, (raw, slug) in enumerate(cases.items()):
+        root = _steam_package(tmp_path / str(index), beta=raw)
+        diagnostics = steam_client_diagnostics(root)
+        assert diagnostics["branch"] == slug
+        assert "hunter2" not in str(diagnostics)
+
+
+def test_steam_client_without_beta_file_is_the_default_branch(tmp_path):
+    root = _steam_package(tmp_path, manifests={"ubuntu12": "1788652215"})
+
+    assert steam_client_diagnostics(root) == {
+        "status": "captured",
+        "branch": "default",
+        "version": 1788652215,
+    }
+
+
+def test_steam_client_is_unavailable_without_a_package_dir(tmp_path):
+    assert steam_client_diagnostics(str(tmp_path / "missing")) == {
+        "status": "unavailable",
+        "branch": "unknown",
+        "version": None,
+    }
+    assert steam_client_diagnostics(None)["status"] == "unavailable"
+
+
+def test_steam_client_ignores_ambiguous_or_malformed_manifests(tmp_path):
+    ambiguous = _steam_package(
+        tmp_path / "a",
+        beta="steamdeck_stable",
+        manifests={"one_ubuntu12": "1", "two_ubuntu12": "2"},
+    )
+    assert steam_client_diagnostics(ambiguous)["version"] is None
+
+    malformed = _steam_package(tmp_path / "b", beta="steamdeck_stable")
+    (tmp_path / "b" / "Steam" / "package" / "steam_client_steamdeck_stable_ubuntu12.manifest"
+     ).write_text('"version" "not-a-number"')
+    assert steam_client_diagnostics(malformed)["version"] is None
+
+
+def test_steam_client_does_not_follow_a_symlinked_beta_file(tmp_path):
+    root = _steam_package(tmp_path)
+    secret = tmp_path / "secret"
+    secret.write_text("steamdeck_beta")
+    (tmp_path / "Steam" / "package" / "beta").symlink_to(secret)
+
+    assert steam_client_diagnostics(root)["branch"] == "unknown"
+
+
+
+def test_steam_client_rejects_a_fifo_without_blocking(tmp_path):
+    root = _steam_package(tmp_path)
+    os.mkfifo(tmp_path / "Steam" / "package" / "beta")
+
+    assert steam_client_diagnostics(root)["branch"] == "unknown"
 
 # ---- build_bundle ---------------------------------------------------------
 def test_build_bundle_shape_and_redaction():
@@ -852,3 +980,66 @@ def test_sysfs_snapshot_is_size_capped(tmp_path):
         _mk(os.path.join(root, f"sys/class/hwmon/hwmon{i}/name"), f"chip{i}\n")
     snap = sysfs_snapshot(root=root)
     assert len(snap["hwmon"]) <= 32  # chip cap, no recursive/unbounded sweep
+
+
+# ---- decky_plugins ---------------------------------------------------------
+def _plugin(root, folder, name=None, version=None):
+    path = root / folder
+    path.mkdir(parents=True)
+    if name is not None:
+        (path / "plugin.json").write_text(f'{{"name": "{name}", "author": "x"}}')
+    if version is not None:
+        (path / "package.json").write_text(f'{{"version": "{version}"}}')
+    return path
+
+
+def test_decky_plugins_lists_every_installed_plugin_with_its_version(tmp_path):
+    _plugin(tmp_path, "PowerTools", name="PowerTools", version="2.0.3")
+    _plugin(tmp_path, "Panel de Control", name="Panel de Control", version="0.57.2")
+
+    assert decky_plugins(str(tmp_path)) == {
+        "status": "captured",
+        "plugins": [
+            {"name": "Panel de Control", "version": "0.57.2"},
+            {"name": "PowerTools", "version": "2.0.3"},
+        ],
+        "truncated": False,
+    }
+
+
+def test_decky_plugins_falls_back_to_folder_name_and_unknown_version(tmp_path):
+    _plugin(tmp_path, "SimpleDeckyTDP")
+    (tmp_path / "SimpleDeckyTDP" / "plugin.json").write_text("{not json")
+
+    assert decky_plugins(str(tmp_path))["plugins"] == [
+        {"name": "SimpleDeckyTDP", "version": None},
+    ]
+
+
+def test_decky_plugins_skips_files_and_symlinks(tmp_path):
+    real = _plugin(tmp_path / "elsewhere", "Real", name="Real", version="1")
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "stray.txt").write_text("x")
+    os.symlink(real, plugins / "Linked")
+
+    assert decky_plugins(str(plugins))["plugins"] == []
+
+
+def test_decky_plugins_caps_the_list(tmp_path):
+    for index in range(report_collector._MAX_DECKY_PLUGINS + 3):
+        _plugin(tmp_path, f"p{index:03d}", name=f"p{index:03d}", version="1")
+
+    result = decky_plugins(str(tmp_path))
+
+    assert len(result["plugins"]) == report_collector._MAX_DECKY_PLUGINS
+    assert result["truncated"] is True
+
+
+def test_decky_plugins_missing_dir_is_unavailable():
+    assert decky_plugins("/nonexistent/plugins") == {
+        "status": "unavailable",
+        "plugins": [],
+        "truncated": False,
+    }
+    assert decky_plugins(None)["status"] == "unavailable"

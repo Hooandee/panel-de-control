@@ -194,6 +194,34 @@ describe("ThemeExtensionRuntimeHost", () => {
     host.dispose();
   });
 
+  it("lets ABI-v1 themes move focus but never capture buttons", async () => {
+    const navigation = { focus: vi.fn(() => true), capture: vi.fn(() => () => {}) };
+    const element = document.createElement("div");
+    let seen: unknown;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      navigation,
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          seen = context.navigation;
+          context.navigation?.focus(element);
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(Object.isFrozen(seen)).toBe(true);
+    expect(Object.keys(seen as object)).toEqual(["focus"]);
+    expect(navigation.focus).toHaveBeenCalledWith(element);
+    expect(navigation.capture).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
   it("exposes a frozen navigation channel to ABI-v2 themes", async () => {
     const stopCapture = vi.fn();
     const navigation = {

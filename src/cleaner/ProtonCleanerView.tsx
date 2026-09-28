@@ -38,7 +38,6 @@ export const ProtonCleanerView: FC<{ controller: ProtonCleanerController }> = ({
 
   return <div style={cleanerColumn}>
     {error && <CleanerNotice warning>{t(cleanerReasonKey(error))}</CleanerNotice>}
-    {controller.state?.scan_id && !controller.state.coverage_complete && <CleanerNotice warning>{t("cleaner.proton.coverageIncomplete")}</CleanerNotice>}
     {controller.result && <CleanerResult
       bytes={formatBytes(controller.result.estimated_bytes_removed, lang)}
       failed={controller.result.items.some((item) => item.status !== "deleted")}
@@ -77,7 +76,7 @@ export const ProtonCleanerView: FC<{ controller: ProtonCleanerController }> = ({
             <span style={{ display: "block", fontWeight: 600 }}>{entry.name}</span>
             <span style={{ ...cleanerCaption, display: "block" }}>{t(`cleaner.proton.status.${entry.status}`)}</span>
             {entry.recommended && <span style={{ ...cleanerCaption, display: "block", color: theme.color.accent }}>{t("cleaner.recommended")} · {t("cleaner.recommendation.unused_proton")}</span>}
-            {entry.reason && !entry.recommended && <span style={{ ...cleanerCaption, display: "block" }}>{t(cleanerReasonKey(entry.reason))}</span>}
+            {entry.reason === "tool_in_use" && !entry.recommended && <span style={{ ...cleanerCaption, display: "block" }}>{t(cleanerReasonKey(entry.reason))}</span>}
           </span>
           <span style={{ ...cleanerCaption, color: theme.color.textPrimary, whiteSpace: "nowrap" }}>{entry.bytes === null ? t("cleaner.sizeUnknown") : formatBytes(entry.bytes, lang)}</span>
           <Check size={18} color={checked ? theme.color.accent : theme.color.textMuted} />

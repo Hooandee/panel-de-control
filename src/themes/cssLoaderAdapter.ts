@@ -209,23 +209,14 @@ export class CssLoaderAdapter {
           "CSS Loader returned an invalid theme list",
         );
       }
-      const themes: CssLoaderTheme[] = [];
-      const themeNames = new Set<string>();
-      rawThemes.forEach((rawTheme, index) => {
-        const theme = normalizeTheme(rawTheme);
-        if (!theme || themeNames.has(theme.name)) {
-          throw new CssLoaderOperationError(
-            "malformed_response",
-            `CSS Loader returned an invalid theme at index ${index}`,
-          );
-        }
-        themeNames.add(theme.name);
-        themes.push(theme);
-      });
-      return {
-        status: "ready",
-        themes,
-      };
+      const byName = new Map<string, CssLoaderTheme>();
+      const ambiguous = new Set<string>();
+      for (const theme of rawThemes.map(normalizeTheme)) {
+        if (!theme || ambiguous.has(theme.name)) continue;
+        if (byName.delete(theme.name)) ambiguous.add(theme.name);
+        else byName.set(theme.name, theme);
+      }
+      return { status: "ready", themes: [...byName.values()] };
     } catch (error) {
       return {
         status: "error",
@@ -266,7 +257,8 @@ export class CssLoaderAdapter {
     }
   }
 
-  private async resetThemes(): Promise<void> {
+  // `fails` also lists third-party folders that were already broken on disk.
+  private async resetThemes(protectedThemeNames: ReadonlySet<string>): Promise<ReadonlySet<string>> {
     const result = await this.callMutationWithTimeout(this.reloadTimeoutMs, "reset");
     if (
       !isRecord(result)
@@ -282,13 +274,16 @@ export class CssLoaderAdapter {
         "CSS Loader returned an invalid result for reset",
       );
     }
-    if (result.fails.length > 0) {
-      const [themeName, reason] = result.fails[0] as [string, string];
+    const fails = result.fails as [string, string][];
+    const protectedFailure = fails.find(([themeName]) => protectedThemeNames.has(themeName));
+    if (protectedFailure) {
+      const [themeName, reason] = protectedFailure;
       throw new CssLoaderOperationError(
         "mutation_failed",
         `CSS Loader could not reload ${themeName}: ${reason}`,
       );
     }
+    return new Set(fails.map(([themeName]) => themeName));
   }
 
   async setThemeState(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot> {
@@ -332,7 +327,7 @@ export class CssLoaderAdapter {
     expectedVersion: string,
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes();
+    const brokenOnDisk = await this.resetThemes(new Set([expectedThemeName]));
     let after = await this.requireReady();
     let updated = after.themes.find((theme) => theme.name === expectedThemeName);
     if (!updated || updated.version !== expectedVersion) {
@@ -349,17 +344,20 @@ export class CssLoaderAdapter {
         `CSS Loader did not preserve ${expectedThemeName} v${expectedVersion}`,
       );
     }
-    this.verifyInventoryState(before, after, expectedThemeName);
+    this.verifyInventoryState(before, after, [expectedThemeName, ...brokenOnDisk]);
     const previous = before.themes.find((theme) => theme.name === expectedThemeName);
     if (previous) this.verifyCompatibleTargetState(previous, updated);
     return after;
   }
 
-  async restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes();
+  async restoreThemeSnapshot(
+    expected: CssLoaderReadySnapshot,
+    restoredThemeNames: readonly string[] = [],
+  ): Promise<CssLoaderReadySnapshot> {
+    const brokenOnDisk = await this.resetThemes(new Set(restoredThemeNames));
     const current = await this.requireReady();
     const after = await this.restoreCompatibleSnapshotState(expected, current);
-    this.verifyInventoryState(expected, after);
+    this.verifyInventoryState(expected, after, [...brokenOnDisk]);
     return after;
   }
 
@@ -367,11 +365,11 @@ export class CssLoaderAdapter {
     recoveries: readonly CssLoaderRecoveryExpectation[],
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes();
-    const current = await this.requireReady();
     const recoveredNames = new Set(recoveries.map((recovery) => recovery.themeName));
+    const brokenOnDisk = await this.resetThemes(recoveredNames);
+    const current = await this.requireReady();
     const after = await this.restoreCompatibleSnapshotState(before, current, recoveredNames);
-    this.verifyInventoryState(before, after, recoveries.map((recovery) => recovery.themeName));
+    this.verifyInventoryState(before, after, [...recoveredNames, ...brokenOnDisk]);
     for (const recovery of recoveries) {
       const restored = after.themes.find((theme) => theme.name === recovery.themeName);
       if (
@@ -396,14 +394,10 @@ export class CssLoaderAdapter {
   ): Promise<CssLoaderReadySnapshot> {
     for (const expectedTheme of expected.themes) {
       const currentTheme = current.themes.find((theme) => theme.name === expectedTheme.name);
-      if (
-        !currentTheme
-        || (
-          currentTheme.version !== expectedTheme.version
-          && !allowedVersionChanges.has(expectedTheme.name)
-        )
-      ) continue;
-      for (const expectedPatch of expectedTheme.patches) {
+      if (!currentTheme) continue;
+      const restorePatches = currentTheme.version === expectedTheme.version
+        || allowedVersionChanges.has(expectedTheme.name);
+      for (const expectedPatch of restorePatches ? expectedTheme.patches : []) {
         const currentPatch = currentTheme.patches.find((patch) => patch.name === expectedPatch.name);
         if (
           currentPatch
@@ -437,14 +431,21 @@ export class CssLoaderAdapter {
     const excluded = new Set(
       typeof excludedThemeNames === "string" ? [excludedThemeNames] : excludedThemeNames,
     );
+    const versions = (themes: readonly CssLoaderTheme[]) => new Map(themes.map((theme) => [theme.name, theme.version]));
+    const beforeVersions = versions(before.themes);
+    const afterVersions = versions(after.themes);
     const relevant = (themes: readonly CssLoaderTheme[]) => themes
       .filter((theme) => !excluded.has(theme.name))
-      .map((theme) => ({
-        name: theme.name,
-        version: theme.version,
-        enabled: theme.enabled,
-        patches: theme.patches.map((patch) => ({ name: patch.name, value: patch.value })),
-      }))
+      .map((theme) => {
+        const sameVersion = beforeVersions.get(theme.name) === afterVersions.get(theme.name);
+        return {
+          name: theme.name,
+          enabled: theme.enabled,
+          patches: sameVersion
+            ? theme.patches.map((patch) => ({ name: patch.name, value: patch.value }))
+            : null,
+        };
+      })
       .sort((left, right) => left.name.localeCompare(right.name));
     if (JSON.stringify(relevant(before.themes)) !== JSON.stringify(relevant(after.themes))) {
       throw new CssLoaderOperationError(

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelSteamCleaner, executeSteamCleaner, getSteamCleanerState, prepareSteamCleaner, scanSteamCleaner } from "../api";
+import { recordUiDiagnostic } from "../system/uiDiagnostics";
 import { cleanerErrorCode } from "./errors";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./types";
 
@@ -31,7 +32,7 @@ export function useSteamCleaner() {
       const next = await getSteamCleanerState();
       if (mounted.current && revision === epoch.current) { accept(next); setError(null); }
     } catch (failure) {
-      if (mounted.current && revision === epoch.current) setError(cleanerErrorCode(failure));
+      recordUiDiagnostic("cleaner", cleanerErrorCode(failure), "refresh");
     } finally {
       if (mounted.current && revision === epoch.current) setLoading(false);
     }
@@ -63,7 +64,7 @@ export function useSteamCleaner() {
         if (!stopped && mounted.current && revision === epoch.current) { accept(next); failures = 0; }
       } catch (failure) {
         failures += 1;
-        if (!stopped && mounted.current && revision === epoch.current) setError(cleanerErrorCode(failure));
+        recordUiDiagnostic("cleaner", cleanerErrorCode(failure), "poll");
       }
       if (!stopped && failures < 3) timer = setTimeout(poll, 800);
     };
@@ -97,7 +98,7 @@ export function useSteamCleaner() {
       const next = await scanSteamCleaner();
       if (mounted.current) { epoch.current += 1; accept(next); }
     } catch (failure) {
-      if (mounted.current) setError(cleanerErrorCode(failure));
+      recordUiDiagnostic("cleaner", cleanerErrorCode(failure), "scan");
     } finally { finish(); }
   };
 

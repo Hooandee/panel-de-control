@@ -168,18 +168,16 @@ describe("Steam Cleaner interface", () => {
     expect(screen.queryByText("cleaner.result.title")).toBeNull();
   });
 
-  it("does not present unmeasured or unidentified game data as zero bytes or an AppID title", () => {
-    render(<SteamCleanerView controller={controller({ state: state({ entries: [entry("unknown", { name: null, bytes: null, installation: "unknown", blocked_reason: "unknown_identity" })], totals: { shadercache: 0, compatdata: 0, unknown: 1 } }) })} />);
-    const game = screen.getByRole("button", { name: "cleaner.chooseGameData cleaner.unknownGame" });
-    expect(game.getAttribute("aria-disabled")).toBe("true");
-    expect(within(game).getByText("cleaner.sizeUnknown")).toBeTruthy();
-    expect(within(game).queryByText("0 B")).toBeNull();
+  it("leaves out games whose data can only be kept for reasons the user cannot act on", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [
+      entry("unknown", { name: null, bytes: null, installation: "unknown", blocked_reason: "unknown_identity" }),
+      entry("kept", { game_id: "other", appid: "20", name: "Kept", blocked_reason: "coverage_incomplete" }),
+    ], totals: { shadercache: 0, compatdata: 0, unknown: 1 } }) })} />);
+    expect(screen.queryByRole("button", { name: /cleaner.unknownGame/ })).toBeNull();
+    expect(screen.queryByText("Kept")).toBeNull();
     expect(screen.queryByText("AppID 10")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails cleaner.unknownGame" }));
-    expect(screen.getByText("cleaner.steamIdentifier 10")).toBeTruthy();
-    expect(screen.getByText("cleaner.reason.unknown_identity")).toBeTruthy();
-    expect(screen.queryByText("cleaner.warning.unknown_identity")).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByText("cleaner.noCleanable")).toBeTruthy();
+    expect(screen.queryByText("cleaner.empty")).toBeNull();
   });
 
   it("warns about an unidentified eligible game without claiming its data will be kept", () => {
@@ -231,14 +229,21 @@ describe("Steam Cleaner interface", () => {
     expect(screen.getByText(`cleaner.kind.shadercache · ${expected}`)).toBeTruthy();
   });
 
-  it("shows unknown totals when an unavailable library prevents any measurement", () => {
+  it("keeps an unavailable library out of sight instead of warning about it", () => {
     render(<SteamCleanerView controller={controller({ state: state({
       coverage_complete: false, entries: [], totals: { shadercache: 0, compatdata: 0, unknown: 0 },
-      libraries: [{ id: "library", label: "Internal drive", available: false, reason: "library_unavailable" }],
+      libraries: [{ id: "library", label: "SN128", available: false, reason: "library_disconnected" }],
     }) })} />);
-    expect(screen.getAllByText("cleaner.sizeUnknown")).toHaveLength(2);
-    expect(screen.queryByText("0 B")).toBeNull();
-    expect(screen.getByText("cleaner.coverageIncomplete")).toBeTruthy();
+    expect(screen.queryByText("cleaner.sizeUnknown")).toBeNull();
+    expect(screen.queryByText("cleaner.coverageIncomplete")).toBeNull();
+    expect(screen.queryByText(/SN128/)).toBeNull();
+    expect(screen.queryByText("cleaner.reason.library_disconnected")).toBeNull();
+  });
+
+  it("still explains data kept because a game is running", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [entry("running", { blocked_reason: "active_game" })] }) })} />);
+    fireEvent.click(screen.getByRole("button", { name: /cleaner.gameDetails/ }));
+    expect(screen.getByText("cleaner.reason.active_game")).toBeTruthy();
   });
 
   it("shows zero totals when a complete scan finds no data", () => {
