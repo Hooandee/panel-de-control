@@ -11091,6 +11091,12 @@ class Plugin:
             return
         self._offload(self._reapply_audio_sync)
 
+    def _log_audio_transition(self, action: str, **fields) -> None:
+        decky.logger.info(
+            "Audio transition %s",
+            json.dumps({"action": action, **fields}, sort_keys=True, separators=(",", ":")),
+        )
+
     def _record_audio_apply_failure(self, detail) -> None:
         self._audio_last_apply = dict(detail)
         self._audio_apply_failures += 1
@@ -11127,6 +11133,10 @@ class Plugin:
                     if callable(diagnostics)
                     else {"ok": True}
                 )
+                if not self._audio_last_apply.get("unchanged"):
+                    self._log_audio_transition(
+                        "apply", route=route, downstream=self._audio_last_apply.get("downstream")
+                    )
         except Exception as e:  # noqa: BLE001
             self._record_audio_apply_failure({
                 "ok": False,
@@ -11194,6 +11204,10 @@ class Plugin:
                     continue
                 probe = await self._offload_call(self._audio_check)
                 if not probe["active"] or probe["route"] != self._audio_route_last:
+                    self._log_audio_transition(
+                        "watch", route=probe["route"], previous=self._audio_route_last,
+                        active=probe["active"], test=self._test_sample is not None,
+                    )
                     self._audio_route_last = probe["route"]
                     self._reapply_audio()
                 self._audio_watch_resume_at = now + min(
@@ -11399,6 +11413,7 @@ class Plugin:
             self._offload(lambda: self._start_audio_test_sync(sample))
         else:
             self._test_sample = None
+            self._log_audio_transition("test_stop")
             self._offload(self._audio.stop_test)
         return await self._offload_call(self._audio_state)
 
@@ -11412,8 +11427,10 @@ class Plugin:
                 audio_tone.write_wav(path, audio_tone.render(sample))
             self._audio.start_test(path)
             self._test_sample = sample
-        except Exception:  # noqa: BLE001
+            self._log_audio_transition("test_start", sample=sample)
+        except Exception as e:  # noqa: BLE001
             self._test_sample = None
+            self._log_audio_transition("test_failed", error=type(e).__name__)
 
     async def set_audio_curve(
         self, gains: list, bass: int, scope: str, appid=None, expected_route=None

@@ -593,3 +593,16 @@ def test_audio_watcher_returns_to_normal_cadence_after_recovery(tmp_path, monkey
 
     gaps = [later - earlier for earlier, later in zip(reapplies, reapplies[1:])]
     assert gaps[-1] == 4
+
+
+def test_audio_transitions_reach_the_log(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    lines = []
+    monkeypatch.setattr(sys.modules["decky"].logger, "info", lambda *args, **kwargs: lines.append(args[0] % args[1:]))
+    asyncio.run(p.set_audio_enabled(True))
+    asyncio.run(p.set_audio_test(True, "voice"))
+    asyncio.run(p.set_audio_test(False))
+    transitions = [line for line in lines if line.startswith("Audio transition ")]
+    assert any('"action":"apply"' in line and '"route":"speaker"' in line for line in transitions)
+    assert any('"action":"test_start"' in line and '"sample":"voice"' in line for line in transitions)
+    assert any('"action":"test_stop"' in line for line in transitions)
