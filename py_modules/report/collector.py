@@ -894,7 +894,7 @@ def steam_cleaner_snapshot(diagnostics) -> dict:
     safe_event_keys = {
         "event", "operation_id", "phase", "at", "reason", "source",
         "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
-        "readback", "kind", "time", "errors", "deleted", "vdf_error",
+        "readback", "kind", "time", "errors", "deleted", "vdf_error", "blocked", "activity",
     }
 
     def bounded(value):

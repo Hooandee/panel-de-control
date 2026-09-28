@@ -6,11 +6,12 @@ import stat
 import threading
 import time
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 
 from . import filesystem, vdf
-from .activity import process_activity
+from .activity import activity_causes, process_activity
 from .service import REASONS, SteamCleanerError, clean_name, grouped_id, opaque, system_error
 
 
@@ -190,7 +191,13 @@ class ProtonCleanerService:
             }
             with self._lock:
                 self._state.update(state)
-            self._event("completed", operation_id, "scan", count=len(entries), complete=complete)
+            details = {"count": len(entries), "complete": complete}
+            blocked = Counter(entry["reason"] for entry in entries if entry.get("reason") in REASONS)
+            if blocked:
+                details["blocked"] = dict(blocked)
+            if activity["causes"]:
+                details["activity"] = activity["causes"]
+            self._event("completed", operation_id, "scan", **details)
             return self.get_state()
 
     def prepare(self, scan_id, entry_ids):
@@ -503,13 +510,13 @@ class ProtonCleanerService:
         try:
             result = self._activity_provider()
             if not isinstance(result, dict) or result.get("complete") is not True or not isinstance(result.get("paths"), (list, tuple, set)):
-                return {"complete": False, "paths": []}
+                return {"complete": False, "paths": [], "causes": activity_causes(result)}
             paths = result["paths"]
             if any(not isinstance(path, str) or not os.path.isabs(path) for path in paths):
-                return {"complete": False, "paths": []}
-            return {"complete": True, "paths": list(paths)}
+                return {"complete": False, "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
+            return {"complete": True, "paths": list(paths), "causes": []}
         except Exception:
-            return {"complete": False, "paths": []}
+            return {"complete": False, "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
 
     @staticmethod
     def _path_active(path, active_paths):
@@ -572,6 +579,14 @@ class ProtonCleanerService:
                     event["count"] = item["count"]
                 if type(item.get("complete")) is bool:
                     event["complete"] = item["complete"]
+                if isinstance(item.get("blocked"), dict):
+                    blocked = {reason: count for reason, count in item["blocked"].items() if reason in REASONS and type(count) is int and 0 < count <= 10_000}
+                    if blocked:
+                        event["blocked"] = blocked
+                if isinstance(item.get("activity"), list):
+                    causes = activity_causes({"causes": item["activity"]})
+                    if causes:
+                        event["activity"] = causes
                 allowed.append(event)
             self._diagnostic["events"] = allowed
             if allowed:

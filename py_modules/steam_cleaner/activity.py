@@ -17,15 +17,47 @@ def shader_processing(process, environment):
     return {match for source in sources for match in SHADER_CACHE.findall(os.fsdecode(source))}
 
 
+ACTIVITY_CAUSES = ("proc_unreadable", "environ_too_large", "unidentified", "fd_unreadable", "unreadable")
+MAX_CAUSES = 8
+
+
+def process_name(process):
+    try:
+        name = (process / "comm").read_text(errors="replace").strip().lower()
+    except OSError:
+        return "unknown"
+    return re.sub(r"[^a-z0-9._+-]", "_", name)[:16] or "unknown"
+
+
+def activity_causes(result):
+    causes = result.get("causes") if isinstance(result, dict) else None
+    if not isinstance(causes, list):
+        return [{"cause": "unreadable", "process": "none"}]
+    return [
+        {"cause": item["cause"], "process": item["process"]}
+        for item in causes[:MAX_CAUSES]
+        if isinstance(item, dict) and item.get("cause") in ACTIVITY_CAUSES
+        and isinstance(item.get("process"), str) and re.fullmatch(r"[a-z0-9._+-]{1,16}", item["process"])
+    ]
+
+
 def process_activity(home, proc_root="/proc", data_roots=()):
-    result = {"complete": True, "appids": [], "paths": []}
+    result = {"complete": True, "appids": [], "paths": [], "causes": []}
     appids = set()
     paths = set()
+
+    def incomplete(cause, process=None):
+        result["complete"] = False
+        entry = {"cause": cause, "process": process_name(process) if process else "none"}
+        if entry not in result["causes"] and len(result["causes"]) < MAX_CAUSES:
+            result["causes"].append(entry)
+
     try:
         uid = os.stat(home).st_uid
         processes = list(Path(proc_root).iterdir())
     except OSError:
-        return {**result, "complete": False}
+        incomplete("proc_unreadable")
+        return result
     for process in processes:
         if not process.name.isdecimal():
             continue
@@ -35,7 +67,7 @@ def process_activity(home, proc_root="/proc", data_roots=()):
             with open(process / "environ", "rb") as source:
                 raw = source.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
-                result["complete"] = False
+                incomplete("environ_too_large", process)
                 continue
             environment = dict(part.split(b"=", 1) for part in raw.split(b"\0") if b"=" in part)
             process_appids = set()
@@ -55,16 +87,16 @@ def process_activity(home, proc_root="/proc", data_roots=()):
                 appids.update(appid for _, appid in caches)
                 paths.update(os.path.realpath(path) for path, _ in caches)
                 if not caches:
-                    result["complete"] = False
+                    incomplete("unidentified", process)
             elif not process_appids and not prefix and command.startswith(("wine", "pressure-vessel")):
-                result["complete"] = False
+                incomplete("unidentified", process)
             if data_roots:
                 links = [process / "cwd"]
                 try:
                     links.extend((process / "fd").iterdir())
                 except FileNotFoundError:
                     if process.exists():
-                        result["complete"] = False
+                        incomplete("fd_unreadable", process)
                 for link in links:
                     try:
                         destination = os.readlink(link)
@@ -75,7 +107,7 @@ def process_activity(home, proc_root="/proc", data_roots=()):
         except (FileNotFoundError, ProcessLookupError):
             continue
         except (OSError, ValueError, UnicodeError):
-            result["complete"] = False
+            incomplete("unreadable", process)
     result["appids"] = sorted(appids)
     result["paths"] = sorted(paths)
     return result

@@ -16,7 +16,7 @@ def test_steam_open_is_not_a_global_game_block(tmp_path):
     process(root, 1, "steam", b"USER=private\0")
     process(root, 2, "steamwebhelper", b"USER=private\0")
     result = process_activity(tmp_path, str(root))
-    assert result == {"complete": True, "appids": [], "paths": []}
+    assert result == {"complete": True, "appids": [], "paths": [], "causes": []}
 
 
 def test_backend_observes_native_and_shortcut_activity(tmp_path):
@@ -34,7 +34,9 @@ def test_unidentified_wine_and_missing_proc_fail_closed(tmp_path):
     assert process_activity(tmp_path, str(tmp_path / "missing"))["complete"] is False
     root = tmp_path / "proc"
     process(root, 1, "wineserver", b"USER=private\0")
-    assert process_activity(tmp_path, str(root))["complete"] is False
+    result = process_activity(tmp_path, str(root))
+    assert result["complete"] is False
+    assert result["causes"] == [{"cause": "unidentified", "process": "wineserver"}]
 
 
 def test_open_cache_file_detected_even_without_steam_environment(tmp_path):
@@ -71,7 +73,7 @@ def test_steam_shader_processing_blocks_only_its_game(tmp_path):
     replay = process(root, 1, "fossilize_repla", f"USER=private\0MESA_GLSL_CACHE_DIR={cache}\0".encode())
     (replay / "cmdline").write_bytes(f"fossilize_replay\0--master-process\0{cache}/fozpipelinesv6/steam_pipeline_cache.foz\0".encode())
     result = process_activity(tmp_path, str(root))
-    assert result == {"complete": True, "appids": ["2215200"], "paths": [cache]}
+    assert result == {"complete": True, "appids": ["2215200"], "paths": [cache], "causes": []}
 
 
 def test_shader_processing_without_a_game_path_fails_closed(tmp_path):
