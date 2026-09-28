@@ -34,7 +34,7 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
-from tdp.low_battery_hold import decide_hold
+from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -139,6 +139,7 @@ _REPORT_SERVICE_URL = os.environ.get(
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
+_LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
@@ -447,6 +448,8 @@ class Plugin:
             tdp_factory.select_low_battery_hold_backend(self._device)
         )
         self._low_battery_hold_last_write_at = None
+        self._low_battery_watch_at = 0.0
+        self._low_battery_below = None
         self._low_battery_hold_cached_reassert_s = None
         self._low_battery_hold_last_failure = None
         self._low_battery_hold_recovery_pending = bool(
@@ -6092,6 +6095,40 @@ class Plugin:
         )
         return result
 
+    def _watch_low_battery_threshold(self, now, command, hold):
+        if now < self._low_battery_watch_at:
+            return
+        self._low_battery_watch_at = now + _LOW_BATTERY_WATCH_S
+        battery = self._battery.read() if not command.on_ac else {}
+        try:
+            percent = int(battery.get("percent"))
+        except (TypeError, ValueError):
+            percent = None
+        below = percent is not None and percent <= LOW_BATTERY_PERCENT
+        previous, self._low_battery_below = self._low_battery_below, below
+        if below == bool(previous):
+            return
+        read_profile = getattr(self._tdp_backend, "read_profile", None)
+        decky.logger.info(
+            "Low battery TDP threshold %s",
+            json.dumps(
+                {
+                    "below": below,
+                    "battery_percent": percent,
+                    "on_ac": command.on_ac,
+                    "hold_enabled": hold.enabled,
+                    "hold_active": hold.active,
+                    "hold_reason": hold.reason,
+                    "backend": getattr(self._tdp_backend, "name", None),
+                    "platform_profile": read_profile() if callable(read_profile) else None,
+                    "requested": dict(command.logical_requested),
+                    "observation": self._tdp_observation.as_dict(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+
     def _tdp_authoritative_reassert_s(self, hold=None):
         cadences = []
         if self._current_appid is not None:
@@ -6122,6 +6159,7 @@ class Plugin:
         command = self._capture_tdp_command("guard", bump=False)
         hold = self._low_battery_hold_decision()
         self._low_battery_hold_cached_reassert_s = hold.reassert_s
+        self._watch_low_battery_threshold(now, command, hold)
         if self._guard_low_battery_sidecar(command, hold, now):
             return
         if not self._tdp_control_on():
@@ -11487,6 +11525,10 @@ class Plugin:
     def _log_lifecycle_event(self, event) -> None:
         if event.get("event") == "resume_detected":
             self._reset_auto_session("resume")
+        if event.get("event") in ("resume_detected", "ac_changed"):
+            expedite = getattr(self._tdp_backend, "expedite_handoff_retry", None)
+            if callable(expedite):
+                expedite()
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
         log = (
             decky.logger.warning
