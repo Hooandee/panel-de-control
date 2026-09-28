@@ -70,6 +70,7 @@ export function coerceQamLayout(value: unknown): QamLayout {
   };
 }
 
+// Steam opens some native tabs by itself (Friends & Chat): the requested one stays even if hidden.
 export function resolveQamTokens(
   defaults: QamEntryToken[],
   layout: QamLayout,

@@ -639,17 +639,25 @@ class SteamCleanerService:
             return base_path / parts[0]
         return None
 
+    def _specific_mount(self, root, mounts):
+        generic = {"/", *REMOVABLE_MEDIA_ROOTS, *(str(Path(base) / self._home.name) for base in REMOVABLE_MEDIA_ROOTS)}
+        generic.update(str(Path(base).parent) for base in REMOVABLE_MEDIA_ROOTS)
+        containing = [
+            mount for mount in mounts
+            if mount not in generic and (str(root) == mount or str(root).startswith(mount + os.sep))
+        ]
+        return max(containing, key=len) if containing else None
+
     def _drive_disconnected(self, root, mounts):
         drive = self._removable_drive(root)
-        return drive is not None and (not drive.exists() or (bool(mounts) and str(drive) not in mounts))
+        if drive is None or self._specific_mount(root, mounts):
+            return False
+        return not drive.exists() or bool(mounts)
 
     def _library_label(self, root, mounts, index):
+        mount = self._specific_mount(root, mounts)
         drive = self._removable_drive(root)
-        containing = [mount for mount in mounts if mount != "/" and (str(root) == mount or str(root).startswith(mount + os.sep))]
-        if drive is not None:
-            name = drive.name
-        else:
-            name = Path(max(containing, key=len)).name if containing else root.name
+        name = Path(mount).name if mount else drive.name if drive is not None else root.name
         if name == self._home.name or name in ("", ".", "/", "home", "Users", "root"):
             return f"Steam {index + 1}"
         return clean_name(name) or f"Steam {index + 1}"

@@ -903,3 +903,17 @@ def test_disconnected_library_diagnostic_keeps_the_reason_without_paths(tmp_path
     [issue] = [event for event in cleaner.diagnostics()["events"] if event.get("source") == "library"]
     assert issue["reason"] == "library_disconnected"
     assert "mmcblk0p1" not in json.dumps(issue)
+
+
+def test_deeper_mount_keeps_its_own_name_and_stays_connected(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    data(steam)
+    disk = tmp_path / "run" / "media" / "disks" / "ssd1"
+    removable_media(tmp_path, monkeypatch, mounts=[disk])
+    disk.mkdir(parents=True)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" {{ "path" "{disk / "SteamLibrary"}" }} }}')
+
+    state = service(home).inventory()
+
+    assert state["libraries"][1]["label"] == "ssd1"
+    assert state["libraries"][1]["reason"] == "library_unavailable"
