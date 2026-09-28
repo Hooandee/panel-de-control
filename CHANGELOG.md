@@ -7,27 +7,27 @@
 
 ### Español
 
-* **TDP:** Se ha intentado arreglar que en la Legion Go 2 el TDP dejara de aplicarse o se quedara como no disponible. Si el firmware no responde, la consola pasa a su modo equilibrado y vuelve al TDP elegido en cuanto el firmware lo acepta.
+* **TDP:** Se ha intentado arreglar que en la Legion Go 2 el TDP dejara de aplicarse o se quedara como no disponible, sobre todo en CachyOS, aunque también podía pasar en SteamOS y Bazzite. Si el firmware no responde, la consola pasa a su modo equilibrado y vuelve al TDP elegido en cuanto el firmware lo acepta.
 * **Reportes:** Los reportes de problemas explican mejor qué pasa con el TDP, también al bajar del 20 % de batería.
 
 ### English
 
-* **TDP:** An attempt has been made to fix the TDP on the Legion Go 2 no longer applying or staying unavailable. If the firmware does not respond, the handheld switches to its balanced mode and goes back to the selected TDP as soon as the firmware accepts it.
+* **TDP:** An attempt has been made to fix the TDP on the Legion Go 2 no longer applying or staying unavailable, mostly on CachyOS, although it could also happen on SteamOS and Bazzite. If the firmware does not respond, the handheld switches to its balanced mode and goes back to the selected TDP as soon as the firmware accepts it.
 * **Reports:** Problem reports explain better what happens with the TDP, including when the battery drops below 20 %.
 
 ### Italiano
 
-* **TDP:** Si è cercato di risolvere il problema per cui sulla Legion Go 2 il TDP smetteva di essere applicato o restava non disponibile. Se il firmware non risponde, la console passa alla sua modalità bilanciata e torna al TDP scelto appena il firmware lo accetta.
+* **TDP:** Si è cercato di risolvere il problema per cui sulla Legion Go 2 il TDP smetteva di essere applicato o restava non disponibile, soprattutto su CachyOS, anche se poteva succedere anche su SteamOS e Bazzite. Se il firmware non risponde, la console passa alla sua modalità bilanciata e torna al TDP scelto appena il firmware lo accetta.
 * **Segnalazioni:** Le segnalazioni di problemi spiegano meglio cosa succede con il TDP, anche quando la batteria scende sotto il 20 %.
 
 ### Deutsch
 
-* **TDP:** Es wurde versucht zu beheben, dass die TDP auf der Legion Go 2 nicht mehr angewendet wurde oder nicht verfügbar blieb. Reagiert die Firmware nicht, wechselt das Gerät in ihren ausgewogenen Modus und kehrt zur gewählten TDP zurück, sobald die Firmware sie annimmt.
+* **TDP:** Es wurde versucht zu beheben, dass die TDP auf der Legion Go 2 nicht mehr angewendet wurde oder nicht verfügbar blieb, vor allem unter CachyOS, auch wenn es unter SteamOS und Bazzite ebenfalls vorkommen konnte. Reagiert die Firmware nicht, wechselt das Gerät in ihren ausgewogenen Modus und kehrt zur gewählten TDP zurück, sobald die Firmware sie annimmt.
 * **Berichte:** Problemberichte zeigen besser, was mit der TDP passiert, auch wenn der Akku unter 20 % fällt.
 
 ### Português (Brasil)
 
-* **TDP:** Foi feita uma tentativa de corrigir o TDP no Legion Go 2 deixar de ser aplicado ou ficar indisponível. Se o firmware não responder, o console passa para o modo equilibrado dele e volta ao TDP escolhido assim que o firmware o aceitar.
+* **TDP:** Foi feita uma tentativa de corrigir o TDP no Legion Go 2 deixar de ser aplicado ou ficar indisponível, principalmente no CachyOS, embora também pudesse acontecer no SteamOS e no Bazzite. Se o firmware não responder, o console passa para o modo equilibrado dele e volta ao TDP escolhido assim que o firmware o aceitar.
 * **Relatórios:** Os relatórios de problemas explicam melhor o que acontece com o TDP, inclusive quando a bateria fica abaixo de 20 %.
 
 ## [0.57.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.2...panel-de-control-v0.57.3) (2026-09-28)
