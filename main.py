@@ -1173,6 +1173,9 @@ class Plugin:
         user_home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return Path(user_home) / "homebrew" / "themes"
 
+    def _decky_plugins_root(self) -> Path:
+        return self._themes_root().parent / "plugins"
+
     def _theme_receipts_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
 
@@ -2198,6 +2201,10 @@ class Plugin:
             )
         except Exception:  # noqa: BLE001
             steam_client = {"status": "unavailable", "branch": "unknown", "version": None}
+        try:
+            plugins = report_collector.decky_plugins(str(self._decky_plugins_root()))
+        except Exception:  # noqa: BLE001
+            plugins = {"status": "unavailable", "plugins": [], "truncated": False}
         return {
             "plugin_version": read_version(),
             "decky_version": getattr(decky, "DECKY_VERSION", None),
@@ -2209,6 +2216,7 @@ class Plugin:
             "platform": dict(self._platform),
             "kernel": kernel,
             "steam_client": steam_client,
+            "decky_plugins": plugins,
         }
 
     def _report_stores(self) -> dict:

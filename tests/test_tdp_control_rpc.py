@@ -1254,6 +1254,36 @@ def test_report_environment_names_the_steam_client_channel(Plugin, monkeypatch, 
     }
 
 
+def test_report_environment_lists_installed_decky_plugins(Plugin, monkeypatch, tmp_path):
+    import main as main_mod
+
+    other = tmp_path / "homebrew" / "plugins" / "PowerTools"
+    other.mkdir(parents=True)
+    (other / "plugin.json").write_text('{"name": "PowerTools"}')
+    (other / "package.json").write_text('{"version": "2.0.3"}')
+    monkeypatch.delenv("DECKY_HOME", raising=False)
+    monkeypatch.setattr(main_mod.decky, "DECKY_USER_HOME", str(tmp_path), raising=False)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["decky_plugins"]["plugins"] == [
+        {"name": "PowerTools", "version": "2.0.3"},
+    ]
+
+
+def test_report_environment_survives_a_failing_plugin_listing(Plugin, monkeypatch):
+    import main as main_mod
+
+    def boom(_root):
+        raise RuntimeError("listing")
+
+    monkeypatch.setattr(main_mod.report_collector, "decky_plugins", boom)
+    plugin = Plugin()
+    plugin._init()
+
+    assert plugin._report_environment()["decky_plugins"]["status"] == "unavailable"
+
+
 def test_report_environment_survives_a_failing_steam_client_probe(Plugin, monkeypatch):
     import main as main_mod
 

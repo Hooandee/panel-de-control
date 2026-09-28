@@ -5,6 +5,7 @@ from report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
+    decky_plugins,
     frontend_crash_diagnostics,
     kernel_logs,
     redact_obj,
@@ -979,3 +980,66 @@ def test_sysfs_snapshot_is_size_capped(tmp_path):
         _mk(os.path.join(root, f"sys/class/hwmon/hwmon{i}/name"), f"chip{i}\n")
     snap = sysfs_snapshot(root=root)
     assert len(snap["hwmon"]) <= 32  # chip cap, no recursive/unbounded sweep
+
+
+# ---- decky_plugins ---------------------------------------------------------
+def _plugin(root, folder, name=None, version=None):
+    path = root / folder
+    path.mkdir(parents=True)
+    if name is not None:
+        (path / "plugin.json").write_text(f'{{"name": "{name}", "author": "x"}}')
+    if version is not None:
+        (path / "package.json").write_text(f'{{"version": "{version}"}}')
+    return path
+
+
+def test_decky_plugins_lists_every_installed_plugin_with_its_version(tmp_path):
+    _plugin(tmp_path, "PowerTools", name="PowerTools", version="2.0.3")
+    _plugin(tmp_path, "Panel de Control", name="Panel de Control", version="0.57.2")
+
+    assert decky_plugins(str(tmp_path)) == {
+        "status": "captured",
+        "plugins": [
+            {"name": "Panel de Control", "version": "0.57.2"},
+            {"name": "PowerTools", "version": "2.0.3"},
+        ],
+        "truncated": False,
+    }
+
+
+def test_decky_plugins_falls_back_to_folder_name_and_unknown_version(tmp_path):
+    _plugin(tmp_path, "SimpleDeckyTDP")
+    (tmp_path / "SimpleDeckyTDP" / "plugin.json").write_text("{not json")
+
+    assert decky_plugins(str(tmp_path))["plugins"] == [
+        {"name": "SimpleDeckyTDP", "version": None},
+    ]
+
+
+def test_decky_plugins_skips_files_and_symlinks(tmp_path):
+    real = _plugin(tmp_path / "elsewhere", "Real", name="Real", version="1")
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "stray.txt").write_text("x")
+    os.symlink(real, plugins / "Linked")
+
+    assert decky_plugins(str(plugins))["plugins"] == []
+
+
+def test_decky_plugins_caps_the_list(tmp_path):
+    for index in range(report_collector._MAX_DECKY_PLUGINS + 3):
+        _plugin(tmp_path, f"p{index:03d}", name=f"p{index:03d}", version="1")
+
+    result = decky_plugins(str(tmp_path))
+
+    assert len(result["plugins"]) == report_collector._MAX_DECKY_PLUGINS
+    assert result["truncated"] is True
+
+
+def test_decky_plugins_missing_dir_is_unavailable():
+    assert decky_plugins("/nonexistent/plugins") == {
+        "status": "unavailable",
+        "plugins": [],
+        "truncated": False,
+    }
+    assert decky_plugins(None)["status"] == "unavailable"
