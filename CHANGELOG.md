@@ -5,9 +5,25 @@
 ## [0.57.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.1...panel-de-control-v0.57.2) (2026-09-28)
 
 
-### Bug Fixes
+### Español
 
-* **report:** include the Steam client branch and build in bug reports ([#785](https://github.com/Hooandee/panel-de-control/issues/785)) ([e010f74](https://github.com/Hooandee/panel-de-control/commit/e010f74e6984ce70d12d8b45abc1db26481d3620))
+* **Reportes:** Los reportes de problemas indican ahora qué versión de Steam usas, estable o beta. Así se ve enseguida si un fallo en otro plugin, como SteamGridDB o ProtonDB Badges, viene de la beta de Steam y no de Panel.
+
+### English
+
+* **Reports:** Problem reports now say which Steam version you're on, stable or beta. That makes it clear right away when a problem in another plugin, like SteamGridDB or ProtonDB Badges, comes from the Steam beta and not from Panel.
+
+### Italiano
+
+* **Segnalazioni:** Le segnalazioni di problemi ora indicano quale versione di Steam usi, stabile o beta. Così si capisce subito se un problema in un altro plugin, come SteamGridDB o ProtonDB Badges, dipende dalla beta di Steam e non da Panel.
+
+### Deutsch
+
+* **Berichte:** Problemberichte zeigen jetzt, welche Steam-Version du nutzt, stabil oder Beta. So ist sofort klar, ob ein Fehler in einem anderen Plugin wie SteamGridDB oder ProtonDB Badges von der Steam-Beta kommt und nicht von Panel.
+
+### Português (Brasil)
+
+* **Relatórios:** Os relatórios de problemas agora mostram qual versão do Steam você usa, estável ou beta. Assim dá para ver na hora se um erro em outro plugin, como SteamGridDB ou ProtonDB Badges, vem da beta do Steam e não do Panel.
 
 ## [0.57.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.0...panel-de-control-v0.57.1) (2026-09-28)
 
