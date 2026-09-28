@@ -63,3 +63,26 @@ def test_unreadable_live_process_cannot_be_declared_idle(tmp_path, monkeypatch):
 
     monkeypatch.setattr(os, "stat", denied)
     assert process_activity(tmp_path, str(root))["complete"] is False
+
+
+def test_steam_shader_processing_blocks_only_its_game(tmp_path):
+    root = tmp_path / "proc"
+    cache = os.path.realpath(tmp_path) + "/Steam/steamapps/shadercache/2215200"
+    replay = process(root, 1, "fossilize_repla", f"USER=private\0MESA_GLSL_CACHE_DIR={cache}\0".encode())
+    (replay / "cmdline").write_bytes(f"fossilize_replay\0--master-process\0{cache}/fozpipelinesv6/steam_pipeline_cache.foz\0".encode())
+    result = process_activity(tmp_path, str(root))
+    assert result == {"complete": True, "appids": ["2215200"], "paths": [cache]}
+
+
+def test_shader_processing_without_a_game_path_fails_closed(tmp_path):
+    root = tmp_path / "proc"
+    replay = process(root, 1, "fossilize_repla", b"USER=private\0")
+    (replay / "cmdline").write_bytes(b"fossilize_replay\0--master-process\0/tmp/cache.foz\0")
+    assert process_activity(tmp_path, str(root))["complete"] is False
+
+
+def test_wine_is_not_identified_from_its_arguments(tmp_path):
+    root = tmp_path / "proc"
+    wine = process(root, 1, "wine64", b"USER=private\0")
+    (wine / "cmdline").write_bytes(b"wine64\0/library/steamapps/compatdata/10/pfx/drive_c/game.exe\0")
+    assert process_activity(tmp_path, str(root))["complete"] is False

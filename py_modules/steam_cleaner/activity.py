@@ -1,5 +1,20 @@
 import os
+import re
 from pathlib import Path
+
+SHADER_CACHE = re.compile(r"(/[^\0]*?/steamapps/shadercache/([0-9]{1,10}))(?=/|\0|$)")
+
+
+def shader_processing(process, environment):
+    # Steam starts background shader processing without SteamAppId; its cache
+    # directory names the game it works on.
+    try:
+        with open(process / "cmdline", "rb") as source:
+            arguments = source.read(64 * 1024)
+    except FileNotFoundError:
+        arguments = b""
+    sources = (environment.get(b"MESA_GLSL_CACHE_DIR", b""), arguments)
+    return {match for source in sources for match in SHADER_CACHE.findall(os.fsdecode(source))}
 
 
 def process_activity(home, proc_root="/proc", data_roots=()):
@@ -35,7 +50,13 @@ def process_activity(home, proc_root="/proc", data_roots=()):
             if prefix:
                 paths.add(os.path.realpath(os.fsdecode(prefix)))
             command = (process / "comm").read_text().strip().lower()
-            if not process_appids and not prefix and command.startswith(("wine", "fossilize", "pressure-vessel")):
+            if not process_appids and not prefix and command.startswith("fossilize"):
+                caches = shader_processing(process, environment)
+                appids.update(appid for _, appid in caches)
+                paths.update(os.path.realpath(path) for path, _ in caches)
+                if not caches:
+                    result["complete"] = False
+            elif not process_appids and not prefix and command.startswith(("wine", "pressure-vessel")):
                 result["complete"] = False
             if data_roots:
                 links = [process / "cwd"]
