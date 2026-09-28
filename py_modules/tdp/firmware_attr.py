@@ -322,6 +322,7 @@ class FirmwareAttrBackend(TDPBackend):
         )
         if (
             mismatches
+            and all("=unavailable" not in mismatch for mismatch in mismatches)
             and restore_rails
             and allow_rearm
             and self._rearm_custom_on_unapplied_writes
@@ -541,6 +542,11 @@ class FirmwareAttrBackend(TDPBackend):
             for surface, rail, path in surfaces
         )
 
+    def _writes_not_taken(self, observation, surfaces, snapshot, targets):
+        if self._rearm_custom_on_unapplied_writes:
+            return self._writes_unapplied(observation, surfaces, snapshot, targets)
+        return self._writes_ignored(observation, surfaces, snapshot, targets)
+
     def _writes_unapplied(self, observation, surfaces, snapshot, targets):
         observed = observation.surfaces
         changing = [
@@ -552,6 +558,11 @@ class FirmwareAttrBackend(TDPBackend):
             (reading := observed.get(surface, {}).get(rail)) is not None
             and reading.applied_w is not None
             and reading.applied_w != targets[rail]
+            and not (
+                reading.max_w is not None
+                and targets[rail] > reading.max_w
+                and reading.applied_w == reading.max_w
+            )
             for surface, rail in changing
         )
 
@@ -902,13 +913,7 @@ class FirmwareAttrBackend(TDPBackend):
             not failed
             and mismatches
             and self._custom_rearm_allowed(previous_profile)
-            and (
-                (
-                    self._rearm_custom_on_unapplied_writes
-                    and self._writes_unapplied(observation, surfaces, snapshot, targets)
-                )
-                or self._writes_ignored(observation, surfaces, snapshot, targets)
-            )
+            and self._writes_not_taken(observation, surfaces, snapshot, targets)
         ):
             rearmed = self._rearm_custom(surfaces, targets)
             observation = self.observe()
@@ -1089,8 +1094,9 @@ class FirmwareAttrBackend(TDPBackend):
             diagnostics["write_circuit_open"] = self._write_circuit_open
         if isinstance(self._runtime_lock_payload, dict):
             diagnostics["transaction_lock"] = {
-                key: self._runtime_lock_payload.get(key)
+                key: self._runtime_lock_payload[key]
                 for key in ("state", "snapshot", "profile", "custom_rearm_attempted")
+                if key in self._runtime_lock_payload
             }
             if self._locked_since is not None:
                 diagnostics["transaction_lock"]["locked_s"] = round(
