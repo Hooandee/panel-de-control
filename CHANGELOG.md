@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## [0.57.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.2...panel-de-control-v0.57.3) (2026-09-28)
+
+
+### Español
+
+* **Limpieza:** Se ha intentado arreglar que Limpieza no dejara limpiar nada, y ya no muestra avisos innecesarios.
+* **Ecualizador:** Se ha intentado arreglar que el TDP bajara con el ecualizador activo en la Steam Deck OLED con overclock.
+* **Reportes:** Los reportes de problemas son más completos.
+
+### English
+
+* **Cleanup:** An attempt has been made to fix Cleanup not letting you clean anything, and it no longer shows unnecessary warnings.
+* **Equalizer:** An attempt has been made to fix the TDP dropping with the equalizer on for an overclocked Steam Deck OLED.
+* **Reports:** Problem reports are more complete.
+
+### Italiano
+
+* **Pulizia:** Si è cercato di risolvere il problema per cui Pulizia non permetteva di pulire nulla, e non mostra più avvisi inutili.
+* **Equalizzatore:** Si è cercato di risolvere il calo del TDP con l'equalizzatore attivo su Steam Deck OLED in overclock.
+* **Segnalazioni:** Le segnalazioni di problemi sono più complete.
+
+### Deutsch
+
+* **Bereinigung:** Es wurde versucht zu beheben, dass sich mit der Bereinigung nichts bereinigen ließ, und sie zeigt keine unnötigen Warnungen mehr.
+* **Equalizer:** Es wurde versucht zu beheben, dass die TDP bei einem übertakteten Steam Deck OLED mit aktivem Equalizer abfiel.
+* **Berichte:** Problemberichte sind vollständiger.
+
+### Português (Brasil)
+
+* **Limpeza:** Foi feita uma tentativa de corrigir a Limpeza não deixar limpar nada, e ela não mostra mais avisos desnecessários.
+* **Equalizador:** Foi feita uma tentativa de corrigir a queda do TDP com o equalizador ativo no Steam Deck OLED com overclock.
+* **Relatórios:** Os relatórios de problemas estão mais completos.
+
 ## [0.57.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.1...panel-de-control-v0.57.2) (2026-09-28)
 
 
