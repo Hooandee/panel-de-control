@@ -557,13 +557,17 @@ def test_exact_legion_go_2_83n0_recovers_lock_by_rearming_custom(
     assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_recovered"
 
 
-def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
-    tmp_path,
-    monkeypatch,
-):
+def _stuck_go_2_lock(tmp_path, monkeypatch, choices=None):
+    clock = {"now": 1000.0}
     monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("tdp.firmware_attr.time.monotonic", lambda: clock["now"])
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    if choices is not None:
+        with open(
+            os.path.join(root, "sys/class/platform-profile/platform-profile-0/choices"), "w",
+        ) as handle:
+            handle.write(choices)
     lock_path = _arm_lenovo_transaction_lock(
         root,
         "custom",
@@ -576,6 +580,96 @@ def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
     backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     firmware = _go_2_firmware_out_of_custom(backend, root, rail_writes_fail=True)
     firmware["arms"] = False
+    return backend, firmware, lock_path, clock
+
+
+def test_exact_legion_go_2_83n0_hands_off_to_balanced_when_rearm_fails(
+    tmp_path,
+    monkeypatch,
+):
+    backend, firmware, lock_path, _clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "firmware handed off to balanced"}
+    assert backend.read_profile() == "balanced"
+    assert backend.ready() is True
+    assert not os.path.exists(lock_path)
+    assert "transaction_lock" not in backend.diagnostics()
+    assert backend.diagnostics()["firmware_handoff"] == {
+        "profile": "balanced",
+        "attempts": 0,
+        "retry_in_s": 30,
+    }
+    assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_not_recovered"
+
+
+def test_exact_legion_go_2_83n0_handoff_retries_with_backoff_until_firmware_answers(
+    tmp_path,
+    monkeypatch,
+):
+    backend, firmware, lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    rail_writes = []
+    model_write = backend._write
+
+    def counting_write(path, value):
+        if path.endswith("current_value"):
+            rail_writes.append(value)
+        return model_write(path, value)
+
+    backend._write = counting_write
+
+    waiting = backend.set_levels(18, 18, 18, ac=True)
+    assert waiting.ok is False
+    assert "retry pending" in waiting.detail
+    assert rail_writes == []
+
+    clock["now"] += 31
+    still_stuck = backend.set_levels(18, 18, 18, ac=True)
+    assert still_stuck.ok is False
+    assert "rollback confirmed" in still_stuck.detail
+    assert backend.read_profile() == "balanced"
+    assert not os.path.exists(lock_path)
+    assert backend.diagnostics()["firmware_handoff"]["attempts"] == 1
+    assert backend.diagnostics()["firmware_handoff"]["retry_in_s"] == 60
+
+    firmware["arms"] = True
+    clock["now"] += 31
+    assert "retry pending" in backend.set_levels(18, 18, 18, ac=True).detail
+    clock["now"] += 30
+    answered = backend.set_levels(18, 18, 18, ac=True)
+
+    assert answered.ok is True
+    assert backend.read_applied() == 18
+    assert backend.read_profile() == "custom"
+    assert "firmware_handoff" not in backend.diagnostics()
+
+
+def test_exact_legion_go_2_83n0_handoff_retries_at_once_for_a_new_request(
+    tmp_path,
+    monkeypatch,
+):
+    backend, firmware, _lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    clock["now"] += 31
+    backend.set_levels(18, 18, 18, ac=True)
+    firmware["arms"] = True
+
+    assert "retry pending" in backend.set_levels(18, 18, 18, ac=True).detail
+    changed = backend.set_levels(12, 12, 12, ac=True)
+
+    assert changed.ok is True
+    assert backend.read_applied() == 12
+
+
+def test_exact_legion_go_2_83n0_keeps_lock_when_balanced_is_unavailable(
+    tmp_path,
+    monkeypatch,
+):
+    backend, firmware, lock_path, _clock = _stuck_go_2_lock(
+        tmp_path, monkeypatch, choices="low-power performance custom",
+    )
 
     first = backend.recover_runtime_transaction()
     backend._last_custom_rearm_at = None
@@ -585,7 +679,7 @@ def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
     assert "pl1!EBUSY" in first["detail"]
     assert "custom re-arm not confirmed" in first["detail"]
     assert "custom re-arm" not in second["detail"]
-    assert firmware["profiles"].count("balanced") == 1
+    assert firmware["profiles"].count("low-power") == 1
     assert backend.ready() is False
     assert os.path.exists(lock_path)
     lock = backend.diagnostics()["transaction_lock"]
@@ -595,7 +689,7 @@ def test_exact_legion_go_2_83n0_keeps_lock_when_custom_rearm_fails(
     assert lock["locked_s"] >= 0
     with open(lock_path) as handle:
         assert json.load(handle)["custom_rearm_attempted"] is True
-    assert backend.diagnostics()["custom_rearm"]["last"] == "rollback_not_recovered"
+    assert "firmware_handoff" not in backend.diagnostics()
 
 
 def test_exact_legion_go_2_83n0_unreadable_rail_does_not_rearm_on_recovery(
