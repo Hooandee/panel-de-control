@@ -17,7 +17,15 @@ interface NavigationController {
   FocusElement?(element: HTMLElement): unknown;
 }
 
+interface NavigationNode {
+  m_element?: unknown;
+  m_rgChildren?: unknown;
+  BTakeFocus?(source?: number): unknown;
+}
+
 interface NavigationTree {
+  m_Root?: NavigationNode | null;
+  m_rgChildNavTrees?: unknown;
   RegisterGlobalButtonHandler?(
     button: number,
     handler: (event?: unknown) => boolean,
@@ -44,6 +52,41 @@ function getSteamNavigationController(): NavigationController | null | undefined
   return scope.GamepadNavTree?.m_context?.m_controller ?? scope.FocusNavController;
 }
 
+const MAX_SEARCHED_NODES = 20_000;
+const GAMEPAD_FOCUS_SOURCE = 3;
+
+// Current Steam builds dropped FocusNavController.FocusElement and ignore DOM focus(); the only
+// way to move gamepad focus is through the navigation node that owns the element.
+function findNavigationNode(tree: NavigationTree, element: HTMLElement): NavigationNode | null {
+  const pending: unknown[] = [tree];
+  const seen = new Set<unknown>();
+  let searched = 0;
+  while (pending.length > 0 && searched < MAX_SEARCHED_NODES) {
+    const current = pending.pop();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    searched += 1;
+    const candidate = current as NavigationNode & NavigationTree;
+    if (candidate.m_element === element) return candidate;
+    if (candidate.m_Root) pending.push(candidate.m_Root);
+    for (const list of [candidate.m_rgChildren, candidate.m_rgChildNavTrees]) {
+      if (Array.isArray(list)) pending.push(...list);
+    }
+  }
+  return null;
+}
+
+function focusThroughNavigationNode(
+  controller: NavigationController | null | undefined,
+  element: HTMLElement,
+): boolean {
+  const tree = controller?.GetActiveNavTree?.();
+  if (!tree) return false;
+  const node = findNavigationNode(tree, element);
+  if (typeof node?.BTakeFocus !== "function") return false;
+  return Boolean(node.BTakeFocus(GAMEPAD_FOCUS_SOURCE));
+}
+
 function consumeInput(event: unknown): void {
   if (!event || typeof event !== "object") return;
   for (const method of ["preventDefault", "stopPropagation", "stopImmediatePropagation"] as const) {
@@ -64,6 +107,8 @@ export function createThemeNavigationAccess({
         if (typeof controller?.FocusElement === "function") {
           controller.FocusElement(element);
           hostFocused = true;
+        } else if (focusThroughNavigationNode(controller, element)) {
+          return true;
         }
       } catch {
         hostFocused = false;
