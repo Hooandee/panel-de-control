@@ -221,6 +221,19 @@ now capped to the real 20 W ASUS rates it at. The **Legion Go 2** with the plain
 Extreme) is now detected by name instead of as a generic device. For anything we do not own, reports
 from the Settings tab are what confirm how it really behaves.
 
+The **OneXPlayer X2 Mini Pro** (Ryzen AI Max+ 388, 6 to 55 W on battery and up to 80 W on the
+charger; the 120 W external liquid cooler stays out for now) and the **OneXPlayer 3** (Intel Arc
+G3 Extreme, up to 35 W) are recognised too, both experimental.
+
+**Desktop PCs** (anything that isn't the Steam Machine) no longer show up as a generic device.
+They're recognised by having no battery and a non-portable chassis, and get desktop mode: CPU
+power on Intel and dedicated AMD graphics power, never past the limits their firmware sets, plus
+the motherboard fans on the curve. Many distros don't load the driver for those fans, so the Fans
+tab has a switch that loads it when the system ships it. The graphics fan always stays automatic:
+before this, on some desktops with a dedicated AMD card, the generic curve ended up driving it
+and could hold it too low. All of this is experimental and every motherboard is different, so
+reports from Settings are what tell what really responds.
+
 ### Notes
 
 1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no

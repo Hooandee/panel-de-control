@@ -13,7 +13,7 @@ def normalize_desktop_settings(settings: dict) -> bool:
             if settings.get("desktop_power_mode") in _POWER_MODES
             else "free"
         ),
-        "desktop_cpu_w": _bounded_int(settings.get("desktop_cpu_w"), 23, 4, 30),
+        "desktop_cpu_w": _bounded_int(settings.get("desktop_cpu_w"), 23, 4, 500),
         "desktop_gpu_w": _bounded_int(settings.get("desktop_gpu_w"), 80, 1, 1000),
         "desktop_prev_tdp_control": (
             settings.get("desktop_prev_tdp_control")
@@ -55,8 +55,11 @@ def recognised_desktop_migration_pending(settings: dict, device) -> bool:
     )
 
 
+_AUTOMATIC_DESKTOPS = frozenset({"steam_machine", "desktop_pc"})
+
+
 def migrate_desktop_defaults(settings: dict, device) -> bool:
-    """Seed Fremont once into pass-through mode without changing any other host.
+    """Seed automatic desktops once into pass-through mode without changing any other host.
 
     Existing users keep every later choice because the marker is durable. Generic
     desktop opt-in also stays a pure UI/capability choice and never rewrites the
@@ -65,6 +68,7 @@ def migrate_desktop_defaults(settings: dict, device) -> bool:
     key = getattr(device, "key", None)
     if recognised_desktop_migration_pending(settings, device):
         return False
+    changed = False
     if (
         key != "steam_machine"
         and not getattr(device, "is_generic", False)
@@ -76,11 +80,11 @@ def migrate_desktop_defaults(settings: dict, device) -> bool:
         settings["desktop_prev_tdp_control"] = None
         if isinstance(previous, bool):
             settings["tdp_control_enabled"] = previous
-        return True
-    if key != "steam_machine":
-        return False
+        changed = True
+    if key not in _AUTOMATIC_DESKTOPS:
+        return changed
     if settings.get("_desktop_defaults_migrated") is True:
-        return False
+        return changed
     settings["desktop_power_mode"] = "free"
     settings["tdp_control_enabled"] = False
     settings["_desktop_defaults_migrated"] = True

@@ -572,6 +572,17 @@ def _hwmon_ppt_nodes(chip_dir: str) -> dict:
     return values
 
 
+def _hwmon_fan_nodes(chip_dir: str) -> dict:
+    values = {}
+    for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input"):
+        for path in sorted(_glob(chip_dir, pat)):
+            values[os.path.basename(path)] = {
+                "value": read_str(path),
+                "writable": _mode_writable(path),
+            }
+    return values
+
+
 def _snap_hwmon(root: str) -> list[dict]:
     out: list[dict] = []
     for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*"))[:_SNAP_MAX_CHIPS]:
@@ -583,6 +594,9 @@ def _snap_hwmon(root: str) -> list[dict]:
             ppt_nodes = _hwmon_ppt_nodes(chip)
             if ppt_nodes:
                 entry["ppt_nodes"] = ppt_nodes
+            fan_nodes = _hwmon_fan_nodes(chip)
+            if fan_nodes:
+                entry["fan_nodes"] = fan_nodes
             out.append(entry)
         except Exception:  # noqa: BLE001
             continue
@@ -764,8 +778,87 @@ def _snap_cpu_gpu_power(root: str) -> dict:
     return out
 
 
+def _snap_desktop(root: str) -> dict:
+    """What a desktop PC can be controlled through: board fan drivers, CPU RAPL
+    bounds, AMD GPU power/overdrive/fan surfaces and the desktop detection inputs.
+    Values and permissions only; no device names that could carry MAC addresses."""
+    from desktop.board_fans import (
+        available_modules, board_fan_channels, loaded_modules,
+    )
+
+    out: dict = {
+        "board_fans": {
+            "available": available_modules(root),
+            "loaded": loaded_modules(root),
+            "channels": board_fan_channels(root),
+        },
+        "power_supplies": [],
+        "rapl": [],
+        "amdgpu": [],
+        "cpu": {},
+    }
+    cmdline = read_str(os.path.join(root, "proc/cmdline")) or ""
+    out["acpi_enforce_resources"] = next(
+        (token.split("=", 1)[1] for token in cmdline.split()
+         if token.startswith("acpi_enforce_resources=")), None)
+    for supply in sorted(_glob(root, "sys/class/power_supply/*"))[:_SNAP_MAX_CHIPS]:
+        out["power_supplies"].append({
+            "type": read_str(os.path.join(supply, "type")),
+            "scope": read_str(os.path.join(supply, "scope")),
+        })
+    for surface in sorted(
+        _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
+    )[:_SNAP_MAX_CHIPS]:
+        constraints = []
+        for index in range(4):
+            limit = os.path.join(surface, f"constraint_{index}_power_limit_uw")
+            if not os.path.exists(limit):
+                continue
+            constraints.append({
+                "name": read_str(os.path.join(surface, f"constraint_{index}_name")),
+                "limit_uw": read_str(limit),
+                "max_uw": read_str(os.path.join(surface, f"constraint_{index}_max_power_uw")),
+                "writable": _mode_writable(limit),
+            })
+        if constraints:
+            out["rapl"].append({
+                "surface": os.path.basename(surface),
+                "name": read_str(os.path.join(surface, "name")),
+                "enabled": read_str(os.path.join(surface, "enabled")),
+                "constraints": constraints,
+            })
+    for device in sorted(_glob(root, "sys/class/drm/card[0-9]*/device"))[:_SNAP_MAX_CHIPS]:
+        if read_str(os.path.join(device, "vendor")) != "0x1002":
+            continue
+        hwmon = next(iter(sorted(_glob(device, "hwmon/hwmon*"))), None)
+        out["amdgpu"].append({
+            "card": os.path.basename(os.path.dirname(device)),
+            "boot_vga": read_str(os.path.join(device, "boot_vga")),
+            "power_cap": {
+                leaf: read_str(os.path.join(hwmon, leaf))
+                for leaf in ("power1_cap", "power1_cap_min", "power1_cap_max",
+                             "power1_cap_default")
+            } if hwmon else None,
+            "power_cap_writable": bool(hwmon) and _mode_writable(
+                os.path.join(hwmon, "power1_cap")),
+            "overdrive": os.path.exists(os.path.join(device, "pp_od_clk_voltage")),
+            "fan_ctrl": sorted(_listdir(os.path.join(device, "gpu_od/fan_ctrl"))),
+        })
+    out["ppfeaturemask"] = read_str(
+        os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"))
+    cpu = os.path.join(root, "sys/devices/system/cpu")
+    out["cpu"] = {
+        "amd_pstate": read_str(os.path.join(cpu, "amd_pstate/status")),
+        "governors": read_str(os.path.join(
+            cpu, "cpufreq/policy0/scaling_available_governors")),
+        "epp": read_str(os.path.join(
+            cpu, "cpufreq/policy0/energy_performance_available_preferences")),
+    }
+    return out
+
+
 _DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
-               "product_name", "product_version", "product_family")
+               "product_name", "product_version", "product_family", "chassis_type")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
 _EC_IO = "sys/kernel/debug/ec/ec0/io"
 _EC_DUMP_BYTES = 256
@@ -862,7 +955,7 @@ def sysfs_snapshot(
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
-                  "ec": {}}
+                  "desktop": {}, "ec": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -903,6 +996,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["desktop"] = _snap_desktop(root)
     except Exception:  # noqa: BLE001
         pass
     try:

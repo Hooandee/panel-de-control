@@ -3,6 +3,13 @@ import { DeviceInfo, isUnvalidated } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
+const DESKTOP_PC_KEY = "desktop_pc";
+
+const hintKey = (device: DeviceInfo): string => {
+  if (device.key === DESKTOP_PC_KEY) return "device.desktop.hint";
+  return device.is_generic ? "device.generic.hint" : "device.experimental.hint";
+};
+
 export const DeviceHeader: FC<{
   device: DeviceInfo;
   presentation?: "full" | "compact";
@@ -38,7 +45,9 @@ export const DeviceHeader: FC<{
           textOverflow: "ellipsis",
         }}
       >
-        {t("device.detected", { name: device.display_name })}
+        {t("device.detected", {
+          name: device.key === DESKTOP_PC_KEY ? t("device.desktop.name") : device.display_name,
+        })}
       </span>
       {presentation === "full" ? (
         <>
@@ -61,8 +70,8 @@ export const DeviceHeader: FC<{
       {isUnvalidated(device) && (
         <span
           role="img"
-          aria-label={t(device.is_generic ? "device.generic.hint" : "device.experimental.hint")}
-          title={t(device.is_generic ? "device.generic.hint" : "device.experimental.hint")}
+          aria-label={t(hintKey(device))}
+          title={t(hintKey(device))}
           style={{
             width: 6,
             height: 6,

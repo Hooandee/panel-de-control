@@ -2,7 +2,13 @@ import dataclasses
 import os
 
 from cpu.info import read_cpu_model
-from device_profiles import DEVICE_TABLE, GENERIC, DeviceProfile
+from device_profiles import DESKTOP_PC, DEVICE_TABLE, GENERIC, DeviceProfile
+
+# SMBIOS chassis types that can carry a battery or be held (portable, laptop,
+# notebook, hand held, docking station, sub notebook, tablet, convertible,
+# detachable). Many handheld BIOSes report "Desktop", so chassis alone never
+# proves a desktop: the host must also lack a system battery.
+_PORTABLE_CHASSIS = frozenset({"8", "9", "10", "11", "12", "14", "30", "31", "32"})
 
 def _read_dmi(root: str, field: str) -> str:
     try:
@@ -28,6 +34,36 @@ def _read_vendor(root: str = "/") -> str | None:
     return None
 
 
+def _has_system_battery(root: str) -> bool | None:
+    supplies = os.path.join(root, "sys/class/power_supply")
+    try:
+        names = os.listdir(supplies)
+    except OSError:
+        return None
+    for name in names:
+        base = os.path.join(supplies, name)
+        if _read_file(os.path.join(base, "type")) != "Battery":
+            continue
+        if _read_file(os.path.join(base, "scope")) != "Device":
+            return True
+    return False
+
+
+def _read_file(path: str) -> str:
+    try:
+        with open(path) as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def _is_desktop_host(root: str) -> bool:
+    chassis = _read_dmi(root, "chassis_type")
+    if not chassis or chassis in _PORTABLE_CHASSIS:
+        return False
+    return _has_system_battery(root) is False
+
+
 def _generic_for(root: str) -> DeviceProfile:
     """GENERIC with the real silicon vendor + chip name read from the host, so an
     unrecognised handheld still picks the right per-vendor backend chain and shows
@@ -35,7 +71,8 @@ def _generic_for(root: str) -> DeviceProfile:
     case) when cpuinfo is unreadable."""
     vendor = _read_vendor(root) or GENERIC.vendor
     chip = read_cpu_model(root) or GENERIC.chip
-    return dataclasses.replace(GENERIC, vendor=vendor, chip=chip)
+    base = DESKTOP_PC if _is_desktop_host(root) else GENERIC
+    return dataclasses.replace(base, vendor=vendor, chip=chip)
 
 
 def gpu_generation(vendor: str, chip: str) -> str:

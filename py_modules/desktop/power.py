@@ -37,6 +37,7 @@ class DesktopPowerCoordinator:
         boot_id=None,
         device_key=None,
         legacy_device_keys=None,
+        firmware_relative=False,
     ) -> None:
         self._cpu = cpu_backend
         self._gpu = gpu_cap
@@ -54,6 +55,9 @@ class DesktopPowerCoordinator:
         self._gpu_owned = False
         self._active = False
         self._mode = "free"
+        # Unknown desktops: ranges and presets come from what the CPU and GPU
+        # firmware report, never from the Steam Machine's fixed watts.
+        self._firmware_relative = bool(firmware_relative)
         self._load_persisted_state(persisted_state)
 
     def can_replace_cpu_backend(self) -> bool:
@@ -194,8 +198,36 @@ class DesktopPowerCoordinator:
         self._durable_state_reason = None
         return True, None
 
+    def _cpu_bounds(self) -> tuple[int, int]:
+        if self._firmware_relative and getattr(self._cpu, "supported", False):
+            limits = self._cpu.get_limits()
+            return limits.min_w, limits.max_ac_w
+        return 4, 30
+
+    def _presets(self, gpu: dict) -> dict:
+        if not self._firmware_relative:
+            return PRESETS
+        cpu_min, cpu_max = self._cpu_bounds()
+        gpu_min = gpu.get("min_w")
+        gpu_ref = gpu.get("default_w") or gpu.get("max_w")
+
+        def cpu_at(fraction):
+            return max(cpu_min, round(cpu_max * fraction))
+
+        def gpu_at(fraction):
+            if gpu_min is None or gpu_ref is None:
+                return None
+            return round(gpu_min + (gpu_ref - gpu_min) * fraction)
+
+        return {
+            "silent": (cpu_at(0.5), gpu_at(0.0)),
+            "balanced": (cpu_at(0.75), gpu_at(0.5)),
+            "performance": (cpu_max, gpu_at(1.0)),
+        }
+
     def state(self) -> dict:
         gpu = self._gpu.state()
+        cpu_min, cpu_max = self._cpu_bounds()
         return {
             "supported": bool(
                 getattr(self._cpu, "supported", False)
@@ -209,8 +241,8 @@ class DesktopPowerCoordinator:
             "mode": self._mode,
             "cpu_w": self._cpu.read_applied() if getattr(self._cpu, "supported", False) else None,
             "gpu_w": gpu["current_w"],
-            "cpu_min_w": 4,
-            "cpu_max_w": 30,
+            "cpu_min_w": cpu_min,
+            "cpu_max_w": cpu_max,
             "gpu_min_w": gpu["min_w"],
             "gpu_max_w": gpu["max_w"],
             "presets": {
@@ -219,14 +251,14 @@ class DesktopPowerCoordinator:
                     "cpu_policy": CPU_POLICIES[key] if self._cpu_policy.supported else None,
                     "gpu_w": gpu_w if gpu["supported"] else None,
                 }
-                for key, (cpu, gpu_w) in PRESETS.items()
+                for key, (cpu, gpu_w) in self._presets(gpu).items()
             },
         }
 
     def apply(self, mode: str) -> dict:
         if mode == "free":
             return self.restore()
-        values = PRESETS.get(mode)
+        values = self._presets(self._gpu.state()).get(mode)
         if values is None:
             return {"ok": False, "mode": self._mode, "cpu_w": None, "gpu_w": None,
                     "detail": "unknown desktop power mode"}
@@ -234,7 +266,8 @@ class DesktopPowerCoordinator:
 
     def apply_custom(self, cpu_w: int, gpu_w: int) -> dict:
         gpu_state = self._gpu.state()
-        cpu_target = max(4, min(30, int(cpu_w)))
+        cpu_min, cpu_max = self._cpu_bounds()
+        cpu_target = max(cpu_min, min(cpu_max, int(cpu_w)))
         if (gpu_state["supported"]
                 and (gpu_state["min_w"] is None or gpu_state["max_w"] is None)):
             return {"ok": False, "mode": self._mode, "cpu_w": None, "gpu_w": None,

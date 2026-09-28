@@ -720,3 +720,4 @@ def test_desktop_fan_mutations_are_serialized_while_hardware_apply_is_pending():
         assert len(calls) == 2
 
     asyncio.run(scenario())
+

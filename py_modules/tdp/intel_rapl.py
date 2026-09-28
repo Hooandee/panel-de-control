@@ -14,6 +14,26 @@ _RAPL_NAMES = {"long_term": "pl1", "short_term": "pl2"}
 _CLAW_PL2_RESTORE_MAX_W = 37
 
 
+_DESKTOP_MAX_SANE_W = 500
+
+
+def firmware_pl1_ceiling_w(root: str = "/") -> int | None:
+    """Highest PL1 the firmware set or declares for package-0, read before any
+    write. Desktop limits never go above it."""
+    values = []
+    for _label, base in _RAPL_SURFACES:
+        directory = os.path.join(root, _POWERCAP, base)
+        for leaf in ("constraint_0_power_limit_uw", "constraint_0_max_power_uw"):
+            try:
+                with open(os.path.join(directory, leaf)) as handle:
+                    watts = int(handle.read().strip()) // 1_000_000
+            except (OSError, ValueError):
+                continue
+            if 0 < watts <= _DESKTOP_MAX_SANE_W:
+                values.append(watts)
+    return max(values) if values else None
+
+
 class IntelRaplBackend(TDPBackend):
     """Intel handheld TDP control through the kernel powercap RAPL interface."""
 

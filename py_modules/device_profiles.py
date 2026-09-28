@@ -90,6 +90,19 @@ GENERIC = DeviceProfile(
     is_generic=True,
 )
 
+DESKTOP_PC = DeviceProfile(
+    key="desktop_pc",
+    display_name="PC de sobremesa",
+    chip=GENERIC.chip,
+    vendor=GENERIC.vendor,
+    tdp_min=GENERIC.tdp_min,
+    tdp_default=GENERIC.tdp_default,
+    tdp_max=GENERIC.tdp_max,
+    tdp_max_charger=GENERIC.tdp_max_charger,
+    experimental=True,
+    desktop_mode=True,
+)
+
 # Ordered most-specific first (so "ROG Ally X" wins before "ROG Ally").
 DEVICE_TABLE = (
     DeviceProfile("steam_machine", "Steam Machine", "AMD Custom CPU 1772", "amd",
@@ -136,6 +149,19 @@ DEVICE_TABLE = (
                   dmi_matches=(DmiMatch(
                       "ONEXPLAYER SUPER X", "ONE-NETBOOK", ("ONEXPLAYER SUPER X",)),),
                   experimental=True, panel="oled", hdr=True, charger_only_extra=True),
+    # OEM rates 6-80 W on air; 120 W needs the external Frost Bay liquid cooler,
+    # which stays locked until it can be detected.
+    DeviceProfile("onexplayer_x2_mini_pro", "OneXPlayer X2 Mini Pro",
+                  "AMD Ryzen AI Max+ 388", "amd",
+                  6, 30, 55, 80,
+                  dmi_matches=(DmiMatch(
+                      "ONEXPLAYER X2Mini PRO", "ONE-NETBOOK", ("ONEXPLAYER X2Mini PRO",)),),
+                  experimental=True, panel="oled", display_refresh_hz=144,
+                  charger_only_extra=True),
+    DeviceProfile("onexplayer_3", "OneXPlayer 3", "Intel Arc G3 Extreme", "intel",
+                  8, 20, 35, 35,
+                  dmi_matches=(DmiMatch("ONEXPLAYER 3", "ONE-NETBOOK", ("ONEXPLAYER 3",)),),
+                  experimental=True, panel="oled", hdr=True, display_refresh_hz=144),
     DeviceProfile("zotac_gaming_zone", "Zotac Gaming Zone",
                   "AMD Ryzen 7 8840U", "amd",
                   8, 15, 28, 28,

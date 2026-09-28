@@ -16,7 +16,7 @@ from tdp.amd_dptc import AmdDptcBackend
 from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
-from tdp.intel_rapl import IntelRaplBackend
+from tdp.intel_rapl import IntelRaplBackend, firmware_pl1_ceiling_w
 from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
@@ -179,6 +179,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    if key == "desktop_pc":
+        # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
+        # without readback, AMD RAPL can confirm a write it ignores).
+        return [intel] if device.vendor == "intel" else []
     if device.vendor == "intel":
         return [msi, intel]
     if key == "steam_machine":
@@ -218,9 +222,21 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
     return [dptc, asus, lenovo, msi, *amd_tail]
 
 
+_DESKTOP_MIN_W = 15
+
+
+def _desktop_limits(device, root) -> TdpLimits | None:
+    if device.key != "desktop_pc" or device.vendor != "intel":
+        return None
+    ceiling = firmware_pl1_ceiling_w(root)
+    if ceiling is None:
+        return None
+    return TdpLimits(min(_DESKTOP_MIN_W, ceiling), ceiling, ceiling, ceiling)
+
+
 def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBackend:
     """Pick the first supported TDP strategy for the detected device; else NullBackend."""
-    fallback = TdpLimits.from_profile(device)
+    fallback = _desktop_limits(device, root) or TdpLimits.from_profile(device)
 
     def ryzenadj():
         kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}

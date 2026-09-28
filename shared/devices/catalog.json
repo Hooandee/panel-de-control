@@ -327,6 +327,60 @@
       "vendor": "amd"
     },
     {
+      "chip": "AMD Ryzen AI Max+ 388",
+      "display_name": "OneXPlayer X2 Mini Pro",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "ONEXPLAYER X2Mini PRO"
+          ],
+          "product_name": "ONEXPLAYER X2Mini PRO",
+          "sys_vendor": "ONE-NETBOOK"
+        }
+      ],
+      "experimental": true,
+      "key": "onexplayer_x2_mini_pro",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 30,
+        "tdp_max": 55,
+        "tdp_max_charger": 80,
+        "tdp_min": 6,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "Intel Arc G3 Extreme",
+      "display_name": "OneXPlayer 3",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "ONEXPLAYER 3"
+          ],
+          "product_name": "ONEXPLAYER 3",
+          "sys_vendor": "ONE-NETBOOK"
+        }
+      ],
+      "experimental": true,
+      "key": "onexplayer_3",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 20,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 8,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "intel"
+    },
+    {
       "chip": "AMD Ryzen 7 8840U",
       "display_name": "Zotac Gaming Zone",
       "dmi_matches": [

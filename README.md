@@ -224,6 +224,20 @@ queda capada a los 20 W reales que homologa ASUS. La **Legion Go 2** con el Ryze
 Extreme) también se detecta ya con su nombre en vez de como equipo genérico. En todo lo que no
 tenemos en mano, los reportes desde Ajustes son los que confirman lo que responde de verdad.
 
+También se reconocen la **OneXPlayer X2 Mini Pro** (Ryzen AI Max+ 388, de 6 a 55 W con batería y
+hasta 80 W con el cargador; los 120 W de la refrigeración líquida externa se quedan fuera por
+ahora) y la **OneXPlayer 3** (Intel Arc G3 Extreme, hasta 35 W), las dos experimentales.
+
+Los **PC de sobremesa** (cualquiera que no sea la Steam Machine) ya no salen como equipo genérico.
+Se reconocen porque no tienen batería y su chasis no es portátil, y entran en modo sobremesa:
+potencia de CPU en Intel y de la gráfica AMD dedicada, siempre sin pasar de los límites que marca
+su firmware, y los ventiladores de la placa con la curva. Muchas distros no cargan el driver de
+esos ventiladores, así que en Ventiladores hay un interruptor para cargarlo si el sistema lo trae.
+El ventilador de la gráfica siempre se queda en automático: antes, en algunos sobremesa con AMD
+dedicada, la curva genérica acababa moviéndolo y podía dejarlo demasiado bajo. Todo esto es
+experimental y cada placa es un mundo, así que los reportes desde Ajustes son los que dicen qué
+responde de verdad.
+
 ### Notas
 
 1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de

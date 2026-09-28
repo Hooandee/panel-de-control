@@ -368,3 +368,101 @@ def test_gpu_generation():
     assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen Z2 A") == "rdna2"
     assert gpu_generation("amd", "Desconocido") == "unknown"
+
+
+def test_onexplayer_x2_mini_pro_is_recognised_with_official_limits(tmp_path):
+    profile = _detect_dmi(
+        tmp_path, "ONEXPLAYER X2Mini PRO", "ONE-NETBOOK", "ONEXPLAYER X2Mini PRO"
+    )
+
+    assert profile.key == "onexplayer_x2_mini_pro"
+    assert profile.is_generic is False
+    assert profile.experimental is True
+    assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
+            profile.tdp_max_charger) == (6, 30, 55, 80)
+    assert profile.charger_only_extra is True
+    assert profile.cooler_max is None
+    assert profile.panel == "oled"
+    assert profile.display_refresh_hz == 144
+
+
+def test_onexplayer_3_is_recognised_as_intel(tmp_path):
+    profile = _detect_dmi(tmp_path, "ONEXPLAYER 3", "ONE-NETBOOK", "ONEXPLAYER 3")
+
+    assert profile.key == "onexplayer_3"
+    assert profile.vendor == "intel"
+    assert profile.experimental is True
+    assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
+            profile.tdp_max_charger) == (8, 20, 35, 35)
+    assert profile.panel == "oled"
+    assert profile.hdr is True
+    assert profile.display_refresh_hz == 144
+
+
+@pytest.mark.parametrize(
+    ("product", "vendor", "board"),
+    (
+        ("ONEXPLAYER X2Mini PRO", "OTHER", "ONEXPLAYER X2Mini PRO"),
+        ("ONEXPLAYER X2Mini", "ONE-NETBOOK", "ONEXPLAYER X2Mini"),
+        ("ONEXPLAYER 3", "OTHER", "ONEXPLAYER 3"),
+        ("ONEXPLAYER 3 PRO", "ONE-NETBOOK", "ONEXPLAYER 3 PRO"),
+    ),
+)
+def test_new_onexplayer_profiles_require_exact_dmi(tmp_path, product, vendor, board):
+    assert _detect_dmi(tmp_path, product, vendor, board).is_generic is True
+
+
+def _mk_host(root, chassis, supplies=()):
+    dmi = root / "sys/class/dmi/id"
+    dmi.mkdir(parents=True, exist_ok=True)
+    (dmi / "product_name").write_text("Z590\n")
+    (dmi / "sys_vendor").write_text("INTEL\n")
+    (dmi / "board_name").write_text("Z590\n")
+    if chassis is not None:
+        (dmi / "chassis_type").write_text(f"{chassis}\n")
+    (root / "sys/class/power_supply").mkdir(parents=True, exist_ok=True)
+    for name, kind, scope in supplies:
+        supply = root / "sys/class/power_supply" / name
+        supply.mkdir()
+        (supply / "type").write_text(f"{kind}\n")
+        if scope is not None:
+            (supply / "scope").write_text(f"{scope}\n")
+    return detect(root=str(root))
+
+
+@pytest.mark.parametrize("chassis", ("3", "6", "7", "35", "1", "2"))
+def test_batteryless_non_portable_host_is_a_firmware_owned_desktop(tmp_path, chassis):
+    # PDC-GWEV / PDC-PAE4 / PDC-5MVY: desktops whose only batteries are controllers.
+    profile = _mk_host(tmp_path, chassis, supplies=(
+        ("nintendo_switch_controller_battery_0003", "Battery", "Device"),
+        ("hidpp_battery_0", "Battery", "Device"),
+    ))
+
+    assert profile.key == "desktop_pc"
+    assert profile.is_generic is False
+    assert profile.desktop_mode is True
+
+
+@pytest.mark.parametrize(
+    ("chassis", "supplies"),
+    (
+        ("3", (("BAT0", "Battery", None),)),
+        ("3", (("BATT", "Battery", "System"),)),
+        ("11", ()),
+        ("9", ()),
+        ("32", ()),
+        (None, ()),
+    ),
+)
+def test_hosts_that_may_be_portable_stay_generic(tmp_path, chassis, supplies):
+    assert _mk_host(tmp_path, chassis, supplies).key == "generic"
+
+
+def test_known_profiles_win_over_desktop_detection(tmp_path):
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True)
+    for field, value in (("product_name", "Fremont"), ("sys_vendor", "Valve"),
+                         ("board_name", "Fremont"), ("chassis_type", "3")):
+        (dmi / field).write_text(value)
+    (tmp_path / "sys/class/power_supply").mkdir(parents=True)
+    assert detect(root=str(tmp_path)).key == "steam_machine"
