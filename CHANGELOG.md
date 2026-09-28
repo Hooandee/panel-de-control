@@ -5,9 +5,45 @@
 ## [0.57.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.0...panel-de-control-v0.57.1) (2026-09-28)
 
 
-### Bug Fixes
+### Español
 
-* stop themes, the QAM and cleanup from failing without a reason ([#783](https://github.com/Hooandee/panel-de-control/issues/783)) ([8de2b75](https://github.com/Hooandee/panel-de-control/commit/8de2b753c01316b6704954070ebb7821e158fbe8))
+* **Temas:** Instalar, actualizar o aplicar un tema ya no falla con «La operación no ha terminado de forma segura». Pasaba cuando había algún tema de la comunidad dañado en la carpeta de temas, y a partir de ahí no se podía hacer nada con ningún tema. Si algo falla, ahora se muestra un código que ayuda a encontrar el motivo, y un tema de Panel dañado se arregla volviendo a instalarlo, conservando tus ajustes.
+* **Temas:** Hooandee y Luminous Atlas se pueden mezclar sin que se pisen. Al activar uno, las secciones que comparten pasan al que acabas de activar, y para repartirlas basta con activar la sección que quieras en cada tema. Así se evitan las portadas descuadradas y recortadas que salían con los dos temas a la vez, y al desactivar un tema el otro recupera sus secciones.
+* **Temas:** Con Hooandee y las noticias de Inicio ocultas, bajar desde el carrusel ya no deja la pantalla vacía.
+* **Menú rápido:** «Amigos y chat» vuelve a abrir tus amigos aunque hayas ocultado esa pestaña del menú rápido, en lugar de mostrar otra pestaña a pantalla completa.
+* **Limpieza:** Una biblioteca de Steam en una tarjeta o disco que no está conectado aparece con el nombre de la unidad y como «Unidad no conectada», en lugar de «run» y un error de lectura.
+
+### English
+
+* **Themes:** Installing, updating or applying a theme no longer fails with "The operation didn't complete". It happened when a damaged community theme was sitting in the themes folder, and from then on no theme could be changed. If something does fail, a code is now shown to help find the cause, and a damaged Panel theme can be fixed by reinstalling it, keeping your settings.
+* **Themes:** Hooandee and Luminous Atlas can be mixed without overlapping. Turning one on moves the sections they share to the theme you just turned on, and to split them you only need to turn on the section you want in each theme. This avoids the misaligned, cropped covers that showed up with both themes at once, and turning a theme off gives its sections back to the other one.
+* **Themes:** With Hooandee and the Home news hidden, moving down from the carousel no longer leaves the screen empty.
+* **Quick Access:** "Friends & Chat" opens your friends again even if you hid that tab from Quick Access, instead of showing another tab full screen.
+* **Cleanup:** A Steam library on a card or drive that isn't connected shows the drive's name and "Drive not connected", instead of "run" and a read error.
+
+### Italiano
+
+* **Temi:** Installare, aggiornare o applicare un tema non fallisce più con «L'operazione non è stata completata». Succedeva quando nella cartella dei temi c'era un tema della community danneggiato, e da quel momento non si poteva più cambiare nessun tema. Se qualcosa non va, ora compare un codice che aiuta a trovarne il motivo, e un tema di Panel danneggiato si ripara reinstallandolo, mantenendo le tue impostazioni.
+* **Temi:** Hooandee e Luminous Atlas si possono combinare senza sovrapporsi. Attivandone uno, le sezioni che condividono passano al tema appena attivato, e per dividerle basta attivare la sezione che vuoi in ciascun tema. Così spariscono le copertine storte e tagliate che apparivano con entrambi i temi attivi, e disattivando un tema l'altro recupera le sue sezioni.
+* **Temi:** Con Hooandee e le notizie della Home nascoste, scendere dal carosello non lascia più lo schermo vuoto.
+* **Menu rapido:** «Amici e chat» torna ad aprire i tuoi amici anche se hai nascosto quella scheda dal menu rapido, invece di mostrare un'altra scheda a schermo intero.
+* **Pulizia:** Una libreria di Steam su una scheda o un disco non collegato mostra il nome dell'unità e «Unità non collegata», invece di «run» e di un errore di lettura.
+
+### Deutsch
+
+* **Themes:** Ein Theme zu installieren, zu aktualisieren oder anzuwenden schlägt nicht mehr mit „Der Vorgang wurde nicht abgeschlossen“ fehl. Das passierte, wenn ein beschädigtes Community-Theme im Theme-Ordner lag, und danach ließ sich kein Theme mehr ändern. Falls doch etwas schiefgeht, wird jetzt ein Code angezeigt, der bei der Ursache hilft, und ein beschädigtes Panel-Theme lässt sich durch eine Neuinstallation reparieren, ohne deine Einstellungen zu verlieren.
+* **Themes:** Hooandee und Luminous Atlas lassen sich kombinieren, ohne sich zu überlagern. Wenn du eines aktivierst, übernimmt es die gemeinsamen Bereiche, und zum Aufteilen reicht es, in jedem Theme den gewünschten Bereich zu aktivieren. So verschwinden die verschobenen, abgeschnittenen Cover, die mit beiden Themes gleichzeitig auftraten, und beim Deaktivieren eines Themes bekommt das andere seine Bereiche zurück.
+* **Themes:** Mit Hooandee und ausgeblendeten News auf der Startseite bleibt der Bildschirm nicht mehr leer, wenn du vom Karussell nach unten gehst.
+* **Schnellzugriff:** „Freunde & Chat“ öffnet wieder deine Freunde, auch wenn du diesen Tab im Schnellzugriff ausgeblendet hast, statt einen anderen Tab im Vollbild zu zeigen.
+* **Bereinigung:** Eine Steam-Bibliothek auf einer Karte oder einem Laufwerk, das nicht verbunden ist, erscheint mit dem Namen des Laufwerks und „Laufwerk nicht verbunden“ statt mit „run“ und einem Lesefehler.
+
+### Português (Brasil)
+
+* **Temas:** Instalar, atualizar ou aplicar um tema não falha mais com «A operação não foi concluída». Acontecia quando havia um tema da comunidade danificado na pasta de temas, e a partir daí não dava para mudar nenhum tema. Se algo der errado, agora aparece um código que ajuda a achar o motivo, e um tema do Panel danificado se conserta reinstalando, mantendo suas configurações.
+* **Temas:** Hooandee e Luminous Atlas podem ser combinados sem se sobrepor. Ao ativar um, as seções que eles compartilham passam para o tema que você acabou de ativar, e para dividi-las basta ativar a seção que quiser em cada tema. Isso evita as capas desalinhadas e cortadas que apareciam com os dois temas ao mesmo tempo, e ao desativar um tema o outro recupera suas seções.
+* **Temas:** Com o Hooandee e as notícias do Início ocultas, descer a partir do carrossel não deixa mais a tela vazia.
+* **Acesso rápido:** «Amigos e chat» volta a abrir seus amigos mesmo que você tenha ocultado essa aba do acesso rápido, em vez de mostrar outra aba em tela cheia.
+* **Limpeza:** Uma biblioteca do Steam em um cartão ou disco que não está conectado aparece com o nome da unidade e «Unidade não conectada», em vez de «run» e um erro de leitura.
 
 ## [0.57.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.56.1...panel-de-control-v0.57.0) (2026-09-27)
 
