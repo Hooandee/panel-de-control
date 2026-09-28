@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.57.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.3...panel-de-control-v0.57.4) (2026-09-28)
+
+
+### Bug Fixes
+
+* recover Legion Go 2 TDP when the firmware stops applying custom limits ([#791](https://github.com/Hooandee/panel-de-control/issues/791)) ([7ab4e71](https://github.com/Hooandee/panel-de-control/commit/7ab4e7194783b3881763da552aff1b7315f90b79))
+
 ## [0.57.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.2...panel-de-control-v0.57.3) (2026-09-28)
 
 
