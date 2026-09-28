@@ -222,27 +222,46 @@ class PipeWireEq:
 
     def _session_cmd(self, argv):
         if not self._session:
-            return None, None
-        _uid, runtime, user = self._session
+            return None, None, None
+        uid, runtime, user = self._session
         env = clean_env()
         env["XDG_RUNTIME_DIR"] = runtime
         env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime}/bus"
         env["LC_ALL"] = "C"  # pactl field labels ("Name:", "Active Port:") must stay English to parse
-        argv = [resolve_bin(argv[0]), *argv[1:]]
-        cmd = (
-            [resolve_bin("runuser"), "-u", user, "--", *argv]
-            if os.geteuid() == 0
-            else list(argv)
-        )
-        return cmd, env
+        identity = {}
+        if os.geteuid() == 0:
+            # Not runuser: it opens a PAM login session per call (logind scope, lastlog2
+            # write), and at watcher cadence that churn can take systemd down.
+            try:
+                account = pwd.getpwuid(uid)
+                gid, home, shell = account.pw_gid, account.pw_dir, account.pw_shell
+            except KeyError:
+                gid, home, shell = uid, None, None
+            try:
+                groups = os.getgrouplist(user, gid)
+            except OSError:
+                groups = [gid]
+            identity = {"user": uid, "group": gid, "extra_groups": groups}
+            env["USER"] = env["LOGNAME"] = user
+            if home:
+                env["HOME"] = home
+            if shell:
+                env["SHELL"] = shell
+        return [resolve_bin(argv[0]), *argv[1:]], env, identity
 
     def _run(self, argv, timeout=8):
-        cmd, env = self._session_cmd(argv)
+        cmd, env, identity = self._session_cmd(argv)
         if cmd is None:
             return ""
         try:
             out = subprocess.run(
-                cmd, env=env, check=False, capture_output=True, timeout=timeout, text=True
+                cmd,
+                env=env,
+                check=False,
+                capture_output=True,
+                timeout=timeout,
+                text=True,
+                **identity,
             )
             return out.stdout.strip()
         except (OSError, subprocess.SubprocessError):
@@ -254,14 +273,14 @@ class PipeWireEq:
             'SDL_AUDIODRIVER=pulseaudio ffplay -nodisp -loop 0 -volume 100 "$PDC_TEST_WAV" '
             '|| while true; do pw-play "$PDC_TEST_WAV" || sleep 1; done'
         )
-        cmd, env = self._session_cmd(["sh", "-c", loop])
+        cmd, env, identity = self._session_cmd(["sh", "-c", loop])
         if cmd is None:
             return
         env["PDC_TEST_WAV"] = path
         try:
             self._test_proc = subprocess.Popen(  # noqa: S603
                 cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
+                start_new_session=True, **identity,
             )
         except (OSError, subprocess.SubprocessError):
             self._test_proc = None

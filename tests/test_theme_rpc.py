@@ -634,3 +634,22 @@ def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
 
     assert diagnostics["unreadable_theme_folders"] == 2
     assert "Private Broken Name" not in str(diagnostics)
+
+
+def test_ui_diagnostics_reach_the_log_and_report_without_free_text_in_the_report(theme_rpc):
+    _, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda message, *args: warnings.append(message % args)
+
+    for _ in range(3):
+        asyncio.run(plugin.record_ui_diagnostic("cleaner", "coverage_incomplete", "scan"))
+    asyncio.run(plugin.record_ui_diagnostic("<script>", "Bad!", "x" * 900))
+    for index in range(25):
+        asyncio.run(plugin.record_ui_diagnostic("proton", f"code_{index}", ""))
+
+    assert warnings[0] == 'UI diagnostic {"area":"cleaner","code":"coverage_incomplete","detail":"scan"}'
+    assert '"area":"unknown","code":"unknown"' in warnings[1] and len(warnings[1]) < 320
+    diagnostics = plugin._ui_diagnostics_snapshot()
+    assert len(diagnostics) == 20
+    assert diagnostics[-1] == {"area": "proton", "code": "code_24", "count": 1}
+    assert all("detail" not in entry for entry in diagnostics)

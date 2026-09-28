@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import types
 from pathlib import Path
 
 import audio.pipewire as pipewire
@@ -3066,3 +3067,77 @@ def test_relevant_links_empty_and_capped():
     assert _relevant_links(None) == ""
     big = "\n".join("alsa_output.sink%d:port" % i for i in range(5000))
     assert len(_relevant_links(big, cap=500)) == 500
+
+
+def _root_session_eq(monkeypatch):
+    account = types.SimpleNamespace(
+        pw_uid=1000, pw_gid=1000, pw_dir="/home/deck", pw_shell="/bin/bash"
+    )
+    monkeypatch.setattr(pipewire.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(pipewire.pwd, "getpwuid", lambda uid: account)
+    monkeypatch.setattr(pipewire.os, "getgrouplist", lambda user, gid: [1000, 998])
+    monkeypatch.setattr(pipewire, "resolve_bin", lambda name: f"/usr/bin/{name}")
+    eq = PipeWireEq(name="X")
+    eq._session = (1000, "/run/user/1000", "deck")
+    return eq
+
+
+def test_root_session_commands_drop_privileges_without_a_login_session(monkeypatch):
+    eq = _root_session_eq(monkeypatch)
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return types.SimpleNamespace(stdout="alsa_output.speaker\n")
+
+    monkeypatch.setattr(pipewire.subprocess, "run", fake_run)
+
+    assert eq._run(["pactl", "get-default-sink"]) == "alsa_output.speaker"
+
+    cmd, kwargs = calls[0]
+    assert cmd == ["/usr/bin/pactl", "get-default-sink"]
+    assert all("runuser" not in part for part in cmd)
+    assert kwargs["user"] == 1000
+    assert kwargs["group"] == 1000
+    assert kwargs["extra_groups"] == [1000, 998]
+    env = kwargs["env"]
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+    assert env["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1000/bus"
+    assert env["HOME"] == "/home/deck"
+    assert env["USER"] == env["LOGNAME"] == "deck"
+
+
+def test_root_test_tone_drops_privileges_without_a_login_session(monkeypatch):
+    eq = _root_session_eq(monkeypatch)
+    calls = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return types.SimpleNamespace(pid=4242, poll=lambda: None)
+
+    monkeypatch.setattr(pipewire.subprocess, "Popen", fake_popen)
+
+    eq.start_test("/tmp/tone.wav")
+
+    cmd, kwargs = calls[0]
+    assert cmd[0] == "/usr/bin/sh"
+    assert all("runuser" not in part for part in cmd)
+    assert (kwargs["user"], kwargs["group"]) == (1000, 1000)
+    assert kwargs["env"]["PDC_TEST_WAV"] == "/tmp/tone.wav"
+
+
+def test_unprivileged_session_commands_keep_the_current_identity(monkeypatch):
+    eq = _root_session_eq(monkeypatch)
+    monkeypatch.setattr(pipewire.os, "geteuid", lambda: 1000)
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(kwargs)
+        return types.SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(pipewire.subprocess, "run", fake_run)
+
+    eq._run(["pactl", "info"])
+
+    assert "user" not in calls[0]
+    assert "extra_groups" not in calls[0]

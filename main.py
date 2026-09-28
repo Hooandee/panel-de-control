@@ -139,6 +139,7 @@ _REPORT_SERVICE_URL = os.environ.get(
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
+_AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
 _RPC_CONTEXT_UNSET = object()
@@ -182,6 +183,8 @@ _THEME_FAILURE_OPERATIONS = frozenset({
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media)$")
+_UI_DIAGNOSTIC_HISTORY = 20
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
@@ -758,6 +761,7 @@ class Plugin:
         self._shutting_down = False
         self._offload_futures = set()
         self._audio_apply_failures = 0
+        self._audio_watch_resume_at = 0.0
         self._audio_last_apply = None
         self._test_sample = None
         self._ui_active = False
@@ -1169,6 +1173,9 @@ class Plugin:
         user_home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return Path(user_home) / "homebrew" / "themes"
 
+    def _decky_plugins_root(self) -> Path:
+        return self._themes_root().parent / "plugins"
+
     def _theme_receipts_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
 
@@ -1213,6 +1220,32 @@ class Plugin:
             failures = deque(maxlen=_THEME_FAILURE_HISTORY)
             self._theme_failure_history = failures
         return failures
+
+    def _ui_diagnostics(self) -> deque:
+        entries = getattr(self, "_ui_diagnostic_history", None)
+        if entries is None:
+            entries = deque(maxlen=_UI_DIAGNOSTIC_HISTORY)
+            self._ui_diagnostic_history = entries
+        return entries
+
+    def _ui_diagnostics_snapshot(self) -> list[dict]:
+        return [{key: entry[key] for key in ("area", "code", "count")} for entry in self._ui_diagnostics()]
+
+    async def record_ui_diagnostic(self, area: str, code: str, detail: str = "") -> bool:
+        area = area if isinstance(area, str) and _UI_DIAGNOSTIC_AREA.match(area) else "unknown"
+        code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
+        detail = " ".join(str(detail).split())[:_THEME_FAILURE_MESSAGE_CHARS]
+        entries = self._ui_diagnostics()
+        entry = {"area": area, "code": code, "detail": detail}
+        if entries and {key: entries[-1][key] for key in entry} == entry:
+            entries[-1]["count"] += 1
+            return True
+        entries.append({**entry, "count": 1})
+        decky.logger.warning(
+            "UI diagnostic %s",
+            json.dumps(entry, separators=(",", ":"), ensure_ascii=False),
+        )
+        return True
 
     async def record_theme_failure(self, operation: str, code: str, message: str) -> bool:
         operation = operation if operation in _THEME_FAILURE_OPERATIONS else "unknown"
@@ -1900,6 +1933,7 @@ class Plugin:
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
+            "ui_diagnostics": self._ui_diagnostics_snapshot(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -2167,6 +2201,10 @@ class Plugin:
             )
         except Exception:  # noqa: BLE001
             steam_client = {"status": "unavailable", "branch": "unknown", "version": None}
+        try:
+            plugins = report_collector.decky_plugins(str(self._decky_plugins_root()))
+        except Exception:  # noqa: BLE001
+            plugins = {"status": "unavailable", "plugins": [], "truncated": False}
         return {
             "plugin_version": read_version(),
             "decky_version": getattr(decky, "DECKY_VERSION", None),
@@ -2178,6 +2216,7 @@ class Plugin:
             "platform": dict(self._platform),
             "kernel": kernel,
             "steam_client": steam_client,
+            "decky_plugins": plugins,
         }
 
     def _report_stores(self) -> dict:
@@ -11052,6 +11091,12 @@ class Plugin:
             return
         self._offload(self._reapply_audio_sync)
 
+    def _log_audio_transition(self, action: str, **fields) -> None:
+        decky.logger.info(
+            "Audio transition %s",
+            json.dumps({"action": action, **fields}, sort_keys=True, separators=(",", ":")),
+        )
+
     def _record_audio_apply_failure(self, detail) -> None:
         self._audio_last_apply = dict(detail)
         self._audio_apply_failures += 1
@@ -11080,6 +11125,8 @@ class Plugin:
                 detail = diagnostics() if callable(diagnostics) else {"ok": False}
                 self._record_audio_apply_failure(detail)
             else:
+                if self._audio_apply_failures:
+                    self._log_audio_transition("recovered", failures=self._audio_apply_failures)
                 self._audio_apply_failures = 0
                 self._audio_runtime_expected = True
                 diagnostics = getattr(self._audio, "apply_diagnostics", None)
@@ -11088,6 +11135,10 @@ class Plugin:
                     if callable(diagnostics)
                     else {"ok": True}
                 )
+                if not self._audio_last_apply.get("unchanged"):
+                    self._log_audio_transition(
+                        "apply", route=route, downstream=self._audio_last_apply.get("downstream")
+                    )
         except Exception as e:  # noqa: BLE001
             self._record_audio_apply_failure({
                 "ok": False,
@@ -11149,10 +11200,21 @@ class Plugin:
                         await self._offload_call(self._restore_audio_safe)
                     continue
                 self._audio_runtime_expected = True
+                now = _monotonic()
+                failures = self._audio_apply_failures
+                if failures and now < self._audio_watch_resume_at:
+                    continue
                 probe = await self._offload_call(self._audio_check)
                 if not probe["active"] or probe["route"] != self._audio_route_last:
+                    self._log_audio_transition(
+                        "watch", route=probe["route"], previous=self._audio_route_last,
+                        active=probe["active"], test=self._test_sample is not None,
+                    )
                     self._audio_route_last = probe["route"]
                     self._reapply_audio()
+                self._audio_watch_resume_at = now + min(
+                    _AUDIO_RETRY_MAX_S, _AUDIO_POLL_S * 2 ** min(failures, 5)
+                )
             except asyncio.CancelledError:
                 break
             except Exception:  # noqa: BLE001
@@ -11218,6 +11280,7 @@ class Plugin:
         self._init()
         self._settings["audio_eq_enabled"] = bool(enabled)
         self._store.save(self._settings)
+        self._log_audio_transition("enabled" if enabled else "disabled")
         if enabled:
             self._reapply_audio()
         else:
@@ -11353,6 +11416,7 @@ class Plugin:
             self._offload(lambda: self._start_audio_test_sync(sample))
         else:
             self._test_sample = None
+            self._log_audio_transition("test_stop")
             self._offload(self._audio.stop_test)
         return await self._offload_call(self._audio_state)
 
@@ -11366,8 +11430,10 @@ class Plugin:
                 audio_tone.write_wav(path, audio_tone.render(sample))
             self._audio.start_test(path)
             self._test_sample = sample
-        except Exception:  # noqa: BLE001
+            self._log_audio_transition("test_start", sample=sample)
+        except Exception as e:  # noqa: BLE001
             self._test_sample = None
+            self._log_audio_transition("test_failed", error=type(e).__name__)
 
     async def set_audio_curve(
         self, gains: list, bass: int, scope: str, appid=None, expected_route=None

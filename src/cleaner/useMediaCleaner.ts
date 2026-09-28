@@ -49,7 +49,6 @@ export function useMediaCleaner() {
       for (const source of issues) record("scan_failed", operationId, next.length, 1, source, source === "measurement" ? "measurement_failed" : "steam_api_error");
       if (mounted.current && revision === epoch.current) {
         setItems(next);
-        setError(issues.length ? "media_incomplete" : null);
         record("scan_completed", operationId, next.length, issues.length);
       }
     } catch {
@@ -57,7 +56,6 @@ export function useMediaCleaner() {
       record("scan_failed", operationId, 0, Math.max(issues.length, 1), "none", "steam_api_error");
       if (mounted.current && revision === epoch.current) {
         setItems([]);
-        setError("media_unavailable");
       }
     } finally {
       if (inflight.current === "scan") inflight.current = null;

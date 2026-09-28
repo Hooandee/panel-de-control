@@ -528,3 +528,93 @@ def test_guard_does_not_clamp_headphone_route(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
     assert st["route"] == "headphone"
     assert fake.applied[-1][0] == [12.0] * 10  # guard is speaker-only
+
+
+def _run_failing_watcher(p, monkeypatch, iterations, *, recover_after=None):
+    main = sys.modules["main"]
+    clock = [1000.0]
+    checks = []
+    reapplies = []
+    original_check = p._audio_check
+
+    def counted_check():
+        checks.append(clock[0])
+        return original_check()
+
+    def failing_reapply():
+        reapplies.append(clock[0])
+        if recover_after is not None and len(reapplies) > recover_after:
+            p._audio_apply_failures = 0
+        else:
+            p._audio_apply_failures += 1
+
+    p._audio_check = counted_check
+    p._reapply_audio = failing_reapply
+    monkeypatch.setattr(main, "_monotonic", lambda: clock[0])
+    sleeps = 0
+
+    async def tick(delay):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > iterations:
+            raise asyncio.CancelledError
+        clock[0] += delay
+
+    monkeypatch.setattr(asyncio, "sleep", tick)
+    asyncio.run(p._audio_loop())
+    return checks, reapplies
+
+
+def test_audio_watcher_backs_off_while_the_eq_keeps_failing(tmp_path, monkeypatch):
+    p, _fake = _make_plugin(
+        tmp_path, monkeypatch, audio=_FakePipeWireEq(apply_ok=False)
+    )
+    asyncio.run(p.get_audio_state())
+    p._settings["audio_eq_enabled"] = True
+
+    checks, reapplies = _run_failing_watcher(p, monkeypatch, iterations=150)
+
+    gaps = [later - earlier for earlier, later in zip(reapplies, reapplies[1:])]
+    assert len(checks) == len(reapplies) < 20
+    assert gaps == sorted(gaps)
+    assert max(gaps) == 60
+
+
+def test_audio_watcher_returns_to_normal_cadence_after_recovery(tmp_path, monkeypatch):
+    p, _fake = _make_plugin(
+        tmp_path, monkeypatch, audio=_FakePipeWireEq(apply_ok=False)
+    )
+    asyncio.run(p.get_audio_state())
+    p._settings["audio_eq_enabled"] = True
+
+    _checks, reapplies = _run_failing_watcher(
+        p, monkeypatch, iterations=40, recover_after=3
+    )
+
+    gaps = [later - earlier for earlier, later in zip(reapplies, reapplies[1:])]
+    assert gaps[-1] == 4
+
+
+def test_audio_transitions_reach_the_log(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    lines = []
+    monkeypatch.setattr(sys.modules["decky"].logger, "info", lambda *args, **kwargs: lines.append(args[0] % args[1:]))
+    asyncio.run(p.set_audio_enabled(True))
+    asyncio.run(p.set_audio_test(True, "voice"))
+    asyncio.run(p.set_audio_test(False))
+    transitions = [line for line in lines if line.startswith("Audio transition ")]
+    assert any('"action":"apply"' in line and '"route":"speaker"' in line for line in transitions)
+    assert any('"action":"test_start"' in line and '"sample":"voice"' in line for line in transitions)
+    assert any('"action":"test_stop"' in line for line in transitions)
+    assert any('"action":"enabled"' in line for line in transitions)
+
+
+def test_audio_recovery_after_failed_applies_reaches_the_log(tmp_path, monkeypatch):
+    fake = _FakePipeWireEq(apply_ok=False)
+    p, _ = _make_plugin(tmp_path, monkeypatch, audio=fake)
+    lines = []
+    monkeypatch.setattr(sys.modules["decky"].logger, "info", lambda *args, **kwargs: lines.append(args[0] % args[1:]))
+    asyncio.run(p.set_audio_enabled(True))
+    fake._apply_ok = True
+    p._reapply_audio_sync()
+    assert any('"action":"recovered"' in line and '"failures":1' in line for line in lines)

@@ -8,12 +8,13 @@ import stat
 import threading
 import time
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
 
 from . import filesystem, vdf
-from .activity import process_activity
+from .activity import activity_causes, process_activity
 from .media_diagnostics import SteamMediaDiagnostics
 
 
@@ -326,7 +327,8 @@ class SteamCleanerService:
                     entries=entries, libraries=libraries, totals=totals,
                     progress={"processed": len(entries), "total": len(entries)},
                 )
-            self._event("completed", operation_id, "scan", scan_id=self._state["scan_id"], count=len(entries), duration_ms=int((time.monotonic() - started) * 1000), reason="cancelled" if self._cancelled.is_set() else None)
+            blocked = Counter(entry["blocked_reason"] for entry in entries if entry["blocked_reason"] in REASONS)
+            self._event("completed", operation_id, "scan", scan_id=self._state["scan_id"], count=len(entries), duration_ms=int((time.monotonic() - started) * 1000), reason="cancelled" if self._cancelled.is_set() else None, blocked=dict(blocked) or None, activity=activity["causes"] or None)
             return self.get_state()
 
     def prepare(self, scan_id, entry_ids):
@@ -593,12 +595,12 @@ class SteamCleanerService:
         try:
             result = self._activity_provider()
             if not isinstance(result, dict) or result.get("complete") is not True or not isinstance(result.get("appids"), (list, set, tuple)) or not isinstance(result.get("paths"), (list, set, tuple)):
-                return {"complete": False, "appids": [], "paths": []}
+                return {"complete": False, "appids": [], "paths": [], "causes": activity_causes(result)}
             if any(not str(value).isdecimal() for value in result["appids"]) or any(not isinstance(value, str) or not os.path.isabs(value) for value in result["paths"]):
-                return {"complete": False, "appids": [], "paths": []}
-            return {"complete": True, "appids": {str(value) for value in result["appids"]}, "paths": result["paths"]}
+                return {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
+            return {"complete": True, "appids": {str(value) for value in result["appids"]}, "paths": result["paths"], "causes": []}
         except Exception:
-            return {"complete": False, "appids": [], "paths": []}
+            return {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unreadable", "process": "none"}]}
 
     def _activity_reason(self, entry, activity):
         if not activity["complete"]:
@@ -724,6 +726,14 @@ class SteamCleanerService:
                 for key in ("count", "duration_ms"):
                     if type(item.get(key)) is int and 0 <= item[key] <= 10**12:
                         result[key] = item[key]
+                if isinstance(item.get("blocked"), dict):
+                    blocked = {reason: count for reason, count in item["blocked"].items() if reason in REASONS and type(count) is int and 0 < count <= MAX_ENTRIES}
+                    if blocked:
+                        result["blocked"] = blocked
+                if isinstance(item.get("activity"), list):
+                    causes = activity_causes({"causes": item["activity"]})
+                    if causes:
+                        result["activity"] = causes
                 allowed.append(result)
             self._diagnostic["events"] = allowed
             if allowed:

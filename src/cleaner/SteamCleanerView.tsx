@@ -57,6 +57,8 @@ const Notice: FC<{ children: ReactNode; warning?: boolean }> = ({ children, warn
   </div>
 );
 
+const ACTIONABLE_REASONS = new Set(["active_game", "active_download"]);
+
 const EntryChoice: FC<{ entry: CleanerEntry; selected: boolean; disabled: boolean; onToggle: () => void }> = ({ entry, selected, disabled, onToggle }) => {
   const { t, lang } = useI18n();
   const title = t(`cleaner.kind.${entry.kind}`);
@@ -69,7 +71,7 @@ const EntryChoice: FC<{ entry: CleanerEntry; selected: boolean; disabled: boolea
         <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block" }}>{title}</span><span style={caption}>{storage}</span></span>
         <span style={{ ...caption, flexShrink: 0, fontVariantNumeric: "tabular-nums", color: theme.color.textPrimary }}>{entry.bytes === null ? t("cleaner.sizeUnknown") : formatBytes(entry.bytes, lang)}</span>
       </CleanerAction>
-      {entry.blocked_reason && <div style={{ ...caption, paddingInline: 8 }}>{t(cleanerReasonKey(entry.blocked_reason))}</div>}
+      {entry.blocked_reason && ACTIONABLE_REASONS.has(entry.blocked_reason) && <div style={{ ...caption, paddingInline: 8 }}>{t(cleanerReasonKey(entry.blocked_reason))}</div>}
       {!entry.blocked_reason && entry.warnings.filter((warning) => warning !== "prefix_data").map((warning) => <div key={warning} style={{ ...caption, paddingInline: 8 }}>{t(warning === "unknown_identity" ? "cleaner.warning.unknown_identity" : cleanerReasonKey(warning))}</div>)}
     </div>
   );
@@ -139,7 +141,9 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
   const labels = useRef(new Map<string, CleanerEntry>());
   const metadata = useMemo(readCleanerMetadata, [state?.scan_id]);
   const installedMetadata = useMemo(() => readInstalledCleanerMetadata(metadata), [metadata]);
-  const games = useMemo(() => groupEntries(state?.entries ?? [], metadata), [state?.entries, metadata]);
+  const games = useMemo(() => groupEntries(state?.entries ?? [], metadata).filter((game) => game.entries.some(
+    (entry) => !entry.blocked_reason || ACTIONABLE_REASONS.has(entry.blocked_reason),
+  )), [state?.entries, metadata]);
   const shown = useMemo(() => filterGames(games, query, filter, sort, selected), [games, query, filter, sort, selected]);
   const chosen = (state?.entries ?? []).filter((entry) => selected.has(entry.id) && !entry.blocked_reason);
   const chosenBytes = chosen.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
@@ -165,7 +169,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
     });
   }, [entries]);
 
-  const errorNotice = error || state?.error;
+  const errorNotice = error;
   const failedNotice = errorNotice && <div style={column}><Notice warning>{t(cleanerReasonKey(errorNotice))}</Notice><CleanerAction label={t("cleaner.refreshState")} onActivate={() => void controller.refresh()}><LuRefreshCw size={15} />{t("cleaner.refreshState")}</CleanerAction></div>;
 
   return (
@@ -179,9 +183,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
             {(["shadercache", "compatdata"] as const).map((kind) => {
               const categoryEntries = entries?.filter((entry) => entry.kind === kind) ?? [];
-              const sizeUnknown = categoryEntries.length === 0
-                ? !state?.coverage_complete
-                : categoryEntries.every((entry) => entry.bytes === null);
+              const sizeUnknown = categoryEntries.length > 0 && categoryEntries.every((entry) => entry.bytes === null);
               const size = !hasScanData ? t("cleaner.notScanned")
                 : sizeUnknown ? t("cleaner.sizeUnknown") : formatBytes(state!.totals[kind], lang);
               return <div key={kind} style={{ ...theme.tile, padding: "9px 10px" }}>
@@ -191,7 +193,6 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
             })}
           </div>
           <div style={{ ...caption, marginTop: 9 }}>{t("cleaner.summaryHint")}</div>
-          {!!state?.totals.unknown && <div style={{ ...caption, color: theme.color.warn }}>{t("cleaner.unknownSizes")}</div>}
         </div>}
         {failedNotice}
         {loading ? <div role="status" style={{ ...caption, padding: 12 }}>{t("cleaner.loading")}</div> : busy ? <div style={{ ...theme.card, ...column, padding: 12 }}>
@@ -201,9 +202,6 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
           <div style={caption}>{t("cleaner.cancelHint")}</div>
         </div> : !hasScanData ? <CleanerAction label={t("cleaner.scan")} primary onActivate={() => { setSelected(new Set()); void controller.scan(); }}><LuRefreshCw size={16} />{t("cleaner.scan")}</CleanerAction> : null}
         {calculatingGames && installedMetadata.map((game) => <LoadingGameRow key={game.appid} game={game} />)}
-        {state?.scan_id && !state.coverage_complete && <Notice warning>{t("cleaner.coverageIncomplete")}</Notice>}
-        {state?.libraries.filter((library) => !library.available).map((library) => <Notice key={library.id} warning={library.reason !== "library_disconnected"}>{library.label} · {t(cleanerReasonKey(library.reason))}</Notice>)}
-        {state && state.status !== "idle" && !loading && !busy && !state.available && <Notice>{t("cleaner.unavailable")}</Notice>}
         {result && !busy && <div style={{ ...theme.card, ...column, padding: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: theme.font.body, fontWeight: 600 }}>
             {result.items.some((item) => item.status !== "deleted") || result.cancelled ? <LuCircleAlert size={17} color={theme.color.warn} /> : <LuCircleCheck size={17} color={theme.color.ok} />}
@@ -247,7 +245,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
             {selected.size > 0 && <div style={{ width: 32, flexShrink: 0 }}><CleanerAction label={t("cleaner.clearSelection")} disabled={selectionDisabled} onActivate={() => setSelected(new Set())} style={{ padding: 6, minHeight: 30, background: "transparent", boxShadow: "none" }}><LuX size={15} /></CleanerAction></div>}
           </div>
           {shown.map((game) => <GameRow key={game.id} game={game} selected={selected} disabled={selectionDisabled} onCaches={() => setSelected((value) => toggleCaches(game.entries, value))} onEntry={(entry) => setSelected((value) => toggleEntry(entry, value))} />)}
-          {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? "cleaner.empty" : filter === "cleanable" && !query ? "cleaner.noCleanable" : filter === "not_installed" && !query ? "cleaner.noRecommendations" : "cleaner.noMatch")}</div>}
+          {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? (state?.entries.length ? "cleaner.noCleanable" : "cleaner.empty") : filter === "cleanable" && !query ? "cleaner.noCleanable" : filter === "not_installed" && !query ? "cleaner.noRecommendations" : "cleaner.noMatch")}</div>}
           {(plan || chosen.length > 0) && <CleanerActionTray>
             {plan ? <Focusable flow-children="column" onCancel={(event) => { event.stopPropagation(); controller.dismissPlan(); }} style={column}>
               <div style={{ fontSize: theme.font.body, fontWeight: 600 }}>{t("cleaner.confirm.title")}</div>

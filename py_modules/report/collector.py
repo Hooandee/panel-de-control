@@ -168,6 +168,9 @@ _KNOWN_FRONTEND_ORIGINS = {
 _STEAM_BRANCH_SLUGS = (("preview", "preview"), ("beta", "beta"), ("stable", "stable"))
 _STEAM_MANIFEST_VERSION = re.compile(r'"version"\s+"(?P<version>\d{1,12})"')
 _MAX_STEAM_PACKAGE_BYTES = 4096
+_MAX_DECKY_PLUGINS = 64
+_MAX_PLUGIN_MANIFEST_BYTES = 16384
+_MAX_PLUGIN_FIELD = 80
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
@@ -270,6 +273,46 @@ def steam_client_diagnostics(steam_root: str | None) -> dict:
         "branch": branch,
         "version": _steam_manifest_version(package, branch_name),
     }
+
+
+def _plugin_manifest_field(folder: str, filename: str, key: str) -> str | None:
+    try:
+        raw = _head_regular_file(os.path.join(folder, filename), _MAX_PLUGIN_MANIFEST_BYTES)
+        value = json.loads(raw).get(key)
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(value, str):
+        return None
+    value = "".join(ch for ch in value if ch.isprintable()).strip()
+    return value[:_MAX_PLUGIN_FIELD] or None
+
+
+def decky_plugins(plugins_dir: str | None) -> dict:
+    empty = {"status": "unavailable", "plugins": [], "truncated": False}
+    if not isinstance(plugins_dir, str) or not plugins_dir:
+        return empty
+    try:
+        entries = sorted(os.scandir(plugins_dir), key=lambda entry: entry.name)
+    except OSError:
+        return empty
+    plugins = []
+    truncated = False
+    for entry in entries:
+        try:
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        if len(plugins) >= _MAX_DECKY_PLUGINS:
+            truncated = True
+            break
+        name = _plugin_manifest_field(entry.path, "plugin.json", "name")
+        plugins.append({
+            "name": name or entry.name[:_MAX_PLUGIN_FIELD],
+            "version": _plugin_manifest_field(entry.path, "package.json", "version"),
+        })
+    plugins.sort(key=lambda plugin: plugin["name"].lower())
+    return {"status": "captured", "plugins": plugins, "truncated": truncated}
 
 
 def _frontend_signal(line: str) -> tuple[str | None, bool]:
@@ -894,7 +937,7 @@ def steam_cleaner_snapshot(diagnostics) -> dict:
     safe_event_keys = {
         "event", "operation_id", "phase", "at", "reason", "source",
         "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
-        "readback", "kind", "time", "errors", "deleted", "vdf_error",
+        "readback", "kind", "time", "errors", "deleted", "vdf_error", "blocked", "activity",
     }
 
     def bounded(value):

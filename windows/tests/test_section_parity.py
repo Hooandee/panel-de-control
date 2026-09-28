@@ -6,6 +6,7 @@ REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "src" / "customize" / "manifest.tsx"
 CATALOG = REPO / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "SectionCatalog.cs"
 WINDOWS_ONLY_BLOCKS = {"energy"}
+LINUX_ONLY_SECTIONS = {"ambient"}
 
 
 def linux_tabs():
@@ -37,7 +38,7 @@ def windows_catalog():
 
 class SectionParityTests(unittest.TestCase):
     def test_windows_has_every_linux_section_in_order_with_its_accent(self):
-        linux = [(section, accent) for section, accent in linux_tabs()]
+        linux = [(section, accent) for section, accent in linux_tabs() if section not in LINUX_ONLY_SECTIONS]
         windows = [(section, accent) for section, accent, _ in windows_catalog()]
         self.assertEqual(linux, windows)
 

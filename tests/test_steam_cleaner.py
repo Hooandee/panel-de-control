@@ -917,3 +917,25 @@ def test_deeper_mount_keeps_its_own_name_and_stays_connected(tmp_path, monkeypat
 
     assert state["libraries"][1]["label"] == "ssd1"
     assert state["libraries"][1]["reason"] == "library_unavailable"
+
+
+def test_scan_records_why_every_game_stays_blocked(tmp_path):
+    from report.collector import steam_cleaner_snapshot
+
+    home, steam = make_steam(tmp_path)
+    for appid in ("10", "20"):
+        manifest(steam, appid)
+        data(steam, appid=appid)
+    settings = tmp_path / "settings"
+    unknown = {"complete": False, "appids": [], "paths": [], "causes": [{"cause": "unidentified", "process": "wineserver"}]}
+    cleaner = service(home, state_dir=str(settings), activity_provider=lambda: unknown)
+    cleaner.inventory()
+    completed = [event for event in cleaner.diagnostics()["events"] if event["event"] == "completed"][-1]
+    assert completed["blocked"] == {"activity_unknown": 2}
+    assert completed["activity"] == [{"cause": "unidentified", "process": "wineserver"}]
+    reloaded = service(home, state_dir=str(settings)).diagnostics()
+    reloaded_completed = [event for event in reloaded["events"] if event["event"] == "completed"][-1]
+    assert reloaded_completed["blocked"] == {"activity_unknown": 2}
+    assert reloaded_completed["activity"] == completed["activity"]
+    reported = [event for event in steam_cleaner_snapshot(reloaded)["events"] if event["event"] == "completed"][-1]
+    assert reported["activity"] == completed["activity"]
