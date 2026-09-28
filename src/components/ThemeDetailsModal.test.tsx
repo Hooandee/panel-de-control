@@ -67,6 +67,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     recoveryKeptCurrent: false,
     error: null,
     errorCode: null,
+    sectionHandoff: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
@@ -491,6 +492,13 @@ describe("ThemeDetailsModal", () => {
     expect(screen.queryByRole("button", { name: "themes.action.install" })).toBeNull();
     expect(mocks.focusElement).toHaveBeenLastCalledWith(heading);
     expect(document.activeElement).toBe(heading);
+  });
+
+  it("explains which theme gave up its sections after an activation", () => {
+    mocks.controller = installedController({ sectionHandoff: { owner: "Luminous Atlas", others: ["Gallery"] } });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByText("themes.operation.sectionHandoff")).toBeTruthy();
   });
 
   it("shows the existing failure warning and restores removal", () => {

@@ -394,6 +394,7 @@ export const ptBR: Record<string, string> = {
   "themes.retry": "Verificar novamente",
   "themes.operation.failed": "A operação não foi concluída. Tente novamente; se continuar falhando, envie um relatório pelas Configurações.",
   "themes.operation.code": "Código: {code}",
+  "themes.operation.sectionHandoff": "Para não se sobreporem, {others} deixa de estilizar as seções que agora {owner} estiliza. Você pode dividi-las nas seções de cada tema.",
   "themes.state.active": "Ativo",
   "themes.state.installed": "Instalado",
   "themes.state.notInstalled": "Não instalado",

@@ -572,4 +572,90 @@ describe("ThemesClient", () => {
     await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(false);
     expect(client.getSnapshot()).toMatchObject({ error: "reload failed", errorCode: "unknown" });
   });
+  describe("section ownership between Hooandee themes", () => {
+    const ATLAS: PublishedThemeRelease = {
+      ...RELEASE, catalogId: "hooandee-atlas", cssLoaderName: "Atlas", exclusiveGroup: undefined,
+    };
+    const GALLERY: PublishedThemeRelease = {
+      ...RELEASE, catalogId: "hooandee-gallery", cssLoaderName: "Gallery", exclusiveGroup: undefined,
+    };
+    const section = (name: string, value: string) => ({
+      name, defaultValue: "Yes", value, options: ["No", "Yes"], type: "checkbox" as const, rawType: "checkbox",
+    });
+
+    function world(atlasEnabled: boolean) {
+      const themes = new Map<string, CssLoaderTheme>([
+        ["Gallery", { ...INSTALLED_THEME, id: "Gallery", name: "Gallery", displayName: "Gallery", enabled: true,
+          patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Ajustes", "Yes")] }],
+        ["Atlas", { ...INSTALLED_THEME, id: "Atlas", name: "Atlas", displayName: "Luminous Atlas", enabled: atlasEnabled,
+          patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Ajustes", "No")] }],
+      ]);
+      const snapshot = (): CssLoaderReadySnapshot => ({ status: "ready", themes: [...themes.values()].map((t) => structuredClone(t)) });
+      const setEnabled = (name: string, enabled: boolean) => themes.set(name, { ...themes.get(name)!, enabled });
+      let stored: Record<string, string> = {};
+      const deps = dependencies({
+        publication: { check: vi.fn(async () => ({ status: "published" as const, checkedAt: 1, themes: [ATLAS, GALLERY] })) },
+        sectionHandoffs: { read: () => stored, write: (next) => { stored = { ...next }; } },
+      });
+      deps.adapter.inspect = vi.fn(async () => snapshot());
+      deps.adapter.requireReady = vi.fn(async () => snapshot());
+      deps.adapter.setPatchValue = vi.fn(async (themeName: string, patchName: string, value: string) => {
+        const theme = themes.get(themeName)!;
+        themes.set(themeName, { ...theme, patches: theme.patches.map((p) => p.name === patchName ? { ...p, value } : p) });
+        return snapshot();
+      });
+      deps.activator.activate = vi.fn(async () => { setEnabled("Atlas", true); return snapshot(); });
+      deps.activator.deactivate = vi.fn(async () => { setEnabled("Atlas", false); return snapshot(); });
+      const value = (theme: string, patch: string) => themes.get(theme)!.patches.find((p) => p.name === patch)!.value;
+      return { deps, value, stored: () => stored };
+    }
+
+    it("hands overlapping sections to the theme being activated and gives them back on deactivation", async () => {
+      const { deps, value, stored } = world(false);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Gallery", "Estilizar Inicio")).toBe("No");
+      expect(value("Gallery", "Estilizar Ajustes")).toBe("Yes");
+      expect(client.getSnapshot().sectionHandoff).toEqual({ owner: "Luminous Atlas", others: ["Gallery"] });
+      expect(stored()).toEqual({ "Gallery\u0000Estilizar Inicio": "Atlas" });
+
+      await expect(client.deactivate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Gallery", "Estilizar Inicio")).toBe("Yes");
+      expect(stored()).toEqual({});
+    });
+
+    it("lets a section be taken back by turning it on in the other theme", async () => {
+      const { deps, value } = world(true);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.setPatch("hooandee-gallery", "Estilizar Inicio", "Yes")).resolves.toBe(true);
+
+      expect(value("Atlas", "Estilizar Inicio")).toBe("No");
+      expect(value("Gallery", "Estilizar Inicio")).toBe("Yes");
+    });
+
+    it("keeps a confirmed activation when a section handoff cannot be written", async () => {
+      const { deps } = world(false);
+      const reportFailure = vi.fn();
+      deps.reportFailure = reportFailure;
+      const setPatchValue = deps.adapter.setPatchValue;
+      deps.adapter.setPatchValue = vi.fn(async () => { throw new CssLoaderOperationError("mutation_failed", "nope"); });
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(client.getSnapshot()).toMatchObject({ error: null, sectionHandoff: null });
+      expect(reportFailure).toHaveBeenCalledWith(expect.objectContaining({ code: "section_handoff_failed" }));
+      expect(setPatchValue).not.toHaveBeenCalled();
+    });
+  });
 });

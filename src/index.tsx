@@ -24,7 +24,7 @@ import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
-import { hydratePrefs, onPrefsHealed, prefsHydrated } from "./system/pdcStorage";
+import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
@@ -39,7 +39,11 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
-import { configureThemeFailureReporter, createProductionThemesDependencies } from "./themes/themesClient";
+import {
+  configureSectionHandoffStorage,
+  configureThemeFailureReporter,
+  createProductionThemesDependencies,
+} from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
@@ -93,6 +97,10 @@ export default definePlugin(() => {
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
+  const releaseSectionHandoffStorage = configureSectionHandoffStorage({
+    read: () => readString("pdc:themeSectionHandoffs"),
+    write: (value) => writeString("pdc:themeSectionHandoffs", value),
+  });
   const themesClient = getThemesClient(createProductionThemesDependencies());
   let qamRuntime: ReturnType<typeof startPluginQamRuntime> | null = null;
   let dismounted = false;
@@ -177,6 +185,7 @@ export default definePlugin(() => {
       releaseThemePublicationHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
+      releaseSectionHandoffStorage();
       releaseCssLoaderHost();
     },
   };

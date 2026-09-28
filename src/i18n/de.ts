@@ -394,6 +394,7 @@ export const de: Record<string, string> = {
   "themes.retry": "Erneut prüfen",
   "themes.operation.failed": "Der Vorgang wurde nicht abgeschlossen. Versuche es erneut; wenn es weiterhin fehlschlägt, sende einen Bericht aus den Einstellungen.",
   "themes.operation.code": "Code: {code}",
+  "themes.operation.sectionHandoff": "Damit sie sich nicht überlagern, gestaltet {others} die Bereiche nicht mehr, die jetzt {owner} gestaltet. Du kannst sie in den Bereichen jedes Themes aufteilen.",
   "themes.state.active": "Aktiv",
   "themes.state.installed": "Installiert",
   "themes.state.notInstalled": "Nicht installiert",

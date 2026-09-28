@@ -101,6 +101,15 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
       </div>
     ) : null}
 
+    {controller.sectionHandoff && !controller.error ? (
+      <div role="status" style={{ ...theme.card, padding: theme.space.md, color: theme.color.textMuted }}>
+        {t("themes.operation.sectionHandoff", {
+          owner: controller.sectionHandoff.owner,
+          others: controller.sectionHandoff.others.join(", "),
+        })}
+      </div>
+    ) : null}
+
     {controller.error ? (
       <div role="alert" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
         {t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}
