@@ -4,6 +4,7 @@ import { ThemeActivationError, ThemeActivator, type ThemeActivationAdapter } fro
 import { CssLoaderOperationError, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import type { CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
+import { ThemeInstallError } from "./panelThemeInstaller";
 import { ThemesClient, type ThemesDependencies } from "./themesClient";
 
 const RELEASE: PublishedThemeRelease = {
@@ -497,5 +498,180 @@ describe("ThemesClient", () => {
     await expect(client.activate("example-theme")).resolves.toBe(false);
     expect(deps.installer.prepare).not.toHaveBeenCalled();
     expect(deps.activator.activate).not.toHaveBeenCalled();
+  });
+  it("releases an install rollback that CSS Loader keeps failing to reconcile", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure });
+    deps.installer.pendingRecoveries = vi.fn(async () => [
+      { transaction: "stuck", themeName: "Example Theme", previousVersion: "1.0.0" },
+    ]);
+    deps.adapter.reconcileRecoveredThemes = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader changed another theme during reload");
+    });
+    const client = new ThemesClient(deps);
+
+    await client.refresh();
+    await client.refresh();
+    expect(deps.installer.acknowledgeRollback).not.toHaveBeenCalled();
+    expect(client.getSnapshot()).toMatchObject({ errorCode: "verification_failed", recoveryKeptCurrent: false });
+
+    await client.refresh();
+
+    expect(deps.installer.acknowledgeRollback).toHaveBeenCalledWith("stuck");
+    expect(reportFailure.mock.calls.map(([failure]) => failure.code)).toEqual([
+      "verification_failed",
+      "released_after_mismatch",
+    ]);
+    expect(client.getSnapshot()).toMatchObject({ error: null, errorCode: null, recoveryKeptCurrent: true });
+    deps.installer.pendingRecoveries = vi.fn(async () => []);
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(true);
+  });
+
+  it("never releases an install rollback the backend refuses to recover", async () => {
+    const deps = dependencies();
+    deps.installer.pendingRecoveries = vi.fn(async () => {
+      throw new ThemeInstallError("invalid_journal", "A theme transaction journal requires recovery");
+    });
+    const client = new ThemesClient(deps);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) await client.refresh();
+
+    expect(deps.installer.acknowledgeRollback).not.toHaveBeenCalled();
+    expect(client.getSnapshot()).toMatchObject({
+      recoveryBlocked: true,
+      recoveryKeptCurrent: false,
+      errorCode: "invalid_journal",
+    });
+  });
+
+  it("reports the failing operation and its code for diagnostics", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure });
+    deps.adapter.reloadTheme = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not register Example Theme v1.2.3");
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(false);
+
+    expect(reportFailure).toHaveBeenCalledWith({
+      operation: "installing",
+      code: "verification_failed",
+      message: "CSS Loader did not register Example Theme v1.2.3",
+    });
+    expect(client.getSnapshot().errorCode).toBe("verification_failed");
+  });
+
+  it("keeps working when failure reporting itself fails", async () => {
+    const deps = dependencies({ reportFailure: vi.fn(() => { throw new Error("rpc down"); }) });
+    deps.adapter.reloadTheme = vi.fn(async () => { throw new Error("reload failed"); });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.install("example-theme", { version: "1.2.3" })).resolves.toBe(false);
+    expect(client.getSnapshot()).toMatchObject({ error: "reload failed", errorCode: "unknown" });
+  });
+  describe("section ownership between Hooandee themes", () => {
+    const ATLAS: PublishedThemeRelease = {
+      ...RELEASE, catalogId: "hooandee-atlas", cssLoaderName: "Atlas", exclusiveGroup: undefined,
+    };
+    const GALLERY: PublishedThemeRelease = {
+      ...RELEASE, catalogId: "hooandee-gallery", cssLoaderName: "Gallery", exclusiveGroup: undefined,
+    };
+    const section = (name: string, value: string) => ({
+      name, defaultValue: "Yes", value, options: ["No", "Yes"], type: "checkbox" as const, rawType: "checkbox",
+    });
+
+    function world(atlasEnabled: boolean) {
+      const themes = new Map<string, CssLoaderTheme>([
+        ["Gallery", { ...INSTALLED_THEME, id: "Gallery", name: "Gallery", displayName: "Gallery", enabled: true,
+          patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Ajustes", "Yes")] }],
+        ["Atlas", { ...INSTALLED_THEME, id: "Atlas", name: "Atlas", displayName: "Luminous Atlas", enabled: atlasEnabled,
+          patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Ajustes", "No")] }],
+      ]);
+      const snapshot = (): CssLoaderReadySnapshot => ({ status: "ready", themes: [...themes.values()].map((t) => structuredClone(t)) });
+      const setEnabled = (name: string, enabled: boolean) => themes.set(name, { ...themes.get(name)!, enabled });
+      let stored: Record<string, string> = {};
+      const deps = dependencies({
+        publication: { check: vi.fn(async () => ({ status: "published" as const, checkedAt: 1, themes: [ATLAS, GALLERY] })) },
+        sectionHandoffs: { read: () => stored, write: (next) => { stored = { ...next }; } },
+      });
+      deps.adapter.inspect = vi.fn(async () => snapshot());
+      deps.adapter.requireReady = vi.fn(async () => snapshot());
+      deps.adapter.setPatchValue = vi.fn(async (themeName: string, patchName: string, value: string) => {
+        const theme = themes.get(themeName)!;
+        themes.set(themeName, { ...theme, patches: theme.patches.map((p) => p.name === patchName ? { ...p, value } : p) });
+        return snapshot();
+      });
+      deps.activator.activate = vi.fn(async () => { setEnabled("Atlas", true); return snapshot(); });
+      deps.activator.deactivate = vi.fn(async () => { setEnabled("Atlas", false); return snapshot(); });
+      const value = (theme: string, patch: string) => themes.get(theme)!.patches.find((p) => p.name === patch)!.value;
+      return { deps, value, stored: () => stored };
+    }
+
+    it("hands overlapping sections to the theme being activated and gives them back on deactivation", async () => {
+      const { deps, value, stored } = world(false);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Gallery", "Estilizar Inicio")).toBe("No");
+      expect(value("Gallery", "Estilizar Ajustes")).toBe("Yes");
+      expect(client.getSnapshot().sectionHandoff).toEqual({ owner: "Luminous Atlas", others: ["Gallery"] });
+      expect(stored()).toEqual({ "Gallery\u0000Estilizar Inicio": "Atlas" });
+
+      await expect(client.deactivate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Gallery", "Estilizar Inicio")).toBe("Yes");
+      expect(stored()).toEqual({});
+    });
+
+    it("gives an activated theme back the sections it had handed to another theme", async () => {
+      const { deps, value, stored } = world(true);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+      await client.setPatch("hooandee-gallery", "Estilizar Inicio", "Yes");
+      expect(value("Atlas", "Estilizar Inicio")).toBe("No");
+      await client.deactivate("hooandee-atlas");
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(value("Atlas", "Estilizar Inicio")).toBe("Yes");
+      expect(value("Gallery", "Estilizar Inicio")).toBe("No");
+      expect(stored()).toEqual({ "Gallery\u0000Estilizar Inicio": "Atlas" });
+    });
+
+    it("lets a section be taken back by turning it on in the other theme", async () => {
+      const { deps, value } = world(true);
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.setPatch("hooandee-gallery", "Estilizar Inicio", "Yes")).resolves.toBe(true);
+
+      expect(value("Atlas", "Estilizar Inicio")).toBe("No");
+      expect(value("Gallery", "Estilizar Inicio")).toBe("Yes");
+    });
+
+    it("keeps a confirmed activation when a section handoff cannot be written", async () => {
+      const { deps } = world(false);
+      const reportFailure = vi.fn();
+      deps.reportFailure = reportFailure;
+      const setPatchValue = deps.adapter.setPatchValue;
+      deps.adapter.setPatchValue = vi.fn(async () => { throw new CssLoaderOperationError("mutation_failed", "nope"); });
+      const client = new ThemesClient(deps);
+      await client.refresh();
+      await client.refreshPublication();
+
+      await expect(client.activate("hooandee-atlas")).resolves.toBe(true);
+
+      expect(client.getSnapshot()).toMatchObject({ error: null, sectionHandoff: null });
+      expect(reportFailure).toHaveBeenCalledWith(expect.objectContaining({ code: "section_handoff_failed" }));
+      expect(setPatchValue).not.toHaveBeenCalled();
+    });
   });
 });

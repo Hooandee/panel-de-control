@@ -64,6 +64,37 @@ function useInheritedRenderer(
 }
 
 describe("registerQuickAccessTab", () => {
+  it("keeps a hidden native tab reachable while Steam is opening it", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const friends = { key: 3 };
+    const settings = { key: 4 };
+    const standardDecky = { decky: true, key: 999, panel: {} };
+    const menu = { m_eQuickAccessTab: 4 };
+    const host = {
+      __TABS_HOOK_INSTANCE: hook,
+      SteamUIStore: { WindowStore: { GamepadUIMainWindowInstance: { m_MenuStore: menu } } },
+    };
+    const composition = configureQuickAccessTabComposition({
+      layout: { order: ["native:4", "native:3"], hiddenNative: ["native:3"], pinnedViews: [], ownedIds: {} },
+      tokensById: new Map(),
+    }, host);
+
+    const closed = [friends, settings, standardDecky];
+    hook.render(closed, true);
+    expect(closed.map((tab) => tab.key)).toEqual([4, 999]);
+
+    menu.m_eQuickAccessTab = 3;
+    const openingFriends = [friends, settings, standardDecky];
+    hook.render(openingFriends, true);
+    expect(openingFriends.map((tab) => tab.key)).toEqual([4, 3, 999]);
+
+    const hiddenRender = [friends, settings, standardDecky];
+    hook.render(hiddenRender, false);
+    expect(hiddenRender.map((tab) => tab.key)).toEqual([4, 999]);
+    composition.dispose();
+  });
+
   it("composes native and owned tabs live and restores the native-first materialization", () => {
     const hook = createHook();
     useInheritedRenderer(hook, appendRegistryOnCountChange);

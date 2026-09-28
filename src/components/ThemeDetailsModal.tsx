@@ -432,9 +432,23 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               </div>
             ) : null}
 
+            {controller.sectionHandoff && !controller.error ? (
+              <div data-pdc-theme-status-surface="true" role="status" style={STATUS_SURFACE}>
+                <div data-pdc-theme-muted>{t("themes.operation.sectionHandoff", {
+                  owner: controller.sectionHandoff.owner,
+                  others: controller.sectionHandoff.others.join(", "),
+                })}</div>
+              </div>
+            ) : null}
+
             {controller.error ? (
               <div data-pdc-theme-status-surface="true" role="alert" style={STATUS_SURFACE}>
                 <div data-pdc-theme-warning>{t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}</div>
+                {controller.errorCode ? (
+                  <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
+                    {t("themes.operation.code", { code: controller.errorCode })}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

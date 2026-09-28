@@ -9,6 +9,7 @@ import {
   type ThemesDependencies,
   type ThemesOperation,
   type ThemeInstallConfirmation,
+  type SectionHandoffNotice,
 } from "./themesClient";
 
 export type { ThemesAdapter, ThemesActivator, ThemesDependencies, ThemesOperation } from "./themesClient";
@@ -22,6 +23,8 @@ export interface ThemesController {
   recoveryBlocked: boolean;
   recoveryKeptCurrent: boolean;
   error: string | null;
+  errorCode: string | null;
+  sectionHandoff: SectionHandoffNotice | null;
   publication: ThemePublicationState;
   refresh(): Promise<void>;
   refreshPublication(): Promise<void>;

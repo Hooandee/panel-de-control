@@ -417,6 +417,35 @@ def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
     assert all("line" not in signal for signal in diagnostics["signals"])
 
 
+def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[0927/140000.000:INFO:CONSOLE(2)] "Uncaught TypeError: x is not a function", '
+        "source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js?v=1 (2)\n"
+        '[0927/140001.000:INFO:CONSOLE(9)] "Uncaught (in promise) ReferenceError: y", '
+        "source: http://127.0.0.1:1337/plugins/SteamGridDB/dist/index.js (9)\n"
+        '[0927/140002.000:INFO:CONSOLE(3)] "Uncaught TypeError: z", '
+        "source: http://localhost:1337/plugins/password=hunter2/dist/index.js (3)\n"
+        '[0927/140003.000:INFO:CONSOLE(4)] "Uncaught SyntaxError: w", '
+        "source: http://localhost:1337/frontend/index.js (4)\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "TypeError", "origin": "panel"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "ReferenceError", "origin": "steamgriddb"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "TypeError", "origin": "other_plugin"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+         "error_type": "SyntaxError", "origin": "decky"},
+    ]
+    assert "hunter2" not in str(diagnostics)
+
+
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     tmp_path,
     monkeypatch,

@@ -82,6 +82,7 @@ _TRANSACTION_PREFIX = ".panel-theme-transaction-"
 _QUARANTINE_PREFIX = ".panel-theme-quarantine-"
 _QUARANTINE_RECORD = "quarantine.json"
 _MAX_QUARANTINED = 3
+_CORRUPTED_PREFIX = ".panel-theme-corrupted-"
 _MUTATION_LOCK_NAME = ".panel-theme-install.lock"
 _TRANSACTION_TOKEN = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
 _INSTALL_LOCK = threading.RLock()
@@ -877,6 +878,54 @@ def _read_existing_manifest(path: Path) -> dict[str, Any]:
     return _read_json(path, "identity_mismatch")
 
 
+def _is_corrupted_panel_install(installed: Path, theme_id: str) -> bool:
+    if installed.is_symlink() or not installed.is_dir():
+        return False
+    try:
+        marker = _read_existing_manifest(installed / "panel-theme.json")
+    except ThemePackageError:
+        return False
+    if marker.get("schemaVersion") != 2 or marker.get("catalogId") != theme_id:
+        return False
+    try:
+        _read_existing_manifest(installed / "theme.json")
+    except ThemePackageError:
+        return True
+    return False
+
+
+def _numbered_directories(parent: Path, prefix: str) -> list[Path]:
+    return sorted(
+        (path for path in parent.glob(f"{prefix}*") if path.is_dir() and not path.is_symlink()),
+        key=lambda path: path.name,
+    )
+
+
+def _next_numbered_directory(parent: Path, prefix: str) -> Path:
+    existing = _numbered_directories(parent, prefix)
+    sequence = int(existing[-1].name[len(prefix):].split("-", 1)[0]) + 1 if existing else 1
+    return parent / f"{prefix}{sequence:08d}-{secrets.token_hex(4)}"
+
+
+def _prune_numbered_directories(parent: Path, prefix: str) -> None:
+    for stale in _numbered_directories(parent, prefix)[:-_MAX_QUARANTINED]:
+        try:
+            _durable_remove_tree(stale)
+        except OSError:
+            continue
+
+
+def _set_aside_corrupted_install(installed: Path) -> Path:
+    parent = installed.parent.parent
+    aside = _next_numbered_directory(parent, _CORRUPTED_PREFIX)
+    try:
+        _durable_replace(installed, aside)
+    except OSError as error:
+        raise ThemePackageError("install_failed", "Unreadable theme could not be set aside") from error
+    _prune_numbered_directories(parent, _CORRUPTED_PREFIX)
+    return aside
+
+
 def _verify_owned_destination(installed: Path, theme_id: str, theme_name: str) -> None:
     if not installed.exists():
         return
@@ -1327,10 +1376,7 @@ def _hash_file(path: Path) -> str:
 
 
 def _quarantined_transactions(parent: Path) -> list[Path]:
-    return sorted(
-        (path for path in parent.glob(f"{_QUARANTINE_PREFIX}*") if path.is_dir() and not path.is_symlink()),
-        key=lambda path: path.name,
-    )
+    return _numbered_directories(parent, _QUARANTINE_PREFIX)
 
 
 def _quarantined_theme(work: Path) -> tuple[str, str] | None:
@@ -1379,9 +1425,7 @@ def _quarantine_transaction(
     really on disk. If the move itself fails the old blocking behaviour is kept.
     """
     parent = work.parent
-    existing = _quarantined_transactions(parent)
-    sequence = int(existing[-1].name[len(_QUARANTINE_PREFIX):].split("-", 1)[0]) + 1 if existing else 1
-    destination = parent / f"{_QUARANTINE_PREFIX}{sequence:08d}-{secrets.token_hex(4)}"
+    destination = _next_numbered_directory(parent, _QUARANTINE_PREFIX)
     try:
         _durable_replace(work, destination)
     except OSError as error:
@@ -1397,11 +1441,7 @@ def _quarantine_transaction(
     except OSError:
         pass
     _reconcile_quarantined_receipt(themes_root, receipts_path, destination)
-    for stale in _quarantined_transactions(parent)[:-_MAX_QUARANTINED]:
-        try:
-            _durable_remove_tree(stale)
-        except OSError:
-            continue
+    _prune_numbered_directories(parent, _QUARANTINE_PREFIX)
 
 
 def _active_transaction(themes_root: Path, receipts_path: Path | None = None) -> bool:
@@ -1479,6 +1519,9 @@ def prepare_theme_archive(
         if _active_transaction(root, receipt_store):
             raise ThemePackageError("transaction_busy", "Another theme installation is pending")
         destination = root / theme_name
+        css_loader_state_source = destination
+        if _is_corrupted_panel_install(destination, theme_id):
+            css_loader_state_source = _set_aside_corrupted_install(destination)
         _verify_owned_destination(destination, theme_id, theme_name)
         previous_version: str | None = None
         previous_receipt: dict[str, object] | None = None
@@ -1491,6 +1534,7 @@ def prepare_theme_archive(
             (item for item in persisted_receipts if item["catalogId"] == theme_id),
             None,
         )
+
         if not destination.exists() and persisted_previous is not None:
             _replace_receipt(receipt_store, theme_id, None)
             persisted_previous = None
@@ -1528,7 +1572,7 @@ def prepare_theme_archive(
                 theme_name,
             )
             new_receipt = _validate_identity(extracted, theme_id, theme_name, version)
-            _preserve_css_loader_state(destination, extracted)
+            _preserve_css_loader_state(css_loader_state_source, extracted)
             _set_tree_ownership(extracted, css_loader_owner.st_uid, css_loader_owner.st_gid)
             _fsync_tree(extracted)
             journal = {
@@ -1853,7 +1897,12 @@ def theme_transaction_diagnostics(themes_root: str | Path) -> dict[str, object]:
             last = {"reason": str(record.get("reason", "unknown"))}
         except ThemePackageError:
             last = {"reason": "unknown"}
-    return {"pending": pending, "quarantined": len(quarantined), "last_quarantine": last}
+    return {
+        "pending": pending,
+        "quarantined": len(quarantined),
+        "last_quarantine": last,
+        "set_aside": len(_numbered_directories(parent, _CORRUPTED_PREFIX)),
+    }
 
 
 def list_theme_extensions(

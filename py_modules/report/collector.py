@@ -19,6 +19,7 @@ import json
 import os
 import re
 import stat
+import urllib.parse
 
 from sysfs import read_str
 
@@ -149,6 +150,20 @@ _PLUGIN_ERROR_TYPES = {
     "syntaxerror": "SyntaxError",
     "error": "Error",
 }
+_DECKY_ORIGIN = re.compile(r"(?:localhost|127\.0\.0\.1):1337(?P<path>/[^\s?#)\"']*)?")
+_FRONTEND_EXCEPTION_TYPE = re.compile(
+    r"Uncaught(?: \(in promise\))? (?P<error>TypeError|ReferenceError|SyntaxError|RangeError|Error)\b"
+)
+# Plugin folder names are user text: only these fixed slugs leave the device.
+_KNOWN_FRONTEND_ORIGINS = {
+    "paneldecontrol": "panel",
+    "cssloader": "css_loader",
+    "sdhcssloader": "css_loader",
+    "steamgriddb": "steamgriddb",
+    "protondbbadges": "protondb_badges",
+    "protondbdecky": "protondb_badges",
+    "hltbfordeck": "hltb",
+}
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
@@ -196,11 +211,26 @@ def _frontend_signal(line: str) -> tuple[str | None, bool]:
     ):
         return "react_error", False
     if (
-        "localhost:1337" in line
+        _DECKY_ORIGIN.search(line)
         and re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", line)
     ):
         return "decky_frontend_exception", False
     return None, False
+
+
+def _frontend_exception_detail(line: str) -> dict:
+    error = _FRONTEND_EXCEPTION_TYPE.search(line)
+    origin = "decky"
+    match = _DECKY_ORIGIN.search(line)
+    path = (match.group("path") if match else None) or ""
+    if path.startswith("/plugins/"):
+        folder = urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0])
+        slug = re.sub(r"[^a-z0-9]", "", folder.lower())
+        origin = _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin")
+    return {
+        "error_type": error.group("error") if error else "unknown",
+        "origin": origin,
+    }
 
 
 def frontend_crash_diagnostics(
@@ -274,10 +304,10 @@ def frontend_crash_diagnostics(
                     seen_plugins.add(key)
                     plugin_load_errors.append(plugin)
             if len(signals) < _MAX_FRONTEND_SIGNALS:
-                signals.append({
-                    "source": source,
-                    "kind": kind,
-                })
+                signal = {"source": source, "kind": kind}
+                if kind == "decky_frontend_exception":
+                    signal.update(_frontend_exception_detail(raw_line))
+                signals.append(signal)
 
     captured = any(entry["status"] == "captured" for entry in files)
     status = (

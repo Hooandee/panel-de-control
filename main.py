@@ -176,6 +176,14 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
+_THEME_FAILURE_OPERATIONS = frozenset({
+    "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
+})
+_THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+_THEME_FAILURE_MESSAGE_CHARS = 240
+_THEME_FAILURE_HISTORY = 5
+_THEME_FOLDER_SCAN_LIMIT = 200
+_THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -1173,7 +1181,54 @@ class Plugin:
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
+            "recent_failures": [
+                {key: entry[key] for key in ("operation", "code", "count")}
+                for entry in self._theme_failures()
+            ],
+            "unreadable_theme_folders": self._unreadable_theme_folders(),
         }
+
+    def _unreadable_theme_folders(self) -> int:
+        unreadable = 0
+        try:
+            folders = [entry for entry in self._themes_root().iterdir() if entry.is_dir()]
+        except OSError:
+            return 0
+        for folder in folders[:_THEME_FOLDER_SCAN_LIMIT]:
+            manifest = folder / "theme.json"
+            if not manifest.is_file():
+                continue
+            try:
+                readable = manifest.stat().st_size <= _THEME_MANIFEST_SCAN_BYTES and isinstance(
+                    json.loads(manifest.read_text(encoding="utf-8")), dict
+                )
+            except (OSError, ValueError):
+                readable = False
+            unreadable += not readable
+        return unreadable
+
+    def _theme_failures(self) -> deque:
+        failures = getattr(self, "_theme_failure_history", None)
+        if failures is None:
+            failures = deque(maxlen=_THEME_FAILURE_HISTORY)
+            self._theme_failure_history = failures
+        return failures
+
+    async def record_theme_failure(self, operation: str, code: str, message: str) -> bool:
+        operation = operation if operation in _THEME_FAILURE_OPERATIONS else "unknown"
+        code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
+        message = " ".join(str(message).split())[:_THEME_FAILURE_MESSAGE_CHARS]
+        failures = self._theme_failures()
+        entry = {"operation": operation, "code": code, "message": message}
+        if failures and {key: failures[-1][key] for key in entry} == entry:
+            failures[-1]["count"] += 1
+            return True
+        failures.append({**entry, "count": 1})
+        decky.logger.warning(
+            "Theme operation failed %s",
+            json.dumps(entry, separators=(",", ":"), ensure_ascii=False),
+        )
+        return True
 
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)

@@ -66,6 +66,8 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     recoveryBlocked: false,
     recoveryKeptCurrent: false,
     error: null,
+    errorCode: null,
+    sectionHandoff: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
@@ -492,6 +494,13 @@ describe("ThemeDetailsModal", () => {
     expect(document.activeElement).toBe(heading);
   });
 
+  it("explains which theme gave up its sections after an activation", () => {
+    mocks.controller = installedController({ sectionHandoff: { owner: "Luminous Atlas", others: ["Gallery"] } });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByText("themes.operation.sectionHandoff")).toBeTruthy();
+  });
+
   it("shows the existing failure warning and restores removal", () => {
     const uninstall = vi.fn(async () => false);
     mocks.controller = installedController({ uninstall });
@@ -499,10 +508,15 @@ describe("ThemeDetailsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
     fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
-    mocks.controller = installedController({ error: "CSS Loader did not confirm removal", uninstall });
+    mocks.controller = installedController({
+      error: "CSS Loader did not confirm removal",
+      errorCode: "verification_failed",
+      uninstall,
+    });
     view.rerender(<ThemeDetailsModal themeId="example-theme" />);
 
     expect(screen.getByRole("alert").textContent).toContain("themes.operation.failed");
+    expect(screen.getByRole("alert").textContent).toContain("themes.operation.code");
     expect((screen.getByRole("button", { name: "themes.action.delete" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
