@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.57.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.2...panel-de-control-v0.57.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* unblock Cleanup, stop equalizer login sessions and list plugins in bug reports ([#788](https://github.com/Hooandee/panel-de-control/issues/788)) ([d1a6dcb](https://github.com/Hooandee/panel-de-control/commit/d1a6dcb0e02e9ba154edea1c3b91f2315727b21f))
+
 ## [0.57.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.1...panel-de-control-v0.57.2) (2026-09-28)
 
 
