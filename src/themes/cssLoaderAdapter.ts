@@ -102,13 +102,6 @@ function normalizeTheme(value: unknown): CssLoaderTheme | null {
   };
 }
 
-function themeNames(
-  snapshot: CssLoaderReadySnapshot,
-  extra: readonly string[] = [],
-): ReadonlySet<string> {
-  return new Set([...snapshot.themes.map((theme) => theme.name), ...extra]);
-}
-
 function errorInfo(error: unknown): CssLoaderErrorInfo {
   if (error instanceof CssLoaderOperationError) {
     return { code: error.code, message: error.message };
@@ -276,9 +269,10 @@ export class CssLoaderAdapter {
     }
   }
 
-  // CSS Loader lists every folder it could not load, including third-party themes that were
-  // already broken; only a failure of a theme Panel must preserve invalidates the reset.
-  private async resetThemes(protectedThemeNames: ReadonlySet<string>): Promise<void> {
+  // CSS Loader lists every folder it could not load, including third-party themes broken on disk
+  // regardless of Panel; only a failure of a theme Panel is installing or restoring invalidates
+  // the reset, and the other failures are left out of the readback comparison.
+  private async resetThemes(protectedThemeNames: ReadonlySet<string>): Promise<ReadonlySet<string>> {
     const result = await this.callMutationWithTimeout(this.reloadTimeoutMs, "reset");
     if (
       !isRecord(result)
@@ -303,6 +297,7 @@ export class CssLoaderAdapter {
         `CSS Loader could not reload ${themeName}: ${reason}`,
       );
     }
+    return new Set((result.fails as [string, string][]).map(([themeName]) => themeName));
   }
 
   async setThemeState(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot> {
@@ -346,7 +341,7 @@ export class CssLoaderAdapter {
     expectedVersion: string,
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes(themeNames(before, [expectedThemeName]));
+    const brokenOnDisk = await this.resetThemes(new Set([expectedThemeName]));
     let after = await this.requireReady();
     let updated = after.themes.find((theme) => theme.name === expectedThemeName);
     if (!updated || updated.version !== expectedVersion) {
@@ -363,17 +358,20 @@ export class CssLoaderAdapter {
         `CSS Loader did not preserve ${expectedThemeName} v${expectedVersion}`,
       );
     }
-    this.verifyInventoryState(before, after, expectedThemeName);
+    this.verifyInventoryState(before, after, [expectedThemeName, ...brokenOnDisk]);
     const previous = before.themes.find((theme) => theme.name === expectedThemeName);
     if (previous) this.verifyCompatibleTargetState(previous, updated);
     return after;
   }
 
-  async restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes(themeNames(expected));
+  async restoreThemeSnapshot(
+    expected: CssLoaderReadySnapshot,
+    restoredThemeNames: readonly string[] = [],
+  ): Promise<CssLoaderReadySnapshot> {
+    const brokenOnDisk = await this.resetThemes(new Set(restoredThemeNames));
     const current = await this.requireReady();
     const after = await this.restoreCompatibleSnapshotState(expected, current);
-    this.verifyInventoryState(expected, after);
+    this.verifyInventoryState(expected, after, [...brokenOnDisk]);
     return after;
   }
 
@@ -381,11 +379,11 @@ export class CssLoaderAdapter {
     recoveries: readonly CssLoaderRecoveryExpectation[],
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
-    await this.resetThemes(themeNames(before, recoveries.map((recovery) => recovery.themeName)));
-    const current = await this.requireReady();
     const recoveredNames = new Set(recoveries.map((recovery) => recovery.themeName));
+    const brokenOnDisk = await this.resetThemes(recoveredNames);
+    const current = await this.requireReady();
     const after = await this.restoreCompatibleSnapshotState(before, current, recoveredNames);
-    this.verifyInventoryState(before, after, recoveries.map((recovery) => recovery.themeName));
+    this.verifyInventoryState(before, after, [...recoveredNames, ...brokenOnDisk]);
     for (const recovery of recoveries) {
       const restored = after.themes.find((theme) => theme.name === recovery.themeName);
       if (

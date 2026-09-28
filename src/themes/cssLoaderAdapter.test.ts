@@ -451,22 +451,75 @@ describe("CssLoaderAdapter mutations", () => {
     });
   });
 
-  it("rejects a reset that fails to load the target or a theme that was loaded before", async () => {
-    const other = { ...RAW_THEME, id: "Other", name: "Other" };
-    for (const failed of ["Example Theme", "Other"]) {
-      const call = vi.fn(async (method: string) => {
-        if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }, other];
-        if (method === "reset") return { fails: [[failed, "invalid manifest"]] };
-        throw new Error(`Unexpected method: ${method}`);
-      });
-      const adapter = new CssLoaderAdapter(host({ call }));
-      const before = await adapter.requireReady();
+  it("rejects a reset that fails to load the theme being installed", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
+      if (method === "reset") return { fails: [["Example Theme", "invalid manifest"]] };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
 
-      await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
-        code: "mutation_failed",
-        message: `CSS Loader could not reload ${failed}: invalid manifest`,
-      });
-    }
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
+      code: "mutation_failed",
+      message: "CSS Loader could not reload Example Theme: invalid manifest",
+    });
+  });
+
+  it("tolerates a loaded third-party theme that breaks on disk during the reload", async () => {
+    const other = { ...RAW_THEME, id: "Other", name: "Other" };
+    let reset = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return reset
+        ? [{ ...RAW_THEME, version: "0.6.0" }]
+        : [{ ...RAW_THEME, version: "0.5.0" }, other];
+      if (method === "reset") {
+        reset = true;
+        return { fails: [["Other", "invalid manifest"]] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).resolves.toMatchObject({
+      status: "ready",
+    });
+  });
+
+  it("still rejects a reload that silently drops a third-party theme", async () => {
+    const other = { ...RAW_THEME, id: "Other", name: "Other" };
+    let reset = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return reset
+        ? [{ ...RAW_THEME, version: "0.6.0" }]
+        : [{ ...RAW_THEME, version: "0.5.0" }, other];
+      if (method === "reset") {
+        reset = true;
+        return { fails: [] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
+      code: "verification_failed",
+    });
+  });
+
+  it("rejects a rollback whose restored theme fails to load", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
+      if (method === "reset") return { fails: [["Example Theme", "invalid manifest"]] };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.restoreThemeSnapshot(before, ["Example Theme"])).rejects.toMatchObject({
+      code: "mutation_failed",
+    });
   });
 
   it("accepts a third-party theme updated on disk while keeping its activation", async () => {

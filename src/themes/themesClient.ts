@@ -26,7 +26,10 @@ export interface ThemesAdapter {
     expectedVersion: string,
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
-  restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
+  restoreThemeSnapshot(
+    expected: CssLoaderReadySnapshot,
+    restoredThemeNames?: readonly string[],
+  ): Promise<CssLoaderReadySnapshot>;
   reconcileRecoveredThemes(
     recoveries: readonly { themeName: string; previousVersion: string | null }[],
     before: CssLoaderReadySnapshot,
@@ -367,7 +370,7 @@ export class ThemesClient {
             );
           }
           try {
-            await this.dependencies.adapter.restoreThemeSnapshot(before);
+            await this.dependencies.adapter.restoreThemeSnapshot(before, [card.release.cssLoaderName]);
           } catch (restoreError) {
             throw new ThemeInstallError(
               "rollback_verification_failed",
