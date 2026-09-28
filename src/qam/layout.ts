@@ -70,16 +70,19 @@ export function coerceQamLayout(value: unknown): QamLayout {
   };
 }
 
+// Steam opens specific native entries by itself (Friends & Chat opens Friends): a hidden entry
+// stays reachable while it is the one being opened, or Steam shows another tab in its place.
 export function resolveQamTokens(
   defaults: QamEntryToken[],
   layout: QamLayout,
   protectedToken: QamEntryToken,
+  requestedNative?: QamEntryToken | null,
 ): QamEntryToken[] {
   const hiddenNative = new Set(layout.hiddenNative);
   const pinnedViews = new Set(layout.pinnedViews);
   const visible = (token: string) => {
     if (token === protectedToken) return true;
-    if (isNativeQamToken(token)) return !hiddenNative.has(token);
+    if (isNativeQamToken(token)) return token === requestedNative || !hiddenNative.has(token);
     if (isPanelQamToken(token)) return pinnedViews.has(token);
     return false;
   };

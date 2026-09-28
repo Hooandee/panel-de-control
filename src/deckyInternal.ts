@@ -58,6 +58,7 @@ interface ActiveQamComposition {
   owner: object;
   config: QuickAccessTabCompositionConfig;
   expectedKeys: string[] | null;
+  host: unknown;
 }
 
 interface QamRenderAdapterState {
@@ -134,6 +135,26 @@ function unavailableQamTab(
 ): QuickAccessTabRegistration {
   lastQamTabReason = reason;
   return { registered: false, restartRequired, reason, dispose() {} };
+}
+
+interface SteamMenuHost {
+  SteamUIStore?: {
+    WindowStore?: {
+      GamepadUIMainWindowInstance?: { m_MenuStore?: { m_eQuickAccessTab?: unknown } };
+    };
+  };
+}
+
+function requestedNativeQamToken(host: unknown): QamEntryToken | null {
+  try {
+    const tab = (host as SteamMenuHost | null)?.SteamUIStore?.WindowStore
+      ?.GamepadUIMainWindowInstance?.m_MenuStore?.m_eQuickAccessTab;
+    return typeof tab === "number" && Number.isInteger(tab) && tab !== DECKY_PLUGIN_TAB_ID
+      ? `native:${tab}`
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function tabsHookOf(host: unknown): DeckyTabsHook | null {
@@ -547,6 +568,7 @@ function reconcileAdaptedRender(
       defaults,
       composition.layout,
       QAM_DECKY_TOKEN,
+      visible ? requestedNativeQamToken(activeComposition.host) : null,
     );
     const composed = composeQamEntries(canonicalTabs, desiredTokens, ownedEntries);
     if (!composed.ok) {
@@ -738,7 +760,7 @@ export function configureQuickAccessTabComposition(
   }
 
   const owner = {};
-  state.composition = { owner, config, expectedKeys: null };
+  state.composition = { owner, config, expectedKeys: null, host };
   state.releaseRequested = false;
   if (config.onRuntimeFailure) state.failureListeners.add(config.onRuntimeFailure);
   if (!reconcileObservedArrays(state)) {

@@ -23,6 +23,23 @@ describe("QAM layout", () => {
     )).toEqual(["pdc:section:hud", "native:friends", "decky"]);
   });
 
+  it("shows a hidden native entry while Steam is opening it", () => {
+    const layout: QamLayout = {
+      order: ["pdc:section:hud", "native:3", "native:4"],
+      hiddenNative: ["native:3", "native:4"],
+      pinnedViews: ["pdc:section:hud"],
+      ownedIds: {},
+    };
+    const defaults = ["native:3", "native:4", "pdc:section:hud", "decky"];
+
+    expect(resolveQamTokens(defaults, layout, "decky", "native:3"))
+      .toEqual(["pdc:section:hud", "native:3", "decky"]);
+    expect(resolveQamTokens(defaults, layout, "decky", "native:9"))
+      .toEqual(["pdc:section:hud", "decky"]);
+    expect(resolveQamTokens(defaults, layout, "decky", "pdc:section:power"))
+      .toEqual(["pdc:section:hud", "decky"]);
+  });
+
   it("shows unseen native entries without pinning unseen Panel views", () => {
     const layout: QamLayout = {
       order: ["native:friends", "pdc:section:hud"],
