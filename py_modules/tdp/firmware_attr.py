@@ -141,7 +141,6 @@ class FirmwareAttrBackend(TDPBackend):
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
         self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._runtime_lock_payload = self._safety_lock.load_payload()
-        self._locked_since = time.monotonic() if self._runtime_lock_payload else None
         self._recovery_failures = 0
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
@@ -443,7 +442,6 @@ class FirmwareAttrBackend(TDPBackend):
             return {"ok": False, "detail": detail}
         if purpose == "transaction":
             self._runtime_lock_payload = None
-            self._locked_since = None
             self._recovery_failures = 0
         else:
             self._owned_payload = None
@@ -465,26 +463,23 @@ class FirmwareAttrBackend(TDPBackend):
         if not self._safety_lock.clear():
             return False
         self._runtime_lock_payload = None
-        self._locked_since = None
         self._recovery_failures = 0
         self._write_circuit_open = None
         self._custom_return_pending = False
-        self._schedule_handoff_retry(None)
+        self._schedule_handoff_retry()
         return True
 
-    def _schedule_handoff_retry(self, targets):
+    def _schedule_handoff_retry(self):
         attempts = 0 if self._handoff is None else self._handoff["attempts"] + 1
         delay = _HANDOFF_RETRY_S[min(attempts, len(_HANDOFF_RETRY_S) - 1)]
-        self._handoff = {
-            "attempts": attempts,
-            "retry_at": time.monotonic() + delay,
-            "targets": targets,
-        }
+        self._handoff = {"attempts": attempts, "retry_at": time.monotonic() + delay}
 
-    def _handoff_retry_waiting(self, requested):
-        if self._handoff is None or time.monotonic() >= self._handoff["retry_at"]:
-            return False
-        return self._handoff["targets"] in (None, requested)
+    def _handoff_retry_waiting(self):
+        return self._handoff is not None and time.monotonic() < self._handoff["retry_at"]
+
+    def expedite_handoff_retry(self):
+        if self._handoff is not None:
+            self._handoff["retry_at"] = 0.0
 
     def recover_runtime_transaction(self):
         result = {"ok": True, "detail": "no firmware recovery pending"}
@@ -855,7 +850,7 @@ class FirmwareAttrBackend(TDPBackend):
                 "firmware ownership recovery pending",
             )
         requested = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
-        if self._handoff_retry_waiting(requested):
+        if self._handoff_retry_waiting():
             return TdpResult(
                 pl1,
                 self.read_applied(),
@@ -915,6 +910,7 @@ class FirmwareAttrBackend(TDPBackend):
         lock_payload = {
             "state": "transaction_pending",
             "detail": "firmware transaction pending",
+            "locked_at": round(time.time()),
             "snapshot": {
                 self._surface_label(surface, rail): snapshot[path]
                 for surface, rail, path in surfaces
@@ -1029,8 +1025,6 @@ class FirmwareAttrBackend(TDPBackend):
                 if self._rollback_rearmed:
                     lock_payload["custom_rearm_attempted"] = True
                 self._runtime_lock_payload = lock_payload
-                if self._locked_since is None:
-                    self._locked_since = time.monotonic()
                 if not self._safety_lock.persist_payload(lock_payload):
                     self._write_circuit_open += "; runtime lock persistence failed"
             elif not self._safety_lock.clear():
@@ -1050,8 +1044,11 @@ class FirmwareAttrBackend(TDPBackend):
                 if applied_w is not None
                 else None
             )
-            if self._handoff is not None:
-                self._schedule_handoff_retry(requested)
+            if self._handoff is not None or (
+                self._handoff_profile is not None
+                and previous_profile == self._handoff_profile
+            ):
+                self._schedule_handoff_retry()
             failure_kind = (
                 "target_not_applied"
                 if not failed
@@ -1160,18 +1157,16 @@ class FirmwareAttrBackend(TDPBackend):
         if self._write_circuit_open is not None:
             diagnostics["write_circuit_open"] = self._write_circuit_open
         if isinstance(self._runtime_lock_payload, dict):
-            diagnostics["transaction_lock"] = {
+            lock = {
                 key: self._runtime_lock_payload[key]
                 for key in ("state", "snapshot", "profile", "custom_rearm_attempted")
                 if key in self._runtime_lock_payload
             }
-            if self._locked_since is not None:
-                diagnostics["transaction_lock"]["locked_s"] = round(
-                    time.monotonic() - self._locked_since
-                )
-                diagnostics["transaction_lock"]["recovery_failures"] = (
-                    self._recovery_failures
-                )
+            locked_at = self._runtime_lock_payload.get("locked_at")
+            if isinstance(locked_at, (int, float)):
+                lock["locked_s"] = max(0, round(time.time() - locked_at))
+            lock["recovery_failures"] = self._recovery_failures
+            diagnostics["transaction_lock"] = lock
         if self._trust_live_bounds:
             diagnostics["live_bounds_valid"] = {
                 rail: self._validated_live_bounds(attr) is not None

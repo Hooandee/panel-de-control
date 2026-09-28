@@ -646,7 +646,7 @@ def test_exact_legion_go_2_83n0_handoff_retries_with_backoff_until_firmware_answ
     assert "firmware_handoff" not in backend.diagnostics()
 
 
-def test_exact_legion_go_2_83n0_handoff_retries_at_once_for_a_new_request(
+def test_exact_legion_go_2_83n0_handoff_backoff_holds_for_changing_requests(
     tmp_path,
     monkeypatch,
 ):
@@ -656,11 +656,50 @@ def test_exact_legion_go_2_83n0_handoff_retries_at_once_for_a_new_request(
     backend.set_levels(18, 18, 18, ac=True)
     firmware["arms"] = True
 
-    assert "retry pending" in backend.set_levels(18, 18, 18, ac=True).detail
-    changed = backend.set_levels(12, 12, 12, ac=True)
+    for watts in (12, 14, 16):
+        clock["now"] += 5
+        assert "retry pending" in backend.set_levels(watts, watts, watts, ac=True).detail
 
-    assert changed.ok is True
-    assert backend.read_applied() == 12
+    backend.expedite_handoff_retry()
+    resumed = backend.set_levels(16, 16, 16, ac=True)
+
+    assert resumed.ok is True
+    assert backend.read_applied() == 16
+
+
+def test_exact_legion_go_2_83n0_handoff_backoff_survives_a_restart(tmp_path, monkeypatch):
+    backend, firmware, _lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    restarted = select_backend(
+        _p("legion_go_2"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    stuck = _go_2_firmware_out_of_custom(restarted, str(tmp_path), rail_writes_fail=True)
+    stuck["arms"] = False
+    stuck["left_custom"] = True
+
+    failed = restarted.set_levels(18, 18, 18, ac=True)
+
+    assert failed.ok is False
+    assert restarted.read_profile() == "balanced"
+    assert restarted.diagnostics()["firmware_handoff"]["attempts"] == 0
+    assert "retry pending" in restarted.set_levels(18, 18, 18, ac=True).detail
+
+
+def test_exact_legion_go_2_83n0_failed_rollback_lock_reports_its_age(tmp_path, monkeypatch):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    firmware = _go_2_firmware_out_of_custom(backend, root, rail_writes_fail=True)
+    firmware["arms"] = False
+
+    result = backend.set_levels(18, 18, 18, ac=True)
+
+    assert result.ok is False
+    lock = backend.diagnostics()["transaction_lock"]
+    assert lock["state"] == "rollback_failed"
+    assert lock["locked_s"] >= 0
+    assert lock["recovery_failures"] == 0
 
 
 def test_exact_legion_go_2_83n0_keeps_lock_when_balanced_is_unavailable(
@@ -686,7 +725,7 @@ def test_exact_legion_go_2_83n0_keeps_lock_when_balanced_is_unavailable(
     assert lock["state"] == "rollback_failed"
     assert lock["custom_rearm_attempted"] is True
     assert lock["recovery_failures"] == 2
-    assert lock["locked_s"] >= 0
+    assert "locked_s" not in lock
     with open(lock_path) as handle:
         assert json.load(handle)["custom_rearm_attempted"] is True
     assert "firmware_handoff" not in backend.diagnostics()

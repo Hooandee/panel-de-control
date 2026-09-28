@@ -2406,3 +2406,14 @@ def test_guard_logs_low_battery_threshold_crossings_once(plugin, monkeypatch):
     assert set(entering["requested"]) >= {"pl1"}
     assert "observation" in entering
     assert logged[1]["on_ac"] is True
+
+
+def test_resume_and_ac_changes_expedite_a_firmware_handoff_retry(plugin):
+    calls = []
+    plugin._tdp_backend.expedite_handoff_retry = lambda: calls.append(True)
+
+    plugin._log_lifecycle_event({"event": "resume_detected"})
+    plugin._log_lifecycle_event({"event": "ac_changed", "on_ac": True})
+    plugin._log_lifecycle_event({"event": "baseline"})
+
+    assert len(calls) == 2

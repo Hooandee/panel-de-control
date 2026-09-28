@@ -11525,6 +11525,10 @@ class Plugin:
     def _log_lifecycle_event(self, event) -> None:
         if event.get("event") == "resume_detected":
             self._reset_auto_session("resume")
+        if event.get("event") in ("resume_detected", "ac_changed"):
+            expedite = getattr(self._tdp_backend, "expedite_handoff_retry", None)
+            if callable(expedite):
+                expedite()
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
         log = (
             decky.logger.warning
