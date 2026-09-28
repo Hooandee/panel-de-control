@@ -131,11 +131,22 @@ def test_desktop_pc_seeds_pass_through_once_and_disables_handheld_tdp():
     assert settings["tdp_control_enabled"] is False
     assert settings["desktop_power_mode"] == "free"
     assert settings["desktop_mode_enabled"] is False
-    assert settings["_desktop_defaults_migrated"] is True
+    assert settings["_desktop_pc_prev_tdp_control"] is True
 
     settings["desktop_power_mode"] = "balanced"
     assert migrate_desktop_defaults(settings, DESKTOP_PC) is False
     assert settings["desktop_power_mode"] == "balanced"
+
+
+def test_misdetected_handheld_gets_its_tdp_switch_back():
+    from desktop.mode import migrate_desktop_defaults
+    from device_profiles import GENERIC
+    settings = {"tdp_control_enabled": True}
+    migrate_desktop_defaults(settings, DESKTOP_PC)
+
+    assert migrate_desktop_defaults(settings, GENERIC) is True
+    assert settings["tdp_control_enabled"] is True
+    assert "_desktop_pc_prev_tdp_control" not in settings
 
 
 def test_desktop_gpu_power_cap_uses_the_driver_bounds(tmp_path):
@@ -160,3 +171,68 @@ def test_desktop_gpu_power_cap_uses_the_driver_bounds(tmp_path):
     assert cap.restore()["ok"] is True
     with open(os.path.join(hwmon, "power1_cap")) as handle:
         assert handle.read() == "263000000"
+
+
+def test_onexplayer_3_rapl_write_reaches_45_w_only_on_ac(tmp_path):
+    from device_profiles import DEVICE_TABLE
+    rapl = _rapl(str(tmp_path), pl1_w=25)
+    oxp3 = next(p for p in DEVICE_TABLE if p.key == "onexplayer_3")
+    backend = select_backend(oxp3, root=str(tmp_path))
+    path = os.path.join(rapl, "constraint_0_power_limit_uw")
+
+    assert backend.get_limits().max_ac_w == 35
+    backend.set_tdp(60, True)
+    with open(path) as handle:
+        assert int(handle.read()) == 45_000_000
+    backend.set_tdp(60, False)
+    with open(path) as handle:
+        assert int(handle.read()) == 35_000_000
+
+
+def test_free_restores_an_unlimited_firmware_pl1_verbatim(tmp_path):
+    from desktop.power import DesktopPowerCoordinator
+
+    class NoGpu:
+        supported = False
+
+        def state(self):
+            return {"supported": False, "current_w": None, "min_w": None,
+                    "max_w": None, "default_w": None}
+
+    rapl = _rapl(str(tmp_path), pl1_w=1, max_w=125)
+    limit = os.path.join(rapl, "constraint_0_power_limit_uw")
+    _w(limit, "4095875000")
+    cpu = select_backend(dataclasses.replace(DESKTOP_PC, vendor="intel"), root=str(tmp_path))
+    assert cpu.get_limits().max_ac_w == 125
+    coordinator = DesktopPowerCoordinator(cpu, NoGpu(), persist_state=lambda _s: None,
+                                          boot_id="boot", device_key="desktop_pc",
+                                          firmware_relative=True)
+
+    assert coordinator.apply("performance")["ok"] is True
+    with open(limit) as handle:
+        assert int(handle.read()) == 125_000_000
+    assert coordinator.apply("free")["ok"] is True
+    with open(limit) as handle:
+        assert handle.read() == "4095875000"
+
+
+def test_intel_desktop_without_a_readable_ceiling_is_not_driven(tmp_path):
+    d = os.path.join(str(tmp_path), "sys/devices/virtual/powercap/intel-rapl/intel-rapl:0")
+    _w(os.path.join(d, "name"), "package-0")
+    _w(os.path.join(d, "constraint_0_power_limit_uw"), "4095875000")
+    device = dataclasses.replace(DESKTOP_PC, vendor="intel")
+    assert isinstance(select_backend(device, root=str(tmp_path)), NullBackend)
+
+
+def test_same_boot_handoff_keeps_the_firmware_ceiling_after_a_restart(tmp_path):
+    from desktop.power import handoff_cpu_ceiling_w
+    _rapl(str(tmp_path), pl1_w=62)
+    state = {"version": 1, "boot_id": "b1", "device_key": "desktop_pc",
+             "baseline": {"cpu_w": 125, "cpu_uw": 125_000_000,
+                          "cpu_policy": None, "gpu_uw": None}}
+    hint = handoff_cpu_ceiling_w(state, boot_id="b1")
+    backend = select_backend(dataclasses.replace(DESKTOP_PC, vendor="intel"),
+                             root=str(tmp_path), desktop_ceiling_hint_w=hint)
+
+    assert backend.get_limits().max_ac_w == 125
+    assert handoff_cpu_ceiling_w(state, boot_id="b2") is None

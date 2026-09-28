@@ -17,10 +17,12 @@ _CLAW_PL2_RESTORE_MAX_W = 37
 _DESKTOP_MAX_SANE_W = 500
 
 
-def firmware_pl1_ceiling_w(root: str = "/") -> int | None:
+def firmware_pl1_ceiling_w(root: str = "/", hint_w: int | None = None) -> int | None:
     """Highest PL1 the firmware set or declares for package-0, read before any
-    write. Desktop limits never go above it."""
-    values = []
+    write; `hint_w` is a firmware value captured earlier in this boot. Desktop
+    limits never go above it. Values above the sane bound ("unlimited" PL1) are
+    ignored, so the ceiling then comes from the declared maximum."""
+    values = [hint_w] if isinstance(hint_w, int) and 0 < hint_w <= _DESKTOP_MAX_SANE_W else []
     for _label, base in _RAPL_SURFACES:
         directory = os.path.join(root, _POWERCAP, base)
         for leaf in ("constraint_0_power_limit_uw", "constraint_0_max_power_uw"):
@@ -50,8 +52,10 @@ class IntelRaplBackend(TDPBackend):
         safety_lock_path: str | None = None,
         ownership_lock_path: str | None = None,
         auto_tdp_allowed: bool = True,
+        write_max_ac: int | None = None,
     ) -> None:
         self._fallback = fallback
+        self._write_limits = fallback.with_ac_max(write_max_ac)
         self._root = root
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
@@ -401,7 +405,7 @@ class IntelRaplBackend(TDPBackend):
                     False,
                     "RAPL AutoTDP state could not be restored",
                 )
-        target = self._fallback.clamp(watts, ac)
+        target = self._write_limits.clamp(watts, ac)
         ok = self._write(self._constraint(0), target * 1_000_000)
         applied = self.read_applied()
         # RAPL quantizes the limit to the package power-unit granularity, so the
@@ -412,6 +416,17 @@ class IntelRaplBackend(TDPBackend):
 
     def read_applied(self) -> int | None:
         return self._read_constraint_w(0)
+
+    def capture_limit_uw(self) -> int | None:
+        return self._read_int(self._constraint(0)) if self.supported else None
+
+    def restore_limit_uw(self, value_uw: int) -> bool:
+        """Write a captured firmware PL1 back verbatim (never clamped) and confirm
+        it by exact readback."""
+        if not self.supported:
+            return False
+        return (self._write(self._constraint(0), int(value_uw))
+                and self._read_int(self._constraint(0)) == int(value_uw))
 
     def _read_constraint_w(self, index):
         value = self._read_int(self._constraint(index))

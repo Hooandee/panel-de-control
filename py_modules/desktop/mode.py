@@ -55,20 +55,25 @@ def recognised_desktop_migration_pending(settings: dict, device) -> bool:
     )
 
 
-_AUTOMATIC_DESKTOPS = frozenset({"steam_machine", "desktop_pc"})
-
-
 def migrate_desktop_defaults(settings: dict, device) -> bool:
     """Seed automatic desktops once into pass-through mode without changing any other host.
 
     Existing users keep every later choice because the marker is durable. Generic
     desktop opt-in also stays a pure UI/capability choice and never rewrites the
-    handheld TDP master switch.
+    handheld TDP master switch. The desktop PC seed is detection-based, so it keeps
+    the previous handheld switch and gives it back if the host stops detecting as
+    a desktop (a handheld whose battery driver was missing at boot).
     """
     key = getattr(device, "key", None)
     if recognised_desktop_migration_pending(settings, device):
         return False
     changed = False
+    if key != "desktop_pc" and "_desktop_pc_prev_tdp_control" in settings:
+        previous = settings.pop("_desktop_pc_prev_tdp_control")
+        if isinstance(previous, bool):
+            settings["tdp_control_enabled"] = previous
+        settings["desktop_power_mode"] = "free"
+        changed = True
     if (
         key != "steam_machine"
         and not getattr(device, "is_generic", False)
@@ -81,7 +86,14 @@ def migrate_desktop_defaults(settings: dict, device) -> bool:
         if isinstance(previous, bool):
             settings["tdp_control_enabled"] = previous
         changed = True
-    if key not in _AUTOMATIC_DESKTOPS:
+    if key == "desktop_pc":
+        if "_desktop_pc_prev_tdp_control" in settings:
+            return changed
+        settings["_desktop_pc_prev_tdp_control"] = settings.get("tdp_control_enabled", True)
+        settings["desktop_power_mode"] = "free"
+        settings["tdp_control_enabled"] = False
+        return True
+    if key != "steam_machine":
         return changed
     if settings.get("_desktop_defaults_migrated") is True:
         return changed

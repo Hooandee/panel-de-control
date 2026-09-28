@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import time
 from collections import deque
 from concurrent.futures import (
@@ -85,7 +86,7 @@ from desktop.mode import (
     normalize_desktop_settings,
     recognised_desktop_migration_pending,
 )
-from desktop.power import DesktopPowerCoordinator
+from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
@@ -446,6 +447,8 @@ class Plugin:
         self._tdp_backend = tdp_factory.select_backend(
             self._device,
             os_id=self._os_id,
+            desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
+                self._settings.get("desktop_power_handoff")),
         )
         self._low_battery_hold_backend = (
             tdp_factory.select_low_battery_hold_backend(self._device)
@@ -522,8 +525,10 @@ class Plugin:
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
+        board_module = self._settings.get("board_fan_module")
         self._board_fans = (
-            BoardFanDriver() if self._device.key == "desktop_pc" else None
+            BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
+            if self._device.key == "desktop_pc" else None
         )
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
@@ -1972,7 +1977,8 @@ class Plugin:
         # Bounded filesystem listing of the raw sysfs support surfaces (fan/temp
         # chips, vendor WMI attributes, battery/charge nodes, ACPI-call + modules)
         # so an unrecognised device is diagnosable from what actually exists.
-        snapshot = report_collector.sysfs_snapshot(home=home, hostname=hostname)
+        snapshot = await loop.run_in_executor(
+            None, lambda: self._report_sysfs_snapshot(home, hostname))
         # dmesg/journalctl are blocking subprocess calls (up to a few seconds each);
         # run them off the event loop so the auto-TDP loop and other RPCs don't stall.
         kernel = await loop.run_in_executor(
@@ -3125,10 +3131,18 @@ class Plugin:
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
         try:
-            self._fan_ctrl.restore_auto()
-        except Exception:  # noqa: BLE001 — the swap must still be attempted
-            pass
-        state = driver.load(only) if enabled else driver.unload()
+            released = self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            released = None
+        released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+        if enabled:
+            state = driver.load(only)
+        elif released_ok:
+            state = driver.unload()
+        else:
+            # Unloading under a fan still in manual mode would strand it at its
+            # last duty with no driver to move it again.
+            state = driver.release_failed()
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
@@ -3137,6 +3151,36 @@ class Plugin:
             {**state, "backend": getattr(self._fan_ctrl, "name", "null")},
             sort_keys=True, separators=(",", ":")))
         return state
+
+    # Models whose fan EC map is unknown: a report loads ec_sys read-only for one
+    # dump so the registers can be matched against known OneXPlayer layouts.
+    _REPORT_EC_PROBE_KEYS = frozenset({"onexplayer_3"})
+
+    def _report_sysfs_snapshot(self, home, hostname) -> dict:
+        probe = None
+        if (getattr(getattr(self, "_device", None), "key", None) in self._REPORT_EC_PROBE_KEYS
+                and not os.path.exists("/sys/kernel/debug/ec/ec0/io")
+                and not os.path.isdir("/sys/module/ec_sys")):
+            probe = {"loaded_for_report": False, "unloaded": None}
+            probe["loaded_for_report"] = self._run_modprobe(["ec_sys"])
+        try:
+            snapshot = report_collector.sysfs_snapshot(home=home, hostname=hostname)
+        finally:
+            if probe and probe["loaded_for_report"]:
+                probe["unloaded"] = self._run_modprobe(["-r", "ec_sys"])
+        if probe is not None and isinstance(snapshot.get("ec"), dict):
+            snapshot["ec"]["report_probe"] = probe
+        return snapshot
+
+    @staticmethod
+    def _run_modprobe(args) -> bool:
+        from controllers.detect import clean_env, resolve_bin
+        try:
+            return subprocess.run([resolve_bin("modprobe"), *args], check=False,
+                                  capture_output=True, timeout=5,
+                                  env=clean_env()).returncode == 0
+        except Exception:  # noqa: BLE001
+            return False
 
     async def get_board_fan_state(self) -> dict:
         self._init()
@@ -3149,7 +3193,8 @@ class Plugin:
             return {"supported": False}
         enabled = enabled is True
         state = await self._offload_call(lambda: self._set_board_fans_sync(enabled))
-        self._settings["board_fan_driver"] = bool(enabled and state["channels"] > 0)
+        self._settings["board_fan_driver"] = bool(
+            state["channels"] > 0 and (enabled or state["loaded_by_panel"]))
         self._settings["board_fan_module"] = (
             self._board_fans.active_module if self._settings["board_fan_driver"] else None
         )
@@ -10506,6 +10551,8 @@ class Plugin:
             replacement = tdp_factory.select_backend(
                 self._device,
                 os_id=self._os_id,
+                desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
+                    self._settings.get("desktop_power_handoff")),
             )
         except Exception as error:  # noqa: BLE001
             selection_error = type(error).__name__

@@ -381,7 +381,7 @@ def test_onexplayer_x2_mini_pro_is_recognised_with_official_limits(tmp_path):
     assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
             profile.tdp_max_charger) == (6, 30, 55, 80)
     assert profile.charger_only_extra is True
-    assert profile.cooler_max is None
+    assert profile.cooler_max == 120
     assert profile.panel == "oled"
     assert profile.display_refresh_hz == 144
 
@@ -394,6 +394,7 @@ def test_onexplayer_3_is_recognised_as_intel(tmp_path):
     assert profile.experimental is True
     assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
             profile.tdp_max_charger) == (8, 20, 35, 35)
+    assert profile.experimental_tdp_max_ac == 45
     assert profile.panel == "oled"
     assert profile.hdr is True
     assert profile.display_refresh_hz == 144

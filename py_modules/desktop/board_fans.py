@@ -66,12 +66,13 @@ def available_modules(root: str = "/", release: str | None = None) -> list[str]:
 
 class BoardFanDriver:
     def __init__(self, root: str = "/", run=_default_run, release: str | None = None,
-                 settle_s: float = 1.5) -> None:
+                 settle_s: float = 1.5, owned: tuple = ()) -> None:
         self._root = root
         self._run = run
         self._release = release
         self._settle_s = settle_s
-        self._loaded_by_us: list[str] = []
+        # A module this plugin loaded before a restart in the same boot stays ours.
+        self._loaded_by_us: list[str] = [name for name in owned if name in CANDIDATES]
         self.last: dict | None = None
 
     def state(self) -> dict:
@@ -122,7 +123,8 @@ class BoardFanDriver:
                 continue
             channels = self._wait_for_channels()
             if channels:
-                self._loaded_by_us.append(name)
+                if name not in self._loaded_by_us:
+                    self._loaded_by_us.append(name)
                 attempts.append({"module": name, "result": "fans", "channels": channels})
                 break
             attempts.append({"module": name, "result": "no_fans"})
@@ -137,6 +139,12 @@ class BoardFanDriver:
             return self._run(["modprobe", "-r", name]).returncode == 0
         except Exception:  # noqa: BLE001
             return False
+
+    def release_failed(self) -> dict:
+        self.last = {"action": "unload", "ok": False,
+                     "channels": board_fan_channels(self._root), "attempts": [],
+                     "detail": "fans_not_released"}
+        return self.state()
 
     def unload(self) -> dict:
         results = {name: self._unload(name) for name in self._loaded_by_us}

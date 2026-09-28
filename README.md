@@ -225,8 +225,9 @@ Extreme) también se detecta ya con su nombre en vez de como equipo genérico. E
 tenemos en mano, los reportes desde Ajustes son los que confirman lo que responde de verdad.
 
 También se reconocen la **OneXPlayer X2 Mini Pro** (Ryzen AI Max+ 388, de 6 a 55 W con batería y
-hasta 80 W con el cargador; los 120 W de la refrigeración líquida externa se quedan fuera por
-ahora) y la **OneXPlayer 3** (Intel Arc G3 Extreme, hasta 35 W), las dos experimentales.
+hasta 80 W con el cargador; con la refrigeración líquida externa conectada se puede subir a 120 W
+desde Ajustes) y la **OneXPlayer 3** (Intel Arc G3 Extreme, hasta 35 W, y 45 W experimentales con
+el cargador si se desbloquean a mano), las dos experimentales.
 
 Los **PC de sobremesa** (cualquiera que no sea la Steam Machine) ya no salen como equipo genérico.
 Se reconocen porque no tienen batería y su chasis no es portátil, y entran en modo sobremesa:

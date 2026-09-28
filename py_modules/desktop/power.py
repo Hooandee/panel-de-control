@@ -24,6 +24,21 @@ class _NoCpuPolicy:
         return {"ok": True, "applied": None}
 
 
+def handoff_cpu_ceiling_w(state, boot_id=None) -> int | None:
+    """Firmware PL1 captured by a desktop handoff earlier in this boot, so a plugin
+    restart never mistakes its own lowered limit for the firmware ceiling."""
+    if not isinstance(state, dict) or state.get("version") != 1:
+        return None
+    boot_id = boot_id or DesktopPowerCoordinator._read_boot_id()
+    baseline = state.get("baseline")
+    if not boot_id or state.get("boot_id") != boot_id or not isinstance(baseline, dict):
+        return None
+    cpu_uw = baseline.get("cpu_uw")
+    if isinstance(cpu_uw, int) and not isinstance(cpu_uw, bool) and cpu_uw > 0:
+        return cpu_uw // 1_000_000
+    return None
+
+
 class DesktopPowerCoordinator:
     """Atomic owner for separate CPU package and discrete-GPU power limits."""
 
@@ -84,9 +99,13 @@ class DesktopPowerCoordinator:
 
     @classmethod
     def _valid_baseline(cls, baseline):
-        if not isinstance(baseline, dict) or set(baseline) != {
-            "cpu_w", "cpu_policy", "gpu_uw"
-        }:
+        if not isinstance(baseline, dict) or not (
+            {"cpu_w", "cpu_policy", "gpu_uw"} <= set(baseline)
+            <= {"cpu_w", "cpu_uw", "cpu_policy", "gpu_uw"}
+        ):
+            return False
+        if baseline.get("cpu_uw") is not None and not cls._valid_positive_int(
+                baseline.get("cpu_uw")):
             return False
         cpu_w = baseline.get("cpu_w")
         policy = baseline.get("cpu_policy")
@@ -162,6 +181,12 @@ class DesktopPowerCoordinator:
             "cpu_policy": policy,
             "gpu_uw": gpu_uw,
         }
+        capture_cpu = getattr(self._cpu, "capture_limit_uw", None)
+        if getattr(self._cpu, "supported", False) and callable(capture_cpu):
+            cpu_uw = capture_cpu()
+            if cpu_uw is None:
+                return None
+            baseline["cpu_uw"] = cpu_uw
         required_missing = (
             getattr(self._cpu, "supported", False) and cpu_w is None
             or self._cpu_policy.supported and policy is None
@@ -356,8 +381,13 @@ class DesktopPowerCoordinator:
         cpu_ok = True
         if self._cpu_owned:
             cpu_w = baseline.get("cpu_w")
-            cpu_ok = cpu_w is not None and bool(
-                self._cpu.set_tdp(int(cpu_w), True).ok)
+            cpu_uw = baseline.get("cpu_uw")
+            restore_raw = getattr(self._cpu, "restore_limit_uw", None)
+            if cpu_uw is not None and callable(restore_raw):
+                cpu_ok = bool(restore_raw(cpu_uw))
+            else:
+                cpu_ok = cpu_w is not None and bool(
+                    self._cpu.set_tdp(int(cpu_w), True).ok)
 
         hardware_ok = cpu_ok and policy_ok and gpu_ok
         cleared = hardware_ok and self._persist_ownership(None)

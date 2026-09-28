@@ -222,8 +222,9 @@ Extreme) is now detected by name instead of as a generic device. For anything we
 from the Settings tab are what confirm how it really behaves.
 
 The **OneXPlayer X2 Mini Pro** (Ryzen AI Max+ 388, 6 to 55 W on battery and up to 80 W on the
-charger; the 120 W external liquid cooler stays out for now) and the **OneXPlayer 3** (Intel Arc
-G3 Extreme, up to 35 W) are recognised too, both experimental.
+charger; with the external liquid cooler attached it can go to 120 W from Settings) and the
+**OneXPlayer 3** (Intel Arc G3 Extreme, up to 35 W, plus an experimental 45 W on the charger when
+unlocked by hand) are recognised too, both experimental.
 
 **Desktop PCs** (anything that isn't the Steam Machine) no longer show up as a generic device.
 They're recognised by having no battery and a non-portable chassis, and get desktop mode: CPU

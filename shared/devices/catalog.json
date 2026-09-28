@@ -342,7 +342,7 @@
       "key": "onexplayer_x2_mini_pro",
       "limits": {
         "charger_only_extra": true,
-        "cooler_max": null,
+        "cooler_max": 120,
         "experimental_tdp_max_ac": null,
         "tdp_default": 30,
         "tdp_max": 55,
@@ -370,7 +370,7 @@
       "limits": {
         "charger_only_extra": false,
         "cooler_max": null,
-        "experimental_tdp_max_ac": null,
+        "experimental_tdp_max_ac": 45,
         "tdp_default": 20,
         "tdp_max": 35,
         "tdp_max_charger": 35,

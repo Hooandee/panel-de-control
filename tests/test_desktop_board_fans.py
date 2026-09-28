@@ -201,3 +201,63 @@ def test_restart_reloads_only_the_driver_that_worked(tmp_path):
     _driver(tmp_path, run).load(only="it87")
 
     assert run.calls == [["modprobe", "it87"]]
+
+
+def test_onexplayer_3_report_loads_ec_read_only_and_unloads_it(monkeypatch):
+    import main
+    from device_profiles import DEVICE_TABLE
+    plugin = _plugin(monkeypatch, channels_after_load=0)
+    plugin._device = next(p for p in DEVICE_TABLE if p.key == "onexplayer_3")
+    calls = []
+    monkeypatch.setattr(main.Plugin, "_run_modprobe",
+                        staticmethod(lambda args: calls.append(args) or True))
+    monkeypatch.setattr(main.os.path, "exists", lambda path: False)
+    monkeypatch.setattr(main.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(main.report_collector, "sysfs_snapshot",
+                        lambda **kwargs: {"ec": {"dump": "00"}})
+
+    snapshot = plugin._report_sysfs_snapshot("/home/deck", "host")
+
+    assert calls == [["ec_sys"], ["-r", "ec_sys"]]
+    assert snapshot["ec"]["report_probe"] == {"loaded_for_report": True, "unloaded": True}
+
+
+def test_other_devices_never_probe_the_ec_for_reports(monkeypatch):
+    import main
+    plugin = _plugin(monkeypatch, channels_after_load=0)
+    calls = []
+    monkeypatch.setattr(main.Plugin, "_run_modprobe",
+                        staticmethod(lambda args: calls.append(args) or True))
+    monkeypatch.setattr(main.report_collector, "sysfs_snapshot", lambda **kwargs: {"ec": {}})
+
+    assert "report_probe" not in plugin._report_sysfs_snapshot(None, None)["ec"]
+    assert calls == []
+
+
+def test_driver_loaded_before_a_plugin_restart_is_still_unloaded(tmp_path):
+    _ship(str(tmp_path), "nct6775")
+    run = FakeModprobe(str(tmp_path), binds={"nct6775"})
+    _driver(tmp_path, run).load()
+
+    restarted = BoardFanDriver(root=str(tmp_path), run=run, release=RELEASE,
+                               settle_s=0, owned=("nct6775",))
+    assert restarted.load(only="nct6775")["last"]["detail"] == "already_present"
+    restarted.unload()
+
+    assert run.calls[-1] == ["modprobe", "-r", "nct6775"]
+
+
+def test_driver_stays_loaded_when_fans_could_not_be_released(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["board_fan_driver"] = True
+    plugin._fan_ctrl.restore_auto = lambda: {"ok": False}
+    plugin._board_fans.release_failed = lambda: (plugin._board_fans.calls.append("kept")
+                                                 or {**plugin._board_fans.state(),
+                                                     "channels": 3,
+                                                     "loaded_by_panel": ["nct6775"]})
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+
+    assert plugin._board_fans.calls == ["kept"]
+    assert plugin._settings["board_fan_driver"] is True

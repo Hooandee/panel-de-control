@@ -150,16 +150,18 @@ DEVICE_TABLE = (
                       "ONEXPLAYER SUPER X", "ONE-NETBOOK", ("ONEXPLAYER SUPER X",)),),
                   experimental=True, panel="oled", hdr=True, charger_only_extra=True),
     # OEM rates 6-80 W on air; 120 W needs the external Frost Bay liquid cooler,
-    # which stays locked until it can be detected.
+    # so it is only reachable through the explicit "external cooler" opt-in.
     DeviceProfile("onexplayer_x2_mini_pro", "OneXPlayer X2 Mini Pro",
                   "AMD Ryzen AI Max+ 388", "amd",
                   6, 30, 55, 80,
                   dmi_matches=(DmiMatch(
                       "ONEXPLAYER X2Mini PRO", "ONE-NETBOOK", ("ONEXPLAYER X2Mini PRO",)),),
                   experimental=True, panel="oled", display_refresh_hz=144,
-                  charger_only_extra=True),
+                  charger_only_extra=True, cooler_max=120),
+    # Intel rates Arc G3 Extreme at 8-35 W; the same chip runs at 45 W in the
+    # OneXFly Apex Air, offered only as a warned, charger-only opt-in.
     DeviceProfile("onexplayer_3", "OneXPlayer 3", "Intel Arc G3 Extreme", "intel",
-                  8, 20, 35, 35,
+                  8, 20, 35, 35, experimental_tdp_max_ac=45,
                   dmi_matches=(DmiMatch("ONEXPLAYER 3", "ONE-NETBOOK", ("ONEXPLAYER 3",)),),
                   experimental=True, panel="oled", hdr=True, display_refresh_hz=144),
     DeviceProfile("zotac_gaming_zone", "Zotac Gaming Zone",
