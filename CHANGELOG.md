@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.57.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.1...panel-de-control-v0.57.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **report:** include the Steam client branch and build in bug reports ([#785](https://github.com/Hooandee/panel-de-control/issues/785)) ([e010f74](https://github.com/Hooandee/panel-de-control/commit/e010f74e6984ce70d12d8b45abc1db26481d3620))
+
 ## [0.57.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.0...panel-de-control-v0.57.1) (2026-09-28)
 
 
