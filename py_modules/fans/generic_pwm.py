@@ -5,31 +5,41 @@ curve and write ``pwmN`` directly (``pwmN_enable`` = 1 manual). Release hands ea
 fan back to firmware auto.
 
 Only engaged when a chip also exposes a real ``fanN_input`` tach, so we never drive
-an unrelated PWM. The hottest curve point stays above the safety floor, and a missing
-temp reading releases to auto rather than holding a stale duty.
+an unrelated PWM. Graphics-driver chips are skipped: a discrete GPU's firmware owns
+its fan, and driving it from the system curve starves the card under load. The
+hottest curve point stays above the safety floor, and a missing temp reading
+releases to auto rather than holding a stale duty.
 """
 
 import glob
 import os
 import re
 
-from fans.control import _interp, _read_int, _write, _SAFE_MAX_TEMP_FLOOR
+from fans.control import _interp, _read, _read_int, _write, _SAFE_MAX_TEMP_FLOOR
 from fans.software_loop import _HWMON, SoftwareLoopBackend
 
 _ENABLE_MANUAL = 1
 _ENABLE_AUTO = 2
+GPU_DRIVER_CHIPS = frozenset({"amdgpu", "radeon", "nouveau", "i915", "xe"})
 
 
 class GenericPwmFanBackend(SoftwareLoopBackend):
     name = "generic-pwm"
 
-    def __init__(self, temp_fn=None, root: str = "/") -> None:
+    def __init__(self, temp_fn=None, root: str = "/", min_duty: int = 0,
+                 spinning_only: bool = False) -> None:
         self._orig_enable: dict[int, int] = {}
         self._fans: list[int] = []
+        self._min_duty = max(0, min(255, int(min_duty)))
+        # Desktop boards expose every header, connected or not; an idle tach at 0
+        # can be an empty header or a semi-passive fan, and neither is taken.
+        self._spinning_only = spinning_only
         super().__init__(temp_fn=temp_fn, root=root)
 
     def _find_chip(self):
         for d in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
+            if _read(os.path.join(d, "name")) in GPU_DRIVER_CHIPS:
+                continue
             fans = []
             for enable_path in sorted(glob.glob(os.path.join(d, "pwm[0-9]*_enable"))):
                 m = re.search(r"pwm(\d+)_enable$", enable_path)
@@ -37,9 +47,13 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
                     continue
                 idx = m.group(1)
                 # Require a same-index tach so we only drive a pwm backed by a real fan.
-                if all(os.path.exists(os.path.join(d, name))
-                       for name in (f"pwm{idx}", f"fan{idx}_input")):
-                    fans.append(int(idx))
+                if not all(os.path.exists(os.path.join(d, name))
+                           for name in (f"pwm{idx}", f"fan{idx}_input")):
+                    continue
+                if self._spinning_only and not (_read_int(
+                        os.path.join(d, f"fan{idx}_input")) or 0) > 0:
+                    continue
+                fans.append(int(idx))
             if fans:
                 self._fans = fans
                 return d
@@ -78,7 +92,7 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
         pwm = _interp(self._points, temp)
         if temp >= self._points[-1][0]:
             pwm = max(pwm, _SAFE_MAX_TEMP_FLOOR)  # never idle at/above the hottest point
-        pwm = max(0, min(255, pwm))
+        pwm = max(self._min_duty, min(255, pwm))
         all_ok = True
         for m in self._fans:
             manual = (_write(self._enable(m), str(_ENABLE_MANUAL))

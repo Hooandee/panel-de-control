@@ -24,7 +24,7 @@ def test_corrupt_desktop_settings_fail_closed_and_clamp_numeric_values():
     settings = {
         "desktop_mode_enabled": "false",
         "desktop_power_mode": "overdrive",
-        "desktop_cpu_w": 999,
+        "desktop_cpu_w": 9999,
         "desktop_gpu_w": "120",
         "desktop_prev_tdp_control": "true",
         "_desktop_defaults_migrated": "false",
@@ -37,7 +37,7 @@ def test_corrupt_desktop_settings_fail_closed_and_clamp_numeric_values():
     assert settings == {
         "desktop_mode_enabled": False,
         "desktop_power_mode": "free",
-        "desktop_cpu_w": 30,
+        "desktop_cpu_w": 500,
         "desktop_gpu_w": 80,
         "desktop_prev_tdp_control": None,
         "_desktop_defaults_migrated": False,

@@ -14,6 +14,45 @@ _RAPL_NAMES = {"long_term": "pl1", "short_term": "pl2"}
 _CLAW_PL2_RESTORE_MAX_W = 37
 
 
+_DESKTOP_MAX_SANE_W = 500
+
+
+def _sane_w(value) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    watts = value // 1_000_000
+    return watts if 0 < watts <= _DESKTOP_MAX_SANE_W else None
+
+
+def _read_uw(path: str) -> int | None:
+    try:
+        with open(path) as handle:
+            return int(handle.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def firmware_pl1_ceiling_w(root: str = "/", hint_w: int | None = None) -> int | None:
+    """Effective firmware PL1 for package-0, read before any write. The package
+    obeys the lowest PL1 across the MMIO and MSR surfaces, so that is the ceiling;
+    an "unlimited" PL1 is ignored and the declared maximum is used instead.
+    `hint_w` is the effective value captured earlier in this boot and wins."""
+    if isinstance(hint_w, int) and 0 < hint_w <= _DESKTOP_MAX_SANE_W:
+        return hint_w
+    limits, maxima = [], []
+    for _label, base in _RAPL_SURFACES:
+        directory = os.path.join(root, _POWERCAP, base)
+        limit = _sane_w(_read_uw(os.path.join(directory, "constraint_0_power_limit_uw")))
+        maximum = _sane_w(_read_uw(os.path.join(directory, "constraint_0_max_power_uw")))
+        if limit is not None:
+            limits.append(limit)
+        if maximum is not None:
+            maxima.append(maximum)
+    if limits:
+        return min(limits)
+    return max(maxima) if maxima else None
+
+
 class IntelRaplBackend(TDPBackend):
     """Intel handheld TDP control through the kernel powercap RAPL interface."""
 
@@ -30,13 +69,24 @@ class IntelRaplBackend(TDPBackend):
         safety_lock_path: str | None = None,
         ownership_lock_path: str | None = None,
         auto_tdp_allowed: bool = True,
+        write_max_ac: int | None = None,
+        sync_surfaces: bool = False,
     ) -> None:
         self._fallback = fallback
+        self._write_limits = fallback.with_ac_max(write_max_ac)
         self._root = root
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         self._dir = self._find_rapl_dir()
         self.supported = self._dir is not None
+        # The package obeys the lowest PL1 of MMIO and MSR; writing one surface
+        # while the other stays lower "confirms" a limit the CPU never reaches.
+        self._sync_surfaces = bool(sync_surfaces)
+        self._pl1_dirs = (
+            [d for d in (os.path.join(root, _POWERCAP, base) for _l, base in _RAPL_SURFACES)
+             if os.path.exists(os.path.join(d, "constraint_0_power_limit_uw"))]
+            if sync_surfaces else ([self._dir] if self._dir else [])
+        )
         self._auto_surfaces = self._find_auto_surfaces()
         self.auto_tdp_safe = bool(auto_tdp_allowed) and (
             len(self._auto_surfaces) == len(_RAPL_SURFACES)
@@ -381,17 +431,50 @@ class IntelRaplBackend(TDPBackend):
                     False,
                     "RAPL AutoTDP state could not be restored",
                 )
-        target = self._fallback.clamp(watts, ac)
-        ok = self._write(self._constraint(0), target * 1_000_000)
+        target = self._write_limits.clamp(watts, ac)
+        # A BIOS-locked surface refuses the write but still counts: the package
+        # obeys the lowest PL1, so with several surfaces success is judged on that
+        # effective value. A single surface keeps requiring the write itself.
+        written = [self._write(self._pl1_path(directory), target * 1_000_000)
+                   for directory in self._pl1_dirs]
         applied = self.read_applied()
         # RAPL quantizes the limit to the package power-unit granularity, so the
         # readback can round to target±1 W even on a good write — accept ±1 W.
-        success = ok and applied is not None and abs(applied - target) <= 1
+        success = (applied is not None and abs(applied - target) <= 1
+                   and (self._sync_surfaces or all(written)))
         detail = "" if success else f"write not confirmed (wanted {target}, read {applied})"
         return TdpResult(target, applied, success, detail)
 
+    @staticmethod
+    def _pl1_path(directory: str) -> str:
+        return os.path.join(directory, "constraint_0_power_limit_uw")
+
     def read_applied(self) -> int | None:
-        return self._read_constraint_w(0)
+        values = [self._read_int(self._pl1_path(d)) for d in self._pl1_dirs]
+        values = [value for value in values if value is not None]
+        return round(min(values) / 1_000_000) if values else None
+
+    def capture_limit_uw(self) -> dict | None:
+        """Every driven PL1 surface, verbatim, keyed by its powercap directory."""
+        captured = {os.path.basename(d): self._read_int(self._pl1_path(d))
+                    for d in self._pl1_dirs}
+        if not captured or any(value is None for value in captured.values()):
+            return None
+        return captured
+
+    def restore_limit_uw(self, captured: dict) -> bool:
+        """Write captured firmware PL1 values back verbatim (never clamped) and
+        confirm each by exact readback."""
+        by_name = {os.path.basename(d): d for d in self._pl1_dirs}
+        if not isinstance(captured, dict) or set(captured) != set(by_name):
+            return False
+        ok = True
+        for name, value in captured.items():
+            path = self._pl1_path(by_name[name])
+            if self._read_int(path) != int(value):
+                self._write(path, int(value))
+            ok = self._read_int(path) == int(value) and ok
+        return ok
 
     def _read_constraint_w(self, index):
         value = self._read_int(self._constraint(index))
@@ -415,7 +498,7 @@ class IntelRaplBackend(TDPBackend):
             return TdpObservation(readable=True, surfaces=surfaces)
         rails = {}
         for rail, index in (("pl1", 0), ("pl2", 1)):
-            value = self._read_constraint_w(index)
+            value = self.read_applied() if index == 0 else self._read_constraint_w(index)
             if value is not None:
                 rails[rail] = RailReading(value)
         return TdpObservation(

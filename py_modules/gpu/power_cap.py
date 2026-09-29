@@ -29,7 +29,7 @@ class AmdGpuPowerCap:
         self._captured_uw = None
 
     def _find(self):
-        if self._device_key not in (None, "steam_machine"):
+        if self._device_key not in (None, "steam_machine", "desktop_pc"):
             return None
         drm_devices = {
             os.path.realpath(path)

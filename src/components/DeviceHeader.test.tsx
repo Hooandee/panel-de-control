@@ -57,3 +57,19 @@ describe("DeviceHeader", () => {
     expect(screen.getByRole("img", { name: label })).toBeTruthy();
   });
 });
+
+describe("DeviceHeader on a firmware-owned desktop", () => {
+  beforeEach(() => window.localStorage.setItem("panel-de-control-lang", "es"));
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  it("names the desktop and explains that firmware owns the limits", () => {
+    render(<DeviceHeader device={{ ...device, key: "desktop_pc", display_name: "PC de sobremesa",
+      experimental: true }} />);
+
+    expect(screen.getByText("PC de sobremesa")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /PC de sobremesa: se controla/ })).toBeTruthy();
+  });
+});

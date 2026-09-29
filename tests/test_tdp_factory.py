@@ -1672,7 +1672,7 @@ def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypat
     monkeypatch.setattr(
         factory,
         "_candidates",
-        lambda *args: [broken, working, unreachable],
+        lambda *args, **kwargs: [broken, working, unreachable],
     )
 
     backend = select_backend(
@@ -1728,7 +1728,7 @@ def test_factory_continues_after_a_present_candidate_is_not_ready(
     monkeypatch.setattr(
         factory,
         "_candidates",
-        lambda *args: [unavailable, working],
+        lambda *args, **kwargs: [unavailable, working],
     )
 
     backend = select_backend(

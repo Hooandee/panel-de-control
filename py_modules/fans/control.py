@@ -416,6 +416,10 @@ def experimental_ec_backends(temp_fn=None, root: str = "/") -> list:
             OxpEcFanBackend(temp_fn=temp_fn, root=root)]
 
 
+# A CPU cooler on a board header must never be stopped by a cool curve point.
+_DESKTOP_MIN_DUTY = 77
+
+
 def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False):
     """Return the best available fan-control backend for this device.
 
@@ -439,6 +443,11 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     """
     if getattr(device, "key", None) == "zotac_gaming_zone":
         return ZotacFanReadOnlyBackend()
+    if getattr(device, "key", None) == "desktop_pc":
+        from fans.generic_pwm import GenericPwmFanBackend
+        board = GenericPwmFanBackend(temp_fn=temp_fn, root=root,
+                                     min_duty=_DESKTOP_MIN_DUTY, spinning_only=True)
+        return board if board.supported else NullFanBackend()
     if getattr(device, "key", None) == "steam_machine":
         from fans.fremont import FremontFanBackend
         fremont = FremontFanBackend(temp_fn=temp_fn, root=root)

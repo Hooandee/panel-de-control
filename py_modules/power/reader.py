@@ -196,7 +196,7 @@ class PowerReader:
     def read_desktop(self, device_key=None):
         """Explicit dual-domain snapshot; CPU package power remains unknown unless
         the host exposes a trustworthy separate source (none is guessed here)."""
-        if device_key not in (None, "steam_machine"):
+        if device_key not in (None, "steam_machine", "desktop_pc"):
             return {
                 "cpu_watts": None,
                 "gpu_watts": None,

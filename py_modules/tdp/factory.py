@@ -16,7 +16,7 @@ from tdp.amd_dptc import AmdDptcBackend
 from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
-from tdp.intel_rapl import IntelRaplBackend
+from tdp.intel_rapl import IntelRaplBackend, firmware_pl1_ceiling_w
 from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
@@ -40,7 +40,7 @@ def _runtime_lock_path(root, name):
     return os.path.join(root, "run/panel-de-control", name)
 
 
-def _candidates(device, fallback, root, ryzenadj, os_id=None):
+def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
     known-good backend first, then falls through to every other known path by
@@ -139,6 +139,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 "ownership-intel-rapl.lock",
             ),
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
+            write_max_ac=device.experimental_tdp_max_ac,
+            sync_surfaces=device.key in ("onexplayer_3", "desktop_pc"),
         )
 
     def deck():
@@ -158,7 +160,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         return AmdDptcBackend(
             fallback,
             root=root,
-            write_max=device.cooler_max,
+            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )
@@ -172,13 +174,18 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         )
 
     def alib():
-        return AlibBackend(fallback, root=root, write_max=device.cooler_max)
+        return AlibBackend(fallback, root=root,
+                           write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max)
 
     # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
     # first, then the acpi_call ALIB path when ryzenadj is absent.
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    if key == "desktop_pc":
+        # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
+        # without readback, AMD RAPL can confirm a write it ignores).
+        return [intel] if desktop_cpu else []
     if device.vendor == "intel":
         return [msi, intel]
     if key == "steam_machine":
@@ -218,9 +225,32 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
     return [dptc, asus, lenovo, msi, *amd_tail]
 
 
-def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBackend:
-    """Pick the first supported TDP strategy for the detected device; else NullBackend."""
-    fallback = TdpLimits.from_profile(device)
+def _charger_write_max(device) -> int | None:
+    ceilings = [getattr(device, "experimental_tdp_max_ac", None)]
+    if getattr(device, "cooler_charger_only", False):
+        ceilings.append(device.cooler_max)
+    ceilings = [value for value in ceilings if value]
+    return max(ceilings) if ceilings else None
+
+
+_DESKTOP_MIN_W = 15
+
+
+def _desktop_limits(device, root, hint_w=None) -> TdpLimits | None:
+    if device.key != "desktop_pc" or device.vendor != "intel":
+        return None
+    ceiling = firmware_pl1_ceiling_w(root, hint_w)
+    if ceiling is None:
+        return None
+    return TdpLimits(min(_DESKTOP_MIN_W, ceiling), ceiling, ceiling, ceiling)
+
+
+def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
+                   desktop_ceiling_hint_w=None) -> TDPBackend:
+    """Pick the first supported TDP strategy for the detected device; else NullBackend.
+    A desktop CPU is only driven when its firmware PL1 ceiling is readable."""
+    desktop_limits = _desktop_limits(device, root, desktop_ceiling_hint_w)
+    fallback = desktop_limits or TdpLimits.from_profile(device)
 
     def ryzenadj():
         kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
@@ -230,9 +260,9 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
         )
         return RyzenadjBackend(
             fallback,
-            write_max=device.cooler_max,
+            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
             write_max_ac=(
-                None if gpd_recovery else device.experimental_tdp_max_ac
+                None if gpd_recovery else _charger_write_max(device)
             ),
             power_only_retry=gpd_recovery,
             require_readback=strict_readback,
@@ -244,7 +274,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
         )
 
     trace = []
-    for make in _candidates(device, fallback, root, ryzenadj, os_id):
+    for make in _candidates(device, fallback, root, ryzenadj, os_id,
+                            desktop_cpu=desktop_limits is not None):
         candidate = make.__name__
         try:
             backend = make()

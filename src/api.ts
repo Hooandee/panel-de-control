@@ -115,6 +115,8 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // The cooler ceiling is charger-only and never reaches presets or Auto-TDP.
+  cooler_charger_only?: boolean;
   experimental_tdp_max_ac: number | null;
   // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
   // launch-options upscaler gating (FSR4 = rdna3/rdna4).
@@ -534,6 +536,18 @@ export interface FanCurveState {
   channels?: DesktopFanChannel[];
   apply_ok?: boolean;
   rollback_ok?: boolean;
+  board_fans?: BoardFanState;
+}
+
+// Desktop PCs: opt-in loading of the motherboard's fan driver.
+export interface BoardFanState {
+  supported: boolean;
+  enabled?: boolean;
+  available?: string[];
+  loaded?: string[];
+  loaded_by_panel?: string[];
+  channels?: number;
+  last?: { action: string; ok: boolean; channels: number; detail: string } | null;
 }
 
 export interface DesktopFanChannel {
@@ -582,6 +596,8 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
+export const setBoardFanEnabled =
+  callable<[enabled: boolean], BoardFanState>("set_board_fan_enabled");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanFollowGlobal =
