@@ -5,9 +5,30 @@
 ## [0.58.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.0...panel-de-control-v0.58.1) (2026-09-29)
 
 
-### Bug Fixes
+### Español
 
-* **tdp:** keep ASUS and Lenovo limits when the firmware reloads its own ([#801](https://github.com/Hooandee/panel-de-control/issues/801)) ([7bd2f5c](https://github.com/Hooandee/panel-de-control/commit/7bd2f5cb3a44de809b1dde1163d501b9d260638d))
+* **TDP:** En las ROG Ally, Ally X y Xbox Ally, el firmware a veces volvía a poner sus propios límites al cambiar el perfil de rendimiento o al enchufar el cargador. El equipo podía gastar el doble de lo elegido, por ejemplo 40 W con 20 W puestos, mientras Panel seguía mostrando 20 W. Ahora Panel se da cuenta y vuelve a aplicar tu TDP en pocos segundos.
+* **TDP:** En ASUS y Lenovo, si el consumo real se queda claramente por encima del límite elegido, Panel lo corrige solo y lo avisa en la sección de TDP.
+
+### English
+
+* **TDP:** On the ROG Ally, Ally X and Xbox Ally, the firmware sometimes put its own limits back when the performance profile changed or the charger was plugged in. The device could draw twice what you picked, for example 40 W with 20 W set, while Panel still showed 20 W. Panel now notices and puts your TDP back within a few seconds.
+* **TDP:** On ASUS and Lenovo, if real power draw stays clearly above the limit you picked, Panel fixes it on its own and shows a note in the TDP section.
+
+### Italiano
+
+* **TDP:** Su ROG Ally, Ally X e Xbox Ally, a volte il firmware rimetteva i propri limiti quando cambiava il profilo di prestazioni o si collegava il caricatore. Il dispositivo poteva consumare il doppio di quanto scelto, per esempio 40 W con 20 W impostati, mentre Panel mostrava ancora 20 W. Ora Panel se ne accorge e riapplica il tuo TDP in pochi secondi.
+* **TDP:** Su ASUS e Lenovo, se il consumo reale resta chiaramente sopra il limite scelto, Panel lo corregge da solo e lo segnala nella sezione TDP.
+
+### Deutsch
+
+* **TDP:** Auf ROG Ally, Ally X und Xbox Ally hat die Firmware manchmal ihre eigenen Limits wieder gesetzt, wenn sich das Leistungsprofil änderte oder das Netzteil eingesteckt wurde. Das Gerät konnte dann doppelt so viel verbrauchen wie eingestellt, zum Beispiel 40 W bei 20 W, während Panel weiter 20 W anzeigte. Jetzt merkt Panel das und setzt deine TDP innerhalb weniger Sekunden wieder.
+* **TDP:** Auf ASUS und Lenovo korrigiert Panel es selbst, wenn der tatsächliche Verbrauch deutlich über dem gewählten Limit bleibt, und zeigt einen Hinweis im TDP-Bereich.
+
+### Português (Brasil)
+
+* **TDP:** No ROG Ally, Ally X e Xbox Ally, o firmware às vezes voltava a aplicar os próprios limites ao mudar o perfil de desempenho ou ao ligar o carregador. O aparelho podia gastar o dobro do escolhido, por exemplo 40 W com 20 W definidos, enquanto o Panel continuava mostrando 20 W. Agora o Panel percebe e volta a aplicar o seu TDP em poucos segundos.
+* **TDP:** Em ASUS e Lenovo, se o consumo real ficar claramente acima do limite escolhido, o Panel corrige sozinho e mostra um aviso na seção de TDP.
 
 ## [0.58.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.4...panel-de-control-v0.58.0) (2026-09-29)
 
