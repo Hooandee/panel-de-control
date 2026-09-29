@@ -36,4 +36,45 @@ describe("TdpOwnershipStatus", () => {
 
     expect(screen.getByText("tdp.ownership.constrained 22 22 15")).toBeTruthy();
   });
+
+  it("explains a hidden firmware limit that is being restored", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          status: "in_sync",
+          reason: "",
+          overshoot: { state: "correcting", target_w: 20, peak_w: 43.2, age_s: 1 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.overshootCorrecting 43 20")).toBeTruthy();
+  });
+
+  it("stays silent for in-sync rails without an overshoot", () => {
+    const { container } = render(
+      <TdpOwnershipStatus
+        ownership={{ ...ownership, status: "in_sync", reason: "", overshoot: null }}
+      />,
+    );
+
+    expect(container.textContent).toBe("");
+  });
+
+  it("keeps a persistent conflict message ahead of an overshoot notice", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          status: "drift",
+          reason: "external_drift",
+          conflict_persistent: true,
+          overshoot: { state: "unresolved", target_w: 20, peak_w: 43, age_s: 5 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.conflict 22 22 15")).toBeTruthy();
+  });
 });

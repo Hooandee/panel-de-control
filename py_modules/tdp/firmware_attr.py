@@ -109,6 +109,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
         self._rearm_custom_on_unapplied_writes = bool(rearm_custom_on_unapplied_writes)
+        self.rearms_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
         self._custom_rearm_enabled = (
             bool(rearm_custom_on_ignored_writes) or self._rearm_custom_on_unapplied_writes
         )

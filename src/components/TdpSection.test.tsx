@@ -35,7 +35,7 @@ vi.mock("./Presets", () => ({ Presets: () => <div /> }));
 vi.mock("./FirmwareModes", () => ({ FirmwareModes: () => <div /> }));
 vi.mock("./AdvancedBoost", () => ({ AdvancedBoost: () => <div /> }));
 vi.mock("./TdpSuggestionCard", () => ({ TdpSuggestionCard: () => <div /> }));
-vi.mock("./TdpOwnershipStatus", () => ({ TdpOwnershipStatus: () => <div /> }));
+vi.mock("./TdpOwnershipStatus", () => ({ TdpOwnershipStatus: () => <div data-testid="ownership-status" /> }));
 
 import { TdpSection } from "./TdpSection";
 
@@ -488,5 +488,27 @@ describe("TdpSection Steam Deck PPT arc", () => {
 
     expect(screen.queryByText("tdp.learned.band")).toBeNull();
     expect(screen.queryByText("tdp.learned.learning.title")).toBeNull();
+  });
+});
+
+describe("TdpSection ownership row", () => {
+  afterEach(cleanup);
+
+  it("shows the overshoot notice while the rails read in sync", () => {
+    renderTdpSection({
+      ...deckState,
+      ownership: {
+        ...deckState.ownership,
+        overshoot: { state: "restored", target_w: 20, peak_w: 43, age_s: 3 },
+      },
+    } as unknown as TdpState);
+
+    expect(screen.getByTestId("ownership-status")).toBeTruthy();
+  });
+
+  it("keeps the row hidden for in-sync rails without a notice", () => {
+    renderTdpSection(deckState);
+
+    expect(screen.queryByTestId("ownership-status")).toBeNull();
   });
 });
