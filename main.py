@@ -6296,8 +6296,6 @@ class Plugin:
 
     def _guard_hidden_overshoot(self, now, command, hold, outcome, targets, observation):
         self._tdp_overshoot_clock = now
-        if self._ui_active:
-            return None
         monitor = self._overshoot_monitor()
         before = monitor.last
         watts = None

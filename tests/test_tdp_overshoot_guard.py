@@ -128,14 +128,12 @@ def test_recurring_resets_escalate_to_bounded_reassert(plugin):  # noqa: F811
 
 @pytest.mark.parametrize(
     "setup",
-    ["ui_open", "no_game", "generic", "desktop", "write_only", "low_target"],
+    ["no_game", "generic", "desktop", "write_only", "low_target"],
 )
 def test_ineligible_contexts_never_correct(plugin, setup):  # noqa: F811
     backend = HiddenLimitBackend()
     start_game(plugin, backend, watts=7 if setup == "low_target" else 20)
-    if setup == "ui_open":
-        plugin._ui_active = True
-    elif setup == "no_game":
+    if setup == "no_game":
         plugin._current_appid = None
     elif setup == "generic":
         plugin._device = replace(ALLY_X, is_generic=True)
@@ -165,16 +163,10 @@ def test_diagnostics_expose_the_monitor_state(plugin):  # noqa: F811
     assert diagnostics["last"]["peak_w"] == 43.0
 
 
-def test_open_qam_freezes_detection_instead_of_resetting_it(plugin):  # noqa: F811
-    backend = HiddenLimitBackend(restore_on="never")
+def test_ui_activity_flag_does_not_disable_detection(plugin):  # noqa: F811
+    backend = HiddenLimitBackend()
     start_game(plugin, backend)
-    backend.hidden = True
-    now = run(plugin, 10.0, SUSTAIN_S + 4.0)
-    assert overshoot_logs(plugin)[-1]["state"] == "correcting"
     plugin._ui_active = True
-    backend.writes.clear()
-    now = run(plugin, now, 60.0)
-    assert backend.writes == []
-    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"][
-        "state"
-    ] == "correcting"
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 6.0)
+    assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}]
