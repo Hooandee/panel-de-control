@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.58.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.4...panel-de-control-v0.58.0) (2026-09-29)
+
+
+### Features
+
+* recognise OneXPlayer X2 Mini Pro, OneXPlayer 3 and desktop PCs ([#794](https://github.com/Hooandee/panel-de-control/issues/794)) ([89c0397](https://github.com/Hooandee/panel-de-control/commit/89c0397220ef208e5a01d6daf7b9b68e8593e6e6))
+
 ## [0.57.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.3...panel-de-control-v0.57.4) (2026-09-28)
 
 
