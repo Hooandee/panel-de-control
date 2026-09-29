@@ -1,4 +1,6 @@
 from tdp.overshoot import (
+    PROFILE_SETTLE_S,
+    PlatformProfileWatch,
     ESCALATE_HOLD_S,
     NUDGE,
     REASSERT_S,
@@ -34,13 +36,13 @@ def test_ceiling_uses_the_sustained_rails_not_the_fast_one():
     assert sustained_ceiling({"pl1": 15, "pl2": 15, "pl3": 30}) == 15
     assert sustained_ceiling({"pl1": 15, "pl2": 17, "pl3": 20}) == 17
     assert sustained_ceiling({"pl1": 11}) == 11
-    assert overshoot_limit(20) == 26.0
-    assert overshoot_limit(40) == 50.0
+    assert overshoot_limit(20) == 23.0
+    assert overshoot_limit(40) == 44.0
 
 
 def test_normal_draw_at_or_near_the_limit_never_triggers():
     monitor = HiddenOvershootMonitor()
-    actions, _ = feed(monitor, [20.0, 21.5, 25.9, 24.0] * 30)
+    actions, _ = feed(monitor, [20.0, 21.5, 22.9, 21.0] * 30)
     assert actions == []
     assert monitor.last is None
 
@@ -177,3 +179,36 @@ def test_notice_for_another_target_is_dropped():
     assert monitor.last["state"] == "restored"
     monitor.observe(now, GAME, 14.0, {"pl1": 15, "pl2": 15, "pl3": 15}, True)
     assert monitor.last is None
+
+
+def test_ally_x_battery_profile_reload_is_caught_by_the_power_fallback():
+    monitor = HiddenOvershootMonitor()
+    boosted = {"pl1": 17, "pl2": 25, "pl3": 33}
+    actions, _ = feed(monitor, [29.3] * 12, target=boosted)
+    assert [action for _, action in actions] == [REWRITE]
+
+
+class ProfileSource:
+    def __init__(self, *values):
+        self.values = list(values)
+
+    def __call__(self):
+        return tuple(("platform-profile", value) for value in self.values)
+
+
+def test_profile_change_asks_for_a_rewrite_at_each_settle_step():
+    source = ProfileSource("performance")
+    watch = PlatformProfileWatch(read=source)
+    assert watch.observe(0.0) is False
+    source.values = ["balanced"]
+    due = [at / 2 for at in range(0, 20) if watch.observe(10.0 + at / 2)]
+    assert due == list(PROFILE_SETTLE_S)
+    assert watch.last_change["from"] == ["performance"]
+    assert watch.last_change["to"] == ["balanced"]
+
+
+def test_steady_or_unreadable_profiles_never_ask_for_writes():
+    steady = PlatformProfileWatch(read=ProfileSource("performance"))
+    assert not any(steady.observe(at) for at in range(60))
+    unreadable = PlatformProfileWatch(read=lambda: None)
+    assert not any(unreadable.observe(at) for at in range(60))

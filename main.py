@@ -47,7 +47,12 @@ from tdp.reconcile import (
     decide,
     rail_bounds,
 )
-from tdp.overshoot import NUDGE, HiddenOvershootMonitor, nudged_target
+from tdp.overshoot import (
+    NUDGE,
+    HiddenOvershootMonitor,
+    PlatformProfileWatch,
+    nudged_target,
+)
 from tdp.types import (
     TDP_REQUEST_MIN_W,
     RailReading,
@@ -147,6 +152,7 @@ _OVERSHOOT_BACKENDS = frozenset(
     ("firmware-attr:asus-armoury", "firmware-attr:lenovo-wmi-other")
 )
 _OVERSHOOT_VIEW_STALE_S = 10.0
+_PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
@@ -6266,6 +6272,25 @@ class Plugin:
             cadences.append(float(hold.reassert_s))
         return min(cadences) if cadences else None
 
+    def _platform_profile_watch(self):
+        watch = getattr(self, "_tdp_profile_watch", None)
+        if watch is None:
+            watch = self._tdp_profile_watch = PlatformProfileWatch()
+        return watch
+
+    def _profile_reassert_eligible(self, command, hold, status):
+        backend = self._tdp_backend
+        return bool(
+            getattr(backend, "name", None) in _PROFILE_REASSERT_BACKENDS
+            and getattr(backend, "readback", True)
+            and not self._device.is_generic
+            and self._device.key not in ("desktop_pc", "steam_machine")
+            and not command.auto_tdp
+            and not self._auto_runtime_active()
+            and not hold.active
+            and status in ("in_sync", "constrained")
+        )
+
     def _overshoot_monitor(self):
         monitor = getattr(self, "_tdp_overshoot", None)
         if monitor is None:
@@ -6350,6 +6375,7 @@ class Plugin:
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
         self._tdp_overshoot_clock = now
+        profile_reassert_due = self._platform_profile_watch().observe(now)
         if self._tdp_shutdown:
             return
         if self._low_battery_hold_recovery_pending:
@@ -6440,6 +6466,33 @@ class Plugin:
         if self._auto_ui_blocks_tdp_write(command.reason):
             return
         correction = None
+        if (
+            outcome.action != "apply"
+            and profile_reassert_due
+            and self._profile_reassert_eligible(command, hold, outcome.status)
+            and bool(command.on_ac) == read_on_ac()
+        ):
+            decky.logger.info(
+                "TDP profile reassert %s",
+                json.dumps(
+                    {
+                        "change": self._platform_profile_watch().last_change,
+                        "target": dict(targets.target),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+            correction = (
+                "profile",
+                self._apply_tdp_targets(
+                    targets.target,
+                    command.on_ac,
+                    command.auto_tdp,
+                ),
+            )
+            action = "profile-reassert"
+            outcome = replace(outcome, action="apply")
         if outcome.action != "apply":
             correction = self._guard_hidden_overshoot(
                 now,
@@ -10544,7 +10597,10 @@ class Plugin:
                 ),
             },
             "history": list(self._tdp_history),
-            "overshoot": self._overshoot_monitor().as_dict(self._overshoot_clock()),
+            "overshoot": {
+                **self._overshoot_monitor().as_dict(self._overshoot_clock()),
+                "profile_change": self._platform_profile_watch().last_change,
+            },
             "auto": {
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),

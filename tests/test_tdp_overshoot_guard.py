@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 
 from device_profiles import DEVICE_TABLE
-from tdp.overshoot import REASSERT_S, SUSTAIN_S, VERIFY_S
+from tdp.overshoot import REASSERT_S, SUSTAIN_S, VERIFY_S, PlatformProfileWatch
 from tdp.reconcile import ReconcileMemory
 from test_tdp_guard_rpc import FakeBackend, plugin  # noqa: F401
 
@@ -225,3 +225,49 @@ def test_escalated_reassert_stops_when_auto_tdp_takes_over(plugin, monkeypatch):
     monkeypatch.setattr(plugin, "_auto_runtime_active", lambda: True)
     eligible = plugin._overshoot_context_eligible(command, hold)
     assert plugin._tdp_authoritative_reassert_s(hold, now, eligible) is None
+
+
+
+class Profiles:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self):
+        return (("asus-wmi", self.value),)
+
+
+@pytest.mark.parametrize(
+    ("backend_name", "expected_writes"),
+    [("firmware-attr:asus-armoury", 2), ("firmware-attr:lenovo-wmi-other", 0)],
+)
+def test_platform_profile_change_rewrites_asus_rails_twice(
+    plugin, backend_name, expected_writes  # noqa: F811
+):
+    backend = HiddenLimitBackend()
+    backend.name = backend_name
+    start_game(plugin, backend)
+    profiles = Profiles("performance")
+    plugin._tdp_profile_watch = PlatformProfileWatch(read=profiles)
+    now = run(plugin, 10.0, 10.0, step=0.5)
+    backend.writes.clear()
+    profiles.value = "balanced"
+    run(plugin, now, 10.0, step=0.5)
+    assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}] * expected_writes
+    if expected_writes:
+        assert plugin._tdp_history[-1]["action"] == "profile-reassert"
+        change = plugin._tdp_diagnostics()["overshoot"]["profile_change"]
+        assert change["to"] == ["balanced"]
+
+
+def test_profile_change_outside_a_game_still_restores_the_rails(plugin):  # noqa: F811
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    plugin._current_appid = None
+    plugin._execute_tdp_command(plugin._capture_tdp_command("global"))
+    profiles = Profiles("performance")
+    plugin._tdp_profile_watch = PlatformProfileWatch(read=profiles)
+    now = run(plugin, 10.0, 10.0, step=0.5)
+    backend.writes.clear()
+    profiles.value = "low-power"
+    run(plugin, now, 10.0, step=0.5)
+    assert len(backend.writes) == 2

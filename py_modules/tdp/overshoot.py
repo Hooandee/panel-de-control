@@ -1,14 +1,17 @@
+import glob
+import os
 from dataclasses import dataclass
 
-# Some firmware (ROG Ally X RC72LA) reloads its own maximum power
-# limits into the SMU while firmware-attributes keeps echoing the last value
-# written, so the rails read in sync while the chip draws far above them. Only
-# the measured package power reveals it, and a fresh write restores the limit.
+# ASUS firmware (ROG Ally X RC72LA) loads the limits of the new platform
+# profile into the SMU while firmware-attributes keeps echoing the last value
+# written, so the rails read in sync while the chip draws far above them. A
+# fresh write of the same rails restores them; the measured package power is
+# the fallback signal when the profile change itself goes unseen.
 SUSTAIN_S = 20.0
 VERIFY_S = 10.0
 MIN_TARGET_W = 10
-MARGIN_W = 6.0
-MARGIN_RATIO = 0.25
+MARGIN_W = 3.0
+MARGIN_RATIO = 0.10
 UNRESOLVED_COOLDOWN_S = (60.0, 180.0, 600.0)
 MAX_UNRESOLVED = 3
 ESCALATE_EPISODES = 2
@@ -16,8 +19,56 @@ ESCALATE_WINDOW_S = 600.0
 ESCALATE_HOLD_S = 1800.0
 REASSERT_S = 15.0
 
+PROFILE_SETTLE_S = (1.0, 4.0)
+
 REWRITE = "rewrite"
 NUDGE = "nudge"
+
+
+def read_platform_profiles(root="/"):
+    paths = sorted(
+        glob.glob(os.path.join(root, "sys/class/platform-profile/*/profile"))
+    ) + [os.path.join(root, "sys/firmware/acpi/platform_profile")]
+    profiles = []
+    for path in paths:
+        try:
+            with open(path) as handle:
+                profiles.append((path, handle.read().strip()))
+        except OSError:
+            continue
+    return tuple(profiles) or None
+
+
+class PlatformProfileWatch:
+    """Reports when the rails must be written again after the platform
+    profile changed underneath them, once per settle step."""
+
+    def __init__(self, read=read_platform_profiles):
+        self._read = read
+        self._profiles = None
+        self._changed_at = None
+        self._steps_done = 0
+        self.last_change = None
+
+    def observe(self, now):
+        profiles = self._read()
+        if profiles is None:
+            return False
+        if self._profiles is not None and profiles != self._profiles:
+            self._changed_at = now
+            self._steps_done = 0
+            self.last_change = {
+                "at": round(now, 3),
+                "from": [value for _, value in self._profiles],
+                "to": [value for _, value in profiles],
+            }
+        self._profiles = profiles
+        if self._changed_at is None or self._steps_done >= len(PROFILE_SETTLE_S):
+            return False
+        if now - self._changed_at < PROFILE_SETTLE_S[self._steps_done]:
+            return False
+        self._steps_done += 1
+        return True
 
 
 def sustained_ceiling(target):
