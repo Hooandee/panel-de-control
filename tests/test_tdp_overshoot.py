@@ -16,7 +16,7 @@ GAME = "game-a"
 
 # Ally X RC72LA on AC: rails read 20/20/20 in sync while the chip drew these
 # watts (5 s telemetry). A 19 -> 20 write brought it back to 20.0 W.
-YWJ3_OVERSHOOT = [21.5, 38.1, 40.2, 42.9, 44.0, 42.6, 43.0, 43.5, 43.2, 43.0]
+ALLY_X_AC_OVERSHOOT = [21.5, 38.1, 40.2, 42.9, 44.0, 42.6, 43.0, 43.5, 43.2, 43.0]
 
 
 def feed(monitor, samples, start=0.0, step=2.0, target=FLAT_20, eligible=True):
@@ -52,9 +52,9 @@ def test_short_burst_above_the_limit_never_triggers():
     assert actions == []
 
 
-def test_ywj3_sustained_overshoot_rewrites_then_verifies_restoration():
+def test_ally_x_sustained_overshoot_rewrites_then_verifies_restoration():
     monitor = HiddenOvershootMonitor()
-    actions, now = feed(monitor, YWJ3_OVERSHOOT + [43.0] * 2)
+    actions, now = feed(monitor, ALLY_X_AC_OVERSHOOT + [43.0] * 2)
     assert [action for _, action in actions] == [REWRITE]
     feed(monitor, [20.0], start=now)
     last = monitor.last
