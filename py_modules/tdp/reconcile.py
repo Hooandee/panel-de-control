@@ -50,6 +50,19 @@ def _live_bounds(observation, rail):
     return (max(mins) if mins else None, min(maxes) if maxes else None)
 
 
+def rail_bounds(safe_bounds, observation):
+    bounds = {}
+    for rail, bound in safe_bounds.items():
+        lo, hi = int(bound["min"]), int(bound["max"])
+        live_min, live_max = _live_bounds(observation, rail)
+        if live_min is not None:
+            lo = max(lo, live_min)
+        if live_max is not None:
+            hi = min(hi, live_max)
+        bounds[rail] = (lo, hi)
+    return bounds
+
+
 def build_targets(requested, safe_bounds, observation, probe_live_max=False):
     target, reasons = {}, {}
     for rail, raw in requested.items():
