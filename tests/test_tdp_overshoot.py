@@ -154,3 +154,10 @@ def test_interrupted_correction_clears_the_correcting_notice():
     assert monitor.last["state"] == "correcting"
     monitor.observe(100.0, GAME, 43.0, FLAT_20, False)
     assert monitor.last is None
+
+
+def test_steam_deck_slow_fast_rail_model_is_left_alone():
+    monitor = HiddenOvershootMonitor()
+    deck_target = {"pl2": 15, "pl3": 15}
+    assert sustained_ceiling(deck_target) is None
+    assert feed(monitor, [40.0] * 60, target=deck_target)[0] == []
