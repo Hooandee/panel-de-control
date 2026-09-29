@@ -58,7 +58,7 @@ def test_ally_x_sustained_overshoot_rewrites_then_verifies_restoration():
     monitor = HiddenOvershootMonitor()
     actions, now = feed(monitor, ALLY_X_AC_OVERSHOOT + [43.0] * 2)
     assert [action for _, action in actions] == [REWRITE]
-    feed(monitor, [20.0], start=now)
+    feed(monitor, [20.0, 20.0], start=now)
     last = monitor.last
     assert last["state"] == "restored"
     assert last["method"] == REWRITE
@@ -76,7 +76,7 @@ def test_rewrite_that_does_not_help_escalates_to_nudge_then_gives_up():
 
 def test_nudge_that_worked_becomes_the_first_correction_next_time():
     monitor = HiddenOvershootMonitor()
-    first = [43.0] * int((SUSTAIN_S + VERIFY_S) / 2 + 2) + [20.0]
+    first = [43.0] * int((SUSTAIN_S + VERIFY_S) / 2 + 2) + [20.0, 20.0]
     actions, now = feed(monitor, first)
     assert [action for _, action in actions] == [REWRITE, NUDGE]
     assert monitor.last["state"] == "restored"
@@ -120,7 +120,7 @@ def test_repeated_restorations_enable_a_bounded_periodic_reassert():
     monitor = HiddenOvershootMonitor()
     now = 0.0
     for _ in range(2):
-        _, now = feed(monitor, [43.0] * 11 + [20.0], start=now)
+        _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0], start=now)
         now += 60.0
     assert monitor.reassert_s(now, GAME) == REASSERT_S
     assert monitor.reassert_s(now, "other-game") is None
@@ -129,14 +129,14 @@ def test_repeated_restorations_enable_a_bounded_periodic_reassert():
 
 def test_a_single_restoration_does_not_enable_periodic_writes():
     monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [43.0] * 11 + [20.0])
+    _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0])
     assert monitor.reassert_s(now, GAME) is None
 
 
 def test_game_change_resets_the_session():
     monitor = HiddenOvershootMonitor()
     for _ in range(2):
-        feed(monitor, [43.0] * 11 + [20.0])
+        feed(monitor, [43.0] * 11 + [20.0, 20.0])
     monitor.observe(10_000.0, "game-b", 20.0, FLAT_20, True)
     assert monitor.reassert_s(10_000.0, GAME) is None
     assert monitor.last is None
@@ -175,7 +175,7 @@ def test_unresolved_notice_clears_once_power_is_normal_again():
 
 def test_notice_for_another_target_is_dropped():
     monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [43.0] * 11 + [20.0])
+    _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0])
     assert monitor.last["state"] == "restored"
     monitor.observe(now, GAME, 14.0, {"pl1": 15, "pl2": 15, "pl3": 15}, True)
     assert monitor.last is None
@@ -212,3 +212,22 @@ def test_steady_or_unreadable_profiles_never_ask_for_writes():
     assert not any(steady.observe(at) for at in range(60))
     unreadable = PlatformProfileWatch(read=lambda: None)
     assert not any(unreadable.observe(at) for at in range(60))
+
+
+def test_power_hovering_at_the_limit_stays_bounded():
+    monitor = HiddenOvershootMonitor()
+    target = {"pl1": 10, "pl2": 15, "pl3": 15}
+    samples = ([19.0] * 14 + [17.0]) * 60
+    actions, _ = feed(monitor, samples, target=target)
+    assert len(actions) <= 6
+    assert monitor.reassert_s(len(samples) * 2.0, GAME) is None
+
+
+def test_restorations_are_capped_per_session():
+    monitor = HiddenOvershootMonitor()
+    now = 0.0
+    for _ in range(10):
+        _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0], start=now)
+        now += 700.0
+    assert monitor.as_dict(now)["restored_total"] == 6
+    assert feed(monitor, [43.0] * 30, start=now)[0] == []

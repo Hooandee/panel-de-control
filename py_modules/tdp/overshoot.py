@@ -18,6 +18,8 @@ ESCALATE_EPISODES = 2
 ESCALATE_WINDOW_S = 600.0
 ESCALATE_HOLD_S = 1800.0
 REASSERT_S = 15.0
+RESTORE_READINGS = 2
+MAX_RESTORED_PER_SESSION = 6
 
 PROFILE_SETTLE_S = (1.0, 4.0)
 
@@ -105,6 +107,7 @@ class _Episode:
     target: dict
     verify_until: float
     peak_w: float
+    under_readings: int = 0
 
 
 class HiddenOvershootMonitor:
@@ -121,6 +124,7 @@ class HiddenOvershootMonitor:
         self._resolved_at = ()
         self._preferred = REWRITE
         self._unresolved = 0
+        self._restored_total = 0
         self._cooldown_until = 0.0
         self._last = None
 
@@ -155,8 +159,11 @@ class HiddenOvershootMonitor:
             episode = None
         if episode is not None:
             if not over:
-                self._resolve(now, episode, ceiling, watts)
+                episode.under_readings += 1
+                if episode.under_readings >= RESTORE_READINGS:
+                    self._resolve(now, episode, ceiling, watts)
                 return None
+            episode.under_readings = 0
             episode.peak_w = max(episode.peak_w, float(watts))
             if now < episode.verify_until:
                 return None
@@ -171,7 +178,11 @@ class HiddenOvershootMonitor:
             self._over_since = None
             self._forget_unresolved()
             return None
-        if self._unresolved >= MAX_UNRESOLVED or now < self._cooldown_until:
+        if (
+            self._unresolved >= MAX_UNRESOLVED
+            or self._restored_total >= MAX_RESTORED_PER_SESSION
+            or now < self._cooldown_until
+        ):
             return None
         if self._over_since is None or self._over_target != dict(target):
             self._over_since = now
@@ -203,6 +214,7 @@ class HiddenOvershootMonitor:
         self._over_since = None
         self._preferred = episode.method
         self._unresolved = 0
+        self._restored_total += 1
         self._resolved_at = tuple(
             at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
         ) + (now,)
@@ -242,7 +254,11 @@ class HiddenOvershootMonitor:
         return self._preferred
 
     def reassert_s(self, now, context):
-        if context != self._context or not self._resolved_at:
+        if (
+            context != self._context
+            or not self._resolved_at
+            or self._restored_total >= MAX_RESTORED_PER_SESSION
+        ):
             return None
         recent = [
             at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
@@ -267,5 +283,6 @@ class HiddenOvershootMonitor:
                 ]
             ),
             "unresolved": self._unresolved,
+            "restored_total": self._restored_total,
             "reassert_s": self.reassert_s(now, self._context),
         }
