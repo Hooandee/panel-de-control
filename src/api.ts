@@ -252,6 +252,14 @@ export interface TdpOwnership {
   surfaces: Record<string, Partial<Record<keyof Levels, TdpRailReading>>>;
   conflict_persistent: boolean;
   failures: number;
+  overshoot?: TdpOvershoot | null;
+}
+
+export interface TdpOvershoot {
+  state: "correcting" | "restored" | "unresolved";
+  ceiling_w: number;
+  peak_w: number;
+  age_s: number;
 }
 
 // Boost behaviour: how the SPPT/FPPT rails relate to the sustained PL1.

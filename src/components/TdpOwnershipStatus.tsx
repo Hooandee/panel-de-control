@@ -10,6 +10,24 @@ export const TdpOwnershipStatus: FC<{
   onAc?: boolean;
 }> = ({ ownership, onAc }) => {
   const { t } = useI18n();
+  const overshoot = ownership.overshoot;
+  if (overshoot) {
+    const key = {
+      correcting: "tdp.ownership.overshootCorrecting",
+      restored: "tdp.ownership.overshootRestored",
+      unresolved: "tdp.ownership.overshootUnresolved",
+    }[overshoot.state];
+    return (
+      <div
+        style={{
+          fontSize: theme.font.caption,
+          color: overshoot.state === "restored" ? theme.color.textMuted : theme.color.warn,
+        }}
+      >
+        {t(key, { peak: Math.round(overshoot.peak_w), target: overshoot.ceiling_w })}
+      </div>
+    );
+  }
   const view = ownershipView(ownership);
   if (!view.show) return null;
   const color = view.kind === "rejected" || view.kind === "conflict"

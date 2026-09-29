@@ -1,0 +1,204 @@
+from dataclasses import dataclass
+
+# Some firmware (ROG Ally X RC72LA) reloads its own maximum power
+# limits into the SMU while firmware-attributes keeps echoing the last value
+# written, so the rails read in sync while the chip draws far above them. Only
+# the measured package power reveals it, and a fresh write restores the limit.
+SUSTAIN_S = 20.0
+VERIFY_S = 10.0
+MIN_TARGET_W = 10
+MARGIN_W = 6.0
+MARGIN_RATIO = 0.25
+UNRESOLVED_COOLDOWN_S = (60.0, 180.0, 600.0)
+MAX_UNRESOLVED = 3
+ESCALATE_EPISODES = 2
+ESCALATE_WINDOW_S = 600.0
+ESCALATE_HOLD_S = 1800.0
+REASSERT_S = 15.0
+
+REWRITE = "rewrite"
+NUDGE = "nudge"
+
+
+def sustained_ceiling(target):
+    pl1 = target.get("pl1")
+    if pl1 is None:
+        return None
+    return max(int(pl1), int(target.get("pl2", pl1)))
+
+
+def overshoot_limit(ceiling):
+    return ceiling + max(MARGIN_W, ceiling * MARGIN_RATIO)
+
+
+def nudged_target(target, bounds):
+    """Same target one watt off on every rail that can move, so the driver sees
+    a changed value. None when no rail can move inside its bounds."""
+    nudged, moved = {}, False
+    for rail, value in target.items():
+        lo, hi = bounds.get(rail, (value, value))
+        if value - 1 >= lo:
+            nudged[rail] = value - 1
+            moved = True
+        elif value + 1 <= hi:
+            nudged[rail] = value + 1
+            moved = True
+        else:
+            nudged[rail] = value
+    return nudged if moved else None
+
+
+@dataclass
+class _Episode:
+    method: str
+    target: dict
+    verify_until: float
+    peak_w: float
+
+
+class HiddenOvershootMonitor:
+    def __init__(self):
+        self._context = None
+        self._reset_session()
+
+    def _reset_session(self):
+        self._over_since = None
+        self._over_target = None
+        self._over_peak = 0.0
+        self._episode = None
+        self._resolved_at = ()
+        self._preferred = REWRITE
+        self._unresolved = 0
+        self._cooldown_until = 0.0
+        self._last = None
+
+    def _enter(self, context):
+        if context != self._context:
+            self._context = context
+            self._reset_session()
+
+    def observe(self, now, context, watts, target, eligible):
+        """Feed one guard sample. Returns REWRITE or NUDGE when a correction
+        write is due, otherwise None."""
+        self._enter(context)
+        ceiling = sustained_ceiling(target or {})
+        if (
+            not eligible
+            or watts is None
+            or ceiling is None
+            or int(target["pl1"]) < MIN_TARGET_W
+        ):
+            self._over_since = None
+            self._episode = None
+            return None
+        limit = overshoot_limit(ceiling)
+        over = float(watts) > limit
+        episode = self._episode
+        if episode is not None and episode.target != dict(target):
+            self._episode = episode = None
+        if episode is not None:
+            if not over:
+                self._resolve(now, episode, ceiling, watts)
+                return None
+            episode.peak_w = max(episode.peak_w, float(watts))
+            if now < episode.verify_until:
+                return None
+            if episode.method == REWRITE:
+                episode.method = NUDGE
+                episode.verify_until = now + VERIFY_S
+                self._note("correcting", now, ceiling, episode.peak_w, NUDGE)
+                return NUDGE
+            self._give_up(now, episode, ceiling)
+            return None
+        if self._unresolved >= MAX_UNRESOLVED or now < self._cooldown_until:
+            return None
+        if not over:
+            self._over_since = None
+            return None
+        if self._over_since is None or self._over_target != dict(target):
+            self._over_since = now
+            self._over_target = dict(target)
+            self._over_peak = 0.0
+        self._over_peak = max(self._over_peak, float(watts))
+        if now - self._over_since < SUSTAIN_S:
+            return None
+        self._episode = _Episode(
+            self._preferred,
+            dict(target),
+            now + VERIFY_S,
+            self._over_peak,
+        )
+        self._note("correcting", now, ceiling, self._over_peak, self._preferred)
+        return self._preferred
+
+    def _resolve(self, now, episode, ceiling, watts):
+        self._episode = None
+        self._over_since = None
+        self._preferred = episode.method
+        self._unresolved = 0
+        self._resolved_at = tuple(
+            at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
+        ) + (now,)
+        self._note(
+            "restored",
+            now,
+            ceiling,
+            episode.peak_w,
+            episode.method,
+            settled_w=float(watts),
+        )
+
+    def _give_up(self, now, episode, ceiling):
+        self._episode = None
+        self._over_since = None
+        index = min(self._unresolved, len(UNRESOLVED_COOLDOWN_S) - 1)
+        self._unresolved += 1
+        self._cooldown_until = now + UNRESOLVED_COOLDOWN_S[index]
+        self._note("unresolved", now, ceiling, episode.peak_w, episode.method)
+
+    def _note(self, state, now, ceiling, peak_w, method, settled_w=None):
+        self._last = {
+            "state": state,
+            "at": round(now, 3),
+            "ceiling_w": ceiling,
+            "peak_w": round(peak_w, 1),
+            "method": method,
+            "settled_w": None if settled_w is None else round(settled_w, 1),
+        }
+
+    @property
+    def last(self):
+        return None if self._last is None else dict(self._last)
+
+    @property
+    def preferred_method(self):
+        return self._preferred
+
+    def reassert_s(self, now, context):
+        if context != self._context or not self._resolved_at:
+            return None
+        recent = [
+            at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
+        ]
+        if (
+            len(recent) >= ESCALATE_EPISODES
+            and now - self._resolved_at[-1] <= ESCALATE_HOLD_S
+        ):
+            return REASSERT_S
+        return None
+
+    def as_dict(self, now):
+        return {
+            "last": self.last,
+            "correcting": self._episode is not None,
+            "preferred_method": self._preferred,
+            "resolved_recent": len(
+                [
+                    at
+                    for at in self._resolved_at
+                    if now - at <= ESCALATE_WINDOW_S
+                ]
+            ),
+            "unresolved": self._unresolved,
+            "reassert_s": self.reassert_s(now, self._context),
+        }

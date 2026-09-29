@@ -36,4 +36,29 @@ describe("TdpOwnershipStatus", () => {
 
     expect(screen.getByText("tdp.ownership.constrained 22 22 15")).toBeTruthy();
   });
+
+  it("explains a hidden firmware limit that is being restored", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          status: "in_sync",
+          reason: "",
+          overshoot: { state: "correcting", ceiling_w: 20, peak_w: 43.2, age_s: 1 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.overshootCorrecting 43 20")).toBeTruthy();
+  });
+
+  it("stays silent for in-sync rails without an overshoot", () => {
+    const { container } = render(
+      <TdpOwnershipStatus
+        ownership={{ ...ownership, status: "in_sync", reason: "", overshoot: null }}
+      />,
+    );
+
+    expect(container.textContent).toBe("");
+  });
 });
