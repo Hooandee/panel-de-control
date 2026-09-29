@@ -1021,9 +1021,14 @@ def sysfs_snapshot(
     # The EC dump is raw hardware register bytes as hex (no PII). Exempt it from the
     # serial-run scrubber, which would otherwise shred a real 512-char hex string.
     ec_dump = snap["ec"].pop("dump", None) if isinstance(snap.get("ec"), dict) else None
+    # The desktop section holds only fixed module names, kernel values and
+    # numbers; the serial-run scrubber would otherwise shred "w83627ehf" or a
+    # ppfeaturemask like "0xfff7bfff".
+    desktop = snap.pop("desktop", {})
     result = redact_obj(snap, home=home, hostname=hostname)
     if isinstance(result.get("ec"), dict):
         result["ec"]["dump"] = ec_dump
+    result["desktop"] = desktop
     return result
 
 

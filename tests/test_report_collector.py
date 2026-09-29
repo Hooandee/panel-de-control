@@ -1102,10 +1102,14 @@ def test_sysfs_snapshot_reports_desktop_control_surfaces(tmp_path):
     _mk(os.path.join(card, "hwmon/hwmon2/power1_cap"), "282000000\n")
     _mk(os.path.join(card, "hwmon/hwmon2/power1_cap_max"), "290000000\n")
 
+    _mk(os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"), "0xfff7bfff\n")
+    _mk(os.path.join(root, "sys/module/w83627ehf/refcnt"), "0\n")
+
     desktop = sysfs_snapshot(root=root)["desktop"]
 
+    assert desktop["ppfeaturemask"] == "0xfff7bfff"
+    assert desktop["board_fans"]["loaded"] == ["nct6775", "w83627ehf"]
     assert desktop["acpi_enforce_resources"] == "lax"
-    assert desktop["board_fans"]["loaded"] == ["nct6775"]
     assert desktop["power_supplies"] == [{"type": "Battery", "scope": "Device"}]
     assert "aa:bb" not in str(desktop)
     assert desktop["rapl"][0]["constraints"][0] == {
