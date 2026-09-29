@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.58.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.0...panel-de-control-v0.58.1) (2026-09-29)
+
+
+### Español
+
+* **TDP:** En ASUS y Lenovo, Panel de Control mantiene mejor el TDP que elijas, también al cambiar el perfil de rendimiento o al enchufar el cargador.
+
+### English
+
+* **TDP:** On ASUS and Lenovo, Panel de Control holds the TDP you pick more reliably, including when the performance profile changes or the charger is plugged in.
+
+### Italiano
+
+* **TDP:** Su ASUS e Lenovo, Panel de Control mantiene meglio il TDP che scegli, anche quando cambia il profilo di prestazioni o colleghi il caricatore.
+
+### Deutsch
+
+* **TDP:** Auf ASUS und Lenovo hält Panel de Control die gewählte TDP zuverlässiger, auch wenn sich das Leistungsprofil ändert oder das Netzteil eingesteckt wird.
+
+### Português (Brasil)
+
+* **TDP:** Em ASUS e Lenovo, o Panel de Control mantém melhor o TDP que você escolher, inclusive ao mudar o perfil de desempenho ou ligar o carregador.
+
 ## [0.58.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.4...panel-de-control-v0.58.0) (2026-09-29)
 
 
