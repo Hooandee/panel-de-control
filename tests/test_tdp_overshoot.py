@@ -146,3 +146,11 @@ def test_nudge_moves_each_rail_inside_its_bounds():
     floor = {"pl1": 7, "pl2": 15, "pl3": 15}
     assert nudged_target(floor, bounds) == {"pl1": 8, "pl2": 16, "pl3": 16}
     assert nudged_target({"pl1": 7}, {"pl1": (7, 7)}) is None
+
+
+def test_interrupted_correction_clears_the_correcting_notice():
+    monitor = HiddenOvershootMonitor()
+    feed(monitor, [43.0] * 11)
+    assert monitor.last["state"] == "correcting"
+    monitor.observe(100.0, GAME, 43.0, FLAT_20, False)
+    assert monitor.last is None

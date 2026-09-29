@@ -6271,7 +6271,6 @@ class Plugin:
     def _overshoot_eligible(self, command, hold, status):
         return bool(
             self._current_appid is not None
-            and not self._ui_active
             and not command.auto_tdp
             and not self._auto_runtime_active()
             and not hold.active
@@ -6297,6 +6296,8 @@ class Plugin:
 
     def _guard_hidden_overshoot(self, now, command, hold, outcome, targets, observation):
         self._tdp_overshoot_clock = now
+        if self._ui_active:
+            return None
         monitor = self._overshoot_monitor()
         before = monitor.last
         watts = None

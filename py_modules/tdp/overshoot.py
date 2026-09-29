@@ -89,13 +89,14 @@ class HiddenOvershootMonitor:
             or int(target["pl1"]) < MIN_TARGET_W
         ):
             self._over_since = None
-            self._episode = None
+            self._drop_episode()
             return None
         limit = overshoot_limit(ceiling)
         over = float(watts) > limit
         episode = self._episode
         if episode is not None and episode.target != dict(target):
-            self._episode = episode = None
+            self._drop_episode()
+            episode = None
         if episode is not None:
             if not over:
                 self._resolve(now, episode, ceiling, watts)
@@ -130,6 +131,11 @@ class HiddenOvershootMonitor:
         )
         self._note("correcting", now, ceiling, self._over_peak, self._preferred)
         return self._preferred
+
+    def _drop_episode(self):
+        self._episode = None
+        if self._last is not None and self._last["state"] == "correcting":
+            self._last = None
 
     def _resolve(self, now, episode, ceiling, watts):
         self._episode = None

@@ -163,3 +163,18 @@ def test_diagnostics_expose_the_monitor_state(plugin):  # noqa: F811
     assert diagnostics["correcting"] is True
     assert diagnostics["last"]["ceiling_w"] == 20
     assert diagnostics["last"]["peak_w"] == 43.0
+
+
+def test_open_qam_freezes_detection_instead_of_resetting_it(plugin):  # noqa: F811
+    backend = HiddenLimitBackend(restore_on="never")
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 4.0)
+    assert overshoot_logs(plugin)[-1]["state"] == "correcting"
+    plugin._ui_active = True
+    backend.writes.clear()
+    now = run(plugin, now, 60.0)
+    assert backend.writes == []
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"][
+        "state"
+    ] == "correcting"
