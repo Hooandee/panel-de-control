@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+## [0.58.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.4...panel-de-control-v0.58.0) (2026-09-29)
+
+
+### Español
+
+* **Dispositivos:** La OneXPlayer X2 Mini Pro y la OneXPlayer 3 ya se reconocen por su nombre en vez de salir como equipo genérico. La X2 Mini Pro llega a 55 W con batería y a 80 W con el cargador, y a 120 W si conectas la refrigeración líquida externa y lo activas en Ajustes. La OneXPlayer 3 llega a 35 W, y a 45 W experimentales con el cargador si los desbloqueas a mano.
+* **Sobremesa:** Los PC de sobremesa ya no salen como equipo genérico. Puedes ajustar la potencia de la CPU Intel y de la gráfica AMD sin pasar nunca de lo que marca su firmware, y los ventiladores de la placa siguen la curva. Si tu sistema no carga el driver de esos ventiladores, en Ventiladores hay un interruptor para activarlo.
+* **Ventiladores:** Se ha intentado arreglar que en algunos PC de sobremesa con gráfica AMD el ventilador de la gráfica no subiera y la gráfica se calentara de más. Ese ventilador ya no lo toca Panel, lo lleva la propia gráfica.
+* **TDP:** Cuando el equipo no deja leer el límite de TDP que se está aplicando, el aviso ahora explica qué se ha enviado y cómo comprobarlo.
+* **Reportes:** Los reportes de problemas traen más datos de los PC de sobremesa y de la OneXPlayer 3.
+
+### English
+
+* **Devices:** The OneXPlayer X2 Mini Pro and the OneXPlayer 3 are now recognised by name instead of showing up as a generic device. The X2 Mini Pro goes up to 55 W on battery and 80 W on the charger, and up to 120 W if you attach the external liquid cooler and turn it on in Settings. The OneXPlayer 3 goes up to 35 W, and to an experimental 45 W on the charger if you unlock it by hand.
+* **Desktop:** Desktop PCs no longer show up as a generic device. You can adjust Intel CPU and AMD graphics power without ever going past what their firmware allows, and the motherboard fans follow the curve. If your system doesn't load the driver for those fans, the Fans tab has a switch to turn it on.
+* **Fans:** An attempt has been made to fix the graphics fan not speeding up on some desktop PCs with AMD graphics, which let the card run too hot. Panel no longer touches that fan; the graphics card handles it itself.
+* **TDP:** When the device can't read back the TDP limit being applied, the message now explains what was sent and how to check it.
+* **Reports:** Problem reports include more details from desktop PCs and the OneXPlayer 3.
+
+### Italiano
+
+* **Dispositivi:** OneXPlayer X2 Mini Pro e OneXPlayer 3 ora vengono riconosciute per nome invece di comparire come dispositivo generico. La X2 Mini Pro arriva a 55 W a batteria e a 80 W con il caricatore, e fino a 120 W se colleghi il raffreddamento a liquido esterno e lo attivi nelle Impostazioni. La OneXPlayer 3 arriva a 35 W, e a 45 W sperimentali con il caricatore se li sblocchi a mano.
+* **Desktop:** I PC desktop non compaiono più come dispositivo generico. Puoi regolare la potenza della CPU Intel e della grafica AMD senza mai superare quanto consente il loro firmware, e le ventole della scheda madre seguono la curva. Se il tuo sistema non carica il driver di quelle ventole, nella scheda Ventole c'è un interruttore per attivarlo.
+* **Ventole:** Si è cercato di risolvere il problema per cui su alcuni PC desktop con grafica AMD la ventola della scheda video non aumentava e la grafica si scaldava troppo. Panel non tocca più quella ventola, la gestisce la scheda video stessa.
+* **TDP:** Quando il dispositivo non permette di rileggere il limite di TDP applicato, l'avviso ora spiega cosa è stato inviato e come verificarlo.
+* **Segnalazioni:** Le segnalazioni di problemi includono più dati dai PC desktop e dalla OneXPlayer 3.
+
+### Deutsch
+
+* **Geräte:** Die OneXPlayer X2 Mini Pro und die OneXPlayer 3 werden jetzt mit Namen erkannt, statt als generisches Gerät zu erscheinen. Die X2 Mini Pro schafft 55 W im Akkubetrieb und 80 W am Netzteil, und bis zu 120 W, wenn du die externe Wasserkühlung anschließt und sie in den Einstellungen aktivierst. Die OneXPlayer 3 schafft 35 W, und experimentelle 45 W am Netzteil, wenn du sie von Hand freischaltest.
+* **Desktop:** Desktop-PCs erscheinen nicht mehr als generisches Gerät. Du kannst die Leistung der Intel-CPU und der AMD-Grafik anpassen, ohne je über das hinauszugehen, was ihre Firmware erlaubt, und die Mainboard-Lüfter folgen der Kurve. Wenn dein System den Treiber für diese Lüfter nicht lädt, gibt es unter Lüfter einen Schalter dafür.
+* **Lüfter:** Es wurde versucht zu beheben, dass auf manchen Desktop-PCs mit AMD-Grafik der Grafiklüfter nicht hochdrehte und die Karte zu heiß wurde. Panel steuert diesen Lüfter nicht mehr, das übernimmt die Grafikkarte selbst.
+* **TDP:** Wenn das Gerät das angewendete TDP-Limit nicht zurücklesen kann, erklärt der Hinweis jetzt, was gesendet wurde und wie man es prüft.
+* **Berichte:** Problemberichte enthalten mehr Daten von Desktop-PCs und der OneXPlayer 3.
+
+### Português (Brasil)
+
+* **Dispositivos:** O OneXPlayer X2 Mini Pro e o OneXPlayer 3 agora são reconhecidos pelo nome em vez de aparecerem como dispositivo genérico. O X2 Mini Pro chega a 55 W na bateria e a 80 W no carregador, e até 120 W se você conectar o resfriamento líquido externo e ativar nos Ajustes. O OneXPlayer 3 chega a 35 W, e a 45 W experimentais no carregador se você desbloquear manualmente.
+* **Desktop:** Os PCs de mesa não aparecem mais como dispositivo genérico. Dá para ajustar a potência da CPU Intel e da placa de vídeo AMD sem nunca passar do que o firmware delas permite, e as ventoinhas da placa-mãe seguem a curva. Se o seu sistema não carrega o driver dessas ventoinhas, na aba Ventoinhas tem um botão para ativá-lo.
+* **Ventoinhas:** Foi feita uma tentativa de corrigir a ventoinha da placa de vídeo não acelerar em alguns PCs de mesa com placa AMD, o que deixava a placa esquentar demais. O Panel não mexe mais nessa ventoinha, quem cuida dela é a própria placa de vídeo.
+* **TDP:** Quando o dispositivo não permite ler de volta o limite de TDP aplicado, o aviso agora explica o que foi enviado e como conferir.
+* **Relatórios:** Os relatórios de problemas trazem mais dados dos PCs de mesa e do OneXPlayer 3.
+
 ## [0.57.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.3...panel-de-control-v0.57.4) (2026-09-28)
 
 
