@@ -887,6 +887,15 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "dmi": {},
         "leds": [],
         "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+        "desktop": {
+            "board_fans": {"available": [], "loaded": [], "channels": 0},
+            "power_supplies": [],
+            "rapl": [],
+            "amdgpu": [],
+            "cpu": {"amd_pstate": None, "governors": None, "epp": None},
+            "acpi_enforce_resources": None,
+            "ppfeaturemask": None,
+        },
         "ec": {
             "debugfs_present": False,
             "ec_sys_loaded": False,
@@ -1043,3 +1052,70 @@ def test_decky_plugins_missing_dir_is_unavailable():
         "truncated": False,
     }
     assert decky_plugins(None)["status"] == "unavailable"
+
+
+def test_sysfs_snapshot_captures_fan_control_values(tmp_path):
+    root = str(tmp_path)
+    chip = os.path.join(root, "sys/class/hwmon/hwmon3")
+    for name, value in {
+        "name": "amdgpu\n",
+        "pwm1": "46\n",
+        "pwm1_enable": "1\n",
+        "fan1_input": "1180\n",
+        "temp1_label": "edge\n",
+    }.items():
+        _mk(os.path.join(chip, name), value)
+    os.chmod(os.path.join(chip, "fan1_input"), 0o444)
+
+    fans = sysfs_snapshot(root=root)["hwmon"][0]["fan_nodes"]
+
+    assert fans == {
+        "fan1_input": {"value": "1180", "writable": False},
+        "pwm1": {"value": "46", "writable": True},
+        "pwm1_enable": {"value": "1", "writable": True},
+    }
+
+
+def test_sysfs_snapshot_dmi_includes_chassis_type(tmp_path):
+    _mk(os.path.join(str(tmp_path), "sys/class/dmi/id/chassis_type"), "3\n")
+    assert sysfs_snapshot(root=str(tmp_path))["dmi"]["chassis_type"] == "3"
+
+
+def test_sysfs_snapshot_reports_desktop_control_surfaces(tmp_path):
+    root = str(tmp_path)
+    _mk(os.path.join(root, "proc/cmdline"), "quiet acpi_enforce_resources=lax splash\n")
+    _mk(os.path.join(root, "sys/module/nct6775/refcnt"), "0\n")
+    pad = os.path.join(root, "sys/class/power_supply/ps-controller-battery-aa:bb")
+    _mk(os.path.join(pad, "type"), "Battery\n")
+    _mk(os.path.join(pad, "scope"), "Device\n")
+    rapl = os.path.join(root, "sys/devices/virtual/powercap/intel-rapl/intel-rapl:0")
+    _mk(os.path.join(rapl, "name"), "package-0\n")
+    _mk(os.path.join(rapl, "enabled"), "1\n")
+    _mk(os.path.join(rapl, "constraint_0_name"), "long_term\n")
+    _mk(os.path.join(rapl, "constraint_0_power_limit_uw"), "95000000\n")
+    _mk(os.path.join(rapl, "constraint_0_max_power_uw"), "65000000\n")
+    card = os.path.join(root, "sys/class/drm/card1/device")
+    _mk(os.path.join(card, "vendor"), "0x1002\n")
+    _mk(os.path.join(card, "boot_vga"), "1\n")
+    _mk(os.path.join(card, "pp_od_clk_voltage"), "OD_SCLK:\n")
+    _mk(os.path.join(card, "gpu_od/fan_ctrl/fan_curve"), "")
+    _mk(os.path.join(card, "hwmon/hwmon2/power1_cap"), "282000000\n")
+    _mk(os.path.join(card, "hwmon/hwmon2/power1_cap_max"), "290000000\n")
+
+    _mk(os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"), "0xfff7bfff\n")
+    _mk(os.path.join(root, "sys/module/w83627ehf/refcnt"), "0\n")
+
+    desktop = sysfs_snapshot(root=root)["desktop"]
+
+    assert desktop["ppfeaturemask"] == "0xfff7bfff"
+    assert desktop["board_fans"]["loaded"] == ["nct6775", "w83627ehf"]
+    assert desktop["acpi_enforce_resources"] == "lax"
+    assert desktop["power_supplies"] == [{"type": "Battery", "scope": "Device"}]
+    assert "aa:bb" not in str(desktop)
+    assert desktop["rapl"][0]["constraints"][0] == {
+        "name": "long_term", "limit_uw": "95000000", "max_uw": "65000000", "writable": True}
+    gpu = desktop["amdgpu"][0]
+    assert gpu["boot_vga"] == "1"
+    assert gpu["overdrive"] is True
+    assert gpu["fan_ctrl"] == ["fan_curve"]
+    assert gpu["power_cap"]["power1_cap_max"] == "290000000"

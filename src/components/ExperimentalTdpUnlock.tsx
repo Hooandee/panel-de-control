@@ -19,7 +19,7 @@ export const ExperimentalTdpUnlock: FC<Props> = ({ enabled, maxWatts, safeMaxWat
   const params = { max: maxWatts, safe: safeMaxWatts };
   return (
     <ToggleField
-      label={t("settings.experimentalTdp")}
+      label={t("settings.experimentalTdp", params)}
       description={t(
         failed
           ? "settings.experimentalTdp.applyFailed"

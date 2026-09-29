@@ -230,3 +230,51 @@ def test_factory_selects_generic_pwm_last(tmp_path):
 
 def test_factory_null_when_nothing(tmp_path):
     assert isinstance(select_fan_backend(None, root=str(tmp_path)), NullFanBackend)
+
+
+def test_discrete_gpu_fan_is_never_driven(tmp_path):
+    # A desktop whose only pwm+tach chip is the dGPU's amdgpu hwmon.
+    # The graphics firmware owns that fan; the generic loop must leave it alone.
+    for idx, driver in enumerate(("amdgpu", "radeon", "nouveau", "i915", "xe")):
+        _mk_pwm_chip(str(tmp_path), idx=idx, name=driver)
+    assert _backend(tmp_path).supported is False
+    assert isinstance(select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0),
+                      NullFanBackend)
+
+
+def test_discrete_gpu_chip_is_skipped_for_the_system_fan_chip(tmp_path):
+    gpu = _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
+    board = _mk_pwm_chip(str(tmp_path), idx=1, name="nct6798")
+    backend = _backend(tmp_path, temp=70.0)
+    assert backend.supported is True
+    backend.set_curve("fan1", CURVE)
+    assert _r(board, "pwm1_enable") == "1"
+    assert _r(gpu, "pwm1_enable") == "2"
+    assert _r(gpu, "pwm1") == "0"
+
+
+def _desktop():
+    from device_profiles import DESKTOP_PC
+    return DESKTOP_PC
+
+
+def test_desktop_drives_only_spinning_board_headers_above_the_floor(tmp_path):
+    gpu = _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
+    board = _mk_pwm_chip(str(tmp_path), idx=1, name="nct6798", fans=(1, 2, 3), enable="5")
+    _w(board, "fan3_input", "0")
+    backend = select_fan_backend(_desktop(), root=str(tmp_path), temp_fn=lambda: 30.0)
+
+    assert isinstance(backend, GenericPwmFanBackend)
+    backend.set_curve("fan1", CURVE)
+    assert [_r(board, f"pwm{m}_enable") for m in (1, 2, 3)] == ["1", "1", "5"]
+    assert int(_r(board, "pwm1")) == 77
+    assert _r(board, "pwm3") == "0"
+    assert _r(gpu, "pwm1_enable") == "2"
+
+    backend.restore_auto()
+    assert [_r(board, f"pwm{m}_enable") for m in (1, 2)] == ["5", "5"]
+
+
+def test_desktop_without_board_fans_is_read_only(tmp_path):
+    _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
+    assert isinstance(select_fan_backend(_desktop(), root=str(tmp_path)), NullFanBackend)

@@ -186,7 +186,8 @@ def test_force_probe_reselects_safe_backend_atomically(Plugin, monkeypatch):
     assert failed.set_levels_calls == 0
     assert queued_result[0].detail == "stale-generation"
     assert plugin._execute_tdp_command(during_selection[0]).detail == "stale-backend"
-    assert selections == [(plugin._device.key, {"os_id": plugin._os_id})]
+    assert selections == [(plugin._device.key, {"os_id": plugin._os_id,
+                                                "desktop_ceiling_hint_w": None})]
     assert plugin._tdp_status == "settling"
     assert plugin._tdp_reason == ""
     assert plugin._tdp_targets is None

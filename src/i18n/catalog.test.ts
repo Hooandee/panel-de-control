@@ -227,7 +227,7 @@ describe("Every supported translation catalog", () => {
         "mandos.modules.unavailable": "HHD stellt die erforderliche Schnittstelle nicht bereit. Es wird kein Befehl gesendet.",
         "mandos.modules.confirm.desc": "Halte das Gerät fest und achte darauf, dass die Module Platz haben. Kann HHD die Stromversorgung der Controller nicht direkt abschalten, wird das Gerät möglicherweise in den Standby versetzt, um das Auswerfen abzuschließen.",
         "settings.desktop.desc": "Aktiviert getrennte Regler für CPU, dedizierte GPU und Lüfter auf diesem Linux-PC. Der Modus startet mit „Frei“ und ändert nichts, bis du einen anderen Modus auswählst.",
-        "settings.experimentalTdp.confirm.desc": "Damit sind am Netzteil bis zu {max} W möglich und somit mehr als die von GPD angegebenen {safe} W. Behalte die Temperaturen im Blick und deaktiviere die Option, wenn das Gerät sie nicht unter Kontrolle halten kann. Auto-TDP und Voreinstellungen bleiben auf {safe} W begrenzt.",
+        "settings.experimentalTdp.confirm.desc": "Damit sind am Netzteil bis zu {max} W möglich und somit mehr als die vom Hersteller angegebenen {safe} W. Behalte die Temperaturen im Blick und deaktiviere die Option, wenn das Gerät sie nicht unter Kontrolle halten kann. Auto-TDP und Voreinstellungen bleiben auf {safe} W begrenzt.",
         "desktop.power.available": "GPU-Leistungslimit",
         "desktop.cpu.draw": "CPU-Leistungsaufnahme",
         "desktop.power.partial": "Es werden nur Regler angezeigt, deren Lese- und Schreibzugriffe das System bestätigt.",

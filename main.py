@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import time
 from collections import deque
 from concurrent.futures import (
@@ -85,9 +86,10 @@ from desktop.mode import (
     normalize_desktop_settings,
     recognised_desktop_migration_pending,
 )
-from desktop.power import DesktopPowerCoordinator
+from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
+from desktop.board_fans import BoardFanDriver
 from battery.reader import BatteryReader
 from battery.charge_limit import (
     NullChargeLimit,
@@ -254,6 +256,8 @@ DEFAULTS = {
     # Manual opt-in for generic Linux desktops. Validated desktop hardware such as
     # Fremont enables the topology automatically, but still starts in pass-through.
     "desktop_mode_enabled": False,
+    "_desktop_pc_seeded": False,
+    "_desktop_pc_prev_tdp_control": None,
     "desktop_power_mode": "free",
     "desktop_cpu_w": 23,
     "desktop_gpu_w": 80,
@@ -312,6 +316,8 @@ DEFAULTS = {
     # EC interface (Legion Go S). Default off → read-only monitor; on → EC curve
     # control with the RPM cap + temp guardian harness. The user accepts the risk.
     "fan_experimental": False,
+    "board_fan_driver": False,
+    "board_fan_module": None,
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
@@ -443,6 +449,8 @@ class Plugin:
         self._tdp_backend = tdp_factory.select_backend(
             self._device,
             os_id=self._os_id,
+            desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
+                self._settings.get("desktop_power_handoff")),
         )
         self._low_battery_hold_backend = (
             tdp_factory.select_low_battery_hold_backend(self._device)
@@ -473,6 +481,7 @@ class Plugin:
             persisted_state=self._settings.get("desktop_power_handoff"),
             persist_state=self._persist_desktop_power_state,
             device_key=self._device.key,
+            firmware_relative=self._device.key == "desktop_pc",
             legacy_device_keys=(
                 {"generic"}
                 if self._desktop_recognition_migration_pending
@@ -518,6 +527,11 @@ class Plugin:
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
+        board_module = self._settings.get("board_fan_module")
+        self._board_fans = (
+            BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
+            if self._device.key == "desktop_pc" else None
+        )
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
         # experimental toggle.
@@ -1965,7 +1979,8 @@ class Plugin:
         # Bounded filesystem listing of the raw sysfs support surfaces (fan/temp
         # chips, vendor WMI attributes, battery/charge nodes, ACPI-call + modules)
         # so an unrecognised device is diagnosable from what actually exists.
-        snapshot = report_collector.sysfs_snapshot(home=home, hostname=hostname)
+        snapshot = await loop.run_in_executor(
+            None, lambda: self._report_sysfs_snapshot(home, hostname))
         # dmesg/journalctl are blocking subprocess calls (up to a few seconds each);
         # run them off the event loop so the auto-TDP loop and other RPCs don't stall.
         kernel = await loop.run_in_executor(
@@ -3108,6 +3123,93 @@ class Plugin:
         log = decky.logger.info if outcome["supported"] else decky.logger.warning
         log("GPD fan recovery %s", encoded)
 
+    def _board_fan_state(self) -> dict:
+        driver = getattr(self, "_board_fans", None)
+        if driver is None:
+            return {"supported": False}
+        return {**driver.state(), "supported": True,
+                "enabled": self._settings.get("board_fan_driver") is True}
+
+    def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
+        driver = self._board_fans
+        try:
+            released = self._fan_ctrl.restore_auto()
+            released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+        except Exception:  # noqa: BLE001
+            released_ok = False
+        if enabled:
+            state = driver.load(only)
+        elif released_ok:
+            state = driver.unload()
+        else:
+            # Unloading under a fan still in manual mode would strand it at its
+            # last duty with no driver to move it again.
+            state = driver.release_failed()
+        self._fan_ctrl = fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp,
+            experimental=bool(self._settings.get("fan_experimental", False)))
+        self._reapply_fans_sync()
+        decky.logger.info("Board fan driver %s", json.dumps(
+            {**state, "backend": getattr(self._fan_ctrl, "name", "null")},
+            sort_keys=True, separators=(",", ":")))
+        return state
+
+    # Models whose fan EC map is unknown: a report loads ec_sys read-only for one
+    # dump so the registers can be matched against known OneXPlayer layouts.
+    _REPORT_EC_PROBE_KEYS = frozenset({"onexplayer_3"})
+
+    def _report_sysfs_snapshot(self, home, hostname) -> dict:
+        probe = None
+        if (getattr(getattr(self, "_device", None), "key", None) in self._REPORT_EC_PROBE_KEYS
+                and not os.path.exists("/sys/kernel/debug/ec/ec0/io")
+                and not os.path.isdir("/sys/module/ec_sys")):
+            probe = {"loaded_for_report": False, "unloaded": None}
+            probe["loaded_for_report"] = self._run_modprobe(["ec_sys"])
+        try:
+            snapshot = report_collector.sysfs_snapshot(home=home, hostname=hostname)
+        finally:
+            if probe and probe["loaded_for_report"]:
+                probe["unloaded"] = self._run_modprobe(["-r", "ec_sys"])
+        if probe is not None and isinstance(snapshot.get("ec"), dict):
+            snapshot["ec"]["report_probe"] = probe
+        return snapshot
+
+    @staticmethod
+    def _run_modprobe(args) -> bool:
+        from controllers.detect import clean_env, resolve_bin
+        try:
+            return subprocess.run([resolve_bin("modprobe"), *args], check=False,
+                                  capture_output=True, timeout=5,
+                                  env=clean_env()).returncode == 0
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def set_board_fan_enabled(self, enabled: bool) -> dict:
+        """Opt in to loading the motherboard's fan driver (desktop PCs only)."""
+        self._init()
+        if getattr(self, "_board_fans", None) is None:
+            return {"supported": False}
+        enabled = enabled is True
+        state = await self._offload_call(lambda: self._set_board_fans_sync(enabled))
+        self._settings["board_fan_driver"] = bool(
+            state["channels"] > 0 and (enabled or state["loaded_by_panel"]))
+        self._settings["board_fan_module"] = (
+            self._board_fans.active_module if self._settings["board_fan_driver"] else None
+        )
+        self._save()
+        self._ensure_fan_loop()
+        return await self._offload_call(self._board_fan_state)
+
+    def _restore_board_fans(self) -> None:
+        if (getattr(self, "_board_fans", None) is None
+                or self._settings.get("board_fan_driver") is not True):
+            return
+        module = self._settings.get("board_fan_module")
+        self._offload(
+            lambda: self._set_board_fans_sync(True, module if isinstance(module, str) else None),
+            done=self._ensure_fan_loop,
+        )
+
     def _reapply_fans(self) -> None:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
         backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
@@ -3250,6 +3352,8 @@ class Plugin:
             "has_firmware_modes": bool(self._firmware_choices()),
             "device_key": getattr(self._device, "key", None),
         }
+        if getattr(self, "_board_fans", None) is not None:
+            state["board_fans"] = self._board_fan_state()
         if self._desktop_mode_on() and hw_state.get("independent"):
             profile = self._desktop_fans.effective(self._current_appid)
             hardware = {fan.get("key"): fan for fan in hw_state.get("fans", [])}
@@ -4926,7 +5030,8 @@ class Plugin:
         lim = self._tdp_backend.get_limits().unlocked(unlock)
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
-            lim = lim.with_cooler(cooler_max)
+            lim = (lim.with_ac_max(cooler_max) if getattr(self._device, "cooler_charger_only", False)
+                   else lim.with_cooler(cooler_max))
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
@@ -4945,7 +5050,12 @@ class Plugin:
     def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
         limits = self._limits() if limits is None else limits
-        if not (
+        manual_cooler = bool(
+            getattr(self._device, "cooler_charger_only", False)
+            and self._device.cooler_max
+            and self._settings.get("cooler_boost", False)
+        )
+        if not manual_cooler and not (
             self._device.experimental_tdp_max_ac
             and self._settings.get("experimental_tdp_unlock") is True
         ):
@@ -10445,6 +10555,8 @@ class Plugin:
             replacement = tdp_factory.select_backend(
                 self._device,
                 os_id=self._os_id,
+                desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
+                    self._settings.get("desktop_power_handoff")),
             )
         except Exception as error:  # noqa: BLE001
             selection_error = type(error).__name__
@@ -11586,6 +11698,7 @@ class Plugin:
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
+        self._restore_board_fans()
         await self._offload_call(self._recover_fremont_fan_handoff)
         await self._prime_tdp_ownership()
         try:
