@@ -7,7 +7,9 @@ from dataclasses import replace
 
 import pytest
 
+from device_profiles import DEVICE_TABLE
 from tdp.backend import TDPBackend
+from tdp.overshoot import SUSTAIN_S, VERIFY_S, PlatformProfileWatch
 from tdp.reconcile import ReconcileMemory
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
@@ -2417,3 +2419,235 @@ def test_resume_and_ac_changes_expedite_a_firmware_handoff_retry(plugin):
     plugin._log_lifecycle_event({"event": "baseline"})
 
     assert len(calls) == 2
+
+
+class HiddenLimitBackend(FakeBackend):
+    """Readback echoes the last write while the firmware may run its own
+    maximum limits underneath, as the Ally X RC72LA does."""
+
+    name = "firmware-attr:asus-armoury"
+
+    def __init__(self, restore_on="any"):
+        super().__init__()
+        self.hidden = False
+        self.restore_on = restore_on
+        self.writes = []
+
+    def set_levels(self, pl1, pl2, pl3, ac):
+        previous = dict(self._levels)
+        result = super().set_levels(pl1, pl2, pl3, ac)
+        self.writes.append(dict(self._levels))
+        changed = self._levels != previous
+        if self.restore_on == "any" or (self.restore_on == "changed" and changed):
+            self.hidden = False
+        return result
+
+
+class Meter:
+    def __init__(self, backend, overshoot_w=43.0):
+        self.backend = backend
+        self.overshoot_w = overshoot_w
+
+    def read_watts(self):
+        if self.backend.hidden:
+            return self.overshoot_w
+        return float(self.backend._levels["pl1"])
+
+    def read(self):
+        return {"watts": self.read_watts(), "gpu_busy": 90}
+
+
+ALLY_X = next(profile for profile in DEVICE_TABLE if profile.key == "rog_ally_x")
+
+
+def start_game(plugin, backend, watts=20):
+    plugin._device = ALLY_X
+    plugin._tdp_backend = backend
+    plugin._power_reader = Meter(backend)
+    plugin._tdp_profiles.set_pl1("global", watts)
+    plugin._current_appid = "3240220"
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game"))
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=0.0)
+    backend.writes.clear()
+
+
+def run(plugin, start, seconds, step=2.0):
+    now = start
+    while now < start + seconds:
+        plugin._tdp_guard_tick(now=now)
+        now += step
+    return now
+
+
+def overshoot_logs(plugin):
+    return [
+        json.loads(args[1])
+        for args in plugin._test_logs["info"]
+        if args and args[0] == "TDP overshoot %s"
+    ]
+
+
+def test_in_sync_rails_with_normal_draw_never_add_writes(plugin):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    run(plugin, 10.0, 300.0)
+    assert backend.writes == []
+    assert overshoot_logs(plugin) == []
+
+
+def test_hidden_firmware_limit_is_detected_and_restored(plugin):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 6.0)
+    assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}]
+    assert plugin._tdp_history[-1]["action"] == "overshoot-rewrite"
+    run(plugin, now, 10.0)
+    states = [entry["state"] for entry in overshoot_logs(plugin)]
+    assert states == ["correcting", "restored"]
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"][
+        "state"
+    ] == "restored"
+    assert plugin._tdp_profiles.effective("3240220")["pl1"] == 20
+
+
+def test_same_value_write_ignored_falls_back_to_a_changed_value(plugin):
+    backend = HiddenLimitBackend(restore_on="changed")
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + VERIFY_S + 10.0)
+    assert backend.writes[0] == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend.writes[1] == {"pl1": 19, "pl2": 19, "pl3": 19}
+    assert backend.writes[2] == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend._levels == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend.hidden is False
+    assert overshoot_logs(plugin)[-1]["state"] == "restored"
+
+
+@pytest.mark.parametrize(
+    "setup",
+    ["no_game", "generic", "desktop", "write_only", "low_target"],
+)
+def test_ineligible_contexts_never_correct(plugin, setup):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend, watts=7 if setup == "low_target" else 20)
+    if setup == "no_game":
+        plugin._current_appid = None
+    elif setup == "generic":
+        plugin._device = replace(ALLY_X, is_generic=True)
+    elif setup == "desktop":
+        plugin._device = replace(ALLY_X, key="desktop_pc")
+    elif setup == "write_only":
+        backend.readback = False
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, 120.0)
+    corrections = [
+        entry for entry in plugin._tdp_history
+        if str(entry["action"]).startswith("overshoot-")
+    ]
+    assert corrections == []
+    assert overshoot_logs(plugin) == []
+
+
+def test_diagnostics_expose_the_monitor_state(plugin):
+    backend = HiddenLimitBackend(restore_on="never")
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 4.0)
+    diagnostics = plugin._tdp_diagnostics()["overshoot"]
+    assert diagnostics["correcting"] is True
+    assert diagnostics["last"]["target_w"] == 20
+    assert diagnostics["last"]["peak_w"] == 43.0
+
+
+def test_ui_activity_flag_does_not_disable_detection(plugin):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    plugin._ui_active = True
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 6.0)
+    assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}]
+
+
+def test_restored_notice_expires_even_when_detection_stops(plugin):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 10.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"]
+    plugin._settings["tdp_control_enabled"] = False
+    run(plugin, now, 120.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"] is None
+
+
+def test_correcting_notice_disappears_when_detection_stops(plugin):
+    backend = HiddenLimitBackend(restore_on="never")
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 4.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"]
+    plugin._settings["tdp_control_enabled"] = False
+    run(plugin, now, 30.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"] is None
+
+
+@pytest.mark.parametrize("variant", ["ryzenadj", "rearm_83l3"])
+def test_backends_without_physical_evidence_are_left_alone(plugin, variant):
+    backend = HiddenLimitBackend()
+    if variant == "ryzenadj":
+        backend.name = "ryzenadj"
+    else:
+        backend.name = "firmware-attr:lenovo-wmi-other"
+        backend.rearms_on_ignored_writes = True
+    start_game(plugin, backend)
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, 120.0)
+    assert backend.writes == []
+    assert overshoot_logs(plugin) == []
+
+
+class Profiles:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self):
+        return (("asus-wmi", self.value),)
+
+
+@pytest.mark.parametrize(
+    ("backend_name", "expected_writes"),
+    [("firmware-attr:asus-armoury", 2), ("firmware-attr:lenovo-wmi-other", 0)],
+)
+def test_platform_profile_change_rewrites_asus_rails_twice(
+    plugin, backend_name, expected_writes
+):
+    backend = HiddenLimitBackend()
+    backend.name = backend_name
+    start_game(plugin, backend)
+    profiles = Profiles("performance")
+    plugin._tdp_profile_watch = PlatformProfileWatch(read=profiles)
+    now = run(plugin, 10.0, 10.0, step=0.5)
+    backend.writes.clear()
+    profiles.value = "balanced"
+    run(plugin, now, 10.0, step=0.5)
+    assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}] * expected_writes
+    if expected_writes:
+        assert plugin._tdp_history[-1]["action"] == "profile-reassert"
+        change = plugin._tdp_diagnostics()["overshoot"]["profile_change"]
+        assert change["to"] == ["balanced"]
+
+
+def test_profile_change_outside_a_game_still_restores_the_rails(plugin):
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    plugin._current_appid = None
+    plugin._execute_tdp_command(plugin._capture_tdp_command("global"))
+    profiles = Profiles("performance")
+    plugin._tdp_profile_watch = PlatformProfileWatch(read=profiles)
+    now = run(plugin, 10.0, 10.0, step=0.5)
+    backend.writes.clear()
+    profiles.value = "low-power"
+    run(plugin, now, 10.0, step=0.5)
+    assert len(backend.writes) == 2

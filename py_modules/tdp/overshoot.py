@@ -16,12 +16,8 @@ MARGIN_W = 3.0
 MARGIN_RATIO = 0.10
 UNRESOLVED_COOLDOWN_S = (60.0, 180.0, 600.0)
 MAX_UNRESOLVED = 3
-ESCALATE_EPISODES = 2
-ESCALATE_WINDOW_S = 600.0
-ESCALATE_HOLD_S = 1800.0
-REASSERT_S = 15.0
 RESTORE_READINGS = 2
-MAX_RESTORED_PER_SESSION = 6
+MAX_RESTORED_PER_SESSION = 30
 
 PROFILE_SETTLE_S = (1.0, 4.0, 10.0)
 
@@ -51,9 +47,6 @@ def read_platform_profiles(root="/"):
 
 
 class PlatformProfileWatch:
-    """Reports when the rails must be written again after the platform
-    profile changed underneath them, once per settle step."""
-
     def __init__(self, read=read_platform_profiles):
         self._read = read
         self._profiles = None
@@ -94,8 +87,7 @@ def overshoot_limit(ceiling):
 
 
 def nudged_target(target, bounds):
-    """Same target one watt off on every rail that can move, so the driver sees
-    a changed value. None when no rail can move inside its bounds."""
+    """One watt off on every rail that can move, so the driver sees a change."""
     nudged, moved = {}, False
     for rail, value in target.items():
         lo, hi = bounds.get(rail, (value, value))
@@ -131,7 +123,6 @@ class HiddenOvershootMonitor:
         self._over_peak = 0.0
         self._severe_since = None
         self._episode = None
-        self._resolved_at = ()
         self._preferred = REWRITE
         self._unresolved = 0
         self._restored_total = 0
@@ -144,8 +135,6 @@ class HiddenOvershootMonitor:
             self._reset_session()
 
     def observe(self, now, context, watts, target, eligible):
-        """Feed one guard sample. Returns REWRITE or NUDGE when a correction
-        write is due, otherwise None."""
         self._enter(context)
         ceiling = sustained_ceiling(target or {})
         if (
@@ -171,7 +160,7 @@ class HiddenOvershootMonitor:
             if not over:
                 episode.under_readings += 1
                 if episode.under_readings >= RESTORE_READINGS:
-                    self._resolve(now, episode, ceiling, watts)
+                    self._resolve(now, episode, target, watts)
                 return None
             episode.under_readings = 0
             episode.peak_w = max(episode.peak_w, float(watts))
@@ -180,9 +169,9 @@ class HiddenOvershootMonitor:
             if episode.method == REWRITE:
                 episode.method = NUDGE
                 episode.verify_until = now + VERIFY_S
-                self._note("correcting", now, ceiling, episode.peak_w, NUDGE)
+                self._note("correcting", now, target, episode.peak_w, NUDGE)
                 return NUDGE
-            self._give_up(now, episode, ceiling)
+            self._give_up(now, episode, target)
             return None
         if not over:
             self._over_since = None
@@ -221,7 +210,7 @@ class HiddenOvershootMonitor:
             now + VERIFY_S,
             self._over_peak,
         )
-        self._note("correcting", now, ceiling, self._over_peak, self._preferred)
+        self._note("correcting", now, target, self._over_peak, self._preferred)
         return self._preferred
 
     def _forget_unresolved(self):
@@ -233,37 +222,35 @@ class HiddenOvershootMonitor:
         if self._last is not None and self._last["state"] == "correcting":
             self._last = None
 
-    def _resolve(self, now, episode, ceiling, watts):
+    def _resolve(self, now, episode, target, watts):
         self._episode = None
         self._over_since = None
         self._preferred = episode.method
         self._unresolved = 0
         self._restored_total += 1
-        self._resolved_at = tuple(
-            at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
-        ) + (now,)
         self._note(
             "restored",
             now,
-            ceiling,
+            target,
             episode.peak_w,
             episode.method,
             settled_w=float(watts),
         )
 
-    def _give_up(self, now, episode, ceiling):
+    def _give_up(self, now, episode, target):
         self._episode = None
         self._over_since = None
         index = min(self._unresolved, len(UNRESOLVED_COOLDOWN_S) - 1)
         self._unresolved += 1
         self._cooldown_until = now + UNRESOLVED_COOLDOWN_S[index]
-        self._note("unresolved", now, ceiling, episode.peak_w, episode.method)
+        self._note("unresolved", now, target, episode.peak_w, episode.method)
 
-    def _note(self, state, now, ceiling, peak_w, method, settled_w=None):
+    def _note(self, state, now, target, peak_w, method, settled_w=None):
         self._last = {
             "state": state,
             "at": round(now, 3),
-            "ceiling_w": ceiling,
+            "target_w": int(target["pl1"]),
+            "ceiling_w": sustained_ceiling(target),
             "peak_w": round(peak_w, 1),
             "method": method,
             "settled_w": None if settled_w is None else round(settled_w, 1),
@@ -273,40 +260,11 @@ class HiddenOvershootMonitor:
     def last(self):
         return None if self._last is None else dict(self._last)
 
-    @property
-    def preferred_method(self):
-        return self._preferred
-
-    def reassert_s(self, now, context):
-        if (
-            context != self._context
-            or not self._resolved_at
-            or self._restored_total >= MAX_RESTORED_PER_SESSION
-        ):
-            return None
-        recent = [
-            at for at in self._resolved_at if now - at <= ESCALATE_WINDOW_S
-        ]
-        if (
-            len(recent) >= ESCALATE_EPISODES
-            and now - self._resolved_at[-1] <= ESCALATE_HOLD_S
-        ):
-            return REASSERT_S
-        return None
-
-    def as_dict(self, now):
+    def as_dict(self):
         return {
             "last": self.last,
             "correcting": self._episode is not None,
             "preferred_method": self._preferred,
-            "resolved_recent": len(
-                [
-                    at
-                    for at in self._resolved_at
-                    if now - at <= ESCALATE_WINDOW_S
-                ]
-            ),
             "unresolved": self._unresolved,
             "restored_total": self._restored_total,
-            "reassert_s": self.reassert_s(now, self._context),
         }

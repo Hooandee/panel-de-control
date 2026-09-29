@@ -44,7 +44,7 @@ describe("TdpOwnershipStatus", () => {
           ...ownership,
           status: "in_sync",
           reason: "",
-          overshoot: { state: "correcting", ceiling_w: 20, peak_w: 43.2, age_s: 1 },
+          overshoot: { state: "correcting", target_w: 20, peak_w: 43.2, age_s: 1 },
         }}
       />,
     );
@@ -70,7 +70,7 @@ describe("TdpOwnershipStatus", () => {
           status: "drift",
           reason: "external_drift",
           conflict_persistent: true,
-          overshoot: { state: "unresolved", ceiling_w: 20, peak_w: 43, age_s: 5 },
+          overshoot: { state: "unresolved", target_w: 20, peak_w: 43, age_s: 5 },
         }}
       />,
     );

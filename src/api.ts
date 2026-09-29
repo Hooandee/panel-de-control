@@ -257,7 +257,7 @@ export interface TdpOwnership {
 
 export interface TdpOvershoot {
   state: "correcting" | "restored" | "unresolved";
-  ceiling_w: number;
+  target_w: number;
   peak_w: number;
   age_s: number;
 }

@@ -6252,7 +6252,7 @@ class Plugin:
             ),
         )
 
-    def _tdp_authoritative_reassert_s(self, hold=None, now=None, overshoot_ok=False):
+    def _tdp_authoritative_reassert_s(self, hold=None):
         cadences = []
         if self._current_appid is not None:
             cadence = getattr(
@@ -6262,12 +6262,6 @@ class Plugin:
             )
             if cadence is not None:
                 cadences.append(float(cadence))
-        overshoot_reassert = self._overshoot_monitor().reassert_s(
-            time.monotonic() if now is None else now,
-            self._current_appid,
-        )
-        if overshoot_ok and overshoot_reassert is not None:
-            cadences.append(float(overshoot_reassert))
         if hold is not None and hold.reassert_s is not None:
             cadences.append(float(hold.reassert_s))
         return min(cadences) if cadences else None
@@ -6297,10 +6291,11 @@ class Plugin:
             monitor = self._tdp_overshoot = HiddenOvershootMonitor()
         return monitor
 
-    def _overshoot_context_eligible(self, command, hold):
+    def _overshoot_eligible(self, command, hold, status):
         backend = self._tdp_backend
         return bool(
-            self._current_appid is not None
+            status in ("in_sync", "constrained")
+            and self._current_appid is not None
             and not command.auto_tdp
             and not self._auto_runtime_active()
             and not hold.active
@@ -6309,12 +6304,6 @@ class Plugin:
             and getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
             and getattr(backend, "readback", True)
             and not getattr(backend, "rearms_on_ignored_writes", False)
-        )
-
-    def _overshoot_eligible(self, command, hold, status):
-        return bool(
-            self._overshoot_context_eligible(command, hold)
-            and status in ("in_sync", "constrained")
         )
 
     def _apply_overshoot_correction(self, method, command, targets, observation):
@@ -6375,7 +6364,10 @@ class Plugin:
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
         self._tdp_overshoot_clock = now
-        profile_reassert_due = self._platform_profile_watch().observe(now)
+        profile_reassert_due = (
+            getattr(self._tdp_backend, "name", None) in _PROFILE_REASSERT_BACKENDS
+            and self._platform_profile_watch().observe(now)
+        )
         if self._tdp_shutdown:
             return
         if self._low_battery_hold_recovery_pending:
@@ -6448,11 +6440,7 @@ class Plugin:
                 "heartbeat_s",
                 None,
             ),
-            authoritative_reassert_s=self._tdp_authoritative_reassert_s(
-                hold,
-                now,
-                overshoot_ok=self._overshoot_context_eligible(command, hold),
-            ),
+            authoritative_reassert_s=self._tdp_authoritative_reassert_s(hold),
         )
         action = (
             "reassert"
@@ -6511,27 +6499,11 @@ class Plugin:
             else:
                 if bool(command.on_ac) != read_on_ac():
                     return
-                if (
-                    action == "reassert"
-                    and self._overshoot_context_eligible(command, hold)
-                    and self._overshoot_monitor().preferred_method == NUDGE
-                    and self._overshoot_monitor().reassert_s(
-                        now, self._current_appid
-                    )
-                    is not None
-                ):
-                    result = self._apply_overshoot_correction(
-                        NUDGE,
-                        command,
-                        targets,
-                        observation,
-                    )
-                else:
-                    result = self._apply_tdp_targets(
-                        targets.target,
-                        command.on_ac,
-                        command.auto_tdp,
-                    )
+                result = self._apply_tdp_targets(
+                    targets.target,
+                    command.on_ac,
+                    command.auto_tdp,
+                )
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
                 return
@@ -6608,16 +6580,6 @@ class Plugin:
                     if reassert_s is None
                     else min(float(primary_reassert), float(reassert_s))
                 )
-        overshoot_reassert = self._overshoot_monitor().reassert_s(
-            now,
-            self._current_appid,
-        )
-        if self._current_appid is not None and overshoot_reassert is not None:
-            reassert_s = (
-                float(overshoot_reassert)
-                if reassert_s is None
-                else min(float(overshoot_reassert), float(reassert_s))
-            )
         if reassert_s is not None and memory.last_write_at is not None:
             due.append(memory.last_write_at + float(reassert_s))
         if not due:
@@ -10359,7 +10321,7 @@ class Plugin:
             return None
         return {
             "state": last["state"],
-            "ceiling_w": last["ceiling_w"],
+            "target_w": last["target_w"],
             "peak_w": last["peak_w"],
             "age_s": round(age, 1),
         }
@@ -10598,7 +10560,7 @@ class Plugin:
             },
             "history": list(self._tdp_history),
             "overshoot": {
-                **self._overshoot_monitor().as_dict(self._overshoot_clock()),
+                **self._overshoot_monitor().as_dict(),
                 "profile_change": self._platform_profile_watch().last_change,
             },
             "auto": {

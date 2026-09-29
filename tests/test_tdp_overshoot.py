@@ -1,9 +1,8 @@
 from tdp.overshoot import (
+    MAX_RESTORED_PER_SESSION,
     PROFILE_SETTLE_S,
     PlatformProfileWatch,
-    ESCALATE_HOLD_S,
     NUDGE,
-    REASSERT_S,
     REWRITE,
     SUSTAIN_S,
     VERIFY_S,
@@ -80,7 +79,7 @@ def test_nudge_that_worked_becomes_the_first_correction_next_time():
     actions, now = feed(monitor, first)
     assert [action for _, action in actions] == [REWRITE, NUDGE]
     assert monitor.last["state"] == "restored"
-    assert monitor.preferred_method == NUDGE
+    assert monitor.as_dict()["preferred_method"] == NUDGE
     actions, _ = feed(monitor, [28.0] * 12, start=now)
     assert [action for _, action in actions] == [NUDGE]
 
@@ -113,24 +112,7 @@ def test_target_change_mid_correction_drops_the_episode():
     assert [action for _, action in actions] == [REWRITE]
     other = {"pl1": 25, "pl2": 25, "pl3": 25}
     assert monitor.observe(now, GAME, 28.0, other, True) is None
-    assert monitor.as_dict(now)["correcting"] is False
-
-
-def test_repeated_restorations_enable_a_bounded_periodic_reassert():
-    monitor = HiddenOvershootMonitor()
-    now = 0.0
-    for _ in range(2):
-        _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0], start=now)
-        now += 60.0
-    assert monitor.reassert_s(now, GAME) == REASSERT_S
-    assert monitor.reassert_s(now, "other-game") is None
-    assert monitor.reassert_s(now + ESCALATE_HOLD_S + 1, GAME) is None
-
-
-def test_a_single_restoration_does_not_enable_periodic_writes():
-    monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0])
-    assert monitor.reassert_s(now, GAME) is None
+    assert monitor.as_dict()["correcting"] is False
 
 
 def test_game_change_resets_the_session():
@@ -138,8 +120,8 @@ def test_game_change_resets_the_session():
     for _ in range(2):
         feed(monitor, [28.0] * 11 + [20.0, 20.0])
     monitor.observe(10_000.0, "game-b", 20.0, FLAT_20, True)
-    assert monitor.reassert_s(10_000.0, GAME) is None
     assert monitor.last is None
+    assert monitor.as_dict()["restored_total"] == 0
 
 
 def test_nudge_moves_each_rail_inside_its_bounds():
@@ -220,16 +202,15 @@ def test_power_hovering_at_the_limit_stays_bounded():
     samples = ([19.0] * 14 + [17.0]) * 60
     actions, _ = feed(monitor, samples, target=target)
     assert len(actions) <= 6
-    assert monitor.reassert_s(len(samples) * 2.0, GAME) is None
 
 
 def test_restorations_are_capped_per_session():
     monitor = HiddenOvershootMonitor()
     now = 0.0
-    for _ in range(10):
+    for _ in range(MAX_RESTORED_PER_SESSION + 5):
         _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0], start=now)
         now += 700.0
-    assert monitor.as_dict(now)["restored_total"] == 6
+    assert monitor.as_dict()["restored_total"] == MAX_RESTORED_PER_SESSION
     assert feed(monitor, [28.0] * 30, start=now)[0] == []
 
 

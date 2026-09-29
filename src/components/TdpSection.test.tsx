@@ -499,7 +499,7 @@ describe("TdpSection ownership row", () => {
       ...deckState,
       ownership: {
         ...deckState.ownership,
-        overshoot: { state: "restored", ceiling_w: 20, peak_w: 43, age_s: 3 },
+        overshoot: { state: "restored", target_w: 20, peak_w: 43, age_s: 3 },
       },
     } as unknown as TdpState);
 

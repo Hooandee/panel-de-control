@@ -26,7 +26,7 @@ export const TdpOwnershipStatus: FC<{
           color: overshoot.state === "restored" ? theme.color.textMuted : theme.color.warn,
         }}
       >
-        {t(key, { peak: Math.round(overshoot.peak_w), target: overshoot.ceiling_w })}
+        {t(key, { peak: Math.round(overshoot.peak_w), target: overshoot.target_w })}
       </div>
     );
   }
