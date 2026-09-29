@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.58.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.0...panel-de-control-v0.58.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **tdp:** keep ASUS and Lenovo limits when the firmware reloads its own ([#801](https://github.com/Hooandee/panel-de-control/issues/801)) ([7bd2f5c](https://github.com/Hooandee/panel-de-control/commit/7bd2f5cb3a44de809b1dde1163d501b9d260638d))
+
 ## [0.58.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.57.4...panel-de-control-v0.58.0) (2026-09-29)
 
 
