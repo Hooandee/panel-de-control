@@ -49,14 +49,14 @@ def test_normal_draw_at_or_near_the_limit_never_triggers():
 
 def test_short_burst_above_the_limit_never_triggers():
     monitor = HiddenOvershootMonitor()
-    burst = [40.0] * int(SUSTAIN_S / 2) + [20.0]
+    burst = [26.0] * int(SUSTAIN_S / 2) + [20.0]
     actions, _ = feed(monitor, burst * 5)
     assert actions == []
 
 
 def test_ally_x_sustained_overshoot_rewrites_then_verifies_restoration():
     monitor = HiddenOvershootMonitor()
-    actions, now = feed(monitor, ALLY_X_AC_OVERSHOOT + [43.0] * 2)
+    actions, now = feed(monitor, ALLY_X_AC_OVERSHOOT[:6])
     assert [action for _, action in actions] == [REWRITE]
     feed(monitor, [20.0, 20.0], start=now)
     last = monitor.last
@@ -68,7 +68,7 @@ def test_ally_x_sustained_overshoot_rewrites_then_verifies_restoration():
 
 def test_rewrite_that_does_not_help_escalates_to_nudge_then_gives_up():
     monitor = HiddenOvershootMonitor()
-    samples = [43.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 4)
+    samples = [28.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 4)
     actions, _ = feed(monitor, samples)
     assert [action for _, action in actions] == [REWRITE, NUDGE]
     assert monitor.last["state"] == "unresolved"
@@ -76,18 +76,18 @@ def test_rewrite_that_does_not_help_escalates_to_nudge_then_gives_up():
 
 def test_nudge_that_worked_becomes_the_first_correction_next_time():
     monitor = HiddenOvershootMonitor()
-    first = [43.0] * int((SUSTAIN_S + VERIFY_S) / 2 + 2) + [20.0, 20.0]
+    first = [28.0] * int((SUSTAIN_S + VERIFY_S) / 2 + 2) + [20.0, 20.0]
     actions, now = feed(monitor, first)
     assert [action for _, action in actions] == [REWRITE, NUDGE]
     assert monitor.last["state"] == "restored"
     assert monitor.preferred_method == NUDGE
-    actions, _ = feed(monitor, [43.0] * 12, start=now)
+    actions, _ = feed(monitor, [28.0] * 12, start=now)
     assert [action for _, action in actions] == [NUDGE]
 
 
 def test_unresolved_backs_off_and_stops_after_three_attempts():
     monitor = HiddenOvershootMonitor()
-    actions, _ = feed(monitor, [43.0] * 2000)
+    actions, _ = feed(monitor, [28.0] * 2000)
     methods = [action for _, action in actions]
     assert methods == [REWRITE, NUDGE] * 3
     starts = [at for at, action in actions if action == REWRITE]
@@ -97,7 +97,7 @@ def test_unresolved_backs_off_and_stops_after_three_attempts():
 
 def test_ineligible_or_unknown_power_never_acts():
     monitor = HiddenOvershootMonitor()
-    assert feed(monitor, [43.0] * 40, eligible=False)[0] == []
+    assert feed(monitor, [28.0] * 40, eligible=False)[0] == []
     assert feed(monitor, [None] * 40)[0] == []
 
 
@@ -109,10 +109,10 @@ def test_low_setpoints_below_the_firmware_floor_are_ignored():
 
 def test_target_change_mid_correction_drops_the_episode():
     monitor = HiddenOvershootMonitor()
-    actions, now = feed(monitor, [43.0] * 11)
+    actions, now = feed(monitor, [28.0] * 11)
     assert [action for _, action in actions] == [REWRITE]
     other = {"pl1": 25, "pl2": 25, "pl3": 25}
-    assert monitor.observe(now, GAME, 43.0, other, True) is None
+    assert monitor.observe(now, GAME, 28.0, other, True) is None
     assert monitor.as_dict(now)["correcting"] is False
 
 
@@ -120,7 +120,7 @@ def test_repeated_restorations_enable_a_bounded_periodic_reassert():
     monitor = HiddenOvershootMonitor()
     now = 0.0
     for _ in range(2):
-        _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0], start=now)
+        _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0], start=now)
         now += 60.0
     assert monitor.reassert_s(now, GAME) == REASSERT_S
     assert monitor.reassert_s(now, "other-game") is None
@@ -129,14 +129,14 @@ def test_repeated_restorations_enable_a_bounded_periodic_reassert():
 
 def test_a_single_restoration_does_not_enable_periodic_writes():
     monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0])
+    _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0])
     assert monitor.reassert_s(now, GAME) is None
 
 
 def test_game_change_resets_the_session():
     monitor = HiddenOvershootMonitor()
     for _ in range(2):
-        feed(monitor, [43.0] * 11 + [20.0, 20.0])
+        feed(monitor, [28.0] * 11 + [20.0, 20.0])
     monitor.observe(10_000.0, "game-b", 20.0, FLAT_20, True)
     assert monitor.reassert_s(10_000.0, GAME) is None
     assert monitor.last is None
@@ -152,9 +152,9 @@ def test_nudge_moves_each_rail_inside_its_bounds():
 
 def test_interrupted_correction_clears_the_correcting_notice():
     monitor = HiddenOvershootMonitor()
-    feed(monitor, [43.0] * 11)
+    feed(monitor, [28.0] * 11)
     assert monitor.last["state"] == "correcting"
-    monitor.observe(100.0, GAME, 43.0, FLAT_20, False)
+    monitor.observe(100.0, GAME, 28.0, FLAT_20, False)
     assert monitor.last is None
 
 
@@ -167,7 +167,7 @@ def test_steam_deck_slow_fast_rail_model_is_left_alone():
 
 def test_unresolved_notice_clears_once_power_is_normal_again():
     monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [43.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 4))
+    _, now = feed(monitor, [28.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 4))
     assert monitor.last["state"] == "unresolved"
     monitor.observe(now, GAME, 18.0, FLAT_20, True)
     assert monitor.last is None
@@ -175,7 +175,7 @@ def test_unresolved_notice_clears_once_power_is_normal_again():
 
 def test_notice_for_another_target_is_dropped():
     monitor = HiddenOvershootMonitor()
-    _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0])
+    _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0])
     assert monitor.last["state"] == "restored"
     monitor.observe(now, GAME, 14.0, {"pl1": 15, "pl2": 15, "pl3": 15}, True)
     assert monitor.last is None
@@ -201,7 +201,7 @@ def test_profile_change_asks_for_a_rewrite_at_each_settle_step():
     watch = PlatformProfileWatch(read=source)
     assert watch.observe(0.0) is False
     source.values = ["balanced"]
-    due = [at / 2 for at in range(0, 20) if watch.observe(10.0 + at / 2)]
+    due = [at / 2 for at in range(0, 30) if watch.observe(10.0 + at / 2)]
     assert due == list(PROFILE_SETTLE_S)
     assert watch.last_change["from"] == ["performance"]
     assert watch.last_change["to"] == ["balanced"]
@@ -227,7 +227,38 @@ def test_restorations_are_capped_per_session():
     monitor = HiddenOvershootMonitor()
     now = 0.0
     for _ in range(10):
-        _, now = feed(monitor, [43.0] * 11 + [20.0, 20.0], start=now)
+        _, now = feed(monitor, [28.0] * 11 + [20.0, 20.0], start=now)
         now += 700.0
     assert monitor.as_dict(now)["restored_total"] == 6
-    assert feed(monitor, [43.0] * 30, start=now)[0] == []
+    assert feed(monitor, [28.0] * 30, start=now)[0] == []
+
+
+def test_severe_overshoot_is_corrected_in_seconds():
+    monitor = HiddenOvershootMonitor()
+    actions, _ = feed(monitor, [45.0] * 5)
+    assert [(at, action) for at, action in actions] == [(6.0, REWRITE)]
+
+
+def test_moderate_overshoot_still_waits_the_full_window():
+    monitor = HiddenOvershootMonitor()
+    actions, _ = feed(monitor, [28.0] * 12)
+    assert [at for at, _ in actions] == [SUSTAIN_S]
+
+
+def test_charger_plug_counts_as_a_profile_change(tmp_path):
+    from tdp.overshoot import read_platform_profiles
+
+    supply = tmp_path / "sys/class/power_supply/AC0"
+    supply.mkdir(parents=True)
+    (supply / "type").write_text("Mains\n")
+    (supply / "online").write_text("0\n")
+    before = read_platform_profiles(str(tmp_path))
+    (supply / "online").write_text("1\n")
+    assert read_platform_profiles(str(tmp_path)) != before
+
+
+def test_fast_rail_headroom_is_not_mistaken_for_a_severe_overshoot():
+    monitor = HiddenOvershootMonitor()
+    boosted = {"pl1": 17, "pl2": 25, "pl3": 33}
+    actions, _ = feed(monitor, [35.0] * 5, target=boosted)
+    assert actions == []

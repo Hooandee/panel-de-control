@@ -8,6 +8,8 @@ from dataclasses import dataclass
 # fresh write of the same rails restores them; the measured package power is
 # the fallback signal when the profile change itself goes unseen.
 SUSTAIN_S = 20.0
+SEVERE_RATIO = 1.5
+SEVERE_SUSTAIN_S = 6.0
 VERIFY_S = 10.0
 MIN_TARGET_W = 10
 MARGIN_W = 3.0
@@ -21,7 +23,7 @@ REASSERT_S = 15.0
 RESTORE_READINGS = 2
 MAX_RESTORED_PER_SESSION = 6
 
-PROFILE_SETTLE_S = (1.0, 4.0)
+PROFILE_SETTLE_S = (1.0, 4.0, 10.0)
 
 REWRITE = "rewrite"
 NUDGE = "nudge"
@@ -31,6 +33,13 @@ def read_platform_profiles(root="/"):
     paths = sorted(
         glob.glob(os.path.join(root, "sys/class/platform-profile/*/profile"))
     ) + [os.path.join(root, "sys/firmware/acpi/platform_profile")]
+    for supply in sorted(glob.glob(os.path.join(root, "sys/class/power_supply/*"))):
+        try:
+            with open(os.path.join(supply, "type")) as handle:
+                if handle.read().strip() == "Mains":
+                    paths.append(os.path.join(supply, "online"))
+        except OSError:
+            continue
     profiles = []
     for path in paths:
         try:
@@ -120,6 +129,7 @@ class HiddenOvershootMonitor:
         self._over_since = None
         self._over_target = None
         self._over_peak = 0.0
+        self._severe_since = None
         self._episode = None
         self._resolved_at = ()
         self._preferred = REWRITE
@@ -188,8 +198,22 @@ class HiddenOvershootMonitor:
             self._over_since = now
             self._over_target = dict(target)
             self._over_peak = 0.0
+            self._severe_since = None
         self._over_peak = max(self._over_peak, float(watts))
-        if now - self._over_since < SUSTAIN_S:
+        severe_limit = max(
+            ceiling * SEVERE_RATIO,
+            int(target.get("pl3", ceiling)) * (1 + MARGIN_RATIO),
+        )
+        if float(watts) > severe_limit:
+            if self._severe_since is None:
+                self._severe_since = now
+        else:
+            self._severe_since = None
+        severe = (
+            self._severe_since is not None
+            and now - self._severe_since >= SEVERE_SUSTAIN_S
+        )
+        if now - self._over_since < SUSTAIN_S and not severe:
             return None
         self._episode = _Episode(
             self._preferred,
