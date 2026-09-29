@@ -10,8 +10,10 @@ export const TdpOwnershipStatus: FC<{
   onAc?: boolean;
 }> = ({ ownership, onAc }) => {
   const { t } = useI18n();
+  const view = ownershipView(ownership);
   const overshoot = ownership.overshoot;
-  if (overshoot) {
+  const ownershipWins = view.show && view.kind !== "constrained" && view.kind !== "settling";
+  if (overshoot && !ownershipWins) {
     const key = {
       correcting: "tdp.ownership.overshootCorrecting",
       restored: "tdp.ownership.overshootRestored",
@@ -28,7 +30,6 @@ export const TdpOwnershipStatus: FC<{
       </div>
     );
   }
-  const view = ownershipView(ownership);
   if (!view.show) return null;
   const color = view.kind === "rejected" || view.kind === "conflict"
     ? theme.color.warn

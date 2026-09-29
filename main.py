@@ -143,6 +143,10 @@ _REPORT_SERVICE_URL = os.environ.get(
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
+_OVERSHOOT_BACKENDS = frozenset(
+    ("firmware-attr:asus-armoury", "firmware-attr:lenovo-wmi-other")
+)
+_OVERSHOOT_VIEW_STALE_S = 10.0
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
@@ -6242,7 +6246,7 @@ class Plugin:
             ),
         )
 
-    def _tdp_authoritative_reassert_s(self, hold=None, now=None):
+    def _tdp_authoritative_reassert_s(self, hold=None, now=None, overshoot_ok=False):
         cadences = []
         if self._current_appid is not None:
             cadence = getattr(
@@ -6256,7 +6260,7 @@ class Plugin:
             time.monotonic() if now is None else now,
             self._current_appid,
         )
-        if self._current_appid is not None and overshoot_reassert is not None:
+        if overshoot_ok and overshoot_reassert is not None:
             cadences.append(float(overshoot_reassert))
         if hold is not None and hold.reassert_s is not None:
             cadences.append(float(hold.reassert_s))
@@ -6268,7 +6272,8 @@ class Plugin:
             monitor = self._tdp_overshoot = HiddenOvershootMonitor()
         return monitor
 
-    def _overshoot_eligible(self, command, hold, status):
+    def _overshoot_context_eligible(self, command, hold):
+        backend = self._tdp_backend
         return bool(
             self._current_appid is not None
             and not command.auto_tdp
@@ -6276,7 +6281,14 @@ class Plugin:
             and not hold.active
             and not self._device.is_generic
             and self._device.key not in ("desktop_pc", "steam_machine")
-            and getattr(self._tdp_backend, "readback", True)
+            and getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
+            and getattr(backend, "readback", True)
+            and not getattr(backend, "rearms_on_ignored_writes", False)
+        )
+
+    def _overshoot_eligible(self, command, hold, status):
+        return bool(
+            self._overshoot_context_eligible(command, hold)
             and status in ("in_sync", "constrained")
         )
 
@@ -6410,7 +6422,11 @@ class Plugin:
                 "heartbeat_s",
                 None,
             ),
-            authoritative_reassert_s=self._tdp_authoritative_reassert_s(hold, now),
+            authoritative_reassert_s=self._tdp_authoritative_reassert_s(
+                hold,
+                now,
+                overshoot_ok=self._overshoot_context_eligible(command, hold),
+            ),
         )
         action = (
             "reassert"
@@ -6444,6 +6460,7 @@ class Plugin:
                     return
                 if (
                     action == "reassert"
+                    and self._overshoot_context_eligible(command, hold)
                     and self._overshoot_monitor().preferred_method == NUDGE
                     and self._overshoot_monitor().reassert_s(
                         now, self._current_appid
@@ -10276,9 +10293,15 @@ class Plugin:
     def _overshoot_view(self):
         monitor = self._overshoot_monitor()
         last = monitor.last
-        if last is None or self._current_appid is None:
+        clock = self._overshoot_clock()
+        if (
+            last is None
+            or self._current_appid is None
+            or monitor.observed_at is None
+            or clock - monitor.observed_at > _OVERSHOOT_VIEW_STALE_S
+        ):
             return None
-        age = self._overshoot_clock() - float(last["at"])
+        age = clock - float(last["at"])
         if last["state"] == "restored" and age > 90.0:
             return None
         return {

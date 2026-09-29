@@ -181,3 +181,47 @@ def test_restored_notice_expires_even_when_detection_stops(plugin):  # noqa: F81
     plugin._settings["tdp_control_enabled"] = False
     run(plugin, now, 120.0)
     assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"] is None
+
+
+def test_correcting_notice_disappears_when_detection_stops(plugin):  # noqa: F811
+    backend = HiddenLimitBackend(restore_on="never")
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 4.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"]
+    plugin._settings["tdp_control_enabled"] = False
+    run(plugin, now, 30.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"] is None
+
+
+@pytest.mark.parametrize("variant", ["ryzenadj", "rearm_83l3"])
+def test_backends_without_physical_evidence_are_left_alone(plugin, variant):  # noqa: F811
+    backend = HiddenLimitBackend()
+    if variant == "ryzenadj":
+        backend.name = "ryzenadj"
+    else:
+        backend.name = "firmware-attr:lenovo-wmi-other"
+        backend.rearms_on_ignored_writes = True
+    start_game(plugin, backend)
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, 120.0)
+    assert backend.writes == []
+    assert overshoot_logs(plugin) == []
+
+
+def test_escalated_reassert_stops_when_auto_tdp_takes_over(plugin, monkeypatch):  # noqa: F811
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    now = 10.0
+    for _ in range(2):
+        backend.hidden = True
+        now = run(plugin, now, SUSTAIN_S + 10.0)
+        now = run(plugin, now, 30.0)
+    command = plugin._capture_tdp_command("guard", bump=False)
+    hold = plugin._low_battery_hold_decision()
+    eligible = plugin._overshoot_context_eligible(command, hold)
+    assert plugin._tdp_authoritative_reassert_s(hold, now, eligible) == REASSERT_S
+    monkeypatch.setattr(plugin, "_auto_runtime_active", lambda: True)
+    eligible = plugin._overshoot_context_eligible(command, hold)
+    assert plugin._tdp_authoritative_reassert_s(hold, now, eligible) is None

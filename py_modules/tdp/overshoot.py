@@ -59,6 +59,7 @@ class _Episode:
 class HiddenOvershootMonitor:
     def __init__(self):
         self._context = None
+        self.observed_at = None
         self._reset_session()
 
     def _reset_session(self):
@@ -90,7 +91,11 @@ class HiddenOvershootMonitor:
         ):
             self._over_since = None
             self._drop_episode()
+            self._forget_unresolved()
             return None
+        self.observed_at = now
+        if self._last is not None and self._last["ceiling_w"] != ceiling:
+            self._last = None
         limit = overshoot_limit(ceiling)
         over = float(watts) > limit
         episode = self._episode
@@ -111,10 +116,11 @@ class HiddenOvershootMonitor:
                 return NUDGE
             self._give_up(now, episode, ceiling)
             return None
-        if self._unresolved >= MAX_UNRESOLVED or now < self._cooldown_until:
-            return None
         if not over:
             self._over_since = None
+            self._forget_unresolved()
+            return None
+        if self._unresolved >= MAX_UNRESOLVED or now < self._cooldown_until:
             return None
         if self._over_since is None or self._over_target != dict(target):
             self._over_since = now
@@ -131,6 +137,10 @@ class HiddenOvershootMonitor:
         )
         self._note("correcting", now, ceiling, self._over_peak, self._preferred)
         return self._preferred
+
+    def _forget_unresolved(self):
+        if self._last is not None and self._last["state"] == "unresolved":
+            self._last = None
 
     def _drop_episode(self):
         self._episode = None

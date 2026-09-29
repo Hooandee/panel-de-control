@@ -61,4 +61,20 @@ describe("TdpOwnershipStatus", () => {
 
     expect(container.textContent).toBe("");
   });
+
+  it("keeps a persistent conflict message ahead of an overshoot notice", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          status: "drift",
+          reason: "external_drift",
+          conflict_persistent: true,
+          overshoot: { state: "unresolved", ceiling_w: 20, peak_w: 43, age_s: 5 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.conflict 22 22 15")).toBeTruthy();
+  });
 });

@@ -161,3 +161,19 @@ def test_steam_deck_slow_fast_rail_model_is_left_alone():
     deck_target = {"pl2": 15, "pl3": 15}
     assert sustained_ceiling(deck_target) is None
     assert feed(monitor, [40.0] * 60, target=deck_target)[0] == []
+
+
+def test_unresolved_notice_clears_once_power_is_normal_again():
+    monitor = HiddenOvershootMonitor()
+    _, now = feed(monitor, [43.0] * int((SUSTAIN_S + 2 * VERIFY_S) / 2 + 4))
+    assert monitor.last["state"] == "unresolved"
+    monitor.observe(now, GAME, 18.0, FLAT_20, True)
+    assert monitor.last is None
+
+
+def test_notice_for_another_target_is_dropped():
+    monitor = HiddenOvershootMonitor()
+    _, now = feed(monitor, [43.0] * 11 + [20.0])
+    assert monitor.last["state"] == "restored"
+    monitor.observe(now, GAME, 14.0, {"pl1": 15, "pl2": 15, "pl3": 15}, True)
+    assert monitor.last is None
