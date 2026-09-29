@@ -6295,7 +6295,6 @@ class Plugin:
         )
 
     def _guard_hidden_overshoot(self, now, command, hold, outcome, targets, observation):
-        self._tdp_overshoot_clock = now
         monitor = self._overshoot_monitor()
         before = monitor.last
         watts = None
@@ -6338,6 +6337,7 @@ class Plugin:
 
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
+        self._tdp_overshoot_clock = now
         if self._tdp_shutdown:
             return
         if self._low_battery_hold_recovery_pending:

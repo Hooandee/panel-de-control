@@ -170,3 +170,14 @@ def test_ui_activity_flag_does_not_disable_detection(plugin):  # noqa: F811
     backend.hidden = True
     run(plugin, 10.0, SUSTAIN_S + 6.0)
     assert backend.writes == [{"pl1": 20, "pl2": 20, "pl3": 20}]
+
+
+def test_restored_notice_expires_even_when_detection_stops(plugin):  # noqa: F811
+    backend = HiddenLimitBackend()
+    start_game(plugin, backend)
+    backend.hidden = True
+    now = run(plugin, 10.0, SUSTAIN_S + 10.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"]
+    plugin._settings["tdp_control_enabled"] = False
+    run(plugin, now, 120.0)
+    assert plugin._tdp_ownership_state(plugin._tdp_observation)["overshoot"] is None
