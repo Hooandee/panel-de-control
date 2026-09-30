@@ -5,9 +5,30 @@
 ## [0.58.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.2...panel-de-control-v0.58.3) (2026-09-30)
 
 
-### Bug Fixes
+### Español
 
-* **themes:** run mixed Hooandee theme runtimes together ([#813](https://github.com/Hooandee/panel-de-control/issues/813)) ([418ae02](https://github.com/Hooandee/panel-de-control/commit/418ae02422cb15fcdff58eeaab427ac23e3256ce))
+* **Temas:** Si combinas mis temas, por ejemplo Gallery con un tema de teclado o con Luminous Atlas, ahora todos se ven completos y no solo a medias.
+* **Reportes:** Los reportes de problemas incluyen cuáles de mis temas tienes, para entender mejor los fallos visuales.
+
+### English
+
+* **Themes:** If you combine my themes, for example Gallery with a keyboard theme or with Luminous Atlas, they now all show in full instead of only halfway.
+* **Reports:** Problem reports include which of my themes you have, to better understand visual issues.
+
+### Italiano
+
+* **Temi:** Se combini i miei temi, per esempio Gallery con un tema della tastiera o con Luminous Atlas, ora si vedono tutti per intero e non più solo a metà.
+* **Segnalazioni:** Le segnalazioni di problemi includono quali dei miei temi hai, per capire meglio i problemi visivi.
+
+### Deutsch
+
+* **Themes:** Wenn du meine Themes kombinierst, zum Beispiel Gallery mit einem Tastatur-Theme oder mit Luminous Atlas, werden jetzt alle vollständig angezeigt statt nur halb.
+* **Berichte:** Problemberichte enthalten, welche meiner Themes du hast, um optische Fehler besser zu verstehen.
+
+### Português (Brasil)
+
+* **Temas:** Se você combinar meus temas, por exemplo Gallery com um tema de teclado ou com Luminous Atlas, agora todos aparecem por completo, e não só pela metade.
+* **Relatórios:** Os relatórios de problemas incluem quais dos meus temas você tem, para entender melhor os problemas visuais.
 
 ## [0.58.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.1...panel-de-control-v0.58.2) (2026-09-30)
 
