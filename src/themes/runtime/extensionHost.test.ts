@@ -206,6 +206,30 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
     host.dispose();
   });
 
+  it("counts a theme's menus section as its QAM when it has no QAM section of its own", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar menús y barras", "Yes")] },
+      {
+        ...secondHomeTheme,
+        patches: [
+          section("Estilizar Inicio", "Yes"),
+          section("Estilizar menú de Steam", "No"),
+          section("Estilizar QAM y Decky", "Yes"),
+        ],
+      },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual(["second-home"]);
+    host.dispose();
+  });
+
   it("keeps two home runtimes CSS-only when both claim Home", async () => {
     const mounted: string[] = [];
     const host = new ThemeExtensionRuntimeHost({
@@ -242,6 +266,35 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
 
     expect(stopped.sort()).toEqual(["example-theme", "second-home"]);
     expect(mounted.filter((id) => id === "second-home")).toHaveLength(2);
+    host.dispose();
+  });
+
+  it("still mounts a runtime whose first load was overtaken by a second theme", async () => {
+    const mounted: string[] = [];
+    let releaseHome!: () => void;
+    const homeLoaded = new Promise<void>((resolve) => { releaseHome = resolve; });
+    const descriptors = [HOME, KEYBOARD];
+    const host = new ThemeExtensionRuntimeHost({
+      client: {
+        list: vi.fn(async () => descriptors),
+        load: vi.fn(async (catalogId) => {
+          if (catalogId === HOME.catalogId) await homeLoaded;
+          const descriptor = descriptors.find((item) => item.catalogId === catalogId)!;
+          return { ...descriptor, source: catalogId };
+        }),
+      },
+      doc: document,
+      evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }]));
+    await settle();
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle();
+    releaseHome();
+    for (let round = 0; round < 6; round += 1) await settle();
+
+    expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
     host.dispose();
   });
 

@@ -168,10 +168,13 @@ function themeFingerprint(theme: CssLoaderTheme): string {
   return JSON.stringify({ version: theme.version, patches });
 }
 
+// A theme without its own QAM section styles the QAM from its menus section (Gallery).
 function claimedSections(theme: CssLoaderTheme): string[] | null {
   const sections = theme.patches.filter((patch) => sectionKeyOf(patch.name) !== null);
   if (sections.length === 0) return null;
-  return sections.filter((patch) => patch.value === SECTION_ON).map((patch) => sectionKeyOf(patch.name)!);
+  const claimed = sections.filter((patch) => patch.value === SECTION_ON).map((patch) => sectionKeyOf(patch.name)!);
+  const hasQamSection = sections.some((patch) => sectionKeyOf(patch.name) === "qam");
+  return claimed.includes("menu") && !hasQamSection ? [...claimed, "qam"] : claimed;
 }
 
 function homeRuntimes(group: readonly RuntimeSelection[]): readonly RuntimeSelection[] {
@@ -397,10 +400,12 @@ export class ThemeExtensionRuntimeHost {
         this.log(error instanceof ThemeExtensionPayloadMismatchError
           ? "extension_payload_mismatch"
           : "extension_load_failed");
+      } else {
+        this.abandon(selection.fingerprint, generation);
       }
       return;
     }
-    if (!this.isCurrent(selection.fingerprint, generation)) return;
+    if (!this.isCurrent(selection.fingerprint, generation)) return this.abandon(selection.fingerprint, generation);
     let extension: ThemeExtensionExport;
     try {
       extension = this.evaluate(payload.source);
@@ -412,10 +417,12 @@ export class ThemeExtensionRuntimeHost {
       if (this.isCurrent(selection.fingerprint, generation)) {
         this.pending.delete(selection.fingerprint);
         this.log("extension_evaluation_failed");
+      } else {
+        this.abandon(selection.fingerprint, generation);
       }
       return;
     }
-    if (!this.isCurrent(selection.fingerprint, generation)) return;
+    if (!this.isCurrent(selection.fingerprint, generation)) return this.abandon(selection.fingerprint, generation);
     const scope = new MountScope(this.log);
     try {
       const sharedContext = {
@@ -465,6 +472,7 @@ export class ThemeExtensionRuntimeHost {
         } catch {
           this.log("extension_dispose_failed");
         }
+        this.abandon(selection.fingerprint, generation);
         return;
       }
       this.active.set(selection.fingerprint, { stop });
@@ -474,6 +482,8 @@ export class ThemeExtensionRuntimeHost {
       if (this.isCurrent(selection.fingerprint, generation)) {
         this.pending.delete(selection.fingerprint);
         this.log("extension_mount_failed");
+      } else {
+        this.abandon(selection.fingerprint, generation);
       }
     }
   }
@@ -495,6 +505,13 @@ export class ThemeExtensionRuntimeHost {
     };
     void request.then(release, release);
     return request;
+  }
+
+  // A mount overtaken by a newer reconcile must not stay "in flight", or that reconcile skips it.
+  private abandon(fingerprint: string, generation: number): void {
+    if (this.pending.get(fingerprint) !== generation) return;
+    this.pending.delete(fingerprint);
+    if (!this.disposed) this.reconcileSelection();
   }
 
   private isCurrent(fingerprint: string, generation: number): boolean {
