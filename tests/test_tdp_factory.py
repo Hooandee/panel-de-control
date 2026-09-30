@@ -919,10 +919,47 @@ def test_gpd_recovery_keeps_lock_when_tolerated_readback_exceeds_oem_ceiling(
     assert lock.exists() is True
 
 
+def _mk_bios(root, version):
+    with open(os.path.join(root, "sys/class/dmi/id/bios_version"), "w") as f:
+        f.write(version + "\n")
+
+
+def test_unverified_83n6_bios_keeps_the_boost_rail_floors_everywhere(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83N6")
+    _mk_bios(root, "S0CN20WW")
+
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend._rail_floors == {"pl2": 15, "pl3": 20}
+    assert backend.menu_rail_floors == {}
+
+
+def test_83n6_without_a_readable_bios_keeps_the_boost_rail_floors(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83N6")
+
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend._rail_floors == {"pl2": 15, "pl3": 20}
+    assert backend.menu_rail_floors == {}
+
+
 def test_only_exact_legion_go_s_83n6_gets_menu_only_rail_floors(tmp_path):
     exact_root = str(tmp_path / "exact")
     _mk_fw(exact_root, "lenovo-wmi-other-0")
     _mk_dmi(exact_root, "LENOVO", "83N6")
+    _mk_bios(exact_root, "S0CN27WW")
     exact = select_backend(
         _p("legion_go_s"),
         root=exact_root,

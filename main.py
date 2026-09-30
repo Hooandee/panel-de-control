@@ -2201,19 +2201,7 @@ class Plugin:
     def _run_capture(self, cmd) -> str | None:
         """Run a diagnostic command and return its stdout (or None). Root + a clean
         env (the frozen runtime's LD_LIBRARY_PATH breaks system binaries). Guarded."""
-        try:
-            import subprocess
-
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=5,
-                env=controller_detect.clean_env(),
-            )  # noqa: S603
-            return r.stdout or ""
-        except Exception:  # noqa: BLE001
-            return None
+        return report_collector.capture_command(cmd, env=controller_detect.clean_env())
 
     def _report_environment(self) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
@@ -4941,12 +4929,6 @@ class Plugin:
         if changed:
             self._gamescope_stats.clear()
         self._ui_active = active
-        if (
-            changed
-            and self._tdp_menu_rail_floors()
-            and not self._auto_runtime_active()
-        ):
-            self._schedule_tdp_apply("menu-floor")
         if activated and self._auto_controller is not None:
             self._advance_tdp_generation()
             await self._apply_auto_ui_floor()
@@ -4956,6 +4938,12 @@ class Plugin:
             self._auto_ui_hold_watts = None
             if self._auto_status.get("held_watts") is not None:
                 self._auto_status = {**self._auto_status, "held_watts": None}
+        if (
+            changed
+            and self._tdp_menu_rail_floors()
+            and not self._auto_runtime_active()
+        ):
+            self._schedule_tdp_apply("menu-floor")
         return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------

@@ -177,3 +177,25 @@ def test_menu_floor_state_is_reported_in_tdp_diagnostics(tmp_path, monkeypatch, 
         "floors": {"pl2": 15, "pl3": 20},
         "active": not in_game,
     }
+
+
+def test_menu_floor_apply_survives_a_loaded_but_idle_auto_controller(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+    plugin._set_current_appid("42")
+    plugin._auto_controller = object()
+    monkeypatch.setattr(plugin, "_auto_runtime_active", lambda: False)
+
+    async def no_auto_floor():
+        return None
+
+    monkeypatch.setattr(plugin, "_apply_auto_ui_floor", no_auto_floor)
+    generations = []
+    monkeypatch.setattr(
+        plugin,
+        "_schedule_tdp_apply",
+        lambda reason, on_ac=None: generations.append(plugin._tdp_generation),
+    )
+
+    asyncio.run(plugin.set_ui_active(True))
+
+    assert generations == [plugin._tdp_generation]

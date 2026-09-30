@@ -520,6 +520,23 @@ def controller_daemon_cmds(manager: str | None) -> dict:
     return {"controller": cmd}
 
 
+def capture_command(cmd, *, run=None, env=None) -> str | None:
+    """stdout of a diagnostic command; when it fails with no output, its exit code and
+    stderr, so a report tells "no entries" from "journalctl could not run". Never raises."""
+    try:
+        if run is None:
+            import subprocess
+
+            run = subprocess.run
+        result = run(cmd, capture_output=True, text=True, timeout=5, env=env)  # noqa: S603
+    except Exception:  # noqa: BLE001
+        return None
+    stdout = result.stdout or ""
+    if stdout or result.returncode == 0:
+        return stdout
+    return f"[exit {result.returncode}] {(result.stderr or '').strip()[:500]}"
+
+
 def kernel_logs(
     run,
     *,
@@ -984,7 +1001,7 @@ def sysfs_snapshot(
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
-                  "desktop": {}, "ec": {}, "pstore": []}
+                  "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": []}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1021,6 +1038,12 @@ def sysfs_snapshot(
         pass
     try:
         snap["pstore"] = sorted(_listdir(os.path.join(root, "sys/fs/pstore")))[:_SNAP_MAX_NAMES]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["pstore_archive"] = sorted(
+            _listdir(os.path.join(root, "var/lib/systemd/pstore"))
+        )[-_SNAP_MAX_NAMES:]
     except Exception:  # noqa: BLE001
         pass
     try:

@@ -1,4 +1,5 @@
 import os
+import types
 
 from report import collector as report_collector
 from report.collector import (
@@ -887,6 +888,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "dmi": {},
         "leds": [],
         "pstore": [],
+        "pstore_archive": [],
         "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
         "desktop": {
             "board_fans": {"available": [], "loaded": [], "channels": 0},
@@ -1173,3 +1175,48 @@ def test_firmware_versions_survive_redaction_but_serials_do_not():
     assert out["board_name"] == "[serial]"
     assert out["product_serial"] == "[redacted]"
     assert "PF4ABCD12345" not in out["log"]
+
+
+def test_capture_command_returns_stdout():
+    def run(cmd, **kwargs):
+        assert kwargs["timeout"] == 5
+        return types.SimpleNamespace(returncode=0, stdout="line\n", stderr="")
+
+    assert report_collector.capture_command(["journalctl"], run=run) == "line\n"
+
+
+def test_capture_command_keeps_the_reason_a_diagnostic_command_failed():
+    def run(cmd, **kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="Compiled without pattern matching support\n",
+        )
+
+    assert report_collector.capture_command(["journalctl"], run=run) == (
+        "[exit 1] Compiled without pattern matching support"
+    )
+
+
+def test_capture_command_empty_success_stays_empty():
+    def run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    assert report_collector.capture_command(["journalctl"], run=run) == ""
+
+
+def test_capture_command_never_raises():
+    def run(cmd, **kwargs):
+        raise OSError("missing")
+
+    assert report_collector.capture_command(["journalctl"], run=run) is None
+
+
+def test_sysfs_snapshot_lists_crash_records_moved_by_systemd_pstore(tmp_path):
+    archived = tmp_path / "var/lib/systemd/pstore/1759012345"
+    archived.mkdir(parents=True)
+    (archived / "dmesg-efi-175901234501001").write_text("panic")
+
+    snap = sysfs_snapshot(root=str(tmp_path))
+
+    assert snap["pstore_archive"] == ["1759012345"]
