@@ -6,6 +6,7 @@ import type {
 } from "../themeExtensionClient";
 import type { ThemeExtensionLibraryAccess } from "./libraryAccess";
 import type { ThemeExtensionNavigationAccess } from "./navigationAccess";
+import { SECTION_ON, sectionKeyOf } from "../sectionOwnership";
 
 export interface ThemeExtensionHostDescriptor {
   abiVersion: 1;
@@ -167,6 +168,23 @@ function themeFingerprint(theme: CssLoaderTheme): string {
   return JSON.stringify({ version: theme.version, patches });
 }
 
+function claimedSections(theme: CssLoaderTheme): string[] | null {
+  const sections = theme.patches.filter((patch) => sectionKeyOf(patch.name) !== null);
+  if (sections.length === 0) return null;
+  return sections.filter((patch) => patch.value === SECTION_ON).map((patch) => sectionKeyOf(patch.name)!);
+}
+
+function homeRuntimes(group: readonly RuntimeSelection[]): readonly RuntimeSelection[] {
+  if (group.length === 1) return group;
+  const claims = group.map((selection) => claimedSections(selection.theme));
+  if (claims.some((claim) => claim === null)) return [];
+  const counts = new Map<string, number>();
+  for (const key of claims.flat() as string[]) counts.set(key, (counts.get(key) ?? 0) + 1);
+  if ([...counts.values()].every((count) => count === 1)) return group;
+  const owners = group.filter((_, index) => claims[index]!.includes("home"));
+  return owners.length === 1 ? owners : [];
+}
+
 function surfaceOf(extension: ThemeExtensionExport): ThemeExtensionSurface {
   return extension.surface === "keyboard" ? "keyboard" : "home";
 }
@@ -326,7 +344,8 @@ export class ThemeExtensionRuntimeHost {
     return selections;
   }
 
-  // One runtime per surface: two home themes with runtimes stay CSS-only, as before surfaces existed.
+  // One runtime per surface, except mixed Hooandee themes: each runtime only styles the sections its
+  // theme owns, so several home runtimes run together while no section is claimed twice.
   private desired(candidates: readonly RuntimeSelection[]): Map<string, RuntimeSelection> {
     const desired = new Map<string, RuntimeSelection>();
     if (candidates.length === 1) {
@@ -339,8 +358,10 @@ export class ThemeExtensionRuntimeHost {
       if (!surface) continue;
       bySurface.set(surface, [...(bySurface.get(surface) ?? []), candidate]);
     }
-    for (const group of bySurface.values()) {
-      if (group.length === 1) desired.set(group[0].fingerprint, group[0]);
+    for (const [surface, group] of bySurface) {
+      for (const selection of surface === "home" ? homeRuntimes(group) : group.length === 1 ? group : []) {
+        desired.set(selection.fingerprint, selection);
+      }
     }
     return desired;
   }

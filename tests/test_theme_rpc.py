@@ -1,3 +1,4 @@
+import json
 import asyncio
 import importlib
 import pathlib
@@ -553,6 +554,8 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "activation_quarantined": True,
         "recent_failures": [],
         "unreadable_theme_folders": 0,
+        "installed": [],
+        "other_active_themes": 0,
     }
 
 
@@ -653,3 +656,47 @@ def test_ui_diagnostics_reach_the_log_and_report_without_free_text_in_the_report
     assert len(diagnostics) == 20
     assert diagnostics[-1] == {"area": "proton", "code": "code_24", "count": 1}
     assert all("detail" not in entry for entry in diagnostics)
+
+
+def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rpc):
+    _, plugin, _ = theme_rpc
+    root = plugin._themes_root()
+
+    def theme(folder, manifest, config, panel=False, runtime=False):
+        (root / folder).mkdir(parents=True)
+        (root / folder / "theme.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (root / folder / "config_USER.json").write_text(json.dumps(config), encoding="utf-8")
+        if panel:
+            (root / folder / "panel-theme.json").write_text("{}", encoding="utf-8")
+        if runtime:
+            (root / folder / "panel-extension.js").write_text("x", encoding="utf-8")
+
+    theme(
+        "Hooandee Gallery",
+        {"name": "Hooandee Gallery", "version": "0.9.54"},
+        {"active": True, "Estilizar Inicio": "No", "Estilizar Descargas": "Yes", "Color de acento": "Salvia"},
+        panel=True, runtime=True,
+    )
+    theme(
+        "Hooandee Luminous Atlas",
+        {"name": "Hooandee Luminous Atlas", "version": "1.1.1"},
+        {"active": False, "Estilizar Inicio": "Yes"},
+        panel=True, runtime=True,
+    )
+    theme("Someone Private.profile", {"name": "Someone Private.profile", "version": "1"}, {"active": True})
+    theme("Art Hero", {"name": "Art Hero", "version": "2"}, {"active": False})
+
+    diagnostics = plugin._theme_report_diagnostics()
+
+    assert diagnostics["installed"] == [
+        {
+            "name": "Hooandee Gallery", "version": "0.9.54", "active": True, "runtime": True,
+            "sections": {"Estilizar Inicio": "No", "Estilizar Descargas": "Yes"},
+        },
+        {
+            "name": "Hooandee Luminous Atlas", "version": "1.1.1", "active": False, "runtime": True,
+            "sections": {"Estilizar Inicio": "Yes"},
+        },
+    ]
+    assert diagnostics["other_active_themes"] == 1
+    assert "Someone Private" not in str(diagnostics)

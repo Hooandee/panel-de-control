@@ -167,6 +167,84 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
     host.dispose();
   });
 
+  const section = (name: string, value: "Yes" | "No") => ({
+    name, defaultValue: "Yes", value, options: ["Yes", "No"],
+    type: "checkbox" as const, rawType: "checkbox",
+  });
+
+  it("mounts both home runtimes when their Hooandee sections do not overlap", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar Descargas", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Descargas", "No")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted.sort()).toEqual(["example-theme", "second-home"]);
+    host.dispose();
+  });
+
+  it("mounts only the Home owner while another section is claimed twice", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar Descargas", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Descargas", "Yes")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual(["second-home"]);
+    host.dispose();
+  });
+
+  it("keeps two home runtimes CSS-only when both claim Home", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual([]);
+    host.dispose();
+  });
+
+  it("remounts a mixed home runtime when its sections change", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, stopped),
+    });
+    const second = { ...secondHomeTheme, patches: [section("Estilizar Inicio", "No")] };
+
+    host.reconcile(snapshot([{ ...homeTheme, patches: [section("Estilizar Inicio", "Yes")] }, second]));
+    await settle();
+    await settle();
+    host.reconcile(snapshot([{ ...homeTheme, patches: [section("Estilizar Inicio", "No")] }, {
+      ...second, patches: [section("Estilizar Inicio", "Yes")],
+    }]));
+    await settle();
+    await settle();
+
+    expect(stopped.sort()).toEqual(["example-theme", "second-home"]);
+    expect(mounted.filter((id) => id === "second-home")).toHaveLength(2);
+    host.dispose();
+  });
+
   it("adds a keyboard runtime without remounting the home runtime", async () => {
     const mounted: string[] = [];
     const stopped: string[] = [];
