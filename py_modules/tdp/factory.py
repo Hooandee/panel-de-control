@@ -8,6 +8,7 @@ from device_quirks import (
     legion_go_2_83n0_firmware_attr_quirks,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
+    legion_go_s_83n6_boost_floors_menu_only,
     legion_go_s_83n6_rail_floors,
     lenovo_legion_firmware_attr_quirks,
 )
@@ -75,13 +76,16 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
 
     def lenovo():
         go_s_83l3 = legion_go_s_83l3_firmware_attr_quirks(device, root)
+        boost_floors = legion_go_s_83n6_rail_floors(device, root)
+        floors_menu_only = legion_go_s_83n6_boost_floors_menu_only(device, root)
         backend = FirmwareAttrBackend(
             "lenovo-wmi-other",
             fallback,
             root=root,
             profile_name="lenovo-wmi-gamezone",
             is_generic=generic,
-            rail_floors=legion_go_s_83n6_rail_floors(device, root),
+            rail_floors=None if floors_menu_only else boost_floors,
+            menu_rail_floors=boost_floors if floors_menu_only else None,
             safety_lock_path=_runtime_lock_path(
                 root,
                 "firmware-lenovo-wmi-other.lock",

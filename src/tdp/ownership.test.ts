@@ -32,6 +32,7 @@ describe("ownershipView", () => {
       target: 15,
       applied: 15,
       persistent: false,
+      boostFloor: null,
     });
   });
 
@@ -44,6 +45,48 @@ describe("ownershipView", () => {
       target: { pl1: 15, pl2: 15, pl3: 20 },
       applied: { pl1: 15, pl2: 15, pl3: 20 },
     }).show).toBe(false);
+  });
+
+  it("reports boost rails held above the request instead of hiding them", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 5, pl2: 5, pl3: 5 },
+      target: { pl1: 5, pl2: 15, pl3: 20 },
+      applied: { pl1: 5, pl2: 15, pl3: 20 },
+    }).boostFloor).toEqual({ pl2: 15, pl3: 20 });
+  });
+
+  it("reports raised boost rails next to a confirmed sustained floor", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "live_min",
+      requested: { pl1: 3, pl2: 3, pl3: 3 },
+      target: { pl1: 7, pl2: 13, pl3: 19 },
+      applied: { pl1: 7, pl2: 13, pl3: 19 },
+    }, 7).boostFloor).toEqual({ pl2: 13, pl3: 19 });
+  });
+
+  it("has no boost floor while the rails match the request", () => {
+    expect(ownershipView({
+      ...base,
+      requested: { pl1: 5, pl2: 5, pl3: 5 },
+      target: { pl1: 5, pl2: 5, pl3: 5 },
+      applied: { pl1: 5, pl2: 5, pl3: 5 },
+    }).boostFloor).toBeNull();
+  });
+
+  it("has no boost floor until the raised rails are confirmed", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 5, pl2: 5, pl3: 5 },
+      target: { pl1: 5, pl2: 15, pl3: 20 },
+      applied: { pl1: 5, pl2: 5, pl3: 5 },
+    }).boostFloor).toBeNull();
   });
 
   it.each(["safe_min", "live_min"])(

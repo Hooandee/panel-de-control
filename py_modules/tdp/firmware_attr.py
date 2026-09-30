@@ -77,6 +77,7 @@ class FirmwareAttrBackend(TDPBackend):
         profile_name=None,
         is_generic=False,
         rail_floors=None,
+        menu_rail_floors=None,
         ignored_live_maxes=None,
         cap_boost_to_active=False,
         readback_settle_delays=None,
@@ -106,6 +107,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._named_profile_owns_rails = bool(named_profile_owns_rails)
         self._optional_rails = frozenset(optional_rails or ())
         self._rail_floors = _normalise_rail_floors(rail_floors)
+        self.menu_rail_floors = _normalise_rail_floors(menu_rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
         self._rearm_custom_on_unapplied_writes = bool(rearm_custom_on_unapplied_writes)

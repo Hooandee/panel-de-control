@@ -105,6 +105,18 @@ def legion_go_s_83n6_rail_floors(device, root: str = "/") -> dict[str, int]:
     return {}
 
 
+# 83N6 BIOS versions whose firmware holds boost rails below 15/20 W. Any other BIOS
+# keeps those floors in games too.
+_LEGION_GO_S_83N6_LOW_BOOST_BIOS = frozenset({"s0cn27ww"})
+
+
+def legion_go_s_83n6_boost_floors_menu_only(device, root: str = "/") -> bool:
+    return (
+        is_legion_go_s_83n6(device, root)
+        and _read_dmi(root, "bios_version").casefold() in _LEGION_GO_S_83N6_LOW_BOOST_BIOS
+    )
+
+
 def legion_go_s_83n6_firmware_attr_quirks(device, root: str = "/") -> dict:
     if not is_legion_go_s_83n6(device, root):
         return {}

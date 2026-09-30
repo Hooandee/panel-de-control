@@ -1,4 +1,5 @@
 import os
+import types
 
 from report import collector as report_collector
 from report.collector import (
@@ -886,6 +887,8 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
         "dmi": {},
         "leds": [],
+        "pstore": [],
+        "pstore_archive": [],
         "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
         "desktop": {
             "board_fans": {"available": [], "loaded": [], "channels": 0},
@@ -1119,3 +1122,101 @@ def test_sysfs_snapshot_reports_desktop_control_surfaces(tmp_path):
     assert gpu["overdrive"] is True
     assert gpu["fan_ctrl"] == ["fan_curve"]
     assert gpu["power_cap"]["power1_cap_max"] == "290000000"
+
+
+def test_kernel_logs_capture_how_the_previous_boot_ended():
+    kernel = report_collector._KERNEL_CMDS["previous_boot_kernel"]
+    ending = report_collector._KERNEL_CMDS["previous_boot_end"]
+    assert kernel[kernel.index("-b") + 1] == "-1" and "-k" in kernel
+    assert ending[ending.index("-b") + 1] == "-1"
+    for identifier in ("systemd", "systemd-logind", "systemd-shutdown", "systemd-sleep"):
+        assert identifier in ending
+    assert "power key" in ending[ending.index("--grep") + 1]
+
+    def run(cmd):
+        if cmd == kernel:
+            return "thermal thermal_zone0: critical temperature reached /home/deck/x"
+        if cmd == ending:
+            return "systemd-logind[1]: Power key pressed short."
+        return None
+
+    out = kernel_logs(run)
+    assert "critical temperature" in out["previous_boot_kernel"]
+    assert "/home/deck" not in out["previous_boot_kernel"]
+    assert "Power key pressed" in out["previous_boot_end"]
+
+
+def test_sysfs_snapshot_records_firmware_version_and_crash_records(tmp_path):
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True)
+    (dmi / "bios_version").write_text("S0CN27WW\n")
+    (dmi / "bios_date").write_text("06/12/2025\n")
+    (dmi / "ec_firmware_release").write_text("1.27\n")
+    pstore = tmp_path / "sys/fs/pstore"
+    pstore.mkdir(parents=True)
+    (pstore / "dmesg-efi-175901234501001").write_text("panic")
+
+    snap = sysfs_snapshot(root=str(tmp_path))
+
+    assert snap["dmi"]["bios_version"] == "S0CN27WW"
+    assert snap["dmi"]["bios_date"] == "06/12/2025"
+    assert snap["dmi"]["ec_firmware_release"] == "1.27"
+    assert snap["pstore"] == ["dmesg-efi-175901234501001"]
+
+
+def test_firmware_versions_survive_redaction_but_serials_do_not():
+    out = report_collector.redact_obj({
+        "bios_version": "S0CN27WW",
+        "board_name": "PF4ABCD12345",
+        "product_serial": "PF4ABCD12345",
+        "log": "bios S0CN27WW on PF4ABCD12345",
+    })
+    assert out["bios_version"] == "S0CN27WW"
+    assert out["board_name"] == "[serial]"
+    assert out["product_serial"] == "[redacted]"
+    assert "PF4ABCD12345" not in out["log"]
+
+
+def test_capture_command_returns_stdout():
+    def run(cmd, **kwargs):
+        assert kwargs["timeout"] == 5
+        return types.SimpleNamespace(returncode=0, stdout="line\n", stderr="")
+
+    assert report_collector.capture_command(["journalctl"], run=run) == "line\n"
+
+
+def test_capture_command_keeps_the_reason_a_diagnostic_command_failed():
+    def run(cmd, **kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="Compiled without pattern matching support\n",
+        )
+
+    assert report_collector.capture_command(["journalctl"], run=run) == (
+        "[exit 1] Compiled without pattern matching support"
+    )
+
+
+def test_capture_command_empty_success_stays_empty():
+    def run(cmd, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    assert report_collector.capture_command(["journalctl"], run=run) == ""
+
+
+def test_capture_command_never_raises():
+    def run(cmd, **kwargs):
+        raise OSError("missing")
+
+    assert report_collector.capture_command(["journalctl"], run=run) is None
+
+
+def test_sysfs_snapshot_lists_crash_records_moved_by_systemd_pstore(tmp_path):
+    archived = tmp_path / "var/lib/systemd/pstore/1759012345"
+    archived.mkdir(parents=True)
+    (archived / "dmesg-efi-175901234501001").write_text("panic")
+
+    snap = sysfs_snapshot(root=str(tmp_path))
+
+    assert snap["pstore_archive"] == ["1759012345"]

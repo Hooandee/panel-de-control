@@ -2201,19 +2201,7 @@ class Plugin:
     def _run_capture(self, cmd) -> str | None:
         """Run a diagnostic command and return its stdout (or None). Root + a clean
         env (the frozen runtime's LD_LIBRARY_PATH breaks system binaries). Guarded."""
-        try:
-            import subprocess
-
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=5,
-                env=controller_detect.clean_env(),
-            )  # noqa: S603
-            return r.stdout or ""
-        except Exception:  # noqa: BLE001
-            return None
+        return report_collector.capture_command(cmd, env=controller_detect.clean_env())
 
     def _report_environment(self) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
@@ -4950,6 +4938,12 @@ class Plugin:
             self._auto_ui_hold_watts = None
             if self._auto_status.get("held_watts") is not None:
                 self._auto_status = {**self._auto_status, "held_watts": None}
+        if (
+            changed
+            and self._tdp_menu_rail_floors()
+            and not self._auto_runtime_active()
+        ):
+            self._schedule_tdp_apply("menu-floor")
         return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------
@@ -5551,6 +5545,11 @@ class Plugin:
                 rail,
                 {"min": limits.min_w, "max": active},
             )
+        if self._tdp_menu_context():
+            for rail, floor in self._tdp_menu_rail_floors().items():
+                bound = safe.get(rail)
+                if bound is not None:
+                    bound["min"] = min(bound["max"], max(bound["min"], floor))
         if bump:
             self._advance_tdp_generation()
         return _TdpCommand(
@@ -5571,6 +5570,13 @@ class Plugin:
             auto_tdp=auto_active,
             ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
+
+    def _tdp_menu_rail_floors(self) -> dict:
+        floors = getattr(self._tdp_backend, "menu_rail_floors", None)
+        return dict(floors) if isinstance(floors, dict) else {}
+
+    def _tdp_menu_context(self) -> bool:
+        return self._current_appid is None or bool(self._ui_active)
 
     def _advance_tdp_generation(self):
         self._tdp_generation += 1
@@ -10300,6 +10306,7 @@ class Plugin:
             "handoff_required": self._os_id == "anatase",
             "external_owner": self._tdp_external_owner,
             "overshoot": self._overshoot_view(),
+            "menu_floor": bool(self._tdp_menu_rail_floors()) and self._tdp_menu_context(),
         }
 
     def _overshoot_clock(self):
@@ -10559,6 +10566,10 @@ class Plugin:
                 ),
             },
             "history": list(self._tdp_history),
+            "menu_rail_floors": {
+                "floors": self._tdp_menu_rail_floors(),
+                "active": self._tdp_menu_context(),
+            },
             "overshoot": {
                 **self._overshoot_monitor().as_dict(),
                 "profile_change": self._platform_profile_watch().last_change,
