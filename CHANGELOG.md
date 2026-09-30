@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.58.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.2...panel-de-control-v0.58.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **themes:** run mixed Hooandee theme runtimes together ([#813](https://github.com/Hooandee/panel-de-control/issues/813)) ([418ae02](https://github.com/Hooandee/panel-de-control/commit/418ae02422cb15fcdff58eeaab427ac23e3256ce))
+
 ## [0.58.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.1...panel-de-control-v0.58.2) (2026-09-30)
 
 
