@@ -1223,7 +1223,49 @@ class Plugin:
                 for entry in self._theme_failures()
             ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
+            **self._installed_theme_inventory(),
         }
+
+    def _installed_theme_inventory(self) -> dict:
+        """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
+        so they are only counted."""
+        installed = []
+        other_active = 0
+        try:
+            folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
+        except OSError:
+            folders = []
+
+        def read_json(path: Path):
+            try:
+                if path.stat().st_size > _THEME_MANIFEST_SCAN_BYTES:
+                    return None
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+            return value if isinstance(value, dict) else None
+
+        for folder in folders[:_THEME_FOLDER_SCAN_LIMIT]:
+            manifest = read_json(folder / "theme.json")
+            if manifest is None:
+                continue
+            config = read_json(folder / "config_USER.json") or {}
+            active = config.get("active") is True
+            if not (folder / "panel-theme.json").is_file():
+                other_active += active
+                continue
+            installed.append({
+                "name": str(manifest.get("name", ""))[:80],
+                "version": str(manifest.get("version", ""))[:32],
+                "active": active,
+                "runtime": (folder / "panel-extension.js").is_file(),
+                "sections": {
+                    key: value
+                    for key, value in config.items()
+                    if isinstance(key, str) and key.startswith("Estilizar ") and isinstance(value, str)
+                },
+            })
+        return {"installed": installed, "other_active_themes": other_active}
 
     def _unreadable_theme_folders(self) -> int:
         unreadable = 0
