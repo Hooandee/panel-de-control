@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.58.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.1...panel-de-control-v0.58.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* let the Legion Go S reach its real low TDP in games ([#807](https://github.com/Hooandee/panel-de-control/issues/807)) ([83e95b0](https://github.com/Hooandee/panel-de-control/commit/83e95b0570fabaa01a58313acc93cb85336e8aaa))
+
 ## [0.58.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.0...panel-de-control-v0.58.1) (2026-09-29)
 
 
