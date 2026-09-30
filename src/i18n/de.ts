@@ -957,6 +957,8 @@ export const de: Record<string, string> = {
   "tdp.minimum.notice": "Die Firmware unterstützt ab {min} W. {requested} W bleiben für später gespeichert.",
   "tdp.minimum.floor": "Die Firmware dieses Geräts lässt weniger als {min} W nicht zu.",
   "tdp.ownership.constrained": "Angefordert: {requested} W · derzeit von der Firmware erlaubt: {applied} W",
+  "tdp.ownership.boostFloorMenu": "In Menüs bleiben SPPT und FPPT bei {pl2} und {pl3} W, damit alles flüssig läuft",
+  "tdp.ownership.boostFloor": "SPPT und FPPT bleiben auf diesem Gerät bei {pl2} und {pl3} W",
   "tdp.ownership.powerLimited": "Stromversorgung oder Firmware begrenzt die Leistung vorübergehend · deine Einstellung bleibt ausgewählt",
   "tdp.ownership.settling": "Leistungslimit wird angewendet und überprüft…",
   "tdp.ownership.rejected": "Die Firmware hat {target} W nicht akzeptiert · {applied} W bleiben aktiv",

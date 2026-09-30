@@ -506,6 +506,23 @@ describe("TdpSection ownership row", () => {
     expect(screen.getByTestId("ownership-status")).toBeTruthy();
   });
 
+  it("shows the row while boost rails are held above the request", () => {
+    renderTdpSection({
+      ...deckState,
+      ownership: {
+        ...deckState.ownership,
+        status: "constrained",
+        reason: "safe_min",
+        requested: { pl1: 5, pl2: 5, pl3: 5 },
+        target: { pl1: 5, pl2: 15, pl3: 20 },
+        applied: { pl1: 5, pl2: 15, pl3: 20 },
+        menu_floor: true,
+      },
+    } as unknown as TdpState);
+
+    expect(screen.getByTestId("ownership-status")).toBeTruthy();
+  });
+
   it("keeps the row hidden for in-sync rails without a notice", () => {
     renderTdpSection(deckState);
 

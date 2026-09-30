@@ -10306,6 +10306,7 @@ class Plugin:
             "handoff_required": self._os_id == "anatase",
             "external_owner": self._tdp_external_owner,
             "overshoot": self._overshoot_view(),
+            "menu_floor": bool(self._tdp_menu_rail_floors()) and self._tdp_menu_context(),
         }
 
     def _overshoot_clock(self):

@@ -77,4 +77,38 @@ describe("TdpOwnershipStatus", () => {
 
     expect(screen.getByText("tdp.ownership.conflict 22 22 15")).toBeTruthy();
   });
+
+  it("says the boost rails are held for the menus", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          reason: "safe_min",
+          requested: { pl1: 5, pl2: 5, pl3: 5 },
+          target: { pl1: 5, pl2: 15, pl3: 20 },
+          applied: { pl1: 5, pl2: 15, pl3: 20 },
+          menu_floor: true,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.boostFloorMenu 15 20")).toBeTruthy();
+  });
+
+  it("says the boost rails are held at the firmware minimum", () => {
+    render(
+      <TdpOwnershipStatus
+        ownership={{
+          ...ownership,
+          reason: "safe_min",
+          requested: { pl1: 5, pl2: 5, pl3: 5 },
+          target: { pl1: 5, pl2: 15, pl3: 20 },
+          applied: { pl1: 5, pl2: 15, pl3: 20 },
+          menu_floor: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("tdp.ownership.boostFloor 15 20")).toBeTruthy();
+  });
 });

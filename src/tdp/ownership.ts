@@ -7,6 +7,7 @@ export interface OwnershipView {
   target: number | null;
   applied: number | null;
   persistent: boolean;
+  boostFloor: { pl2: number; pl3: number } | null;
 }
 
 export function ownershipView(ownership: TdpOwnership, physicalMin?: number): OwnershipView {
@@ -49,6 +50,13 @@ export function ownershipView(ownership: TdpOwnership, physicalMin?: number): Ow
     && target === physicalMin
     && target === applied
     && secondaryMinimumConfirmed;
+  const { pl2: boostPl2, pl3: boostPl3 } = ownership.target;
+  const boostFloor = (secondaryOnlyConstraint || confirmedMinimumConstraint)
+    && onlyRaisedSecondary
+    && typeof boostPl2 === "number"
+    && typeof boostPl3 === "number"
+    ? { pl2: boostPl2, pl3: boostPl3 }
+    : null;
   let kind: OwnershipView["kind"];
   if (persistent) {
     kind = "conflict";
@@ -74,5 +82,6 @@ export function ownershipView(ownership: TdpOwnership, physicalMin?: number): Ow
     target,
     applied,
     persistent,
+    boostFloor,
   };
 }

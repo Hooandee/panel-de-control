@@ -199,3 +199,24 @@ def test_menu_floor_apply_survives_a_loaded_but_idle_auto_controller(tmp_path, m
     asyncio.run(plugin.set_ui_active(True))
 
     assert generations == [plugin._tdp_generation]
+
+
+@pytest.mark.parametrize("in_game", [False, True])
+def test_tdp_ownership_says_when_the_menu_floor_holds_the_boost_rails(
+    tmp_path, monkeypatch, in_game,
+):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+    if in_game:
+        plugin._set_current_appid("42")
+
+    ownership = plugin._tdp_ownership_state(plugin._tdp_backend.observe())
+
+    assert ownership["menu_floor"] is (not in_game)
+
+
+def test_tdp_ownership_never_claims_a_menu_floor_without_one(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, PlainBackend)
+
+    ownership = plugin._tdp_ownership_state(plugin._tdp_backend.observe())
+
+    assert ownership["menu_floor"] is False
