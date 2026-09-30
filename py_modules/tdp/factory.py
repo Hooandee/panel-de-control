@@ -81,7 +81,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             root=root,
             profile_name="lenovo-wmi-gamezone",
             is_generic=generic,
-            rail_floors=legion_go_s_83n6_rail_floors(device, root),
+            menu_rail_floors=legion_go_s_83n6_rail_floors(device, root),
             safety_lock_path=_runtime_lock_path(
                 root,
                 "firmware-lenovo-wmi-other.lock",

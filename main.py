@@ -4941,6 +4941,12 @@ class Plugin:
         if changed:
             self._gamescope_stats.clear()
         self._ui_active = active
+        if (
+            changed
+            and self._tdp_menu_rail_floors()
+            and not self._auto_runtime_active()
+        ):
+            self._schedule_tdp_apply("menu-floor")
         if activated and self._auto_controller is not None:
             self._advance_tdp_generation()
             await self._apply_auto_ui_floor()
@@ -5551,6 +5557,11 @@ class Plugin:
                 rail,
                 {"min": limits.min_w, "max": active},
             )
+        if self._tdp_menu_context():
+            for rail, floor in self._tdp_menu_rail_floors().items():
+                bound = safe.get(rail)
+                if bound is not None:
+                    bound["min"] = min(bound["max"], max(bound["min"], floor))
         if bump:
             self._advance_tdp_generation()
         return _TdpCommand(
@@ -5571,6 +5582,13 @@ class Plugin:
             auto_tdp=auto_active,
             ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
+
+    def _tdp_menu_rail_floors(self) -> dict:
+        floors = getattr(self._tdp_backend, "menu_rail_floors", None)
+        return dict(floors) if isinstance(floors, dict) else {}
+
+    def _tdp_menu_context(self) -> bool:
+        return self._current_appid is None or bool(self._ui_active)
 
     def _advance_tdp_generation(self):
         self._tdp_generation += 1
@@ -10559,6 +10577,10 @@ class Plugin:
                 ),
             },
             "history": list(self._tdp_history),
+            "menu_rail_floors": {
+                "floors": self._tdp_menu_rail_floors(),
+                "active": self._tdp_menu_context(),
+            },
             "overshoot": {
                 **self._overshoot_monitor().as_dict(),
                 "profile_change": self._platform_profile_watch().last_change,

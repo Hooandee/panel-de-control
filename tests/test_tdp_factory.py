@@ -919,7 +919,7 @@ def test_gpd_recovery_keeps_lock_when_tolerated_readback_exceeds_oem_ceiling(
     assert lock.exists() is True
 
 
-def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
+def test_only_exact_legion_go_s_83n6_gets_menu_only_rail_floors(tmp_path):
     exact_root = str(tmp_path / "exact")
     _mk_fw(exact_root, "lenovo-wmi-other-0")
     _mk_dmi(exact_root, "LENOVO", "83N6")
@@ -938,7 +938,14 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
         ryzenadj_resolve=_NO_RYZENADJ,
     )
 
-    assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
+    assert exact.menu_rail_floors == {"pl2": 15, "pl3": 20}
+    assert getattr(exact, "_rail_floors", None) == {}
+    assert {rail: bound["min"] for rail, bound in exact.level_limits().items()} == {
+        "pl1": 5,
+        "pl2": 5,
+        "pl3": 5,
+    }
+    assert nearby.menu_rail_floors == {}
     assert getattr(nearby, "_rail_floors", None) == {}
     assert nearby.low_battery_hold_strategy is None
 
@@ -1338,6 +1345,7 @@ def test_generic_device_does_not_get_83n6_rail_floors_from_dmi_alone(tmp_path):
     )
 
     assert getattr(backend, "_rail_floors", None) == {}
+    assert backend.menu_rail_floors == {}
 
 
 def test_msi_uses_msi_firmware_attr(tmp_path):
