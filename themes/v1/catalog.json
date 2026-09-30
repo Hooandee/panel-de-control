@@ -5,7 +5,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-gallery",
       "cssLoaderName": "Hooandee Gallery",
-      "version": "0.9.53",
+      "version": "0.9.54",
       "displayName": {
         "es": "Hooandee",
         "en": "Hooandee",
@@ -19,9 +19,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.53/theme.zip",
-        "size": 147289,
-        "sha256": "cba0dacc76c216c725729124634c1684cc1af08abeaf93555c56ee878d8afda9"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.54/theme.zip",
+        "size": 147957,
+        "sha256": "27029a8af8672e136bc6f0bab6eb95997ff5e2e16e8c1fe2afa67e8897176629"
       },
       "minimumVersions": {
         "panel": "0.38.0",
