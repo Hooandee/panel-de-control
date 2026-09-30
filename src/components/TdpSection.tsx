@@ -175,9 +175,13 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           overclocked={tdp.overclock?.detected ?? false}
         />
       </PanelSectionRow>
-      {(ownership.show || tdp.ownership.overshoot) && (
+      {(ownership.show || ownership.boostFloor || tdp.ownership.overshoot) && (
         <PanelSectionRow>
-          <TdpOwnershipStatus ownership={tdp.ownership} onAc={tdp.on_ac} />
+          <TdpOwnershipStatus
+            ownership={tdp.ownership}
+            onAc={tdp.on_ac}
+            physicalMin={tdp.limits.min}
+          />
         </PanelSectionRow>
       )}
       {!isAutoOn && (

@@ -8,9 +8,10 @@ import { theme } from "../theme";
 export const TdpOwnershipStatus: FC<{
   ownership: TdpOwnership;
   onAc?: boolean;
-}> = ({ ownership, onAc }) => {
+  physicalMin?: number;
+}> = ({ ownership, onAc, physicalMin }) => {
   const { t } = useI18n();
-  const view = ownershipView(ownership);
+  const view = ownershipView(ownership, physicalMin);
   const overshoot = ownership.overshoot;
   const ownershipWins = view.show && view.kind !== "constrained" && view.kind !== "settling";
   if (overshoot && !ownershipWins) {
@@ -27,6 +28,16 @@ export const TdpOwnershipStatus: FC<{
         }}
       >
         {t(key, { peak: Math.round(overshoot.peak_w), target: overshoot.target_w })}
+      </div>
+    );
+  }
+  if (!view.show && view.boostFloor) {
+    return (
+      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+        {t(
+          ownership.menu_floor ? "tdp.ownership.boostFloorMenu" : "tdp.ownership.boostFloor",
+          view.boostFloor,
+        )}
       </div>
     );
   }

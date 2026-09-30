@@ -253,6 +253,7 @@ export interface TdpOwnership {
   conflict_persistent: boolean;
   failures: number;
   overshoot?: TdpOvershoot | null;
+  menu_floor?: boolean;
 }
 
 export interface TdpOvershoot {

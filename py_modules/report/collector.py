@@ -34,6 +34,11 @@ _SCRUB_KEY = re.compile(
     re.I,
 )
 _HOME_PATH = re.compile(r"/home/[^/\s:\"']+")
+# Firmware versions are shared by every unit of a model and decide firmware bugs, but
+# look like serials to _SERIAL_RUN ("S0CN27WW"). Their values skip only that rule.
+_FIRMWARE_VERSION_KEYS = frozenset(
+    {"bios_version", "bios_date", "bios_release", "ec_firmware_release"}
+)
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
 _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
@@ -52,7 +57,13 @@ _SERIAL_RUN = re.compile(
 )
 
 
-def redact_text(s, *, home: str | None = None, hostname: str | None = None):
+def redact_text(
+    s,
+    *,
+    home: str | None = None,
+    hostname: str | None = None,
+    keep_serial_runs: bool = False,
+):
     """Scrub PII from a string: home paths, an explicit hostname, MAC/UUID and
     serial-like values that show up inside log or kernel output. Never touches a
     bare username token (that would nuke 'Steam Deck' when the user is 'deck')."""
@@ -66,7 +77,8 @@ def redact_text(s, *, home: str | None = None, hostname: str | None = None):
     s = _MAC.sub("[mac]", s)
     s = _UUID.sub("[uuid]", s)
     s = _SERIAL_LABELED.sub(lambda m: f"{m.group(1)}{m.group(2)}[serial]", s)
-    s = _SERIAL_RUN.sub("[serial]", s)
+    if not keep_serial_runs:
+        s = _SERIAL_RUN.sub("[serial]", s)
     return s
 
 
@@ -78,6 +90,8 @@ def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
         for k, v in obj.items():
             if isinstance(k, str) and _SCRUB_KEY.search(k) and isinstance(v, (str, int, float)):
                 out[k] = "[redacted]"
+            elif k in _FIRMWARE_VERSION_KEYS and isinstance(v, str):
+                out[k] = redact_text(v, home=home, hostname=hostname, keep_serial_runs=True)
             else:
                 out[k] = redact_obj(v, home=home, hostname=hostname)
         return out
@@ -466,6 +480,20 @@ _KERNEL_CMDS = {
         "-t", "power-profiles-daemon", "-t", "tuned", "-t", "tuned-ppd",
         "-n", "200", "--no-pager",
     ],
+    # How the previous boot ended: a clean reboot leaves the systemd/logind shutdown
+    # sequence, a thermal trip or panic leaves kernel warnings, a hard reset leaves
+    # neither. The plugin's own log cannot tell these apart.
+    "previous_boot_kernel": [
+        "/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning",
+        "-n", "150", "--no-pager",
+    ],
+    "previous_boot_end": [
+        "/usr/bin/journalctl", "-b", "-1",
+        "-t", "systemd", "-t", "systemd-logind", "-t", "systemd-shutdown",
+        "-t", "systemd-sleep",
+        "--grep", "(?i)power key|reboot|power-?off|shutdown|suspend|hibernat|(entering|returned from) sleep|lid (opened|closed)",
+        "-n", "60", "--no-pager",
+    ],
 }
 
 
@@ -490,6 +518,23 @@ def controller_daemon_cmds(manager: str | None) -> dict:
         cmd.extend(("-u", unit))
     cmd.extend(("-n", "300", "--no-pager"))
     return {"controller": cmd}
+
+
+def capture_command(cmd, *, run=None, env=None) -> str | None:
+    """stdout of a diagnostic command; when it fails with no output, its exit code and
+    stderr, so a report tells "no entries" from "journalctl could not run". Never raises."""
+    try:
+        if run is None:
+            import subprocess
+
+            run = subprocess.run
+        result = run(cmd, capture_output=True, text=True, timeout=5, env=env)  # noqa: S603
+    except Exception:  # noqa: BLE001
+        return None
+    stdout = result.stdout or ""
+    if stdout or result.returncode == 0:
+        return stdout
+    return f"[exit {result.returncode}] {(result.stderr or '').strip()[:500]}"
 
 
 def kernel_logs(
@@ -858,7 +903,8 @@ def _snap_desktop(root: str) -> dict:
 
 
 _DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
-               "product_name", "product_version", "product_family", "chassis_type")
+               "product_name", "product_version", "product_family", "chassis_type",
+               "bios_version", "bios_date", "bios_release", "ec_firmware_release")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
 _EC_IO = "sys/kernel/debug/ec/ec0/io"
 _EC_DUMP_BYTES = 256
@@ -955,7 +1001,7 @@ def sysfs_snapshot(
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
-                  "desktop": {}, "ec": {}}
+                  "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": []}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -988,6 +1034,16 @@ def sysfs_snapshot(
         pass
     try:
         snap["dmi"] = _snap_dmi(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["pstore"] = sorted(_listdir(os.path.join(root, "sys/fs/pstore")))[:_SNAP_MAX_NAMES]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["pstore_archive"] = sorted(
+            _listdir(os.path.join(root, "var/lib/systemd/pstore"))
+        )[-_SNAP_MAX_NAMES:]
     except Exception:  # noqa: BLE001
         pass
     try:

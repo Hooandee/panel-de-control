@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.58.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.1...panel-de-control-v0.58.2) (2026-09-30)
+
+
+### Español
+
+* **TDP:** En la Legion Go S, los TDP bajos ahora se respetan de verdad en los juegos, sin que los menús pierdan fluidez. Y si el equipo no puede bajar tanto como pides, la sección de Potencia te lo avisa.
+* **Reportes:** Los reportes de problemas traen algo más de información para entender los reinicios inesperados.
+
+### English
+
+* **TDP:** On the Legion Go S, low TDP values are now really respected in games, and the menus stay smooth. If the device can't go as low as you ask, the Power section lets you know.
+* **Reports:** Problem reports include a bit more information to help understand unexpected restarts.
+
+### Italiano
+
+* **TDP:** Sulla Legion Go S, i TDP bassi ora vengono rispettati davvero nei giochi, senza che i menu perdano fluidità. E se il dispositivo non può scendere quanto chiedi, la sezione Potenza te lo segnala.
+* **Segnalazioni:** Le segnalazioni di problemi includono qualche informazione in più per capire i riavvii inattesi.
+
+### Deutsch
+
+* **TDP:** Auf der Legion Go S werden niedrige TDP-Werte in Spielen jetzt wirklich eingehalten, und die Menüs bleiben flüssig. Kann das Gerät nicht so weit heruntergehen wie gewünscht, weist der Bereich Leistung darauf hin.
+* **Berichte:** Problemberichte enthalten etwas mehr Informationen, um unerwartete Neustarts besser zu verstehen.
+
+### Português (Brasil)
+
+* **TDP:** No Legion Go S, TDPs baixos agora são respeitados de verdade nos jogos, sem os menus perderem fluidez. E se o aparelho não puder baixar tanto quanto você pede, a seção Potência avisa.
+* **Relatórios:** Os relatórios de problemas trazem um pouco mais de informação para entender reinícios inesperados.
+
 ## [0.58.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.0...panel-de-control-v0.58.1) (2026-09-29)
 
 
