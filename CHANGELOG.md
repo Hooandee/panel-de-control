@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.60.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.59.0...panel-de-control-v0.60.0) (2026-10-01)
+
+
+### Features
+
+* raise OneXFly Apex TDP to 80 W on the charger and 120 W with the external cooler ([#837](https://github.com/Hooandee/panel-de-control/issues/837)) ([4946841](https://github.com/Hooandee/panel-de-control/commit/4946841cab2a9f9c5003b77c5411b5b2682efb4a))
+
 ## [0.59.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.3...panel-de-control-v0.59.0) (2026-10-01)
 
 
