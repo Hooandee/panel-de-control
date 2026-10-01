@@ -12542,5 +12542,6 @@ class Plugin:
 journal.trace_calls(
     Plugin,
     untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs"}),
+    automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report"}),
 )

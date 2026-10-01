@@ -152,6 +152,8 @@ def test_summary_condenses_each_session():
         {"t": 13, "s": "state", "m": "tdp", "game": 1850570, "tdp_w": 7, "cpu_c": 100},
         {"t": 14, "s": "tdp", "m": "external_write", "n": 2},
         {"t": 15, "s": "rpc", "m": "set_tdp_watts", "n": 3},
+        {"t": 15.5, "s": "rpc", "m": "load_theme_extension", "auto": True},
+        {"t": 15.6, "s": "rpc", "m": "ignored"},
         {"t": 16, "l": "W", "s": "log", "m": "fan write failed"},
         {"t": 17, "l": "W", "s": "log", "m": "fan write failed", "n": 4, "last": 30},
         {"t": 40, "s": "session", "m": "stop"},
@@ -162,6 +164,7 @@ def test_summary_condenses_each_session():
     assert first["rivals"] == ["PowerTools"] and first["external_writes"] == 2 and first["actions"] == 3
     assert first["problems"] == [{"level": "W", "message": "fan write failed", "count": 5}]
     assert first["stopped"] is True and first["state_changes"] == {"start": 1, "tdp": 1}
+    assert first["ignored"] == 1 and first["last_line"] == 40
     assert second["start"] == 50 and "stopped" not in second
     assert second["rivals"] == ["PowerTools"]
 

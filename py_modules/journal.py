@@ -455,7 +455,7 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
         if record.get("s") == "session" and record.get("m") == "start" or current is None:
             current = {
                 "start": record.get("t"),
-                "end": record.get("t"),
+                "last_line": record.get("t"),
                 "version": record.get("version"),
                 "games": [],
                 "tdp_w": None,
@@ -467,11 +467,13 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
                 "_problems": {},
             }
             sessions.append(current)
-        current["end"] = record.get("last", record.get("t"))
+        current["last_line"] = record.get("last", record.get("t"))
         source = record.get("s")
         if source == "session" and record.get("m") == "stop":
             current["stopped"] = True
-        elif source == "rpc":
+        elif source == "rpc" and record.get("m") == "ignored":
+            current["ignored"] = current.get("ignored", 0) + _count(record)
+        elif source == "rpc" and not record.get("auto"):
             current["actions"] += _count(record)
         elif source == "context":
             rivals = [rival.get("name") for rival in record.get("rivals") or []]
@@ -728,6 +730,7 @@ def trace_calls(
     untraced_prefixes: tuple[str, ...] = ("_", "get_", "list_", "check_", "record_"),
     untraced: frozenset[str] = frozenset(),
     hidden_arguments: frozenset[str] = frozenset(),
+    automatic: frozenset[str] = frozenset(),
 ) -> None:
     """Wraps the frontend-callable coroutines that change something so each call,
     its arguments and a failed outcome land in the diary as a user action. Calls of
@@ -736,29 +739,30 @@ def trace_calls(
     for name, function in list(vars(cls).items()):
         if name.startswith(untraced_prefixes) or name in untraced or not inspect.iscoroutinefunction(function):
             continue
-        setattr(cls, name, _traced(name, function, name in hidden_arguments))
+        setattr(cls, name, _traced(name, function, name in hidden_arguments, name in automatic))
 
 
-def _traced(name: str, function: Callable, hide_arguments: bool) -> Callable:
+def _traced(name: str, function: Callable, hide_arguments: bool, automatic: bool) -> Callable:
     @functools.wraps(function)
     async def call(self, *args, **kwargs):
         journal = active
         if journal is None or _inside_call.get():
             return await function(self, *args, **kwargs)
         arguments = None if hide_arguments else _summary(list(args) + ([kwargs] if kwargs else []))
+        marks = {"auto": True} if automatic else {}
         token = _inside_call.set(True)
         try:
             result = await function(self, *args, **kwargs)
         except Exception as error:
-            journal.write("ERROR", "rpc", name, a=arguments, r={"raised": type(error).__name__, "where": _where(error), "message": str(error)[:160]})
+            journal.write("ERROR", "rpc", name, a=arguments, r={"raised": type(error).__name__, "where": _where(error), "message": str(error)[:160]}, **marks)
             raise
         finally:
             _inside_call.reset(token)
         outcome = _outcome(result)
         if outcome is None:
-            journal.write("INFO", "rpc", name, a=arguments)
+            journal.write("INFO", "rpc", name, a=arguments, **marks)
         else:
-            journal.write("WARNING", "rpc", name, a=arguments, r=outcome)
+            journal.write("WARNING", "rpc", name, a=arguments, r=outcome, **marks)
         after_action = getattr(self, "_journal_after_action", None)
         if callable(after_action):
             after_action()
