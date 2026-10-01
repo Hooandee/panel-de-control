@@ -21,3 +21,11 @@ export function gpuClockPresentation(state: ClockPresentationInput) {
     rejected,
   };
 }
+
+export function nearestLevelIndex(levels: number[], value: number): number {
+  let best = 0;
+  for (let index = 1; index < levels.length; index += 1) {
+    if (Math.abs(levels[index] - value) < Math.abs(levels[best] - value)) best = index;
+  }
+  return best;
+}
