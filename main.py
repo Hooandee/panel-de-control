@@ -6,6 +6,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import deque
 from concurrent.futures import (
@@ -3630,7 +3631,6 @@ class Plugin:
             return await self._fan_curve_state_offloop()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            decky.logger.warning("Fan request ignored: scope %r without a game", scope)
             return await self._fan_curve_state_offloop()
         self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
@@ -8743,12 +8743,29 @@ class Plugin:
         if context_appid is not _RPC_CONTEXT_UNSET:
             context = str(context_appid) if context_appid is not None else None
             if context != self._current_appid:
+                self._journal_ignored("stale_game_context", scope=scope, appid=appid,
+                                      context=context, current=self._current_appid)
                 return False
-        return scope == "global" or (
+        current = scope == "global" or (
             scope == "game"
             and appid is not None
             and str(appid) == self._current_appid
         )
+        if not current:
+            self._journal_ignored("scope_not_current", scope=scope, appid=appid,
+                                  current=self._current_appid)
+        return current
+
+    def _journal_ignored(self, reason: str, **fields) -> None:
+        """A request answered with the unchanged state: which call, why, and what
+        it carried, so a setting that "did nothing" is explained in the diary."""
+        diary = journal.active
+        if diary is None:
+            return
+        caller = sys._getframe(2).f_code.co_name
+        if caller.startswith("_"):
+            caller = sys._getframe(3).f_code.co_name
+        diary.write("WARNING", "rpc", "ignored", call=caller, reason=reason, **fields)
 
     def _set_current_appid(self, appid) -> None:
         current = str(appid) if appid is not None else None
@@ -11213,6 +11230,7 @@ class Plugin:
     def _resolve_scope(self, scope, appid):
         """Normalize scope/appid; returns scope or None if invalid."""
         if scope not in ("global", "game"):
+            self._journal_ignored("invalid_scope", scope=scope, appid=appid)
             return None
         if scope == "game" and appid is None:
             return "global"
