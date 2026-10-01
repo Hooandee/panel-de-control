@@ -6,7 +6,9 @@ carry it. The diary lives in the plugin's data folder as one JSON-lines file per
 bounded by age and total size.
 
 Writers never block: records go to a bounded queue drained by one daemon thread,
-and a full queue drops the record and counts it instead of waiting.
+and a full queue drops the record and counts it instead of waiting. A record that
+repeats the previous one is written once; its repeats within a minute become one
+more line carrying how many there were (`n`) and when the last was (`last`).
 """
 from __future__ import annotations
 
@@ -53,6 +55,7 @@ class Journal:
         max_file_bytes: int = 4 * 1024 * 1024,
         queue_size: int = 4096,
         coalesce_s: float = 1.5,
+        repeat_s: float = 60.0,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.directory = directory
@@ -60,6 +63,7 @@ class Journal:
         self._max_total_bytes = max_total_bytes
         self._max_file_bytes = max_file_bytes
         self._coalesce_s = coalesce_s
+        self._repeat_s = repeat_s
         self._clock = clock
         self._queue: queue.Queue = queue.Queue(maxsize=queue_size)
         self._thread: threading.Thread | None = None
@@ -68,7 +72,9 @@ class Journal:
         self._file_name: str | None = None
         self._file_day: str | None = None
         self._file_segment = 0
-        self._pending_call: dict | None = None
+        self._pending: dict | None = None
+        self._repeat: dict | None = None
+        self._last_content: dict | None = None
         self.dropped = 0
         self.write_failures = 0
 
@@ -123,7 +129,7 @@ class Journal:
             try:
                 record = self._queue.get(timeout=self._coalesce_s)
             except queue.Empty:
-                self._flush_pending_call()
+                self._flush_stale()
                 self._sync()
                 if self._stopping.is_set():
                     break
@@ -143,20 +149,36 @@ class Journal:
             self._sync()
             if self._stopping.is_set():
                 break
-        self._flush_pending_call()
+        self._flush_pending()
         self._close_file()
 
     def _accept(self, record: dict) -> None:
-        if record.get("s") != "rpc":
-            self._flush_pending_call()
-            self._append(record)
+        if record.get("s") == "rpc":
+            self._accept_call(record)
             return
-        pending = self._pending_call
+        self._flush_call()
+        content = {key: value for key, value in record.items() if key != "t"}
+        repeat = self._repeat
+        if content == self._last_content and (
+            repeat is None or record["t"] - repeat["last"] <= self._repeat_s
+        ):
+            if repeat is None:
+                self._repeat = {**record, "n": 1, "last": record["t"]}
+            else:
+                repeat["n"] += 1
+                repeat["last"] = record["t"]
+            return
+        self._flush_repeat()
+        self._append(record)
+        self._last_content = content
+
+    def _accept_call(self, record: dict) -> None:
+        pending = self._pending
         if (
             pending is not None
             and pending["m"] == record["m"]
-            and record["t"] - pending.get("last", pending["t"]) <= self._coalesce_s
             and "r" not in pending
+            and record["t"] - pending.get("last", pending["t"]) <= self._coalesce_s
         ):
             pending["a"] = record.get("a")
             pending["last"] = record["t"]
@@ -164,13 +186,31 @@ class Journal:
             if "r" in record:
                 pending["r"] = record["r"]
             return
-        self._flush_pending_call()
-        self._pending_call = dict(record)
+        self._flush_pending()
+        self._pending = dict(record)
 
-    def _flush_pending_call(self) -> None:
-        if self._pending_call is not None:
-            record, self._pending_call = self._pending_call, None
+    def _flush_call(self) -> None:
+        if self._pending is not None:
+            record, self._pending = self._pending, None
+            self._flush_repeat()
             self._append(record)
+            self._last_content = None
+
+    def _flush_repeat(self) -> None:
+        if self._repeat is not None:
+            record, self._repeat = self._repeat, None
+            self._append(record)
+
+    def _flush_pending(self) -> None:
+        self._flush_call()
+        self._flush_repeat()
+
+    def _flush_stale(self) -> None:
+        now = self._clock()
+        if self._pending is not None and now - self._pending.get("last", self._pending["t"]) > self._coalesce_s:
+            self._flush_call()
+        if self._repeat is not None and now - self._repeat["last"] > self._repeat_s:
+            self._flush_repeat()
 
     def _append(self, record: dict) -> None:
         try:
@@ -253,11 +293,12 @@ def read_records(directory: str) -> Iterator[dict]:
             continue
 
 
+_KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp")
 _KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
 
 
 def _is_key_record(record: dict) -> bool:
-    if record.get("l") in ("W", "E", "C") or record.get("s") in ("rpc", "session"):
+    if record.get("l") in ("W", "E", "C") or record.get("s") in _KEY_SOURCES:
         return True
     message = record.get("m")
     return isinstance(message, str) and any(key in message for key in _KEY_MESSAGES)
@@ -307,12 +348,75 @@ def collect(
             continue
     return {
         "schema": 1,
+        "summary": summarize(recent + older),
         "files": files,
         "recent": recent_kept,
         "recent_omitted": recent_cut,
         "older": older_kept,
         "older_omitted": older_cut,
     }
+
+
+def _count(record: dict) -> int:
+    count = record.get("n", 1)
+    return count if isinstance(count, int) and count > 0 else 1
+
+
+def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
+    """One short entry per session, oldest first: what to read before any line."""
+    sessions: list[dict] = []
+    current: dict | None = None
+    for record in sorted(records, key=lambda item: item.get("t", 0)):
+        if record.get("s") == "session" and record.get("m") == "start" or current is None:
+            current = {
+                "start": record.get("t"),
+                "end": record.get("t"),
+                "version": record.get("version"),
+                "games": [],
+                "tdp_w": None,
+                "max_temp_c": None,
+                "rivals": [],
+                "external_writes": 0,
+                "actions": 0,
+                "state_changes": {},
+                "_problems": {},
+            }
+            sessions.append(current)
+        current["end"] = record.get("last", record.get("t"))
+        source = record.get("s")
+        if source == "session" and record.get("m") == "stop":
+            current["stopped"] = True
+        elif source == "rpc":
+            current["actions"] += _count(record)
+        elif source == "context":
+            current["rivals"] = [rival.get("name") for rival in record.get("rivals") or []]
+        elif source == "tdp" and record.get("m") == "external_write":
+            current["external_writes"] += 1
+        elif source == "state":
+            changes = current["state_changes"]
+            changes[record.get("m")] = changes.get(record.get("m"), 0) + 1
+            game = record.get("game")
+            if game is not None and game not in current["games"]:
+                current["games"].append(game)
+            tdp = record.get("tdp_w")
+            if isinstance(tdp, (int, float)):
+                low, high = current["tdp_w"] or (tdp, tdp)
+                current["tdp_w"] = [min(low, tdp), max(high, tdp)]
+            for key in ("cpu_c", "gpu_c"):
+                value = record.get(key)
+                if isinstance(value, (int, float)):
+                    current["max_temp_c"] = max(current["max_temp_c"] or value, value)
+        if record.get("l") in ("W", "E", "C"):
+            key = (record.get("l"), str(record.get("m", ""))[:120])
+            current["_problems"][key] = current["_problems"].get(key, 0) + _count(record)
+    for session in sessions:
+        problems = session.pop("_problems")
+        session["problems"] = [
+            {"level": level, "message": message, "count": count}
+            for (level, message), count in sorted(problems.items(), key=lambda item: -item[1])[:top]
+        ]
+        session["problem_kinds"] = len(problems)
+    return sessions
 
 
 class JournalHandler(logging.Handler):
@@ -384,6 +488,7 @@ def trace_calls(
     cls: type,
     *,
     untraced_prefixes: tuple[str, ...] = ("_", "get_", "list_", "check_", "record_"),
+    untraced: frozenset[str] = frozenset(),
     hidden_arguments: frozenset[str] = frozenset(),
 ) -> None:
     """Wraps the frontend-callable coroutines that change something so each call,
@@ -391,7 +496,7 @@ def trace_calls(
     the same method within the coalescing window collapse into one record, and calls
     made from inside another traced call are the backend's own, not the user's."""
     for name, function in list(vars(cls).items()):
-        if name.startswith(untraced_prefixes) or not inspect.iscoroutinefunction(function):
+        if name.startswith(untraced_prefixes) or name in untraced or not inspect.iscoroutinefunction(function):
             continue
         setattr(cls, name, _traced(name, function, name in hidden_arguments))
 

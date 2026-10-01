@@ -74,6 +74,20 @@ def test_repeated_calls_of_one_action_collapse_into_the_last(tmp_path):
     assert calls == [("set_tdp_watts", "[15]", 3), ("set_hud_config", "[{}]", 1), ("set_tdp_watts", "[9]", 1)]
 
 
+def test_identical_lines_in_a_row_become_one_with_a_count(tmp_path):
+    j = Journal(str(tmp_path), clock=lambda: 200.0)
+    _run(
+        j,
+        (("ERROR", "log", "Task was destroyed"), {"at": 100.0}),
+        (("ERROR", "log", "Task was destroyed"), {"at": 100.1}),
+        (("ERROR", "log", "Task was destroyed"), {"at": 100.2}),
+        (("INFO", "log", "other"), {"at": 101.0}),
+        (("ERROR", "log", "Task was destroyed"), {"at": 300.0}),
+    )
+    records = [(r["m"], r.get("n", 1)) for r in _lines(str(tmp_path))]
+    assert records == [("Task was destroyed", 1), ("Task was destroyed", 2), ("other", 1), ("Task was destroyed", 1)]
+
+
 def test_collect_sends_the_last_day_whole_and_only_key_records_before(tmp_path):
     now = 1_790_000_000.0
     j = Journal(str(tmp_path), clock=lambda: now)
@@ -90,6 +104,29 @@ def test_collect_sends_the_last_day_whole_and_only_key_records_before(tmp_path):
         'TDP transition {"requested":{"pl1":7}}', "fan write failed", "set_tdp_watts",
     ]
     assert [r["m"] for r in bundle["recent"]] == ["Audio transition {}"]
+
+
+def test_summary_condenses_each_session():
+    from journal import summarize
+
+    records = [
+        {"t": 10, "s": "session", "m": "start", "version": "0.59.0"},
+        {"t": 11, "s": "context", "m": "snapshot", "rivals": [{"name": "PowerTools"}]},
+        {"t": 12, "s": "state", "m": "start", "game": 1850570, "tdp_w": 40, "cpu_c": 99},
+        {"t": 13, "s": "state", "m": "tdp", "game": 1850570, "tdp_w": 7, "cpu_c": 100},
+        {"t": 14, "s": "tdp", "m": "external_write"},
+        {"t": 15, "s": "rpc", "m": "set_tdp_watts", "n": 3},
+        {"t": 16, "l": "W", "s": "log", "m": "fan write failed"},
+        {"t": 17, "l": "W", "s": "log", "m": "fan write failed", "n": 4, "last": 30},
+        {"t": 40, "s": "session", "m": "stop"},
+        {"t": 50, "s": "session", "m": "start", "version": "0.59.0"},
+    ]
+    first, second = summarize(records)
+    assert first["games"] == [1850570] and first["tdp_w"] == [7, 40] and first["max_temp_c"] == 100
+    assert first["rivals"] == ["PowerTools"] and first["external_writes"] == 1 and first["actions"] == 3
+    assert first["problems"] == [{"level": "W", "message": "fan write failed", "count": 5}]
+    assert first["stopped"] is True and first["state_changes"] == {"start": 1, "tdp": 1}
+    assert second["start"] == 50 and "stopped" not in second
 
 
 def test_collect_keeps_the_newest_records_within_budget(tmp_path):
