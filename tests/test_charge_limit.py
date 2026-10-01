@@ -12,6 +12,7 @@ from battery.charge_limit import (
 def _mk_conservation(root, value="0"):
     d = os.path.join(root, "sys/devices/pci0000:00/PNP0C09:00/VPC2004:00")
     os.makedirs(d, exist_ok=True)
+    os.makedirs(os.path.join(root, "sys/bus/acpi/devices/VPC2004:00"), exist_ok=True)
     p = os.path.join(d, "conservation_mode")
     with open(p, "w") as f:
         f.write(value)
@@ -158,6 +159,37 @@ def test_charge_limit_backend_names_are_stable(tmp_path):
 def test_lenovo_conservation_unsupported_without_file(tmp_path):
     cl = LenovoConservationMode(root=str(tmp_path))
     assert cl.supported is False
+
+
+def test_lenovo_conservation_skips_the_device_walk_without_lenovo_acpi(tmp_path, monkeypatch):
+    import battery.charge_limit as charge_limit
+
+    walked = []
+    real_glob = charge_limit.glob.glob
+    monkeypatch.setattr(
+        charge_limit.glob,
+        "glob",
+        lambda pattern, *a, **k: walked.append(pattern) or real_glob(pattern, *a, **k),
+    )
+    cl = LenovoConservationMode(root=str(tmp_path))
+    assert cl.supported is False
+    assert not any("sys/devices" in pattern for pattern in walked)
+
+
+def test_select_stops_at_the_first_supported_backend(tmp_path, monkeypatch):
+    import battery.charge_limit as charge_limit
+
+    _mk_bat(str(tmp_path), value="80")
+    _mk_conservation(str(tmp_path), value="0")
+    built = []
+    monkeypatch.setattr(
+        charge_limit.LenovoConservationMode,
+        "__init__",
+        lambda self, root="/": built.append(root) or None,
+    )
+    cl = select_charge_limit(_Generic(), root=str(tmp_path))
+    assert isinstance(cl, SysfsChargeLimit)
+    assert built == []
 
 
 def test_lenovo_conservation_found_via_acpi_flat_path(tmp_path):
