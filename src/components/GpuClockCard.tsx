@@ -25,7 +25,9 @@ export const GpuClockCard: FC = () => {
   const loIndex = levels ? nearestLevelIndex(levels, lo) : 0;
   const hiIndex = levels ? nearestLevelIndex(levels, hi) : 0;
   const shown = gpuClockPresentation(state);
-  const summary = state.manual
+  const summary = state.managed_by_power
+    ? t("gpu.clock.auto")
+    : state.manual
     ? `${shown.minimum}–${shown.maximum} MHz`
     : t("gpu.clock.auto");
 
@@ -46,19 +48,25 @@ export const GpuClockCard: FC = () => {
           onScope={onScope}
         />
       )}
-      <ToggleField
-        label={t("gpu.clock.manual")}
-        description={t("gpu.clock.manual.desc")}
-        checked={state.manual}
-        onChange={setManual}
-        bottomSeparator="none"
-      />
+      {state.managed_by_power ? (
+        <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>
+          {t("power.managedFrequency")}
+        </div>
+      ) : (
+        <ToggleField
+          label={t("gpu.clock.manual")}
+          description={t("gpu.clock.manual.desc")}
+          checked={state.manual}
+          onChange={setManual}
+          bottomSeparator="none"
+        />
+      )}
       {shown.rejected && (
         <div style={{ color: theme.color.danger, fontSize: theme.font.caption }}>
           {t("gpu.clock.rejected")}
         </div>
       )}
-      {state.manual && (
+      {state.manual && !state.managed_by_power && (
         <div style={{ marginTop: theme.space.sm }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
             <span>{t("gpu.clock.min")}</span>

@@ -1,3 +1,4 @@
+import type { LevelFrequencies, PowerUnit } from "./tdp/unit";
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
@@ -295,6 +296,9 @@ export interface LowBatteryTdpHoldState {
 
 export interface TdpState {
   supported: boolean;
+  // "level" on ARM: values are performance levels, never watts.
+  unit?: PowerUnit;
+  level_frequencies?: Record<string, LevelFrequencies> | null;
   auto_supported?: boolean;
   backend: string;
   recovery_pending?: boolean;
@@ -724,6 +728,7 @@ export interface CpuFrequencyPolicyState {
 
 export interface CpuFrequencyState {
   supported: boolean;
+  managed_by_power?: boolean;
   backend: string;
   manual: boolean;
   range_min_khz: number | null;
@@ -767,6 +772,7 @@ export const setCpuFollowGlobal = callable<[follow: boolean, appid: string | nul
 export interface EcoState {
   enabled: boolean;
   tdp_min_w: number;
+  tdp_unit?: PowerUnit;
   affects_boost: boolean;
   // Brightness % to wake back to (the pre-eco snapshot).
   wake_brightness: number;
@@ -841,6 +847,7 @@ export interface ColorState extends ColorPreset {
 
 export interface GpuClockState {
   supported: boolean;
+  managed_by_power?: boolean;
   manual: boolean;
   range_min: number | null;
   range_max: number | null;
@@ -1026,6 +1033,7 @@ export const runControllerAction =
 export interface GameProfileRow {
   appid: string;
   tdp?: {
+    unit?: PowerUnit;
     pl1: number;
     auto: boolean;
     target_fps: number;

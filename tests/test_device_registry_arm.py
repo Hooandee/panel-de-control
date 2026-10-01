@@ -99,8 +99,7 @@ def test_arm_never_reaches_x86_power_or_gpu_clock_paths(tmp_path):
         raise AssertionError("ryzenadj must not be resolved on ARM")
 
     backend = select_backend(prof, root=root, ryzenadj_resolve=no_ryzenadj)
-    assert backend.supported is False
-    assert backend.probe_trace == ()
+    assert {item["backend"] for item in backend.probe_trace} <= {"arm-frequency-levels"}
     selection = select_gpu_clock(prof, root=root)._selection
     assert {row["backend"] for row in selection} <= {"devfreq"}
 

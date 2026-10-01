@@ -819,3 +819,84 @@ def test_auto_store_rollback_never_restores_manual_without_durable_marker(
     assert persisted["gpu_handoff_pending"] is False
     assert state["status"] == "rejected"
     assert state["reason"] == "store_write_failed_rollback_failed"
+
+
+def test_arm_power_levels_own_the_gpu_clock_while_power_control_is_on(tmp_path, monkeypatch):
+    p, gpu = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.unit = "level"
+    before = gpu.get()
+
+    st = asyncio.run(p.set_gpu_clock(500, 900, "global", None, None))
+
+    assert st["managed_by_power"] is True
+    assert st["manual"] is False
+    assert gpu.get() == before
+    assert p._gpu_profiles.clock(None)["manual"] is False
+
+    asyncio.run(p.set_tdp_control_enabled(False))
+    assert p._frequency_managed_by_power() is False
+    assert asyncio.run(p.get_gpu_clock())["managed_by_power"] is False
+
+
+def test_arm_power_levels_force_the_cpu_frequency_intent_to_auto(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._cpu_profiles.set_frequency("global", 600_000, 1_800_000)
+    assert p._cpu_intent()["frequency"]["manual"] is True
+
+    p._tdp_backend.unit = "level"
+
+    assert p._cpu_intent()["frequency"] == {"manual": False, "min_khz": None, "max_khz": None}
+    assert p._cpu_intent()["boost"] is True
+
+
+def test_watt_values_saved_before_arm_levels_are_never_replayed_as_levels(tmp_path, monkeypatch):
+    from tdp_profiles import ProfileStore
+
+    stale = ProfileStore(str(tmp_path / "tdp_profiles.json"), 15)
+    stale.set_pl1("global", 3)
+    stale.set_pl1("game", 25, appid="77")
+
+    import tdp.factory as factory
+
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    real_select = factory.select_backend
+
+    def level_backend(device, **kw):
+        backend = real_select(device, **kw)
+        backend.unit = "level"
+        return backend
+
+    monkeypatch.setattr(factory, "select_backend", level_backend)
+    p._init()
+
+    assert p._settings["tdp_unit"] == "level"
+    assert p._tdp_profiles.has_game("77") is False
+    assert p._tdp_profiles.effective(None)["pl1"] != 3
+
+    p._tdp_profiles.set_pl1("global", 8)
+    restarted = type(p)()
+    restarted._init()
+    assert restarted._tdp_profiles.effective(None)["pl1"] == 8
+
+
+def test_pc_power_values_survive_restarts(tmp_path, monkeypatch):
+    from tdp_profiles import ProfileStore
+
+    saved = ProfileStore(str(tmp_path / "tdp_profiles.json"), 15)
+    saved.set_pl1("global", 12)
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    assert p._tdp_profiles.effective(None)["pl1"] == 12
+    assert p._settings["tdp_unit"] == "W"
+
+
+def test_arm_levels_can_request_the_lowest_level(tmp_path, monkeypatch):
+    from tdp.types import TdpLimits
+
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.unit = "level"
+    p._tdp_backend.get_limits = lambda: TdpLimits(1, 6, 10, 10)
+    assert p._tdp_request_min() == 1

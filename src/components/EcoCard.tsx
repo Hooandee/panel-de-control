@@ -39,7 +39,11 @@ export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => 
           bottomSeparator="none"
         />
         <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.md, marginTop: theme.space.xs }}>
-          <Effect icon={<LuZap size={12} />} label={t("system.eco.effect.tdp", { watts: state.tdp_min_w })} active={on} />
+          <Effect icon={<LuZap size={12} />} label={
+            state.tdp_unit === "level"
+              ? t("system.eco.effect.level", { level: state.tdp_min_w })
+              : t("system.eco.effect.tdp", { watts: state.tdp_min_w })
+          } active={on} />
           {brightnessSupported && (
             <Effect icon={<LuSun size={12} />} label={t("system.eco.effect.brightness")} active={on} />
           )}
