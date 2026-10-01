@@ -338,3 +338,43 @@ def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_cooler_headroom(tmp_path):
         "pl3": {"min": 5, "max": 100},
     }
     assert backend.cap_boost_to_active is True
+
+
+def _mk_dptc_with_max(root, maximum):
+    _mk_dptc(root)
+    base = os.path.join(root, "sys/class/firmware-attributes/amd-dptc/attributes")
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _write(os.path.join(base, attr, "max_value"), maximum)
+
+
+def _dptc_pl1(root):
+    path = os.path.join(
+        root, "sys/class/firmware-attributes/amd-dptc/attributes/ppt_pl1_spl/current_value")
+    with open(path) as handle:
+        return int(handle.read())
+
+
+def _apply_flat(backend, watts, ac):
+    return backend.apply_targets({"pl1": watts, "pl2": watts, "pl3": watts}, ac)
+
+
+def test_anatase_apex_dptc_reaches_the_charger_only_cooler_ceiling(tmp_path):
+    root = str(tmp_path)
+    _mk_dptc_with_max(root, 200)
+    backend = select_backend(_profile("onexplayer_apex"), root=root,
+                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
+
+    assert backend.name == "amd-dptc"
+    assert backend.get_limits().max_ac_w == 80
+    _apply_flat(backend, 120, ac=True)
+    assert _dptc_pl1(root) == 120
+
+
+def test_anatase_dptc_never_passes_the_firmware_max(tmp_path):
+    root = str(tmp_path)
+    _mk_dptc_with_max(root, 90)
+    backend = select_backend(_profile("onexplayer_apex"), root=root,
+                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
+
+    _apply_flat(backend, 120, ac=True)
+    assert _dptc_pl1(root) == 90

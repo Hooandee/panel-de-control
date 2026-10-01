@@ -907,6 +907,10 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "oxpec_module_available": False,
             "dump": None,
         },
+        "connected_devices": {
+            "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
+            "bluetooth_adapters": [],
+        },
     }
 
 

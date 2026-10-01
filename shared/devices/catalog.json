@@ -285,12 +285,12 @@
       "experimental": true,
       "key": "onexplayer_apex",
       "limits": {
-        "charger_only_extra": false,
-        "cooler_max": null,
+        "charger_only_extra": true,
+        "cooler_max": 120,
         "experimental_tdp_max_ac": null,
         "tdp_default": 20,
-        "tdp_max": 45,
-        "tdp_max_charger": 54,
+        "tdp_max": 55,
+        "tdp_max_charger": 80,
         "tdp_min": 5,
         "tdp_presets": []
       },

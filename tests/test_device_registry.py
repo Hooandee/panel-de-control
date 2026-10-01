@@ -65,6 +65,11 @@ def test_onexplayer_apex_is_recognised_experimental():
     assert prof.is_generic is False
     assert prof.experimental is True
     assert prof.vendor == "amd"
+    assert (prof.tdp_min, prof.tdp_default, prof.tdp_max,
+            prof.tdp_max_charger) == (5, 20, 55, 80)
+    assert prof.charger_only_extra is True
+    assert prof.cooler_max == 120
+    assert prof.cooler_charger_only is True
 
 
 def test_onexplayer_apex_matches_case_insensitively():

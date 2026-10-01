@@ -1938,6 +1938,17 @@ def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
     assert [item["candidate"] for item in backend.probe_trace] == ["alib"]
 
 
+def test_onexplayer_apex_alib_reaches_cooler_ceiling_only_on_charger(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    backend = select_backend(_p("onexplayer_apex"), root=root,
+                             ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+
+    assert backend.name == "acpi-alib"
+    assert backend._write_limits.max_ac_w == 120
+    assert backend._write_limits.max_w == 55
+
+
 def test_onexplayer_apex_falls_back_to_ryzenadj_without_alib(tmp_path):
     backend = select_backend(
         _p("onexplayer_apex"),
