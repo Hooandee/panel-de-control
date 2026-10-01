@@ -681,6 +681,7 @@ export const de: Record<string, string> = {
   "mandos.paddles.disabled": "Deaktiviert",
   "mandos.remap.uncalibrated": "Die Controller-Tasten dieses Modells werden derzeit nicht neu belegt. Die Neubelegung je Spiel erfolgt in Steam Input.",
   "mandos.remap.nobuttons": "Derzeit wurden keine neu belegbaren Tasten erkannt. Wenn du gerade neu gestartet hast, warte einige Sekunden.",
+  "mandos.remap.noextra": "Dieses Modell hat keine zusätzlichen Tasten zum Neubelegen. Layouts pro Spiel werden in Steam Input festgelegt.",
   "display.oled.title": "OLED-Look",
   "display.oled.desc": "Lässt die Farben deines Bildschirms lebendiger und tiefer wirken, ähnlich wie bei einem OLED-Display. Das Display selbst wird nicht verändert, nur die Farbdarstellung.",
   "display.oled.apply": "Anwenden",
