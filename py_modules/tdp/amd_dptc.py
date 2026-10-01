@@ -17,8 +17,6 @@ class AmdDptcBackend(FirmwareAttrBackend):
         safety_lock_path=None,
         ownership_lock_path=None,
     ):
-        self._cooler_max = write_max
-        self._charger_max = write_max_ac
         self._write_max = max(fallback.max_ac_w, write_max or 0, write_max_ac or 0)
         super().__init__(
             "amd-dptc",
@@ -47,13 +45,6 @@ class AmdDptcBackend(FirmwareAttrBackend):
             if name and name.startswith(self._profile_name):
                 return candidate
         return None
-
-    def set_tdp(self, watts, ac):
-        if not self.supported:
-            return super().set_tdp(watts, ac)
-        lim = self.get_limits().with_cooler(self._cooler_max).with_ac_max(self._charger_max)
-        target = lim.clamp(watts, ac)
-        return self.set_levels(target, target, target, ac)
 
     def _profile_rail_max(self, attr):
         if attr == "ppt_pl2_sppt":

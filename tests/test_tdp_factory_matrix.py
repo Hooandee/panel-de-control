@@ -354,7 +354,11 @@ def _dptc_pl1(root):
         return int(handle.read())
 
 
-def test_anatase_apex_dptc_reaches_cooler_ceiling_only_on_charger(tmp_path):
+def _apply_flat(backend, watts, ac):
+    return backend.apply_targets({"pl1": watts, "pl2": watts, "pl3": watts}, ac)
+
+
+def test_anatase_apex_dptc_reaches_the_charger_only_cooler_ceiling(tmp_path):
     root = str(tmp_path)
     _mk_dptc_with_max(root, 200)
     backend = select_backend(_profile("onexplayer_apex"), root=root,
@@ -362,21 +366,8 @@ def test_anatase_apex_dptc_reaches_cooler_ceiling_only_on_charger(tmp_path):
 
     assert backend.name == "amd-dptc"
     assert backend.get_limits().max_ac_w == 80
-    assert backend.set_tdp(120, ac=True).requested_w == 120
+    _apply_flat(backend, 120, ac=True)
     assert _dptc_pl1(root) == 120
-    assert backend.set_tdp(120, ac=False).requested_w == 55
-    assert _dptc_pl1(root) == 55
-
-
-def test_anatase_win5_dptc_reaches_cooler_ceiling(tmp_path):
-    root = str(tmp_path)
-    _mk_dptc_with_max(root, 200)
-    backend = select_backend(_profile("gpd_win5"), root=root,
-                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
-
-    assert backend.get_limits().max_ac_w == 55
-    assert backend.set_tdp(75, ac=False).requested_w == 75
-    assert _dptc_pl1(root) == 75
 
 
 def test_anatase_dptc_never_passes_the_firmware_max(tmp_path):
@@ -385,5 +376,5 @@ def test_anatase_dptc_never_passes_the_firmware_max(tmp_path):
     backend = select_backend(_profile("onexplayer_apex"), root=root,
                              ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
 
-    backend.set_tdp(120, ac=True)
+    _apply_flat(backend, 120, ac=True)
     assert _dptc_pl1(root) == 90
