@@ -131,12 +131,15 @@ class LenovoConservationMode(ChargeLimitBackend):
         # NEVER recursive-glob /sys/devices — it walks the entire (huge) device
         # tree and blocks _init, hanging the UI on its spinner. Probe the stable
         # flat ACPI/platform symlinks first, then a bounded-depth fallback.
+        # The bounded walk alone took 16 s on a ROG Ally, so it only runs when the
+        # Lenovo ACPI device that owns conservation_mode exists at all.
         patterns = [
             "sys/bus/acpi/devices/VPC2004:*/conservation_mode",
             "sys/bus/platform/devices/VPC2004:*/conservation_mode",
         ]
-        for depth in range(2, 7):
-            patterns.append(os.path.join("sys/devices", *(["*"] * depth), "conservation_mode"))
+        if glob.glob(os.path.join(root, "sys/bus/acpi/devices/VPC2004:*")):
+            for depth in range(2, 7):
+                patterns.append(os.path.join("sys/devices", *(["*"] * depth), "conservation_mode"))
         for pat in patterns:
             matches = glob.glob(os.path.join(root, pat))
             if matches:
@@ -167,19 +170,19 @@ def select_charge_limit(device, root="/"):
     if key == "steam_machine":
         return NullChargeLimit()
     if key.startswith("steam_deck"):
-        candidates = [SteamDeckChargeLimit(root), SysfsChargeLimit(root)]
+        candidates = [SteamDeckChargeLimit, SysfsChargeLimit]
     elif key == "zotac_gaming_zone":
         # No upstream Zotac charge-limit ABI exists yet. Adopt only the standard
         # power-supply percentage contract if the running kernel exposes it; never
         # mistake an accessory Deck hwmon or unrelated Lenovo ACPI node for support.
-        candidates = [SysfsChargeLimit(root)]
+        candidates = [SysfsChargeLimit]
     elif key.startswith("legion"):
-        candidates = [SysfsChargeLimit(root), LenovoConservationMode(root)]
+        candidates = [SysfsChargeLimit, LenovoConservationMode]
     else:
         # Unrecognised / other: probe every known interface, standard threshold first.
-        candidates = [SysfsChargeLimit(root), SteamDeckChargeLimit(root),
-                      LenovoConservationMode(root)]
-    for backend in candidates:
+        candidates = [SysfsChargeLimit, SteamDeckChargeLimit, LenovoConservationMode]
+    for candidate in candidates:
+        backend = candidate(root)
         if backend.supported:
             return backend
     return NullChargeLimit()
