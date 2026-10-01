@@ -7,47 +7,74 @@ from tdp.types import TdpLimits, TdpResult
 
 _CPUFREQ = "sys/devices/system/cpu/cpufreq"
 _DEVFREQ = "sys/class/devfreq"
+_COOLING = "sys/class/thermal"
 _LEVELS = 10
 _FLOOR = 0.4
 
 
-def _table(path, *names):
-    values = set()
-    for name in names:
-        text = read_str(os.path.join(path, name)) or ""
-        values.update(int(item) for item in text.split() if item.isdigit())
-    return tuple(sorted(values))
+def _values(path, name):
+    text = read_str(os.path.join(path, name)) or ""
+    return {int(item) for item in text.split() if item.isdigit()}
 
 
 def _snap_down(table, target):
     return max((value for value in table if value <= target), default=table[0])
 
 
+def _cooling_states(root):
+    states = {}
+    for device in glob.glob(os.path.join(root, _COOLING, "cooling_device*")):
+        kind = read_str(os.path.join(device, "type"))
+        state = read_int(os.path.join(device, "cur_state"))
+        if kind and state is not None:
+            states[kind] = state
+    return states
+
+
 class _Domain:
-    def __init__(self, path, table, max_node, min_node, cpu):
+    def __init__(self, root, path, cpu):
+        self.root = root
         self.path = path
         self.cpu = cpu
-        self.table = table
-        self.max_node = os.path.join(path, max_node)
-        self.min_node = os.path.join(path, min_node)
+        if cpu:
+            self.max_node = os.path.join(path, "scaling_max_freq")
+            self.min_node = os.path.join(path, "scaling_min_freq")
+            self._base = _values(path, "scaling_available_frequencies")
+            self._boost = _values(path, "scaling_boost_frequencies")
+            first_cpu = (read_str(os.path.join(path, "related_cpus")) or "").split()
+            self.cooling = f"cpufreq-cpu{first_cpu[0]}" if first_cpu else None
+        else:
+            self.max_node = os.path.join(path, "max_freq")
+            self.min_node = os.path.join(path, "min_freq")
+            self._base = _values(path, "available_frequencies")
+            self._boost = set()
+            self.cooling = f"devfreq-{os.path.basename(path)}"
+
+    def table(self):
+        boost_on = read_str(os.path.join(self.root, _CPUFREQ, "boost")) != "0"
+        values = self._base | (self._boost if boost_on else set())
+        return tuple(sorted(values))
 
     def ceiling(self, level):
+        table = self.table()
         fraction = _FLOOR + (1 - _FLOOR) * (level - 1) / (_LEVELS - 1)
-        return _snap_down(self.table, int(self.table[-1] * fraction))
+        return _snap_down(table, int(table[-1] * fraction))
 
-    def read(self):
-        return read_int(self.max_node), read_int(self.min_node)
+    def holds(self, ceiling, cooling_states):
+        observed = read_int(self.max_node)
+        if observed == ceiling:
+            return True
+        # Thermal cooling lowers the effective limit below what was written.
+        throttled = cooling_states.get(self.cooling, 0) > 0
+        return throttled and observed is not None and observed <= ceiling
 
-    def write(self, ceiling, floor=None):
+    def write(self, ceiling):
         current_min = read_int(self.min_node)
         if current_min is None:
             return False
-        floor = min(current_min, ceiling) if floor is None else floor
-        if floor < current_min and not write_str(self.min_node, floor):
+        if current_min > ceiling and not write_str(self.min_node, self.table()[0]):
             return False
-        if not write_str(self.max_node, ceiling):
-            return False
-        return floor == current_min or write_str(self.min_node, floor)
+        return write_str(self.max_node, ceiling)
 
 
 class ArmPerformanceLevels(TDPBackend):
@@ -59,19 +86,20 @@ class ArmPerformanceLevels(TDPBackend):
     auto_tdp_supported = False
     guard_interval_s = 3.0
 
-    def __init__(self, root="/"):
+    def __init__(self, root="/", on_release=None):
+        self._root = root
+        self._on_release = on_release
         self._domains = []
         for path in sorted(glob.glob(os.path.join(root, _CPUFREQ, "policy[0-9]*")),
                            key=lambda p: int(os.path.basename(p)[6:])):
-            table = _table(path, "scaling_available_frequencies", "scaling_boost_frequencies")
-            if table:
-                self._domains.append(_Domain(path, table, "scaling_max_freq", "scaling_min_freq", True))
+            domain = _Domain(root, path, cpu=True)
+            if domain.table():
+                self._domains.append(domain)
         for path in sorted(glob.glob(os.path.join(root, _DEVFREQ, "*.gpu"))):
-            table = _table(path, "available_frequencies")
-            if table:
-                self._domains.append(_Domain(path, table, "max_freq", "min_freq", False))
+            domain = _Domain(root, path, cpu=False)
+            if domain.table():
+                self._domains.append(domain)
                 break
-        self._baseline = None
 
     @property
     def supported(self):
@@ -99,10 +127,16 @@ class ArmPerformanceLevels(TDPBackend):
             }
         return table
 
+    def _holds(self, level, cooling_states):
+        return all(
+            domain.holds(ceiling, cooling_states)
+            for domain, ceiling in zip(self._domains, self.ceilings(level))
+        )
+
     def read_applied(self):
-        observed = [domain.read()[0] for domain in self._domains]
+        cooling_states = _cooling_states(self._root)
         for level in range(_LEVELS, 0, -1):
-            if observed == self.ceilings(level):
+            if self._holds(level, cooling_states):
                 return level
         return None
 
@@ -110,25 +144,20 @@ class ArmPerformanceLevels(TDPBackend):
         level = max(1, min(_LEVELS, int(watts)))
         if not self.supported:
             return TdpResult(level, None, False, "arm levels unsupported")
-        if self._baseline is None:
-            self._baseline = [domain.read() for domain in self._domains]
         for domain, ceiling in zip(self._domains, self.ceilings(level)):
             if not domain.write(ceiling):
                 return TdpResult(level, self.read_applied(), False, "write failed",
                                  failure_kind="write")
-        applied = self.read_applied()
-        if applied != level:
-            return TdpResult(level, applied, False, "readback mismatch",
+        if not self._holds(level, _cooling_states(self._root)):
+            return TdpResult(level, self.read_applied(), False, "readback mismatch",
                              failure_kind="readback")
-        return TdpResult(level, applied, True, "")
+        return TdpResult(level, level, True, "")
 
     def release(self):
-        if self._baseline is None:
-            return True
-        ok = all(
-            maximum is not None and minimum is not None and domain.write(maximum, minimum)
-            for domain, (maximum, minimum) in zip(self._domains, self._baseline)
-        )
-        if ok:
-            self._baseline = None
+        ok = all(domain.write(domain.table()[-1]) for domain in self._domains)
+        if self._on_release is not None:
+            try:
+                self._on_release()
+            except Exception:  # noqa: BLE001
+                pass
         return ok

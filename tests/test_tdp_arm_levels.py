@@ -22,6 +22,7 @@ def _read(root, rel):
 
 def _policy(root, number, table, boost="", current_max=None):
     base = f"sys/devices/system/cpu/cpufreq/policy{number}"
+    _write(root, f"{base}/related_cpus", f"{number}\n")
     values = [int(v) for v in table.split()] + [int(v) for v in boost.split()]
     _write(root, f"{base}/scaling_available_frequencies", table)
     _write(root, f"{base}/scaling_boost_frequencies", boost)
@@ -89,13 +90,49 @@ def test_external_ceilings_read_as_no_level(tmp_path):
     assert backend.read_applied() is None
 
 
-def test_release_restores_the_ceilings_found_before_control(tmp_path):
+def test_release_lifts_every_ceiling_and_lets_the_system_reapply(tmp_path):
+    root = _thor(tmp_path)
+    reloads = []
+    backend = ArmPerformanceLevels(root=root, on_release=lambda: reloads.append(True))
+    backend.set_tdp(3, ac=False)
+    assert backend.release() is True
+    assert _caps(root) == (2016000, 2803200, 3187200, 680000000)
+    assert reloads == [True]
+
+
+def test_release_after_a_restart_needs_no_memory_of_the_start(tmp_path):
+    root = _thor(tmp_path)
+    ArmPerformanceLevels(root=root).set_tdp(3, ac=False)
+    assert ArmPerformanceLevels(root=root).release() is True
+    assert _caps(root) == (2016000, 2803200, 3187200, 680000000)
+
+
+def _cooling(root, index, kind, state):
+    base = f"sys/class/thermal/cooling_device{index}"
+    _write(root, f"{base}/type", kind)
+    _write(root, f"{base}/cur_state", state)
+
+
+def test_thermal_throttling_below_the_level_still_reads_as_that_level(tmp_path):
     root = _thor(tmp_path)
     backend = ArmPerformanceLevels(root=root)
-    backend.set_tdp(3, ac=False)
-    backend.set_tdp(8, ac=False)
-    assert backend.release() is True
-    assert _caps(root) == (1555200, 2054400, 2092800, 680000000)
+    backend.set_tdp(10, ac=False)
+    _write(root, "sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq", 2476800)
+    _cooling(root, 2, "cpufreq-cpu7", 0)
+    assert backend.read_applied() is None
+    _cooling(root, 2, "cpufreq-cpu7", 4)
+    assert backend.read_applied() == 10
+
+
+def test_level_ten_follows_the_boost_switch(tmp_path):
+    root = _thor(tmp_path)
+    _write(root, "sys/devices/system/cpu/cpufreq/boost", "0")
+    backend = ArmPerformanceLevels(root=root)
+    assert backend.set_tdp(10, ac=False).ok is True
+    assert _caps(root)[2] == 2956800
+    _write(root, "sys/devices/system/cpu/cpufreq/boost", "1")
+    assert backend.set_tdp(10, ac=False).ok is True
+    assert _caps(root)[2] == 3187200
 
 
 def test_minimum_frequency_never_stays_above_the_new_ceiling(tmp_path):

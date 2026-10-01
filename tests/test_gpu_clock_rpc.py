@@ -900,3 +900,30 @@ def test_arm_levels_can_request_the_lowest_level(tmp_path, monkeypatch):
     p._tdp_backend.unit = "level"
     p._tdp_backend.get_limits = lambda: TdpLimits(1, 6, 10, 10)
     assert p._tdp_request_min() == 1
+
+
+def test_turning_power_off_lifts_level_ceilings_before_cpu_and_gpu_reapply(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.unit = "level"
+    order = []
+    monkeypatch.setattr(p, "_restore_power_handoff", lambda: order.append("release") or True)
+    monkeypatch.setattr(p, "_reapply_all", lambda: order.append("reapply"))
+
+    asyncio.run(p.set_ui_module("power", True))
+
+    assert order[:2] == ["release", "reapply"]
+    assert order.count("release") == 1
+
+
+def test_turning_power_control_off_reapplies_manual_cpu_and_gpu_on_arm(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.unit = "level"
+    calls = []
+    monkeypatch.setattr(p, "_apply_cpu", lambda: calls.append("cpu"))
+    monkeypatch.setattr(p, "_apply_gpu_clock", lambda: calls.append("gpu"))
+
+    asyncio.run(p.set_tdp_control_enabled(False))
+
+    assert calls == ["cpu", "gpu"]

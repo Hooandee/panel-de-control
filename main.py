@@ -1208,6 +1208,11 @@ class Plugin:
                 await self._apply_charge_limit_intent(charge_generation)
             self._sync_sampler()
             return {"disabled": self._user_disabled_all()}
+        early_release = None
+        if module_id == "power" and disabled and self._power_uses_levels():
+            # The level's ceilings must be gone before the CPU window and GPU clock
+            # re-apply on the same nodes, or they would adopt them as their baseline.
+            early_release = bool(await self._offload_call(self._restore_power_handoff))
         self._reapply_all()
         if module_id == "system" and disabled:
             self._publish_charge_limit_handoff(self._charge_limit_generation)
@@ -1216,8 +1221,10 @@ class Plugin:
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "power" and disabled:
-            released = bool(
-                await self._offload_call(self._restore_power_handoff)
+            released = (
+                early_release
+                if early_release is not None
+                else bool(await self._offload_call(self._restore_power_handoff))
             )
             if hasattr(self, "_tdp_backend"):
                 self._remember_tdp_observation(
@@ -3124,6 +3131,9 @@ class Plugin:
             released = bool(
                 await self._offload_call(self._restore_power_handoff)
             )
+            if self._power_uses_levels():
+                self._apply_cpu()
+                self._apply_gpu_clock()
             self._remember_tdp_observation(
                 await self._offload_call(self._observe_tdp_sync)
             )
@@ -3145,6 +3155,9 @@ class Plugin:
                 if not retired.get("ok"):
                     return False
             else:
+                if self._power_uses_levels():
+                    self._apply_cpu()
+                    self._apply_gpu_clock()
                 await self._apply_tdp_now("control-enabled")
         return enabled
 
@@ -5591,6 +5604,9 @@ class Plugin:
             decky.logger.info("Power values reset for unit change to %s", unit)
         except Exception as exc:  # noqa: BLE001
             decky.logger.warning("Power value reset failed: %s", type(exc).__name__)
+
+    def _power_uses_levels(self) -> bool:
+        return getattr(getattr(self, "_tdp_backend", None), "unit", None) == "level"
 
     def _frequency_managed_by_power(self) -> bool:
         """On ARM the performance level owns the same cpufreq/devfreq ceilings that the
@@ -11017,6 +11033,7 @@ class Plugin:
             },)
         self._desktop_power.replace_cpu_backend(replacement)
         self._tdp_backend = replacement
+        self._reset_power_values_on_unit_change()
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(replacement, "readback", True)),
         )

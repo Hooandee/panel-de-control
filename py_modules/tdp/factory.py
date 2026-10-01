@@ -1,5 +1,7 @@
 import os
 
+import armada_os
+
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025_tdp_recovery,
@@ -179,7 +181,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         )
 
     def arm_levels():
-        return ArmPerformanceLevels(root=root)
+        on_release = armada_os.reload_powerd if armada_os.powerd_present(root) else None
+        return ArmPerformanceLevels(root=root, on_release=on_release)
 
     def alib():
         return AlibBackend(fallback, root=root,
