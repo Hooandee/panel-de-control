@@ -102,18 +102,22 @@ class Journal:
         thread.join(timeout)
         self._thread = None
 
-    def write(self, level: str, source: str, message: str, *, at: float | None = None, **fields: Any) -> None:
-        record = {
-            "t": round(self._clock() if at is None else at, 3),
-            "l": _LEVELS.get(level, level[:1] or "I"),
-            "s": source,
-            "m": message if len(message) <= _MAX_MESSAGE else message[:_MAX_MESSAGE] + "…",
-        }
-        record.update(fields)
+    def write(self, level: str, source: str, message: str, /, *, at: float | None = None, **fields: Any) -> None:
+        """Never raises and never waits: a diary problem must not break what is
+        being recorded."""
         try:
+            record = {
+                "t": round(self._clock() if at is None else at, 3),
+                "l": _LEVELS.get(level, level[:1] or "I"),
+                "s": source,
+                "m": message if len(message) <= _MAX_MESSAGE else message[:_MAX_MESSAGE] + "…",
+            }
+            record.update({key: value for key, value in fields.items() if key not in record})
             self._queue.put_nowait(record)
         except queue.Full:
             self.dropped += 1
+        except Exception:  # noqa: BLE001
+            self.write_failures += 1
 
     def files(self) -> list[str]:
         try:
@@ -683,6 +687,12 @@ def _summary(value: Any) -> str:
     return text if len(text) <= _MAX_ARGS else text[:_MAX_ARGS] + "…"
 
 
+def _where(error: BaseException) -> str:
+    """The last two frames of an error, as file:line function."""
+    frames = traceback.extract_tb(error.__traceback__)[-2:]
+    return " < ".join(f"{os.path.basename(frame.filename)}:{frame.lineno} {frame.name}" for frame in reversed(frames))
+
+
 def _outcome(result: Any) -> dict | None:
     if isinstance(result, dict) and result.get("ok") is False:
         detail = result.get("error") or result.get("detail") or result.get("reason")
@@ -718,7 +728,7 @@ def _traced(name: str, function: Callable, hide_arguments: bool) -> Callable:
         try:
             result = await function(self, *args, **kwargs)
         except Exception as error:
-            journal.write("ERROR", "rpc", name, a=arguments, r={"raised": type(error).__name__})
+            journal.write("ERROR", "rpc", name, a=arguments, r={"raised": type(error).__name__, "where": _where(error), "message": str(error)[:160]})
             raise
         finally:
             _inside_call.reset(token)

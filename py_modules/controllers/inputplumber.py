@@ -6,6 +6,7 @@ Legion, Claw, Ally each expose a different set), and an override is applied by
 merging it into the device's current profile (preserving defaults) and loading it.
 Global (IP profiles are global) — per-game remap is Steam Input's job.
 """
+import journal
 from controllers import ip_profile
 from controllers.ip_merge import merge_profile
 
@@ -68,8 +69,11 @@ def set_button(store, dbus, device_key, source: str, targets: list,
     caps = dbus.capabilities()  # read once — reused for the guard and the returned config
     valid = {cap for (cap, _label) in ip_profile.buttons_for(device_key, caps)}
     if source not in valid:
+        _journal_remap_refused("source_not_remappable", source, targets, None)
         return get_config(store, dbus, device_key, appid, caps)
     clean = ip_profile.sanitize_targets(targets)
+    if len(clean) != len(targets if isinstance(targets, (list, tuple)) else []):
+        _journal_remap_refused("targets_dropped", source, targets, clean)
     prospective = store.overrides_for(scope, appid)
     if clean:
         prospective[source] = clean
@@ -79,7 +83,17 @@ def set_button(store, dbus, device_key, source: str, targets: list,
     if applied:
         store.replace(scope, appid, prospective)
         return get_config(store, dbus, device_key, appid, caps)
+    _journal_remap_refused("daemon_rejected", source, targets, clean)
     return get_config(store, dbus, device_key, appid)
+
+
+def _journal_remap_refused(reason, source, requested, kept) -> None:
+    """A remap Panel did not apply as asked, and why: the reply to the frontend is
+    just the unchanged config."""
+    diary = journal.active
+    if diary is not None:
+        diary.write("WARNING", "controller", "remap_refused", reason=reason, source=source,
+                    requested=requested, kept=kept)
 
 
 def apply_effective(store, dbus, appid, merge=merge_profile) -> bool:

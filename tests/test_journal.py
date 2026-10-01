@@ -248,7 +248,7 @@ def test_traced_calls_record_arguments_and_failures(tmp_path):
         ("set_value", "[-1]", {"ok": False, "error": '"negative"'}),
         ("submit_report", None, None),
         ("apply_all", "[]", None),
-        ("explode", "[]", {"raised": "RuntimeError"}),
+        ("explode", "[]", records[-1]["r"]),
     ]
     assert "private words" not in json.dumps(records)
 
@@ -357,3 +357,34 @@ def test_merged_sections_lays_changes_over_the_days_snapshot(tmp_path):
     merged = merged_sections(str(tmp_path))
     assert merged["sections"] == {"hud": {"layout": "horizontal"}, "fans": {"preset": "auto"}}
     assert merged["t"] == now - 20
+
+
+def test_fields_named_like_the_record_never_break_a_write(tmp_path):
+    j = Journal(str(tmp_path))
+    j.start()
+    j.write("WARNING", "controller", "remap_refused", source="LeftPaddle1", m="ignored", t="x")
+    j.stop()
+    record = _lines(str(tmp_path))[0]
+    assert (record["s"], record["m"], record["source"]) == ("controller", "remap_refused", "LeftPaddle1")
+    assert j.write_failures == 0
+
+
+def test_a_raising_call_records_where_it_failed(tmp_path):
+    class Plugin:
+        async def explode(self):
+            raise RuntimeError("no watts")
+
+    trace_calls(Plugin)
+    j = Journal(str(tmp_path))
+    j.start()
+    journal.active = j
+    try:
+        asyncio.run(Plugin().explode())
+    except RuntimeError:
+        pass
+    finally:
+        journal.active = None
+        j.stop()
+    failure = _lines(str(tmp_path))[0]["r"]
+    assert failure["raised"] == "RuntimeError" and failure["message"] == "no watts"
+    assert "test_journal.py" in failure["where"] and "explode" in failure["where"]
