@@ -11628,7 +11628,18 @@ class Plugin:
         if active:
             sync_state = getattr(self._audio, "sync_state", None)
             active = not callable(sync_state) or sync_state() is True
-        return {"route": self._current_route(), "active": active}
+        volume = None
+        if active and journal.active is not None:
+            eq_volume = getattr(self._audio, "eq_volume", None)
+            volume = eq_volume() if callable(eq_volume) else None
+        return {"route": self._current_route(), "active": active, "volume": volume}
+
+    def _journal_audio_volume(self, volume) -> None:
+        diary = journal.active
+        previous = getattr(self, "_audio_volume_seen", None)
+        self._audio_volume_seen = volume
+        if diary is not None and volume is not None and previous is not None and volume != previous:
+            diary.write("INFO", "audio", "volume_seen", sink="eq", before=previous, after=volume)
 
     async def _audio_loop(self) -> None:
         """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
@@ -11655,6 +11666,7 @@ class Plugin:
                 if failures and now < self._audio_watch_resume_at:
                     continue
                 probe = await self._offload_call(self._audio_check)
+                self._journal_audio_volume(probe.get("volume"))
                 if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._log_audio_transition(
                         "watch", route=probe["route"], previous=self._audio_route_last,
@@ -11667,8 +11679,8 @@ class Plugin:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as error:  # noqa: BLE001
+                decky.logger.warning("Audio watch failed: %s: %s", type(error).__name__, error)
 
     def _restore_audio_safe(self) -> None:
         """Remove the EQ sink and restore the previous default output so a
