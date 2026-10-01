@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { gpuClockPresentation } from "./logic";
+import { gpuClockPresentation, nearestLevelIndex } from "./logic";
 
 describe("gpuClockPresentation", () => {
   it("uses confirmed readback instead of configured values after rejection", () => {
@@ -31,5 +31,15 @@ describe("gpuClockPresentation", () => {
     });
 
     expect(shown).toEqual({ minimum: 1_200, maximum: 2_400, rejected: false });
+  });
+});
+
+describe("nearestLevelIndex", () => {
+  const levels = [220, 295, 348, 401, 475, 550, 615, 680];
+  it("maps a stored MHz value onto the closest real level", () => {
+    expect(nearestLevelIndex(levels, 220)).toBe(0);
+    expect(nearestLevelIndex(levels, 520)).toBe(5);
+    expect(nearestLevelIndex(levels, 680)).toBe(7);
+    expect(nearestLevelIndex(levels, 9999)).toBe(7);
   });
 });

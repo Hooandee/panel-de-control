@@ -9289,6 +9289,9 @@ class Plugin:
             "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
+            "levels": (
+                self._gpu_clock.levels() if callable(getattr(self._gpu_clock, "levels", None)) else None
+            ),
             # Stored per-scope window when set; else the live/full range for the sliders.
             "min": gmin if gmin is not None else (applied_min if cur else (rng[0] if rng else None)),
             "max": gmax if gmax is not None else (applied_max if cur else (rng[1] if rng else None)),
