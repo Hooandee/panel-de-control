@@ -772,6 +772,7 @@ export const ptBR: Record<string, string> = {
   "fans.curve.governed": "A ventoinha está no modo \"{mode}\"; ajuste-a usando o modo de desempenho na aba Potência, e não manualmente aqui.",
   "fans.curve.custom_mode": "No modo personalizado, o Painel de Controle não pode controlar a ventoinha. Tudo bem: o firmware continua cuidando dela. Para influenciar a ventoinha, escolha um modo de TDP (Silencioso, Equilibrado ou Desempenho) na aba Potência.",
   "fans.curve.kernel_pending": "Nenhum driver de ventoinha está disponível para este modelo no kernel atual do SteamOS. Enquanto isso, você pode ativar abaixo o controle experimental.",
+  "fans.armadaHandoff": "O Armada OS controla a ventoinha. Ao escolher uma curva, o Panel de Control assume, e Auto devolve ao Armada.",
   "fans.board.title": "Ventoinhas da placa-mãe",
   "fans.board.toggle": "Controlar ventoinhas da placa-mãe",
   "fans.board.note": "Carrega o driver de sensores da placa-mãe, se o sistema o incluir, para as ventoinhas seguirem a curva. Pode ser desativado a qualquer momento.",

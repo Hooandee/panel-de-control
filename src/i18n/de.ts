@@ -772,6 +772,7 @@ export const de: Record<string, string> = {
   "fans.curve.governed": "Der Lüfter befindet sich im Modus {mode}. Er wird über den Leistungsmodus im Bereich Leistung gesteuert, nicht hier manuell.",
   "fans.curve.custom_mode": "Im benutzerdefinierten Modus kann das Kontrollzentrum den Lüfter nicht steuern. Die Firmware übernimmt weiterhin sicher. Wähle im Tab Leistung einen TDP-Modus wie Leise, Ausgewogen oder Leistung, um den Lüfter zu beeinflussen.",
   "fans.curve.kernel_pending": "Für dieses Modell ist im aktuellen SteamOS-Kernel kein Lüftertreiber verfügbar. Bis dahin kannst du weiter unten die experimentelle Steuerung aktivieren.",
+  "fans.armadaHandoff": "Armada OS steuert den Lüfter. Mit einer Kurve übernimmt Panel de Control, Auto gibt ihn an Armada zurück.",
   "fans.board.title": "Mainboard-Lüfter",
   "fans.board.toggle": "Mainboard-Lüfter steuern",
   "fans.board.note": "Lädt den Sensortreiber des Mainboards, falls das System ihn mitbringt, damit die Lüfter der Kurve folgen. Lässt sich jederzeit wieder ausschalten.",

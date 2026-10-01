@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fanCurveNotice } from "./notice";
+import { fanCurveNotice, fanHandoffNotice } from "./notice";
 import type { FanCurveState } from "../api";
 
 // Echo translator: returns "key" or "key|param=value" so assertions stay simple.
@@ -30,5 +30,13 @@ describe("fanCurveNotice", () => {
     // Even with an OS name present, the kernel-pending note wins — it's the actionable one.
     expect(fanCurveNotice({ ...base, kernel_pending: true, os_name: "SteamOS" }, t))
       .toBe("fans.curve.kernel_pending");
+  });
+});
+
+describe("fanHandoffNotice", () => {
+  const t = (key: string) => key;
+  it("explains the Armada handoff only on that backend", () => {
+    expect(fanHandoffNotice({ source: "armada-pwm" } as never, t)).toBe("fans.armadaHandoff");
+    expect(fanHandoffNotice({ source: "generic-pwm" } as never, t)).toBeNull();
   });
 });
