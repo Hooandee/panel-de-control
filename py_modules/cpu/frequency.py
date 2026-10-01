@@ -40,6 +40,7 @@ class Policy:
     affected_cpus: tuple[int, ...]
     hardware_min_khz: int
     hardware_max_khz: int
+    available_khz: tuple[int, ...] = ()
 
     @property
     def scaling_min_path(self):
@@ -366,7 +367,14 @@ class LinuxCpuFrequency:
     def _target_for(policy, requested):
         minimum = min(max(requested[0], policy.hardware_min_khz), policy.hardware_max_khz)
         maximum = min(max(requested[1], policy.hardware_min_khz), policy.hardware_max_khz)
-        return minimum, maximum
+        table = policy.available_khz
+        if not table:
+            return minimum, maximum
+        # Table-driven drivers (qcom-cpufreq-hw, acpi-cpufreq) store the nearest
+        # table entry, so an off-table target would never read back as written.
+        maximum = max((value for value in table if value <= maximum), default=table[0])
+        minimum = min((value for value in table if value >= minimum), default=table[-1])
+        return min(minimum, maximum), maximum
 
     @staticmethod
     def _ordered_writes(policy, current, target):
@@ -851,6 +859,12 @@ class LinuxCpuFrequency:
         }
 
 
+def _read_frequency_table(path):
+    text = read_str(os.path.join(path, "scaling_available_frequencies")) or ""
+    values = sorted({int(item) for item in text.split() if item.isdigit()})
+    return tuple(values)
+
+
 def _discover_policies(root):
     base = os.path.join(root, _CPUFREQ)
     candidates = []
@@ -900,6 +914,7 @@ def _discover_policies(root):
             affected_cpus=_parse_cpu_list(affected_text),
             hardware_min_khz=values["hardware_min"],
             hardware_max_khz=values["hardware_max"],
+            available_khz=_read_frequency_table(path),
         ))
     if not policies:
         return None, "no_policies"

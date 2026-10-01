@@ -1305,3 +1305,40 @@ def test_mixed_drivers_keep_intel_maximum_identity_strict(tmp_path):
     assert result.reason == "policy_identity_changed"
     failure = control.diagnostics()["last_failure"]["policies"][1]
     assert failure["identity_changed_fields"] == ["hardware_max_khz"]
+
+
+def _read_khz(root, rel):
+    with open(os.path.join(root, rel)) as handle:
+        return int(handle.read())
+
+
+def test_table_driven_policies_get_targets_snapped_to_real_frequencies(tmp_path):
+    root = str(tmp_path)
+    little = _policy(root, 0, hw_min=307_200, hw_max=2_016_000, driver="qcom-cpufreq-hw", cpus="0-2")
+    _write(root, f"{little}/scaling_available_frequencies",
+           "307200 1459200 1555200 1785600 2016000 ")
+    big = _policy(root, 3, hw_min=499_200, hw_max=2_803_200, driver="qcom-cpufreq-hw", cpus="3-6")
+    _write(root, f"{big}/scaling_available_frequencies",
+           "499200 691200 1689600 1920000 2054400 2803200")
+
+    control = select_cpu_frequency(root=root)
+    result = control.set_window(600_000, 1_804_800)
+
+    assert result.ok is True
+    assert result.status == "clamped"
+    assert _read_khz(root, f"{little}/scaling_max_freq") == 1_785_600
+    assert _read_khz(root, f"{little}/scaling_min_freq") == 1_459_200
+    assert _read_khz(root, f"{big}/scaling_max_freq") == 1_689_600
+    assert _read_khz(root, f"{big}/scaling_min_freq") == 691_200
+
+
+def test_table_snap_never_inverts_a_narrow_window(tmp_path):
+    root = str(tmp_path)
+    base = _policy(root, 0, hw_min=307_200, hw_max=2_016_000, driver="qcom-cpufreq-hw", cpus="0-2")
+    _write(root, f"{base}/scaling_available_frequencies", "307200 1459200 1785600 2016000")
+
+    result = select_cpu_frequency(root=root).set_window(1_500_000, 1_600_000)
+
+    assert result.ok is True
+    assert _read_khz(root, f"{base}/scaling_min_freq") <= _read_khz(root, f"{base}/scaling_max_freq")
+    assert _read_khz(root, f"{base}/scaling_max_freq") == 1_459_200
