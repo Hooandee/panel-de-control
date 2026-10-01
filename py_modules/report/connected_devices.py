@@ -2,7 +2,8 @@
 
 Answers "what is plugged in" for a report (docks, external coolers, controllers,
 eGPUs) without running lsusb/lspci. Serial numbers, MAC addresses (input `uniq`,
-`phys`) and user-given Bluetooth names are never read.
+`phys`) and Bluetooth input names, which carry the user's name for the device,
+are never kept.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import os
 from sysfs import read_str
 
 _MAX_PER_BUS = 64
+_BUS_BLUETOOTH = "0005"
 
 
 def _attrs(path: str, names: tuple[str, ...]) -> dict:
@@ -23,96 +25,86 @@ def _attrs(path: str, names: tuple[str, ...]) -> dict:
     return out
 
 
-def _driver(path: str) -> str | None:
+def _hex_attrs(path: str, names: tuple[str, ...]) -> dict:
+    # Without the 0x prefix: "0x030000" has the shape the report serial scrubber removes.
+    return {name: value.removeprefix("0x") for name, value in _attrs(path, names).items()}
+
+
+def _driver(path: str) -> dict:
     link = os.path.join(path, "driver")
     try:
-        return os.path.basename(os.readlink(link)) if os.path.islink(link) else None
+        return {"driver": os.path.basename(os.readlink(link))} if os.path.islink(link) else {}
     except OSError:
-        return None
+        return {}
 
 
-def _entries(root: str, pattern: str, required: str | None = None) -> list[str]:
-    paths = sorted(glob.glob(os.path.join(root, pattern)))
-    if required:
-        paths = [path for path in paths if os.path.exists(os.path.join(path, required))]
-    return paths[:_MAX_PER_BUS]
+def _usb(path: str) -> dict:
+    name = os.path.basename(path)
+    interface_glob = f"{name[3:]}-0:*" if name.startswith("usb") else f"{name}:*"
+    interfaces = [
+        {**_attrs(interface, ("bInterfaceClass",)), **_driver(interface)}
+        for interface in sorted(glob.glob(os.path.join(os.path.dirname(path), interface_glob)))
+    ]
+    device = {"bus_path": name,
+              **_attrs(path, ("idVendor", "idProduct", "manufacturer", "product",
+                              "bDeviceClass", "speed"))}
+    interfaces = [interface for interface in interfaces if interface]
+    return {**device, "interfaces": interfaces} if interfaces else device
 
 
-def _usb(root: str) -> list[dict]:
-    devices = []
-    for path in _entries(root, "sys/bus/usb/devices/*", required="idVendor"):
-        device = {"bus_path": os.path.basename(path)}
-        device.update(_attrs(path, ("idVendor", "idProduct", "manufacturer", "product",
-                                    "bDeviceClass", "speed")))
-        interfaces = []
-        for interface in sorted(glob.glob(path + ":*")):
-            entry = _attrs(interface, ("bInterfaceClass",))
-            driver = _driver(interface)
-            if driver:
-                entry["driver"] = driver
-            if entry:
-                interfaces.append(entry)
-        if interfaces:
-            device["interfaces"] = interfaces
-        devices.append(device)
-    return devices
+def _hid(path: str) -> dict:
+    return {"id": os.path.basename(path), **_driver(path)}
 
 
-def _hid(root: str) -> list[dict]:
-    devices = []
-    for path in _entries(root, "sys/bus/hid/devices/*"):
-        device = {"id": os.path.basename(path)}
-        driver = _driver(path)
-        if driver:
-            device["driver"] = driver
-        devices.append(device)
-    return devices
+def _input(path: str) -> dict:
+    ids = {f"id_{key}": value for key, value in
+           _attrs(os.path.join(path, "id"), ("bustype", "vendor", "product")).items()}
+    name = _attrs(path, ("name",))
+    if ids.get("id_bustype") == _BUS_BLUETOOTH or name.get("name", "").endswith("(AVRCP)"):
+        return ids
+    return {**name, **ids}
 
 
-def _input(root: str) -> list[dict]:
-    devices = []
-    for path in _entries(root, "sys/class/input/input*"):
-        device = _attrs(path, ("name",))
-        device.update({f"id_{key}": value for key, value in
-                       _attrs(os.path.join(path, "id"),
-                              ("bustype", "vendor", "product")).items()})
-        if device:
-            devices.append(device)
-    return devices
+def _pci(path: str) -> dict:
+    return {"address": os.path.basename(path),
+            **_hex_attrs(path, ("vendor", "device", "class")), **_driver(path)}
 
 
-def _pci(root: str) -> list[dict]:
-    devices = []
-    for path in _entries(root, "sys/bus/pci/devices/*"):
-        device = {"address": os.path.basename(path)}
-        device.update(_attrs(path, ("vendor", "device", "class")))
-        driver = _driver(path)
-        if driver:
-            device["driver"] = driver
-        devices.append(device)
-    return devices
+def _thunderbolt(path: str) -> dict:
+    names = _attrs(path, ("vendor_name", "device_name"))
+    return {"id": os.path.basename(path), **names} if names else {}
 
 
-def _thunderbolt(root: str) -> list[dict]:
-    devices = []
-    for path in _entries(root, "sys/bus/thunderbolt/devices/*"):
-        device = _attrs(path, ("vendor_name", "device_name"))
-        if device:
-            devices.append({"id": os.path.basename(path), **device})
-    return devices
+def _bluetooth_adapter(path: str) -> dict:
+    return {"id": os.path.basename(path)}
 
 
-def _bluetooth_adapters(root: str) -> list[str]:
-    return [os.path.basename(path) for path in _entries(root, "sys/class/bluetooth/hci*")]
+_BUSES = (
+    ("usb", "sys/bus/usb/devices/*", lambda path: os.path.exists(os.path.join(path, "idVendor")), _usb),
+    ("hid", "sys/bus/hid/devices/*", None, _hid),
+    ("input", "sys/class/input/input*", None, _input),
+    ("pci", "sys/bus/pci/devices/*", None, _pci),
+    ("thunderbolt", "sys/bus/thunderbolt/devices/*", None, _thunderbolt),
+    ("bluetooth_adapters", "sys/class/bluetooth/hci*", lambda path: ":" not in os.path.basename(path),
+     _bluetooth_adapter),
+)
 
 
 def snapshot(root: str = "/") -> dict:
-    """Bounded per-bus listing. Never raises: an unreadable bus is an empty list."""
-    out = {}
-    for key, read in (("usb", _usb), ("hid", _hid), ("input", _input), ("pci", _pci),
-                      ("thunderbolt", _thunderbolt), ("bluetooth_adapters", _bluetooth_adapters)):
+    """Bounded per-bus listing; `truncated` holds the real count of any bus over the
+    cap. Never raises: an unreadable bus is an empty list."""
+    out: dict = {}
+    truncated = {}
+    for key, pattern, keep, read in _BUSES:
         try:
-            out[key] = read(root)
+            paths = sorted(glob.glob(os.path.join(root, pattern)))
+            if keep:
+                paths = [path for path in paths if keep(path)]
+            out[key] = [device for device in map(read, paths[:_MAX_PER_BUS]) if device]
+            if len(paths) > _MAX_PER_BUS:
+                truncated[key] = len(paths)
         except Exception:  # noqa: BLE001
             out[key] = []
+    if truncated:
+        out["truncated"] = truncated
     return out

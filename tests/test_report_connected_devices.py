@@ -55,13 +55,13 @@ def test_input_devices_never_read_phys_or_uniq(tmp_path):
     _write(os.path.join(path, "name"), "Xbox Wireless Controller")
     _write(os.path.join(path, "uniq"), "aa:bb:cc:dd:ee:ff")
     _write(os.path.join(path, "phys"), "aa:bb:cc:dd:ee:00")
-    _write(os.path.join(path, "id/bustype"), "0005")
+    _write(os.path.join(path, "id/bustype"), "0003")
     _write(os.path.join(path, "id/vendor"), "045e")
-    _write(os.path.join(path, "id/product"), "0b13")
+    _write(os.path.join(path, "id/product"), "0b12")
 
     assert connected_devices.snapshot(root)["input"] == [{
         "name": "Xbox Wireless Controller",
-        "id_bustype": "0005", "id_vendor": "045e", "id_product": "0b13",
+        "id_bustype": "0003", "id_vendor": "045e", "id_product": "0b12",
     }]
 
 
@@ -78,14 +78,15 @@ def test_pci_hid_thunderbolt_and_bluetooth_adapters(tmp_path):
     _write(os.path.join(tb, "vendor_name"), "Razer")
     _write(os.path.join(tb, "device_name"), "Core X")
     os.makedirs(os.path.join(root, "sys/class/bluetooth/hci0"))
+    os.makedirs(os.path.join(root, "sys/class/bluetooth/hci0:256"))
 
     snap = connected_devices.snapshot(root)
 
-    assert snap["pci"] == [{"address": "0000:c5:00.0", "vendor": "0x1002",
-                            "device": "0x1586", "class": "0x030000", "driver": "amdgpu"}]
+    assert snap["pci"] == [{"address": "0000:c5:00.0", "vendor": "1002",
+                            "device": "1586", "class": "030000", "driver": "amdgpu"}]
     assert snap["hid"] == [{"id": "0003:045E:028E.0001", "driver": "hid-generic"}]
     assert snap["thunderbolt"] == [{"id": "0-1", "vendor_name": "Razer", "device_name": "Core X"}]
-    assert snap["bluetooth_adapters"] == ["hci0"]
+    assert snap["bluetooth_adapters"] == [{"id": "hci0"}]
 
 
 def test_missing_buses_are_empty_lists(tmp_path):
@@ -103,3 +104,52 @@ def test_sysfs_snapshot_carries_connected_devices_redacted(tmp_path):
 
     assert snap["connected_devices"]["usb"][0]["product"] == "Frost Bay"
     assert "SN9X8Y7Z6W5V" not in str(snap)
+
+
+def _input_device(root, name, label, bustype):
+    path = os.path.join(root, "sys/class/input", name)
+    _write(os.path.join(path, "name"), label)
+    _write(os.path.join(path, "id/bustype"), bustype)
+    _write(os.path.join(path, "id/vendor"), "0000")
+    _write(os.path.join(path, "id/product"), "0000")
+
+
+def test_bluetooth_input_names_are_dropped(tmp_path):
+    root = str(tmp_path)
+    _input_device(root, "input1", "Juan's Pad", "0005")
+    _input_device(root, "input2", "Juan's AirPods Pro (AVRCP)", "0006")
+
+    names = [d.get("name") for d in connected_devices.snapshot(root)["input"]]
+    assert names == [None, None]
+
+
+def test_root_hub_lists_its_interfaces(tmp_path):
+    root = str(tmp_path)
+    _usb_device(root, "usb1", "1d6b", "0002", "xHCI Host Controller")
+    interface = os.path.join(root, "sys/bus/usb/devices/1-0:1.0")
+    _write(os.path.join(interface, "bInterfaceClass"), "09")
+    _driver(root, interface, "hub")
+
+    usb = connected_devices.snapshot(root)["usb"]
+    assert usb[0]["interfaces"] == [{"bInterfaceClass": "09", "driver": "hub"}]
+
+
+def test_bus_over_the_cap_reports_its_real_count(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    monkeypatch.setattr(connected_devices, "_MAX_PER_BUS", 2)
+    for index in range(3):
+        os.makedirs(os.path.join(root, f"sys/bus/hid/devices/0003:0000:000{index}.0001"))
+
+    snap = connected_devices.snapshot(root)
+    assert len(snap["hid"]) == 2
+    assert snap["truncated"] == {"hid": 3}
+
+
+def test_pci_class_survives_report_redaction(tmp_path):
+    root = str(tmp_path)
+    pci = os.path.join(root, "sys/bus/pci/devices/0000:c5:00.0")
+    for leaf, value in (("vendor", "0x1002"), ("device", "0x1586"), ("class", "0x030000")):
+        _write(os.path.join(pci, leaf), value)
+
+    snap = collector.sysfs_snapshot(root)
+    assert snap["connected_devices"]["pci"][0]["class"] == "030000"
