@@ -336,7 +336,19 @@ def test_qcom_firmware_that_ignores_the_limit_turns_the_feature_off(tmp_path, mo
     backend = charge_limit.QcomBattmgrChargeLimit(root)
     assert backend.supported is True
     assert backend.set(80) is False
+    assert backend.supported is True
+    assert backend.set(80) is False
     assert backend.supported is False
+
+
+def test_qcom_range_matches_the_driver_clamp(tmp_path):
+    import battery.charge_limit as charge_limit
+
+    root, path = _qcom_battery(tmp_path)
+    backend = charge_limit.QcomBattmgrChargeLimit(root)
+    assert backend.range() == (55, 100)
+    assert backend.set(30) is True
+    assert backend.get() == 55
 
 
 def test_qcom_firmware_that_applies_the_limit_keeps_it(tmp_path):
