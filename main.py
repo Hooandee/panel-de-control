@@ -151,11 +151,8 @@ _REPORT_SERVICE_URL = os.environ.get(
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
-# What each Panel section has applied, written to the diary at start and whenever it
-# changes: section id -> (getter, stable fields or None for the whole value). Live
-# readings (watts, temperatures, RPM) stay out so a line means a real change.
-# tests/test_journal_sections.py fails for a section in src/sections/registry.tsx
-# that has no entry here.
+# Stable fields only: live readings would make every refresh look like a change.
+# tests/test_journal_sections.py requires an entry for every section.
 _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "power": (
         ("get_tdp_state", (
@@ -1366,8 +1363,6 @@ class Plugin:
         return [{key: entry[key] for key in ("area", "code", "count")} for entry in self._ui_diagnostics()]
 
     async def record_ui_event(self, area: str, action: str, detail: str = "", ok: bool = True) -> bool:
-        """A Steam setting the interface wrote itself (overlay level, volume,
-        brightness, per-game profile, launch options) and whether it went through."""
         diary = journal.active
         if diary is None:
             return False
@@ -8773,8 +8768,6 @@ class Plugin:
         return current
 
     def _journal_ignored(self, reason: str, **fields) -> None:
-        """A request answered with the unchanged state: which call, why, and what
-        it carried, so a setting that "did nothing" is explained in the diary."""
         diary = journal.active
         if diary is None:
             return
@@ -9815,8 +9808,7 @@ class Plugin:
             self._log_display_transition("color", ok=False, error=type(error).__name__)
 
     def _log_display_transition(self, kind: str, *, ok: bool, **fields) -> None:
-        """One line when what the display got, or whether it took, changes: the
-        startup re-asserts that repeat the same look stay silent."""
+        """Startup re-asserts the same look dozens of times; only changes are logged."""
         event = {"kind": kind, "ok": ok, **{key: value for key, value in fields.items() if value is not None}}
         last = getattr(self, "_display_logged", {})
         if last.get(kind) == event:

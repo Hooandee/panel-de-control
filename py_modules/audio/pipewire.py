@@ -188,9 +188,6 @@ def _find_session():
 
 
 def _journal_sink_write(kind, sink, before, requested, readback, caller):
-    """Every volume or mute Panel writes that changes something or does not take,
-    with what it was, what was asked, what reads back and which step asked for it:
-    when a user's volume jumps, the diary tells whether Panel moved it."""
     diary = journal.active
     wanted = list(requested) if isinstance(requested, tuple) else requested
     if kind == "volume":
@@ -711,7 +708,6 @@ class PipeWireEq:
         return tuple(f"{value}%" for value in values) or None
 
     def eq_volume(self):
-        """The EQ sink's volume as the user sees it (what Steam's slider moves)."""
         return self._sink_volume_pct(self._label)
 
     def _sink_volume_pct(self, sink):

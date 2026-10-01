@@ -19,8 +19,7 @@ _UA = "panel-de-control-reporter"
 
 
 def encode_payload(bundle: dict) -> dict:
-    """The gzip envelope the collector accepts: the week of diary a bundle carries
-    compresses about tenfold, well inside the service's request limit."""
+    """The collector's gzip envelope; it decodes and size-checks the bundle."""
     raw = json.dumps(bundle).encode("utf-8")
     return {
         "app": bundle.get("app"),

@@ -10,8 +10,6 @@ export function recordUiDiagnostic(area: UiDiagnosticArea, code: string, detail 
   } catch {}
 }
 
-/** A thrown value as a diagnostic code (snake_case error name) and a one-line
- * detail: where it happened, its message and the first frame of Panel's code. */
 export function describeError(where: string, error: unknown): { code: string; detail: string } {
   const name = error instanceof Error ? error.name : typeof error;
   const code = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase().slice(0, 48) || "unknown";
@@ -22,9 +20,7 @@ export function describeError(where: string, error: unknown): { code: string; de
   return { code: /^[a-z]/.test(code) ? code : `e_${code}`.slice(0, 48), detail: `${where}: ${message} ${location}`.trim() };
 }
 
-/** Errors that escape Panel's own code outside React rendering (rejected
- * promises, timers, event handlers). Other plugins' and Steam's errors share the
- * window, so only those whose stack or source points at Panel's bundle count. */
+/** Steam and other plugins share this window: only errors from Panel's bundle count. */
 export function startFrontendErrorReporting(target: Window): () => void {
   const report = (error: unknown, source: string) => {
     const stack = error instanceof Error && typeof error.stack === "string" ? error.stack : "";

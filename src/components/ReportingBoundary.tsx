@@ -7,10 +7,8 @@ interface Props {
   children?: ReactNode;
 }
 
-/** Records a render error in the diary, then hands it on unchanged so Decky's
- * ErrorBoundary around it keeps showing its usual error view. Rethrowing from
- * render means React never commits this boundary, so componentDidCatch would not
- * run: the error is recorded here, once. */
+/** Rethrows so Decky's ErrorBoundary still shows its view. React never commits a
+ * boundary that rethrows, so componentDidCatch would not run: report in render. */
 export class ReportingBoundary extends Component<Props, { error: unknown }> {
   state: { error: unknown } = { error: null };
   private reported: unknown = null;

@@ -1,11 +1,4 @@
-"""What surrounds Panel on this machine, written to the diary only when it changes.
-
-Support questions are mostly "who else was touching power or fans, and what was the
-machine doing when it went wrong". The diary answers them with two kinds of line:
-the context (Decky plugins and power/fan services, flagging the ones that compete
-with Panel) and a state snapshot taken when something meaningful moves, never on a
-clock alone, so a week of play stays short enough to read.
-"""
+"""Plugins, services and machine state around Panel, written only when they change."""
 from __future__ import annotations
 
 import json
@@ -14,7 +7,6 @@ import re
 import time
 from typing import Callable
 
-# Normalised Decky plugin name -> what it competes with Panel for.
 _RIVAL_PLUGINS = {
     "simpledeckytdp": "tdp",
     "powertools": "tdp",
@@ -26,7 +18,6 @@ _RIVAL_PLUGINS = {
     "fantastic": "fans",
     "fancontrol": "fans",
 }
-# Service unit stem -> what it can write.
 _POWER_SERVICES = {
     "hhd": "tdp",
     "powerstation": "tdp",
@@ -48,7 +39,6 @@ def _normalise(name: str) -> str:
 
 
 def plugin_inventory(plugins_dir: str, loader_settings: str) -> list[dict]:
-    """Every installed Decky plugin with its version and whether Decky has it on."""
     try:
         with open(loader_settings, encoding="utf-8") as handle:
             disabled = set(json.load(handle).get("disabled_plugins") or [])
@@ -84,7 +74,6 @@ def _manifest(directory: str, file_name: str, key: str) -> str | None:
 
 
 def active_services(run: Callable[[list[str]], str | None]) -> list[str]:
-    """Running services that can write power, fan or controller state."""
     output = run(["systemctl", "list-units", "--type=service", "--state=active", "--no-legend", "--plain"])
     found = set()
     for line in (output or "").splitlines():
@@ -96,7 +85,6 @@ def active_services(run: Callable[[list[str]], str | None]) -> list[str]:
 
 
 def rivals(plugins: list[dict], services: list[str]) -> list[dict]:
-    """The plugins and services that write what Panel writes."""
     found = []
     for plugin in plugins:
         area = _RIVAL_PLUGINS.get(_normalise(plugin["name"]))
@@ -116,7 +104,6 @@ def context_snapshot(plugins_dir: str, loader_settings: str, run: Callable[[list
 
 
 def context_changes(previous: dict | None, current: dict) -> dict | None:
-    """What changed since the last context line, or None when nothing did."""
     if previous is None:
         return None
     before = {plugin["name"]: plugin for plugin in previous.get("plugins", [])}
@@ -140,8 +127,7 @@ _ARTWORK_KINDS = {"p": "cover", "_hero": "hero", "_logo": "logo", "_icon": "icon
 
 
 def custom_artwork(userdata: str) -> dict:
-    """How many custom images Steam serves from userdata/*/config/grid, by kind and
-    format: themes draw these and SteamGridDB saves .png, which Steam tries last."""
+    """SteamGridDB saves custom art as .png, which Steam tries only after .jpg fails."""
     counts: dict[str, int] = {}
     try:
         users = os.listdir(userdata)
@@ -164,8 +150,6 @@ _MAX_SECTION_JSON = 2000
 
 
 def pick_fields(value: object, fields: tuple[str, ...] | None) -> object:
-    """The named fields of a section getter's result (dotted paths reach into
-    nested dicts); None keeps the whole value. Missing fields are left out."""
     if fields is None or not isinstance(value, dict):
         return value
     picked = {}
@@ -181,7 +165,6 @@ def pick_fields(value: object, fields: tuple[str, ...] | None) -> object:
 
 
 def bounded(summary: dict) -> dict:
-    """A section summary short enough for one diary line."""
     text = json.dumps(summary, ensure_ascii=False, sort_keys=True, default=str)
     if len(text) <= _MAX_SECTION_JSON:
         return summary
@@ -189,14 +172,13 @@ def bounded(summary: dict) -> dict:
 
 
 def canonical(value: object) -> str:
-    """Comparable form: a value read back from the diary went through JSON."""
+    """A value read back from the diary went through JSON (tuples became lists)."""
     return json.dumps(value, sort_keys=True, default=str)
 
 
 def needs_snapshot(last: dict | None, current: dict, keys: tuple[str, ...], *, now: float | None = None) -> bool:
-    """A full line is written for the first record of each day and whenever the
-    content differs from the last one in the diary, even from an earlier session,
-    so restarts that change nothing add nothing."""
+    """Full once a day and on change, compared even across sessions, so a restart
+    that changes nothing adds nothing."""
     if not last or not isinstance(last.get("t"), (int, float)):
         return True
     now = time.time() if now is None else now
@@ -206,7 +188,6 @@ def needs_snapshot(last: dict | None, current: dict, keys: tuple[str, ...], *, n
 
 
 def section_changes(previous: dict | None, current: dict) -> dict:
-    """The sections whose applied state differs from the last line, in full."""
     if previous is None:
         return dict(current)
     return {name: state for name, state in current.items() if previous.get(name) != state}
@@ -230,12 +211,10 @@ def _temp_band(temp: float | None, previous_band: int) -> int:
 
 
 class StateWatcher:
-    """Decides which samples become a diary line: the first one, then only when
-    the game, the power source or Panel's control state change, the applied TDP
-    moves 2 W or more, the hottest sensor crosses 80/90/95 °C, a game keeps the GPU
-    busy yet draws under half its TDP for two samples in a row (or stops doing so),
-    or nothing was written for the heartbeat. A light game drawing little with an
-    idle GPU is not a low draw."""
+    """A sample becomes a line only when something moves: game, power source,
+    control state, TDP by 2 W or more, a temperature band, a busy GPU drawing under
+    half its TDP (an idle GPU drawing little is a light game, not a problem), or
+    the heartbeat."""
 
     def __init__(self, heartbeat_s: float = 1800.0) -> None:
         self._heartbeat_s = heartbeat_s

@@ -1,8 +1,4 @@
-/** Steam settings Panel's interface writes directly (overlay level, volume,
- * brightness, per-game profile, launch options), sent to the backend diary.
- * The sink is attached at plugin start so this module never loads the Decky API;
- * without it every call is a no-op. Repeats of one action within the window
- * (a dragged slider) go out once, with the last value. */
+/** The sink is attached at plugin start so this module never loads the Decky API. */
 export type UiEventSink = (area: string, action: string, detail: string, ok: boolean) => unknown;
 
 const COALESCE_MS = 1000;

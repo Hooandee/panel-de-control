@@ -88,8 +88,7 @@ def set_button(store, dbus, device_key, source: str, targets: list,
 
 
 def _journal_remap_refused(reason, source, requested, kept) -> None:
-    """A remap Panel did not apply as asked, and why: the reply to the frontend is
-    just the unchanged config."""
+    """The frontend only gets the unchanged config back, so the reason goes here."""
     diary = journal.active
     if diary is not None:
         diary.write("WARNING", "controller", "remap_refused", reason=reason, source=source,

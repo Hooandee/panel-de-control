@@ -1,15 +1,9 @@
-"""Panel's own diary of what the plugin and the user did, kept for a week.
+"""Panel's own week-long diary. Decky deletes all but the newest five plugin logs
+on every load, so the diary lives in the plugin's data folder instead.
 
-Decky keeps only the newest five plugin logs and deletes the rest every time the
-plugin loads, so anything older than a few restarts was lost before a report could
-carry it. The diary lives in the plugin's data folder as one JSON-lines file per day,
-bounded by age and total size.
-
-Writers never block: records go to a bounded queue drained by one daemon thread,
-and a full queue drops the record and counts it instead of waiting. A record that
-equals one of the last six written within a minute is not written again: a
-minute later one line carries how many there were (`n`) and when the last was
-(`last`), so a component fighting in a loop costs a few lines a minute.
+Writers never block: a full queue drops and counts. A record equal to one of the
+last six written within a minute is folded into a later line carrying `n` and
+`last`, so a component fighting in a loop costs a few lines a minute.
 """
 from __future__ import annotations
 
@@ -104,8 +98,7 @@ class Journal:
         self._thread = None
 
     def write(self, level: str, source: str, message: str, /, *, at: float | None = None, **fields: Any) -> None:
-        """Never raises and never waits: a diary problem must not break what is
-        being recorded."""
+        """Never raises: a diary problem must not break what is being recorded."""
         try:
             record = {
                 "t": round(self._clock() if at is None else at, 3),
@@ -296,7 +289,6 @@ class Journal:
 
 
 def read_records(directory: str) -> Iterator[dict]:
-    """Every readable record, oldest file first. Corrupt lines are skipped."""
     journal = Journal(directory)
     for path in journal.files():
         try:
@@ -313,7 +305,6 @@ def read_records(directory: str) -> Iterator[dict]:
 
 
 def last_record(directory: str, source: str, *, max_bytes: int = 1_000_000) -> dict | None:
-    """The newest record of a source, reading at most the tail of the two newest files."""
     for path in reversed(Journal(directory).files()[-2:]):
         try:
             with open(path, "rb") as handle:
@@ -334,9 +325,8 @@ def last_record(directory: str, source: str, *, max_bytes: int = 1_000_000) -> d
 
 
 def merged_sections(directory: str) -> dict | None:
-    """The applied state of every section as the diary last knew it: the day's
-    full snapshot with the later per-section changes laid over it. None when the
-    newest file holds no snapshot (a new day starts with a full one)."""
+    """The day's section snapshot with its later changes laid over it; None
+    without a snapshot today, so a new day starts with a full one."""
     files = Journal(directory).files()
     if not files:
         return None
@@ -382,9 +372,8 @@ def collect(
     recent_bytes: int = 700_000,
     older_bytes: int = 500_000,
 ) -> dict:
-    """What a report carries: every record of the last day, then only warnings,
-    errors, user actions, sessions and power/lifecycle transitions of the older
-    days. Each part keeps its newest records within its byte budget."""
+    """The last day in full plus only the key records of the older days, each
+    part keeping its newest records within its byte budget."""
     now = time.time() if now is None else now
     recent: list[dict] = []
     older: list[dict] = []
@@ -436,8 +425,6 @@ _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _problem_key(record: dict) -> str:
-    """Problems that differ only in numbers or clocks group together; a structured
-    transition groups by what went wrong, not by its values."""
     message = str(record.get("m", ""))
     event = record.get("e")
     if isinstance(event, dict):
@@ -447,7 +434,6 @@ def _problem_key(record: dict) -> str:
 
 
 def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
-    """One short entry per session, oldest first: what to read before any line."""
     sessions: list[dict] = []
     current: dict | None = None
     rivals: list = []
@@ -508,10 +494,9 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
 
 
 class LoopWatchdog:
-    """Notices when the asyncio loop stops answering. Built on the loop's thread;
-    a coroutine on the loop stamps a heartbeat and a thread checks it, and the first time it is older than
-    the limit writes one warning with the loop thread's stack, then one more line
-    when the loop answers again with how long it was stuck."""
+    """Warns, with the loop thread's stack, when the asyncio loop misses its
+    heartbeat. Built on the loop's thread so a freeze during startup, before the
+    first heartbeat, still has a stack to show."""
 
     def __init__(
         self,
@@ -574,9 +559,7 @@ _TRANSITION_NOISE = ("at", "generation", "history")
 
 
 def compact_event(value: Any) -> Any:
-    """A transition payload without what never helps a diagnosis: the monotonic
-    clock, the internal generation, empty values, a rollback that was not tried
-    and the fixed min/max of every rail (they are in the backend line)."""
+    """Rail min/max are left out: they never change and the backend line has them."""
     if isinstance(value, dict):
         compact = {}
         for key, item in value.items():
@@ -607,8 +590,6 @@ def compact_transition(message: str) -> tuple[str, dict] | None:
 
 
 class JournalHandler(logging.Handler):
-    """Copies every log record of the plugin process into the diary. A
-    "<Name> transition {json}" line is stored structured and compacted."""
 
     def __init__(self, journal: Journal) -> None:
         super().__init__(logging.INFO)
@@ -639,9 +620,8 @@ class _DroppingQueueHandler(logging.handlers.QueueHandler):
 
 
 def queue_logger_handlers(logger: logging.Logger, *, queue_size: int = 4096) -> Callable[[], None]:
-    """Moves the logger's existing handlers (Decky's log file and stdout) behind a
-    queue drained by a background thread, so logging never waits on disk. Returns
-    the call that puts them back."""
+    """Puts Decky's handlers (its log file and stdout) behind a queue, since they
+    write on the calling thread, including the event loop. Returns the undo."""
     handlers = [handler for handler in logger.handlers if not isinstance(handler, JournalHandler)]
     if not handlers:
         return lambda: None
@@ -666,8 +646,6 @@ _WRITE_HELPERS = frozenset({"write_str", "_write", "write", "_write_target", "_w
 
 
 def write_failed(target: str, value: Any, error: BaseException) -> None:
-    """A hardware write that did not go through: what, which value, the OS error and
-    the function that wrote it. Probes that only read never land here."""
     diary = active
     if diary is None:
         return
@@ -684,8 +662,6 @@ def write_failed(target: str, value: Any, error: BaseException) -> None:
 
 
 def _condensed(value: Any, depth: int = 0) -> Any:
-    """A long argument reduced to what tells the change: simple fields kept,
-    lists of objects reduced to their ids, deeper objects to their keys."""
     if isinstance(value, dict):
         if depth >= 2:
             return sorted(value)[:12]
@@ -712,7 +688,6 @@ def _summary(value: Any) -> str:
 
 
 def _where(error: BaseException) -> str:
-    """The last two frames of an error, as file:line function."""
     frames = traceback.extract_tb(error.__traceback__)[-2:]
     return " < ".join(f"{os.path.basename(frame.filename)}:{frame.lineno} {frame.name}" for frame in reversed(frames))
 
@@ -732,10 +707,8 @@ def trace_calls(
     hidden_arguments: frozenset[str] = frozenset(),
     automatic: frozenset[str] = frozenset(),
 ) -> None:
-    """Wraps the frontend-callable coroutines that change something so each call,
-    its arguments and a failed outcome land in the diary as a user action. Calls of
-    the same method within the coalescing window collapse into one record, and calls
-    made from inside another traced call are the backend's own, not the user's."""
+    """Calls made from inside another traced call are the backend's own, not the
+    user's, and stay out."""
     for name, function in list(vars(cls).items()):
         if name.startswith(untraced_prefixes) or name in untraced or not inspect.iscoroutinefunction(function):
             continue
