@@ -27,6 +27,9 @@ _POWER_SERVICES = {
     "steamos-manager": "tdp",
     "jupiter-fan-control": "fans",
     "fw-fanctrl": "fans",
+    "armada-powerd": "tdp",
+    "armada-steamos-manager": "tdp",
+    "armada-control": "system",
     "inputplumber": "controller",
     "handycon": "controller",
 }
