@@ -3421,6 +3421,8 @@ class Plugin:
             return False
 
     def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
+        if getattr(self._fan_ctrl, "supported", True) is False:
+            return
         event = {
             "mode": mode,
             "ok": ok,
