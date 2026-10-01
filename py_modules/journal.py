@@ -7,8 +7,9 @@ bounded by age and total size.
 
 Writers never block: records go to a bounded queue drained by one daemon thread,
 and a full queue drops the record and counts it instead of waiting. A record that
-repeats the previous one is written once; its repeats within a minute become one
-more line carrying how many there were (`n`) and when the last was (`last`).
+equals one of the last six written within a minute is not written again: a
+minute later one line carries how many there were (`n`) and when the last was
+(`last`), so a component fighting in a loop costs a few lines a minute.
 """
 from __future__ import annotations
 
@@ -28,6 +29,8 @@ import traceback
 from typing import Any, Callable, Iterator
 
 _FILE_PREFIX = "pdc-"
+_FOLD_WINDOW = 6
+_NEVER_FOLDED = ("session", "sections", "context", "loop")
 _FILE_SUFFIX = ".jsonl"
 _LEVELS = {"DEBUG": "D", "INFO": "I", "WARNING": "W", "ERROR": "E", "CRITICAL": "C"}
 _MAX_MESSAGE = 4000
@@ -76,8 +79,8 @@ class Journal:
         self._file_day: str | None = None
         self._file_segment = 0
         self._pending: dict | None = None
-        self._repeat: dict | None = None
-        self._last_content: dict | None = None
+        self._recent: dict[str, float] = {}
+        self._folded: dict[str, dict] = {}
         self.dropped = 0
         self.write_failures = 0
 
@@ -160,20 +163,28 @@ class Journal:
             self._accept_call(record)
             return
         self._flush_call()
-        content = {key: value for key, value in record.items() if key != "t"}
-        repeat = self._repeat
-        if content == self._last_content and (
-            repeat is None or record["t"] - repeat["last"] <= self._repeat_s
-        ):
-            if repeat is None:
-                self._repeat = {**record, "n": 1, "last": record["t"]}
-            else:
-                repeat["n"] += 1
-                repeat["last"] = record["t"]
+        self._flush_folded(now=record["t"])
+        if record.get("s") in _NEVER_FOLDED:
+            self._append(record)
             return
-        self._flush_repeat()
+        key = json.dumps({k: v for k, v in record.items() if k != "t"}, sort_keys=True, default=str)
+        written_at = self._recent.get(key)
+        if written_at is not None and record["t"] - written_at <= self._repeat_s:
+            folded = self._folded.get(key)
+            if folded is None:
+                self._folded[key] = {**record, "n": 1, "last": record["t"]}
+            else:
+                folded["n"] += 1
+                folded["last"] = record["t"]
+            return
         self._append(record)
-        self._last_content = content
+        self._remember(key, record["t"])
+
+    def _remember(self, key: str, at: float) -> None:
+        self._recent.pop(key, None)
+        self._recent[key] = at
+        while len(self._recent) > _FOLD_WINDOW:
+            self._recent.pop(next(iter(self._recent)))
 
     def _accept_call(self, record: dict) -> None:
         pending = self._pending
@@ -195,25 +206,25 @@ class Journal:
     def _flush_call(self) -> None:
         if self._pending is not None:
             record, self._pending = self._pending, None
-            self._flush_repeat()
             self._append(record)
-            self._last_content = None
 
-    def _flush_repeat(self) -> None:
-        if self._repeat is not None:
-            record, self._repeat = self._repeat, None
-            self._append(record)
+    def _flush_folded(self, *, now: float | None = None, every: bool = False) -> None:
+        now = self._clock() if now is None else now
+        for key, folded in list(self._folded.items()):
+            if every or now - folded["t"] >= self._repeat_s:
+                del self._folded[key]
+                self._append(folded)
+                self._remember(key, folded["last"])
 
     def _flush_pending(self) -> None:
         self._flush_call()
-        self._flush_repeat()
+        self._flush_folded(every=True)
 
     def _flush_stale(self) -> None:
         now = self._clock()
         if self._pending is not None and now - self._pending.get("last", self._pending["t"]) > self._coalesce_s:
             self._flush_call()
-        if self._repeat is not None and now - self._repeat["last"] > self._repeat_s:
-            self._flush_repeat()
+        self._flush_folded()
 
     def _append(self, record: dict) -> None:
         try:
@@ -404,6 +415,7 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
     """One short entry per session, oldest first: what to read before any line."""
     sessions: list[dict] = []
     current: dict | None = None
+    rivals: list = []
     for record in sorted(records, key=lambda item: item.get("t", 0)):
         if record.get("s") == "session" and record.get("m") == "start" or current is None:
             current = {
@@ -413,7 +425,7 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
                 "games": [],
                 "tdp_w": None,
                 "max_temp_c": None,
-                "rivals": [],
+                "rivals": list(rivals),
                 "external_writes": 0,
                 "actions": 0,
                 "state_changes": {},
@@ -427,9 +439,10 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
         elif source == "rpc":
             current["actions"] += _count(record)
         elif source == "context":
-            current["rivals"] = [rival.get("name") for rival in record.get("rivals") or []]
+            rivals = [rival.get("name") for rival in record.get("rivals") or []]
+            current["rivals"] = list(rivals)
         elif source == "tdp" and record.get("m") == "external_write":
-            current["external_writes"] += 1
+            current["external_writes"] += _count(record)
         elif source == "state":
             changes = current["state_changes"]
             changes[record.get("m")] = changes.get(record.get("m"), 0) + 1
@@ -523,7 +536,7 @@ _TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z ]{1,40} transition) (?P<event>
 _TRANSITION_NOISE = ("at", "generation")
 
 
-def _compact_event(value: Any) -> Any:
+def compact_event(value: Any) -> Any:
     """A transition payload without what never helps a diagnosis: the monotonic
     clock, the internal generation, empty values, a rollback that was not tried
     and the fixed min/max of every rail (they are in the backend line)."""
@@ -536,10 +549,10 @@ def _compact_event(value: Any) -> Any:
                 continue
             if key in ("min", "max") and isinstance(item, (int, float)):
                 continue
-            compact[key] = _compact_event(item)
+            compact[key] = compact_event(item)
         return compact
     if isinstance(value, list):
-        return [_compact_event(item) for item in value]
+        return [compact_event(item) for item in value]
     return value
 
 
@@ -553,7 +566,7 @@ def compact_transition(message: str) -> tuple[str, dict] | None:
         return None
     if not isinstance(event, dict):
         return None
-    return match.group("name"), _compact_event(event)
+    return match.group("name"), compact_event(event)
 
 
 class JournalHandler(logging.Handler):

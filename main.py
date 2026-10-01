@@ -12228,7 +12228,7 @@ class Plugin:
             "tdp",
             "external_write",
             requested=event.get("requested"),
-            observation=event.get("observation"),
+            observation=journal.compact_event(event.get("observation")),
             game=self._current_appid,
             rivals=context.get("rivals", []),
         )

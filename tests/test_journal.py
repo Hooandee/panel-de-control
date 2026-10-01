@@ -84,8 +84,44 @@ def test_identical_lines_in_a_row_become_one_with_a_count(tmp_path):
         (("INFO", "log", "other"), {"at": 101.0}),
         (("ERROR", "log", "Task was destroyed"), {"at": 300.0}),
     )
-    records = [(r["m"], r.get("n", 1)) for r in _lines(str(tmp_path))]
-    assert records == [("Task was destroyed", 1), ("Task was destroyed", 2), ("other", 1), ("Task was destroyed", 1)]
+    records = sorted((r["t"], r["m"], r.get("n", 1)) for r in _lines(str(tmp_path)))
+    assert records == [
+        (100.0, "Task was destroyed", 1),
+        (100.1, "Task was destroyed", 2),
+        (101.0, "other", 1),
+        (300.0, "Task was destroyed", 1),
+    ]
+
+
+def test_a_loop_of_alternating_lines_is_folded_with_counts(tmp_path):
+    j = Journal(str(tmp_path), clock=lambda: 1000.0)
+    cycle = ["external_write", "confirm_again", "apply"]
+    writes = []
+    for step in range(30):
+        writes.append((("WARNING", "log", cycle[step % 3]), {"at": 900.0 + step}))
+    _run(j, *writes)
+    records = _lines(str(tmp_path))
+    assert len(records) == 6
+    assert sum(r.get("n", 1) for r in records) == 30
+
+
+def test_a_long_loop_reports_its_count_every_minute(tmp_path):
+    now = [0.0]
+    j = Journal(str(tmp_path), clock=lambda: now[0])
+    j.start()
+    for step in range(300):
+        now[0] = 1000.0 + step
+        j.write("WARNING", "log", ("external_write", "apply")[step % 2], at=now[0])
+    j.stop()
+    records = _lines(str(tmp_path))
+    assert sum(r.get("n", 1) for r in records) == 300
+    assert 8 <= len(records) <= 14
+
+
+def test_session_and_state_snapshots_are_never_folded(tmp_path):
+    j = Journal(str(tmp_path), clock=lambda: 200.0)
+    _run(j, *[(("INFO", "session", "start"), {"at": 100.0 + i}) for i in range(3)])
+    assert len(_lines(str(tmp_path))) == 3
 
 
 def test_collect_sends_the_last_day_whole_and_only_key_records_before(tmp_path):
@@ -114,7 +150,7 @@ def test_summary_condenses_each_session():
         {"t": 11, "s": "context", "m": "snapshot", "rivals": [{"name": "PowerTools"}]},
         {"t": 12, "s": "state", "m": "start", "game": 1850570, "tdp_w": 40, "cpu_c": 99},
         {"t": 13, "s": "state", "m": "tdp", "game": 1850570, "tdp_w": 7, "cpu_c": 100},
-        {"t": 14, "s": "tdp", "m": "external_write"},
+        {"t": 14, "s": "tdp", "m": "external_write", "n": 2},
         {"t": 15, "s": "rpc", "m": "set_tdp_watts", "n": 3},
         {"t": 16, "l": "W", "s": "log", "m": "fan write failed"},
         {"t": 17, "l": "W", "s": "log", "m": "fan write failed", "n": 4, "last": 30},
@@ -123,10 +159,11 @@ def test_summary_condenses_each_session():
     ]
     first, second = summarize(records)
     assert first["games"] == [1850570] and first["tdp_w"] == [7, 40] and first["max_temp_c"] == 100
-    assert first["rivals"] == ["PowerTools"] and first["external_writes"] == 1 and first["actions"] == 3
+    assert first["rivals"] == ["PowerTools"] and first["external_writes"] == 2 and first["actions"] == 3
     assert first["problems"] == [{"level": "W", "message": "fan write failed", "count": 5}]
     assert first["stopped"] is True and first["state_changes"] == {"start": 1, "tdp": 1}
     assert second["start"] == 50 and "stopped" not in second
+    assert second["rivals"] == ["PowerTools"]
 
 
 def test_collect_keeps_the_newest_records_within_budget(tmp_path):
