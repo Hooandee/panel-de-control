@@ -5,15 +5,30 @@
 ## [0.59.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.3...panel-de-control-v0.59.0) (2026-10-01)
 
 
-### Features
+### Español
 
-* keep a week of Panel's own logs, rivals and section state for reports ([#820](https://github.com/Hooandee/panel-de-control/issues/820)) ([9de6ec6](https://github.com/Hooandee/panel-de-control/commit/9de6ec6e88ff0d8d50283009262f6d33d72992d5))
+* **Reportes:** Los reportes de problemas son ahora mucho más listos. Panel guarda su propio historial de la última semana, se da cuenta si otro plugin o programa está tocando el TDP o los ventiladores y apunta lo que cambia en cada sección, así puedo entender y arreglar los fallos mucho más rápido.
+* **Arranque:** En algunas consolas, como la ROG Ally o la MSI Claw, Panel ya no se queda unos segundos bloqueado al arrancar.
 
+### English
 
-### Bug Fixes
+* **Reports:** Problem reports are now much smarter. Panel keeps its own history of the last week, notices when another plugin or program is touching the TDP or the fans, and notes what changes in each section, so I can understand and fix issues much faster.
+* **Startup:** On some handhelds, like the ROG Ally or the MSI Claw, Panel no longer freezes for a few seconds when it starts.
 
-* never merge a failed call into a successful one in the diary ([#828](https://github.com/Hooandee/panel-de-control/issues/828)) ([4c63ba5](https://github.com/Hooandee/panel-de-control/commit/4c63ba55dd06cad93a51d6f63151422a5e6dbfc1))
-* stop the charge-limit probe from freezing Panel's startup ([#821](https://github.com/Hooandee/panel-de-control/issues/821)) ([93b19b4](https://github.com/Hooandee/panel-de-control/commit/93b19b4b0daa4c6213b8dda456e524451cf06b1a))
+### Italiano
+
+* **Segnalazioni:** Le segnalazioni di problemi ora sono molto più intelligenti. Panel tiene un proprio storico dell'ultima settimana, si accorge se un altro plugin o programma sta toccando il TDP o le ventole e annota cosa cambia in ogni sezione, così posso capire e risolvere i problemi molto più in fretta.
+* **Avvio:** Su alcune console, come la ROG Ally o la MSI Claw, Panel non si blocca più per qualche secondo all'avvio.
+
+### Deutsch
+
+* **Berichte:** Problemberichte sind jetzt viel klüger. Panel führt einen eigenen Verlauf der letzten Woche, merkt, wenn ein anderes Plugin oder Programm am TDP oder an den Lüftern dreht, und notiert, was sich in jedem Bereich ändert. So kann ich Fehler viel schneller verstehen und beheben.
+* **Start:** Auf manchen Handhelds, etwa dem ROG Ally oder der MSI Claw, hängt Panel beim Start nicht mehr ein paar Sekunden fest.
+
+### Português (Brasil)
+
+* **Relatórios:** Os relatórios de problemas agora são muito mais inteligentes. O Panel guarda seu próprio histórico da última semana, percebe quando outro plugin ou programa está mexendo no TDP ou nas ventoinhas e anota o que muda em cada seção, assim consigo entender e corrigir os problemas muito mais rápido.
+* **Inicialização:** Em alguns portáteis, como o ROG Ally ou o MSI Claw, o Panel não trava mais por alguns segundos ao iniciar.
 
 ## [0.58.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.2...panel-de-control-v0.58.3) (2026-09-30)
 
