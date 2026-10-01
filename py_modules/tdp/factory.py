@@ -186,6 +186,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    if getattr(device, "arch", "x86") == "arm":
+        return []
     if key == "desktop_pc":
         # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
         # without readback, AMD RAPL can confirm a write it ignores).

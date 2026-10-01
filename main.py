@@ -764,7 +764,11 @@ class Plugin:
         self._cpu_info = read_cpu_info()
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
-        self._chip = read_cpu_model() if not self._device.is_generic else None
+        self._chip = (
+            read_cpu_model()
+            if not self._device.is_generic and self._device.arch != "arm"
+            else None
+        )
         self._current_appid = None
         self._current_game_name = None  # display name of the running game (for the HUD)
         # HUD (MangoHud) plugin-state metrics: the presets.conf path + the shown pdc

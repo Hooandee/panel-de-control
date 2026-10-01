@@ -109,7 +109,8 @@ export interface DeviceInfo {
   key: string;
   display_name: string;
   chip: string;
-  vendor: "amd" | "intel";
+  vendor: string;
+  arch?: "x86" | "arm";
   tdp_min: number;
   tdp_default: number;
   tdp_max: number;

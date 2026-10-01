@@ -26,7 +26,7 @@ class DeviceProfile:
     key: str                      # stable id, e.g. "rog_ally_x"
     display_name: str             # shown in DeviceHeader, e.g. "ROG Ally X"
     chip: str                     # e.g. "AMD Z1 Extreme"
-    vendor: str                   # "amd" | "intel"
+    vendor: str                   # "amd" | "intel" | "qualcomm" | other SoC vendor
     tdp_min: int                  # watts
     tdp_default: int              # watts (sensible nominal)
     tdp_max: int                  # watts on battery
@@ -73,6 +73,10 @@ class DeviceProfile:
     # domains. Automatic only for hardware that has been validated end-to-end;
     # generic Linux hosts remain opt-in from Settings.
     desktop_mode: bool = False
+    # "arm" profiles are matched by device-tree compatible strings and never reach
+    # x86-only paths (watt-based TDP backends, ryzenadj, amdgpu/i915 clocks).
+    arch: str = "x86"
+    dt_compatible: tuple[str, ...] = field(default_factory=tuple)
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -104,6 +108,25 @@ DESKTOP_PC = DeviceProfile(
     tdp_max_charger=GENERIC.tdp_max_charger,
     experimental=True,
     desktop_mode=True,
+)
+
+GENERIC_ARM = DeviceProfile(
+    key="generic_arm",
+    display_name="Dispositivo ARM",
+    chip=GENERIC.chip,
+    vendor="arm",
+    tdp_min=0,
+    tdp_default=0,
+    tdp_max=0,
+    tdp_max_charger=0,
+    is_generic=True,
+    arch="arm",
+)
+
+ARM_DEVICE_TABLE = (
+    DeviceProfile("ayn_thor", "AYN Thor", "Snapdragon 8 Gen 2", "qualcomm",
+                  0, 0, 0, 0, dt_compatible=("ayn,thor",), experimental=True,
+                  panel="oled", arch="arm"),
 )
 
 # Ordered most-specific first (so "ROG Ally X" wins before "ROG Ally").

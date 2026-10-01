@@ -382,11 +382,12 @@ class XeGpuClock(_FreqPairClock):
 
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
-    order = (
-        (XeGpuClock, IntelGpuClock)
-        if getattr(device, "vendor", "amd") == "intel"
-        else (AmdGpuClock,)
-    )
+    if getattr(device, "arch", "x86") == "arm":
+        order = ()
+    elif getattr(device, "vendor", "amd") == "intel":
+        order = (XeGpuClock, IntelGpuClock)
+    else:
+        order = (AmdGpuClock,)
     selection = []
     for cls in order:
         backend = cls(root)
