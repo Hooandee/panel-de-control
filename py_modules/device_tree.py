@@ -49,7 +49,10 @@ def _read_text(path: str) -> str:
 
 
 def is_arm(root: str = "/") -> bool:
-    return os.path.exists(os.path.join(root, _MIDR)) or bool(read_device_tree(root).compatible)
+    if os.path.exists(os.path.join(root, _MIDR)):
+        return True
+    has_dmi = bool(_read_text(os.path.join(root, "sys/class/dmi/id/sys_vendor")))
+    return not has_dmi and bool(read_device_tree(root).compatible)
 
 
 def read_device_tree(root: str = "/") -> DeviceTree:

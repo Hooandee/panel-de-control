@@ -102,3 +102,24 @@ def test_arm_never_reaches_x86_power_or_gpu_clock_paths(tmp_path):
     assert backend.supported is False
     assert backend.probe_trace == ()
     assert select_gpu_clock(prof, root=root)._selection == []
+
+
+def test_x86_with_a_populated_device_tree_and_dmi_stays_x86(tmp_path):
+    dt = tmp_path / "proc/device-tree"
+    dt.mkdir(parents=True)
+    (dt / "compatible").write_bytes(b"intel,ce4100\0")
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True)
+    (dmi / "sys_vendor").write_text("Some OEM\n")
+    (dmi / "product_name").write_text("Unknown Handheld\n")
+    (tmp_path / "proc/cpuinfo").write_text("vendor_id\t: GenuineIntel\nmodel name\t: Core\n")
+    prof = detect(root=str(tmp_path))
+    assert prof.arch == "x86"
+    assert prof.key == "generic"
+
+
+def test_device_tree_without_midr_or_dmi_is_arm(tmp_path):
+    dt = tmp_path / "proc/device-tree"
+    dt.mkdir(parents=True)
+    (dt / "compatible").write_bytes(b"ayn,thor\0qcom,sm8550\0")
+    assert detect(root=str(tmp_path)).key == "ayn_thor"

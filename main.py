@@ -635,9 +635,10 @@ class Plugin:
             self._settings["_hdr_scope_migrated"] = True
             self._store.save(self._settings)
         # Intel/Xe needs gamescope composition forced for a color look to show in-game
-        # (the LUT isn't carried by the HW color pipeline as it is on AMD).
+        # (the LUT isn't carried by the HW color pipeline as it is on AMD); ARM display
+        # controllers keep the same forced path until their plane pipeline is proven.
         self._color_backend = GamescopeColorBackend(
-            force_composite=(self._device.vendor == "intel")
+            force_composite=(self._device.vendor == "intel" or self._device.arch == "arm")
         )
         decky.logger.info(
             "color: supported=%s (%s)",
