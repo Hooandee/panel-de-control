@@ -1,5 +1,6 @@
 import { ScalarControl } from "./types";
 import { markSelfWrite } from "./selfWrite";
+import { recordUiEvent } from "./uiEvents";
 
 // SteamClient brightness adapter. Isolated here so the rest of the UI is stable
 // if a device needs a different call. Never throws — degrades to "unavailable"
@@ -29,8 +30,9 @@ export const displayBrightness: ScalarControl = {
     try {
       markSelfWrite("brightness");
       SteamClient?.System?.Display?.SetBrightness?.(fraction);
-    } catch {
-      /* ignore */
+      recordUiEvent("display", "brightness", { fraction });
+    } catch (error) {
+      recordUiEvent("display", "brightness", { fraction, error: String(error).slice(0, 120) }, false);
     }
   },
 };

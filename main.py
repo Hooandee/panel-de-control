@@ -261,6 +261,7 @@ _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
 _UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
 _UI_DIAGNOSTIC_HISTORY = 20
+_UI_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
@@ -1363,6 +1364,18 @@ class Plugin:
 
     def _ui_diagnostics_snapshot(self) -> list[dict]:
         return [{key: entry[key] for key in ("area", "code", "count")} for entry in self._ui_diagnostics()]
+
+    async def record_ui_event(self, area: str, action: str, detail: str = "", ok: bool = True) -> bool:
+        """A Steam setting the interface wrote itself (overlay level, volume,
+        brightness, per-game profile, launch options) and whether it went through."""
+        diary = journal.active
+        if diary is None:
+            return False
+        area = area if isinstance(area, str) and _UI_EVENT_NAME.match(area) else "unknown"
+        action = action if isinstance(action, str) and _UI_EVENT_NAME.match(action) else "unknown"
+        diary.write("INFO" if ok else "WARNING", "ui", action, area=area,
+                    detail=" ".join(str(detail).split())[:400], ok=bool(ok))
+        return True
 
     async def record_ui_diagnostic(self, area: str, code: str, detail: str = "") -> bool:
         area = area if isinstance(area, str) and _UI_DIAGNOSTIC_AREA.match(area) else "unknown"

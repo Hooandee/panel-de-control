@@ -1,5 +1,7 @@
 import { findModuleExport } from "@decky/ui";
 
+import { recordUiEvent } from "../system/uiEvents";
+
 export type SteamOverlayResolver = "global" | "module" | "unavailable";
 export type SteamOverlayActivationOutcome =
   | "not_attempted"
@@ -300,6 +302,7 @@ export class SteamOverlayController {
       requested_level: requestedLevel,
       observed_level: observedLevel,
     };
+    recordUiEvent("hud", "steam_overlay_level", { ...this.lastActivation }, outcome === "confirmed" || outcome === "already_visible");
     return this.diagnostics();
   }
 

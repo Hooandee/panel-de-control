@@ -16,6 +16,7 @@ import {
   loadThemeExtension,
   prepareRemoteThemeInstall,
   recordThemeFailure,
+  recordUiEvent,
   rollbackThemeInstall,
   settleThemeActivation,
 } from "./api";
@@ -23,6 +24,7 @@ import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { startFrontendErrorReporting } from "./system/uiDiagnostics";
+import { setUiEventSink } from "./system/uiEvents";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
@@ -147,6 +149,7 @@ export default definePlugin(() => {
   hydrateModules();
 
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
+  setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
@@ -182,6 +185,7 @@ export default definePlugin(() => {
       shutdownUiActivity();
       stopGameWatcher();
       stopFrontendErrorReporting();
+      setUiEventSink(null);
       stopEcoAmbient();
       stopValueToast();
       stopContextMenu();
