@@ -958,6 +958,7 @@ export interface ControllerConfig {
   // Whether we have a known button map for this model. When false,
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
+  extra_buttons?: boolean;
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];

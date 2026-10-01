@@ -56,6 +56,10 @@ DEVICE_BUTTONS = {
     ],
 }
 
+# Recognised models whose controller has no extra button beyond the standard
+# layout and the system buttons (AYN Thor: Back and AYN keys map to QuickAccess).
+DEVICES_WITHOUT_EXTRA_BUTTONS = frozenset({"ayn_thor"})
+
 # InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
 # versions. Pick the generation that best matches the live daemon; ties prefer the
 # current names. This keeps one physical M1/M2 pair in the UI instead of exposing
@@ -125,7 +129,15 @@ def buttons_for(device_key, capabilities) -> list:
 
 def is_known_device(device_key) -> bool:
     """Whether we have a known button map for this device."""
-    return device_key in DEVICE_BUTTONS or device_key in DEVICE_BUTTON_VARIANTS
+    return (
+        device_key in DEVICE_BUTTONS
+        or device_key in DEVICE_BUTTON_VARIANTS
+        or device_key in DEVICES_WITHOUT_EXTRA_BUTTONS
+    )
+
+
+def has_extra_buttons(device_key) -> bool:
+    return device_key not in DEVICES_WITHOUT_EXTRA_BUTTONS
 
 
 def sanitize_target(target: dict):
