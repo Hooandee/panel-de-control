@@ -12,6 +12,7 @@ curve can leave a fan idle when the device is hot.
 import glob
 import os
 from typing import Optional
+import journal
 
 _HWMON = "sys/class/hwmon"
 _CHIP_NAME = "asus_custom_fan_curve"
@@ -133,7 +134,8 @@ def _write(path: str, value: str) -> bool:
         with open(path, "w") as f:
             f.write(value)
         return True
-    except OSError:
+    except OSError as error:
+        journal.write_failed(path, value, error)
         return False
 
 

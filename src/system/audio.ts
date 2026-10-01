@@ -1,5 +1,6 @@
 import { ScalarControl } from "./types";
 import { markSelfWrite } from "./selfWrite";
+import { recordUiEvent } from "./uiEvents";
 
 // SteamClient system-volume adapter. Volume is per audio device, so we track the
 // default OUTPUT device: GetDevices() seeds the current level and device id,
@@ -73,9 +74,10 @@ export const systemVolume: ScalarControl = {
       if (outputDeviceId !== null) {
         markSelfWrite("volume");
         void SteamClient?.System?.Audio?.SetDeviceVolume?.(outputDeviceId, OUTPUT, fraction);
+        recordUiEvent("audio", "steam_volume", { fraction });
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      recordUiEvent("audio", "steam_volume", { fraction, error: String(error).slice(0, 120) }, false);
     }
   },
 };

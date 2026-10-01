@@ -4,6 +4,7 @@ returns None (honest 'unknown'), a failed write returns False.
 Consolidation target: fans/hwmon.py, fans/control.py and power/reader.py still
 carry their own private copies of these (pre-existing backlog); new code should
 import from here, and those can migrate incrementally."""
+import journal
 
 
 def read_str(path):
@@ -29,5 +30,6 @@ def write_str(path, value) -> bool:
         with open(path, "w") as f:
             f.write(str(value))
         return True
-    except OSError:
+    except OSError as error:
+        journal.write_failed(path, value, error)
         return False

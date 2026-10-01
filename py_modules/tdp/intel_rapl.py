@@ -3,6 +3,7 @@ import os
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+import journal
 
 _POWERCAP = "sys/devices/virtual/powercap"
 # Prefer the MMIO interface (current on recent kernels), fall back to the legacy one.
@@ -293,7 +294,8 @@ class IntelRaplBackend(TDPBackend):
             with open(path, "w") as f:
                 f.write(str(value))
             return True
-        except OSError:
+        except OSError as error:
+            journal.write_failed(path, value, error)
             return False
 
     def get_limits(self) -> TdpLimits:

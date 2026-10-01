@@ -3,6 +3,7 @@
 // and testable. Everything is guarded: a missing global degrades to empty/no-op.
 
 import { stableGameKey, gameInstanceKey, isNonSteam, APP_TYPE_TOOL } from "../tdp/gameIdentity";
+import { recordUiEvent } from "../system/uiEvents";
 
 export interface GameEntry {
   /** The exact numeric appid of the library entry opened by the user. */
@@ -174,10 +175,15 @@ export function writeLaunchOptions(appid: number, value: string, isNonSteam = fa
       isNonSteam && typeof apps?.SetShortcutLaunchOptions === "function"
         ? apps.SetShortcutLaunchOptions
         : apps?.SetAppLaunchOptions;
-    if (typeof setter !== "function") return false;
+    if (typeof setter !== "function") {
+      recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: "no_setter" }, false);
+      return false;
+    }
     setter.call(apps, appid, value);
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, value: value.slice(0, 300) });
     return true;
-  } catch {
+  } catch (error) {
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: String(error).slice(0, 120) }, false);
     return false;
   }
 }

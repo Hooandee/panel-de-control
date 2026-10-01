@@ -1,5 +1,7 @@
 import { findModuleByExport, findModuleExport } from "@decky/ui";
 
+import { recordUiEvent } from "../system/uiEvents";
+
 import {
   selectSteamPerformanceComponents,
   SteamPerformanceComponents,
@@ -416,6 +418,7 @@ export function syncSteamPerformanceProfile(
 
   try {
     store.SetGameSpecificProfileEnabled(useGameProfile);
+    recordUiEvent("performance", "game_profile", { useGameProfile, scope, running_game_id: expectedGameId });
     recordSteamPerformanceDiagnostic("profile", {
       status: "request_sent",
       scope,

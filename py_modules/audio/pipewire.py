@@ -9,7 +9,10 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import time
+
+import journal
 
 from audio.const import balance_channels
 from audio.filter_chain import build_chain_config
@@ -182,6 +185,26 @@ def _find_session():
             continue
     return None
 
+
+
+def _journal_sink_write(kind, sink, before, requested, readback, caller):
+    diary = journal.active
+    wanted = list(requested) if isinstance(requested, tuple) else requested
+    if kind == "volume":
+        unchanged = before == readback and readback is not None and set(readback) == set(wanted)
+    else:
+        unchanged = before == readback == wanted
+    if diary is not None and not unchanged:
+        diary.write(
+            "INFO",
+            "audio",
+            kind,
+            sink=sink,
+            before=before,
+            requested=wanted,
+            after=readback,
+            by=caller,
+        )
 
 class PipeWireEq:
     def __init__(self, runner=None, name="Panel de Control"):
@@ -684,13 +707,18 @@ class PipeWireEq:
         )
         return tuple(f"{value}%" for value in values) or None
 
+    def eq_volume(self):
+        return self._sink_volume_pct(self._label)
+
     def _sink_volume_pct(self, sink):
         values = self._sink_volume_pcts(sink)
         return values[0] if values else None
 
     def _set_sink_volume_confirmed(self, sink, *values):
+        before = self._sink_volume_pcts(sink) if journal.active else None
         self._runner(["pactl", "set-sink-volume", sink, *values])
         readback = self._sink_volume_pcts(sink)
+        _journal_sink_write("volume", sink, before, values, readback, sys._getframe(1).f_code.co_name)
         if not readback:
             return False
         if len(values) == 1:
@@ -707,8 +735,11 @@ class PipeWireEq:
 
     def _set_sink_mute_confirmed(self, sink, muted):
         value = "1" if muted else "0"
+        before = self._sink_muted(sink) if journal.active else None
         self._runner(["pactl", "set-sink-mute", sink, value])
-        return self._sink_muted(sink) == bool(muted)
+        readback = self._sink_muted(sink)
+        _journal_sink_write("mute", sink, before, bool(muted), readback, sys._getframe(1).f_code.co_name)
+        return readback == bool(muted)
 
     def _downstream_sink(self):
         default_sink = self._runner(["pactl", "get-default-sink"])

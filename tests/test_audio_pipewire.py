@@ -3141,3 +3141,24 @@ def test_unprivileged_session_commands_keep_the_current_identity(monkeypatch):
 
     assert "user" not in calls[0]
     assert "extra_groups" not in calls[0]
+
+
+def test_volume_writes_that_change_nothing_stay_out_of_the_diary(tmp_path):
+    import journal
+    from audio import pipewire
+
+    written = []
+
+    class Diary:
+        def write(self, *args, **fields):
+            written.append((args, fields))
+
+    journal.active = Diary()
+    try:
+        pipewire._journal_sink_write("volume", "eq", ("100%", "100%"), ("100%",), ("100%", "100%"), "pin")
+        pipewire._journal_sink_write("mute", "eq", False, False, False, "pin")
+        pipewire._journal_sink_write("volume", "eq", ("30%", "30%"), ("100%",), ("100%", "100%"), "ensure_sink")
+        pipewire._journal_sink_write("volume", "eq", ("30%",), ("100%",), ("30%",), "ensure_sink")
+    finally:
+        journal.active = None
+    assert [fields["by"] for _args, fields in written] == ["ensure_sink", "ensure_sink"]

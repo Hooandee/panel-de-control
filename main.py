@@ -1,10 +1,12 @@
 import asyncio
 import copy
+import inspect
 import json
 import math
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import deque
 from concurrent.futures import (
@@ -26,6 +28,8 @@ import device_registry
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
+import journal
+import journal_context
 import self_updater
 import theme_activation
 import theme_packages
@@ -144,6 +148,60 @@ _REPORT_APP = "panel-de-control"
 _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
+_SUPPORT_SAMPLE_INTERVAL_S = 30
+_SUPPORT_CONTEXT_INTERVAL_S = 900
+_SUPPORT_AFTER_ACTION_S = 5
+# Stable fields only: live readings would make every refresh look like a change.
+# tests/test_journal_sections.py requires an entry for every section.
+_SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
+    "power": (
+        ("get_tdp_state", (
+            "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
+            "global_watts", "has_game_profile", "follows_global", "auto_config",
+            "global_auto_config", "low_battery_hold.enabled",
+        )),
+    ),
+    "system": (
+        ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
+        ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
+        ("get_eco_state", ("enabled", "tdp_min_w")),
+        ("get_battery_state", ("charge_limit",)),
+    ),
+    "display": (
+        ("get_color_state", (
+            "active_preset", "saturation", "temperature", "contrast", "gamma", "hue", "black",
+            "vibrance", "oled_look", "has_game_profile",
+        )),
+    ),
+    "fans": (
+        ("get_fan_curve_state", (
+            "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
+        )),
+    ),
+    "audio": (
+        ("get_audio_state", ("enabled", "preset", "route", "bass", "loudness", "balance", "has_game_profile")),
+    ),
+    "mandos": (
+        ("_safe_controller_config", ("manager", "manager_version", "buttons", "has_game_profile")),
+    ),
+    "hud": (
+        ("get_hud_state", (
+            "capability", "applyStatus", "conflict", "model.enabled", "model.layout",
+            "model.position", "model.items",
+        )),
+    ),
+    "params": (("_support_launch_state", None),),
+    "cleaner": (("_steam_cleaner_diagnostics", ("phase", "interrupted", "persistence_error")),),
+    "ambient": (("_support_ambient_state", None),),
+    "themes": (
+        ("_theme_report_diagnostics", (
+            "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "recent_failures",
+        )),
+        ("_support_custom_artwork", None),
+    ),
+    "settings": (("_support_settings_state", None),),
+}
 
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
@@ -198,8 +256,9 @@ _THEME_FAILURE_OPERATIONS = frozenset({
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
-_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media)$")
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
 _UI_DIAGNOSTIC_HISTORY = 20
+_UI_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
@@ -1303,6 +1362,16 @@ class Plugin:
     def _ui_diagnostics_snapshot(self) -> list[dict]:
         return [{key: entry[key] for key in ("area", "code", "count")} for entry in self._ui_diagnostics()]
 
+    async def record_ui_event(self, area: str, action: str, detail: str = "", ok: bool = True) -> bool:
+        diary = journal.active
+        if diary is None:
+            return False
+        area = area if isinstance(area, str) and _UI_EVENT_NAME.match(area) else "unknown"
+        action = action if isinstance(action, str) and _UI_EVENT_NAME.match(action) else "unknown"
+        diary.write("INFO" if ok else "WARNING", "ui", action, area=area,
+                    detail=" ".join(str(detail).split())[:400], ok=bool(ok))
+        return True
+
     async def record_ui_diagnostic(self, area: str, code: str, detail: str = "") -> bool:
         area = area if isinstance(area, str) and _UI_DIAGNOSTIC_AREA.match(area) else "unknown"
         code = code if isinstance(code, str) and _THEME_FAILURE_CODE.match(code) else "unknown"
@@ -2049,6 +2118,7 @@ class Plugin:
                 hostname=hostname,
             ),
         )
+        diary = await loop.run_in_executor(None, self._journal_report)
         return report_collector.build_bundle(
             app=_REPORT_APP,
             categories=categories,
@@ -2059,6 +2129,7 @@ class Plugin:
             state=states,
             stores=self._report_stores(),
             logs=logs,
+            journal=diary,
             kernel=kernel,
             sysfs=snapshot,
             home=home,
@@ -3271,8 +3342,8 @@ class Plugin:
         if callable(starter) and getattr(ctrl, "_owns_fan", False):
             try:
                 starter()
-            except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
-                pass
+            except Exception as error:  # noqa: BLE001 — starting the loop must never break an RPC
+                self._log_fan_transition("loop_start_failed", ok=False, error=type(error).__name__)
 
     def _reapply_fans_sync(self) -> bool:
         """Apply the effective fan profile for the current game (or global). Returns
@@ -3292,6 +3363,7 @@ class Plugin:
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             released = self._restore_fans_safe()
             self._fan_apply_confirmed = False
+            self._log_fan_transition("module_disabled", ok=bool(released))
             return released
         try:
             hw_state = self._fan_ctrl.read_state()
@@ -3312,32 +3384,62 @@ class Plugin:
                             continue
                         result = self._fan_ctrl.set_curve(channel, channel_profile["points"])
                     ok = bool(result.get("ok")) and ok
+                self._log_fan_transition("desktop_channels", ok=ok, profile=profile)
                 return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
+            points = None
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
+                    mode = "adaptive_learning_auto"
                     res = self._fan_ctrl.set_auto(None)  # not enough data → firmware auto
                 else:
+                    mode = "adaptive_curve"
                     if not self._arm_fremont_fan_handoff_marker():
+                        self._log_fan_transition(mode, ok=False, detail="handoff_marker")
                         return False
                     res = self._fan_ctrl.apply_curve_all(points)
             elif preset == "auto" or not profile["points"]:
+                mode = "auto"
                 res = self._fan_ctrl.set_auto(None)
             else:
+                mode = "curve"
+                points = profile["points"]
                 if not self._arm_fremont_fan_handoff_marker():
+                    self._log_fan_transition(mode, ok=False, detail="handoff_marker")
                     return False
-                res = self._fan_ctrl.apply_curve_all(profile["points"])
+                res = self._fan_ctrl.apply_curve_all(points)
             # A malformed response (None / {} / no "ok") is not success, so reset_ok
             # can't ride a bad re-apply.
             confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
             self._fan_apply_confirmed = confirmed
+            self._log_fan_transition(
+                mode,
+                ok=confirmed,
+                preset=preset,
+                points=points,
+                detail=res.get("detail") if isinstance(res, dict) else "invalid_response",
+            )
             return confirmed and self._sync_fremont_fan_handoff_marker()
-        except Exception:  # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
             self._fan_apply_confirmed = False
             self._sync_fremont_fan_handoff_marker()
+            self._log_fan_transition("apply_failed", ok=False, error=type(error).__name__)
             return False
+
+    def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
+        if getattr(self._fan_ctrl, "supported", True) is False:
+            return
+        event = {
+            "mode": mode,
+            "ok": ok,
+            "backend": getattr(self._fan_ctrl, "name", type(self._fan_ctrl).__name__),
+            "appid": self._current_appid,
+            **{key: value for key, value in fields.items() if value is not None},
+        }
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Fan transition %s", json.dumps(event, sort_keys=True, separators=(",", ":"), default=str))
 
     def _adaptive_curve_points(self, appid):
         """The learned curve to drive in adaptive mode for *appid* (or None if there
@@ -3535,6 +3637,7 @@ class Plugin:
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
         if preset not in fan_presets.PRESETS:
+            decky.logger.warning("Fan request ignored: unknown preset %r", preset)
             return await self._fan_curve_state_offloop()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
@@ -4458,8 +4561,9 @@ class Plugin:
                 "Auto-TDP transition %s",
                 json.dumps(
                     {
-                        field: status.get(field)
-                        for field in transition_fields
+                        **{field: status.get(field) for field in transition_fields},
+                        "fps": status.get("fps"),
+                        "signal_age_s": status.get("signal_age_s"),
                     },
                     sort_keys=True,
                     separators=(",", ":"),
@@ -6775,7 +6879,9 @@ class Plugin:
             "at": round(time.monotonic(), 3),
             **fingerprint,
         }
+        previous_event = self._tdp_history[-1] if self._tdp_history else None
         self._tdp_history.append(event)
+        self._journal_external_tdp_write(event, previous_event)
         encoded = json.dumps(
             event,
             sort_keys=True,
@@ -8648,12 +8754,27 @@ class Plugin:
         if context_appid is not _RPC_CONTEXT_UNSET:
             context = str(context_appid) if context_appid is not None else None
             if context != self._current_appid:
+                self._journal_ignored("stale_game_context", scope=scope, appid=appid,
+                                      context=context, current=self._current_appid)
                 return False
-        return scope == "global" or (
+        current = scope == "global" or (
             scope == "game"
             and appid is not None
             and str(appid) == self._current_appid
         )
+        if not current:
+            self._journal_ignored("scope_not_current", scope=scope, appid=appid,
+                                  current=self._current_appid)
+        return current
+
+    def _journal_ignored(self, reason: str, **fields) -> None:
+        diary = journal.active
+        if diary is None:
+            return
+        caller = sys._getframe(2).f_code.co_name
+        if caller.startswith("_"):
+            caller = sys._getframe(3).f_code.co_name
+        diary.write("WARNING", "rpc", "ignored", call=caller, reason=reason, **fields)
 
     def _set_current_appid(self, appid) -> None:
         current = str(appid) if appid is not None else None
@@ -9678,9 +9799,23 @@ class Plugin:
             return
         try:
             if self._color_backend.supported:
-                self._color_backend.apply(self._effective_color())
-        except Exception:  # noqa: BLE001
-            pass
+                color = self._effective_color()
+                ok = self._color_backend.apply(color)
+                self._log_display_transition("color", ok=bool(ok), color=color,
+                                             night=self._night_is_active(),
+                                             result=getattr(self._color_backend, "_last_apply", None))
+        except Exception as error:  # noqa: BLE001
+            self._log_display_transition("color", ok=False, error=type(error).__name__)
+
+    def _log_display_transition(self, kind: str, *, ok: bool, **fields) -> None:
+        """Startup re-asserts the same look dozens of times; only changes are logged."""
+        event = {"kind": kind, "ok": ok, **{key: value for key, value in fields.items() if value is not None}}
+        last = getattr(self, "_display_logged", {})
+        if last.get(kind) == event:
+            return
+        self._display_logged = {**last, kind: event}
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Display transition %s", json.dumps(event, sort_keys=True, separators=(",", ":"), default=str))
 
     async def _await_display_backend(self, attempts=30, interval=5.0,
                                      reasserts=40, reassert_interval=3.0) -> None:
@@ -10078,9 +10213,10 @@ class Plugin:
         elsewhere, e.g. Steam's own toggle)."""
         try:
             if self._hdr_supported() and self._color.hdr(self._current_appid):
-                self._hdr_backend.set_enabled(True)
-        except Exception:  # noqa: BLE001
-            pass
+                ok = self._hdr_backend.set_enabled(True)
+                self._log_display_transition("hdr", ok=ok is not False, enabled=True)
+        except Exception as error:  # noqa: BLE001
+            self._log_display_transition("hdr", ok=False, error=type(error).__name__)
 
     async def get_hdr_state(self) -> dict:
         self._init()
@@ -11102,6 +11238,7 @@ class Plugin:
     def _resolve_scope(self, scope, appid):
         """Normalize scope/appid; returns scope or None if invalid."""
         if scope not in ("global", "game"):
+            self._journal_ignored("invalid_scope", scope=scope, appid=appid)
             return None
         if scope == "game" and appid is None:
             return "global"
@@ -11566,7 +11703,18 @@ class Plugin:
         if active:
             sync_state = getattr(self._audio, "sync_state", None)
             active = not callable(sync_state) or sync_state() is True
-        return {"route": self._current_route(), "active": active}
+        volume = None
+        if active and journal.active is not None:
+            eq_volume = getattr(self._audio, "eq_volume", None)
+            volume = eq_volume() if callable(eq_volume) else None
+        return {"route": self._current_route(), "active": active, "volume": volume}
+
+    def _journal_audio_volume(self, volume) -> None:
+        diary = journal.active
+        previous = getattr(self, "_audio_volume_seen", None)
+        self._audio_volume_seen = volume
+        if diary is not None and volume is not None and previous is not None and volume != previous:
+            diary.write("INFO", "audio", "volume_seen", sink="eq", before=previous, after=volume)
 
     async def _audio_loop(self) -> None:
         """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
@@ -11593,6 +11741,7 @@ class Plugin:
                 if failures and now < self._audio_watch_resume_at:
                     continue
                 probe = await self._offload_call(self._audio_check)
+                self._journal_audio_volume(probe.get("volume"))
                 if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._log_audio_transition(
                         "watch", route=probe["route"], previous=self._audio_route_last,
@@ -11605,8 +11754,8 @@ class Plugin:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as error:  # noqa: BLE001
+                decky.logger.warning("Audio watch failed: %s: %s", type(error).__name__, error)
 
     def _restore_audio_safe(self) -> None:
         """Remove the EQ sink and restore the previous default output so a
@@ -11888,6 +12037,7 @@ class Plugin:
         log("Lifecycle transition %s", encoded)
 
     async def _main(self) -> None:
+        self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
@@ -11955,6 +12105,7 @@ class Plugin:
             # has it on without waiting for the QAM.
             self._start_auto_loop()
             self._start_audio_loop()
+            self._start_support_watch()
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -11976,6 +12127,246 @@ class Plugin:
             self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
         decky.logger.info("Panel de Control unloaded")
+        self._stop_journal()
+
+    def _start_journal(self) -> None:
+        if journal.active is not None:
+            return
+        runtime_dir = getattr(decky, "DECKY_PLUGIN_RUNTIME_DIR", "")
+        if not runtime_dir:
+            return
+        try:
+            diary = journal.Journal(os.path.join(runtime_dir, "logs"))
+            diary.start()
+            handler = journal.JournalHandler(diary)
+            decky.logger.addHandler(handler)
+            self._journal_handler = handler
+            self._journal_restore_handlers = journal.queue_logger_handlers(decky.logger)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Journal unavailable: %s", error)
+            return
+        journal.active = diary
+        self._loop_watchdog = journal.LoopWatchdog(diary)
+        self._loop_watchdog_task = asyncio.get_running_loop().create_task(self._loop_watchdog.beat())
+        self._loop_watchdog.start()
+        diary.write(
+            "INFO",
+            "session",
+            "start",
+            version=read_version(),
+            decky=os.environ.get("DECKY_VERSION"),
+        )
+
+    @staticmethod
+    def _journal_report() -> dict | None:
+        diary = journal.active
+        if diary is None:
+            return None
+        try:
+            report = journal.collect(diary.directory)
+        except Exception as error:  # noqa: BLE001
+            return {"schema": 1, "error": type(error).__name__}
+        report["dropped"] = diary.dropped
+        report["write_failures"] = diary.write_failures
+        return report
+
+    def _start_support_watch(self) -> None:
+        if journal.active is None:
+            return
+        task = getattr(self, "_support_task", None)
+        if task is not None and not task.done():
+            return
+        self._support_task = asyncio.create_task(self._support_watch_loop())
+
+    def _read_support_context(self) -> dict:
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        homebrew = os.path.join(home, "homebrew")
+        return journal_context.context_snapshot(
+            os.path.join(homebrew, "plugins"),
+            os.path.join(homebrew, "settings", "loader.json"),
+            self._run_capture,
+        )
+
+    async def _support_sample(self) -> dict:
+        power = await self.get_power_draw()
+        fans = await self.get_fan_state()
+        cpu_c, gpu_c = extract_cpu_gpu_temps(fans)
+        rpm = next(
+            (fan.get("rpm") for fan in (fans.get("fans") or []) if isinstance(fan, dict)),
+            None,
+        )
+        try:
+            battery = self._battery.read().get("percent")
+        except Exception:  # noqa: BLE001
+            battery = None
+        watts = power.get("watts")
+        return {
+            "game": self._current_appid,
+            "ac": power.get("on_ac"),
+            "tdp_w": power.get("applied"),
+            "set_w": power.get("setpoint"),
+            "control": (power.get("ownership") or {}).get("status"),
+            "w": round(watts, 1) if isinstance(watts, (int, float)) else None,
+            "gpu_busy": power.get("gpu_busy"),
+            "cpu_c": cpu_c,
+            "gpu_c": gpu_c,
+            "rpm": rpm,
+            "bat": battery,
+        }
+
+    def _journal_after_action(self) -> None:
+        self._support_refresh_due = time.monotonic() + _SUPPORT_AFTER_ACTION_S
+
+    async def _support_watch_loop(self) -> None:
+        watcher = journal_context.StateWatcher()
+        loop = asyncio.get_running_loop()
+        next_context = 0.0
+        diary = journal.active
+        if diary is None:
+            return
+        last_context, last_sections = await loop.run_in_executor(
+            None,
+            lambda: (
+                journal.last_record(diary.directory, "context"),
+                journal.merged_sections(diary.directory),
+            ),
+        )
+        while not self._shutting_down:
+            diary = journal.active
+            if diary is None:
+                return
+            try:
+                refresh_due = getattr(self, "_support_refresh_due", None)
+                if refresh_due is not None and time.monotonic() >= refresh_due:
+                    self._support_refresh_due = None
+                    next_context = 0.0
+                if time.monotonic() >= next_context:
+                    next_context = time.monotonic() + _SUPPORT_CONTEXT_INTERVAL_S
+                    context = await loop.run_in_executor(None, self._read_support_context)
+                    self._support_context = context
+                    if journal_context.needs_snapshot(last_context, context, ("plugins", "services", "rivals")):
+                        changes = journal_context.context_changes(last_context, context)
+                        diary.write("INFO", "context", "snapshot", **context, **({"changes": changes} if changes else {}))
+                        last_context = {"t": time.time(), **context}
+                    sections = await self._support_section_states()
+                    if journal_context.needs_snapshot(last_sections, {}, (), now=time.time()):
+                        diary.write("INFO", "sections", "snapshot", sections=sections)
+                        last_sections = {"t": time.time(), "sections": sections}
+                    else:
+                        changed = journal_context.section_changes(last_sections.get("sections"), sections)
+                        changed = {
+                            name: state for name, state in changed.items()
+                            if journal_context.canonical(state)
+                            != journal_context.canonical(last_sections["sections"].get(name))
+                        }
+                        if changed:
+                            diary.write("INFO", "sections", "changed", sections=changed)
+                            last_sections = {"t": time.time(), "sections": {**last_sections["sections"], **changed}}
+                sample = await self._support_sample()
+                reason = watcher.observe(sample, time.time())
+                if reason is not None:
+                    diary.write("INFO", "state", reason, **sample)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                diary.write("WARNING", "state", "sample_failed", error=type(error).__name__)
+            await self._support_pause()
+
+    async def _support_pause(self) -> None:
+        deadline = time.monotonic() + _SUPPORT_SAMPLE_INTERVAL_S
+        while time.monotonic() < deadline:
+            refresh_due = getattr(self, "_support_refresh_due", None)
+            if refresh_due is not None and time.monotonic() >= refresh_due:
+                return
+            await asyncio.sleep(1.0)
+
+    def _support_launch_state(self) -> dict:
+        return {
+            "custom_vars": len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars"))),
+            "games_with_options": len(self._settings.get("launch_usage") or {}),
+        }
+
+    @staticmethod
+    def _support_custom_artwork() -> dict:
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        return journal_context.custom_artwork(os.path.join(home, ".local", "share", "Steam", "userdata"))
+
+    @staticmethod
+    def _support_ambient_state() -> dict:
+        return {"available": False}
+
+    def _support_settings_state(self) -> dict:
+        prefs = self._settings.get("ui_prefs")
+        prefs = prefs if isinstance(prefs, dict) else {}
+        return {
+            "language": prefs.get("panel-de-control-lang"),
+            "qam_layout": prefs.get("pdc:qamLayout"),
+            "disabled_modules": self._settings.get("disabled_modules"),
+            "telemetry_enabled": self._settings.get("telemetry_enabled"),
+            "fan_experimental": self._settings.get("fan_experimental"),
+            "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
+        }
+
+    async def _support_call(self, name: str):
+        method = getattr(self, name)
+        if inspect.iscoroutinefunction(method):
+            return await method()
+        if name == "_theme_report_diagnostics":
+            return await self._offload_theme_call(method)
+        return await asyncio.get_running_loop().run_in_executor(None, method)
+
+    async def _support_section_states(self) -> dict:
+        states = {}
+        for section, sources in _SUPPORT_SECTIONS.items():
+            summary: dict = {}
+            for getter, fields in sources:
+                try:
+                    value = journal_context.pick_fields(await self._support_call(getter), fields)
+                except Exception as error:  # noqa: BLE001
+                    value = {"unavailable": type(error).__name__}
+                if len(sources) == 1 and isinstance(value, dict):
+                    summary.update(value)
+                else:
+                    summary[getter.removeprefix("_").removeprefix("get_")] = value
+            states[section] = journal_context.bounded(journal.compact_event(summary))
+        return states
+
+    def _journal_external_tdp_write(self, event: dict, previous: dict | None) -> None:
+        diary = journal.active
+        if diary is None or event.get("status_reason") != "external_drift":
+            return
+        if previous is not None and previous.get("status_reason") == "external_drift":
+            return
+        context = getattr(self, "_support_context", None) or {}
+        diary.write(
+            "WARNING",
+            "tdp",
+            "external_write",
+            requested=event.get("requested"),
+            observation=journal.compact_event(event.get("observation")),
+            game=self._current_appid,
+            rivals=context.get("rivals", []),
+        )
+
+    def _stop_journal(self) -> None:
+        diary = journal.active
+        if diary is None:
+            return
+        journal.active = None
+        watchdog = getattr(self, "_loop_watchdog", None)
+        if watchdog is not None:
+            watchdog.stop()
+        task = getattr(self, "_loop_watchdog_task", None)
+        if task is not None:
+            task.cancel()
+        diary.write("INFO", "session", "stop")
+        restore = getattr(self, "_journal_restore_handlers", None)
+        if restore is not None:
+            restore()
+        handler = getattr(self, "_journal_handler", None)
+        if handler is not None:
+            decky.logger.removeHandler(handler)
+        diary.stop(timeout=1.0)
 
     def _prepare_shutdown(self) -> None:
         self._cancel_charge_limit_reconcile("shutdown")
@@ -12004,6 +12395,10 @@ class Plugin:
         self._audio_task = None
         if audio_task is not None:
             audio_task.cancel()
+        support_task = getattr(self, "_support_task", None)
+        self._support_task = None
+        if support_task is not None:
+            support_task.cancel()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
@@ -12146,3 +12541,12 @@ class Plugin:
         finally:
             self._finish_theme_shutdown_sync()
         decky.logger.info("Panel de Control uninstalled")
+        self._stop_journal()
+
+
+journal.trace_calls(
+    Plugin,
+    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs"}),
+    automatic=frozenset({"load_theme_extension"}),
+    hidden_arguments=frozenset({"submit_report"}),
+)

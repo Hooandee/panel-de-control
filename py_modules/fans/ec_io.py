@@ -12,6 +12,7 @@ fresh load, so if ec_sys was already loaded read-only the node stays read-only a
 import os
 import threading
 from typing import Optional
+import journal
 
 
 class EcSys:
@@ -73,5 +74,6 @@ class EcSys:
                 f.seek(addr)
                 f.write(bytes([val & 0xFF]))
             return True
-        except OSError:
+        except OSError as error:
+            journal.write_failed(f"ec:{addr:#04x}", val, error)
             return False

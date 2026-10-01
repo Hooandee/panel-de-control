@@ -590,7 +590,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == 5
+    assert b["schema"] == 6
     assert b["app"] == "panel-de-control"
     assert b["kind"] == "bug"
     assert b["categories"] == ["tdp", "fans"]
