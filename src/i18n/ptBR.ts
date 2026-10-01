@@ -48,7 +48,7 @@ export const ptBR: Record<string, string> = {
   "hud.show.hint": "O Painel de Controle tenta ativar o nível do Steam necessário quando você mostra o HUD.",
   "hud.steam.hidden": "O HUD está oculto no Steam. Ative-o para mostrar este design no jogo.",
   "hud.steam.activate": "Ativar HUD do Steam",
-  "hud.steam.unavailable": "Não consigo ler as configurações do Steam. Ative manualmente a sobreposição de desempenho nível 2 ou superior.",
+  "hud.steam.unavailable": "Não é possível ler as configurações do Steam. Ative manualmente a sobreposição de desempenho nível 2 ou superior.",
   "hud.experimental.badge": "Experimental",
   "hud.reload": "Recarregar no jogo",
   "hud.reload.busy": "Recarregando…",
