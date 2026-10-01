@@ -17,9 +17,9 @@ class AmdDptcBackend(FirmwareAttrBackend):
         safety_lock_path=None,
         ownership_lock_path=None,
     ):
-        self._cooler_max = _watts_or_none(write_max)
-        self._charger_max = _watts_or_none(write_max_ac)
-        self._write_max = max(fallback.max_ac_w, self._cooler_max or 0, self._charger_max or 0)
+        self._cooler_max = write_max
+        self._charger_max = write_max_ac
+        self._write_max = max(fallback.max_ac_w, write_max or 0, write_max_ac or 0)
         super().__init__(
             "amd-dptc",
             fallback,
@@ -61,10 +61,3 @@ class AmdDptcBackend(FirmwareAttrBackend):
         if attr == "ppt_pl3_fppt":
             return round(self._write_max * 1.4)
         return self._write_max
-
-
-def _watts_or_none(value):
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None

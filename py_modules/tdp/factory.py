@@ -23,6 +23,7 @@ from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
+from tdp.write_ceilings import charger_write_max, cooler_write_max
 
 
 _RYZENADJ_ONLY_KEYS = frozenset({
@@ -164,8 +165,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         return AmdDptcBackend(
             fallback,
             root=root,
-            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
-            write_max_ac=_charger_write_max(device),
+            write_max=cooler_write_max(device),
+            write_max_ac=charger_write_max(device),
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )
@@ -180,8 +181,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
 
     def alib():
         return AlibBackend(fallback, root=root,
-                           write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
-                           write_max_ac=_charger_write_max(device))
+                           write_max=cooler_write_max(device),
+                           write_max_ac=charger_write_max(device))
 
     # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
     # first, then the acpi_call ALIB path when ryzenadj is absent.
@@ -231,14 +232,6 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     return [dptc, asus, lenovo, msi, *amd_tail]
 
 
-def _charger_write_max(device) -> int | None:
-    ceilings = [getattr(device, "experimental_tdp_max_ac", None)]
-    if getattr(device, "cooler_charger_only", False):
-        ceilings.append(device.cooler_max)
-    ceilings = [value for value in ceilings if value]
-    return max(ceilings) if ceilings else None
-
-
 _DESKTOP_MIN_W = 15
 
 
@@ -266,9 +259,9 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
         )
         return RyzenadjBackend(
             fallback,
-            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
+            write_max=cooler_write_max(device),
             write_max_ac=(
-                None if gpd_recovery else _charger_write_max(device)
+                None if gpd_recovery else charger_write_max(device)
             ),
             power_only_retry=gpd_recovery,
             require_readback=strict_readback,
