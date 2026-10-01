@@ -1596,6 +1596,16 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert hud["capability"] == "inactive"
 
 
+def _values(value):
+    """Every leaf of a JSON-like value as text; a substring search would also match
+    the appid's digits inside a timing such as 0.000136542."""
+    if isinstance(value, dict):
+        return [leaf for item in value.values() for leaf in _values(item)]
+    if isinstance(value, (list, tuple)):
+        return [leaf for item in value for leaf in _values(item)]
+    return [str(value)]
+
+
 def test_report_collects_autotdp_diagnostics_for_an_unrelated_category(
     plugin, monkeypatch
 ):
@@ -1658,7 +1668,7 @@ def test_report_collects_autotdp_diagnostics_for_an_unrelated_category(
     assert auto["learning"]["usable"] is True
     assert auto["last_pre_ui"]["reason"] != "ui_active"
     assert auto["last_pre_ui"]["fps"] == 58
-    assert "42" not in json.dumps(auto)
+    assert "42" not in _values(auto)
 
 
 def test_autotdp_diagnostics_do_not_reprobe_backend_readiness(plugin):
