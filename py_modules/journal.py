@@ -566,7 +566,7 @@ class LoopWatchdog:
             self.check()
 
 
-_TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z ]{1,40} transition) (?P<event>\{.*\})$", re.S)
+_TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z -]{1,40} transition) (?P<event>\{.*\})$", re.S)
 _TRANSITION_NOISE = ("at", "generation", "history")
 
 

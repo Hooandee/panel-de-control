@@ -4551,8 +4551,9 @@ class Plugin:
                 "Auto-TDP transition %s",
                 json.dumps(
                     {
-                        field: status.get(field)
-                        for field in transition_fields
+                        **{field: status.get(field) for field in transition_fields},
+                        "fps": status.get("fps"),
+                        "signal_age_s": status.get("signal_age_s"),
                     },
                     sort_keys=True,
                     separators=(",", ":"),

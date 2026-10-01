@@ -388,3 +388,10 @@ def test_a_raising_call_records_where_it_failed(tmp_path):
     failure = _lines(str(tmp_path))[0]["r"]
     assert failure["raised"] == "RuntimeError" and failure["message"] == "no watts"
     assert "test_journal.py" in failure["where"] and "explode" in failure["where"]
+
+
+def test_auto_tdp_transitions_are_structured_too():
+    from journal import compact_transition
+
+    name, event = compact_transition('Auto-TDP transition {"setpoint":9,"fps":61.5,"target_fps":40}')
+    assert name == "Auto-TDP transition" and event == {"setpoint": 9, "fps": 61.5, "target_fps": 40}
