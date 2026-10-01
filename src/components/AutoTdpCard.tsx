@@ -223,7 +223,7 @@ export const AutoTdpCard: FC<Props> = ({
               />
               {constrained && (
                 <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
-                  {t("tdp.auto.range.constrained", { min: range.min, max: range.max })}
+                  {t(levels ? "tdp.auto.range.constrained.level" : "tdp.auto.range.constrained", { min: range.min, max: range.max })}
                 </div>
               )}
             </div>
@@ -271,7 +271,7 @@ export const AutoTdpCard: FC<Props> = ({
             {showLive && live?.seed_source === "learned" && live.seed_watts != null
               && live.target_fps === config.target_fps && (
               <div style={{ marginTop: theme.space.xs, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
-                {t("tdp.auto.learned_start", { watts: live.seed_watts, fps: config.target_fps })}
+                {t(levels ? "tdp.auto.learned_start.level" : "tdp.auto.learned_start", { watts: live.seed_watts, fps: config.target_fps })}
               </div>
             )}
           </>

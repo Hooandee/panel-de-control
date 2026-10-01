@@ -176,7 +176,11 @@ class PowerReader:
                 value = self._fdinfo_gpu.read()
                 self._gpu_busy_diagnostics = {
                     "source": "drm_fdinfo",
-                    "state": "ok" if value is not None else "warming_up",
+                    "state": (
+                        "ok" if value is not None
+                        else "warming_up" if self._fdinfo_gpu.has_clients
+                        else "no_clients"
+                    ),
                 }
                 return value
             value = self._intel_gpu.read_gpu_busy()

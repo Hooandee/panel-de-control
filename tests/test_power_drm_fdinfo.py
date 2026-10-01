@@ -52,8 +52,41 @@ def test_power_reader_uses_fdinfo_on_devfreq_gpus(tmp_path):
     (tmp_path / "sys/class/devfreq/3d00000.gpu").mkdir(parents=True)
     _client(tmp_path, 100, 5, "7", 0)
     reader = PowerReader(root=str(tmp_path), gpu_samples=1, gpu_sample_gap=0)
+    now = {"t": 0.0}
+    reader._fdinfo_gpu._clock = lambda: now["t"]
     assert reader.read_gpu_busy() is None
     assert reader.gpu_diagnostics() == {"source": "drm_fdinfo", "state": "warming_up"}
     _client(tmp_path, 100, 5, "7", 10_000_000_000)
+    now["t"] = 2.0
     assert reader.read_gpu_busy() == 100
     assert reader.gpu_diagnostics()["state"] == "ok"
+
+
+def test_reads_inside_one_second_reuse_the_last_window(tmp_path):
+    now = {"t": 0.0}
+    _client(tmp_path, 100, 5, "7", 0)
+    reader = DrmFdinfoGpuBusy(root=str(tmp_path), clock=lambda: now["t"])
+    reader.read()
+    now["t"] = 1.0
+    _client(tmp_path, 100, 5, "7", 500_000_000)
+    assert reader.read() == 50
+    now["t"] = 1.01
+    _client(tmp_path, 100, 5, "7", 510_000_000)
+    assert reader.read() == 50
+    now["t"] = 2.0
+    _client(tmp_path, 100, 5, "7", 600_000_000)
+    assert reader.read() == 10
+
+
+def test_new_gpu_clients_are_found_by_the_periodic_rescan(tmp_path):
+    now = {"t": 0.0}
+    _client(tmp_path, 100, 5, "7", 0)
+    reader = DrmFdinfoGpuBusy(root=str(tmp_path), clock=lambda: now["t"])
+    reader.read()
+    _client(tmp_path, 400, 2, "11", 0)
+    now["t"] = 1.0
+    reader.read()
+    assert len(reader._paths) == 1
+    now["t"] = 11.0
+    reader.read()
+    assert len(reader._paths) == 2

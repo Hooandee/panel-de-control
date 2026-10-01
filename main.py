@@ -8426,6 +8426,7 @@ class Plugin:
                 primary_rail = getattr(observation_backend, "primary_rail", "pl1")
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
+                snap["tdp_unit"] = getattr(self._tdp_backend, "unit", "W")
             if "pdc_auto_tdp" in active_ids:
                 snap["auto_tdp"] = (
                     self._auto_tdp_supported()
