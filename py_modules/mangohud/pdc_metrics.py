@@ -11,6 +11,7 @@ DASH = "-"
 _TEXT = {
     "es": {
         "auto": "Auto",
+        "level": "Nv",
         "learning": "Aprendiendo",
         "active": "Activo",
         "inactive": "Inactivo",
@@ -26,6 +27,7 @@ _TEXT = {
     },
     "en": {
         "auto": "Auto",
+        "level": "Lv",
         "learning": "Learning",
         "active": "Active",
         "inactive": "Inactive",
@@ -58,12 +60,16 @@ def _text(snap, key):
     return _TEXT[locale if locale in _TEXT else "es"][key]
 
 
-def _watts(value):
-    return f"{round(value)}W" if isinstance(value, (int, float)) else None
+def _watts(value, snap=None):
+    if not isinstance(value, (int, float)):
+        return None
+    if snap is not None and snap.get("tdp_unit") == "level":
+        return f"{_text(snap, 'level')} {round(value)}"
+    return f"{round(value)}W"
 
 
 def tdp(snap):
-    watts = _watts(snap.get("applied")) or DASH
+    watts = _watts(snap.get("applied"), snap) or DASH
     return f"{_text(snap, 'auto')} {watts}" if snap.get("auto") else watts
 
 
@@ -71,6 +77,8 @@ def tdp_learn(snap):
     band = snap.get("learn") or {}
     lo, hi = band.get("floor"), band.get("ceil")
     if band.get("enough") and isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
+        if snap.get("tdp_unit") == "level":
+            return f"{_text(snap, 'level')} {round(lo)}-{round(hi)}"
         return f"{round(lo)}-{round(hi)}W"
     return _text(snap, "learning") if band.get("reason") in _LEARNING else DASH
 

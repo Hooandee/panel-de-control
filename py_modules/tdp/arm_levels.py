@@ -83,7 +83,7 @@ class ArmPerformanceLevels(TDPBackend):
 
     name = "arm-frequency-levels"
     unit = "level"
-    auto_tdp_supported = False
+    auto_tdp_safe = True
     guard_interval_s = 3.0
 
     def __init__(self, root="/", on_release=None):

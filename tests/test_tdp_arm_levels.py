@@ -152,3 +152,10 @@ def test_level_table_shows_real_frequencies_for_the_slider(tmp_path):
     table = ArmPerformanceLevels(root=_thor(tmp_path)).level_table()
     assert table["6"] == {"cpu_khz": [1459200, 2054400, 2227200], "gpu_mhz": 475}
     assert table["10"] == {"cpu_khz": [2016000, 2803200, 3187200], "gpu_mhz": 680}
+
+
+def test_levels_are_safe_for_auto(tmp_path):
+    backend = ArmPerformanceLevels(root=_thor(tmp_path))
+    assert backend.auto_tdp_supported is True
+    assert backend.auto_tdp_safe is True
+    assert backend.readback is True
