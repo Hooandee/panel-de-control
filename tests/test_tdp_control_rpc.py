@@ -1296,3 +1296,29 @@ def test_report_environment_survives_a_failing_steam_client_probe(Plugin, monkey
     plugin._init()
 
     assert plugin._report_environment()["steam_client"]["status"] == "unavailable"
+
+
+def test_repeated_identical_backend_transition_is_logged_once(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    warnings = []
+    monkeypatch.setattr(main_mod.decky.logger, "warning", lambda *a, **k: warnings.append(a))
+    unsupported = FakeBackend()
+    unsupported.name = "unsupported"
+    probe = {"ready": False, "error": None}
+    for _ in range(3):
+        plugin._record_tdp_backend_transition(
+            unsupported, probe, {"ok": True}, unsupported, probe, "replacement_unready",
+        )
+    transitions = [a for a in warnings if a and a[0] == "TDP backend transition %s"]
+    assert len(transitions) == 1
+    history = list(plugin._tdp_backend_history)
+    assert history[-1]["repeats"] == 2
+
+    plugin._record_tdp_backend_transition(
+        unsupported, probe, {"ok": True}, unsupported, probe, "recovery_pending",
+    )
+    transitions = [a for a in warnings if a and a[0] == "TDP backend transition %s"]
+    assert len(transitions) == 2

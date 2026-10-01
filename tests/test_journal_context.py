@@ -139,3 +139,19 @@ def test_custom_artwork_is_counted_by_kind_and_format(tmp_path):
         "cover.jpg": 1, "cover.png": 1, "hero.png": 1, "logo.png": 1, "wide.jpg": 1,
     }
     assert custom_artwork(str(tmp_path / "missing")) == {}
+
+
+def test_armada_power_daemons_are_rivals(tmp_path):
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    units = (
+        "armada-powerd.service loaded active running armada power policy daemon\n"
+        "armada-steamos-manager.service loaded active running armada SteamOS Manager\n"
+        "armada-control.service loaded active running Armada Control\n"
+    )
+    context = context_snapshot(str(plugins), str(tmp_path / "loader.json"), lambda command: units)
+    assert context["rivals"] == [
+        {"name": "armada-powerd", "kind": "service", "writes": "tdp"},
+        {"name": "armada-steamos-manager", "kind": "service", "writes": "tdp"},
+    ]
+    assert "armada-control" in context["services"]

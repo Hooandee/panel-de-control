@@ -10811,6 +10811,13 @@ class Plugin:
             "outcome": outcome,
             "handoff": handoff,
         }
+        last = self._tdp_backend_history[-1] if self._tdp_backend_history else None
+        if last is not None and all(
+            last.get(key) == value for key, value in event.items() if key != "at"
+        ):
+            last["repeats"] = last.get("repeats", 0) + 1
+            last["last_at"] = event["at"]
+            return
         self._tdp_backend_history.append(event)
         log = decky.logger.info if outcome == "reselected" else decky.logger.warning
         log(
@@ -12082,8 +12089,13 @@ class Plugin:
                 )
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Interrupted theme recovery failed: %s", error)
+        device = getattr(self, "_device", None)
         decky.logger.info(
-            "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
+            "Panel de Control v%s loaded (euid=%s device=%s arch=%s)",
+            read_version(),
+            os.geteuid(),
+            getattr(device, "key", None),
+            getattr(device, "arch", None),
         )
         self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with

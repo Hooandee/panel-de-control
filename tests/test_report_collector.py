@@ -44,7 +44,9 @@ def test_kernel_logs_captures_power_daemon_journal():
 
 def test_power_daemon_journal_covers_known_tdp_writers():
     cmd = report_collector._KERNEL_CMDS["power_daemons"]
-    for identifier in ("steamos-manager", "powerstation", "power-profiles-daemon", "tuned"):
+    for identifier in (
+        "steamos-manager", "powerstation", "power-profiles-daemon", "tuned", "armada-powerd",
+    ):
         assert identifier in cmd
 
 
@@ -907,6 +909,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "oxpec_module_available": False,
             "dump": None,
         },
+        "arm": {"arch": "x86"},
     }
 
 
@@ -1220,3 +1223,61 @@ def test_sysfs_snapshot_lists_crash_records_moved_by_systemd_pstore(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
 
     assert snap["pstore_archive"] == ["1759012345"]
+
+
+def _arm_tree(tmp_path):
+    regs = tmp_path / "sys/devices/system/cpu/cpu0/regs/identification"
+    regs.mkdir(parents=True)
+    (regs / "midr_el1").write_text("0x00000000411fd461\n")
+    dt = tmp_path / "proc/device-tree"
+    dt.mkdir(parents=True)
+    (dt / "model").write_bytes(b"AYN Thor\0")
+    (dt / "compatible").write_bytes(b"ayn,thor\0qcom,qcs8550\0qcom,sm8550\0")
+    soc = tmp_path / "sys/devices/soc0"
+    soc.mkdir(parents=True)
+    (soc / "family").write_text("Snapdragon\n")
+    (soc / "machine").write_text("QCS8550\n")
+    (soc / "soc_id").write_text("519\n")
+    (soc / "serial_number").write_text("1234567890\n")
+    gpu = tmp_path / "sys/class/devfreq/3d00000.gpu"
+    gpu.mkdir(parents=True)
+    (gpu / "governor").write_text("simple_ondemand\n")
+    (gpu / "min_freq").write_text("220000000\n")
+    (gpu / "max_freq").write_text("680000000\n")
+    (gpu / "cur_freq").write_text("475000000\n")
+    (gpu / "available_frequencies").write_text("220000000 475000000 680000000\n")
+    for name, brightness, maximum in (("ae94000.dsi.0", "255", "255"), ("ae96000.dsi.0", "112", "4096")):
+        bl = tmp_path / "sys/class/backlight" / name
+        bl.mkdir(parents=True)
+        (bl / "brightness").write_text(brightness + "\n")
+        (bl / "max_brightness").write_text(maximum + "\n")
+    (tmp_path / "proc/cpuinfo").write_text("vendor_id\t: GenuineIntel\nmodel name\t: Cortex-A510\n")
+    return str(tmp_path)
+
+
+def test_sysfs_snapshot_records_arm_identity_and_emulation(tmp_path):
+    arm = sysfs_snapshot(root=_arm_tree(tmp_path))["arm"]
+    assert arm["arch"] == "arm"
+    assert arm["midr_el1"] == "0x00000000411fd461"
+    assert arm["model"] == "AYN Thor"
+    assert arm["compatible"] == ["ayn,thor", "qcom,qcs8550", "qcom,sm8550"]
+    assert arm["soc"] == {"family": "Snapdragon", "machine": "QCS8550", "soc_id": "519"}
+    assert arm["x86_emulated"] is True
+    assert arm["devfreq"] == [{
+        "name": "3d00000.gpu",
+        "governor": "simple_ondemand",
+        "min_hz": "220000000",
+        "max_hz": "680000000",
+        "cur_hz": "475000000",
+        "available_hz": "220000000 475000000 680000000",
+    }]
+    assert arm["backlight"] == [
+        {"name": "ae94000.dsi.0", "brightness": "255", "max_brightness": "255"},
+        {"name": "ae96000.dsi.0", "brightness": "112", "max_brightness": "4096"},
+    ]
+
+
+def test_sysfs_snapshot_marks_x86_hosts_without_arm_detail(tmp_path):
+    (tmp_path / "proc").mkdir()
+    (tmp_path / "proc/cpuinfo").write_text("vendor_id\t: AuthenticAMD\n")
+    assert sysfs_snapshot(root=str(tmp_path))["arm"] == {"arch": "x86"}
