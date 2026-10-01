@@ -3332,8 +3332,8 @@ class Plugin:
         if callable(starter) and getattr(ctrl, "_owns_fan", False):
             try:
                 starter()
-            except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
-                pass
+            except Exception as error:  # noqa: BLE001 — starting the loop must never break an RPC
+                self._log_fan_transition("loop_start_failed", ok=False, error=type(error).__name__)
 
     def _reapply_fans_sync(self) -> bool:
         """Apply the effective fan profile for the current game (or global). Returns
@@ -3353,6 +3353,7 @@ class Plugin:
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             released = self._restore_fans_safe()
             self._fan_apply_confirmed = False
+            self._log_fan_transition("module_disabled", ok=bool(released))
             return released
         try:
             hw_state = self._fan_ctrl.read_state()
@@ -3373,32 +3374,60 @@ class Plugin:
                             continue
                         result = self._fan_ctrl.set_curve(channel, channel_profile["points"])
                     ok = bool(result.get("ok")) and ok
+                self._log_fan_transition("desktop_channels", ok=ok, profile=profile)
                 return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
+            points = None
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
+                    mode = "adaptive_learning_auto"
                     res = self._fan_ctrl.set_auto(None)  # not enough data → firmware auto
                 else:
+                    mode = "adaptive_curve"
                     if not self._arm_fremont_fan_handoff_marker():
+                        self._log_fan_transition(mode, ok=False, detail="handoff_marker")
                         return False
                     res = self._fan_ctrl.apply_curve_all(points)
             elif preset == "auto" or not profile["points"]:
+                mode = "auto"
                 res = self._fan_ctrl.set_auto(None)
             else:
+                mode = "curve"
+                points = profile["points"]
                 if not self._arm_fremont_fan_handoff_marker():
+                    self._log_fan_transition(mode, ok=False, detail="handoff_marker")
                     return False
-                res = self._fan_ctrl.apply_curve_all(profile["points"])
+                res = self._fan_ctrl.apply_curve_all(points)
             # A malformed response (None / {} / no "ok") is not success, so reset_ok
             # can't ride a bad re-apply.
             confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
             self._fan_apply_confirmed = confirmed
+            self._log_fan_transition(
+                mode,
+                ok=confirmed,
+                preset=preset,
+                points=points,
+                detail=res.get("detail") if isinstance(res, dict) else "invalid_response",
+            )
             return confirmed and self._sync_fremont_fan_handoff_marker()
-        except Exception:  # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
             self._fan_apply_confirmed = False
             self._sync_fremont_fan_handoff_marker()
+            self._log_fan_transition("apply_failed", ok=False, error=type(error).__name__)
             return False
+
+    def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
+        event = {
+            "mode": mode,
+            "ok": ok,
+            "backend": getattr(self._fan_ctrl, "name", type(self._fan_ctrl).__name__),
+            "appid": self._current_appid,
+            **{key: value for key, value in fields.items() if value is not None},
+        }
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Fan transition %s", json.dumps(event, sort_keys=True, separators=(",", ":"), default=str))
 
     def _adaptive_curve_points(self, appid):
         """The learned curve to drive in adaptive mode for *appid* (or None if there
@@ -3596,9 +3625,11 @@ class Plugin:
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
         if preset not in fan_presets.PRESETS:
+            decky.logger.warning("Fan request ignored: unknown preset %r", preset)
             return await self._fan_curve_state_offloop()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
+            decky.logger.warning("Fan request ignored: scope %r without a game", scope)
             return await self._fan_curve_state_offloop()
         self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
