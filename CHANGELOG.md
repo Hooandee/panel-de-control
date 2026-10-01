@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [0.59.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.3...panel-de-control-v0.59.0) (2026-10-01)
+
+
+### Features
+
+* keep a week of Panel's own logs, rivals and section state for reports ([#820](https://github.com/Hooandee/panel-de-control/issues/820)) ([9de6ec6](https://github.com/Hooandee/panel-de-control/commit/9de6ec6e88ff0d8d50283009262f6d33d72992d5))
+
+
+### Bug Fixes
+
+* never merge a failed call into a successful one in the diary ([#828](https://github.com/Hooandee/panel-de-control/issues/828)) ([4c63ba5](https://github.com/Hooandee/panel-de-control/commit/4c63ba55dd06cad93a51d6f63151422a5e6dbfc1))
+* stop the charge-limit probe from freezing Panel's startup ([#821](https://github.com/Hooandee/panel-de-control/issues/821)) ([93b19b4](https://github.com/Hooandee/panel-de-control/commit/93b19b4b0daa4c6213b8dda456e524451cf06b1a))
+
 ## [0.58.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.2...panel-de-control-v0.58.3) (2026-09-30)
 
 
