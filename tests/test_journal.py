@@ -395,3 +395,20 @@ def test_auto_tdp_transitions_are_structured_too():
 
     name, event = compact_transition('Auto-TDP transition {"setpoint":9,"fps":61.5,"target_fps":40}')
     assert name == "Auto-TDP transition" and event == {"setpoint": 9, "fps": 61.5, "target_fps": 40}
+
+
+def test_a_failed_hardware_write_is_recorded_with_its_os_error(tmp_path):
+    import sysfs
+
+    j = Journal(str(tmp_path / "diary"))
+    j.start()
+    journal.active = j
+    try:
+        assert sysfs.write_str(str(tmp_path), 15) is False
+    finally:
+        journal.active = None
+        j.stop()
+    record = _lines(str(tmp_path / "diary"))[0]
+    assert (record["s"], record["m"], record["error"]) == ("hw", "write_failed", "EISDIR")
+    assert record["target"] == str(tmp_path) and record["value"] == "15"
+    assert record["by"] == "test_journal.py:test_a_failed_hardware_write_is_recorded_with_its_os_error"

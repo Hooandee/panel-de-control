@@ -7,6 +7,7 @@ from sysfs import read_str
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+import journal
 
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
@@ -575,6 +576,7 @@ class FirmwareAttrBackend(TDPBackend):
             return True
         except OSError as error:
             self._last_write_error = errno.errorcode.get(error.errno, "OSError")
+            journal.write_failed(path, value, error)
             return False
 
     def _failed_write_label(self, surface, rail):

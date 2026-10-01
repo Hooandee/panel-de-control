@@ -14,6 +14,7 @@ minute later one line carries how many there were (`n`) and when the last was
 from __future__ import annotations
 
 import contextvars
+import errno
 import functools
 import inspect
 import json
@@ -657,6 +658,27 @@ def queue_logger_handlers(logger: logging.Logger, *, queue_size: int = 4096) -> 
             logger.addHandler(handler)
 
     return restore
+
+
+_WRITE_HELPERS = frozenset({"write_str", "_write", "write", "_write_target", "_write_and_verify"})
+
+
+def write_failed(target: str, value: Any, error: BaseException) -> None:
+    """A hardware write that did not go through: what, which value, the OS error and
+    the function that wrote it. Probes that only read never land here."""
+    diary = active
+    if diary is None:
+        return
+    try:
+        code = errno.errorcode.get(getattr(error, "errno", None) or 0, type(error).__name__)
+        frame = sys._getframe(1)
+        while frame.f_back is not None and frame.f_code.co_name in _WRITE_HELPERS:
+            frame = frame.f_back
+        caller = f"{os.path.basename(frame.f_code.co_filename)}:{frame.f_code.co_name}"
+        diary.write("WARNING", "hw", "write_failed", target=str(target), value=str(value)[:40],
+                    error=code, by=caller)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _condensed(value: Any, depth: int = 0) -> Any:

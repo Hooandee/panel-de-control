@@ -17,6 +17,7 @@ from typing import Callable, Optional
 
 from fans.control import _read, _interp
 from fans.software_loop import SoftwareLoopBackend
+import journal
 
 # Number of write+readback attempts to confirm a release reached the EC.
 _RELEASE_CONFIRM_RETRIES = 3
@@ -79,7 +80,8 @@ class _PortEC:
                 self._select(addr)
                 os.pwrite(self._fd, bytes([val & 0xFF]), 0x4F)
                 return True
-            except OSError:
+            except OSError as error:
+                journal.write_failed(f"legion-ec:{addr:#04x}", val, error)
                 return False
 
 
