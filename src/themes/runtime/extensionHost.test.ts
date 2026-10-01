@@ -89,8 +89,237 @@ describe("evaluateThemeExtensionBundle", () => {
     "module.exports = Object.freeze({ abiVersion: 3, mount() { return () => {}; } });",
     "module.exports = Object.freeze({ abiVersion: 1, mount() { return () => {}; }, extra: true });",
     "module.exports = Object.freeze({ abiVersion: 1 });",
+    "module.exports = Object.freeze({ abiVersion: 1, surface: \"home\", mount() { return () => {}; } });",
   ])("rejects invalid exports", (source) => {
     expect(() => evaluateThemeExtensionBundle(source)).toThrow();
+  });
+});
+
+describe("evaluateThemeExtensionBundle surfaces", () => {
+  it("accepts a keyboard surface declaration", () => {
+    const extension = evaluateThemeExtensionBundle(
+      "module.exports = Object.freeze({ abiVersion: 1, surface: \"keyboard\", mount() { return () => {}; } });",
+    );
+    expect(extension.surface).toBe("keyboard");
+  });
+});
+
+describe("ThemeExtensionRuntimeHost surfaces", () => {
+  const HOME = DESCRIPTOR;
+  const KEYBOARD: ThemeExtensionDescriptor = {
+    catalogId: "keyboard-theme", cssLoaderName: "Keyboard Theme", version: "2.0.0", abiVersion: 1, sha256: "k".repeat(64),
+  };
+  const SECOND_HOME: ThemeExtensionDescriptor = {
+    catalogId: "second-home", cssLoaderName: "Second Home", version: "3.0.0", abiVersion: 1, sha256: "s".repeat(64),
+  };
+  const homeTheme = theme();
+  const keyboardTheme = theme({ id: "Keyboard Theme", name: "Keyboard Theme", displayName: "Keyboard Theme", version: "2.0.0" });
+  const secondHomeTheme = theme({ id: "Second Home", name: "Second Home", displayName: "Second Home", version: "3.0.0" });
+
+  function surfaceClient(descriptors: readonly ThemeExtensionDescriptor[]): ThemeExtensionClient {
+    return {
+      list: vi.fn(async () => descriptors),
+      load: vi.fn(async (catalogId) => {
+        const descriptor = descriptors.find((item) => item.catalogId === catalogId)!;
+        return { ...descriptor, source: catalogId };
+      }),
+    };
+  }
+
+  function recordingEvaluate(mounted: string[], stopped: string[]) {
+    return vi.fn((source: string): ThemeExtensionExport => Object.freeze({
+      abiVersion: 1 as const,
+      ...(source === "keyboard-theme" ? { surface: "keyboard" as const } : {}),
+      mount: () => {
+        mounted.push(source);
+        return () => { stopped.push(source); };
+      },
+    }));
+  }
+
+  it("mounts a home runtime and a keyboard runtime side by side", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, KEYBOARD]), doc: document, evaluate: recordingEvaluate(mounted, stopped),
+    });
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle();
+    await settle();
+
+    expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
+    host.dispose();
+    expect(stopped.sort()).toEqual(["example-theme", "keyboard-theme"]);
+  });
+
+  it("keeps two home runtimes CSS-only", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([homeTheme, secondHomeTheme]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual([]);
+    host.dispose();
+  });
+
+  const section = (name: string, value: "Yes" | "No") => ({
+    name, defaultValue: "Yes", value, options: ["Yes", "No"],
+    type: "checkbox" as const, rawType: "checkbox",
+  });
+
+  it("mounts both home runtimes when their Hooandee sections do not overlap", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar Descargas", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Descargas", "No")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted.sort()).toEqual(["example-theme", "second-home"]);
+    host.dispose();
+  });
+
+  it("mounts only the Home owner while another section is claimed twice", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar Descargas", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes"), section("Estilizar Descargas", "Yes")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual(["second-home"]);
+    host.dispose();
+  });
+
+  it("counts a theme's menus section as its QAM when it has no QAM section of its own", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "No"), section("Estilizar menús y barras", "Yes")] },
+      {
+        ...secondHomeTheme,
+        patches: [
+          section("Estilizar Inicio", "Yes"),
+          section("Estilizar menú de Steam", "No"),
+          section("Estilizar QAM y Decky", "Yes"),
+        ],
+      },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual(["second-home"]);
+    host.dispose();
+  });
+
+  it("keeps two home runtimes CSS-only when both claim Home", async () => {
+    const mounted: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([
+      { ...homeTheme, patches: [section("Estilizar Inicio", "Yes")] },
+      { ...secondHomeTheme, patches: [section("Estilizar Inicio", "Yes")] },
+    ]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual([]);
+    host.dispose();
+  });
+
+  it("remounts a mixed home runtime when its sections change", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, SECOND_HOME]), doc: document, evaluate: recordingEvaluate(mounted, stopped),
+    });
+    const second = { ...secondHomeTheme, patches: [section("Estilizar Inicio", "No")] };
+
+    host.reconcile(snapshot([{ ...homeTheme, patches: [section("Estilizar Inicio", "Yes")] }, second]));
+    await settle();
+    await settle();
+    host.reconcile(snapshot([{ ...homeTheme, patches: [section("Estilizar Inicio", "No")] }, {
+      ...second, patches: [section("Estilizar Inicio", "Yes")],
+    }]));
+    await settle();
+    await settle();
+
+    expect(stopped.sort()).toEqual(["example-theme", "second-home"]);
+    expect(mounted.filter((id) => id === "second-home")).toHaveLength(2);
+    host.dispose();
+  });
+
+  it("still mounts a runtime whose first load was overtaken by a second theme", async () => {
+    const mounted: string[] = [];
+    let releaseHome!: () => void;
+    const homeLoaded = new Promise<void>((resolve) => { releaseHome = resolve; });
+    const descriptors = [HOME, KEYBOARD];
+    const host = new ThemeExtensionRuntimeHost({
+      client: {
+        list: vi.fn(async () => descriptors),
+        load: vi.fn(async (catalogId) => {
+          if (catalogId === HOME.catalogId) await homeLoaded;
+          const descriptor = descriptors.find((item) => item.catalogId === catalogId)!;
+          return { ...descriptor, source: catalogId };
+        }),
+      },
+      doc: document,
+      evaluate: recordingEvaluate(mounted, []),
+    });
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }]));
+    await settle();
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle();
+    releaseHome();
+    for (let round = 0; round < 6; round += 1) await settle();
+
+    expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
+    host.dispose();
+  });
+
+  it("adds a keyboard runtime without remounting the home runtime", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, KEYBOARD]), doc: document, evaluate: recordingEvaluate(mounted, stopped),
+    });
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }]));
+    await settle();
+    expect(mounted).toEqual(["example-theme"]);
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle();
+    await settle();
+
+    expect(mounted).toEqual(["example-theme", "keyboard-theme"]);
+    expect(stopped).toEqual([]);
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }]));
+    await settle();
+    expect(stopped).toEqual(["keyboard-theme"]);
+    host.dispose();
   });
 });
 
