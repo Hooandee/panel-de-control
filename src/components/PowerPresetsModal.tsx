@@ -30,6 +30,7 @@ interface Props {
   pl3Max: number; // firmware FPPT rail ceiling
   onClose?: () => void; // refresh the chip row when the manager closes
   closeModal?: () => void;
+  formatValue?: (value: number) => string;
 }
 
 type CustomEntry = PowerPresetState["custom"][string];
@@ -103,7 +104,7 @@ const BoostEditor: FC<{
   );
 };
 
-const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, pl2Max, pl3Max, onClose, closeModal }) => {
+const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, pl2Max, pl3Max, onClose, closeModal, formatValue }) => {
   const { t } = useI18n();
   const [state, setState] = useState<PowerPresetState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -145,7 +146,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
   if (!state) return <Loading />;
 
   // The manager doesn't use the active flag, so a neutral live boost is fine here.
-  const items = resolveItems(state, builtinWatts, onAc, currentWatts, max, { mode: "estable", off2: 0, off3: 0 }).manager;
+  const items = resolveItems(state, builtinWatts, onAc, currentWatts, max, { mode: "estable", off2: 0, off3: 0 }, formatValue).manager;
   const customCount = items.filter((it) => it.kind === "custom").length;
   const wrap = (p: Promise<PowerPresetState>) => p.then((s) => alive.current && setState(s)).catch(() => {});
   const patch = (id: string, entry: CustomEntry) =>

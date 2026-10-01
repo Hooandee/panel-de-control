@@ -1,5 +1,7 @@
 import os
 
+import armada_os
+
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025_tdp_recovery,
@@ -14,6 +16,7 @@ from device_quirks import (
 )
 from tdp.alib import AlibBackend
 from tdp.amd_dptc import AmdDptcBackend
+from tdp.arm_levels import ArmPerformanceLevels
 from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -177,6 +180,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             ownership_lock_path=_runtime_lock_path(root, "ownership-msi-claw-a8.lock"),
         )
 
+    def arm_levels():
+        on_release = armada_os.reload_powerd if armada_os.powerd_present(root) else None
+        return ArmPerformanceLevels(root=root, on_release=on_release)
+
     def alib():
         return AlibBackend(fallback, root=root,
                            write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max)
@@ -187,7 +194,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
 
     key = device.key
     if getattr(device, "arch", "x86") == "arm":
-        return []
+        return [arm_levels]
     if key == "desktop_pc":
         # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
         # without readback, AMD RAPL can confirm a write it ignores).

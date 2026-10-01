@@ -115,17 +115,17 @@ GENERIC_ARM = DeviceProfile(
     display_name="Dispositivo ARM",
     chip=GENERIC.chip,
     vendor="arm",
-    tdp_min=0,
-    tdp_default=0,
-    tdp_max=0,
-    tdp_max_charger=0,
+    tdp_min=1,
+    tdp_default=6,
+    tdp_max=10,
+    tdp_max_charger=10,
     is_generic=True,
     arch="arm",
 )
 
 ARM_DEVICE_TABLE = (
     DeviceProfile("ayn_thor", "AYN Thor", "Snapdragon 8 Gen 2", "qualcomm",
-                  0, 0, 0, 0, dt_compatible=("ayn,thor",), experimental=True,
+                  1, 6, 10, 10, dt_compatible=("ayn,thor",), experimental=True,
                   panel="oled", arch="arm"),
 )
 

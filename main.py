@@ -314,6 +314,8 @@ def _now_minutes() -> int:
     return t.hour * 60 + t.minute
 
 DEFAULTS = {
+    # Unit of the saved power values: "W" on PC, "level" on ARM.
+    "tdp_unit": "W",
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -523,6 +525,7 @@ class Plugin:
             desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
                 self._settings.get("desktop_power_handoff")),
         )
+        self._reset_power_values_on_unit_change()
         self._low_battery_hold_backend = (
             tdp_factory.select_low_battery_hold_backend(self._device)
         )
@@ -1205,6 +1208,11 @@ class Plugin:
                 await self._apply_charge_limit_intent(charge_generation)
             self._sync_sampler()
             return {"disabled": self._user_disabled_all()}
+        early_release = None
+        if module_id == "power" and disabled and self._power_uses_levels():
+            # The level's ceilings must be gone before the CPU window and GPU clock
+            # re-apply on the same nodes, or they would adopt them as their baseline.
+            early_release = bool(await self._offload_call(self._restore_power_handoff))
         self._reapply_all()
         if module_id == "system" and disabled:
             self._publish_charge_limit_handoff(self._charge_limit_generation)
@@ -1213,8 +1221,10 @@ class Plugin:
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "power" and disabled:
-            released = bool(
-                await self._offload_call(self._restore_power_handoff)
+            released = (
+                early_release
+                if early_release is not None
+                else bool(await self._offload_call(self._restore_power_handoff))
             )
             if hasattr(self, "_tdp_backend"):
                 self._remember_tdp_observation(
@@ -2514,6 +2524,7 @@ class Plugin:
         if self._tdp_profiles.differs_from_global(appid):
             tp = self._tdp_profiles.game_profile(appid)
             row["tdp"] = {
+                "unit": getattr(self._tdp_backend, "unit", "W"),
                 "pl1": int(tp.get("pl1", 0)),
                 "auto": bool(tp.get("auto_tdp")),
                 "target_fps": int(tp["auto_target_fps"]),
@@ -3120,6 +3131,9 @@ class Plugin:
             released = bool(
                 await self._offload_call(self._restore_power_handoff)
             )
+            if self._power_uses_levels():
+                self._apply_cpu()
+                self._apply_gpu_clock()
             self._remember_tdp_observation(
                 await self._offload_call(self._observe_tdp_sync)
             )
@@ -3141,6 +3155,9 @@ class Plugin:
                 if not retired.get("ok"):
                     return False
             else:
+                if self._power_uses_levels():
+                    self._apply_cpu()
+                    self._apply_gpu_clock()
                 await self._apply_tdp_now("control-enabled")
         return enabled
 
@@ -5329,6 +5346,9 @@ class Plugin:
     def _tdp_request_min(self) -> int:
         if self._device.key == "gpd_win_mini_2025":
             return int(self._device.tdp_min)
+        backend = getattr(self, "_tdp_backend", None)
+        if getattr(backend, "unit", None) == "level":
+            return int(backend.get_limits().min_w)
         return TDP_REQUEST_MIN_W
 
     def _clamp_tdp_request(self, watts, active_max: int) -> int:
@@ -5566,6 +5586,38 @@ class Plugin:
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
+
+    def _reset_power_values_on_unit_change(self) -> None:
+        """Saved power values are watts on PC and performance levels on ARM; a value
+        saved in one unit must never be replayed as the other."""
+        unit = getattr(self._tdp_backend, "unit", "W")
+        if not getattr(self._tdp_backend, "supported", False):
+            return
+        if self._settings.get("tdp_unit", "W") == unit:
+            return
+        try:
+            self._tdp_profiles.reset()
+            self._power_presets.reset()
+            self._auto_learning.reset()
+            self._settings["tdp_unit"] = unit
+            self._store.save(self._settings)
+            decky.logger.info("Power values reset for unit change to %s", unit)
+        except Exception as exc:  # noqa: BLE001
+            decky.logger.warning("Power value reset failed: %s", type(exc).__name__)
+
+    def _power_uses_levels(self) -> bool:
+        return getattr(getattr(self, "_tdp_backend", None), "unit", None) == "level"
+
+    def _frequency_managed_by_power(self) -> bool:
+        """On ARM the performance level owns the same cpufreq/devfreq ceilings that the
+        CPU window and GPU clock controls write, so only one of them may drive them."""
+        backend = getattr(self, "_tdp_backend", None)
+        return bool(
+            getattr(backend, "unit", None) == "level"
+            and getattr(backend, "supported", False)
+            and self._tdp_control_on()
+            and self._module_enabled("power")
+        )
 
     # ---- Module enable/disable ---------------------------------------------
     # autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
@@ -7757,7 +7809,13 @@ class Plugin:
     def _cpu_intent(self) -> dict:
         profiles = getattr(self, "_cpu_profiles", None)
         if profiles is not None:
-            return profiles.effective(getattr(self, "_current_appid", None))
+            intent = profiles.effective(getattr(self, "_current_appid", None))
+            if self._frequency_managed_by_power():
+                intent = {
+                    **intent,
+                    "frequency": {"manual": False, "min_khz": None, "max_khz": None},
+                }
+            return intent
         return {
             "smt": True,
             "boost": True,
@@ -7941,6 +7999,7 @@ class Plugin:
         return {
             "enabled": bool(self._settings.get("eco_enabled", False)),
             "tdp_min_w": self._limits().min_w,
+            "tdp_unit": getattr(self._tdp_backend, "unit", "W"),
             "affects_boost": self._boost.supported,
             # The brightness % to wake back to (pre-eco snapshot).
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
@@ -8716,6 +8775,7 @@ class Plugin:
             "active_cores": self._cores.active() if self._cores.supported else None,
             "frequency": {
                 "supported": self._cpu_frequency.supported,
+                "managed_by_power": self._frequency_managed_by_power(),
                 "backend": frequency_diagnostics.get("backend", "unsupported"),
                 "manual": bool(frequency_profile["manual"]),
                 "range_min_khz": frequency_range[0] if frequency_range else None,
@@ -8880,7 +8940,7 @@ class Plugin:
         context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
-        if self._cpu_shutdown:
+        if self._cpu_shutdown or self._frequency_managed_by_power():
             return self._cpu_state()
         async with self._cpu_mutation_lock:
             if not self._cpu_scope_is_current(scope, appid, context_appid):
@@ -9084,7 +9144,7 @@ class Plugin:
             system_enabled = self._module_enabled("system")
             g = (
                 self._gpu_profiles.clock(self._current_appid)
-                if system_enabled
+                if system_enabled and not self._frequency_managed_by_power()
                 else {"manual": False, "min": None, "max": None}
             )
             if not self._gpu_clock.supported:
@@ -9286,6 +9346,7 @@ class Plugin:
         applied_min, applied_max = cur if cur else (None, None)
         return {
             "supported": self._gpu_clock.supported,
+            "managed_by_power": self._frequency_managed_by_power(),
             "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
@@ -9573,7 +9634,11 @@ class Plugin:
         context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
-        if self._gpu_shutdown or not self._module_enabled("system"):
+        if (
+            self._gpu_shutdown
+            or not self._module_enabled("system")
+            or self._frequency_managed_by_power()
+        ):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
             if self._gpu_shutdown or not self._module_enabled("system"):
@@ -10380,6 +10445,12 @@ class Plugin:
                 or self._low_battery_hold_recovery_pending
             ),
             "request_min": request_min,
+            "unit": getattr(self._tdp_backend, "unit", "W"),
+            "level_frequencies": (
+                self._tdp_backend.level_table()
+                if callable(getattr(self._tdp_backend, "level_table", None))
+                else None
+            ),
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
             "auto_limits": {
@@ -10962,6 +11033,7 @@ class Plugin:
             },)
         self._desktop_power.replace_cpu_backend(replacement)
         self._tdp_backend = replacement
+        self._reset_power_values_on_unit_change()
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(replacement, "readback", True)),
         )
