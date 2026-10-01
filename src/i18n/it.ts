@@ -711,6 +711,7 @@ export const it: Record<string, string> = {
   "fans.curve.governed": "La ventola è in modalità «{mode}» e si regola tramite la modalità prestazioni nella sezione Potenza, non manualmente qui.",
   "fans.curve.custom_mode": "In modalità personalizzata la ventola non può essere controllata da qui. Il dispositivo funziona correttamente e se ne occupa il firmware. Per influire sulla ventola, scegli una modalità TDP, Silenziosa, Bilanciata o Prestazioni, nella scheda Potenza.",
   "fans.curve.kernel_pending": "Nel kernel SteamOS attuale non è disponibile un driver della ventola per questo modello. Nel frattempo puoi attivare qui sotto il controllo sperimentale.",
+  "fans.armadaHandoff": "Armada OS controlla la ventola. Scegliendo una curva passa a Panel de Control, e Auto la restituisce ad Armada.",
   "fans.board.title": "Ventole della scheda madre",
   "fans.board.toggle": "Controlla le ventole della scheda madre",
   "fans.board.note": "Carica il driver dei sensori della scheda madre, se il sistema lo include, per far seguire la curva alle ventole. Si può disattivare in qualsiasi momento.",

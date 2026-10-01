@@ -16,6 +16,22 @@ _TEMP_RULES = {
 }
 _TEMP_DEMOTE = ("nvme", "mt7921", "iwlwifi", "ucsi", "BAT", "AC")
 
+# ARM SoCs expose each thermal zone as its own hwmon chip named "<zone>_thermal"
+# (Qualcomm cpu7_middle_thermal / gpuss_0_thermal, Rockchip bigcore0_thermal).
+_SOC_GPU_ZONES = ("gpu",)
+_SOC_CPU_ZONES = ("cpu", "core", "soc")
+
+
+def _soc_zone_rule(chip: str) -> tuple[str, int] | None:
+    if not chip.endswith("_thermal"):
+        return None
+    zone = chip[: -len("_thermal")]
+    if any(key in zone for key in _SOC_GPU_ZONES):
+        return "GPU", 1
+    if any(key in zone for key in _SOC_CPU_ZONES):
+        return "CPU", 0
+    return None
+
 
 def _read(path: str) -> str | None:
     try:
@@ -100,6 +116,9 @@ def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | Non
                 return "GPU", 1
         if chip in _TEMP_RULES:
             return _TEMP_RULES[chip]
+        soc = _soc_zone_rule(chip)
+        if soc is not None:
+            return soc
         if any(chip.startswith(d) for d in _TEMP_DEMOTE):
             return t["label"], 3
         return t["label"], 2
