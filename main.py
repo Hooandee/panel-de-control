@@ -9773,9 +9773,24 @@ class Plugin:
             return
         try:
             if self._color_backend.supported:
-                self._color_backend.apply(self._effective_color())
-        except Exception:  # noqa: BLE001
-            pass
+                color = self._effective_color()
+                ok = self._color_backend.apply(color)
+                self._log_display_transition("color", ok=bool(ok), color=color,
+                                             night=self._night_is_active(),
+                                             result=getattr(self._color_backend, "_last_apply", None))
+        except Exception as error:  # noqa: BLE001
+            self._log_display_transition("color", ok=False, error=type(error).__name__)
+
+    def _log_display_transition(self, kind: str, *, ok: bool, **fields) -> None:
+        """One line when what the display got, or whether it took, changes: the
+        startup re-asserts that repeat the same look stay silent."""
+        event = {"kind": kind, "ok": ok, **{key: value for key, value in fields.items() if value is not None}}
+        last = getattr(self, "_display_logged", {})
+        if last.get(kind) == event:
+            return
+        self._display_logged = {**last, kind: event}
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Display transition %s", json.dumps(event, sort_keys=True, separators=(",", ":"), default=str))
 
     async def _await_display_backend(self, attempts=30, interval=5.0,
                                      reasserts=40, reassert_interval=3.0) -> None:
@@ -10173,9 +10188,10 @@ class Plugin:
         elsewhere, e.g. Steam's own toggle)."""
         try:
             if self._hdr_supported() and self._color.hdr(self._current_appid):
-                self._hdr_backend.set_enabled(True)
-        except Exception:  # noqa: BLE001
-            pass
+                ok = self._hdr_backend.set_enabled(True)
+                self._log_display_transition("hdr", ok=ok is not False, enabled=True)
+        except Exception as error:  # noqa: BLE001
+            self._log_display_transition("hdr", ok=False, error=type(error).__name__)
 
     async def get_hdr_state(self) -> dict:
         self._init()
