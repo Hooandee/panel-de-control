@@ -13,14 +13,13 @@ class AmdDptcBackend(FirmwareAttrBackend):
         fallback,
         root="/",
         write_max=None,
+        write_max_ac=None,
         safety_lock_path=None,
         ownership_lock_path=None,
     ):
-        try:
-            requested_max = int(write_max) if write_max is not None else 0
-        except (TypeError, ValueError):
-            requested_max = 0
-        self._write_max = max(fallback.max_ac_w, requested_max)
+        self._cooler_max = _watts_or_none(write_max)
+        self._charger_max = _watts_or_none(write_max_ac)
+        self._write_max = max(fallback.max_ac_w, self._cooler_max or 0, self._charger_max or 0)
         super().__init__(
             "amd-dptc",
             fallback,
@@ -49,9 +48,23 @@ class AmdDptcBackend(FirmwareAttrBackend):
                 return candidate
         return None
 
+    def set_tdp(self, watts, ac):
+        if not self.supported:
+            return super().set_tdp(watts, ac)
+        lim = self.get_limits().with_cooler(self._cooler_max).with_ac_max(self._charger_max)
+        target = lim.clamp(watts, ac)
+        return self.set_levels(target, target, target, ac)
+
     def _profile_rail_max(self, attr):
         if attr == "ppt_pl2_sppt":
             return round(self._write_max * 1.2)
         if attr == "ppt_pl3_fppt":
             return round(self._write_max * 1.4)
         return self._write_max
+
+
+def _watts_or_none(value):
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None

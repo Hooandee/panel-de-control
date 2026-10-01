@@ -165,6 +165,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             fallback,
             root=root,
             write_max=None if getattr(device, "cooler_charger_only", False) else device.cooler_max,
+            write_max_ac=_charger_write_max(device),
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )
