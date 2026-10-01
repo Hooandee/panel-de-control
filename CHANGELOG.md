@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## [0.60.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.59.0...panel-de-control-v0.60.0) (2026-10-01)
+
+
+### Español
+
+* **TDP:** La OneXFly Apex ya puede pasar de los 54 W: llega a 55 W con batería y a 80 W con el cargador, que es lo que da OneXPlayer de fábrica. Si tienes la refrigeración líquida Frost Bay, activa "Cooler externo puesto" en Ajustes y con el cargador puedes subir hasta 120 W.
+* **TDP:** En la Apex y en la X2 Mini Pro, con el cooler externo activado, en algunos sistemas el TDP se quedaba en 80 W aunque pidieras más. Ahora llega de verdad a lo que marcas.
+* **Reportes:** Los reportes de problemas incluyen qué tienes conectado (docks, mandos, memorias USB, gráficas externas...), sin números de serie ni nombres personales, para entender mejor los fallos que dependen de un accesorio.
+
+### English
+
+* **TDP:** The OneXFly Apex can now go past 54 W: up to 55 W on battery and 80 W on the charger, which is what OneXPlayer rates it at. If you have the Frost Bay liquid cooler, turn on "External cooler attached" in Settings and you can go up to 120 W on the charger.
+* **TDP:** On the Apex and the X2 Mini Pro, with the external cooler turned on, some systems kept the TDP at 80 W even when you asked for more. It now really reaches what you set.
+* **Reports:** Problem reports include what you have plugged in (docks, controllers, USB drives, external GPUs...), without serial numbers or personal names, to better understand issues that depend on an accessory.
+
+### Italiano
+
+* **TDP:** La OneXFly Apex ora può superare i 54 W: arriva a 55 W a batteria e a 80 W con il caricatore, cioè quello che OneXPlayer dichiara di fabbrica. Se hai il raffreddamento a liquido Frost Bay, attiva "Sistema di raffreddamento esterno collegato" nelle Impostazioni e con il caricatore puoi salire fino a 120 W.
+* **TDP:** Sulla Apex e sulla X2 Mini Pro, con il raffreddamento esterno attivato, su alcuni sistemi il TDP restava a 80 W anche se chiedevi di più. Ora arriva davvero al valore che imposti.
+* **Segnalazioni:** Le segnalazioni di problemi includono cosa hai collegato (dock, controller, chiavette USB, schede grafiche esterne...), senza numeri di serie né nomi personali, per capire meglio i problemi legati a un accessorio.
+
+### Deutsch
+
+* **TDP:** Der OneXFly Apex kann jetzt über 54 W hinaus: bis zu 55 W im Akkubetrieb und 80 W am Ladegerät, so wie OneXPlayer ihn ab Werk angibt. Wenn du die Frost-Bay-Wasserkühlung hast, schalte in den Einstellungen "Externe Kühlung angeschlossen" ein, dann geht es am Ladegerät bis 120 W.
+* **TDP:** Beim Apex und beim X2 Mini Pro blieb der TDP mit eingeschalteter externer Kühlung auf manchen Systemen bei 80 W, auch wenn du mehr eingestellt hast. Jetzt kommt wirklich an, was du einstellst.
+* **Berichte:** Problemberichte enthalten, was angeschlossen ist (Docks, Controller, USB-Sticks, externe Grafikkarten...), ohne Seriennummern oder persönliche Namen, damit sich Fehler, die an einem Zubehör hängen, besser verstehen lassen.
+
+### Português (Brasil)
+
+* **TDP:** O OneXFly Apex agora pode passar dos 54 W: chega a 55 W na bateria e a 80 W no carregador, que é o que a OneXPlayer indica de fábrica. Se você tem o resfriamento líquido Frost Bay, ative "Cooler externo conectado" nas Configurações e no carregador dá para subir até 120 W.
+* **TDP:** No Apex e no X2 Mini Pro, com o cooler externo ativado, em alguns sistemas o TDP ficava em 80 W mesmo pedindo mais. Agora chega de verdade ao valor que você define.
+* **Relatórios:** Os relatórios de problemas incluem o que está conectado (docks, controles, pendrives, placas de vídeo externas...), sem números de série nem nomes pessoais, para entender melhor os problemas que dependem de um acessório.
+
 ## [0.59.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.58.3...panel-de-control-v0.59.0) (2026-10-01)
 
 
