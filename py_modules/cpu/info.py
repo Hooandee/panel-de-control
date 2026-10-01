@@ -54,11 +54,23 @@ def read_cpu_info(root="/"):
     for p in glob.glob(os.path.join(base, "cpu[0-9]*", "topology", "core_id")):
         v = read_int(p)
         if v is not None:
-            core_ids.add(v)
+            cluster = read_int(os.path.join(os.path.dirname(p), "cluster_id"))
+            core_ids.add((cluster or 0, v))
+    max_khz = []
+    for policy in glob.glob(os.path.join(base, "cpufreq", "policy[0-9]*")):
+        value = read_int(os.path.join(policy, "cpuinfo_max_freq"))
+        if value is not None:
+            max_khz.append(value)
+        # cpuinfo_max_freq drops the boost step while boost is off; the tables don't.
+        for name in ("scaling_available_frequencies", "scaling_boost_frequencies"):
+            max_khz.extend(
+                int(item) for item in (read_str(os.path.join(policy, name)) or "").split()
+                if item.isdigit()
+            )
 
     return {
         "cores": len(core_ids) or None,
         "threads": _count_range(read_str(os.path.join(base, "present"))),
         "base_khz": read_int(os.path.join(base, "cpufreq/policy0/base_frequency")),
-        "max_khz": read_int(os.path.join(base, "cpufreq/policy0/cpuinfo_max_freq")),
+        "max_khz": max(max_khz) if max_khz else None,
     }
