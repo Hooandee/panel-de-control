@@ -52,6 +52,23 @@ def test_old_days_and_excess_size_are_deleted(tmp_path):
     assert names == [f"pdc-{two_days}.jsonl", f"pdc-{today}.jsonl"]
 
 
+def test_a_failed_call_never_folds_into_a_successful_one(tmp_path):
+    j = Journal(str(tmp_path), coalesce_s=1.5, clock=lambda: 200.0)
+    _run(
+        j,
+        (("INFO", "rpc", "set_value"), {"at": 100.0, "a": "[3]"}),
+        (("WARNING", "rpc", "set_value"), {"at": 100.0, "a": "[-1]", "r": {"ok": False}}),
+        (("INFO", "rpc", "set_value"), {"at": 100.0, "a": "[4]"}),
+    )
+    assert [(r["a"], r.get("r")) for r in _lines(str(tmp_path))] == [("[3]", None), ("[-1]", {"ok": False}), ("[4]", None)]
+
+
+def test_no_window_means_no_folding_even_within_one_millisecond(tmp_path):
+    j = Journal(str(tmp_path), coalesce_s=0, clock=lambda: 200.0)
+    _run(j, *[(("INFO", "rpc", "set_value"), {"at": 100.0, "a": f"[{i}]"}) for i in range(3)])
+    assert [r["a"] for r in _lines(str(tmp_path))] == ["[0]", "[1]", "[2]"]
+
+
 def test_a_full_day_file_continues_in_the_next_segment(tmp_path):
     now = 1_790_000_000.0
     j = Journal(str(tmp_path), max_file_bytes=120, clock=lambda: now)
