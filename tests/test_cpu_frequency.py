@@ -1342,3 +1342,21 @@ def test_table_snap_never_inverts_a_narrow_window(tmp_path):
     assert result.ok is True
     assert _read_khz(root, f"{base}/scaling_min_freq") <= _read_khz(root, f"{base}/scaling_max_freq")
     assert _read_khz(root, f"{base}/scaling_max_freq") == 1_459_200
+
+
+def test_boost_only_top_frequency_stays_reachable_and_auto_restores_it(tmp_path):
+    root = str(tmp_path)
+    prime = _policy(root, 7, hw_min=595_200, hw_max=3_187_200, driver="qcom-cpufreq-hw", cpus="7")
+    _write(root, f"{prime}/scaling_available_frequencies", "595200 1708800 2956800")
+    _write(root, f"{prime}/scaling_boost_frequencies", "3187200 ")
+
+    control = select_cpu_frequency(root=root)
+    assert control.set_window(595_200, 3_187_200).ok is True
+    assert _read_khz(root, f"{prime}/scaling_max_freq") == 3_187_200
+
+    assert control.set_window(595_200, 2_000_000).ok is True
+    assert _read_khz(root, f"{prime}/scaling_max_freq") == 1_708_800
+    result = control.set_auto()
+    assert result.ok is True
+    assert result.status == "restored"
+    assert _read_khz(root, f"{prime}/scaling_max_freq") == 3_187_200
