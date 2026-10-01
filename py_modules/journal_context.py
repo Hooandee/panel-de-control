@@ -135,6 +135,31 @@ def context_changes(previous: dict | None, current: dict) -> dict | None:
     return {key: value for key, value in changes.items() if value} or None
 
 
+_ARTWORK = re.compile(r"^\d+(?P<kind>p|_hero|_logo|_icon)?\.(?P<ext>png|jpg|jpeg|webp|ico)$", re.I)
+_ARTWORK_KINDS = {"p": "cover", "_hero": "hero", "_logo": "logo", "_icon": "icon", None: "wide"}
+
+
+def custom_artwork(userdata: str) -> dict:
+    """How many custom images Steam serves from userdata/*/config/grid, by kind and
+    format: themes draw these and SteamGridDB saves .png, which Steam tries last."""
+    counts: dict[str, int] = {}
+    try:
+        users = os.listdir(userdata)
+    except OSError:
+        return counts
+    for user in users[:8]:
+        try:
+            names = os.listdir(os.path.join(userdata, user, "config", "grid"))
+        except OSError:
+            continue
+        for name in names[:5000]:
+            match = _ARTWORK.match(name)
+            if match:
+                key = f"{_ARTWORK_KINDS[match.group('kind')]}.{match.group('ext').lower()}"
+                counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 _MAX_SECTION_JSON = 2000
 
 

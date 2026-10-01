@@ -126,3 +126,16 @@ def test_snapshots_are_written_once_a_day_and_on_change():
     assert not needs_snapshot(same_day, current, ("sections",), now=now)
     assert needs_snapshot({**same_day, "t": now - 86400}, current, ("sections",), now=now)
     assert needs_snapshot(same_day, {"sections": {"hud": {"items": ("fps", "cpu")}}}, ("sections",), now=now)
+
+
+def test_custom_artwork_is_counted_by_kind_and_format(tmp_path):
+    from journal_context import custom_artwork
+
+    grid = tmp_path / "123" / "config" / "grid"
+    grid.mkdir(parents=True)
+    for name in ("2054970p.png", "2054970_hero.png", "2054970_logo.png", "10p.jpg", "10.jpg", "notes.txt", "2054970.json"):
+        (grid / name).write_text("x")
+    assert custom_artwork(str(tmp_path)) == {
+        "cover.jpg": 1, "cover.png": 1, "hero.png": 1, "logo.png": 1, "wide.jpg": 1,
+    }
+    assert custom_artwork(str(tmp_path / "missing")) == {}

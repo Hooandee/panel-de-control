@@ -200,6 +200,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "installed", "other_active_themes", "activation_phase", "activation_quarantined",
             "recent_failures",
         )),
+        ("_support_custom_artwork", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -257,7 +258,7 @@ _THEME_FAILURE_OPERATIONS = frozenset({
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
-_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media)$")
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
 _UI_DIAGNOSTIC_HISTORY = 20
 _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
@@ -12242,6 +12243,11 @@ class Plugin:
             "custom_vars": len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars"))),
             "games_with_options": len(self._settings.get("launch_usage") or {}),
         }
+
+    @staticmethod
+    def _support_custom_artwork() -> dict:
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        return journal_context.custom_artwork(os.path.join(home, ".local", "share", "Steam", "userdata"))
 
     @staticmethod
     def _support_ambient_state() -> dict:

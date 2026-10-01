@@ -6,6 +6,7 @@ import type { QamViewTarget } from "../qam/viewCatalog";
 import { I18nProvider } from "../i18n";
 import { ControlCenter } from "./ControlCenter";
 import { QamPanelGate } from "./QamPanelGate";
+import { ReportingBoundary } from "./ReportingBoundary";
 
 export const PinnedQamView: FC<{
   token: QamEntryToken;
@@ -15,7 +16,9 @@ export const PinnedQamView: FC<{
   <QamPanelGate surfaceId={token} lifecycle={lifecycle}>
     <I18nProvider>
       <ErrorBoundary>
-        <ControlCenter target={target} />
+        <ReportingBoundary where={`pinned:${token}`}>
+          <ControlCenter target={target} />
+        </ReportingBoundary>
       </ErrorBoundary>
     </I18nProvider>
   </QamPanelGate>

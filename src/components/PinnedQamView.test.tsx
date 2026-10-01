@@ -17,6 +17,9 @@ vi.mock("./QamPanelGate", () => ({
   ),
 }));
 
+vi.mock("./ReportingBoundary", () => ({
+  ReportingBoundary: ({ children }: { children?: unknown }) => children,
+}));
 vi.mock("./ControlCenter", () => ({
   ControlCenter: ({ target }: { target?: { kind: string; id?: string } }) => (
     <div data-testid="targeted-control-center" data-kind={target?.kind} data-id={target?.id} />

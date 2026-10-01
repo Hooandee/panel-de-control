@@ -21,6 +21,8 @@ import {
 } from "./api";
 import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
+import { ReportingBoundary } from "./components/ReportingBoundary";
+import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
@@ -59,7 +61,9 @@ const PluginTitle: FC = () => (
 
 const ControlCenterContent: FC = () => (
   <ErrorBoundary>
-    <ControlCenter />
+    <ReportingBoundary where="control-center">
+      <ControlCenter />
+    </ReportingBoundary>
   </ErrorBoundary>
 );
 
@@ -142,6 +146,7 @@ export default definePlugin(() => {
   hydrateQam();
   hydrateModules();
 
+  const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   const stopGameWatcher = startGameWatcher();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
@@ -176,6 +181,7 @@ export default definePlugin(() => {
       stopSteamOverlayActivity();
       shutdownUiActivity();
       stopGameWatcher();
+      stopFrontendErrorReporting();
       stopEcoAmbient();
       stopValueToast();
       stopContextMenu();
