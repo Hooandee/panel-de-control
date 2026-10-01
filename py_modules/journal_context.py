@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from typing import Callable
 
 # Normalised Decky plugin name -> what it competes with Panel for.
@@ -160,6 +161,21 @@ def bounded(summary: dict) -> dict:
     if len(text) <= _MAX_SECTION_JSON:
         return summary
     return {"truncated": text[:_MAX_SECTION_JSON]}
+
+
+def needs_snapshot(last: dict | None, current: dict, keys: tuple[str, ...], *, now: float | None = None) -> bool:
+    """A full line is written for the first record of each day and whenever the
+    content differs from the last one in the diary, even from an earlier session,
+    so restarts that change nothing add nothing."""
+    if not last or not isinstance(last.get("t"), (int, float)):
+        return True
+    now = time.time() if now is None else now
+    if time.strftime("%Y%m%d", time.localtime(last["t"])) != time.strftime("%Y%m%d", time.localtime(now)):
+        return True
+    def canonical(value: object) -> str:
+        return json.dumps(value, sort_keys=True, default=str)
+
+    return any(canonical(last.get(key)) != canonical(current.get(key)) for key in keys)
 
 
 def section_changes(previous: dict | None, current: dict) -> dict:

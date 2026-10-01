@@ -234,3 +234,58 @@ def test_watchdog_reports_a_stuck_loop_once_and_its_recovery(tmp_path):
     j.stop()
     records = [(r["s"], r["m"]) for r in _lines(str(tmp_path))]
     assert records == [("loop", "blocked"), ("loop", "recovered")]
+
+
+def test_transitions_are_stored_structured_without_fixed_values(tmp_path):
+    import logging as logging_module
+
+    j = Journal(str(tmp_path))
+    j.start()
+    handler = JournalHandler(j)
+    payload = (
+        '{"action":"apply","at":12.5,"generation":3,"failures":0,"target_reasons":{},'
+        '"observation":{"surfaces":{"x":{"pl1":{"applied":7,"min":5,"max":33}}}},'
+        '"requested":{"pl1":7},"rollback":{"attempted":false,"ok":null},"write":null}'
+    )
+    handler.emit(logging_module.makeLogRecord({"name": "root", "levelname": "INFO", "msg": "TDP transition %s", "args": (payload,)}))
+    j.stop()
+    record = _lines(str(tmp_path))[0]
+    assert record["m"] == "TDP transition"
+    assert record["e"] == {
+        "action": "apply",
+        "failures": 0,
+        "observation": {"surfaces": {"x": {"pl1": {"applied": 7}}}},
+        "requested": {"pl1": 7},
+    }
+
+
+def test_problems_differing_only_in_numbers_are_one_entry():
+    from journal import summarize
+
+    records = [
+        {"t": 1, "s": "session", "m": "start"},
+        {"t": 2, "l": "W", "s": "log", "m": "TDP transition", "e": {"action": "blocked", "status": "unverifiable"}},
+        {"t": 3, "l": "W", "s": "log", "m": "TDP transition", "e": {"action": "blocked", "status": "unverifiable"}},
+        {"t": 4, "l": "W", "s": "log", "m": "fan write failed after 120 ms"},
+        {"t": 5, "l": "W", "s": "log", "m": "fan write failed after 340 ms"},
+    ]
+    problems = summarize(records)[0]["problems"]
+    assert [(p["message"], p["count"]) for p in problems] == [
+        ("TDP transition blocked unverifiable", 2),
+        ("fan write failed after # ms", 2),
+    ]
+
+
+def test_last_record_finds_the_newest_line_of_a_source(tmp_path):
+    from journal import last_record
+
+    now = 1_790_000_000.0
+    j = Journal(str(tmp_path), clock=lambda: now)
+    _run(
+        j,
+        (("INFO", "sections", "applied"), {"at": now - 10, "sections": {"a": 1}}),
+        (("INFO", "log", "x"), {"at": now - 5}),
+        (("INFO", "sections", "applied"), {"at": now - 2, "sections": {"a": 2}}),
+    )
+    assert last_record(str(tmp_path), "sections")["sections"] == {"a": 2}
+    assert last_record(str(tmp_path), "context") is None

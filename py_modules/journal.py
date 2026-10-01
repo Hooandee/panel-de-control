@@ -20,6 +20,7 @@ import logging
 import logging.handlers
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -295,6 +296,27 @@ def read_records(directory: str) -> Iterator[dict]:
             continue
 
 
+def last_record(directory: str, source: str, *, max_bytes: int = 1_000_000) -> dict | None:
+    """The newest record of a source, reading at most the tail of the two newest files."""
+    for path in reversed(Journal(directory).files()[-2:]):
+        try:
+            with open(path, "rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                size = handle.tell()
+                handle.seek(max(0, size - max_bytes))
+                lines = handle.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict) and record.get("s") == source:
+                return record
+    return None
+
+
 _KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop")
 _KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
 
@@ -364,6 +386,20 @@ def _count(record: dict) -> int:
     return count if isinstance(count, int) and count > 0 else 1
 
 
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _problem_key(record: dict) -> str:
+    """Problems that differ only in numbers or clocks group together; a structured
+    transition groups by what went wrong, not by its values."""
+    message = str(record.get("m", ""))
+    event = record.get("e")
+    if isinstance(event, dict):
+        detail = [str(event.get(key)) for key in ("action", "status", "status_reason", "operation", "error_type") if event.get(key)]
+        message = f"{message} {' '.join(detail)}"
+    return _NUMBER.sub("#", message)[:120]
+
+
 def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
     """One short entry per session, oldest first: what to read before any line."""
     sessions: list[dict] = []
@@ -409,7 +445,7 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
                 if isinstance(value, (int, float)):
                     current["max_temp_c"] = max(current["max_temp_c"] or value, value)
         if record.get("l") in ("W", "E", "C"):
-            key = (record.get("l"), str(record.get("m", ""))[:120])
+            key = (record.get("l"), _problem_key(record))
             current["_problems"][key] = current["_problems"].get(key, 0) + _count(record)
     for session in sessions:
         problems = session.pop("_problems")
@@ -483,8 +519,46 @@ class LoopWatchdog:
             self.check()
 
 
+_TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z ]{1,40} transition) (?P<event>\{.*\})$", re.S)
+_TRANSITION_NOISE = ("at", "generation")
+
+
+def _compact_event(value: Any) -> Any:
+    """A transition payload without what never helps a diagnosis: the monotonic
+    clock, the internal generation, empty values, a rollback that was not tried
+    and the fixed min/max of every rail (they are in the backend line)."""
+    if isinstance(value, dict):
+        compact = {}
+        for key, item in value.items():
+            if key in _TRANSITION_NOISE or item is None or item == {} or item == []:
+                continue
+            if key == "rollback" and isinstance(item, dict) and item.get("attempted") is False:
+                continue
+            if key in ("min", "max") and isinstance(item, (int, float)):
+                continue
+            compact[key] = _compact_event(item)
+        return compact
+    if isinstance(value, list):
+        return [_compact_event(item) for item in value]
+    return value
+
+
+def compact_transition(message: str) -> tuple[str, dict] | None:
+    match = _TRANSITION.match(message)
+    if not match:
+        return None
+    try:
+        event = json.loads(match.group("event"))
+    except ValueError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    return match.group("name"), _compact_event(event)
+
+
 class JournalHandler(logging.Handler):
-    """Copies every log record of the plugin process into the diary."""
+    """Copies every log record of the plugin process into the diary. A
+    "<Name> transition {json}" line is stored structured and compacted."""
 
     def __init__(self, journal: Journal) -> None:
         super().__init__(logging.INFO)
@@ -496,6 +570,11 @@ class JournalHandler(logging.Handler):
             if record.exc_info:
                 message = f"{message}\n{logging.Formatter().formatException(record.exc_info)}"
             source = "log" if record.name == "root" else record.name
+            transition = None if record.exc_info else compact_transition(message)
+            if transition is not None:
+                name, event = transition
+                self._journal.write(record.levelname, source, name, at=record.created, e=event)
+                return
             self._journal.write(record.levelname, source, message, at=record.created)
         except Exception:  # noqa: BLE001
             pass

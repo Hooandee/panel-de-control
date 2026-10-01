@@ -2,6 +2,7 @@ import json
 
 from journal_context import (
     StateWatcher,
+    needs_snapshot,
     active_services,
     context_changes,
     context_snapshot,
@@ -113,3 +114,15 @@ def test_a_light_game_with_an_idle_gpu_is_not_a_low_draw():
     watcher.observe(_sample(tdp_w=15, w=5, gpu_busy=30), 0)
     assert watcher.observe(_sample(tdp_w=15, w=5, gpu_busy=30), 30) is None
     assert watcher.observe(_sample(tdp_w=15, w=5, gpu_busy=35), 60) is None
+
+
+def test_snapshots_are_written_once_a_day_and_on_change():
+    import time
+
+    now = time.mktime((2026, 10, 1, 12, 0, 0, 0, 0, -1))
+    current = {"sections": {"hud": {"items": ("fps",)}}}
+    assert needs_snapshot(None, current, ("sections",), now=now)
+    same_day = {"t": now - 3600, "sections": {"hud": {"items": ["fps"]}}}
+    assert not needs_snapshot(same_day, current, ("sections",), now=now)
+    assert needs_snapshot({**same_day, "t": now - 86400}, current, ("sections",), now=now)
+    assert needs_snapshot(same_day, {"sections": {"hud": {"items": ("fps", "cpu")}}}, ("sections",), now=now)

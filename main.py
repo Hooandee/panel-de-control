@@ -12131,6 +12131,16 @@ class Plugin:
         watcher = journal_context.StateWatcher()
         loop = asyncio.get_running_loop()
         next_context = 0.0
+        diary = journal.active
+        if diary is None:
+            return
+        last_context, last_sections = await loop.run_in_executor(
+            None,
+            lambda: (
+                journal.last_record(diary.directory, "context"),
+                journal.last_record(diary.directory, "sections"),
+            ),
+        )
         while not self._shutting_down:
             diary = journal.active
             if diary is None:
@@ -12138,20 +12148,18 @@ class Plugin:
             try:
                 if time.monotonic() >= next_context:
                     next_context = time.monotonic() + _SUPPORT_CONTEXT_INTERVAL_S
-                    current = await loop.run_in_executor(None, self._read_support_context)
-                    previous = getattr(self, "_support_context", None)
-                    self._support_context = current
-                    if previous is None:
-                        diary.write("INFO", "context", "snapshot", **current)
-                    else:
-                        changes = journal_context.context_changes(previous, current)
-                        if changes:
-                            diary.write("INFO", "context", "changed", rivals=current["rivals"], **changes)
+                    context = await loop.run_in_executor(None, self._read_support_context)
+                    self._support_context = context
+                    if journal_context.needs_snapshot(last_context, context, ("plugins", "services", "rivals")):
+                        changes = journal_context.context_changes(last_context, context)
+                        diary.write("INFO", "context", "snapshot", **context, **({"changes": changes} if changes else {}))
+                        last_context = {"t": time.time(), **context}
                     sections = await self._support_section_states()
-                    changed = journal_context.section_changes(getattr(self, "_support_sections", None), sections)
-                    self._support_sections = sections
-                    if changed:
-                        diary.write("INFO", "sections", "applied", sections=changed)
+                    previous = (last_sections or {}).get("sections")
+                    if journal_context.needs_snapshot(last_sections, {"sections": sections}, ("sections",)):
+                        changed = sorted(journal_context.section_changes(previous, sections))
+                        diary.write("INFO", "sections", "applied", sections=sections, changed=changed)
+                        last_sections = {"t": time.time(), "sections": sections}
                 sample = await self._support_sample()
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
