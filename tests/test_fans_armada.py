@@ -19,6 +19,11 @@ class FakeControl:
     def __init__(self, stop_ok=True, start_ok=True, guard_ok=True):
         self.calls = []
         self.stop_ok, self.start_ok, self.guard_ok = stop_ok, start_ok, guard_ok
+        self.running = True
+        self.beats = 0
+
+    def beat(self):
+        self.beats += 1
 
     def start_guard(self):
         self.calls.append("guard+")
@@ -28,12 +33,19 @@ class FakeControl:
         self.calls.append("guard-")
         return True
 
+    def powerd_active(self):
+        return self.running
+
     def stop_powerd(self):
         self.calls.append("stop")
+        if self.stop_ok:
+            self.running = False
         return self.stop_ok
 
     def start_powerd(self):
         self.calls.append("start")
+        if self.start_ok:
+            self.running = True
         return self.start_ok
 
 
@@ -97,7 +109,7 @@ def test_powerd_that_will_not_stop_is_never_fought(tmp_path):
     result = backend.apply_curve_all(CURVE)
     backend.stop()
     assert result["ok"] is False
-    assert control.calls == ["guard+", "stop", "guard-"]
+    assert control.calls == ["guard+", "stop", "start", "guard-"]
     assert _read(root, f"{fan}/pwm1_enable") == "3"
 
 
@@ -127,14 +139,54 @@ def test_systemd_control_masks_while_owning_and_unmasks_on_handback(monkeypatch)
     import fans.armada as armada
 
     calls = []
-    monkeypatch.setattr(armada, "_run", lambda argv: calls.append(argv[1:]) or True)
-    control = armada.SystemdPowerdControl(pid=4242)
-    control.stop_powerd()
+
+    def fake_run(argv):
+        calls.append(argv[1:])
+        return True, "inactive" if argv[1:2] == ["is-active"] else ""
+
+    monkeypatch.setattr(armada, "_run", fake_run)
+    control = armada.SystemdPowerdControl(pid=4242, heartbeat="/nonexistent/beat")
+    assert control.stop_powerd() is True
     control.start_powerd()
     control.start_guard()
     assert calls[0] == ["mask", "--runtime", "--now", "armada-powerd.service"]
-    assert calls[1] == ["unmask", "--runtime", "armada-powerd.service"]
-    assert calls[3] == ["start", "armada-powerd.service"]
+    assert ["unmask", "--runtime", "armada-powerd.service"] in calls
+    assert ["start", "armada-powerd.service"] in calls
     guard = " ".join(calls[-1])
+    assert "--unit=pdc-armada-fan-guard-4242" in guard
     assert "kill -0 4242" in guard
+    assert "stat -c %Y /nonexistent/beat" in guard
     assert "unmask --runtime armada-powerd.service" in guard
+
+
+def test_missing_temperature_hands_the_fan_back_and_retakes_it_later(tmp_path):
+    root, fan = _thor(tmp_path)
+    reading = {"value": 60.0}
+    control = FakeControl()
+    backend = ArmadaFanBackend(temp_fn=lambda: reading["value"], root=root, control=control)
+    backend.apply_curve_all(CURVE)
+    backend.stop()
+    reading["value"] = None
+    backend._apply_once()
+    assert control.running is True
+    assert _read(root, f"{fan}/pwm1_enable") == "3"
+    reading["value"] = 60.0
+    assert backend._apply_once() is True
+    assert control.running is False
+    assert _read(root, f"{fan}/pwm1_enable") == "1"
+
+
+def test_a_daemon_that_came_back_is_taken_again(tmp_path):
+    root, _ = _thor(tmp_path)
+    now = {"t": 0.0}
+    control = FakeControl()
+    backend = ArmadaFanBackend(temp_fn=lambda: 60.0, root=root, control=control,
+                               clock=lambda: now["t"])
+    backend.apply_curve_all(CURVE)
+    backend.stop()
+    control.running = True
+    now["t"] = 11.0
+    backend._apply_once()
+    assert control.running is False
+    assert control.calls.count("stop") == 2
+    assert control.beats >= 2
