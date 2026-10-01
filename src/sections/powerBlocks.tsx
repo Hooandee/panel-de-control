@@ -75,6 +75,7 @@ const AutoTdpBlock: FC = () => {
       onInitialTdp={onAutoInitialTdp}
       onMinTdp={onAutoMinTdp}
       onMaxTdp={onAutoMaxTdp}
+      unit={tdp.unit}
     />
   );
 };

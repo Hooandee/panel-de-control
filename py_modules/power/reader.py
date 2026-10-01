@@ -2,6 +2,7 @@ import glob
 import os
 import time
 
+from power.drm_fdinfo import DrmFdinfoGpuBusy
 from power.intel import IntelGpuUtil
 
 
@@ -32,6 +33,11 @@ class PowerReader:
         self._amdgpu_hwmon = self._find_amdgpu_dir()
         self._gpu_busy_path = self._find_gpu_busy_path()
         self._intel_gpu = IntelGpuUtil(root=root)
+        self._fdinfo_gpu = (
+            DrmFdinfoGpuBusy(root=root)
+            if glob.glob(os.path.join(root, "sys/class/devfreq/*.gpu"))
+            else None
+        )
         self._gpu_busy_diagnostics = {
             "source": "unknown",
             "state": "not_sampled",
@@ -166,6 +172,13 @@ class PowerReader:
                     "state": "busy_unavailable",
                 }
                 return None
+            if self._fdinfo_gpu is not None:
+                value = self._fdinfo_gpu.read()
+                self._gpu_busy_diagnostics = {
+                    "source": "drm_fdinfo",
+                    "state": "ok" if value is not None else "warming_up",
+                }
+                return value
             value = self._intel_gpu.read_gpu_busy()
             self._gpu_busy_diagnostics = self._intel_gpu.diagnostics()
             return value

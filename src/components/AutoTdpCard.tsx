@@ -6,6 +6,7 @@ import { AutoTdpConfig, AutoTdpLive, TdpLimits, TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { effectiveAutoRange } from "../tdp/autoView";
+import { PowerUnit, isLevelUnit } from "../tdp/unit";
 
 const MIN_TARGET_FPS = 20;
 const MAX_TARGET_FPS = 240;
@@ -24,6 +25,7 @@ interface Props {
   onInitialTdp: (watts: number) => void;
   onMinTdp: (watts: number) => void;
   onMaxTdp: (watts: number) => void;
+  unit?: PowerUnit;
 }
 
 function statusKey(live: AutoTdpLive): string {
@@ -72,8 +74,12 @@ export const AutoTdpCard: FC<Props> = ({
   onInitialTdp,
   onMinTdp,
   onMaxTdp,
+  unit = "W",
 }) => {
   const { t } = useI18n();
+  const levels = isLevelUnit(unit);
+  const powerText = (value: number) => (levels ? t("tdp.level.inline", { level: value }) : `${value} W`);
+  const powerSuffix = levels ? "" : " W";
   const scopeLabel = scope === "global"
     ? t("tdp.auto.scope.global")
     : t("tdp.scope.game");
@@ -102,11 +108,11 @@ export const AutoTdpCard: FC<Props> = ({
     || live?.state === "recovering"
     ? {
         fps: shownFps ?? config.target_fps,
-        watts: maintainedWatts,
+        watts: powerText(maintainedWatts),
       }
     : menuPaused && live?.held_watts === null
     ? {}
-    : { watts: maintainedWatts };
+    : { watts: powerText(maintainedWatts) };
 
   return (
     <PanelSectionRow>
@@ -115,7 +121,7 @@ export const AutoTdpCard: FC<Props> = ({
           <LuGauge size={18} color={theme.color.accent} aria-hidden />
           <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: theme.space.xs }}>
             <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>
-              {t("tdp.auto.title")}
+              {t(levels ? "tdp.auto.title.level" : "tdp.auto.title")}
             </span>
             <span style={{
               padding: "1px 5px",
@@ -194,7 +200,7 @@ export const AutoTdpCard: FC<Props> = ({
                 editableValue
                 validValues="steps"
                 minimumDpadGranularity={1}
-                valueSuffix=" W"
+                valueSuffix={powerSuffix}
                 className="pdc-contained-slider"
                 onChange={onMinTdp}
                 bottomSeparator="none"
@@ -210,7 +216,7 @@ export const AutoTdpCard: FC<Props> = ({
                 editableValue
                 validValues="steps"
                 minimumDpadGranularity={1}
-                valueSuffix=" W"
+                valueSuffix={powerSuffix}
                 className="pdc-contained-slider"
                 onChange={onMaxTdp}
                 bottomSeparator="none"
@@ -224,7 +230,7 @@ export const AutoTdpCard: FC<Props> = ({
 
             <div style={{ minWidth: 0, overflow: "hidden", marginTop: theme.space.xs }}>
               <SliderField
-                label={t("tdp.auto.initial.label")}
+                label={t(levels ? "tdp.auto.initial.label.level" : "tdp.auto.initial.label")}
                 layout="below"
                 value={initialTdp}
                 min={range.min}
@@ -234,7 +240,7 @@ export const AutoTdpCard: FC<Props> = ({
                 editableValue
                 validValues="steps"
                 minimumDpadGranularity={1}
-                valueSuffix=" W"
+                valueSuffix={powerSuffix}
                 className="pdc-contained-slider"
                 onChange={onInitialTdp}
                 bottomSeparator="none"
