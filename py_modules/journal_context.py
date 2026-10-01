@@ -163,6 +163,11 @@ def bounded(summary: dict) -> dict:
     return {"truncated": text[:_MAX_SECTION_JSON]}
 
 
+def canonical(value: object) -> str:
+    """Comparable form: a value read back from the diary went through JSON."""
+    return json.dumps(value, sort_keys=True, default=str)
+
+
 def needs_snapshot(last: dict | None, current: dict, keys: tuple[str, ...], *, now: float | None = None) -> bool:
     """A full line is written for the first record of each day and whenever the
     content differs from the last one in the diary, even from an earlier session,
@@ -172,9 +177,6 @@ def needs_snapshot(last: dict | None, current: dict, keys: tuple[str, ...], *, n
     now = time.time() if now is None else now
     if time.strftime("%Y%m%d", time.localtime(last["t"])) != time.strftime("%Y%m%d", time.localtime(now)):
         return True
-    def canonical(value: object) -> str:
-        return json.dumps(value, sort_keys=True, default=str)
-
     return any(canonical(last.get(key)) != canonical(current.get(key)) for key in keys)
 
 

@@ -149,6 +149,7 @@ _REPORT_SERVICE_URL = os.environ.get(
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SUPPORT_CONTEXT_INTERVAL_S = 900
+_SUPPORT_AFTER_ACTION_S = 5
 # What each Panel section has applied, written to the diary at start and whenever it
 # changes: section id -> (getter, stable fields or None for the whole value). Live
 # readings (watts, temperatures, RPM) stay out so a line means a real change.
@@ -12139,6 +12140,9 @@ class Plugin:
             "bat": battery,
         }
 
+    def _journal_after_action(self) -> None:
+        self._support_refresh_due = time.monotonic() + _SUPPORT_AFTER_ACTION_S
+
     async def _support_watch_loop(self) -> None:
         watcher = journal_context.StateWatcher()
         loop = asyncio.get_running_loop()
@@ -12150,7 +12154,7 @@ class Plugin:
             None,
             lambda: (
                 journal.last_record(diary.directory, "context"),
-                journal.last_record(diary.directory, "sections"),
+                journal.merged_sections(diary.directory),
             ),
         )
         while not self._shutting_down:
@@ -12158,6 +12162,10 @@ class Plugin:
             if diary is None:
                 return
             try:
+                refresh_due = getattr(self, "_support_refresh_due", None)
+                if refresh_due is not None and time.monotonic() >= refresh_due:
+                    self._support_refresh_due = None
+                    next_context = 0.0
                 if time.monotonic() >= next_context:
                     next_context = time.monotonic() + _SUPPORT_CONTEXT_INTERVAL_S
                     context = await loop.run_in_executor(None, self._read_support_context)
@@ -12167,11 +12175,19 @@ class Plugin:
                         diary.write("INFO", "context", "snapshot", **context, **({"changes": changes} if changes else {}))
                         last_context = {"t": time.time(), **context}
                     sections = await self._support_section_states()
-                    previous = (last_sections or {}).get("sections")
-                    if journal_context.needs_snapshot(last_sections, {"sections": sections}, ("sections",)):
-                        changed = sorted(journal_context.section_changes(previous, sections))
-                        diary.write("INFO", "sections", "applied", sections=sections, changed=changed)
+                    if journal_context.needs_snapshot(last_sections, {}, (), now=time.time()):
+                        diary.write("INFO", "sections", "snapshot", sections=sections)
                         last_sections = {"t": time.time(), "sections": sections}
+                    else:
+                        changed = journal_context.section_changes(last_sections.get("sections"), sections)
+                        changed = {
+                            name: state for name, state in changed.items()
+                            if journal_context.canonical(state)
+                            != journal_context.canonical(last_sections["sections"].get(name))
+                        }
+                        if changed:
+                            diary.write("INFO", "sections", "changed", sections=changed)
+                            last_sections = {"t": time.time(), "sections": {**last_sections["sections"], **changed}}
                 sample = await self._support_sample()
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
@@ -12180,7 +12196,15 @@ class Plugin:
                 raise
             except Exception as error:  # noqa: BLE001
                 diary.write("WARNING", "state", "sample_failed", error=type(error).__name__)
-            await asyncio.sleep(_SUPPORT_SAMPLE_INTERVAL_S)
+            await self._support_pause()
+
+    async def _support_pause(self) -> None:
+        deadline = time.monotonic() + _SUPPORT_SAMPLE_INTERVAL_S
+        while time.monotonic() < deadline:
+            refresh_due = getattr(self, "_support_refresh_due", None)
+            if refresh_due is not None and time.monotonic() >= refresh_due:
+                return
+            await asyncio.sleep(1.0)
 
     def _support_launch_state(self) -> dict:
         return {
@@ -12225,7 +12249,7 @@ class Plugin:
                     summary.update(value)
                 else:
                     summary[getter.removeprefix("_").removeprefix("get_")] = value
-            states[section] = journal_context.bounded(summary)
+            states[section] = journal_context.bounded(journal.compact_event(summary))
         return states
 
     def _journal_external_tdp_write(self, event: dict, previous: dict | None) -> None:

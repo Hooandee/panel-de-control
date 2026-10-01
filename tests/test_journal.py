@@ -326,3 +326,34 @@ def test_last_record_finds_the_newest_line_of_a_source(tmp_path):
     )
     assert last_record(str(tmp_path), "sections")["sections"] == {"a": 2}
     assert last_record(str(tmp_path), "context") is None
+
+
+def test_long_arguments_keep_what_changed():
+    from journal import _summary
+
+    model = {
+        "enabled": True,
+        "layout": "horizontal",
+        "position": "top-left",
+        "items": [{"kind": "metric", "id": name} for name in ("fps", "gpu", "cpu", "ram", "battery", "time")],
+        "colors": {f"c{i}": "ffffff" for i in range(20)},
+        "background": {"alpha": 0.5, "roundCorners": True},
+    }
+    text = _summary([model])
+    assert len(text) <= 400
+    assert '"layout":"horizontal"' in text and '"time"' in text
+
+
+def test_merged_sections_lays_changes_over_the_days_snapshot(tmp_path):
+    from journal import merged_sections
+
+    now = 1_790_000_000.0
+    j = Journal(str(tmp_path), clock=lambda: now)
+    _run(
+        j,
+        (("INFO", "sections", "snapshot"), {"at": now - 30, "sections": {"hud": {"layout": "vertical"}, "fans": {"preset": "auto"}}}),
+        (("INFO", "sections", "changed"), {"at": now - 20, "sections": {"hud": {"layout": "horizontal"}}}),
+    )
+    merged = merged_sections(str(tmp_path))
+    assert merged["sections"] == {"hud": {"layout": "horizontal"}, "fans": {"preset": "auto"}}
+    assert merged["t"] == now - 20

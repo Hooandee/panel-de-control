@@ -328,6 +328,36 @@ def last_record(directory: str, source: str, *, max_bytes: int = 1_000_000) -> d
     return None
 
 
+def merged_sections(directory: str) -> dict | None:
+    """The applied state of every section as the diary last knew it: the day's
+    full snapshot with the later per-section changes laid over it. None when the
+    newest file holds no snapshot (a new day starts with a full one)."""
+    files = Journal(directory).files()
+    if not files:
+        return None
+    merged: dict | None = None
+    at = None
+    try:
+        with open(files[-1], encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(record, dict) or record.get("s") != "sections":
+                    continue
+                if record.get("m") == "snapshot":
+                    merged = dict(record.get("sections") or {})
+                elif merged is not None:
+                    merged.update(record.get("sections") or {})
+                else:
+                    continue
+                at = record.get("t")
+    except OSError:
+        return None
+    return None if merged is None else {"t": at, "sections": merged}
+
+
 _KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop")
 _KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
 
@@ -533,7 +563,7 @@ class LoopWatchdog:
 
 
 _TRANSITION = re.compile(r"^(?P<name>[A-Z][A-Za-z ]{1,40} transition) (?P<event>\{.*\})$", re.S)
-_TRANSITION_NOISE = ("at", "generation")
+_TRANSITION_NOISE = ("at", "generation", "history")
 
 
 def compact_event(value: Any) -> Any:
@@ -625,9 +655,29 @@ def queue_logger_handlers(logger: logging.Logger, *, queue_size: int = 4096) -> 
     return restore
 
 
+def _condensed(value: Any, depth: int = 0) -> Any:
+    """A long argument reduced to what tells the change: simple fields kept,
+    lists of objects reduced to their ids, deeper objects to their keys."""
+    if isinstance(value, dict):
+        if depth >= 2:
+            return sorted(value)[:12]
+        return {key: _condensed(item, depth + 1) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        if value and all(isinstance(item, dict) for item in value):
+            ids = [item.get("id") or item.get("name") or item.get("kind") for item in value]
+            if all(ids):
+                return ids
+        return [_condensed(item, depth + 1) for item in value[:12]] + (["…"] if len(value) > 12 else [])
+    if isinstance(value, str) and len(value) > 60:
+        return value[:60] + "…"
+    return value
+
+
 def _summary(value: Any) -> str:
     try:
         text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+        if len(text) > _MAX_ARGS:
+            text = json.dumps(_condensed(value), ensure_ascii=False, separators=(",", ":"), default=str)
     except Exception:  # noqa: BLE001
         text = repr(value)
     return text if len(text) <= _MAX_ARGS else text[:_MAX_ARGS] + "…"
@@ -677,6 +727,9 @@ def _traced(name: str, function: Callable, hide_arguments: bool) -> Callable:
             journal.write("INFO", "rpc", name, a=arguments)
         else:
             journal.write("WARNING", "rpc", name, a=arguments, r=outcome)
+        after_action = getattr(self, "_journal_after_action", None)
+        if callable(after_action):
+            after_action()
         return result
 
     return call

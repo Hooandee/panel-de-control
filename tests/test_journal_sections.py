@@ -55,3 +55,15 @@ def test_only_changed_sections_are_written_again():
 
 def test_an_oversized_summary_is_cut_to_one_line():
     assert "truncated" in bounded({"items": ["x" * 50] * 100})
+
+
+def test_internal_counters_never_look_like_a_change(plugin, monkeypatch):  # noqa: F811
+    counter = iter(range(100))
+
+    async def battery():
+        return {"charge_limit": {"enabled": False, "reconciliation": {"generation": next(counter), "history": [1]}}}
+
+    monkeypatch.setattr(plugin, "get_battery_state", battery)
+    first = asyncio.run(plugin._support_section_states())["system"]
+    second = asyncio.run(plugin._support_section_states())["system"]
+    assert first == second
