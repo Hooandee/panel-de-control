@@ -40,6 +40,7 @@ class Policy:
     affected_cpus: tuple[int, ...]
     hardware_min_khz: int
     hardware_max_khz: int
+    available_khz: tuple[int, ...] = ()
 
     @property
     def scaling_min_path(self):
@@ -363,10 +364,17 @@ class LinuxCpuFrequency:
         return min(window[0] for window in windows), max(window[1] for window in windows)
 
     @staticmethod
-    def _target_for(policy, requested):
+    def _target_for(policy, requested, snap=True):
         minimum = min(max(requested[0], policy.hardware_min_khz), policy.hardware_max_khz)
         maximum = min(max(requested[1], policy.hardware_min_khz), policy.hardware_max_khz)
-        return minimum, maximum
+        table = policy.available_khz
+        if not table or not snap:
+            return minimum, maximum
+        # Table-driven drivers (qcom-cpufreq-hw, acpi-cpufreq) store the nearest
+        # table entry, so an off-table target would never read back as written.
+        maximum = max((value for value in table if value <= maximum), default=table[0])
+        minimum = min((value for value in table if value >= minimum), default=table[-1])
+        return min(minimum, maximum), maximum
 
     @staticmethod
     def _ordered_writes(policy, current, target):
@@ -745,7 +753,7 @@ class LinuxCpuFrequency:
             if identity is None:
                 continue
             baseline = self._baseline[identity]
-            target = self._target_for(policy, baseline)
+            target = self._target_for(policy, baseline, snap=False)
             targets[policy.name] = target
             if not self._restore_pair(policy, target):
                 restored = False
@@ -851,6 +859,14 @@ class LinuxCpuFrequency:
         }
 
 
+def _read_frequency_table(path):
+    values = set()
+    for name in ("scaling_available_frequencies", "scaling_boost_frequencies"):
+        text = read_str(os.path.join(path, name)) or ""
+        values.update(int(item) for item in text.split() if item.isdigit())
+    return tuple(sorted(values))
+
+
 def _discover_policies(root):
     base = os.path.join(root, _CPUFREQ)
     candidates = []
@@ -900,6 +916,7 @@ def _discover_policies(root):
             affected_cpus=_parse_cpu_list(affected_text),
             hardware_min_khz=values["hardware_min"],
             hardware_max_khz=values["hardware_max"],
+            available_khz=_read_frequency_table(path),
         ))
     if not policies:
         return None, "no_policies"
