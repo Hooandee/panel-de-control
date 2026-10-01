@@ -422,8 +422,8 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
 
 
 class LoopWatchdog:
-    """Notices when the asyncio loop stops answering. A coroutine on the loop
-    stamps a heartbeat; a thread checks it, and the first time it is older than
+    """Notices when the asyncio loop stops answering. Built on the loop's thread;
+    a coroutine on the loop stamps a heartbeat and a thread checks it, and the first time it is older than
     the limit writes one warning with the loop thread's stack, then one more line
     when the loop answers again with how long it was stuck."""
 
@@ -440,7 +440,7 @@ class LoopWatchdog:
         self._beat_s = beat_s
         self._clock = clock
         self._last_beat = clock()
-        self._loop_thread: int | None = None
+        self._loop_thread = threading.get_ident()
         self._stuck_since: float | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -448,7 +448,6 @@ class LoopWatchdog:
     async def beat(self) -> None:
         import asyncio
 
-        self._loop_thread = threading.get_ident()
         while not self._stop.is_set():
             self._last_beat = self._clock()
             await asyncio.sleep(self._beat_s)
@@ -474,7 +473,7 @@ class LoopWatchdog:
             self._stuck_since = None
 
     def _loop_stack(self) -> str:
-        frame = sys._current_frames().get(self._loop_thread) if self._loop_thread else None
+        frame = sys._current_frames().get(self._loop_thread)
         if frame is None:
             return ""
         return "".join(traceback.format_stack(frame)[-12:])[-3000:]
