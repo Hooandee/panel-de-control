@@ -12059,6 +12059,9 @@ class Plugin:
             decky.logger.error("Journal unavailable: %s", error)
             return
         journal.active = diary
+        self._loop_watchdog = journal.LoopWatchdog(diary)
+        self._loop_watchdog_task = asyncio.get_running_loop().create_task(self._loop_watchdog.beat())
+        self._loop_watchdog.start()
         diary.write(
             "INFO",
             "session",
@@ -12227,6 +12230,12 @@ class Plugin:
         if diary is None:
             return
         journal.active = None
+        watchdog = getattr(self, "_loop_watchdog", None)
+        if watchdog is not None:
+            watchdog.stop()
+        task = getattr(self, "_loop_watchdog_task", None)
+        if task is not None:
+            task.cancel()
         diary.write("INFO", "session", "stop")
         restore = getattr(self, "_journal_restore_handlers", None)
         if restore is not None:

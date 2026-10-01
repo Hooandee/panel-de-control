@@ -20,8 +20,10 @@ import logging
 import logging.handlers
 import os
 import queue
+import sys
 import threading
 import time
+import traceback
 from typing import Any, Callable, Iterator
 
 _FILE_PREFIX = "pdc-"
@@ -293,7 +295,7 @@ def read_records(directory: str) -> Iterator[dict]:
             continue
 
 
-_KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp")
+_KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop")
 _KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
 
 
@@ -417,6 +419,69 @@ def summarize(records: list[dict], *, top: int = 5) -> list[dict]:
         ]
         session["problem_kinds"] = len(problems)
     return sessions
+
+
+class LoopWatchdog:
+    """Notices when the asyncio loop stops answering. A coroutine on the loop
+    stamps a heartbeat; a thread checks it, and the first time it is older than
+    the limit writes one warning with the loop thread's stack, then one more line
+    when the loop answers again with how long it was stuck."""
+
+    def __init__(
+        self,
+        journal: Journal,
+        *,
+        limit_s: float = 3.0,
+        beat_s: float = 0.5,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._journal = journal
+        self._limit_s = limit_s
+        self._beat_s = beat_s
+        self._clock = clock
+        self._last_beat = clock()
+        self._loop_thread: int | None = None
+        self._stuck_since: float | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    async def beat(self) -> None:
+        import asyncio
+
+        self._loop_thread = threading.get_ident()
+        while not self._stop.is_set():
+            self._last_beat = self._clock()
+            await asyncio.sleep(self._beat_s)
+
+    def start(self) -> None:
+        if self._thread is None:
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._watch, name="pdc-loop-watchdog", daemon=True)
+            self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread = None
+
+    def check(self) -> None:
+        now = self._clock()
+        late = now - self._last_beat
+        if late >= self._limit_s and self._stuck_since is None:
+            self._stuck_since = self._last_beat
+            self._journal.write("WARNING", "loop", "blocked", after_s=round(late, 1), stack=self._loop_stack())
+        elif late < self._limit_s and self._stuck_since is not None:
+            self._journal.write("WARNING", "loop", "recovered", stuck_s=round(self._last_beat - self._stuck_since, 1))
+            self._stuck_since = None
+
+    def _loop_stack(self) -> str:
+        frame = sys._current_frames().get(self._loop_thread) if self._loop_thread else None
+        if frame is None:
+            return ""
+        return "".join(traceback.format_stack(frame)[-12:])[-3000:]
+
+    def _watch(self) -> None:
+        while not self._stop.wait(self._beat_s):
+            self.check()
 
 
 class JournalHandler(logging.Handler):

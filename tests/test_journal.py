@@ -214,3 +214,23 @@ def test_traced_calls_record_arguments_and_failures(tmp_path):
         ("explode", "[]", {"raised": "RuntimeError"}),
     ]
     assert "private words" not in json.dumps(records)
+
+
+def test_watchdog_reports_a_stuck_loop_once_and_its_recovery(tmp_path):
+    from journal import LoopWatchdog
+
+    now = [100.0]
+    j = Journal(str(tmp_path), clock=lambda: 1_790_000_000.0)
+    j.start()
+    dog = LoopWatchdog(j, limit_s=3.0, clock=lambda: now[0])
+    now[0] = 101.0
+    dog.check()
+    now[0] = 104.5
+    dog.check()
+    now[0] = 106.0
+    dog.check()
+    dog._last_beat = 106.0
+    dog.check()
+    j.stop()
+    records = [(r["s"], r["m"]) for r in _lines(str(tmp_path))]
+    assert records == [("loop", "blocked"), ("loop", "recovered")]
