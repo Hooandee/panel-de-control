@@ -844,6 +844,8 @@ export interface GpuClockState {
   manual: boolean;
   range_min: number | null;
   range_max: number | null;
+  // Discrete frequencies (MHz) on table-driven GPUs; null when any MHz value is valid.
+  levels?: number[] | null;
   min: number | null;
   max: number | null;
   configured_min: number | null;

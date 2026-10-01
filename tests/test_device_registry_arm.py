@@ -101,7 +101,8 @@ def test_arm_never_reaches_x86_power_or_gpu_clock_paths(tmp_path):
     backend = select_backend(prof, root=root, ryzenadj_resolve=no_ryzenadj)
     assert backend.supported is False
     assert backend.probe_trace == ()
-    assert select_gpu_clock(prof, root=root)._selection == []
+    selection = select_gpu_clock(prof, root=root)._selection
+    assert {row["backend"] for row in selection} <= {"devfreq"}
 
 
 def test_x86_with_a_populated_device_tree_and_dmi_stays_x86(tmp_path):
