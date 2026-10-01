@@ -2,7 +2,7 @@
 
 Split so the tricky parts are pure and unit-testable:
   - redact_text / redact_obj  - strip home paths, hostname, serial-like values
-  - tail_logs                 - newest log files, size-capped, redacted
+  - tail_logs                 - newest Decky log files, size-capped, redacted
   - build_bundle              - assemble the final dict from already-fetched parts
 
 main.py does the I/O (calls the get_*_state RPCs, reads the stores + log dir) and
@@ -24,7 +24,7 @@ import urllib.parse
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 5
+SCHEMA = 6
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -1228,6 +1228,7 @@ def build_bundle(
     stores: dict,
     logs: list,
     kind: str = "bug",
+    journal: dict | None = None,
     kernel: dict | None = None,
     sysfs: dict | None = None,
     home: str | None = None,
@@ -1246,6 +1247,7 @@ def build_bundle(
         "state": state or {},
         "stores": stores or {},
         "logs": logs or [],
+        "journal": journal or {},
         "kernel": kernel or {},
         "sysfs": sysfs or {},
     }

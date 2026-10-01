@@ -53,3 +53,17 @@ def test_save_local_accepts_additive_cpu_gpu_category_and_state(tmp_path):
     path = save_local(str(tmp_path), bundle, code="PDC-CPU-GPU")
     with open(path) as report:
         assert json.load(report) == bundle
+
+
+def test_encode_payload_wraps_the_bundle_in_the_gzip_envelope():
+    import base64
+    import gzip
+    import json
+
+    from report.client import encode_payload
+
+    bundle = {"app": "panel-de-control", "schema": 6, "journal": {"recent": [{"m": "x" * 1000}]}}
+    envelope = encode_payload(bundle)
+    assert (envelope["app"], envelope["schema"], envelope["enc"]) == ("panel-de-control", 6, "gzip")
+    assert json.loads(gzip.decompress(base64.b64decode(envelope["payload"]))) == bundle
+    assert len(envelope["payload"]) < 400

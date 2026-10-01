@@ -26,6 +26,7 @@ import device_registry
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
+import journal
 import self_updater
 import theme_activation
 import theme_packages
@@ -2049,6 +2050,7 @@ class Plugin:
                 hostname=hostname,
             ),
         )
+        diary = await loop.run_in_executor(None, self._journal_report)
         return report_collector.build_bundle(
             app=_REPORT_APP,
             categories=categories,
@@ -2059,6 +2061,7 @@ class Plugin:
             state=states,
             stores=self._report_stores(),
             logs=logs,
+            journal=diary,
             kernel=kernel,
             sysfs=snapshot,
             home=home,
@@ -11888,6 +11891,7 @@ class Plugin:
         log("Lifecycle transition %s", encoded)
 
     async def _main(self) -> None:
+        self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
@@ -11976,6 +11980,59 @@ class Plugin:
             self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
         decky.logger.info("Panel de Control unloaded")
+        self._stop_journal()
+
+    def _start_journal(self) -> None:
+        if journal.active is not None:
+            return
+        runtime_dir = getattr(decky, "DECKY_PLUGIN_RUNTIME_DIR", "")
+        if not runtime_dir:
+            return
+        try:
+            diary = journal.Journal(os.path.join(runtime_dir, "logs"))
+            diary.start()
+            handler = journal.JournalHandler(diary)
+            decky.logger.addHandler(handler)
+            self._journal_handler = handler
+            self._journal_restore_handlers = journal.queue_logger_handlers(decky.logger)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Journal unavailable: %s", error)
+            return
+        journal.active = diary
+        diary.write(
+            "INFO",
+            "session",
+            "start",
+            version=read_version(),
+            decky=os.environ.get("DECKY_VERSION"),
+        )
+
+    @staticmethod
+    def _journal_report() -> dict | None:
+        diary = journal.active
+        if diary is None:
+            return None
+        try:
+            report = journal.collect(diary.directory)
+        except Exception as error:  # noqa: BLE001
+            return {"schema": 1, "error": type(error).__name__}
+        report["dropped"] = diary.dropped
+        report["write_failures"] = diary.write_failures
+        return report
+
+    def _stop_journal(self) -> None:
+        diary = journal.active
+        if diary is None:
+            return
+        journal.active = None
+        diary.write("INFO", "session", "stop")
+        restore = getattr(self, "_journal_restore_handlers", None)
+        if restore is not None:
+            restore()
+        handler = getattr(self, "_journal_handler", None)
+        if handler is not None:
+            decky.logger.removeHandler(handler)
+        diary.stop(timeout=1.0)
 
     def _prepare_shutdown(self) -> None:
         self._cancel_charge_limit_reconcile("shutdown")
@@ -12146,3 +12203,7 @@ class Plugin:
         finally:
             self._finish_theme_shutdown_sync()
         decky.logger.info("Panel de Control uninstalled")
+        self._stop_journal()
+
+
+journal.trace_calls(Plugin, hidden_arguments=frozenset({"submit_report"}))
