@@ -188,15 +188,15 @@ class Journal:
         pending = self._pending
         if (
             pending is not None
+            and self._coalesce_s > 0
             and pending["m"] == record["m"]
             and "r" not in pending
+            and "r" not in record
             and record["t"] - pending.get("last", pending["t"]) <= self._coalesce_s
         ):
             pending["a"] = record.get("a")
             pending["last"] = record["t"]
             pending["n"] = pending.get("n", 1) + 1
-            if "r" in record:
-                pending["r"] = record["r"]
             return
         self._flush_pending()
         self._pending = dict(record)
