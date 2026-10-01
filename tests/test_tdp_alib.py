@@ -117,6 +117,14 @@ def test_set_tdp_clamps_on_battery(tmp_path):
     assert res.requested_w == 45  # clamped to on-battery max
 
 
+def test_charger_only_ceiling_raises_ac_but_not_battery(tmp_path):
+    _mk_call(str(tmp_path))
+    b = AlibBackend(FALLBACK, root=str(tmp_path), modprobe=_NO_MODPROBE,
+                    caller=FakeCaller("0x0"), write_max_ac=120)
+    assert b.set_tdp(999, ac=True).requested_w == 120
+    assert b.set_tdp(999, ac=False).requested_w == 45
+
+
 def test_set_tdp_reports_failure_when_method_errors(tmp_path):
     _mk_call(str(tmp_path))
     fake = FakeCaller("Error: AE_NOT_FOUND")

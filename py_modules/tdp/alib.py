@@ -77,9 +77,10 @@ class AlibBackend(TDPBackend):
     heartbeat_s = 15.0
 
     def __init__(self, fallback: TdpLimits, root: str = "/",
-                 modprobe=_default_modprobe, caller=None, write_max: int | None = None) -> None:
+                 modprobe=_default_modprobe, caller=None, write_max: int | None = None,
+                 write_max_ac: int | None = None) -> None:
         self._fallback = fallback
-        self._write_limits = fallback.with_cooler(write_max)
+        self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self._root = root
         self._call_path = os.path.join(root, _CALL_REL)
         self._modprobe = modprobe

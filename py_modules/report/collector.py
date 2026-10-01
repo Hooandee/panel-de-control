@@ -22,6 +22,7 @@ import stat
 import urllib.parse
 
 import device_tree
+from report import connected_devices
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
@@ -1045,7 +1046,7 @@ def sysfs_snapshot(
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
                   "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
-                  "arm": {}}
+                  "arm": {}, "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1110,6 +1111,10 @@ def sysfs_snapshot(
         snap["arm"] = _snap_arm(root)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        snap["connected_devices"] = connected_devices.snapshot(root)
+    except Exception:  # noqa: BLE001
+        pass
     # Backstop the count caps: if the listing is still oversized, drop the heaviest
     # sections and flag it honestly rather than shipping an unbounded blob.
     if not _within(snap, cap):
@@ -1118,7 +1123,8 @@ def sysfs_snapshot(
         # listings, until the bundle fits.
         if isinstance(snap.get("ec"), dict):
             snap["ec"]["dump"] = None
-        for key in ("modules", "hwmon", "power_supply", "firmware_attributes", "leds"):
+        for key in ("connected_devices", "modules", "hwmon", "power_supply",
+                    "firmware_attributes", "leds"):
             if _within(snap, cap):
                 break
             snap[key] = [] if isinstance(snap[key], list) else {}

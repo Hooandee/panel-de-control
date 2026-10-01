@@ -13,14 +13,11 @@ class AmdDptcBackend(FirmwareAttrBackend):
         fallback,
         root="/",
         write_max=None,
+        write_max_ac=None,
         safety_lock_path=None,
         ownership_lock_path=None,
     ):
-        try:
-            requested_max = int(write_max) if write_max is not None else 0
-        except (TypeError, ValueError):
-            requested_max = 0
-        self._write_max = max(fallback.max_ac_w, requested_max)
+        self._write_max = max(fallback.max_ac_w, write_max or 0, write_max_ac or 0)
         super().__init__(
             "amd-dptc",
             fallback,

@@ -199,10 +199,10 @@ Cualquier otro portátil cae en un perfil **genérico experimental**: el plugin 
 reales y muestra lo que consigue, ocultando honestamente el resto.
 
 El **OneXPlayer OneXFly Apex** (Ryzen AI Max+ 395) ya se reconoce por su nombre y entra como
-experimental. El control de TDP va por la vía genérica de AMD, así que debería funcionar; los
-ventiladores y el límite de carga se activan solo si el equipo expone los nodos, y hasta que
-alguien lo pruebe en mano preferimos no dar nada por hecho. Si tienes uno, los reportes desde
-Ajustes ayudan un montón a afinarlo.
+experimental. El TDP llega a 55 W con batería y a 80 W con el cargador, que es lo que homologa
+OneXPlayer sin accesorios; con la refrigeración líquida externa conectada se puede subir a 120 W
+desde Ajustes. Los ventiladores y el límite de carga se activan solo si el equipo expone los
+nodos. Si tienes uno, los reportes desde Ajustes ayudan un montón a afinarlo.
 
 El **AOKZOE A1X** (Ryzen AI 9 HX 370) también se reconoce por su nombre y entra como experimental.
 Su TDP va por la misma vía genérica de AMD (ryzenadj), pero con un techo de 30 W en vez de quedarse

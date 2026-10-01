@@ -910,6 +910,10 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "dump": None,
         },
         "arm": {"arch": "x86"},
+        "connected_devices": {
+            "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
+            "bluetooth_adapters": [],
+        },
     }
 
 
