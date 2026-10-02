@@ -8,7 +8,7 @@ DISPLAY = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", UserSe
 
 
 class FakeServer:
-    def __init__(self, *_args, on_error=None):
+    def __init__(self, *_args, on_error=None, art=None):
         self.port = None
         self.starts = 0
 

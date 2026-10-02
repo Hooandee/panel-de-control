@@ -146,3 +146,27 @@ def test_url_carries_port_and_token(static_dir):
     url, port, token, after = asyncio.run(run())
     assert url == f"http://127.0.0.1:{port}/?k={token}"
     assert after is None
+
+
+def test_serves_only_resolved_game_art(static_dir, tmp_path):
+    hero = tmp_path / "hero.jpg"
+    hero.write_bytes(b"jpeg")
+
+    async def run():
+        server = KioskServer(
+            str(static_dir), lambda *_: None, (),
+            art=lambda appid, kind: (str(hero), "image/jpeg") if (appid, kind) == ("413150", "hero") else None,
+        )
+        await server.start()
+        try:
+            found = await _request(server.port, b"GET /art/413150/hero HTTP/1.1\r\n\r\n")
+            missing = await _request(server.port, b"GET /art/413150/logo HTTP/1.1\r\n\r\n")
+            nested = await _request(server.port, b"GET /art/413150/hero/x HTTP/1.1\r\n\r\n")
+        finally:
+            await server.stop()
+        return found, missing, nested
+
+    found, missing, nested = asyncio.run(run())
+    assert found == (200, b"jpeg")
+    assert missing[0] == 404
+    assert nested[0] == 404

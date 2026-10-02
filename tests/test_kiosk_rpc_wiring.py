@@ -45,3 +45,10 @@ def test_kiosk_rpcs_match_what_decky_exposes(plugin):  # noqa: F811
     methods = public_rpc_methods(plugin)
     assert {"get_kiosk_state", "set_kiosk_enabled", "get_tdp_state", "get_ui_prefs"} <= methods
     assert not any(name.startswith("_") for name in methods)
+
+
+def test_kiosk_game_name_comes_from_the_steam_library(plugin, tmp_path, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    monkeypatch.setattr(main.kiosk_steam_game, "game_name", lambda home, appid: "Stardew Valley" if appid == "413150" else None)
+    assert asyncio.run(plugin.get_kiosk_game("413150")) == {"appid": "413150", "name": "Stardew Valley"}
+    assert asyncio.run(plugin.get_kiosk_game("1")) == {"appid": "1", "name": None}
