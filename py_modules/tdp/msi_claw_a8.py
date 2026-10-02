@@ -38,7 +38,7 @@ class MsiClawA8FirmwareBackend(FirmwareAttrBackend):
 
     def _profile_rail_max(self, attr):
         if attr == "ppt_pl2_sppt":
-            return max(37, self._write_max_ac)
+            return 37
         if attr == "ppt_pl3_fppt":
-            return max(55, self._write_max_ac)
-        return self._write_max_ac
+            return 55
+        return self._fallback.max_ac_w

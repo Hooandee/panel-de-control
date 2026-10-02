@@ -19,6 +19,8 @@ class TDPBackend(ABC):
     reselection_safe_after_use: bool = False
     probe_trace: tuple[dict, ...] = ()
     primary_rail: str = "pl1"
+    # Highest charger PL1 this backend will write; the manual extra range never exceeds it.
+    manual_write_max_ac: int | None = None
 
     @abstractmethod
     def get_limits(self) -> TdpLimits:

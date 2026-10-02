@@ -1,8 +1,7 @@
 """Manual TDP headroom past the manufacturer's safe range.
 
-Matches what SimpleDeckyTDP lets a player request: up to 40 W on AMD handhelds and
-120 W on Strix Halo, charger only. The firmware may still refuse or clamp it; presets
-and Auto-TDP never enter this range.
+A player may request up to 40 W on AMD handhelds and 120 W on Strix Halo, charger only.
+The firmware may still refuse or clamp it; presets and Auto-TDP never enter this range.
 """
 
 EXTRA_MAX_W = 40
@@ -23,6 +22,10 @@ def extra_tdp_max_ac(device) -> int | None:
     return ceiling if ceiling > device.tdp_max_charger else None
 
 
-def with_extra(limits, device):
-    """`limits` with the charger ceiling raised to the manual extra range, if any."""
-    return limits.with_ac_max(extra_tdp_max_ac(device))
+def with_extra(limits, device, write_max_ac=None):
+    """`limits` with the charger ceiling raised to the manual extra range, if any, never
+    past what the backend writes (`write_max_ac`, when given)."""
+    ceiling = extra_tdp_max_ac(device)
+    if ceiling is not None and write_max_ac is not None:
+        ceiling = min(ceiling, write_max_ac)
+    return limits.with_ac_max(ceiling)

@@ -23,7 +23,7 @@ from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
-from tdp.write_ceilings import charger_write_max, cooler_write_max
+from tdp.write_ceilings import charger_cooler_max, charger_write_max, cooler_write_max
 
 
 _RYZENADJ_ONLY_KEYS = frozenset({
@@ -171,6 +171,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             root=root,
             write_max=cooler_write_max(device),
             write_max_ac=charger_write_max(device),
+            rail_max_ac=charger_cooler_max(device),
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )

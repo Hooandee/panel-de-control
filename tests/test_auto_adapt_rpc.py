@@ -1605,3 +1605,17 @@ def test_overview_skips_tab_flip_with_no_real_change(Plugin):
     p._cpu_profiles.set_smt("game", False, appid="g")
     rows = asyncio.run(p.list_game_profiles())
     assert any(r["appid"] == "g" for r in rows)
+
+
+def test_learned_band_never_suggests_the_extra_range(Plugin):
+    from tdp.types import TdpLimits
+
+    p = Plugin()
+    p._init()
+    p._tdp_backend.get_limits = lambda: TdpLimits(5, 15, 18, 18)
+    _feed_tdp_band(p)
+    asyncio.run(p.set_current_game("123"))
+    learned = asyncio.run(p.get_tdp_state())["learned"]
+
+    assert learned["ceil"] == 18
+    assert learned["floor"] <= 18

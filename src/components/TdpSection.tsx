@@ -178,9 +178,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
           overclocked={tdp.overclock?.detected ?? false}
-          safeMin={tdp.limits.min}
-          safeMax={activeMax}
-          manualMax={tdp.manual_max_ac ?? null}
+          safeMin={deckPptActive ? null : tdp.limits.min}
+          safeMax={deckPptActive ? null : activeMax}
+          manualMax={deckPptActive ? null : (tdp.manual_max_ac ?? null)}
         />
       </PanelSectionRow>
       {showOwnership && (

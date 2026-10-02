@@ -22,3 +22,8 @@ def charger_write_max(device) -> int | None:
         ceilings.append(device.cooler_max)
     ceilings = [value for value in ceilings if value]
     return max(ceilings) if ceilings else None
+
+
+def charger_cooler_max(device) -> int | None:
+    """Charger-only cooler ceiling: safe once the player confirms the cooler is attached."""
+    return device.cooler_max if getattr(device, "cooler_charger_only", False) else None

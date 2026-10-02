@@ -320,6 +320,18 @@ describe("TdpSection Steam Deck PPT arc", () => {
     on_ac: true,
   } as TdpState;
 
+  it("never marks the Steam Deck boost target as extra", () => {
+    renderTdpSection({
+      ...deckState,
+      boost_mode: "custom",
+      global_boost_mode: "custom",
+      ppt: { ...deckState.ppt!, requested: { slow: 25, fast: 25 }, applied: { slow: 25, fast: 25 } },
+    } as TdpState);
+
+    expect(captured.arc).toMatchObject({ safeMin: null, safeMax: null, manualMax: null });
+    expect(screen.queryByText("tdp.extra.high")).toBeNull();
+  });
+
   it("lets the slider reach the extra range on the charger and explains it", () => {
     renderTdpSection({ ...extraState, watts: 36, global_watts: 36 });
 

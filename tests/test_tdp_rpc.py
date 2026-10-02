@@ -251,7 +251,6 @@ def test_gpd_win_mini_keeps_durable_limits_when_backend_is_unavailable(
     migrated._init()
 
     assert migrated._profile_storage_limits() == TdpLimits(20, 20, 35, 40)
-    assert migrated._tdp_request_min() == 3
     assert migrated._tdp_profiles.effective(None)["pl1"] == 35
     assert migrated._tdp_profiles.game_profile("low")["pl1"] == 3
 
@@ -1035,7 +1034,6 @@ def test_gpd_win_mini_corrupt_string_false_never_unlocks_55w(Plugin):
 
     assert asyncio.run(p.get_experimental_tdp_unlock()) is False
     assert p._safe_limits() == TdpLimits(20, 20, 35, 35)
-    assert p._limits().max_ac_w == 40
 
 
 def test_gpd_win_mini_upgrade_normalizes_legacy_low_profile_intent(Plugin):
@@ -1865,11 +1863,12 @@ def _profile(key):
     return next(profile for profile in DEVICE_TABLE if profile.key == key)
 
 
-def _plugin_on(Plugin, key, limits):
+def _plugin_on(Plugin, key, limits, write_max_ac=200):
     p = Plugin()
     p._init()
     p._device = _profile(key)
     p._tdp_backend.get_limits = lambda: limits
+    p._tdp_backend.manual_write_max_ac = write_max_ac
     return p
 
 
@@ -1914,8 +1913,62 @@ def test_steam_deck_has_no_manual_extra_range(Plugin):
     assert state["manual_max_ac"] == state["limits"]["max_ac"]
 
 
+def test_no_extra_range_past_what_the_backend_writes(Plugin):
+    p = _plugin_on(Plugin, "gpd_win_mini_2025", TdpLimits(20, 20, 35, 35), write_max_ac=35)
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["manual_max_ac"] == 35
+
+
 def test_gpd_win_mini_requests_start_at_three_watts(Plugin):
     p = _plugin_on(Plugin, "gpd_win_mini_2025", TdpLimits(20, 20, 35, 35))
 
-    assert p._tdp_request_min() == 3
     assert p._preset_wclamp() == (3, 35)
+
+
+def _ally_x_rails():
+    return {"pl1": {"min": 7, "max": 30},
+            "pl2": {"min": 7, "max": 36},
+            "pl3": {"min": 7, "max": 42}}
+
+
+def test_rails_keep_their_safe_ceilings_inside_the_safe_range(Plugin):
+    p = _plugin_on(Plugin, "rog_ally_x", TdpLimits(7, 17, 25, 30))
+
+    charger = p._cap_level_limits(_ally_x_rails(), 40, True, 30, 20)
+    battery = p._cap_level_limits(_ally_x_rails(), 25, True, 25, 20)
+
+    assert charger == _ally_x_rails()
+    assert battery["pl1"]["max"] == 25 and battery["pl2"]["max"] == 36
+
+
+def test_an_extra_request_lifts_the_rails_only_up_to_itself(Plugin):
+    p = _plugin_on(Plugin, "rog_ally_x", TdpLimits(7, 17, 25, 30))
+
+    ll = p._cap_level_limits(_ally_x_rails(), 40, True, 30, 38)
+
+    assert {rail: bound["max"] for rail, bound in ll.items()} == {"pl1": 38, "pl2": 38, "pl3": 42}
+
+
+def test_boost_capped_to_the_active_ceiling_stays_at_the_safe_one(Plugin):
+    p = _plugin_on(Plugin, "aokzoe_a1x", TdpLimits(4, 18, 30, 30))
+    p._tdp_backend.cap_boost_to_active = True
+    rails = {"pl1": {"min": 4, "max": 30}, "pl2": {"min": 4, "max": 36}, "pl3": {"min": 4, "max": 42}}
+
+    ll = p._cap_level_limits(rails, 40, False, 30, 30)
+
+    assert ll["pl2"]["max"] == 30 and ll["pl3"]["max"] == 30
+
+
+def test_turning_the_cooler_off_brings_its_watts_back_to_the_safe_ceiling(Plugin, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "read_on_ac", lambda: True)
+    p = _plugin_on(Plugin, "onexplayer_apex", TdpLimits(5, 20, 55, 80))
+    asyncio.run(p.set_cooler_boost(True))
+    asyncio.run(p.set_tdp_watts(110, "global"))
+    assert p._tdp_profiles.effective(None)["pl1"] == 110
+
+    asyncio.run(p.set_cooler_boost(False))
+
+    assert p._tdp_profiles.effective(None)["pl1"] == 80

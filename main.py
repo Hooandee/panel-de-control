@@ -39,7 +39,7 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
-from tdp.extra_range import is_strix_halo, with_extra
+from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
@@ -568,14 +568,13 @@ class Plugin:
         self._tdp_storage_migration_retry_at = 0.0
         # Preserve durable intent while a dynamic hardware ceiling is unreadable.
         _lim = self._profile_storage_limits()
-        _request_min = self._tdp_request_min()
         if _lim is None:
             self._tdp_profile_sanitize_pending = True
             self._tdp_storage_migration_retry_at = (
                 _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
             )
         else:
-            self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
+            self._sanitize_tdp_profiles(TDP_REQUEST_MIN_W, _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -4028,8 +4027,15 @@ class Plugin:
         new ceiling (and any re-clamp of the current setpoint) takes effect now."""
         self._init()
         enabled = bool(enabled)
+        was_enabled = self._settings.get("cooler_boost", False) is True
         self._settings["cooler_boost"] = enabled
         self._save()
+        if was_enabled and not enabled:
+            # Without the cooler a value set for it would now sit in the extra range;
+            # bring it back to the safe ceiling as the cooler switch always did.
+            self._sanitize_tdp_profiles(
+                TDP_REQUEST_MIN_W, self._safe_limits().max_ac_w
+            )
         await self._apply_tdp_now("cooler-ceiling")
         return enabled
 
@@ -4084,7 +4090,7 @@ class Plugin:
         safe_reclamp_confirmed = bool(
             result.ok
             and result.applied_w is not None
-            and self._limits().min_w <= result.applied_w <= self._limits().max_ac_w
+            and self._safe_limits().min_w <= result.applied_w <= self._safe_limits().max_ac_w
         )
         if result.ok and (enabled or safe_reclamp_confirmed):
             if not enabled:
@@ -5122,22 +5128,25 @@ class Plugin:
         return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------
-    def _profile_storage_limits(self):
+    def _profile_storage_limits(self, extra=True):
         """Authorised durable range, or None while a dynamic ceiling is unreadable."""
+        def extended(limits):
+            return with_extra(limits, self._device) if extra else limits
+
         if self._device.key == "gpd_win_mini_2025":
-            return with_extra(TdpLimits.from_profile(self._device), self._device)
+            return extended(TdpLimits.from_profile(self._device))
         if self._device.key in _STEAM_DECK_PROFILES:
             overclock = self._steamdeck_overclock_state()
             if overclock["status"] in {"unavailable", "unsupported"}:
                 return None
-            return self._limits(overclock)
+            return self._limits(overclock, extra=extra)
         if self._device.key != "rog_flow_z13":
-            return self._limits()
+            return self._limits(extra=extra)
         limits = TdpLimits.from_profile(self._device)
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
             limits = limits.with_cooler(cooler_max)
-        return with_extra(limits, self._device)
+        return extended(limits)
 
     def _sanitize_tdp_profiles(self, min_w: int, max_w: int) -> None:
         try:
@@ -5168,7 +5177,7 @@ class Plugin:
                 _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
             )
             return
-        self._sanitize_tdp_profiles(self._tdp_request_min(), limits.max_ac_w)
+        self._sanitize_tdp_profiles(TDP_REQUEST_MIN_W, limits.max_ac_w)
         if not self._tdp_profile_sanitize_pending:
             self._tdp_storage_migration_retry_at = 0.0
 
@@ -5203,18 +5212,16 @@ class Plugin:
                 ceiling,
             )
         if extra and not self._desktop_mode_on():
-            lim = with_extra(lim, self._device)
+            lim = with_extra(
+                lim,
+                self._device,
+                getattr(self._tdp_backend, "manual_write_max_ac", None) or 0,
+            )
         return lim
 
     def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
-        if limits is None:
-            limits = self._safe_limits()
-        else:
-            safe_max_ac = self._safe_limits().max_ac_w
-            if limits.max_ac_w > safe_max_ac:
-                limits = TdpLimits(limits.min_w, limits.default_w, limits.max_w,
-                                   max(limits.max_w, safe_max_ac))
+        limits = self._safe_limits() if limits is None else limits
         manual_cooler = bool(
             getattr(self._device, "cooler_charger_only", False)
             and self._device.cooler_max
@@ -5234,7 +5241,7 @@ class Plugin:
         )
 
     def _auto_request_limits(self):
-        return self._automatic_limits(self._profile_storage_limits())
+        return self._automatic_limits(self._profile_storage_limits(extra=False))
 
     def _auto_effective_range(self, appid, on_ac, observation=None):
         limits = self._auto_power_limits(observation)
@@ -5289,6 +5296,8 @@ class Plugin:
             self._tdp_backend.level_limits(),
             active,
             self._manual_boost(effective, appid),
+            self._safe_active_max(ac),
+            effective["pl1"],
         )
         levels = self._clamp_levels(effective, limits, active, ll)
         if self._settings.get("eco_enabled"):
@@ -5303,7 +5312,21 @@ class Plugin:
     def _manual_boost(self, effective: dict, appid=None) -> bool:
         return effective.get("mode") == "custom" and not self._tdp_profiles.auto_tdp(appid)
 
-    def _cap_level_limits(self, ll: dict, active_max: int, manual_boost: bool = False) -> dict:
+    def _safe_active_max(self, ac: bool) -> int | None:
+        """Safe ceiling for the current power source, or None when the device has no
+        manual extra range (then the manual ceiling already is the safe one)."""
+        if extra_tdp_max_ac(self._device) is None or self._desktop_mode_on():
+            return None
+        return self._active_max(self._safe_limits(), ac)
+
+    def _cap_level_limits(
+        self,
+        ll: dict,
+        active_max: int,
+        manual_boost: bool = False,
+        safe_max: int | None = None,
+        pl1: int | None = None,
+    ) -> dict:
         out = {}
         cap_boost = bool(
             getattr(self._tdp_backend, "cap_boost_to_active", False)
@@ -5311,12 +5334,18 @@ class Plugin:
             manual_boost
             and getattr(self._tdp_backend, "manual_boost_to_driver_max", False)
         )
+        boost_cap = active_max if safe_max is None else min(active_max, safe_max)
         for key, b in ll.items():
             if key == "pl1" or cap_boost:
-                hi = min(b["max"], active_max)
+                hi = min(b["max"], active_max if key == "pl1" else boost_cap)
                 out[key] = {"min": min(b["min"], hi), "max": hi}
             else:
                 out[key] = {"min": b["min"], "max": b["max"]}
+        # A manual request in the extra range lifts every rail up to it, and only to it.
+        if safe_max is not None and pl1 is not None and int(pl1) > safe_max:
+            reach = min(int(pl1), active_max)
+            for bound in out.values():
+                bound["max"] = max(bound["max"], reach)
         return out
 
     def _clamp_levels(self, eff: dict, lim, active_max: int, ll: dict) -> dict:
@@ -5333,12 +5362,9 @@ class Plugin:
     def _active_max(self, limits, ac: bool) -> int:
         return limits.max_ac_w if ac else limits.max_w
 
-    def _tdp_request_min(self) -> int:
-        return TDP_REQUEST_MIN_W
-
     def _clamp_tdp_request(self, watts, active_max: int) -> int:
         return max(
-            self._tdp_request_min(),
+            TDP_REQUEST_MIN_W,
             min(int(watts), int(active_max)),
         )
 
@@ -5348,11 +5374,9 @@ class Plugin:
         active_max: int,
         level_limits: dict,
     ) -> dict:
-        request_min = self._tdp_request_min()
-
         def clamp(rail):
             ceiling = level_limits.get(rail, {}).get("max", active_max)
-            return max(request_min, min(int(effective[rail]), int(ceiling)))
+            return max(TDP_REQUEST_MIN_W, min(int(effective[rail]), int(ceiling)))
 
         return {rail: clamp(rail) for rail in ("pl1", "pl2", "pl3")}
 
@@ -5378,6 +5402,11 @@ class Plugin:
             by_pl1 = self._telemetry.aggregate(key)["by_pl1"]
             band = tdp_suggest.learned_band(by_pl1)
             minutes = round(sum(r["seconds"] for r in by_pl1.values()) / 60) if by_pl1 else 0
+            # Manual sessions in the extra range are recorded too; a suggestion stays safe.
+            safe = self._auto_request_limits()
+            for key in ("floor", "ceil", "seed"):
+                if band.get(key) is not None:
+                    band[key] = max(safe.min_w, min(int(band[key]), safe.max_ac_w))
             return {**band, "minutes": minutes, "target_minutes": tdp_suggest.MIN_MINUTES}
         except Exception:  # noqa: BLE001
             return unavail("error")
@@ -5695,6 +5724,8 @@ class Plugin:
             get_level_limits(),
             active,
             not auto_active and self._manual_boost(logical_requested, self._current_appid),
+            self._safe_active_max(ac),
+            logical_requested["pl1"],
         )
         for rail in requested:
             safe.setdefault(
@@ -10322,18 +10353,26 @@ class Plugin:
         auto_limits = self._auto_power_limits(observation)
         auto_request_limits = self._auto_request_limits()
         eff = self._tdp_profiles.effective(self._current_appid)
+        safe_active = self._safe_active_max(ac)
         ll = self._cap_level_limits(
             self._tdp_backend.level_limits(),
             active,
             self._manual_boost(eff, self._current_appid),
+            safe_active,
+            eff["pl1"],
         )
         geff = self._tdp_profiles.effective(None)
-        request_min = self._tdp_request_min()
         requested_levels = self._clamp_requested_levels(eff, active, ll)
         global_requested_levels = self._clamp_requested_levels(
             geff,
             active,
-            ll,
+            self._cap_level_limits(
+                self._tdp_backend.level_limits(),
+                active,
+                self._manual_boost(geff, None),
+                safe_active,
+                geff["pl1"],
+            ),
         )
         observation_backend = self._tdp_observation_backend()
         primary = observation.surfaces.get(observation_backend.name, {})
@@ -10382,7 +10421,7 @@ class Plugin:
                 self._tdp_delayed_recovery_pending()
                 or self._low_battery_hold_recovery_pending
             ),
-            "request_min": request_min,
+            "request_min": TDP_REQUEST_MIN_W,
             "limits": {"min": safe_limits.min_w, "default": safe_limits.default_w,
                        "max": safe_limits.max_w, "max_ac": safe_limits.max_ac_w},
             "manual_max_ac": limits.max_ac_w,
@@ -11402,11 +11441,11 @@ class Plugin:
 
     def _preset_wclamp(self):
         lim = (
-            self._automatic_limits(self._profile_storage_limits())
+            self._automatic_limits(self._profile_storage_limits(extra=False))
             if self._device.key == "gpd_win_mini_2025"
             else self._automatic_limits()
         )
-        return self._tdp_request_min(), lim.max_ac_w
+        return TDP_REQUEST_MIN_W, lim.max_ac_w
 
     async def get_power_presets(self) -> dict:
         self._init()

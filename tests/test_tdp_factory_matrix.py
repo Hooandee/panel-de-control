@@ -312,7 +312,7 @@ def test_bazzite_legion_go_2_keeps_ryzenadj_fallback(tmp_path):
     ]
 
 
-def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_firmware_headroom(tmp_path):
+def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_cooler_headroom(tmp_path):
     root = str(tmp_path)
     _mk_dptc(root)
     base = os.path.join(
@@ -333,7 +333,7 @@ def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_firmware_headroom(tmp_path
     assert backend.get_limits().max_w == 55
     assert backend.get_limits().max_ac_w == 55
     assert backend.level_limits() == {
-        "pl1": {"min": 5, "max": 80},
+        "pl1": {"min": 5, "max": 75},
         "pl2": {"min": 5, "max": 90},
         "pl3": {"min": 5, "max": 100},
     }
@@ -422,7 +422,10 @@ def test_ally_legacy_wmi_accepts_the_extra_range(tmp_path):
                              ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
 
     assert backend.name == "asus-nb-wmi"
-    assert backend.level_limits()["pl1"]["max"] == 40
+    assert backend.level_limits()["pl1"]["max"] == 30
+    backend.set_levels(40, 40, 40, True)
+    with open(os.path.join(root, "sys/devices/platform/asus-nb-wmi/ppt_pl1_spl")) as handle:
+        assert int(handle.read()) == 40
 
 
 def test_zotac_writes_without_readback_when_ryzenadj_cannot_read(tmp_path):

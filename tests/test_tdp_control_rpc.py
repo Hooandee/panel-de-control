@@ -112,6 +112,8 @@ def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
 
     assert plugin._safe_limits().max_ac_w == 42
     assert plugin._profile_storage_limits().max_ac_w == 120
+    assert plugin._profile_storage_limits(extra=False).max_ac_w == 65
+    assert plugin._auto_request_limits().max_ac_w == 65
 
 
 def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):

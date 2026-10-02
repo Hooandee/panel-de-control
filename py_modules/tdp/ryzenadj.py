@@ -114,6 +114,7 @@ class RyzenadjBackend(TDPBackend):
                  hold_rail_floors: dict[str, int] | None = None):
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
+        self.manual_write_max_ac = self._write_limits.max_ac_w
         self._runner = runner
         self._bin = resolve()
         self._power_only_retry = power_only_retry
