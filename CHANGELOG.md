@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.61.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.0...panel-de-control-v0.61.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* keep the QAM panel visible with a reduced Steam UI scale ([#856](https://github.com/Hooandee/panel-de-control/issues/856)) ([898516d](https://github.com/Hooandee/panel-de-control/commit/898516d8033f543d676083d663197a2c6b6bc9d1))
+
 ## [0.61.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.60.0...panel-de-control-v0.61.0) (2026-10-02)
 
 
