@@ -1312,3 +1312,48 @@ def test_set_tdp_unreadable_limit_assumed_applied_not_failed():
         assert res.applied_w is None
         assert "readback unavailable" in res.detail
         assert sum(1 for c in fake.calls if "--stapm-limit" in c[0]) == 2  # re-asserted
+
+
+def test_readback_fallback_writes_without_confirmation_when_the_first_read_fails():
+    fake = FakeRun(info=_unreadable_info())
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+        readback_fallback=True,
+    )
+
+    assert backend.probe() is True
+    result = backend.set_tdp(20, ac=True)
+
+    assert backend.supported is True
+    assert backend.safety_locked is False
+    assert any("--stapm-limit" in argv and "20000" in argv for argv, _kwargs in fake.calls)
+    assert result.applied_w is None
+    assert backend.diagnostics()["readback_state"] == "write_only"
+
+
+def test_readback_fallback_keeps_strict_mode_when_the_read_works():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(info=_snapshot_info(18, fast=26, slow=24)),
+        require_readback=True,
+        readback_fallback=True,
+    )
+
+    assert backend.probe() is True
+    assert backend.diagnostics()["readback_state"] == "ready"
+
+
+def test_strict_backend_without_fallback_still_opens_the_circuit():
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(info=_unreadable_info()),
+        require_readback=True,
+    )
+
+    assert backend.probe() is False
+    assert backend.safety_locked is True

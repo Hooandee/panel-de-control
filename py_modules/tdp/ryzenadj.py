@@ -107,6 +107,7 @@ class RyzenadjBackend(TDPBackend):
                  write_max: int | None = None, write_max_ac: int | None = None,
                  power_only_retry: bool = False,
                  require_readback: bool = False,
+                 readback_fallback: bool = False,
                  allow_unverified_hold: bool = False,
                  unverified_hold_restore: dict[str, int] | None = None,
                  safety_lock_path: str | None = None,
@@ -117,6 +118,7 @@ class RyzenadjBackend(TDPBackend):
         self._bin = resolve()
         self._power_only_retry = power_only_retry
         self._require_readback = bool(require_readback)
+        self._readback_fallback = bool(readback_fallback)
         self._allow_unverified_hold = bool(allow_unverified_hold)
         self._unverified_hold_restore = (
             {
@@ -188,6 +190,9 @@ class RyzenadjBackend(TDPBackend):
         if snapshot is None and retry_initial and self._readback_state == "pending":
             time.sleep(0.05)
             snapshot = self._read_snapshot(require_zero_exit=True)
+        if snapshot is None and self._readback_fallback and self._readback_state == "pending":
+            self._write_without_readback()
+            return None
         if snapshot is None:
             self._readback_state = "circuit_open_initial"
             self._last_readback_failure = (
@@ -199,10 +204,22 @@ class RyzenadjBackend(TDPBackend):
             self._readback_state = "ready"
         return snapshot
 
+    def _write_without_readback(self) -> None:
+        # Some kernels let ryzenadj write but never read (no ryzen_smu, /dev/mem
+        # fallback). Only the first read decides; a later read failure still opens
+        # the circuit, because the limits were readable before.
+        self._require_readback = False
+        self._readback_state = "write_only"
+        self._last_readback_failure = "ryzenadj readback unavailable; writing without confirmation"
+        self._auto_readback = "unknown"
+        self.low_battery_hold_strategy = None
+        self.auto_tdp_safe = not self._power_only_retry
+
     def probe(self) -> bool:
         if not self._require_readback:
             return bool(self.supported)
-        return self._required_snapshot(retry_initial=True) is not None
+        snapshot = self._required_snapshot(retry_initial=True)
+        return snapshot is not None or not self._require_readback
 
     @property
     def probe_pending(self) -> bool:

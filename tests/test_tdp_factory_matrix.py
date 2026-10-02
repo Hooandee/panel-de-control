@@ -423,3 +423,14 @@ def test_ally_legacy_wmi_accepts_the_extra_range(tmp_path):
 
     assert backend.name == "asus-nb-wmi"
     assert backend.level_limits()["pl1"]["max"] == 40
+
+
+def test_zotac_writes_without_readback_when_ryzenadj_cannot_read(tmp_path):
+    backend = select_backend(_profile("zotac_gaming_zone"), root=str(tmp_path),
+                             ryzenadj_resolve=lambda: "/usr/bin/ryzenadj", os_id="steamos")
+
+    assert backend.name == "ryzenadj"
+    assert backend._readback_fallback is True
+    assert select_backend(_profile("onexplayer_superx"), root=str(tmp_path),
+                          ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+                          os_id="steamos")._readback_fallback is False
