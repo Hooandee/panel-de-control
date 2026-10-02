@@ -29,6 +29,7 @@ class KioskController:
         launcher_factory: Callable[[displays.SecondaryDisplay], KioskLauncher] = KioskLauncher,
         server_factory: Callable[..., KioskServer] = KioskServer,
         clock: Callable[[], float] = time.monotonic,
+        art: Callable[[str, str], "tuple[str, str] | None"] = lambda _appid, _kind: None,
     ):
         self.enabled = enabled
         self._journal = journal
@@ -38,6 +39,7 @@ class KioskController:
         self._server = server_factory(
             static_dir, dispatch, allowed_methods,
             on_error=lambda method, error: journal("WARNING", "rpc_failed", method=method, error=error),
+            art=art,
         )
         self._detection = displays.Detection(None, "not_checked")
         self._launcher: KioskLauncher | None = None

@@ -142,6 +142,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
+from kiosk import steam_game as kiosk_steam_game
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -323,6 +324,10 @@ def _plugin_dir() -> str:
     return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 
 
+def _user_home() -> str:
+    return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+
+
 def _kiosk_journal(level: str, event: str, **fields) -> None:
     diary = journal.active
     if diary is not None:
@@ -455,6 +460,7 @@ class Plugin:
             public_rpc_methods(self),
             journal=_kiosk_journal,
             enabled=bool(self._settings.get("kiosk_enabled")),
+            art=lambda appid, kind: kiosk_steam_game.art_file(_user_home(), appid, kind),
         )
         self._os_id = osinfo.read_os_id()
         self._os_name = osinfo.read_os_name()
@@ -1117,6 +1123,10 @@ class Plugin:
 
     async def get_kiosk_state(self) -> dict:
         return await self._kiosk.refresh()
+
+    async def get_kiosk_game(self, appid: str) -> dict:
+        name = await asyncio.to_thread(kiosk_steam_game.game_name, _user_home(), str(appid))
+        return {"appid": str(appid), "name": name}
 
     async def set_kiosk_enabled(self, enabled: bool) -> dict:
         self._settings["kiosk_enabled"] = bool(enabled)

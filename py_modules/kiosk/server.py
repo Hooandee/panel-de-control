@@ -18,6 +18,7 @@ STATIC_TYPES = {
 }
 
 Dispatch = Callable[[str, list], Awaitable[Any]]
+ArtResolver = Callable[[str, str], "tuple[str, str] | None"]
 
 
 @dataclass
@@ -39,11 +40,13 @@ class KioskServer:
         dispatch: Dispatch,
         allowed_methods: Iterable[str],
         on_error: Callable[[str, str], None] = lambda _method, _error: None,
+        art: ArtResolver = lambda _appid, _kind: None,
     ):
         self.static_dir = static_dir
         self.dispatch = dispatch
         self.allowed = frozenset(allowed_methods)
         self.on_error = on_error
+        self.art = art
         self.token = secrets.token_urlsafe(24)
         self.port: int | None = None
         self._server: asyncio.AbstractServer | None = None
@@ -103,6 +106,8 @@ class KioskServer:
                 break
             name, _, value = line.partition(":")
             headers[name.strip().lower()] = value.strip()
+        if method == "GET" and path.startswith("/art/"):
+            return self._art(path)
         if method == "GET":
             return self._static(path)
         if method == "POST" and path == "/rpc":
@@ -121,6 +126,18 @@ class KioskServer:
         try:
             with open(os.path.join(self.static_dir, name), "rb") as handle:
                 return Response(200, handle.read(), content_type)
+        except OSError:
+            return _json(404, {"error": "not_found"})
+
+    def _art(self, path: str) -> Response:
+        parts = path.split("/")
+        found = self.art(parts[2], parts[3]) if len(parts) == 4 else None
+        if found is None:
+            return _json(404, {"error": "not_found"})
+        file_path, content_type = found
+        try:
+            with open(file_path, "rb") as handle:
+                return Response(200, handle.read(), content_type, {"Cache-Control": "max-age=3600"})
         except OSError:
             return _json(404, {"error": "not_found"})
 

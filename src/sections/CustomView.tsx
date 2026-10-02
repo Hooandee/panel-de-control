@@ -24,7 +24,7 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   return <BlocksView blockIds={view?.blocks ?? []} />;
 };
 
-export const BlocksView: FC<{ blockIds: readonly string[] }> = ({ blockIds }) => {
+export const BlocksView: FC<{ blockIds: readonly string[]; className?: string }> = ({ blockIds, className }) => {
   const disabled = useModules();
   const desktopMode = !!useDesktopState().state?.enabled;
   // Drop blocks whose section module is off. Potencia is the exception (mirrors the
@@ -47,7 +47,7 @@ export const BlocksView: FC<{ blockIds: readonly string[] }> = ({ blockIds }) =>
   const needsPowerProfileSelector = blocks.some((id) => POWER_PROFILE_BLOCKS.has(id));
 
   const content: ReactNode = (
-    <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
+    <div className={className} style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
       {needsPowerFallback && <PowerMonitorFallback />}
       {blocks.map((id) => (
         <Block key={id} id={id} />
