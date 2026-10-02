@@ -145,12 +145,27 @@ export function hasWrapper(p: Parsed, token: string): boolean {
   return p.wrappers.includes(token);
 }
 
+// Armada's launcher hands off with os.execv, so a bare name after it ("gamemoderun")
+// is never resolved through PATH and the game fails to start.
+const EXEC_PATH_ONLY_LAUNCHERS = new Set(["armada-game-launch"]);
+
+function execPathOnlyLauncherIndex(wrappers: string[]): number {
+  return wrappers.findIndex((w) => EXEC_PATH_ONLY_LAUNCHERS.has(w.slice(w.lastIndexOf("/") + 1)));
+}
+
 /** Append a wrapper (kept if already present). Callers add known wrappers in
  *  their canonical outer→inner order, so appending yields the right chain while
- *  any pre-existing (unknown) wrapper stays outermost. */
+ *  any pre-existing (unknown) wrapper stays outermost — except launchers that only
+ *  exec absolute paths, which must stay inside every wrapper we add. */
 export function addWrapper(p: Parsed, token: string): Parsed {
-  if (p.wrappers.includes(token)) return p;
-  return { ...p, wrappers: [...p.wrappers, token] };
+  const launcher = execPathOnlyLauncherIndex(p.wrappers);
+  const existing = p.wrappers.indexOf(token);
+  if (launcher < 0 || (existing >= 0 && existing < launcher)) {
+    return existing >= 0 ? p : { ...p, wrappers: [...p.wrappers, token] };
+  }
+  const others = p.wrappers.filter((w) => w !== token);
+  const at = execPathOnlyLauncherIndex(others);
+  return { ...p, wrappers: [...others.slice(0, at), token, ...others.slice(at)] };
 }
 
 export function removeWrapper(p: Parsed, token: string): Parsed {

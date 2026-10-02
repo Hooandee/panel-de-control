@@ -108,6 +108,18 @@ describe("wrapper primitives", () => {
     p = removeWrapper(p, "~/lsfg");
     expect(p.wrappers).toEqual(["mangohud"]);
   });
+
+  it("keeps Armada's launcher innermost because it only execs absolute paths", () => {
+    let p = parse("/usr/libexec/armada/armada-game-launch %command%");
+    p = addWrapper(p, "gamemoderun");
+    p = addWrapper(p, "mangohud");
+    expect(p.wrappers).toEqual(["gamemoderun", "mangohud", "/usr/libexec/armada/armada-game-launch"]);
+  });
+
+  it("moves a wrapper already stranded behind Armada's launcher back outside it", () => {
+    const p = addWrapper(parse("/usr/libexec/armada/armada-game-launch gamemoderun %command%"), "gamemoderun");
+    expect(p.wrappers).toEqual(["gamemoderun", "/usr/libexec/armada/armada-game-launch"]);
+  });
 });
 
 describe("arg primitives", () => {
