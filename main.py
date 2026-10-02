@@ -10486,7 +10486,7 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
-            "presets": self._tdp_presets(self._automatic_limits(limits)),
+            "presets": self._tdp_presets(self._automatic_limits(safe_limits)),
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),

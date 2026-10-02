@@ -1895,6 +1895,7 @@ def test_tdp_state_separates_the_safe_range_from_the_manual_one(Plugin):
     assert state["limits"]["max_ac"] == 30
     assert state["manual_max_ac"] == 40
     assert state["extra_needs_accessory"] is False
+    assert state["presets"]["turbo_ac"] == 30
 
 
 def test_strix_halo_extra_range_asks_for_the_accessory(Plugin):
