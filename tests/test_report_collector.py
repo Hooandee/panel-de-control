@@ -590,7 +590,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == 5
+    assert b["schema"] == 6
     assert b["app"] == "panel-de-control"
     assert b["kind"] == "bug"
     assert b["categories"] == ["tdp", "fans"]
@@ -906,6 +906,10 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "ec_sys_module_available": False,
             "oxpec_module_available": False,
             "dump": None,
+        },
+        "connected_devices": {
+            "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
+            "bluetooth_adapters": [],
         },
     }
 

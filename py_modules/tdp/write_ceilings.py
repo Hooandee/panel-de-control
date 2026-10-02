@@ -1,0 +1,21 @@
+"""Write ceilings a device's opt-ins allow beyond its profile limits.
+
+Backends clamp writes with these; the reported range only grows once the user
+enables the opt-in, so a backend accepting the ceiling never widens the UI on its own.
+"""
+
+
+def cooler_write_max(device) -> int | None:
+    """Ceiling for both battery and charger when the external cooler is attached."""
+    if getattr(device, "cooler_charger_only", False):
+        return None
+    return device.cooler_max
+
+
+def charger_write_max(device) -> int | None:
+    """Ceiling that only applies on the charger (charger-only cooler, warned unlock)."""
+    ceilings = [getattr(device, "experimental_tdp_max_ac", None)]
+    if getattr(device, "cooler_charger_only", False):
+        ceilings.append(device.cooler_max)
+    ceilings = [value for value in ceilings if value]
+    return max(ceilings) if ceilings else None

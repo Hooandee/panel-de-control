@@ -6,6 +6,8 @@ urllib + SSL pattern used by self_updater.
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import os
 import urllib.error
@@ -14,6 +16,17 @@ import urllib.request
 from http_util import ssl_context
 
 _UA = "panel-de-control-reporter"
+
+
+def encode_payload(bundle: dict) -> dict:
+    """The collector's gzip envelope; it decodes and size-checks the bundle."""
+    raw = json.dumps(bundle).encode("utf-8")
+    return {
+        "app": bundle.get("app"),
+        "schema": bundle.get("schema"),
+        "enc": "gzip",
+        "payload": base64.b64encode(gzip.compress(raw)).decode("ascii"),
+    }
 
 
 def parse_response(status: int, body: bytes) -> dict:
@@ -37,7 +50,7 @@ def submit(service_url: str, payload: dict, *, timeout: int = 20) -> dict:
     """POST the payload as JSON. Returns {ok, code, issue_url} or {ok:false, error}.
     Never raises."""
     try:
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(encode_payload(payload)).encode("utf-8")
         req = urllib.request.Request(
             service_url,
             data=body,

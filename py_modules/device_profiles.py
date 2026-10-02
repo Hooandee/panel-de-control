@@ -142,10 +142,12 @@ DEVICE_TABLE = (
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
                   8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
-    # cpuinfo; this string is only a fallback.
+    # cpuinfo; this string is only a fallback. OEM rates 80 W on air; 120 W needs
+    # the external Frost Bay liquid cooler, so it is only reachable through its opt-in.
     DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
                   "AMD Ryzen AI Max+ 395", "amd",
-                  5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
+                  5, 20, 55, 80, match_names=("ONEXPLAYER APEX",), experimental=True,
+                  charger_only_extra=True, cooler_max=120, cooler_charger_only=True),
     DeviceProfile("onexplayer_superx", "OneXPlayer Super X",
                   "AMD Ryzen AI Max+ 395", "amd",
                   10, 30, 55, 75,

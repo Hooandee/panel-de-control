@@ -1,5 +1,6 @@
 import glob
 import os
+import journal
 
 
 def _read_int(path: str):
@@ -15,7 +16,8 @@ def _write(path: str, value: int) -> bool:
         with open(path, "w") as handle:
             handle.write(str(value))
         return True
-    except OSError:
+    except OSError as error:
+        journal.write_failed(path, value, error)
         return False
 
 

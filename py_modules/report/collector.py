@@ -2,7 +2,7 @@
 
 Split so the tricky parts are pure and unit-testable:
   - redact_text / redact_obj  - strip home paths, hostname, serial-like values
-  - tail_logs                 - newest log files, size-capped, redacted
+  - tail_logs                 - newest Decky log files, size-capped, redacted
   - build_bundle              - assemble the final dict from already-fetched parts
 
 main.py does the I/O (calls the get_*_state RPCs, reads the stores + log dir) and
@@ -21,10 +21,11 @@ import re
 import stat
 import urllib.parse
 
+from report import connected_devices
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 5
+SCHEMA = 6
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -1001,7 +1002,8 @@ def sysfs_snapshot(
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
-                  "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": []}
+                  "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
+                  "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1062,6 +1064,10 @@ def sysfs_snapshot(
         snap["ec"] = _snap_ec(root)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        snap["connected_devices"] = connected_devices.snapshot(root)
+    except Exception:  # noqa: BLE001
+        pass
     # Backstop the count caps: if the listing is still oversized, drop the heaviest
     # sections and flag it honestly rather than shipping an unbounded blob.
     if not _within(snap, cap):
@@ -1070,7 +1076,8 @@ def sysfs_snapshot(
         # listings, until the bundle fits.
         if isinstance(snap.get("ec"), dict):
             snap["ec"]["dump"] = None
-        for key in ("modules", "hwmon", "power_supply", "firmware_attributes", "leds"):
+        for key in ("connected_devices", "modules", "hwmon", "power_supply",
+                    "firmware_attributes", "leds"):
             if _within(snap, cap):
                 break
             snap[key] = [] if isinstance(snap[key], list) else {}
@@ -1228,6 +1235,7 @@ def build_bundle(
     stores: dict,
     logs: list,
     kind: str = "bug",
+    journal: dict | None = None,
     kernel: dict | None = None,
     sysfs: dict | None = None,
     home: str | None = None,
@@ -1246,6 +1254,7 @@ def build_bundle(
         "state": state or {},
         "stores": stores or {},
         "logs": logs or [],
+        "journal": journal or {},
         "kernel": kernel or {},
         "sysfs": sysfs or {},
     }

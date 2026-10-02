@@ -3,6 +3,7 @@ import os
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+import journal
 
 
 _BASE = "sys/devices/platform/asus-nb-wmi"
@@ -293,5 +294,6 @@ class AsusNbWmiBackend(TDPBackend):
             with open(path, "w") as handle:
                 handle.write(f"{value}\n")
             return True
-        except OSError:
+        except OSError as error:
+            journal.write_failed(path, value, error)
             return False

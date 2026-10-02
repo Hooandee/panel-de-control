@@ -1,4 +1,6 @@
 import { ErrorBoundary, Focusable, getFocusNavController, PanelSection, PanelSectionRow } from "@decky/ui";
+
+import { ReportingBoundary } from "./ReportingBoundary";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { DeviceInfo, LearningStatus } from "../api";
@@ -227,9 +229,11 @@ export function ControlCenterShell({
           </PanelSectionRow>
           {resolved.mode !== "home" && active && Active ? (
             <ErrorBoundary key={active.id}>
-              <div data-testid="section-body" style={{ paddingBottom: theme.space.lg }}>
-                <Active />
-              </div>
+              <ReportingBoundary where={`section:${active.id}`}>
+                <div data-testid="section-body" style={{ paddingBottom: theme.space.lg }}>
+                  <Active />
+                </div>
+              </ReportingBoundary>
             </ErrorBoundary>
           ) : null}
         </Focusable>
