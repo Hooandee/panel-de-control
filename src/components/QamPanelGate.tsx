@@ -27,6 +27,9 @@ interface QamPanelGateProps extends PropsWithChildren {
 
 // Ancestor overflow can suppress IntersectionObserver updates after vertical clipping.
 const RETAINED_TAB_CHECK_MS = 100;
+// Fractional Steam UI scales snap the scroll clip and the host to different subpixels.
+const SETTLED_EDGE_TOLERANCE_PX = 1;
+const SETTLE_THRESHOLDS = [0, 0.99, 0.995, 0.999, 1];
 
 interface HorizontalBounds {
   left: number;
@@ -35,6 +38,13 @@ interface HorizontalBounds {
 
 function overlapsHorizontally(rect: DOMRect, bounds: HorizontalBounds): boolean {
   return rect.left < bounds.right && rect.right > bounds.left;
+}
+
+function settledHorizontally(entry: IntersectionObserverEntry): boolean {
+  return entry.isIntersecting
+    && entry.intersectionRect.width > 0
+    && entry.intersectionRect.width
+      >= entry.boundingClientRect.width - SETTLED_EDGE_TOLERANCE_PX;
 }
 
 export function canGateQamPanel(host: QamPanelCapabilities = window): boolean {
@@ -73,7 +83,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({
 
     let resize: ResizeObserver | null = null;
     let intersection: IntersectionObserver | null = null;
-    let fullyIntersecting = false;
+    let settled = false;
     let intersectionReported = false;
     let retainedDuringScroll = false;
     let visibleHorizontalBounds: HorizontalBounds | null = null;
@@ -114,7 +124,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({
       }
       const rect = host.getBoundingClientRect();
       setMode(
-        (fullyIntersecting || retainedDuringScroll) && rect.width > 0 && rect.height > 0
+        (settled || retainedDuringScroll) && rect.width > 0 && rect.height > 0
           ? "content"
           : "hidden",
       );
@@ -164,7 +174,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({
 
     try {
       resize = new Resize(() => {
-        if (!intersectionReported && visibleFromLayout()) fullyIntersecting = true;
+        if (!intersectionReported && visibleFromLayout()) settled = true;
         if (retainedDuringScroll) {
           retainedDuringScroll = canRetainAtCurrentPosition();
           if (!retainedDuringScroll) stopRetentionPoll();
@@ -174,8 +184,8 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({
       intersection = new Intersection((entries) => {
         const entry = entries.find((candidate) => candidate.target === host);
         intersectionReported = !!entry;
-        fullyIntersecting = !!entry?.isIntersecting && entry.intersectionRatio === 1;
-        if (fullyIntersecting && entry) {
+        settled = !!entry && settledHorizontally(entry);
+        if (settled && entry) {
           retainedDuringScroll = false;
           visibleHorizontalBounds = {
             left: entry.boundingClientRect.left,
@@ -188,11 +198,11 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({
           else stopRetentionPoll();
         }
         refresh();
-      }, { threshold: [0, 1] });
+      }, { threshold: SETTLE_THRESHOLDS });
       gated = true;
       resize.observe(host);
       intersection.observe(host);
-      fullyIntersecting = visibleFromLayout();
+      settled = visibleFromLayout();
       refresh();
     } catch {
       disconnect();
