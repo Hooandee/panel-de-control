@@ -5,9 +5,25 @@
 ## [0.61.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.0...panel-de-control-v0.61.1) (2026-10-02)
 
 
-### Bug Fixes
+### Español
 
-* keep the QAM panel visible with a reduced Steam UI scale ([#856](https://github.com/Hooandee/panel-de-control/issues/856)) ([898516d](https://github.com/Hooandee/panel-de-control/commit/898516d8033f543d676083d663197a2c6b6bc9d1))
+* **Panel:** Si tenías la escala de la interfaz de Steam más pequeña de lo normal, Panel podía enseñar los iconos un instante y quedarse en blanco. Ahora se abre bien con cualquier escala, y además ya no parpadea al abrirlo.
+
+### English
+
+* **Panel:** If you had Steam's interface scale set smaller than default, Panel could flash its icons for a moment and then go blank. It now opens properly at any scale, and it no longer flickers when you open it.
+
+### Italiano
+
+* **Panel:** Se avevi la scala dell'interfaccia di Steam più piccola del normale, Panel poteva mostrare le icone per un attimo e poi restare vuoto. Ora si apre correttamente con qualsiasi scala e non sfarfalla più quando lo apri.
+
+### Deutsch
+
+* **Panel:** Wenn die Oberflächenskalierung von Steam kleiner als normal eingestellt war, konnte Panel kurz seine Symbole zeigen und dann leer bleiben. Jetzt öffnet es sich bei jeder Skalierung richtig und flackert beim Öffnen nicht mehr.
+
+### Português (Brasil)
+
+* **Panel:** Se a escala da interface do Steam estava menor que o normal, o Panel podia mostrar os ícones por um instante e depois ficar em branco. Agora ele abre direitinho em qualquer escala e não pisca mais ao abrir.
 
 ## [0.61.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.60.0...panel-de-control-v0.61.0) (2026-10-02)
 
