@@ -9,7 +9,7 @@ import { useCpu } from "../../../src/system/useCpu";
 import { useNight } from "../../../src/display/useNight";
 import { fanRpm, hottest } from "../now/metrics";
 import type { Live } from "../now/live";
-import { faderRange, fpsOrWatts, levelCaption, pushSample, sparkPath, valueAt } from "./deckMath";
+import { faderRange, headline, levelCaption, pushSample, sparkPath, valueAt } from "./deckMath";
 
 const HISTORY = 90;
 const FAN_CHOICES: FanPreset[] = ["auto", "silent", "balanced", "performance"];
@@ -87,19 +87,22 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
   const history = useRef<number[]>([]);
   const [, tick] = useState(0);
 
-  const reading = fpsOrWatts(power);
+  const temp = hottest(live.fans);
+  const reading = headline(power, temp);
+  useEffect(() => {
+    history.current = [];
+  }, [reading.kind]);
   useEffect(() => {
     if (reading.value == null) return;
     history.current = pushSample(history.current, reading.value, HISTORY);
     tick((n) => n + 1);
-  }, [power]);
+  }, [power, live.fans]);
 
   const spark = sparkPath(history.current, 300, 60);
   const range = faderRange(tdp, power?.on_ac ?? false);
   const levelUnit = tdp?.unit === "level";
   const autoOn = Boolean(power?.auto_tdp);
   const value = tdp?.supported ? Math.round(tdp.watts) : null;
-  const temp = hottest(live.fans);
   const rpm = fanRpm(live.fans);
   const boost = cpu.state?.boost;
   const fanPresets = new Set(["auto", ...(fan.state?.presets ?? []).map((p) => p.id)]);
@@ -119,8 +122,8 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
 
       <section className="d-live">
         <div className="d-live-main">
-          <b>{reading.value != null ? Math.round(reading.value) : "—"}</b>
-          <span>{reading.kind === "fps" ? "fps" : "W"}</span>
+          <b>{reading.value == null ? "—" : reading.kind === "watts" ? reading.value.toFixed(1) : Math.round(reading.value)}</b>
+          <span>{reading.kind === "fps" ? "fps" : reading.kind === "watts" ? "W" : "°C"}</span>
         </div>
         <svg className="d-spark" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden>
           <defs>
@@ -133,9 +136,15 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
           <path className="d-spark-line" d={spark.line} />
         </svg>
         <dl className="d-live-stats">
-          <div><dt>{t("kiosk.now.power")}</dt><dd>{power?.watts != null ? `${power.watts.toFixed(1)} W` : "—"}</dd></div>
-          <div><dt>{t("kiosk.now.temp")}</dt><dd>{temp != null ? `${Math.round(temp)} °C` : "—"}</dd></div>
-          <div><dt>{t("kiosk.now.fan")}</dt><dd>{rpm != null ? `${rpm.toLocaleString(lang)} rpm` : "—"}</dd></div>
+          {[
+            { kind: "watts", label: t("kiosk.now.power"), value: power?.watts != null ? `${power.watts.toFixed(1)} W` : null },
+            { kind: "temp", label: t("kiosk.now.temp"), value: temp != null ? `${Math.round(temp)} °C` : null },
+            { kind: "fan", label: t("kiosk.now.fan"), value: rpm != null ? `${rpm.toLocaleString(lang)} rpm` : null },
+          ]
+            .filter((stat) => stat.kind !== reading.kind && stat.value != null)
+            .map((stat) => (
+              <div key={stat.kind}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>
+            ))}
         </dl>
       </section>
 

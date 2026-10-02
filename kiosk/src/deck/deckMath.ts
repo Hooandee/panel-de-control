@@ -21,10 +21,13 @@ export function levelCaption(tdp: TdpState | null, level: number | null, lang: s
   return `${cpu} GHz · ${freq.gpu_mhz} MHz`;
 }
 
-export function fpsOrWatts(power: PowerDraw | null): { kind: "fps" | "watts"; value: number | null } {
-  const fps = power?.auto?.fps;
-  if (fps != null) return { kind: "fps", value: fps };
-  return { kind: "watts", value: power?.watts ?? null };
+export type Headline = { kind: "fps" | "watts" | "temp"; value: number | null };
+
+/** The most telling live number available: frame rate, then power draw, then temperature. */
+export function headline(power: PowerDraw | null, celsius: number | null): Headline {
+  if (power?.auto?.fps != null) return { kind: "fps", value: power.auto.fps };
+  if (power?.watts != null) return { kind: "watts", value: power.watts };
+  return { kind: "temp", value: celsius };
 }
 
 export function pushSample(samples: readonly number[], value: number, keep: number): number[] {
