@@ -1296,3 +1296,47 @@ def test_report_environment_survives_a_failing_steam_client_probe(Plugin, monkey
     plugin._init()
 
     assert plugin._report_environment()["steam_client"]["status"] == "unavailable"
+
+
+def _hhd_plugin(Plugin):
+    import main as main_mod
+
+    p = Plugin()
+    p._init()
+    p._controller_backend.manager = main_mod.controller_detect.HHD
+    return p
+
+
+def test_startup_takes_tdp_back_from_hhd_after_the_player_chose_panel(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+    assert asyncio.run(p.take_tdp_control())["ok"] is True
+    p._restore_hhd_tdp()
+    assert fake_hhd.value is True
+
+    rebooted = _hhd_plugin(Plugin)
+    asyncio.run(rebooted._resume_hhd_takeover())
+
+    assert fake_hhd.value is False
+
+
+def test_startup_leaves_hhd_alone_when_the_player_never_took_control(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+
+    asyncio.run(p._resume_hhd_takeover())
+
+    assert fake_hhd.value is True
+
+
+def test_turning_panel_tdp_off_forgets_the_takeover(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+    asyncio.run(p.take_tdp_control())
+    asyncio.run(p.set_tdp_control_enabled(False))
+    assert fake_hhd.value is True
+
+    rebooted = _hhd_plugin(Plugin)
+    asyncio.run(rebooted._resume_hhd_takeover())
+
+    assert fake_hhd.value is True

@@ -358,6 +358,9 @@ DEFAULTS = {
     "seen_autotdp_notice": False,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
+    # The player chose Panel over HHD for TDP; taken back on every start until they turn
+    # Panel's TDP control off. HHD gets it back on unload, so the choice must outlive it.
+    "hhd_tdp_takeover": False,
     "steamdeck_ppt_previous": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
@@ -2992,7 +2995,34 @@ class Plugin:
                 "hhd_managing": bool(managing),
                 "detail": detail,
             }
+        self._remember_hhd_takeover(True)
         return {"ok": True, "hhd_managing": False}
+
+    def _remember_hhd_takeover(self, taken: bool) -> None:
+        if self._settings.get("hhd_tdp_takeover") is taken:
+            return
+        self._settings["hhd_tdp_takeover"] = taken
+        try:
+            self._save()
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("HHD takeover choice not saved")
+
+    async def _resume_hhd_takeover(self) -> None:
+        if (
+            self._settings.get("hhd_tdp_takeover") is not True
+            or not self._tdp_control_on()
+            or self._controller_backend.manager != controller_detect.HHD
+        ):
+            return
+        try:
+            managing = await self._offload_call(self._hhd_tdp_client.current_tdp_enable)
+            if managing is not True:
+                return
+            result = await self.take_tdp_control()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("HHD TDP takeover not resumed: %s", type(error).__name__)
+            return
+        decky.logger.info("HHD TDP takeover resumed ok=%s", result.get("ok"))
 
     def _restore_hhd_tdp_status(self, preserve_ownership=False) -> dict:
         """Return HHD to its previous tdp_enable if we took it. Idempotent. Clears the
@@ -3104,6 +3134,7 @@ class Plugin:
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
+            self._remember_hhd_takeover(False)
             requested = (
                 dict(self._tdp_targets.requested)
                 if self._tdp_targets is not None
@@ -12075,6 +12106,7 @@ class Plugin:
         self._restore_board_fans()
         await self._offload_call(self._recover_fremont_fan_handoff)
         await self._prime_tdp_ownership()
+        await self._resume_hhd_takeover()
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
                 await self._offload_call(self._restore_steamdeck_startup_ppt)
