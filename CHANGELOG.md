@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.61.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.60.0...panel-de-control-v0.61.0) (2026-10-02)
+
+
+### Features
+
+* let manual TDP go past the safe range on the charger, clearly marked as extra ([#852](https://github.com/Hooandee/panel-de-control/issues/852)) ([f273b6c](https://github.com/Hooandee/panel-de-control/commit/f273b6c323cd3f0803802a14b1190145d88c405c))
+
 ## [0.60.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.59.0...panel-de-control-v0.60.0) (2026-10-01)
 
 
