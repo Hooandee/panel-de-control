@@ -202,7 +202,7 @@ def test_manual_request_below_hardware_min_is_preserved_and_constrained(Plugin):
     assert state["ownership"]["status"] == "constrained"
 
 
-def test_gpd_win_mini_normalizes_low_request_to_physical_floor(
+def test_gpd_win_mini_keeps_a_low_request_below_the_firmware_floor(
     Plugin,
     monkeypatch,
 ):
@@ -212,14 +212,13 @@ def test_gpd_win_mini_normalizes_low_request_to_physical_floor(
     result = asyncio.run(p.set_tdp_watts(3, "global"))
     state = asyncio.run(p.get_tdp_state())
 
-    assert result == {"requested_w": 20, "applied_w": 20, "ok": True, "detail": ""}
-    assert state["request_min"] == 20
-    assert state["global_watts"] == 20
-    assert state["global_requested_levels"] == {"pl1": 20, "pl2": 20, "pl3": 20}
-    assert state["ownership"]["status"] == "in_sync"
+    assert result["requested_w"] == 3
+    assert state["request_min"] == 3
+    assert state["limits"]["min"] == 20
+    assert state["global_watts"] == 3
 
 
-def test_gpd_win_mini_migrates_persisted_low_request(Plugin, monkeypatch):
+def test_gpd_win_mini_keeps_a_persisted_low_request(Plugin, monkeypatch):
     legacy = Plugin()
     asyncio.run(legacy.set_tdp_watts(3, "global"))
     _use_gpd_win_mini(monkeypatch)
@@ -227,9 +226,8 @@ def test_gpd_win_mini_migrates_persisted_low_request(Plugin, monkeypatch):
     migrated = Plugin()
     state = asyncio.run(migrated.get_tdp_state())
 
-    assert state["request_min"] == 20
-    assert state["global_watts"] == 20
-    assert migrated._tdp_profiles.effective(None)["pl1"] == 20
+    assert state["global_watts"] == 3
+    assert migrated._tdp_profiles.effective(None)["pl1"] == 3
 
 
 def test_gpd_win_mini_keeps_durable_limits_when_backend_is_unavailable(
@@ -252,20 +250,21 @@ def test_gpd_win_mini_keeps_durable_limits_when_backend_is_unavailable(
     migrated = Plugin()
     migrated._init()
 
-    assert migrated._profile_storage_limits() == TdpLimits(20, 20, 35, 35)
-    assert migrated._tdp_request_min() == 20
+    assert migrated._profile_storage_limits() == TdpLimits(20, 20, 35, 40)
+    assert migrated._tdp_request_min() == 3
     assert migrated._tdp_profiles.effective(None)["pl1"] == 35
-    assert migrated._tdp_profiles.game_profile("low")["pl1"] == 20
+    assert migrated._tdp_profiles.game_profile("low")["pl1"] == 3
 
 
-def test_gpd_win_mini_profile_migration_retries_after_write_failure(
+def test_stored_request_above_the_manual_ceiling_retries_after_write_failure(
     Plugin,
     monkeypatch,
 ):
     import scoped_store
 
     legacy = Plugin()
-    asyncio.run(legacy.set_tdp_watts(3, "global"))
+    legacy._init()
+    legacy._tdp_profiles.set_levels("global", 55, 55, 55)
     main_module = _use_gpd_win_mini(monkeypatch)
     original_save = scoped_store.atomic_json_save
     blocked = True
@@ -281,9 +280,7 @@ def test_gpd_win_mini_profile_migration_retries_after_write_failure(
     monkeypatch.setattr(scoped_store, "atomic_json_save", flaky_save)
     migrated = Plugin()
     migrated._init()
-    assert migrated._tdp_profiles.effective(None)["pl1"] == 20
-    blocked_state = asyncio.run(migrated.get_tdp_state())
-    assert blocked_state["global_watts"] == 20
+    assert migrated._tdp_profiles.effective(None)["pl1"] == 40
 
     blocked = False
     clock[0] += main_module._TDP_STORAGE_MIGRATION_RETRY_S
@@ -291,7 +288,7 @@ def test_gpd_win_mini_profile_migration_retries_after_write_failure(
 
     reloaded = Plugin()
     reloaded._init()
-    assert reloaded._tdp_profiles.effective(None)["pl1"] == 20
+    assert reloaded._tdp_profiles.effective(None)["pl1"] == 40
 
 
 def test_manual_request_below_policy_floor_is_normalized_to_three(Plugin):
@@ -790,21 +787,21 @@ def test_cooler_boost_raises_ceiling_on_win5(Plugin):
     }
     p._tdp_backend.cap_boost_to_active = True
 
-    assert p._limits().max_w == 55 and p._limits().max_ac_w == 55
+    assert p._safe_limits().max_w == 55 and p._safe_limits().max_ac_w == 55
     assert asyncio.run(p.get_tdp_state())["level_limits"] == {
         "pl1": {"min": 5, "max": 55},
         "pl2": {"min": 5, "max": 55},
         "pl3": {"min": 5, "max": 55},
     }
     asyncio.run(p.set_cooler_boost(True))
-    assert p._limits().max_w == 75 and p._limits().max_ac_w == 75  # cooler on
+    assert p._safe_limits().max_w == 75 and p._safe_limits().max_ac_w == 75  # cooler on
     assert asyncio.run(p.get_tdp_state())["level_limits"] == {
         "pl1": {"min": 5, "max": 75},
         "pl2": {"min": 5, "max": 75},
         "pl3": {"min": 5, "max": 75},
     }
     asyncio.run(p.set_cooler_boost(False))
-    assert p._limits().max_w == 55
+    assert p._safe_limits().max_w == 55
 
 
 def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):
@@ -824,13 +821,13 @@ def test_gpd_win_mini_does_not_offer_unvalidated_experimental_ceiling(Plugin):
     )
     p._tdp_backend.get_limits = lambda: TdpLimits(20, 20, 35, 35)
 
-    assert p._limits() == TdpLimits(20, 20, 35, 35)
+    assert p._safe_limits() == TdpLimits(20, 20, 35, 35)
     assert asyncio.run(p.get_experimental_tdp_unlock()) is False
 
     result = asyncio.run(p.set_experimental_tdp_unlock(True))
 
     assert result == {"enabled": False, "ok": True, "detail": "unchanged"}
-    assert p._limits() == TdpLimits(20, 20, 35, 35)
+    assert p._safe_limits() == TdpLimits(20, 20, 35, 35)
 
 
 def test_retired_gpd_unlock_is_not_forgotten_while_control_is_disabled(Plugin):
@@ -1037,7 +1034,8 @@ def test_gpd_win_mini_corrupt_string_false_never_unlocks_55w(Plugin):
     p._settings["experimental_tdp_unlock"] = "false"
 
     assert asyncio.run(p.get_experimental_tdp_unlock()) is False
-    assert p._limits() == TdpLimits(20, 20, 35, 35)
+    assert p._safe_limits() == TdpLimits(20, 20, 35, 35)
+    assert p._limits().max_ac_w == 40
 
 
 def test_gpd_win_mini_upgrade_normalizes_legacy_low_profile_intent(Plugin):
@@ -1174,7 +1172,7 @@ def test_experimental_unlock_keeps_automation_and_presets_at_base_ceiling(
 
     assert p._limits() == TdpLimits(20, 20, 35, 55)
     assert p._automatic_limits() == TdpLimits(20, 20, 35, 35)
-    assert p._preset_wclamp() == (20, 35)
+    assert p._preset_wclamp() == (3, 35)
     assert max(p._tdp_presets(p._automatic_limits()).values()) == 35
 
     monkeypatch.setattr(main, "read_on_ac", lambda: True)
@@ -1859,3 +1857,65 @@ def test_auto_config_invalid_initial_tdp_is_safely_normalized(Plugin):
     state = asyncio.run(p.set_auto_tdp_config(40, "invalid", "global"))
 
     assert state["global_auto_config"]["initial_tdp"] == 10
+
+
+def _profile(key):
+    from device_profiles import DEVICE_TABLE
+
+    return next(profile for profile in DEVICE_TABLE if profile.key == key)
+
+
+def _plugin_on(Plugin, key, limits):
+    p = Plugin()
+    p._init()
+    p._device = _profile(key)
+    p._tdp_backend.get_limits = lambda: limits
+    return p
+
+
+def test_manual_extra_range_is_charger_only_and_kept_out_of_automation(Plugin, monkeypatch):
+    import main
+
+    p = _plugin_on(Plugin, "rog_ally_x", TdpLimits(7, 17, 25, 30))
+
+    assert p._limits() == TdpLimits(7, 17, 25, 40)
+    assert p._safe_limits() == TdpLimits(7, 17, 25, 30)
+    assert p._automatic_limits() == TdpLimits(7, 17, 25, 30)
+    assert p._preset_wclamp() == (3, 30)
+
+    monkeypatch.setattr(main, "read_on_ac", lambda: True)
+    assert asyncio.run(p.set_tdp_watts(40, "global"))["requested_w"] == 40
+    monkeypatch.setattr(main, "read_on_ac", lambda: False)
+    assert asyncio.run(p.set_tdp_watts(40, "global"))["requested_w"] == 25
+
+
+def test_tdp_state_separates_the_safe_range_from_the_manual_one(Plugin):
+    p = _plugin_on(Plugin, "rog_ally_x", TdpLimits(7, 17, 25, 30))
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["limits"]["max_ac"] == 30
+    assert state["manual_max_ac"] == 40
+    assert state["extra_needs_accessory"] is False
+
+
+def test_strix_halo_extra_range_asks_for_the_accessory(Plugin):
+    p = _plugin_on(Plugin, "onexplayer_apex", TdpLimits(5, 20, 55, 80))
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["limits"]["max_ac"] == 80
+    assert state["manual_max_ac"] == 120
+    assert state["extra_needs_accessory"] is True
+
+
+def test_steam_deck_has_no_manual_extra_range(Plugin):
+    p = _plugin_on(Plugin, "steam_deck_lcd", TdpLimits(3, 12, 15, 15))
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["manual_max_ac"] == state["limits"]["max_ac"]
+
+
+def test_gpd_win_mini_requests_start_at_three_watts(Plugin):
+    p = _plugin_on(Plugin, "gpd_win_mini_2025", TdpLimits(20, 20, 35, 35))
+
+    assert p._tdp_request_min() == 3
+    assert p._preset_wclamp() == (3, 35)

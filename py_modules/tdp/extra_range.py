@@ -21,3 +21,8 @@ def extra_tdp_max_ac(device) -> int | None:
         return None
     ceiling = STRIX_HALO_EXTRA_MAX_W if is_strix_halo(device) else EXTRA_MAX_W
     return ceiling if ceiling > device.tdp_max_charger else None
+
+
+def with_extra(limits, device):
+    """`limits` with the charger ceiling raised to the manual extra range, if any."""
+    return limits.with_ac_max(extra_tdp_max_ac(device))

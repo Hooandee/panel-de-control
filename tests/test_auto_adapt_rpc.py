@@ -320,7 +320,7 @@ def test_loop_does_not_learn_probe_before_protected_cooldown_finishes(
     p = Plugin()
     p._init()
     p._current_appid = "g"
-    cap = p._effective_levels("g")[1]
+    cap = p._auto_power_limits().max_ac_w
     p._tdp_profiles.set_pl1("game", cap, appid="g")
     learned = []
 

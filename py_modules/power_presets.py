@@ -57,7 +57,6 @@ class PowerPresetStore:
     def __init__(self, path):
         self._path = path
         self._data = self._load()
-        self._sanitize_bounds = None
 
     def _load(self):
         try:
@@ -106,34 +105,13 @@ class PowerPresetStore:
             atomic_json_save(self._path, self._data)
         except OSError:
             self._data = self._load()
-            # A rejected CRUD is reloaded; a pending range migration stays clamped.
-            if self._sanitize_bounds is not None:
-                self._sanitize_in_memory(*self._sanitize_bounds)
             raise
-        self._sanitize_bounds = None
 
     def state(self):
         return {"order": list(self._data["order"]),
                 "hidden": list(self._data["hidden"]),
                 "custom": {key: dict(entry)
                            for key, entry in self._data["custom"].items()}}
-
-    def _sanitize_in_memory(self, min_w, max_w):
-        dirty = False
-        for entry in self._data["custom"].values():
-            watts = entry["watts"]
-            clamped = _clamp_watts(watts, min_w, max_w)
-            if clamped != watts:
-                entry["watts"] = clamped
-                dirty = True
-        return dirty
-
-    def sanitize(self, min_w, max_w):
-        dirty = self._sanitize_in_memory(min_w, max_w)
-        if dirty or self._sanitize_bounds is not None:
-            self._sanitize_bounds = (int(min_w), int(max_w))
-            self._save()
-        return dirty
 
     def create(self, watts, icon, boost, name="", min_w=1, max_w=1000):
         if len(self._data["custom"]) >= _MAX_CUSTOM:
