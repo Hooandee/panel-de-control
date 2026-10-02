@@ -123,13 +123,27 @@ class CoreControl:
                 write_str(p, 1)
 
     def _map(self):
+        capacity = {}
         m = {}
         for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
             match = re.search(r"cpu(\d+)", p)
             cid = read_int(p)
             if match and cid is not None:
-                m.setdefault(cid, []).append(int(match.group(1)))
-        return dict(sorted(m.items()))
+                idx = int(match.group(1))
+                cluster = read_int(os.path.join(self._base, f"cpu{idx}", "topology", "cluster_id"))
+                m.setdefault((cluster or 0, cid), []).append(idx)
+                cap = read_int(os.path.join(self._base, f"cpu{idx}", "cpu_capacity"))
+                if cap is not None:
+                    capacity[idx] = cap
+        cores = sorted(m.values(), key=min)
+        if capacity:
+            # big.LITTLE: keep cpu0's core (it cannot go offline), then the most
+            # capable cores, so a lower count sheds the weakest cores first.
+            first = [c for c in cores if 0 in c]
+            rest = sorted((c for c in cores if 0 not in c),
+                          key=lambda c: (-max(capacity.get(i, 0) for i in c), min(c)))
+            cores = first + rest
+        return dict(enumerate(cores))
 
     def _online_path(self, idx):
         return os.path.join(self._base, f"cpu{idx}", "online")

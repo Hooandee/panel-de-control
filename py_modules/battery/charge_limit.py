@@ -94,6 +94,47 @@ class SysfsChargeLimit(_FileChargeLimit):
         return None
 
 
+class QcomBattmgrChargeLimit(SysfsChargeLimit):
+    """Snapdragon pmic-glink battery. The driver reports 0 until a limit is applied
+    and returns success even when the charger firmware rejects the request, so a
+    write that leaves the value unchanged means the firmware has no charge limit."""
+
+    name = "qcom-battmgr"
+    # The driver clamps the end threshold to 55-100.
+    _MIN_END = 55
+    _IGNORED_WRITES_TO_GIVE_UP = 2
+
+    def __init__(self, root="/"):
+        super().__init__(root)
+        self._ignored_writes = 0
+        if self.supported and "pmic-glink" not in (
+            read_str(os.path.join(os.path.dirname(self._path), "uevent")) or ""
+        ):
+            self.supported = False
+
+    def range(self):
+        return (self._MIN_END, _MAX)
+
+    def set(self, percent):
+        return self._write(_clamp(int(percent), self._MIN_END, _MAX))
+
+    def _write(self, value):
+        before = self.get()
+        if super()._write(value):
+            self._ignored_writes = 0
+            return True
+        if before == 0 and self.get() == 0:
+            self._ignored_writes += 1
+            if self._ignored_writes >= self._IGNORED_WRITES_TO_GIVE_UP:
+                self.supported = False
+        return False
+
+    def disable(self):
+        if self.get() in (0, _MAX):
+            return True
+        return self._write(_MAX)
+
+
 class SteamDeckChargeLimit(_FileChargeLimit):
     """Steam Deck `steamdeck_hwmon/max_battery_charge_level`. 0 = no cap (distinct
     from the ASUS/Lenovo 100)."""
@@ -169,7 +210,9 @@ def select_charge_limit(device, root="/"):
     key = getattr(device, "key", "")
     if key == "steam_machine":
         return NullChargeLimit()
-    if key.startswith("steam_deck"):
+    if getattr(device, "arch", "x86") == "arm":
+        candidates = [QcomBattmgrChargeLimit, SysfsChargeLimit]
+    elif key.startswith("steam_deck"):
         candidates = [SteamDeckChargeLimit, SysfsChargeLimit]
     elif key == "zotac_gaming_zone":
         # No upstream Zotac charge-limit ABI exists yet. Adopt only the standard

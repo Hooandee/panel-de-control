@@ -4,6 +4,7 @@ import { ZONE_ICON } from "../tdp/zoneIcons";
 import { TdpLimits } from "../api";
 import { theme } from "../theme";
 import { useI18n } from "../i18n";
+import { PowerUnit, isLevelUnit } from "../tdp/unit";
 
 const CX = 100;
 const CY = 100;
@@ -47,6 +48,7 @@ interface PowerArcProps {
   slowMarkerWatts?: number | null;
   fastMarkerWatts?: number | null;
   overclocked?: boolean;
+  unit?: PowerUnit;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -62,8 +64,12 @@ export const PowerArc: FC<PowerArcProps> = ({
   slowMarkerWatts = null,
   fastMarkerWatts = null,
   overclocked = false,
+  unit = "W",
 }) => {
   const { t } = useI18n();
+  const levels = isLevelUnit(unit);
+  const suffix = levels ? "" : "W";
+  const measuredWatts = levels ? null : actualWatts;
 
   // Auto owns the dial presentation: firmware rails and readback remain diagnostics,
   // while the player sees the single TDP value maintained by the controller.
@@ -92,13 +98,13 @@ export const PowerArc: FC<PowerArcProps> = ({
 
   // HW boost: watts drawn above the applied PL1 via SPPT/FPPT. Null when no draw
   // sensor; shown only when it's a real extra.
-  const boost = auto ? null : boostWatts(heroWatts, actualWatts);
+  const boost = auto ? null : boostWatts(heroWatts, measuredWatts);
   const hasBoost = boost !== null && boost > 0;
   // Where the boost segment ends on the arc (null → nothing to draw). The clamp to
   // the ceiling and the same-rounded-gate-as-boostWatts live in the pure helper.
   const boostEnd = auto
     ? null
-    : boostEndFraction(heroWatts, actualWatts, limits.min, scaleMax);
+    : boostEndFraction(heroWatts, measuredWatts, limits.min, scaleMax);
 
   // Marker at the fixed target you set. A small number by it appears only when it
   // diverges from the applied value (eco/HHD/Steam), so it's read, not estimated.
@@ -193,7 +199,7 @@ export const PowerArc: FC<PowerArcProps> = ({
         )}
         {showTargetLabel && (
           <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
-            {Math.round(markerWatts)}W
+            {Math.round(markerWatts)}{suffix}
           </text>
         )}
         {!auto && slowMarkerWatts !== null && (
@@ -213,15 +219,15 @@ export const PowerArc: FC<PowerArcProps> = ({
           </>
         )}
         {!targetLabelAtMinimum && (
-          <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}W</text>
+          <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}{suffix}</text>
         )}
-        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}W{chargerHeadroom ? " ⚡" : ""}</text>
+        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}{suffix}{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
-          <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>
+          <span style={{ fontSize: 16, color: theme.color.textMuted }}>{levels ? `/${limits.max}` : " W"}</span>
         </div>
         {targetOnly && (
           <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 1, letterSpacing: "0.08em" }}>

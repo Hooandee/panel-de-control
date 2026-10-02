@@ -53,6 +53,10 @@ class ScopedProfileStore:
     def _save(self):
         atomic_json_save(self._path, self._data)
 
+    def reset(self):
+        self._data = {"global": self._clean_global(None), "games": {}}
+        self._save()
+
     def is_following_global(self, appid):
         """True when this game applies the global profile: no own profile, or its own is
         toggled to follow global. Own values are never deleted — following just deactivates."""

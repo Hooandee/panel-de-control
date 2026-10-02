@@ -380,13 +380,146 @@ class XeGpuClock(_FreqPairClock):
                 break
 
 
+class DevfreqGpuClock(_GpuDiagnostics):
+    """ARM GPUs (Adreno, Mali): /sys/class/devfreq/<addr>.gpu, frequencies in Hz.
+
+    Only the devfreq node named after the GPU is eligible; storage and bus
+    controllers share the class.
+    """
+
+    backend = "devfreq"
+    _AUTO_GOVERNOR = "simple_ondemand"
+
+    def __init__(self, root="/"):
+        self._last_operation = None
+        self._dir = None
+        for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq", "*.gpu"))):
+            if self._table_at(path):
+                self._dir = path
+                break
+
+    @staticmethod
+    def _table_at(path):
+        text = read_str(os.path.join(path, "available_frequencies")) or ""
+        return tuple(sorted({int(item) for item in text.split() if item.isdigit()}))
+
+    def _node(self, name):
+        return os.path.join(self._dir, name)
+
+    @property
+    def supported(self):
+        if self._dir is None or not self._table_at(self._dir):
+            return False
+        return all(
+            read_int(self._node(name)) is not None and os.access(self._node(name), os.W_OK)
+            for name in ("min_freq", "max_freq")
+        )
+
+    def _table(self):
+        return self._table_at(self._dir) if self._dir is not None else ()
+
+    def _window_hz(self):
+        lo, hi = read_int(self._node("min_freq")), read_int(self._node("max_freq"))
+        return (lo, hi) if lo is not None and hi is not None else None
+
+    def levels(self):
+        return [value // 1_000_000 for value in self._table()] if self.supported else None
+
+    def get_range(self):
+        table = self._table() if self.supported else ()
+        return (table[0] // 1_000_000, table[-1] // 1_000_000) if table else None
+
+    def get(self):
+        if not self.supported:
+            return None
+        window = self._window_hz()
+        return (window[0] // 1_000_000, window[1] // 1_000_000) if window else None
+
+    def _snap(self, min_mhz, max_mhz):
+        table = self._table()
+        lo_hz, hi_hz = int(min_mhz) * 1_000_000, int(max_mhz) * 1_000_000
+        hi = max((value for value in table if value <= hi_hz), default=table[0])
+        lo = min((value for value in table if value >= lo_hz), default=table[-1])
+        return min(lo, hi), hi
+
+    def _write_window(self, lo, hi):
+        current = self._window_hz()
+        if current is None:
+            return False
+        writes = (
+            (("max_freq", hi), ("min_freq", lo))
+            if lo > current[1]
+            else (("min_freq", lo), ("max_freq", hi))
+        )
+        return all(write_str(self._node(name), value) for name, value in writes)
+
+    def _governor(self):
+        return read_str(self._node("governor"))
+
+    def capture_state(self):
+        window = self._window_hz() if self.supported else None
+        if window is None:
+            return None
+        return {"window_hz": list(window), "governor": self._governor()}
+
+    def restore_state(self, state):
+        if not isinstance(state, dict) or not self.supported:
+            return False
+        window = state.get("window_hz")
+        if not isinstance(window, (list, tuple)) or len(window) != 2:
+            return False
+        governor = state.get("governor")
+        if isinstance(governor, str) and governor and governor != self._governor():
+            write_str(self._node("governor"), governor)
+        target = (int(window[0]), int(window[1]))
+        return self._write_window(*target) and self._window_hz() == target
+
+    def set(self, min_mhz, max_mhz):
+        if not self.supported:
+            self._record("manual", (min_mhz, max_mhz), False, "unsupported")
+            return False
+        try:
+            snapshot = self._window_hz()
+            if snapshot is None:
+                self._record("manual", (min_mhz, max_mhz), False, "baseline_unavailable")
+                return False
+            target = self._snap(min_mhz, max_mhz)
+            wrote = self._write_window(*target)
+            if wrote and self._window_hz() == target:
+                self._record("manual", (min_mhz, max_mhz), True)
+                return True
+            restored = self._write_window(*snapshot) and self._window_hz() == snapshot
+            reason = "write_failed" if not wrote else "readback_mismatch"
+            if not restored:
+                reason = f"{reason}_rollback_failed"
+            self._record("manual", (min_mhz, max_mhz), False, reason)
+            return False
+        except Exception as exc:  # noqa: BLE001
+            self._record("manual", (min_mhz, max_mhz), False, type(exc).__name__)
+            return False
+
+    def set_auto(self):
+        rng = self.get_range()
+        if not rng:
+            self._record("auto", None, False, "range_unavailable")
+            return False
+        if self._governor() != self._AUTO_GOVERNOR:
+            write_str(self._node("governor"), self._AUTO_GOVERNOR)
+        ok = self.set(*rng)
+        operation = getattr(self, "_last_operation", None)
+        if operation is not None:
+            operation["action"] = "auto"
+        return ok
+
+
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
-    order = (
-        (XeGpuClock, IntelGpuClock)
-        if getattr(device, "vendor", "amd") == "intel"
-        else (AmdGpuClock,)
-    )
+    if getattr(device, "arch", "x86") == "arm":
+        order = (DevfreqGpuClock,)
+    elif getattr(device, "vendor", "amd") == "intel":
+        order = (XeGpuClock, IntelGpuClock)
+    else:
+        order = (AmdGpuClock,)
     selection = []
     for cls in order:
         backend = cls(root)

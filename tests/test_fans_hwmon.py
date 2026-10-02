@@ -255,3 +255,33 @@ def test_curate_keeps_cpu_and_gpu_distinct_when_both_present():
         {"chip": "amdgpu", "label": "edge", "celsius": 50.0},
     ])
     assert [t["label"] for t in out] == ["CPU", "GPU"]
+
+
+def test_curate_maps_arm_soc_thermal_zones_to_cpu_and_gpu():
+    temps = [
+        {"chip": "aoss0_thermal", "label": "temp1", "celsius": 51.0},
+        {"chip": "cpu0_thermal", "label": "temp1", "celsius": 51.3},
+        {"chip": "cpu7_middle_thermal", "label": "temp1", "celsius": 56.4},
+        {"chip": "cpuss1_thermal", "label": "temp1", "celsius": 50.3},
+        {"chip": "gpuss_0_thermal", "label": "temp1", "celsius": 53.1},
+        {"chip": "gpuss_7_thermal", "label": "temp1", "celsius": 58.3},
+        {"chip": "modem2_thermal", "label": "temp1", "celsius": 47.7},
+        {"chip": "battery", "label": "temp1", "celsius": 27.0},
+    ]
+    assert curate_temps(temps) == [
+        {"label": "CPU", "celsius": 56.4},
+        {"label": "GPU", "celsius": 58.3},
+    ]
+
+
+def test_curate_maps_rockchip_style_zones():
+    temps = [
+        {"chip": "soc_thermal", "label": "temp1", "celsius": 44.0},
+        {"chip": "bigcore0_thermal", "label": "temp1", "celsius": 47.0},
+        {"chip": "gpu_thermal", "label": "temp1", "celsius": 42.0},
+        {"chip": "npu_thermal", "label": "temp1", "celsius": 40.0},
+    ]
+    assert curate_temps(temps) == [
+        {"label": "CPU", "celsius": 47.0},
+        {"label": "GPU", "celsius": 42.0},
+    ]

@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { useFanState } from "../fans/useFanState";
 import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
-import { fanCurveNotice } from "../fans/notice";
+import { fanCurveNotice, fanHandoffNotice } from "../fans/notice";
 import { isSolo, tempsAvailable } from "../fans/logic";
 import { FanChip } from "../components/FanChip";
 import { TempStat } from "../components/TempStat";
@@ -192,6 +192,13 @@ const CurveBlock: FC = () => {
             <span style={{ fontSize: theme.font.caption, color: theme.color.accent }}>
               {t("fans.firmware.wip")}
             </span>
+          </div>
+        </PanelSectionRow>
+      )}
+      {curveState?.supported && fanHandoffNotice(curveState, t) && (
+        <PanelSectionRow>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {fanHandoffNotice(curveState, t)}
           </div>
         </PanelSectionRow>
       )}

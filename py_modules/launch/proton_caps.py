@@ -17,6 +17,13 @@ _CORE = (
 )
 
 
+# Distro packages (CachyOS proton-cachyos, Armada's ARM64 builds) register tools system-wide.
+SYSTEM_COMPAT_DIRS = (
+    "/usr/share/steam/compatibilitytools.d",
+    "/usr/local/share/steam/compatibilitytools.d",
+)
+
+
 def _steam_roots(home: str) -> list:
     return [os.path.join(home, ".steam", "steam"), os.path.join(home, ".local", "share", "Steam")]
 
@@ -24,6 +31,9 @@ def _steam_roots(home: str) -> list:
 def _builtin_folder(compat_name: str) -> str | None:
     """Map a built-in compat-tool id to its steamapps/common folder name."""
     n = (compat_name or "").lower()
+    # Valve's ARM64 builds install under a folder we have not confirmed; never read the x86 one.
+    if n.endswith("-arm64"):
+        return None
     if "experimental" in n:
         return "Proton - Experimental"
     if n in ("proton_hotfix", "proton_next"):
@@ -34,12 +44,13 @@ def _builtin_folder(compat_name: str) -> str | None:
     return None
 
 
-def _find_proton_script(compat_name: str, home: str) -> str | None:
+def _find_proton_script(compat_name: str, home: str, system_dirs) -> str | None:
     if not compat_name:
         return None
-    for root in _steam_roots(home):
-        # Custom tools (GE-Proton, Proton-CachyOS, …) keep their exact folder name.
-        p = os.path.join(root, "compatibilitytools.d", compat_name, "proton")
+    # Custom tools (GE-Proton, Proton-CachyOS, …) keep their exact folder name.
+    custom_dirs = [os.path.join(root, "compatibilitytools.d") for root in _steam_roots(home)]
+    for d in (*custom_dirs, *system_dirs):
+        p = os.path.join(d, compat_name, "proton")
         if os.path.isfile(p):
             return p
     folder = _builtin_folder(compat_name)
@@ -51,7 +62,9 @@ def _find_proton_script(compat_name: str, home: str) -> str | None:
     return None
 
 
-def detect_capabilities(compat_name: str, home: str | None = None) -> dict:
+def detect_capabilities(
+    compat_name: str, home: str | None = None, system_dirs=SYSTEM_COMPAT_DIRS,
+) -> dict:
     """Return {"envs": [launch-option vars this build supports], "found": bool}.
     `found` is False when the build's script couldn't be located (no compat tool, a
     native/non-Steam game, or a missing install). In that case `envs` is empty — we
@@ -61,7 +74,7 @@ def detect_capabilities(compat_name: str, home: str | None = None) -> dict:
     envs: list = []
     found = False
     try:
-        path = _find_proton_script(compat_name or "", home)
+        path = _find_proton_script(compat_name or "", home, system_dirs)
         if path:
             with open(path, errors="ignore") as f:
                 detected = set(_CORE) | set(_ENV_RE.findall(f.read()))
