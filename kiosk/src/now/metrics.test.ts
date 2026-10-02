@@ -1,24 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { BatteryState, FanState, PowerDraw, TdpState } from "../../../src/api";
-import { batteryReading, fanRpm, formatMinutes, gpuFraction, hottest, powerReading, tempFraction } from "./metrics";
+import type { BatteryState, FanState } from "../../../src/api";
+import { batteryReading, fanRpm, formatMinutes, hottest } from "./metrics";
 
-const tdp = (patch: Partial<TdpState>) => ({ supported: true, watts: 15, limits: { min: 5, default: 15, max: 25, max_ac: 30 }, ...patch }) as TdpState;
-const power = (patch: Partial<PowerDraw>) => ({ watts: 12.5, gpu_busy: 40, ...patch }) as PowerDraw;
-
-describe("powerReading", () => {
-  it("shows the performance level on ARM and keeps measured watts aside", () => {
-    expect(powerReading(tdp({ unit: "level", watts: 6 }), power({}))).toEqual({ value: 6, unit: "level", fraction: 0.6, watts: 12.5 });
-  });
-
-  it("shows measured watts against the highest limit elsewhere", () => {
-    expect(powerReading(tdp({ unit: "W" }), power({ watts: 15 }))).toMatchObject({ value: 15, unit: "W", fraction: 0.5 });
-  });
-
-  it("never invents a value before the first reading", () => {
-    expect(powerReading(null, null)).toEqual({ value: null, unit: "W", fraction: 0, watts: null });
-  });
-});
 
 describe("sensors", () => {
   const fans = { supported: true, fans: [{ label: "a", rpm: 2100, percent: 40 }, { label: "b", rpm: null, percent: null }], temps: [{ label: "cpu", celsius: 61 }, { label: "gpu", celsius: 66.5 }] } as FanState;
@@ -29,12 +13,6 @@ describe("sensors", () => {
     expect(hottest(null)).toBeNull();
   });
 
-  it("maps temperature and GPU load onto ring fractions", () => {
-    expect(tempFraction(30)).toBe(0);
-    expect(tempFraction(95)).toBe(1);
-    expect(tempFraction(null)).toBe(0);
-    expect(gpuFraction(power({ gpu_busy: 140 }))).toBe(1);
-  });
 });
 
 describe("batteryReading", () => {

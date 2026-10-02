@@ -1,4 +1,5 @@
 import type * as Decky from "@decky/ui/dist/index";
+import { runningAppOverview } from "../runningGame";
 import {
   ChangeEvent,
   Component,
@@ -467,7 +468,13 @@ const NavigationKiosk = {
   OpenMainMenu: noop,
   CloseSideMenus: noop,
 };
-const RouterKiosk = { MainRunningApp: undefined, Navigate: noop, CloseSideMenus: noop };
+const RouterKiosk = {
+  get MainRunningApp() {
+    return runningAppOverview();
+  },
+  Navigate: noop,
+  CloseSideMenus: noop,
+};
 const QuickAccessTabKiosk = { Decky: 999 };
 const NavEntryPositionPreferencesKiosk = { FIRST: 0, LAST: 1, MAINTAIN_X: 2, MAINTAIN_Y: 3, PREFERRED: 4 };
 

@@ -10,6 +10,7 @@ import { registerDisplayBlocks } from "../../src/sections/displayBlocks";
 import { registerMandosBlocks } from "../../src/sections/mandosBlocks";
 import { registerPowerBlocks } from "../../src/sections/powerBlocks";
 import { KioskApp } from "./KioskApp";
+import { followRunningGame } from "./runningGame";
 import { KIOSK_CSS, KIOSK_LOGICAL_WIDTH } from "./styles";
 
 registerSystemBlocks();
@@ -31,6 +32,8 @@ window.addEventListener("resize", fitToScreen);
 const PREFS_SYNC_MS = 10_000;
 
 becomePrefsFollower();
+
+followRunningGame();
 
 void followBackendPrefs().finally(() => {
   window.setInterval(() => void followBackendPrefs(), PREFS_SYNC_MS);

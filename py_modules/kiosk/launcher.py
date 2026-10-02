@@ -18,8 +18,6 @@ FIREFOX_PREFS = (
     'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
     'user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);',
     'user_pref("app.update.enabled", false);',
-    # A status screen beside a game: half the refresh rate halves the browser's render cost.
-    'user_pref("layout.frame_rate", 30);',
 )
 
 # gamescope's nested Wayland crashes Firefox (nsWaylandDisplay::Init); X11 + XInput2 gives touch.

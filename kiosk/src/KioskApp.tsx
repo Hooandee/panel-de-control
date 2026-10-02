@@ -4,16 +4,17 @@ import { BlocksView } from "../../src/sections/CustomView";
 import { useViews } from "../../src/customize/viewStore";
 import { useKioskViewIds } from "../../src/customize/kioskViewStore";
 import { currentAccentHex, currentAccentRgb, subscribeAccent } from "../../src/system/accentColor";
+import { useRunningGame } from "../../src/tdp/useRunningGame";
 import { useI18n } from "../../src/i18n";
 import { ModalHost } from "./shims/deckyUi";
 import { currentToasts, subscribeToasts } from "./shims/deckyApi";
 import { kioskPages } from "./pages";
-import { NowPage } from "./now/NowPage";
-import { artUrl, useLive, useRunningGame } from "./now/live";
+import { DeckPage } from "./deck/DeckPage";
+import { artUrl, useLive } from "./now/live";
 import { batteryReading } from "./now/metrics";
 import { PageBoundary } from "./PageBoundary";
 
-const NOW_PAGE_ID = "now";
+const DECK_PAGE_ID = "deck";
 
 const useAccentVars = (): CSSProperties => {
   const hex = useSyncExternalStore(subscribeAccent, currentAccentHex);
@@ -46,9 +47,9 @@ const StatusBattery: FC<{ percent: number | null; charging: boolean }> = ({ perc
 export const KioskApp: FC = () => {
   const { t, lang } = useI18n();
   const live = useLive();
-  const game = useRunningGame(live.tdp?.appid);
+  const game = useRunningGame();
   const pages = [
-    { id: NOW_PAGE_ID, name: t("kiosk.now.title"), blocks: [] as readonly string[] },
+    { id: DECK_PAGE_ID, name: game?.name ?? t("app.title"), blocks: [] as readonly string[] },
     ...kioskPages(useViews(), useKioskViewIds(), t("kiosk.page.default")),
   ];
   const pager = useRef<HTMLDivElement>(null);
@@ -60,25 +61,16 @@ export const KioskApp: FC = () => {
   const goTo = (index: number) => pager.current?.scrollTo({ left: index * pager.current.clientWidth, behavior: "smooth" });
   const current = pages[Math.min(active, pages.length - 1)];
   const battery = batteryReading(live.battery);
-  const showClock = !(active === 0 && !game);
+  const art = game && /^\d+$/.test(game.appid) ? artUrl(game.appid, "hero") : null;
 
   return (
     <div className="k-shell" style={useAccentVars()}>
-      <div
-        className={`k-backdrop${game ? " is-on" : ""}`}
-        style={{ backgroundImage: game ? `url(${artUrl(game.appid, "hero")})` : undefined }}
-      />
-      <div className="k-aurora" />
+      <div className={`k-backdrop${art ? " is-on" : ""}`} style={{ backgroundImage: art ? `url(${art})` : undefined }} />
 
       <header className="k-header">
-        <div className="k-heading">
-          <div className="k-eyebrow">{t("app.title")}</div>
-          <div key={current?.id} className="k-title">{current?.name}</div>
-        </div>
+        <div key={current?.id} className="k-title">{current?.name}</div>
         <div className="k-status">
-          {showClock && (
-            <span className="k-clock">{new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}</span>
-          )}
+          <span className="k-clock">{new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}</span>
           <StatusBattery percent={battery.percent} charging={battery.mood === "charging"} />
         </div>
       </header>
@@ -87,7 +79,7 @@ export const KioskApp: FC = () => {
         {pages.map((page) => (
           <section key={page.id} className="k-page">
             <PageBoundary
-              where={`kiosk:${page.id === NOW_PAGE_ID ? "now" : "view"}`}
+              where={`kiosk:${page.id === DECK_PAGE_ID ? "deck" : "view"}`}
               fallback={(retry) => (
                 <div className="k-card k-page-error">
                   <span>{t("kiosk.page.error")}</span>
@@ -95,8 +87,8 @@ export const KioskApp: FC = () => {
                 </div>
               )}
             >
-              {page.id === NOW_PAGE_ID ? (
-                <NowPage live={live} game={game} />
+              {page.id === DECK_PAGE_ID ? (
+                <DeckPage live={live} />
               ) : (
                 <BlocksView blockIds={page.blocks} className="k-blocks" />
               )}
@@ -105,17 +97,19 @@ export const KioskApp: FC = () => {
         ))}
       </div>
 
-      <nav className="k-dots">
-        {pages.map((page, index) => (
-          <button
-            key={page.id}
-            type="button"
-            aria-label={page.name}
-            className={index === active ? "is-on" : undefined}
-            onClick={() => goTo(index)}
-          />
-        ))}
-      </nav>
+      {pages.length > 1 && (
+        <nav className="k-dots">
+          {pages.map((page, index) => (
+            <button
+              key={page.id}
+              type="button"
+              aria-label={page.name}
+              className={index === active ? "is-on" : undefined}
+              onClick={() => goTo(index)}
+            />
+          ))}
+        </nav>
+      )}
       <Toasts />
       <ModalHost />
     </div>
