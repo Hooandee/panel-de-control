@@ -104,6 +104,10 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
   const autoOn = Boolean(power?.auto_tdp);
   const value = tdp?.supported ? Math.round(tdp.watts) : null;
   const rpm = fanRpm(live.fans);
+  const stats = [
+    { kind: "watts", label: t("kiosk.now.power"), value: power?.watts != null ? `${power.watts.toFixed(1)} W` : null },
+    { kind: "temp", label: t("kiosk.now.temp"), value: temp != null ? `${Math.round(temp)} °C` : null },
+  ].filter((stat) => stat.kind !== reading.kind && stat.value != null);
   const boost = cpu.state?.boost;
   const fanPresets = new Set(["auto", ...(fan.state?.presets ?? []).map((p) => p.id)]);
   const fanChoices = FAN_CHOICES.filter((id) => fanPresets.has(id));
@@ -120,7 +124,7 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
         onCommit={(next) => potencia.onWatts(next)}
       />
 
-      <section className="d-live">
+      <section className={`d-live${stats.length === 0 ? " is-bare" : ""}`}>
         <div className="d-live-main">
           <b>{reading.value == null ? "—" : reading.kind === "watts" ? reading.value.toFixed(1) : Math.round(reading.value)}</b>
           <span>{reading.kind === "fps" ? "fps" : reading.kind === "watts" ? "W" : "°C"}</span>
@@ -135,16 +139,13 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
           <path className="d-spark-area" d={spark.area} />
           <path className="d-spark-line" d={spark.line} />
         </svg>
-        <dl className="d-live-stats">
-          {[
-            { kind: "watts", label: t("kiosk.now.power"), value: power?.watts != null ? `${power.watts.toFixed(1)} W` : null },
-            { kind: "temp", label: t("kiosk.now.temp"), value: temp != null ? `${Math.round(temp)} °C` : null },
-          ]
-            .filter((stat) => stat.kind !== reading.kind && stat.value != null)
-            .map((stat) => (
+        {stats.length > 0 && (
+          <dl className="d-live-stats">
+            {stats.map((stat) => (
               <div key={stat.kind}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>
             ))}
-        </dl>
+          </dl>
+        )}
       </section>
 
       {fan.state?.supported && fanChoices.length > 1 && (

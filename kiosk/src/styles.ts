@@ -79,6 +79,7 @@ button { font: inherit; color: inherit; }
 .d-live-main b { font-size: 84px; font-weight: 250; letter-spacing: -.06em; line-height: .9; }
 .d-live-main span { font-size: 18px; font-weight: 500; color: ${color.textMuted}; }
 .d-spark { position: absolute; left: 0; right: 0; top: 44%; width: 100%; height: 26%; pointer-events: none; }
+.d-live.is-bare .d-spark { top: auto; bottom: 0; height: 46%; }
 .d-spark-area { fill: url(#d-spark-fill); stroke: none; }
 .d-spark-line { fill: none; stroke: var(--k-accent); stroke-width: 1.75; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
 .d-live-stats { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
@@ -101,13 +102,13 @@ button { font: inherit; color: inherit; }
   text-align: left; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.08);
   transition: transform .15s ease, background .25s ease; }
 .d-toggle:active { transform: scale(.96); }
-.d-toggle-icon { flex: 0 0 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; background: rgba(255,255,255,.12);
+.d-toggle-icon { flex: 0 0 36px; height: 36px; border-radius: 18px; display: grid; place-items: center; background: rgba(255,255,255,.12);
   transition: background .25s ease; }
 .d-toggle-icon svg { width: 20px; height: 20px; fill: none; stroke: ${color.textPrimary}; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .d-toggle.is-on .d-toggle-icon { background: var(--k-accent); }
 .d-toggle.is-on .d-toggle-icon svg { stroke: ${color.onAccent}; }
 .d-toggle-text { display: flex; flex-direction: column; min-width: 0; }
-.d-toggle-text b { font-size: 14px; font-weight: 600; }
+.d-toggle-text b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .d-toggle-text small { font-size: 11.5px; color: ${color.textMuted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .k-page-error { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px; color: ${color.textMuted}; }
