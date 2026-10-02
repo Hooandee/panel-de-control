@@ -4,7 +4,7 @@ import { DEFAULT_KIOSK_BLOCKS, kioskPages } from "./pages";
 
 describe("kioskPages", () => {
   it("falls back to a default page when there are no custom views", () => {
-    expect(kioskPages([], "Inicio")).toEqual([{ id: "default", name: "Inicio", blocks: DEFAULT_KIOSK_BLOCKS }]);
+    expect(kioskPages([], [], "Inicio")).toEqual([{ id: "default", name: "Inicio", blocks: DEFAULT_KIOSK_BLOCKS }]);
   });
 
   it("shows every custom view with blocks as its own page, in order", () => {
@@ -13,6 +13,14 @@ describe("kioskPages", () => {
       { id: "b", name: "Vacía", icon: "star" as const, blocks: [] },
       { id: "c", name: "Fans", icon: "star" as const, blocks: ["fanRpm", "temps"] },
     ];
-    expect(kioskPages(views, "Inicio").map((page) => page.id)).toEqual(["a", "c"]);
+    expect(kioskPages(views, [], "Inicio").map((page) => page.id)).toEqual(["a", "c"]);
+  });
+
+  it("follows the views chosen for the bottom screen", () => {
+    const views = [
+      { id: "a", name: "Juego", icon: "star" as const, blocks: ["tdp"] },
+      { id: "c", name: "Fans", icon: "star" as const, blocks: ["fanRpm"] },
+    ];
+    expect(kioskPages(views, ["c"], "Inicio").map((page) => page.id)).toEqual(["c"]);
   });
 });

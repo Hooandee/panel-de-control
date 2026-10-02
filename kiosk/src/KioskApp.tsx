@@ -2,6 +2,7 @@ import { FC, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { BlocksView } from "../../src/sections/CustomView";
 import { useViews } from "../../src/customize/viewStore";
+import { useKioskViewIds } from "../../src/customize/kioskViewStore";
 import { currentAccentHex, currentAccentRgb, subscribeAccent } from "../../src/system/accentColor";
 import { useI18n } from "../../src/i18n";
 import { ModalHost } from "./shims/deckyUi";
@@ -38,7 +39,7 @@ const Toasts: FC = () => {
 
 export const KioskApp: FC = () => {
   const { t } = useI18n();
-  const pages: KioskPage[] = kioskPages(useViews(), t("kiosk.page.default"));
+  const pages: KioskPage[] = kioskPages(useViews(), useKioskViewIds(), t("kiosk.page.default"));
   const pager = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const onScroll = () => {
