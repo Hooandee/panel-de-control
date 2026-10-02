@@ -4,9 +4,9 @@
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c && rollup -c kiosk/rollup.config.mjs",
     "watch": "rollup -c -w",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p kiosk/tsconfig.json",
     "test:fe": "vitest run",
     "test:i18n": "vitest run src/i18n/catalog.test.ts src/i18n/detect.test.ts src/glossary/data.test.ts src/updater/editorial.test.ts src/updater/releaseNotes.test.ts src/updater/italian.test.ts src/updater/german.test.ts src/updater/brazilianPortuguese.test.ts"
   },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isDurableKey, planPrefsSync } from "./prefsSync";
+import { isDurableKey, planFollowBackend, planPrefsSync } from "./prefsSync";
 
 describe("isDurableKey", () => {
   it("mirrors the language key and the pdc: namespace", () => {
@@ -48,5 +48,15 @@ describe("planPrefsSync", () => {
     );
     expect(heal).toEqual({ "panel-de-control-lang": "en" });
     expect(migrate).toEqual({ "pdc:valueToast:enabled": "1" });
+  });
+});
+
+describe("planFollowBackend", () => {
+  it("copies backend values, drops keys the backend no longer has and never migrates", () => {
+    const plan = planFollowBackend(
+      { "pdc:views": "[1]", "pdc:accent": "teal", "pdc:activeTab": "power" },
+      { "pdc:views": "[0]", "pdc:accent": "teal", "pdc:removed": "x", "other": "y" },
+    );
+    expect(plan).toEqual({ set: { "pdc:views": "[1]" }, remove: ["pdc:removed"] });
   });
 });
