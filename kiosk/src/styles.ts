@@ -88,6 +88,8 @@ button { font: inherit; color: inherit; }
 
 .d-fan { grid-area: fan; display: flex; flex-direction: column; gap: 8px; border-radius: 24px; padding: 12px 14px;
   background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.08); }
+.d-fan-head { display: flex; justify-content: space-between; align-items: baseline; }
+.d-fan-rpm { font-size: 13px; font-weight: 600; color: ${color.textPrimary}; font-variant-numeric: tabular-nums; }
 .d-segment { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: rgba(0,0,0,.35); }
 .d-segment button { flex: 1; min-width: 0; border: 0; border-radius: 12px; padding: 10px 4px; background: transparent;
   font-size: 13px; font-weight: 550; color: ${color.textMuted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

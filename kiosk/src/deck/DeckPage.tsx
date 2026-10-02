@@ -139,7 +139,6 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
           {[
             { kind: "watts", label: t("kiosk.now.power"), value: power?.watts != null ? `${power.watts.toFixed(1)} W` : null },
             { kind: "temp", label: t("kiosk.now.temp"), value: temp != null ? `${Math.round(temp)} °C` : null },
-            { kind: "fan", label: t("kiosk.now.fan"), value: rpm != null ? `${rpm.toLocaleString(lang)} rpm` : null },
           ]
             .filter((stat) => stat.kind !== reading.kind && stat.value != null)
             .map((stat) => (
@@ -150,7 +149,10 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
 
       {fan.state?.supported && fanChoices.length > 1 && (
         <section className="d-fan">
-          <span className="d-section-label">{t("kiosk.now.fan")}</span>
+          <div className="d-fan-head">
+            <span className="d-section-label">{t("kiosk.now.fan")}</span>
+            {rpm != null && <span className="d-fan-rpm">{rpm.toLocaleString(lang)} rpm</span>}
+          </div>
           <div className="d-segment" role="radiogroup">
             {fanChoices.map((id) => (
               <button
@@ -172,7 +174,7 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
         {tdp?.supports_auto_tdp !== false && potencia.autoTdpEnabled && (
           <Toggle
             on={autoOn}
-            label={t("kiosk.deck.auto")}
+            label={t(levelUnit ? "kiosk.deck.autoLevel" : "kiosk.deck.autoTdp")}
             detail={autoOn ? t(`kiosk.now.auto.${power?.auto.state ?? "holding"}`) : t("kiosk.now.off")}
             icon={ICONS.auto}
             onPress={() => potencia.onAutoTdpToggle(!autoOn)}

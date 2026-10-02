@@ -46,6 +46,8 @@ export const de: Record<string, string> = {
   "kiosk.deck.turbo": "Turbo",
   "kiosk.deck.night": "Nacht",
   "kiosk.deck.watts": "Watt",
+  "kiosk.deck.autoLevel": "Auto-Stufe",
+  "kiosk.deck.autoTdp": "Auto-TDP",
   "kiosk.page.default": "Start",
   "nav.hud": "HUD",
   "nav.hud.desc": "Informationen und Layout der Spielanzeige.",
