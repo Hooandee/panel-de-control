@@ -85,3 +85,35 @@ def test_no_compat_tool_offers_nothing(tmp_path):
     # Native / non-Steam games (empty compat tool) get no Proton options.
     caps = detect_capabilities("", home=str(tmp_path))
     assert caps == {"envs": [], "found": False}
+
+
+def _write_system_proton(system_dir, folder, body):
+    d = os.path.join(system_dir, folder)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "proton"), "w") as f:
+        f.write(body)
+
+
+def test_reads_system_wide_compat_tool(tmp_path):
+    system_dir = str(tmp_path / "usr-share-steam-compat")
+    _write_system_proton(system_dir, "proton-cachyos-11.0-arm64", PROTON_BODY)
+    caps = detect_capabilities(
+        "proton-cachyos-11.0-arm64", home=str(tmp_path / "home"), system_dirs=(system_dir,),
+    )
+    assert caps["found"] is True
+    assert "PROTON_ENABLE_HDR" in caps["envs"]
+
+
+def test_user_compat_tool_wins_over_system_copy(tmp_path):
+    home = str(tmp_path / "home")
+    system_dir = str(tmp_path / "system")
+    _write_proton(home, "proton-cachyos", PROTON_BODY)
+    _write_system_proton(system_dir, "proton-cachyos", "# stripped system build")
+    caps = detect_capabilities("proton-cachyos", home=home, system_dirs=(system_dir,))
+    assert "PROTON_ENABLE_HDR" in caps["envs"]
+
+
+def test_arm64_builtin_never_reads_the_x86_build(tmp_path):
+    _write_builtin_proton(str(tmp_path), "Proton - Experimental", PROTON_BODY)
+    caps = detect_capabilities("proton-experimental-arm64", home=str(tmp_path), system_dirs=())
+    assert caps == {"envs": [], "found": False}
