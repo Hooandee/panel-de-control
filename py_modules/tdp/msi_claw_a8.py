@@ -13,12 +13,14 @@ class MsiClawA8FirmwareBackend(FirmwareAttrBackend):
         root="/",
         safety_lock_path=None,
         ownership_lock_path=None,
+        write_max_ac=None,
     ):
         super().__init__(
             "msi-wmi-platform",
             fallback,
             root=root,
             is_generic=True,
+            write_max_ac=write_max_ac,
             safety_lock_path=safety_lock_path,
             restore_on_release=True,
             ownership_lock_path=ownership_lock_path,

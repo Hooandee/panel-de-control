@@ -308,7 +308,9 @@ export function useTdp(): TdpControl {
     if (next.max_tdp !== undefined && next.max_tdp < (config.min_tdp ?? tdp.auto_request_limits.min)) {
       config.min_tdp = next.max_tdp;
     }
-    if (next.initial_tdp !== undefined || next.min_tdp !== undefined || next.max_tdp !== undefined) {
+    // Only a direct initial change is clamped and stored; moving min/max keeps the
+    // player's initial value, which the card and the controller clamp on their own.
+    if (next.initial_tdp !== undefined) {
       const range = effectiveAutoRange(config, tdp.auto_limits, tdp.on_ac);
       config.initial_tdp = Math.max(range.min, Math.min(config.initial_tdp, range.max));
     }

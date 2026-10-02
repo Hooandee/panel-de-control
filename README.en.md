@@ -55,6 +55,11 @@ save a global profile or a per-game one.
 - **Boost.** If your firmware allows it, you choose how the SPPT and FPPT rails behave: Stable
   (what you set is what it draws, the default), Auto (a managed boost margin) or Custom (tune the
   margins by hand).
+- **Extra range.** On the charger, the slider goes past the manufacturer's rated maximum up to 40 W
+  on AMD handhelds (120 W on Strix Halo, with its external cooling if it needs it), and down to 3 W,
+  like SimpleDeckyTDP. That part is marked in purple or light blue: Panel asks for the value, but
+  the firmware decides whether to accept it, and the dial shows what really applies. Presets and
+  Auto-TDP never leave the safe range.
 - **Low-battery TDP (experimental).** Keeps the value you selected when the battery reaches 20% or
   less. Off by default.
 - **GPU clock.** Set the minimum and maximum graphics clock.

@@ -23,7 +23,7 @@ from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
-from tdp.write_ceilings import charger_write_max, cooler_write_max
+from tdp.write_ceilings import charger_cooler_max, charger_write_max, cooler_write_max
 
 
 _RYZENADJ_ONLY_KEYS = frozenset({
@@ -73,6 +73,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "ownership-asus-armoury.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
 
     def lenovo():
@@ -91,6 +92,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            write_max_ac=charger_write_max(device),
             **lenovo_legion_firmware_attr_quirks(device, root),
             **legion_go_2_83n0_firmware_attr_quirks(device, root),
             **go_s_83l3,
@@ -110,6 +112,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "firmware-msi-wmi-platform.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
         if not is_msi_claw_8_ai_plus_a2vm(device, root) or not manual.supported:
             return manual
@@ -159,6 +162,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "ownership-asus-nb-wmi.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
 
     def dptc():
@@ -167,6 +171,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             root=root,
             write_max=cooler_write_max(device),
             write_max_ac=charger_write_max(device),
+            rail_max_ac=charger_cooler_max(device),
             safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
         )
@@ -177,6 +182,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             root=root,
             safety_lock_path=_runtime_lock_path(root, "firmware-msi-claw-a8.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-msi-claw-a8.lock"),
+            write_max_ac=charger_write_max(device),
         )
 
     def alib():
@@ -265,6 +271,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             ),
             power_only_retry=gpd_recovery,
             require_readback=strict_readback,
+            readback_fallback=device.key == "zotac_gaming_zone",
+            lock_experimental=bool(getattr(device, "experimental_tdp_max_ac", None)),
             safety_lock_path=_runtime_lock_path(
                 root,
                 f"ryzenadj-{device.key}.lock",

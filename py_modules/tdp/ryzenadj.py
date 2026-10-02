@@ -107,16 +107,21 @@ class RyzenadjBackend(TDPBackend):
                  write_max: int | None = None, write_max_ac: int | None = None,
                  power_only_retry: bool = False,
                  require_readback: bool = False,
+                 readback_fallback: bool = False,
+                 lock_experimental: bool = False,
                  allow_unverified_hold: bool = False,
                  unverified_hold_restore: dict[str, int] | None = None,
                  safety_lock_path: str | None = None,
                  hold_rail_floors: dict[str, int] | None = None):
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
+        self.manual_write_max_ac = self._write_limits.max_ac_w
         self._runner = runner
         self._bin = resolve()
         self._power_only_retry = power_only_retry
         self._require_readback = bool(require_readback)
+        self._readback_fallback = bool(readback_fallback)
+        self._lock_experimental = bool(lock_experimental)
         self._allow_unverified_hold = bool(allow_unverified_hold)
         self._unverified_hold_restore = (
             {
@@ -188,6 +193,9 @@ class RyzenadjBackend(TDPBackend):
         if snapshot is None and retry_initial and self._readback_state == "pending":
             time.sleep(0.05)
             snapshot = self._read_snapshot(require_zero_exit=True)
+        if snapshot is None and self._readback_fallback and self._readback_state == "pending":
+            self._write_without_readback()
+            return None
         if snapshot is None:
             self._readback_state = "circuit_open_initial"
             self._last_readback_failure = (
@@ -199,10 +207,27 @@ class RyzenadjBackend(TDPBackend):
             self._readback_state = "ready"
         return snapshot
 
+    def _is_experimental(self, target: int) -> bool:
+        # An opted-in experimental ceiling locks itself after a failed or interrupted
+        # write; the manual extra range just restores and reports the failure.
+        return self._lock_experimental and target > self._fallback.max_ac_w
+
+    def _write_without_readback(self) -> None:
+        # Some kernels let ryzenadj write but never read (no ryzen_smu, /dev/mem
+        # fallback). Only the first read decides; a later read failure still opens
+        # the circuit, because the limits were readable before.
+        self._require_readback = False
+        self._readback_state = "write_only"
+        self._last_readback_failure = "ryzenadj readback unavailable; writing without confirmation"
+        self._auto_readback = "unknown"
+        self.low_battery_hold_strategy = None
+        self.auto_tdp_safe = not self._power_only_retry
+
     def probe(self) -> bool:
         if not self._require_readback:
             return bool(self.supported)
-        return self._required_snapshot(retry_initial=True) is not None
+        snapshot = self._required_snapshot(retry_initial=True)
+        return snapshot is not None or not self._require_readback
 
     @property
     def probe_pending(self) -> bool:
@@ -222,7 +247,7 @@ class RyzenadjBackend(TDPBackend):
         target = self._write_limits.clamp(watts, on_ac=ac)
         if (
             self._readback_state == "recovery_pending"
-            and target > self._fallback.max_ac_w
+            and self._is_experimental(target)
         ):
             return TdpResult(
                 watts,
@@ -238,7 +263,7 @@ class RyzenadjBackend(TDPBackend):
             "detail": "ryzenadj transaction pending",
             "baseline": baseline,
             "target": target,
-            "experimental": target > self._fallback.max_ac_w,
+            "experimental": self._is_experimental(target),
         }
         if self._require_readback and not self._safety_lock.persist_payload(lock_payload):
             return TdpResult(
@@ -325,7 +350,7 @@ class RyzenadjBackend(TDPBackend):
                 watts,
                 baseline,
                 mismatch,
-                open_circuit=target > self._fallback.max_ac_w,
+                open_circuit=self._is_experimental(target),
             )
         return TdpResult(watts, applied, False, mismatch)
 
@@ -579,7 +604,7 @@ class RyzenadjBackend(TDPBackend):
                 watts,
                 baseline,
                 detail,
-                open_circuit=target > self._fallback.max_ac_w,
+                open_circuit=self._is_experimental(target),
             )
         if confirmed:
             return self._confirmed_result(watts, applied, target, detail)
