@@ -565,6 +565,7 @@ class Plugin:
         )
         self._powerstation_detector = powerstation_conflict.Detector()
         self._tdp_profile_sanitize_pending = False
+        self._tdp_profile_sanitize_max = None
         self._tdp_storage_migration_retry_at = 0.0
         # Preserve durable intent while a dynamic hardware ceiling is unreadable.
         _lim = self._profile_storage_limits()
@@ -3088,6 +3089,7 @@ class Plugin:
     def _restore_hhd_after_tdp_route_loss(self):
         if self._settings.get("hhd_tdp_prev") is None:
             return None
+        self._remember_hhd_takeover(False)
         previous = self._settings.get("tdp_control_enabled", True)
         self._settings["tdp_control_enabled"] = False
         try:
@@ -5153,6 +5155,9 @@ class Plugin:
             changed = self._tdp_profiles.sanitize(min_w, max_w)
         except OSError:
             self._tdp_profile_sanitize_pending = True
+            # A retry must not widen a correction asked for with a tighter ceiling.
+            pending = getattr(self, "_tdp_profile_sanitize_max", None)
+            self._tdp_profile_sanitize_max = max_w if pending is None else min(pending, max_w)
             self._tdp_storage_migration_retry_at = max(
                 self._tdp_storage_migration_retry_at,
                 _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S,
@@ -5162,6 +5167,7 @@ class Plugin:
             )
             return
         self._tdp_profile_sanitize_pending = False
+        self._tdp_profile_sanitize_max = None
         if changed:
             decky.logger.info("Corrected out-of-range stored TDP profiles")
 
@@ -5177,7 +5183,11 @@ class Plugin:
                 _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
             )
             return
-        self._sanitize_tdp_profiles(TDP_REQUEST_MIN_W, limits.max_ac_w)
+        pending_max = getattr(self, "_tdp_profile_sanitize_max", None)
+        self._sanitize_tdp_profiles(
+            TDP_REQUEST_MIN_W,
+            limits.max_ac_w if pending_max is None else min(pending_max, limits.max_ac_w),
+        )
         if not self._tdp_profile_sanitize_pending:
             self._tdp_storage_migration_retry_at = 0.0
 
@@ -5404,9 +5414,9 @@ class Plugin:
             minutes = round(sum(r["seconds"] for r in by_pl1.values()) / 60) if by_pl1 else 0
             # Manual sessions in the extra range are recorded too; a suggestion stays safe.
             safe = self._auto_request_limits()
-            for key in ("floor", "ceil", "seed"):
-                if band.get(key) is not None:
-                    band[key] = max(safe.min_w, min(int(band[key]), safe.max_ac_w))
+            for field in ("floor", "ceil", "seed"):
+                if band.get(field) is not None:
+                    band[field] = max(safe.min_w, min(int(band[field]), safe.max_ac_w))
             return {**band, "minutes": minutes, "target_minutes": tdp_suggest.MIN_MINUTES}
         except Exception:  # noqa: BLE001
             return unavail("error")
@@ -10459,7 +10469,9 @@ class Plugin:
             "supports_auto_tdp": self._auto_tdp_supported(),
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": self._cap_level_limits(
-                ll, self._active_max(safe_limits, ac), self._manual_boost(eff, self._current_appid)
+                self._tdp_backend.level_limits(),
+                self._active_max(safe_limits, ac),
+                self._manual_boost(eff, self._current_appid),
             ),
             "levels": levels,
             "requested_levels": requested_levels,

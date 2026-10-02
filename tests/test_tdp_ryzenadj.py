@@ -494,6 +494,7 @@ def test_rejected_experimental_ceiling_opens_until_explicit_safe_recovery():
         runner=fake,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
     )
 
     rejected = backend.set_tdp(55, ac=True)
@@ -535,6 +536,7 @@ def test_failed_safe_recovery_keeps_experimental_writes_circuit_broken():
         runner=fake,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
     )
 
     assert backend.set_tdp(55, ac=True).ok is False
@@ -569,6 +571,7 @@ def test_experimental_circuit_survives_reload_until_confirmed_safe_recovery(tmp_
         runner=rejected_run,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
         safety_lock_path=safety_lock_path,
     )
 
@@ -585,6 +588,7 @@ def test_experimental_circuit_survives_reload_until_confirmed_safe_recovery(tmp_
         runner=recovery_run,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
         safety_lock_path=safety_lock_path,
     )
     assert reloaded.supported is False
@@ -705,6 +709,7 @@ def test_interrupted_experimental_write_restores_baseline_but_stays_locked(
         runner=initial_run,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
         safety_lock_path=safety_lock_path,
     )
     monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
@@ -724,6 +729,7 @@ def test_interrupted_experimental_write_restores_baseline_but_stays_locked(
         runner=recovery_run,
         write_max_ac=55,
         require_readback=True,
+        lock_experimental=True,
         safety_lock_path=safety_lock_path,
     )
 
@@ -1357,3 +1363,24 @@ def test_strict_backend_without_fallback_still_opens_the_circuit():
 
     assert backend.probe() is False
     assert backend.safety_locked is True
+
+
+def test_a_rejected_extra_request_restores_without_locking_the_backend():
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    fake = ScriptedRun(
+        write_rcs=[0, 0, 0, 0],
+        infos=[_snapshot_info(35)] * 6,
+    )
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        write_max_ac=40,
+        require_readback=True,
+    )
+
+    rejected = backend.set_tdp(40, ac=True)
+
+    assert rejected.ok is False
+    assert backend.supported is True
+    assert backend.safety_locked is False

@@ -123,7 +123,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   // In the extra range the dial and the note already say the firmware decides.
   const showOwnership = (ownership.show || ownership.boostFloor || tdp.ownership.overshoot)
-    && !(zone !== null && (ownership.kind === "constrained" || ownership.kind === "rejected"));
+    && !(zone !== null && ["constrained", "rejected", "conflict"].includes(ownership.kind));
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
   const arcApplied = deckPptActive

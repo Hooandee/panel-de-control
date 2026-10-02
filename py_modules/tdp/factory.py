@@ -272,6 +272,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             power_only_retry=gpd_recovery,
             require_readback=strict_readback,
             readback_fallback=device.key == "zotac_gaming_zone",
+            lock_experimental=bool(getattr(device, "experimental_tdp_max_ac", None)),
             safety_lock_path=_runtime_lock_path(
                 root,
                 f"ryzenadj-{device.key}.lock",

@@ -1972,3 +1972,28 @@ def test_turning_the_cooler_off_brings_its_watts_back_to_the_safe_ceiling(Plugin
     asyncio.run(p.set_cooler_boost(False))
 
     assert p._tdp_profiles.effective(None)["pl1"] == 80
+
+
+def test_a_failed_cooler_correction_retries_with_the_safe_ceiling(Plugin, monkeypatch):
+    import main
+    import scoped_store
+
+    monkeypatch.setattr(main, "read_on_ac", lambda: True)
+    p = _plugin_on(Plugin, "onexplayer_apex", TdpLimits(5, 20, 55, 80))
+    asyncio.run(p.set_cooler_boost(True))
+    asyncio.run(p.set_tdp_watts(110, "global"))
+    original_save = scoped_store.atomic_json_save
+    blocked = [True]
+
+    def flaky_save(path, data):
+        if blocked[0] and path.endswith("tdp_profiles.json"):
+            raise OSError("disk unavailable")
+        return original_save(path, data)
+
+    monkeypatch.setattr(scoped_store, "atomic_json_save", flaky_save)
+    asyncio.run(p.set_cooler_boost(False))
+    blocked[0] = False
+    p._tdp_storage_migration_retry_at = 0.0
+    p._retry_tdp_storage_migrations()
+
+    assert p._tdp_profiles.effective(None)["pl1"] == 80
