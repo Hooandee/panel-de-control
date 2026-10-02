@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## [0.61.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.60.0...panel-de-control-v0.61.0) (2026-10-02)
+
+
+### Español
+
+* **TDP:** Con el cargador, el TDP manual ya puede pasar del máximo que da el fabricante: hasta 40 W en las consolas AMD y hasta 120 W en las Strix Halo (con su refrigeración externa si la necesitan). También puedes bajar hasta 3 W. Esa parte se marca en morado o en azul claro: Panel pide el valor, pero es el firmware el que decide si lo acepta, y el dial enseña siempre lo que se está aplicando de verdad. Los presets y el Auto-TDP siguen dentro del rango seguro.
+* **TDP:** La Zotac Zone vuelve a tener control de TDP en SteamOS.
+* **TDP:** Si le quitas el TDP a Handheld Daemon desde Panel, por ejemplo en la MSI Claw A8, ya no tienes que volver a hacerlo después de cada reinicio.
+* **Auto-TDP:** El TDP inicial ya no se mueve solo al cambiar el mínimo o el máximo.
+
+### English
+
+* **TDP:** On the charger, manual TDP can now go past the manufacturer's maximum: up to 40 W on AMD handhelds and up to 120 W on Strix Halo (with its external cooling if it needs it). You can also go down to 3 W. That part is marked in purple or light blue: Panel asks for the value, but the firmware decides whether to accept it, and the dial always shows what is really being applied. Presets and Auto-TDP stay inside the safe range.
+* **TDP:** The Zotac Zone has TDP control again on SteamOS.
+* **TDP:** If you take TDP over from Handheld Daemon in Panel, for example on the MSI Claw A8, you no longer have to do it again after every restart.
+* **Auto-TDP:** The initial TDP no longer moves on its own when you change the minimum or maximum.
+
+### Italiano
+
+* **TDP:** Con il caricatore, il TDP manuale ora può superare il massimo indicato dal produttore: fino a 40 W sulle console AMD e fino a 120 W sulle Strix Halo (con il loro raffreddamento esterno, se serve). Puoi anche scendere fino a 3 W. Quella parte è segnata in viola o in azzurro: Panel richiede il valore, ma è il firmware a decidere se accettarlo, e il quadrante mostra sempre ciò che viene applicato davvero. I preset e l'Auto-TDP restano nell'intervallo sicuro.
+* **TDP:** La Zotac Zone ha di nuovo il controllo del TDP su SteamOS.
+* **TDP:** Se togli il TDP a Handheld Daemon da Panel, per esempio sulla MSI Claw A8, non devi più rifarlo dopo ogni riavvio.
+* **Auto-TDP:** Il TDP iniziale non si sposta più da solo quando cambi il minimo o il massimo.
+
+### Deutsch
+
+* **TDP:** Am Ladegerät kann der manuelle TDP jetzt über das Maximum des Herstellers hinausgehen: bis 40 W auf AMD-Handhelds und bis 120 W auf Strix Halo (mit externer Kühlung, falls nötig). Nach unten geht es bis 3 W. Dieser Bereich ist lila oder hellblau markiert: Panel fordert den Wert an, aber die Firmware entscheidet, ob sie ihn annimmt, und die Anzeige zeigt immer, was wirklich angewendet wird. Presets und Auto-TDP bleiben im sicheren Bereich.
+* **TDP:** Die Zotac Zone hat unter SteamOS wieder TDP-Steuerung.
+* **TDP:** Wenn du Handheld Daemon in Panel den TDP abnimmst, zum Beispiel auf der MSI Claw A8, musst du das nicht mehr nach jedem Neustart wiederholen.
+* **Auto-TDP:** Der Start-TDP verschiebt sich nicht mehr von selbst, wenn du Minimum oder Maximum änderst.
+
+### Português (Brasil)
+
+* **TDP:** No carregador, o TDP manual agora pode passar do máximo que o fabricante indica: até 40 W nos portáteis AMD e até 120 W nos Strix Halo (com a refrigeração externa, se precisarem). Também dá para descer até 3 W. Essa parte fica marcada em roxo ou azul-claro: o Panel pede o valor, mas é o firmware que decide se aceita, e o mostrador sempre mostra o que está sendo aplicado de verdade. Os presets e o Auto-TDP continuam dentro da faixa segura.
+* **TDP:** O Zotac Zone voltou a ter controle de TDP no SteamOS.
+* **TDP:** Se você tirar o TDP do Handheld Daemon pelo Panel, por exemplo no MSI Claw A8, não precisa mais fazer isso de novo a cada reinício.
+* **Auto-TDP:** O TDP inicial não se mexe mais sozinho quando você muda o mínimo ou o máximo.
+
 ## [0.60.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.59.0...panel-de-control-v0.60.0) (2026-10-01)
 
 
