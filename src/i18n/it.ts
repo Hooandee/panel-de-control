@@ -48,7 +48,7 @@ export const it: Record<string, string> = {
   "hud.show.hint": "Pannello di controllo prova ad attivare il livello Steam necessario quando mostri l'HUD.",
   "hud.steam.hidden": "L'HUD è nascosto in Steam. Attivalo per mostrare questo design nel gioco.",
   "hud.steam.activate": "Attiva HUD di Steam",
-  "hud.steam.unavailable": "Non posso leggere l'impostazione di Steam. Attiva manualmente il livello 2 o superiore dell'overlay delle prestazioni.",
+  "hud.steam.unavailable": "Non è possibile leggere l'impostazione di Steam. Attiva manualmente il livello 2 o superiore dell'overlay delle prestazioni.",
   "hud.experimental.badge": "Sperimentale",
   "hud.reload": "Ricarica nel gioco",
   "hud.reload.busy": "Ricaricamento…",
