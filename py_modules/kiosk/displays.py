@@ -16,6 +16,21 @@ FIREFOX = "/usr/bin/firefox"
 
 Run = Callable[[list[str]], str]
 
+# FB_BLANK_POWERDOWN / FB_BLANK_UNBLANK for /sys/class/backlight/*/bl_power.
+BACKLIGHT_OFF = "4"
+BACKLIGHT_ON = "0"
+
+
+def set_backlight_power(backlight: str, on: bool, sys_root: str = "/sys/class/backlight") -> bool:
+    if not backlight or "/" in backlight or backlight.startswith("."):
+        return False
+    try:
+        with open(os.path.join(sys_root, backlight, "bl_power"), "w") as handle:
+            handle.write(BACKLIGHT_ON if on else BACKLIGHT_OFF)
+        return True
+    except OSError:
+        return False
+
 
 @dataclass(frozen=True)
 class SecondaryDisplay:
@@ -23,6 +38,7 @@ class SecondaryDisplay:
     connector: str
     touchscreen: str
     session: UserSession
+    backlight: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,4 +90,5 @@ def detect(
         session = None
     if session is None:
         return Detection(None, "no_session")
-    return Detection(SecondaryDisplay("armada-lease", connector, touchscreen, session), "ok")
+    backlight = env.get("ARMADA_SECONDARY_BACKLIGHT", "")
+    return Detection(SecondaryDisplay("armada-lease", connector, touchscreen, session, backlight), "ok")

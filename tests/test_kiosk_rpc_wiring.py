@@ -32,6 +32,7 @@ def test_kiosk_state_is_reported_without_side_effects(plugin):  # noqa: F811
         "running": False,
         "mechanism": None,
         "last_error": None,
+        "screen_off": False,
     }
 
 
@@ -52,3 +53,42 @@ def test_kiosk_game_name_comes_from_the_steam_library(plugin, tmp_path, monkeypa
     monkeypatch.setattr(main.kiosk_steam_game, "game_name", lambda home, appid: "Stardew Valley" if appid == "413150" else None)
     assert asyncio.run(plugin.get_kiosk_game("413150")) == {"appid": "413150", "name": "Stardew Valley"}
     assert asyncio.run(plugin.get_kiosk_game("1")) == {"appid": "1", "name": None}
+
+
+def test_steam_actions_report_failures_instead_of_raising(plugin, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    monkeypatch.setattr(main.decky, "emit", None, raising=False)
+    assert asyncio.run(plugin.kiosk_steam("brightness.get", [])) == {"ok": False, "error": "unsupported"}
+    assert asyncio.run(plugin.kiosk_steam("rm -rf", [])) == {"ok": False, "error": "unknown_action"}
+
+
+def test_kiosk_frame_rate_holds_the_reader_only_while_polled(plugin, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    events = []
+    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: events.append("start"))
+    monkeypatch.setattr(plugin._gamescope_stats, "stop", lambda: events.append("stop"))
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 58.0, "reason": "ok"})
+    now = [1000.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+
+    plugin._current_appid = None
+    assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 58.0, "reason": "ok", "playing_s": None}
+    assert events == ["start"]
+    asyncio.run(plugin._sync_auto_stats_reader(False))
+    assert events == ["start"]
+    now[0] += main._KIOSK_FPS_HOLD_S + 1
+    asyncio.run(plugin._sync_auto_stats_reader(False))
+    assert events == ["start", "stop"]
+
+
+def test_kiosk_session_time_counts_from_when_the_game_appeared(plugin, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": None, "reason": "no_game"})
+    monkeypatch.setattr(plugin, "_apply_stats_reader", lambda: asyncio.sleep(0))
+    now = [500.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+    plugin._set_current_appid("1145360")
+    now[0] += 4321.4
+    assert asyncio.run(plugin.get_kiosk_live())["playing_s"] == 4321
+    plugin._set_current_appid(None)
+    assert asyncio.run(plugin.get_kiosk_live())["playing_s"] is None

@@ -6,6 +6,7 @@ from kiosk.launcher import KioskLauncher, UNIT, launch_script
 from user_session import UserSession
 
 THOR_ENV = """ARMADA_DEVICE_ID=ayn-thor
+ARMADA_SECONDARY_BACKLIGHT=ae94000.dsi.0
 ARMADA_DEVICE_NAME=AYN\\ Thor
 ARMADA_SECONDARY_CONNECTOR=DSI-1
 ARMADA_SECONDARY_TOUCHSCREEN=bottom_touchscreen
@@ -32,7 +33,7 @@ def test_parses_armada_device_env_shell_quoting():
 def test_thor_in_game_mode_has_a_secondary_display(monkeypatch):
     monkeypatch.setattr(displays, "session_for_uid", lambda uid: SESSION if uid == 1000 else None)
     found = detect(exists=_exists(*ALL_PRESENT), owner_uid=lambda _p: 1000, run=lambda _a: THOR_ENV)
-    assert found == Detection(SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION), "ok")
+    assert found == Detection(SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION, "ae94000.dsi.0"), "ok")
 
 
 def test_every_missing_piece_has_its_own_reason(monkeypatch):
@@ -102,3 +103,15 @@ def test_failed_start_is_reported():
     ok, detail = launcher.start("http://127.0.0.1:1/?k=t")
     assert not ok
     assert "already exists" in detail
+
+
+def test_backlight_power_writes_blank_codes_and_refuses_paths(tmp_path):
+    from kiosk.displays import set_backlight_power
+
+    (tmp_path / "ae94000.dsi.0").mkdir()
+    assert set_backlight_power("ae94000.dsi.0", False, sys_root=str(tmp_path))
+    assert (tmp_path / "ae94000.dsi.0" / "bl_power").read_text() == "4"
+    assert set_backlight_power("ae94000.dsi.0", True, sys_root=str(tmp_path))
+    assert (tmp_path / "ae94000.dsi.0" / "bl_power").read_text() == "0"
+    assert not set_backlight_power("../../etc", False, sys_root=str(tmp_path))
+    assert not set_backlight_power("", False, sys_root=str(tmp_path))

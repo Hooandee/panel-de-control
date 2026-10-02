@@ -47,6 +47,7 @@ class KioskController:
         self._retry_at = 0.0
         self._retry_delay = RETRY_MIN_S
         self._last_error: str | None = None
+        self._screen_off = False
         self._lock = asyncio.Lock()
 
     def state(self) -> dict:
@@ -59,6 +60,7 @@ class KioskController:
             "running": self._running,
             "mechanism": self._detection.display.mechanism if self._detection.display else None,
             "last_error": self._last_error,
+            "screen_off": self._screen_off,
         }
 
     async def set_enabled(self, enabled: bool) -> dict:
@@ -114,7 +116,21 @@ class KioskController:
             self._last_error = detail or "start_failed"
             self._journal("WARNING", "launch_failed", detail=self._last_error)
 
+    async def set_screen_off(self, off: bool) -> dict:
+        display = self._detection.display
+        if display is None or not display.backlight:
+            return self.state()
+        if await asyncio.to_thread(displays.set_backlight_power, display.backlight, not off):
+            self._screen_off = bool(off)
+            self._journal("INFO", "screen_off" if off else "screen_on")
+        else:
+            self._journal("WARNING", "backlight_failed", backlight=display.backlight)
+        return self.state()
+
     async def _stop(self) -> None:
+        if self._screen_off and self._detection.display is not None:
+            await asyncio.to_thread(displays.set_backlight_power, self._detection.display.backlight, True)
+            self._screen_off = False
         if self._launcher is not None:
             launcher, self._launcher = self._launcher, None
             ok, detail = await asyncio.to_thread(launcher.stop)

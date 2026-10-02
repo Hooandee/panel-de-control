@@ -144,3 +144,17 @@ def test_refresh_reports_availability_without_launching():
     state = asyncio.run(controller.refresh())
     assert (state["supported"], state["available"], state["running"]) == (True, True, False)
     assert launchers == []
+
+
+def test_screen_off_turns_back_on_when_the_kiosk_stops(monkeypatch):
+    from kiosk import displays as display_module
+
+    calls = []
+    monkeypatch.setattr(display_module, "set_backlight_power", lambda bl, on: calls.append((bl, on)) or True)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, journal, _ = _controller([Detection(lit, "ok")])
+    asyncio.run(controller.tick())
+    assert asyncio.run(controller.set_screen_off(True))["screen_off"] is True
+    asyncio.run(controller.set_enabled(False))
+    assert calls == [("ae94000.dsi.0", False), ("ae94000.dsi.0", True)]
+    assert ("INFO", "screen_off", {}) in journal

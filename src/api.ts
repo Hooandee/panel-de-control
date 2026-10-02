@@ -94,10 +94,21 @@ export interface KioskState {
   running: boolean;
   mechanism: string | null;
   last_error: string | null;
+  screen_off?: boolean;
 }
 export const getKioskState = callable<[], KioskState>("get_kiosk_state");
 export const setKioskEnabled = callable<[enabled: boolean], KioskState>("set_kiosk_enabled");
 export const getKioskGame = callable<[appid: string], { appid: string; name: string | null }>("get_kiosk_game");
+export type KioskSteamReply<T = unknown> = { ok: true; result: T } | { ok: false; error: string };
+export const kioskSteam = callable<[action: string, args: unknown[]], KioskSteamReply>("kiosk_steam");
+export const kioskSteamResult = callable<[requestId: number, ok: boolean, result: unknown], boolean>("kiosk_steam_result");
+export interface KioskLive {
+  fps: number | null;
+  reason: string | null;
+  playing_s: number | null;
+}
+export const getKioskLive = callable<[], KioskLive>("get_kiosk_live");
+export const setKioskScreenOff = callable<[off: boolean], KioskState>("set_kiosk_screen_off");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
