@@ -175,7 +175,7 @@ const Deck: FC<{ live: Live }> = ({ live }) => {
         {tdp?.supports_auto_tdp !== false && potencia.autoTdpEnabled && (
           <Toggle
             on={autoOn}
-            label={t(levelUnit ? "kiosk.deck.autoLevel" : "kiosk.deck.autoTdp")}
+            label={t("kiosk.deck.auto")}
             detail={autoOn ? t(`kiosk.now.auto.${power?.auto.state ?? "holding"}`) : t("kiosk.now.off")}
             icon={ICONS.auto}
             onPress={() => potencia.onAutoTdpToggle(!autoOn)}

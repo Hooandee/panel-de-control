@@ -46,8 +46,6 @@ export const ptBR: Record<string, string> = {
   "kiosk.deck.turbo": "Turbo",
   "kiosk.deck.night": "Noite",
   "kiosk.deck.watts": "Watts",
-  "kiosk.deck.autoLevel": "Nível auto",
-  "kiosk.deck.autoTdp": "TDP auto",
   "kiosk.page.default": "Início",
   "nav.hud": "HUD",
   "nav.hud.desc": "Informações e layout da interface durante o jogo.",
