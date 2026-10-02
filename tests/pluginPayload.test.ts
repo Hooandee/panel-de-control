@@ -33,6 +33,8 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
   write(resolve(root, "dist/index.js.map"), "/Users/private/source.ts\n");
   write(resolve(root, "assets/private.css"), "body {}\n");
   write(resolve(root, "assets/private.woff2"), "private font\n");
+  write(resolve(root, "dist/kiosk/inter.woff2"), "kiosk font\n");
+  write(resolve(root, "dist/kiosk/private.woff2"), "private font\n");
   write(resolve(root, "assets/theme.zip"), "private archive\n");
   write(resolve(root, "assets/theme-packages/panel-extension.js"), "private runtime\n");
   write(resolve(root, "themes/private/theme.json"), "{}\n");
@@ -88,9 +90,10 @@ describe("plugin release payload", () => {
     ]));
     expect(files(output).some((path) => /(?:^|\/)__pycache__(?:\/|$)|\.(?:pyc|pyo|map)$/.test(path)))
       .toBe(false);
+    expect(files(output)).toContain("dist/kiosk/inter.woff2");
     expect(files(output).some((path) =>
       /(?:^|\/)(?:themes|theme-packages|\.theme-private)(?:\/|$)/.test(path)
-      || /\.(?:css|otf|ttf|woff2?|zip)$/.test(path)
+      || (/\.(?:css|otf|ttf|woff2?|zip)$/.test(path) && path !== "dist/kiosk/inter.woff2")
       || path.endsWith("panel-extension.js")))
       .toBe(false);
     expect(files(output).some((path) =>

@@ -20,19 +20,22 @@ const PowerMonitorFallback: FC = () => {
 };
 
 export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
-  const views = useViews();
+  const view = useViews().find((v) => v.id === viewId);
+  return <BlocksView blockIds={view?.blocks ?? []} />;
+};
+
+export const BlocksView: FC<{ blockIds: readonly string[] }> = ({ blockIds }) => {
   const disabled = useModules();
   const desktopMode = !!useDesktopState().state?.enabled;
-  const view = views.find((v) => v.id === viewId);
   // Drop blocks whose section module is off. Potencia is the exception (mirrors the
   // shell): master-off means monitor-only, not gone, so its blocks stay.
   const blocks = useMemo(
-    () => (view?.blocks ?? []).filter((id) => {
+    () => blockIds.filter((id) => {
       if (!blockAvailableInMode(id, desktopMode)) return false;
       const sid = getBlockDef(id)?.sectionId;
       return !sid || sid === POWER_TAB || effectiveEnabled(sid, disabled);
     }),
-    [view, disabled, desktopMode],
+    [blockIds, disabled, desktopMode],
   );
 
   const sections = useMemo(

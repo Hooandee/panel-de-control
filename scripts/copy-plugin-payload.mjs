@@ -34,6 +34,9 @@ const FORBIDDEN_SUFFIXES = new Set([
   ".zip",
 ]);
 
+// Public, OFL-licensed font the kiosk page ships with (its license sits next to it).
+const ALLOWED_PAYLOAD_FILES = new Set(["dist/kiosk/inter.woff2"]);
+
 function fail(message) {
   throw new Error(message);
 }
@@ -46,6 +49,7 @@ function includePayloadPath(sourceRoot, sourcePath) {
   const segments = path.split(sep);
   if (segments.includes("__pycache__")) return false;
   if (segments.some((segment) => FORBIDDEN_DIRECTORIES.has(segment))) return false;
+  if (ALLOWED_PAYLOAD_FILES.has(segments.join("/"))) return true;
   const suffix = extname(path).toLowerCase();
   if (FORBIDDEN_SUFFIXES.has(suffix) || basename(path) === "panel-extension.js") return false;
   if (/\.(?:pyc|pyo|map)$/.test(basename(path))) return false;

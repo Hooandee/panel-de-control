@@ -140,6 +140,8 @@ from report import collector as report_collector
 from report import client as report_client
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
+from kiosk.controller import KioskController
+from kiosk.rpc import plugin_dispatch, public_rpc_methods
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -313,9 +315,24 @@ def _now_minutes() -> int:
     t = datetime.now()
     return t.hour * 60 + t.minute
 
+
+_KIOSK_STOP_TIMEOUT_S = 5.0
+
+
+def _plugin_dir() -> str:
+    return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
+
+
+def _kiosk_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "kiosk", event, **fields)
+
+
 DEFAULTS = {
     # Unit of the saved power values: "W" on PC, "level" on ARM.
     "tdp_unit": "W",
+    "kiosk_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -432,6 +449,13 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "state.json")
         )
         self._settings = self._store.load(DEFAULTS)
+        self._kiosk = KioskController(
+            os.path.join(_plugin_dir(), "dist", "kiosk"),
+            plugin_dispatch(self),
+            public_rpc_methods(self),
+            journal=_kiosk_journal,
+            enabled=bool(self._settings.get("kiosk_enabled")),
+        )
         self._os_id = osinfo.read_os_id()
         self._os_name = osinfo.read_os_name()
         self._platform = platform_support.describe(self._os_id)
@@ -1090,6 +1114,26 @@ class Plugin:
     async def get_launch_tools(self) -> dict:
         self._init()
         return dict(self._launch_tools)
+
+    async def get_kiosk_state(self) -> dict:
+        return await self._kiosk.refresh()
+
+    async def set_kiosk_enabled(self, enabled: bool) -> dict:
+        self._settings["kiosk_enabled"] = bool(enabled)
+        self._save()
+        return await self._kiosk.set_enabled(bool(enabled))
+
+    async def _stop_kiosk(self) -> None:
+        task = getattr(self, "_kiosk_task", None)
+        if task is not None:
+            task.cancel()
+        kiosk = getattr(self, "_kiosk", None)
+        if kiosk is None:
+            return
+        try:
+            await asyncio.wait_for(kiosk.shutdown(), _KIOSK_STOP_TIMEOUT_S)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Kiosk shutdown incomplete: %s", error)
 
     async def get_proton_caps(self, compat_name: str = "") -> dict:
         """Which launch-option vars the installed Proton build supports."""
@@ -12199,6 +12243,7 @@ class Plugin:
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -12207,6 +12252,7 @@ class Plugin:
     async def _unload(self) -> None:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        await self._stop_kiosk()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
@@ -12398,6 +12444,7 @@ class Plugin:
             "telemetry_enabled": self._settings.get("telemetry_enabled"),
             "fan_experimental": self._settings.get("fan_experimental"),
             "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
+            "kiosk_enabled": self._settings.get("kiosk_enabled"),
         }
 
     async def _support_call(self, name: str):

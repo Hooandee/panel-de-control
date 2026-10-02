@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../dist/kiosk",
+    "rootDir": "..",
+    "paths": {
+      "@decky/ui": ["./src/shims/deckyUi.tsx"],
+      "@decky/api": ["./src/shims/deckyApi.ts"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["../src/**/*.test.ts", "../src/**/*.test.tsx", "../node_modules"]
+}

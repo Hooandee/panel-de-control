@@ -55,6 +55,7 @@ jobs:
               - ".github/workflows/ci.yml"
               - ".github/workflows/prerelease.yml"
               - "src/**"
+              - "kiosk/**"
               - "tests/*.ts"
               - "tests/**/*.ts"
               - "scripts/*.mjs"
@@ -140,4 +141,4 @@ jobs:
         run: pnpm build
       - name: Verify build output exists
         if: needs.changes.outputs.frontend == 'true'
-        run: test -f dist/index.js
+        run: test -f dist/index.js && test -f dist/kiosk/kiosk.js && test -f dist/kiosk/inter.woff2
