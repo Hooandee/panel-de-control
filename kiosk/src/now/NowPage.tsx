@@ -109,7 +109,7 @@ const Hero: FC<{ game: RunningGame | null; fps: number | null }> = ({ game, fps 
 };
 
 export const NowPage: FC<{ live: Live; game: RunningGame | null }> = ({ live, game }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const power = powerReading(live.tdp, live.power);
   const temp = hottest(live.fans);
   const gpu = live.power?.gpu_busy ?? null;
@@ -183,11 +183,11 @@ export const NowPage: FC<{ live: Live; game: RunningGame | null }> = ({ live, ga
         <div className="k-card k-tile k-reveal" style={{ "--i": 3 } as CSSProperties}>
           <span className="k-rings-caption">{t("kiosk.now.fan")}</span>
           <div className="k-tile-value">
-            <svg className="k-fan" viewBox="0 0 24 24" aria-hidden style={{ animationDuration: rpm ? `${Math.max(0.3, 2400 / rpm)}s` : "0s" }}>
+            <svg className="k-fan" viewBox="0 0 24 24" aria-hidden>
               <circle cx="12" cy="12" r="1.6" />
               <path d="M12 10.4c-.4-3 .3-6.4 3-6.9 2.4-.4 3.4 2.6 1.2 4.3-1.2.9-2.7 1.7-4.2 2.6zM13.6 12c3-.4 6.4.3 6.9 3 .4 2.4-2.6 3.4-4.3 1.2-.9-1.2-1.7-2.7-2.6-4.2zM12 13.6c.4 3-.3 6.4-3 6.9-2.4.4-3.4-2.6-1.2-4.3 1.2-.9 2.7-1.7 4.2-2.6zM10.4 12c-3 .4-6.4-.3-6.9-3-.4-2.4 2.6-3.4 4.3-1.2.9 1.2 1.7 2.7 2.6 4.2z" />
             </svg>
-            <b>{rpm != null ? rpm.toLocaleString() : "—"}</b>
+            <b>{rpm != null ? rpm.toLocaleString(lang) : "—"}</b>
             {rpm != null && <small>rpm</small>}
           </div>
         </div>

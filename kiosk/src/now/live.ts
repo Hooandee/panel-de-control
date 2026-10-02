@@ -20,10 +20,10 @@ export interface Live {
 }
 
 const EVERY: Array<[keyof Live, () => Promise<unknown>, number]> = [
-  ["power", getPowerDraw, 1000],
-  ["fans", getFanState, 2000],
-  ["battery", getBatteryState, 5000],
-  ["tdp", getTdpState, 3000],
+  ["power", getPowerDraw, 2000],
+  ["fans", getFanState, 4000],
+  ["battery", getBatteryState, 15000],
+  ["tdp", getTdpState, 5000],
 ];
 
 export function useLive(): Live {

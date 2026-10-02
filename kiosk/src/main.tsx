@@ -28,7 +28,7 @@ document.head.appendChild(style);
 fitToScreen();
 window.addEventListener("resize", fitToScreen);
 
-const PREFS_SYNC_MS = 5000;
+const PREFS_SYNC_MS = 10_000;
 
 becomePrefsFollower();
 
