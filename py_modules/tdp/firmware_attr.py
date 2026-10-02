@@ -98,8 +98,7 @@ class FirmwareAttrBackend(TDPBackend):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
         self._fallback = fallback
-        self._write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
-        self.manual_write_max_ac = self._write_max_ac
+        self.manual_write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
@@ -823,8 +822,7 @@ class FirmwareAttrBackend(TDPBackend):
         return mx
 
     def _write_rail_max(self, attr):
-        """Write ceiling: the rail's own ceiling, raised to the manual extra range."""
-        return max(self._profile_rail_max(attr), self._write_max_ac)
+        return max(self._profile_rail_max(attr), self.manual_write_max_ac)
 
     def _effective_live_max(self, rail, reported):
         if reported == self._ignored_live_maxes.get(rail):
@@ -833,12 +831,12 @@ class FirmwareAttrBackend(TDPBackend):
 
     def _clamp_live(self, value, attr, ac=False):
         mn, mx = self._live_bounds(attr)
-        safe_hi = self._write_rail_max(attr)
+        write_hi = self._write_rail_max(attr)
         rail = self._rail_for_attr(attr)
         live_hi = self._effective_live_max(rail, mx)
         if ac and self.probe_live_max_on_ac:
             live_hi = None
-        hi = min(live_hi if live_hi is not None else safe_hi, safe_hi)
+        hi = min(live_hi if live_hi is not None else write_hi, write_hi)
         live_lo = mn if mn is not None else self._fallback.min_w
         floor = self._rail_floors.get(rail, self._fallback.min_w)
         lo = min(hi, max(self._fallback.min_w, live_lo, floor))

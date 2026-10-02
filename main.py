@@ -358,8 +358,7 @@ DEFAULTS = {
     "seen_autotdp_notice": False,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
-    # The player chose Panel over HHD for TDP; taken back on every start until they turn
-    # Panel's TDP control off. HHD gets it back on unload, so the choice must outlive it.
+    # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
     "hhd_tdp_takeover": False,
     "steamdeck_ppt_previous": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
@@ -4033,8 +4032,7 @@ class Plugin:
         self._settings["cooler_boost"] = enabled
         self._save()
         if was_enabled and not enabled:
-            # Without the cooler a value set for it would now sit in the extra range;
-            # bring it back to the safe ceiling as the cooler switch always did.
+            # Otherwise a value set for the cooler would stay on as extra.
             self._sanitize_tdp_profiles(
                 TDP_REQUEST_MIN_W, self._safe_limits().max_ac_w
             )
@@ -5155,7 +5153,6 @@ class Plugin:
             changed = self._tdp_profiles.sanitize(min_w, max_w)
         except OSError:
             self._tdp_profile_sanitize_pending = True
-            # A retry must not widen a correction asked for with a tighter ceiling.
             pending = getattr(self, "_tdp_profile_sanitize_max", None)
             self._tdp_profile_sanitize_max = max_w if pending is None else min(pending, max_w)
             self._tdp_storage_migration_retry_at = max(
@@ -5192,7 +5189,6 @@ class Plugin:
             self._tdp_storage_migration_retry_at = 0.0
 
     def _safe_limits(self, overclock=None):
-        """Limits Panel de Control stands behind: `_limits` without the manual extra range."""
         return self._limits(overclock, extra=False)
 
     def _limits(self, overclock=None, *, extra=True):
@@ -5306,8 +5302,8 @@ class Plugin:
             self._tdp_backend.level_limits(),
             active,
             self._manual_boost(effective, appid),
-            self._safe_active_max(ac),
-            effective["pl1"],
+            safe_max=self._safe_active_max(ac),
+            pl1=effective["pl1"],
         )
         levels = self._clamp_levels(effective, limits, active, ll)
         if self._settings.get("eco_enabled"):
@@ -5323,8 +5319,7 @@ class Plugin:
         return effective.get("mode") == "custom" and not self._tdp_profiles.auto_tdp(appid)
 
     def _safe_active_max(self, ac: bool) -> int | None:
-        """Safe ceiling for the current power source, or None when the device has no
-        manual extra range (then the manual ceiling already is the safe one)."""
+        """None when the device has no manual extra range."""
         if extra_tdp_max_ac(self._device) is None or self._desktop_mode_on():
             return None
         return self._active_max(self._safe_limits(), ac)
@@ -5412,7 +5407,6 @@ class Plugin:
             by_pl1 = self._telemetry.aggregate(key)["by_pl1"]
             band = tdp_suggest.learned_band(by_pl1)
             minutes = round(sum(r["seconds"] for r in by_pl1.values()) / 60) if by_pl1 else 0
-            # Manual sessions in the extra range are recorded too; a suggestion stays safe.
             safe = self._auto_request_limits()
             for field in ("floor", "ceil", "seed"):
                 if band.get(field) is not None:
@@ -5734,8 +5728,8 @@ class Plugin:
             get_level_limits(),
             active,
             not auto_active and self._manual_boost(logical_requested, self._current_appid),
-            self._safe_active_max(ac),
-            logical_requested["pl1"],
+            safe_max=self._safe_active_max(ac),
+            pl1=logical_requested["pl1"],
         )
         for rail in requested:
             safe.setdefault(
@@ -10368,8 +10362,8 @@ class Plugin:
             self._tdp_backend.level_limits(),
             active,
             self._manual_boost(eff, self._current_appid),
-            safe_active,
-            eff["pl1"],
+            safe_max=safe_active,
+            pl1=eff["pl1"],
         )
         geff = self._tdp_profiles.effective(None)
         requested_levels = self._clamp_requested_levels(eff, active, ll)
@@ -10380,8 +10374,8 @@ class Plugin:
                 self._tdp_backend.level_limits(),
                 active,
                 self._manual_boost(geff, None),
-                safe_active,
-                geff["pl1"],
+                safe_max=safe_active,
+                pl1=geff["pl1"],
             ),
         )
         observation_backend = self._tdp_observation_backend()

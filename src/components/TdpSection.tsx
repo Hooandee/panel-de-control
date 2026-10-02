@@ -98,11 +98,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-  // The manual slider may go past it on the charger into the extra range.
   const sliderMax = manualCeiling(activeMax, tdp.on_ac, tdp.manual_max_ac);
   const isAutoOn = !monitorOnly && (power?.auto_tdp ?? false);
   const visualLimits = { ...tdp.limits, min: isAutoOn ? tdp.limits.min : requestMin };
-
   // Reference watts clamped to the active ceiling; the reset link shows only when
   // the current value differs from it.
   const resetTarget = resetWatts(tdp.limits.default, tdp.limits.min, activeMax);

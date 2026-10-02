@@ -29,8 +29,7 @@ class AsusNbWmiBackend(TDPBackend):
         write_max_ac: int | None = None,
     ) -> None:
         self._fallback = fallback
-        self._write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
-        self.manual_write_max_ac = self._write_max_ac
+        self.manual_write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
         base = os.path.join(root, _BASE)
         self._paths = {
             rail: os.path.join(base, node)
@@ -96,7 +95,7 @@ class AsusNbWmiBackend(TDPBackend):
         targets = {
             rail: max(
                 self._fallback.min_w,
-                min(int(requested[rail]), max(self._rail_max(rail), self._write_max_ac)),
+                min(int(requested[rail]), max(self._rail_max(rail), self.manual_write_max_ac)),
             )
             for rail in self._rails
         }
