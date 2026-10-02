@@ -216,3 +216,63 @@ describe("PowerArc Steam Deck PPT scale", () => {
     expect(container.querySelector('[data-testid="auto-tdp-halo"]')).toBeNull();
   });
 });
+
+describe("PowerArc extra range", () => {
+  afterEach(cleanup);
+
+  const limits = { min: 3, default: 17, max: 25, max_ac: 30 };
+  const gauge = (container: HTMLElement) =>
+    container.querySelector('[data-testid="tdp-gauge"]') as SVGPathElement;
+
+  it("paints a safe value exactly as before when an extra range exists", () => {
+    const plain = render(<PowerArc watts={20} limits={limits} onAc appliedWatts={20} />);
+    const before = gauge(plain.container).getAttribute("stroke");
+    cleanup();
+    const extended = render(
+      <PowerArc watts={20} limits={limits} onAc appliedWatts={20} safeMin={7} safeMax={30} manualMax={40} />,
+    );
+
+    expect(gauge(extended.container).getAttribute("stroke")).toBe(before);
+    expect(screen.queryByText("tdp.extra.label")).toBeNull();
+    expect(extended.container.querySelector('[data-testid="tdp-extra-fill"]')).toBeNull();
+  });
+
+  it("shows the applied value and what was requested when the firmware clamps", () => {
+    const { container } = render(
+      <PowerArc watts={36} limits={limits} onAc appliedWatts={30} safeMin={7} safeMax={30} manualMax={40} />,
+    );
+
+    expect(screen.getAllByText("30")).toHaveLength(2);
+    expect(screen.getByText("tdp.extra.requested")).toBeTruthy();
+    expect(screen.getByText("tdp.extra.label")).toBeTruthy();
+    expect(container.querySelector('[data-testid="tdp-extra-trail"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="tdp-safe-max"]')).not.toBeNull();
+  });
+
+  it("fills the accepted extra watts", () => {
+    const { container } = render(
+      <PowerArc watts={36} limits={limits} onAc appliedWatts={36} safeMin={7} safeMax={30} manualMax={40} />,
+    );
+
+    expect(container.querySelector('[data-testid="tdp-extra-fill"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="tdp-extra-trail"]')).toBeNull();
+  });
+
+  it("paints a request below the safe minimum in the low colour", () => {
+    const { container } = render(
+      <PowerArc watts={4} limits={limits} onAc appliedWatts={7} safeMin={7} safeMax={30} manualMax={40} />,
+    );
+
+    expect(gauge(container).getAttribute("stroke")).toBe("#8fd8ff");
+    expect(screen.getByText("tdp.extra.requested")).toBeTruthy();
+  });
+
+  it("never widens the arc on battery", () => {
+    const { container } = render(
+      <PowerArc watts={20} limits={limits} onAc={false} appliedWatts={20} safeMin={7} safeMax={25} manualMax={40} />,
+    );
+
+    expect(screen.getByText("30W ⚡")).toBeTruthy();
+    expect(container.querySelector('[data-testid="tdp-safe-max"]')).toBeNull();
+  });
+});

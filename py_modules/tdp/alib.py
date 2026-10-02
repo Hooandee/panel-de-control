@@ -81,6 +81,7 @@ class AlibBackend(TDPBackend):
                  write_max_ac: int | None = None) -> None:
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
+        self.manual_write_max_ac = self._write_limits.max_ac_w
         self._root = root
         self._call_path = os.path.join(root, _CALL_REL)
         self._modprobe = modprobe

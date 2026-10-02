@@ -39,7 +39,8 @@ export function resolveAutoView(
     if (liveApplies) {
       setpoint = power.auto?.held_watts ?? power.setpoint;
     } else if (hasGame) {
-      setpoint = config.initial_tdp;
+      const range = effectiveAutoRange(config, tdp.auto_limits, tdp.on_ac);
+      setpoint = Math.max(range.min, Math.min(config.initial_tdp, range.max));
     } else {
       const range = effectiveAutoRange(config, tdp.auto_limits, tdp.on_ac);
       setpoint = Math.max(range.min, Math.min(tdp.auto_request_limits.default, range.max));

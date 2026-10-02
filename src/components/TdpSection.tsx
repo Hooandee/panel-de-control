@@ -1,9 +1,9 @@
 import { PanelSectionRow, SliderField, Focusable, ToggleField } from "@decky/ui";
 import { FC, useCallback, useMemo } from "react";
-import { LuInfo } from "react-icons/lu";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts, offsetOf } from "../tdp/logic";
+import { extraZone, manualCeiling } from "../tdp/extraZone";
 import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
@@ -98,9 +98,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
+  const sliderMax = manualCeiling(activeMax, tdp.on_ac, tdp.manual_max_ac);
   const isAutoOn = !monitorOnly && (power?.auto_tdp ?? false);
   const visualLimits = { ...tdp.limits, min: isAutoOn ? tdp.limits.min : requestMin };
-  const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
   // Reference watts clamped to the active ceiling; the reset link shows only when
   // the current value differs from it.
   const resetTarget = resetWatts(tdp.limits.default, tdp.limits.min, activeMax);
@@ -110,15 +110,18 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const fwModes = tdp.firmware_modes ?? [];
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
-  const minimumMessage = isAutoOn || inFwMode
-    ? null
-    : view.watts < tdp.limits.min
-      ? t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })
-      : requestMin > 3 && view.watts === requestMin
-        ? t("tdp.minimum.floor", { min: requestMin })
-        : null;
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
+  const zone = isAutoOn || inFwMode ? null : extraZone(shownWatts, tdp.limits.min, activeMax);
+  const extraMessage = zone === "low"
+    ? t("tdp.extra.low", { min: tdp.limits.min })
+    : zone === "high"
+      ? t(tdp.extra_needs_accessory ? "tdp.extra.highAccessory" : "tdp.extra.high", { max: activeMax })
+      : null;
+  const atCeiling = zone === null && Math.min(view.watts, sliderMax) >= sliderMax;
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
+  // In the extra range the dial and the note already say the firmware decides.
+  const showOwnership = (ownership.show || ownership.boostFloor || tdp.ownership.overshoot)
+    && !(zone !== null && ["constrained", "rejected", "conflict"].includes(ownership.kind));
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
   const arcApplied = deckPptActive
@@ -173,9 +176,12 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
           overclocked={tdp.overclock?.detected ?? false}
+          safeMin={deckPptActive ? null : tdp.limits.min}
+          safeMax={deckPptActive ? null : activeMax}
+          manualMax={deckPptActive ? null : (tdp.manual_max_ac ?? null)}
         />
       </PanelSectionRow>
-      {(ownership.show || ownership.boostFloor || tdp.ownership.overshoot) && (
+      {showOwnership && (
         <PanelSectionRow>
           <TdpOwnershipStatus
             ownership={tdp.ownership}
@@ -188,9 +194,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
         <>
           <PanelSectionRow>
             <SliderField
-              value={Math.min(shownWatts, activeMax)}
+              value={Math.min(shownWatts, sliderMax)}
               min={requestMin}
-              max={activeMax}
+              max={sliderMax}
               step={1}
               showValue
               onChange={onWatts}
@@ -212,7 +218,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               />
             </PanelSectionRow>
           )}
-          {minimumMessage && (
+          {extraMessage && (
             <PanelSectionRow>
               <div style={{
                 display: "flex",
@@ -221,8 +227,15 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                 color: theme.color.textMuted,
                 fontSize: theme.font.caption,
               }}>
-                <LuInfo size={13} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{minimumMessage}</span>
+                <span aria-hidden style={{
+                  flexShrink: 0,
+                  width: 7,
+                  height: 7,
+                  marginTop: 4,
+                  borderRadius: "50%",
+                  background: zone === "low" ? theme.color.extraLow : theme.color.extra,
+                }} />
+                <span>{extraMessage}</span>
               </div>
             </PanelSectionRow>
           )}
