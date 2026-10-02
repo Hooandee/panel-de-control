@@ -231,7 +231,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       ppt: null,
     };
 
-    const { container } = render(
+    render(
       <TdpSection
         tdp={state}
         scope="global"
@@ -249,8 +249,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
     );
 
     expect(captured.slider).toMatchObject({ min: 3, value: 3 });
-    expect(screen.getByText("tdp.minimum.notice")).toBeTruthy();
-    expect(container.querySelector("svg")).not.toBeNull();
+    expect(screen.getByText("tdp.extra.low")).toBeTruthy();
     expect(captured.arc).toMatchObject({
       watts: 3,
       limits: { min: 3, default: 15, max: 33, max_ac: 40 },
@@ -285,14 +284,14 @@ describe("TdpSection Steam Deck PPT arc", () => {
       />,
     );
 
-    expect(screen.queryByText("tdp.minimum.notice")).toBeNull();
+    expect(screen.queryByText("tdp.extra.low")).toBeNull();
   });
 
-  it("explains an elevated firmware floor while that minimum is selected", () => {
-    renderTdpSection(elevatedFloorState);
+  it("explains a request below an elevated firmware floor", () => {
+    renderTdpSection({ ...elevatedFloorState, request_min: 3, watts: 3, global_watts: 3 });
 
-    expect(captured.slider).toMatchObject({ min: 20, value: 20 });
-    expect(screen.getByText("tdp.minimum.floor")).toBeTruthy();
+    expect(captured.slider).toMatchObject({ min: 3, value: 3 });
+    expect(screen.getByText("tdp.extra.low")).toBeTruthy();
   });
 
   const hiddenFirmwareFloorCases: Array<[
@@ -310,7 +309,43 @@ describe("TdpSection Steam Deck PPT arc", () => {
   it.each(hiddenFirmwareFloorCases)("hides the elevated firmware-floor explanation when %s", (_case, state, options) => {
     renderTdpSection(state, options);
 
-    expect(screen.queryByText("tdp.minimum.floor")).toBeNull();
+    expect(screen.queryByText("tdp.extra.low")).toBeNull();
+  });
+
+  const extraState = {
+    ...elevatedFloorState,
+    limits: { min: 7, default: 17, max: 25, max_ac: 30 },
+    request_min: 3,
+    manual_max_ac: 40,
+    on_ac: true,
+  } as TdpState;
+
+  it("lets the slider reach the extra range on the charger and explains it", () => {
+    renderTdpSection({ ...extraState, watts: 36, global_watts: 36 });
+
+    expect(captured.slider).toMatchObject({ max: 40, value: 36 });
+    expect(captured.arc).toMatchObject({ safeMin: 7, safeMax: 30, manualMax: 40 });
+    expect(screen.getByText("tdp.extra.high")).toBeTruthy();
+  });
+
+  it("asks for the external cooling on Strix Halo", () => {
+    renderTdpSection({ ...extraState, watts: 36, global_watts: 36, extra_needs_accessory: true });
+
+    expect(screen.getByText("tdp.extra.highAccessory")).toBeTruthy();
+  });
+
+  it("keeps the battery slider inside the safe range", () => {
+    renderTdpSection({ ...extraState, on_ac: false, watts: 20, global_watts: 20 });
+
+    expect(captured.slider).toMatchObject({ max: 25 });
+    expect(screen.queryByText("tdp.extra.high")).toBeNull();
+  });
+
+  it("shows no extra note inside the safe range", () => {
+    renderTdpSection({ ...extraState, watts: 20, global_watts: 20 });
+
+    expect(screen.queryByText("tdp.extra.high")).toBeNull();
+    expect(screen.queryByText("tdp.extra.low")).toBeNull();
   });
 
   it("shows physical power without an AutoTDP halo in monitor-only mode", () => {

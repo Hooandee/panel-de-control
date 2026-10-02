@@ -1,6 +1,7 @@
 import { FC } from "react";
 import { fraction, zoneFor, arcColor, boostWatts, boostEndFraction } from "../tdp/logic";
 import { ZONE_ICON } from "../tdp/zoneIcons";
+import { extraZone } from "../tdp/extraZone";
 import { TdpLimits } from "../api";
 import { theme } from "../theme";
 import { useI18n } from "../i18n";
@@ -27,11 +28,11 @@ function polar(deg: number): [number, number] {
   return polarAt(deg, R);
 }
 
-function arcPath(startDeg: number, endDeg: number): string {
-  const [x1, y1] = polar(startDeg);
-  const [x2, y2] = polar(endDeg);
+function arcPath(startDeg: number, endDeg: number, r = R): string {
+  const [x1, y1] = polarAt(startDeg, r);
+  const [x2, y2] = polarAt(endDeg, r);
   const large = endDeg - startDeg > 180 ? 1 : 0;
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
 interface PowerArcProps {
@@ -47,6 +48,11 @@ interface PowerArcProps {
   slowMarkerWatts?: number | null;
   fastMarkerWatts?: number | null;
   overclocked?: boolean;
+  // Range Panel de Control stands behind. A manual request outside it is shown as extra.
+  safeMin?: number | null;
+  safeMax?: number | null;
+  // Charger ceiling of the manual extra range; widens the arc past safeMax.
+  manualMax?: number | null;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -62,6 +68,9 @@ export const PowerArc: FC<PowerArcProps> = ({
   slowMarkerWatts = null,
   fastMarkerWatts = null,
   overclocked = false,
+  safeMin = null,
+  safeMax = null,
+  manualMax = null,
 }) => {
   const { t } = useI18n();
 
@@ -72,15 +81,26 @@ export const PowerArc: FC<PowerArcProps> = ({
   const targetOnly = !auto && appliedWatts === null && (
     baseMarkerWatts !== null || slowMarkerWatts !== null || fastMarkerWatts !== null
   );
-  const scaleMax = auto
+  const safeScaleMax = auto
     ? (onAc ? limits.max_ac : limits.max)
     : Math.max(limits.max_ac, visualMax ?? limits.max_ac);
+  const extraHigh = !auto && onAc && manualMax !== null && manualMax > safeScaleMax;
+  const scaleMax = extraHigh ? manualMax : safeScaleMax;
 
   const f = fraction(heroWatts, limits.min, scaleMax);
+  // Colour and zone stay relative to the safe range, so the extra range never shifts them.
+  const fSafe = fraction(heroWatts, limits.min, safeScaleMax);
   const gaugeFraction = auto ? Math.max(MIN_AUTO_GAUGE_FRACTION, f) : f;
-  const zone = zoneFor(f);
-  const color = auto ? autoArcColor(f) : arcColor(f);
+  const zone = zoneFor(fSafe);
+  const color = auto ? autoArcColor(f) : arcColor(fSafe);
   const ZoneIcon = ZONE_ICON[zone.key];
+  const extra = auto || safeMin === null || safeMax === null
+    ? null
+    : extraZone(targetWatts, safeMin, safeMax);
+  const extraColor = extra === "low" ? theme.color.extraLow : theme.color.extra;
+  const fSafeTop = fraction(safeScaleMax, limits.min, scaleMax);
+  const fSafeMin = safeMin === null ? 0 : fraction(safeMin, limits.min, scaleMax);
+  const lowTick = !auto && safeMin !== null && safeMin > limits.min;
 
   const fMax = fraction(limits.max, limits.min, scaleMax);
   const fMaxAc = fraction(limits.max_ac, limits.min, scaleMax);
@@ -108,7 +128,21 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [tx1, ty1] = polarAt(tickDeg, R - SW / 2 - 1);
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
   const targetDiverged = Math.round(markerWatts) !== Math.round(heroWatts);
-  const showTargetLabel = !auto && (targetDiverged || baseMarkerWatts !== null);
+  const showTargetLabel = !auto && extra === null && (targetDiverged || baseMarkerWatts !== null);
+  const realAboveSafe = extraHigh && heroWatts > safeScaleMax;
+  const baseFraction = realAboveSafe ? fSafeTop : gaugeFraction;
+  const baseColor = extra === "low" ? extraColor : color;
+  const trailRadius = R - SW / 2 - 6;
+  const [dotX, dotY] = polarAt(START + fTarget * SWEEP, trailRadius);
+  const boundTick = (frac: number) => {
+    const deg = START + frac * SWEEP;
+    const [x1, y1] = polarAt(deg, R - SW / 2 - 2);
+    const [x2, y2] = polarAt(deg, R + SW / 2 + 2);
+    const [lx2, ly2] = polarAt(deg, R + SW / 2 + 11);
+    return { x1, y1, x2, y2, lx: lx2, ly: ly2 };
+  };
+  const lowBound = lowTick ? boundTick(fSafeMin) : null;
+  const highBound = extraHigh ? boundTick(fSafeTop) : null;
   const targetLabelAtMinimum = showTargetLabel
     && Math.round(markerWatts) === Math.round(limits.min);
   const [lx, ly] = polarAt(tickDeg, R + SW / 2 + 10);
@@ -157,19 +191,52 @@ export const PowerArc: FC<PowerArcProps> = ({
         )}
         {/* Base fill: min → applied TDP. A single growing dash (offset 0) so the
             round cap can't bleed a dot onto the far end when f→0. */}
-        {gaugeFraction > 0 && (
+        {baseFraction > 0 && (
           <path
-            data-testid={auto ? "auto-tdp-gauge" : undefined}
+            data-testid={auto ? "auto-tdp-gauge" : "tdp-gauge"}
             d={fullArc}
             fill="none"
-            stroke={color}
+            stroke={baseColor}
             strokeWidth={SW}
             strokeLinecap="round"
             pathLength={1000}
-            strokeDasharray={`${1000 * gaugeFraction} 1000`}
-            style={{ transition: "stroke-dasharray 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${color})` }}
+            strokeDasharray={`${1000 * baseFraction} 1000`}
+            style={{ transition: "stroke-dasharray 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${baseColor})` }}
           />
         )}
+        {realAboveSafe && (
+          <path
+            data-testid="tdp-extra-fill"
+            d={arcPath(START + fSafeTop * SWEEP, START + f * SWEEP)}
+            fill="none"
+            stroke={theme.color.extra}
+            strokeWidth={SW}
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 7px ${theme.color.extra})` }}
+          />
+        )}
+        {extra !== null && targetDiverged && (
+          <>
+            <path
+              data-testid="tdp-extra-trail"
+              d={arcPath(START + Math.min(f, fTarget) * SWEEP, START + Math.max(f, fTarget) * SWEEP, trailRadius)}
+              fill="none"
+              stroke={extraColor}
+              strokeWidth={2.5}
+              strokeDasharray="2.5 3"
+              strokeLinecap="round"
+            />
+            <circle cx={dotX} cy={dotY} r={3} fill={extraColor} />
+          </>
+        )}
+        {[lowBound, highBound].map((bound, i) => bound && (
+          <g key={i} data-testid={i === 0 ? "tdp-safe-min" : "tdp-safe-max"}>
+            <line x1={bound.x1} y1={bound.y1} x2={bound.x2} y2={bound.y2} stroke="rgba(255,255,255,0.35)" strokeWidth={1.2} />
+            <text x={bound.lx} y={bound.ly + 3} fill={theme.color.textMuted} fontSize="8" textAnchor="middle">
+              {i === 0 ? safeMin : safeScaleMax}
+            </text>
+          </g>
+        ))}
         {boostEnd !== null && (
           <path
             d={arcPath(START + f * SWEEP, START + boostEnd * SWEEP)}
@@ -218,11 +285,16 @@ export const PowerArc: FC<PowerArcProps> = ({
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}W{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
+        {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={extra === null ? color : extraColor} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
           <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>
         </div>
+        {extra !== null && targetDiverged && (
+          <div style={{ fontSize: 10, color: extraColor, marginTop: 1 }}>
+            {t("tdp.extra.requested", { w: Math.round(markerWatts) })}
+          </div>
+        )}
         {targetOnly && (
           <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 1, letterSpacing: "0.08em" }}>
             {t("tdp.arc.target")}
@@ -263,7 +335,9 @@ export const PowerArc: FC<PowerArcProps> = ({
             {t("tdp.arc.auto")}
           </div>
         ) : (
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color, marginTop: overclocked ? 3 : undefined }}>{t(`tdp.zone.${zone.key}`)}</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: extra === null ? color : extraColor, marginTop: overclocked ? 3 : undefined }}>
+            {extra === null ? t(`tdp.zone.${zone.key}`) : t("tdp.extra.label")}
+          </div>
         )}
       </div>
     </div>
