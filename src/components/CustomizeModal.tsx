@@ -21,6 +21,7 @@ import { useViews, createView } from "../customize/viewStore";
 import { viewTabId, isViewTabId } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
+import { KioskViewsSetting } from "./KioskViewsSetting";
 import { openDisableModuleModal } from "./DisableModuleModal";
 import { useDesktopState } from "../desktop/useDesktop";
 import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
@@ -432,6 +433,8 @@ const CustomizeBody: FC = () => {
               <LuPlus size={16} /> <span style={{ fontSize: theme.font.body }}>{t("customize.views.new")}</span>
             </Focusable>
           </div>
+
+          <KioskViewsSetting />
 
           <div style={theme.sectionLabel}>{t("customize.appearance")}</div>
           <AccentPicker />
