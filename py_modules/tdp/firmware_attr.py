@@ -93,10 +93,12 @@ class FirmwareAttrBackend(TDPBackend):
         rearm_custom_on_ignored_writes=False,
         rearm_custom_on_unapplied_writes=False,
         firmware_handoff_profile=None,
+        write_max_ac=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
         self._fallback = fallback
+        self._write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
@@ -808,16 +810,16 @@ class FirmwareAttrBackend(TDPBackend):
 
     def _profile_rail_max(self, attr):
         """Recognised-device write ceiling for a rail, mirroring level_limits(): PL1 =
-        charger max, boost rails profile-scaled. The profile is the authority — not the
+        charger write max, boost rails profile-scaled and never below PL1. The profile is the authority — not the
         firmware's reported max, which some ASUS kernels report as a bogus 150 W."""
         mx = self._fallback.max_ac_w
         if self.cap_boost_to_active:
-            return mx
+            return self._write_max_ac
         if attr == "ppt_pl2_sppt":
-            return round(mx * _PL2_BOOST_RATIO)
+            return max(round(mx * _PL2_BOOST_RATIO), self._write_max_ac)
         if attr == "ppt_pl3_fppt":
-            return round(mx * _PL3_BOOST_RATIO)
-        return mx
+            return max(round(mx * _PL3_BOOST_RATIO), self._write_max_ac)
+        return self._write_max_ac
 
     def _effective_live_max(self, rail, reported):
         if reported == self._ignored_live_maxes.get(rail):

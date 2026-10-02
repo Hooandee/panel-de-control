@@ -73,6 +73,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "ownership-asus-armoury.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
 
     def lenovo():
@@ -91,6 +92,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            write_max_ac=charger_write_max(device),
             **lenovo_legion_firmware_attr_quirks(device, root),
             **legion_go_2_83n0_firmware_attr_quirks(device, root),
             **go_s_83l3,
@@ -110,6 +112,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "firmware-msi-wmi-platform.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
         if not is_msi_claw_8_ai_plus_a2vm(device, root) or not manual.supported:
             return manual
@@ -159,6 +162,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
                 root,
                 "ownership-asus-nb-wmi.lock",
             ),
+            write_max_ac=charger_write_max(device),
         )
 
     def dptc():
@@ -177,6 +181,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
             root=root,
             safety_lock_path=_runtime_lock_path(root, "firmware-msi-claw-a8.lock"),
             ownership_lock_path=_runtime_lock_path(root, "ownership-msi-claw-a8.lock"),
+            write_max_ac=charger_write_max(device),
         )
 
     def alib():

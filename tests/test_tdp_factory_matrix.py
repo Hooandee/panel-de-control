@@ -312,7 +312,7 @@ def test_bazzite_legion_go_2_keeps_ryzenadj_fallback(tmp_path):
     ]
 
 
-def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_cooler_headroom(tmp_path):
+def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_firmware_headroom(tmp_path):
     root = str(tmp_path)
     _mk_dptc(root)
     base = os.path.join(
@@ -333,7 +333,7 @@ def test_gpd_win5_dptc_keeps_safe_ceiling_and_exposes_cooler_headroom(tmp_path):
     assert backend.get_limits().max_w == 55
     assert backend.get_limits().max_ac_w == 55
     assert backend.level_limits() == {
-        "pl1": {"min": 5, "max": 75},
+        "pl1": {"min": 5, "max": 80},
         "pl2": {"min": 5, "max": 90},
         "pl3": {"min": 5, "max": 100},
     }
@@ -378,3 +378,48 @@ def test_anatase_dptc_never_passes_the_firmware_max(tmp_path):
 
     _apply_flat(backend, 120, ac=True)
     assert _dptc_pl1(root) == 90
+
+
+def _mk_firmware_with_max(root, provider, maximum):
+    _mk_firmware(root, provider)
+    base = os.path.join(root, "sys/class/firmware-attributes", provider, "attributes")
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _write(os.path.join(base, attr, "max_value"), maximum)
+
+
+def _firmware_pl1(root, provider):
+    path = os.path.join(root, "sys/class/firmware-attributes", provider,
+                        "attributes/ppt_pl1_spl/current_value")
+    with open(path) as handle:
+        return int(handle.read())
+
+
+def test_ally_x_armoury_writes_the_extra_range_up_to_the_firmware_max(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware_with_max(root, "asus-armoury", 200)
+    backend = select_backend(_profile("rog_ally_x"), root=root,
+                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
+
+    assert backend.get_limits().max_ac_w == 30
+    backend.apply_targets({"pl1": 40, "pl2": 40, "pl3": 40}, True)
+    assert _firmware_pl1(root, "asus-armoury") == 40
+
+
+def test_ally_x_armoury_extra_stops_at_the_firmware_max(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware_with_max(root, "asus-armoury", 30)
+    backend = select_backend(_profile("rog_ally_x"), root=root,
+                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
+
+    backend.apply_targets({"pl1": 40, "pl2": 40, "pl3": 40}, True)
+    assert _firmware_pl1(root, "asus-armoury") == 30
+
+
+def test_ally_legacy_wmi_accepts_the_extra_range(tmp_path):
+    root = str(tmp_path)
+    _mk_legacy_asus(root)
+    backend = select_backend(_profile("rog_ally"), root=root,
+                             ryzenadj_resolve=_no_ryzenadj, os_id="anatase")
+
+    assert backend.name == "asus-nb-wmi"
+    assert backend.level_limits()["pl1"]["max"] == 40

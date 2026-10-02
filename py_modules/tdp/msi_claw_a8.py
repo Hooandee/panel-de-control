@@ -13,12 +13,14 @@ class MsiClawA8FirmwareBackend(FirmwareAttrBackend):
         root="/",
         safety_lock_path=None,
         ownership_lock_path=None,
+        write_max_ac=None,
     ):
         super().__init__(
             "msi-wmi-platform",
             fallback,
             root=root,
             is_generic=True,
+            write_max_ac=write_max_ac,
             safety_lock_path=safety_lock_path,
             restore_on_release=True,
             ownership_lock_path=ownership_lock_path,
@@ -36,7 +38,7 @@ class MsiClawA8FirmwareBackend(FirmwareAttrBackend):
 
     def _profile_rail_max(self, attr):
         if attr == "ppt_pl2_sppt":
-            return 37
+            return max(37, self._write_max_ac)
         if attr == "ppt_pl3_fppt":
-            return 55
-        return self._fallback.max_ac_w
+            return max(55, self._write_max_ac)
+        return self._write_max_ac
