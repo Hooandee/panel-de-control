@@ -3,6 +3,8 @@
 Runs under the system python (not the plugin's) inside the nested compositor that armada-run-bottom
 starts. Next to a game that already fills the handheld's memory it costs a fraction of Firefox,
 whose idle footprint (about 650 MB on the AYN Thor) pushed the game into swap and stuttered it.
+GPU compositing is deliberate: painting the page in software took about 30 % of a core on the Thor
+while a game ran, against about 8 % on the GPU.
 Exits with status 3 when WebKitGTK is unavailable so the launcher can fall back to Firefox.
 """
 
@@ -31,9 +33,15 @@ def main(url: str) -> int:
             enable_webgl=False,
             enable_media=False,
             media_playback_requires_user_gesture=True,
-            hardware_acceleration_policy=WebKit.HardwareAccelerationPolicy.NEVER,
+            hardware_acceleration_policy=WebKit.HardwareAccelerationPolicy.ALWAYS,
         )
-        view = WebKit.WebView(settings=settings)
+        context = WebKit.WebContext()
+        context.set_cache_model(WebKit.CacheModel.DOCUMENT_VIEWER)
+        view = WebKit.WebView(
+            settings=settings,
+            web_context=context,
+            network_session=WebKit.NetworkSession.new_ephemeral(),
+        )
         view.load_uri(url)
         window = Gtk.ApplicationWindow(application=app, decorated=False)
         window.set_child(view)
