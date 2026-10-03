@@ -69,10 +69,12 @@ export const Header: FC<{ frame: LiveFrame; target: number | null; celsius: numb
             <small>{t("kiosk.header.temp")}</small>
           </div>
         )}
-        <div className="h-fps">
-          <b>{frame.fps == null ? "—" : Math.round(frame.fps)}</b>
-          <small>{target != null ? t("kiosk.header.target", { fps: target }) : "fps"}</small>
-        </div>
+        {frame.fps != null && (
+          <div className="h-fps">
+            <b>{Math.round(frame.fps)}</b>
+            <small>{target != null ? t("kiosk.header.target", { fps: target }) : "fps"}</small>
+          </div>
+        )}
       </div>
       {pace.line && (
         <svg className="h-pace" viewBox={`0 0 ${PACE_W} ${PACE_H}`} preserveAspectRatio="none" aria-hidden>
