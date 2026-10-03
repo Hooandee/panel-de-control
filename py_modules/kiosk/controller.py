@@ -63,6 +63,10 @@ class KioskController:
             "screen_off": self._screen_off,
         }
 
+    def secondary_connector(self) -> str | None:
+        display = self._detection.display
+        return display.connector if display else None
+
     async def set_enabled(self, enabled: bool) -> dict:
         self.enabled = bool(enabled)
         self._journal("INFO", "enabled" if self.enabled else "disabled")

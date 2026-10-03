@@ -218,6 +218,11 @@ class GamescopeStats:
             self._unread_sample_at = None
         return self._reading(focus, fps, fps_at)
 
+    def focus(self):
+        """gamescope's focused app id as it reported it ("steam", a number, or None)."""
+        with self._lock:
+            return self._focus
+
     def peek(self):
         """Latest frame rate without consuming the unread minimum Auto-TDP decides on."""
         with self._lock:

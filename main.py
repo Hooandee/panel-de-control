@@ -25,6 +25,7 @@ import decky
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
+from gamescope_perf import GamescopePerf
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -738,6 +739,10 @@ class Plugin:
         )
         self._power_reader = PowerReader()
         self._gamescope_stats = GamescopeStats()
+        self._gamescope_perf = GamescopePerf(
+            app_id=self._gamescope_focus_app,
+            skip_connectors=lambda: {c} if (c := self._kiosk.secondary_connector()) else set(),
+        )
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -1152,14 +1157,19 @@ class Plugin:
     async def get_kiosk_live(self) -> dict:
         self._kiosk_fps_at = time.monotonic()
         await self._apply_stats_reader()
-        reading = self._gamescope_stats.peek()
+        fps = self._gamescope_perf.fps()
+        if fps is not None:
+            reason = "ok"
+        else:
+            focus_reason = self._gamescope_stats.peek().get("reason")
+            reason = focus_reason if focus_reason not in (None, "ok") else "fps_unavailable"
         since = getattr(self, "_current_appid_at", None)
         playing_s = (
             round(time.monotonic() - since)
             if self._current_appid is not None and since is not None
             else None
         )
-        return {"fps": reading.get("fps"), "reason": reading.get("reason"), "playing_s": playing_s}
+        return {"fps": round(fps, 1) if fps is not None else None, "reason": reason, "playing_s": playing_s}
 
     async def get_kiosk_vitals(self) -> dict:
         self._init()
@@ -4245,12 +4255,28 @@ class Plugin:
         self._auto_stats_reader_active = bool(active)
         await self._apply_stats_reader()
 
+    def _gamescope_focus_app(self) -> int | None:
+        focus = self._gamescope_stats.focus()
+        if focus == "steam":
+            return None
+        if focus and focus.isdigit() and int(focus) > 0:
+            return int(focus)
+        current = getattr(self, "_current_appid", None)
+        return int(current) if current and str(current).isdigit() else None
+
     def _kiosk_wants_fps(self) -> bool:
         polled = getattr(self, "_kiosk_fps_at", None)
         return polled is not None and time.monotonic() - polled < _KIOSK_FPS_HOLD_S
 
     async def _apply_stats_reader(self):
-        wanted = bool(getattr(self, "_auto_stats_reader_active", False)) or self._kiosk_wants_fps()
+        kiosk = self._kiosk_wants_fps()
+        if kiosk != getattr(self, "_perf_reader_running", False):
+            self._perf_reader_running = kiosk
+            if kiosk:
+                self._gamescope_perf.start()
+            else:
+                await asyncio.to_thread(self._gamescope_perf.stop)
+        wanted = bool(getattr(self, "_auto_stats_reader_active", False)) or kiosk
         if wanted == getattr(self, "_stats_reader_running", False):
             return
         self._stats_reader_running = wanted

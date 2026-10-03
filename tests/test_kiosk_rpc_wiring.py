@@ -62,23 +62,49 @@ def test_steam_actions_report_failures_instead_of_raising(plugin, monkeypatch): 
     assert asyncio.run(plugin.kiosk_steam("rm -rf", [])) == {"ok": False, "error": "unknown_action"}
 
 
-def test_kiosk_frame_rate_holds_the_reader_only_while_polled(plugin, monkeypatch):  # noqa: F811
+def test_kiosk_frame_rate_holds_the_readers_only_while_polled(plugin, monkeypatch):  # noqa: F811
     main = sys.modules["main"]
     events = []
-    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: events.append("start"))
-    monkeypatch.setattr(plugin._gamescope_stats, "stop", lambda: events.append("stop"))
-    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 58.0, "reason": "ok"})
+    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: events.append("stats"))
+    monkeypatch.setattr(plugin._gamescope_stats, "stop", lambda: events.append("stats-stop"))
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 120.0, "reason": "ok"})
+    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: events.append("perf"))
+    monkeypatch.setattr(plugin._gamescope_perf, "stop", lambda: events.append("perf-stop"))
+    monkeypatch.setattr(plugin._gamescope_perf, "fps", lambda: 14.04)
     now = [1000.0]
     monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
 
     plugin._current_appid = None
-    assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 58.0, "reason": "ok", "playing_s": None}
-    assert events == ["start"]
+    assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 14.0, "reason": "ok", "playing_s": None}
+    assert events == ["perf", "stats"]
     asyncio.run(plugin._sync_auto_stats_reader(False))
-    assert events == ["start"]
+    assert events == ["perf", "stats"]
     now[0] += main._KIOSK_FPS_HOLD_S + 1
     asyncio.run(plugin._sync_auto_stats_reader(False))
-    assert events == ["start", "stop"]
+    assert events == ["perf", "stats", "perf-stop", "stats-stop"]
+
+
+def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_perf, "fps", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": None, "reason": "no_game_focus"})
+    assert asyncio.run(plugin.get_kiosk_live())["reason"] == "no_game_focus"
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 120.0, "reason": "ok"})
+    live = asyncio.run(plugin.get_kiosk_live())
+    assert (live["fps"], live["reason"]) == (None, "fps_unavailable")
+
+
+def test_focused_app_comes_from_gamescope_then_the_running_game(plugin, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(plugin._gamescope_stats, "focus", lambda: "812140")
+    assert plugin._gamescope_focus_app() == 812140
+    monkeypatch.setattr(plugin._gamescope_stats, "focus", lambda: "steam")
+    plugin._current_appid = "413150"
+    assert plugin._gamescope_focus_app() is None
+    monkeypatch.setattr(plugin._gamescope_stats, "focus", lambda: None)
+    assert plugin._gamescope_focus_app() == 413150
+    plugin._current_appid = "ns:abc"
+    assert plugin._gamescope_focus_app() is None
 
 
 def test_kiosk_session_time_counts_from_when_the_game_appeared(plugin, monkeypatch):  # noqa: F811
