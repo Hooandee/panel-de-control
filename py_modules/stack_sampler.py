@@ -34,8 +34,15 @@ def sample(seconds: float = 5.0, interval: float = 0.01, top: int = 15) -> dict:
                 counts[_frame_key(frame)] += 1
         samples += 1
         time.sleep(interval)
+    native = {thread.ident: (thread.native_id, thread.name) for thread in threading.enumerate()}
+    last = {
+        str(native.get(ident, (ident, "?"))[0]): f"{native.get(ident, (ident, '?'))[1]}: {_frame_key(frame)}"
+        for ident, frame in sys._current_frames().items()
+        if ident != me
+    }
     return {
         "seconds": seconds,
+        "by_thread": last,
         "samples": samples,
         "threads": threading.active_count(),
         "top": [{"stack": stack, "share": round(n / max(1, samples), 3)} for stack, n in counts.most_common(top)],
