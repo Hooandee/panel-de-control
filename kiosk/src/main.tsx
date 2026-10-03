@@ -21,8 +21,8 @@ const PREFS_SYNC_MS = 10_000;
 
 becomePrefsFollower();
 
-// Glanced at for hours next to a running game: shared hooks poll at a third of the QAM rate.
-setPollFactor(3);
+// Glanced at for hours next to a running game: shared hooks poll at a fifth of the QAM rate.
+setPollFactor(5);
 
 void followBackendPrefs().finally(() => {
   window.setInterval(() => void followBackendPrefs(), PREFS_SYNC_MS);

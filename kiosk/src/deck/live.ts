@@ -65,6 +65,6 @@ function subscribeFrame(listener: () => void): () => void {
 export const useLiveFrame = (): LiveFrame => useSyncExternalStore(subscribeFrame, () => frame);
 
 export const useBattery = () => usePoll<BatteryState>(getBatteryState, 15000)[0];
-export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 3000)[0];
+export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 5000)[0];
 
 export const artUrl = (appid: string, kind: "hero" | "logo") => `/art/${encodeURIComponent(appid)}/${kind}`;
