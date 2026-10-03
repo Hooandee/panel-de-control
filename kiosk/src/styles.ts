@@ -28,7 +28,8 @@ button:disabled { cursor: default; }
 .k-asleep { position: fixed; inset: 0; z-index: 50; background: #000; }
 
 .g-i { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.g-i.is-spin { animation: g-spin 2.6s linear infinite; }
+/* 15° steps: the four-blade fan still reads as turning, at ~9 repaints a second instead of 60. */
+.g-i.is-spin { animation: g-spin 2.6s steps(24) infinite; }
 @keyframes g-spin { to { transform: rotate(360deg); } }
 
 .h-head { position: absolute; left: 0; right: 0; top: 0; height: 200px; pointer-events: none; }
