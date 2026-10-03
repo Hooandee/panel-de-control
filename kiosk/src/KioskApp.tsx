@@ -35,9 +35,12 @@ export const KioskApp: FC = () => {
           </div>
         )}
       >
-        <PotenciaProviderMount>
-          <Deck onScreenOff={screen.sleep} />
-        </PotenciaProviderMount>
+        {/* With the panel off nothing is shown, so nothing is polled either. */}
+        {!screen.off && (
+          <PotenciaProviderMount>
+            <Deck onScreenOff={screen.sleep} />
+          </PotenciaProviderMount>
+        )}
       </PageBoundary>
       <Toasts />
       <ModalHost />
