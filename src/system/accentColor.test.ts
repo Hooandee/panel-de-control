@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ACCENTS, DEFAULT_ACCENT, resolveAccent, hexToRgbTriplet } from "./accentColor";
+import { ACCENTS, DEFAULT_ACCENT, THEME_ACCENT_ID, applyAccentId, applyThemeAccent, currentAccentHex, currentAccentRgb, parseRgbTriplet, resolveAccent, resolveAccentSelection, hexToRgbTriplet } from "./accentColor";
 
 describe("accent palette", () => {
   it("defaults to blue", () => {
@@ -37,5 +37,37 @@ describe("hexToRgbTriplet", () => {
 
   it("falls back to the blue triplet for a non-hex value", () => {
     expect(hexToRgbTriplet("var(--x)")).toBe("78,161,255");
+  });
+});
+
+describe("theme-driven default accent", () => {
+  it("parses rgb triplets in the forms themes write", () => {
+    expect(parseRgbTriplet("95, 242, 176")).toBe("95,242,176");
+    expect(parseRgbTriplet(" 255 118 84 ")).toBe("255,118,84");
+    expect(parseRgbTriplet("300, 0, 0")).toBeNull();
+    expect(parseRgbTriplet("#ff0000")).toBeNull();
+    expect(parseRgbTriplet("")).toBeNull();
+  });
+
+  it("treats an unset or unknown selection as default", () => {
+    expect(resolveAccentSelection(null)).toBe(THEME_ACCENT_ID);
+    expect(resolveAccentSelection("nope")).toBe(THEME_ACCENT_ID);
+    expect(resolveAccentSelection("green")).toBe("green");
+  });
+
+  it("follows the theme accent only while default is selected", () => {
+    applyAccentId(THEME_ACCENT_ID);
+    applyThemeAccent(null);
+    expect(currentAccentHex()).toBe(DEFAULT_ACCENT.hex);
+    applyThemeAccent("255, 118, 84");
+    expect(currentAccentHex()).toBe("#ff7654");
+    expect(currentAccentRgb()).toBe("255,118,84");
+    applyAccentId("green");
+    expect(currentAccentHex()).toBe(resolveAccent("green").hex);
+    applyThemeAccent("1, 2, 3");
+    expect(currentAccentHex()).toBe(resolveAccent("green").hex);
+    applyAccentId(THEME_ACCENT_ID);
+    expect(currentAccentHex()).toBe("#010203");
+    applyThemeAccent(null);
   });
 });

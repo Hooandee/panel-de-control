@@ -1,6 +1,6 @@
 import { FC, Fragment, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
-import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -12,7 +12,7 @@ import { resetHomeMode, updateShowHome } from "../customize/homePreference";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
 import { moduleState, isDisableableSection, sectionModuleDisabled } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
-import { ACCENTS } from "../system/accentColor";
+import { ACCENTS, DEFAULT_ACCENT, THEME_ACCENT_ID, themeAccentHex } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
 import { getBatteryState } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
@@ -70,32 +70,37 @@ const ExpansionRow: FC<{
   );
 };
 
+const AccentSwatch: FC<{ id: string; hex: string; on: boolean; label: string; children?: ReactNode }> = ({ id, hex, on, label, children }) => (
+  <Focusable
+    aria-label={label}
+    onActivate={() => setAccent(id)}
+    onClick={() => setAccent(id)}
+    style={{
+      width: 26, height: 26, borderRadius: 999, background: hex,
+      display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+      boxShadow: on ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${hex}` : `inset 0 0 0 1px ${theme.color.hairline}`,
+    }}
+  >
+    {on ? <LuCheck size={15} color="#fff" /> : children}
+  </Focusable>
+);
+
 const AccentPicker: FC = () => {
   const { t } = useI18n();
   const active = useAccent();
+  const followed = themeAccentHex() ?? DEFAULT_ACCENT.hex;
   return (
     <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
       <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
-        {ACCENTS.map((a) => {
-          const on = a.id === active.id;
-          return (
-            <Focusable
-              key={a.id}
-              aria-label={t(`accent.${a.id}`)}
-              onActivate={() => setAccent(a.id)}
-              onClick={() => setAccent(a.id)}
-              style={{
-                width: 26, height: 26, borderRadius: 999, background: a.hex,
-                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                boxShadow: on ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${a.hex}` : `inset 0 0 0 1px ${theme.color.hairline}`,
-              }}
-            >
-              {on && <LuCheck size={15} color="#fff" />}
-            </Focusable>
-          );
-        })}
+        <AccentSwatch id={THEME_ACCENT_ID} hex={followed} on={active.id === THEME_ACCENT_ID} label={t("accent.default")}>
+          <LuSparkles size={13} color="#fff" />
+        </AccentSwatch>
+        {ACCENTS.map((a) => (
+          <AccentSwatch key={a.id} id={a.id} hex={a.hex} on={a.id === active.id} label={t(`accent.${a.id}`)} />
+        ))}
       </div>
+      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.accentHint")}</span>
     </div>
   );
 };
