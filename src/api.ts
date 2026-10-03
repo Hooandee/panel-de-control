@@ -108,6 +108,15 @@ export interface KioskLive {
   playing_s: number | null;
 }
 export const getKioskLive = callable<[], KioskLive>("get_kiosk_live");
+export interface KioskVitals {
+  cpu_mhz: number | null;
+  gpu_mhz: number | null;
+  ram_used_gb: number | null;
+  ram_total_gb: number | null;
+  watts: number | null;
+  charging: boolean;
+}
+export const getKioskVitals = callable<[], KioskVitals>("get_kiosk_vitals");
 export const setKioskScreenOff = callable<[off: boolean], KioskState>("set_kiosk_screen_off");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");

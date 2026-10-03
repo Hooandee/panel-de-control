@@ -29,6 +29,8 @@ export const ptBR: Record<string, string> = {
   "settings.kiosk.noBrowser": "Falta o Firefox no sistema para usar a tela inferior.",
   "kiosk.header.playing": "Jogando · {time}",
   "kiosk.header.target": "fps · meta {fps}",
+  "kiosk.vitals.power": "Consumo",
+  "kiosk.vitals.charging": "Carga",
   "kiosk.header.temp": "Temp.",
   "kiosk.perf.auto": "Auto",
   "kiosk.perf.custom": "Personalizado",

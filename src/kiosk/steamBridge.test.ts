@@ -61,10 +61,27 @@ describe("kiosk Steam bridge handlers", () => {
       SetDisplayRefreshRateManualHz: vi.fn(),
     };
     const { handlers } = createBridgeHandlers(deps({ perfStore: () => store }));
-    expect(handlers["refresh.get"]([])).toEqual({ current: 120, min: 60, max: 120 });
+    expect(handlers["refresh.get"]([])).toEqual({ current: 120, min: 60, max: 120, settable: true });
     handlers["refresh.set"]([60]);
     expect(store.SetDisplayRefreshRateManualHz).toHaveBeenCalledWith(60);
     expect(() => handlers["refresh.set"]([144])).toThrow("bad_value");
+  });
+
+  it("shows the rate but refuses to switch when Steam does not manage it", () => {
+    const store = {
+      msgLimits: {
+        is_manual_display_refresh_rate_available: true,
+        display_refresh_manual_hz_min: 60,
+        display_refresh_manual_hz_max: 120,
+        disable_refresh_rate_management: true,
+      },
+      msgSettingsPerApp: { display_refresh_manual_hz: 120 },
+      SetDisplayRefreshRateManualHz: vi.fn(),
+    };
+    const { handlers } = createBridgeHandlers(deps({ perfStore: () => store }));
+    expect(handlers["refresh.get"]([])).toEqual({ current: 120, min: 60, max: 120, settable: false });
+    expect(() => handlers["refresh.set"]([60])).toThrow("unsupported");
+    expect(store.SetDisplayRefreshRateManualHz).not.toHaveBeenCalled();
   });
 
   it("says when a Steam feature is missing instead of pretending", () => {

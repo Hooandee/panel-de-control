@@ -17,7 +17,7 @@ import { GlassDialog, Hero, Orb, Orbs, Steps, usePresence, VFader } from "./Glas
 import { FAN_PRESET_ICON, FanIcon, ICON } from "./icons";
 import { Header } from "./Header";
 import { LightsDialog, LightsTile } from "./Lights";
-import { useFans, useLiveFrame } from "./live";
+import { useFans, useLiveFrame, useVitals } from "./live";
 import { SteamActionError, steamCall, useColores, useRefreshRate, useSteamScalar } from "./steam";
 
 type DialogId = "perf" | "fps" | "fan" | "hz" | "lights";
@@ -28,6 +28,38 @@ const PICK_CLOSE_MS = 380;
 const LiveFps: FC = () => {
   const { fps } = useLiveFrame();
   return <>{fps == null ? "— fps" : `${Math.round(fps)} fps`}</>;
+};
+
+const Vitals: FC = () => {
+  const { t, lang } = useI18n();
+  const vitals = useVitals();
+  const number = (value: number, digits: number) =>
+    value.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const items = [
+    { id: "cpu", label: "CPU", unit: "GHz", value: vitals?.cpu_mhz != null ? number(vitals.cpu_mhz / 1000, 2) : null },
+    { id: "gpu", label: "GPU", unit: "MHz", value: vitals?.gpu_mhz != null ? String(vitals.gpu_mhz) : null },
+    {
+      id: "pwr",
+      label: t(vitals?.charging ? "kiosk.vitals.charging" : "kiosk.vitals.power"),
+      unit: "W",
+      value: vitals?.watts != null ? number(vitals.watts, 1) : null,
+    },
+    { id: "ram", label: "RAM", unit: "GB", value: vitals?.ram_used_gb != null ? number(vitals.ram_used_gb, 1) : null },
+  ].filter((item) => item.value != null);
+  if (items.length === 0) return null;
+  return (
+    <dl className="t-vitals">
+      {items.map((item) => (
+        <div key={item.id}>
+          <dt>{item.label}</dt>
+          <dd>
+            {item.value}
+            <small>{item.unit}</small>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 };
 
 const Tile: FC<{
@@ -98,7 +130,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
   const fanChoices = FAN_CHOICES.filter((id) => fanPresets.has(id));
   const fanReady = Boolean(fan.state?.supported) && fanChoices.length > 1;
 
-  const hzChoices = refreshChoices(refresh.range);
+  const hzChoices = refresh.range?.settable === false ? [] : refreshChoices(refresh.range);
   const boost = cpu.state?.boost;
 
   return (
@@ -115,6 +147,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
             <div className="t-perf-name">{perfReady ? perfName : t("kiosk.unavailable")}</div>
             {perfDetail && <div className="t-perf-detail">{perfDetail}</div>}
           </div>
+          <Vitals />
           <div className="t-mini">
             {Array.from({ length: 10 }, (_, i) => <i key={i} className={i < lit ? "is-on" : undefined} />)}
           </div>

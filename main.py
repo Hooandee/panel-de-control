@@ -143,6 +143,7 @@ from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
+from kiosk import vitals as kiosk_vitals
 from kiosk.bridge import BridgeError, SteamBridge
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
@@ -1159,6 +1160,19 @@ class Plugin:
             else None
         )
         return {"fps": reading.get("fps"), "reason": reading.get("reason"), "playing_s": playing_s}
+
+    async def get_kiosk_vitals(self) -> dict:
+        self._init()
+
+        def read() -> dict:
+            battery = self._battery.read()
+            return {
+                **kiosk_vitals.read(),
+                "watts": battery.get("power_now_w"),
+                "charging": battery.get("status") == "Charging",
+            }
+
+        return await asyncio.to_thread(read)
 
     async def set_kiosk_screen_off(self, off: bool) -> dict:
         return await self._kiosk.set_screen_off(bool(off))

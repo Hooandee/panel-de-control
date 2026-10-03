@@ -29,6 +29,8 @@ export const it: Record<string, string> = {
   "settings.kiosk.noBrowser": "Manca Firefox nel sistema: lo schermo inferiore non si può usare.",
   "kiosk.header.playing": "In gioco · {time}",
   "kiosk.header.target": "fps · obiettivo {fps}",
+  "kiosk.vitals.power": "Consumo",
+  "kiosk.vitals.charging": "Carica",
   "kiosk.header.temp": "Temp.",
   "kiosk.perf.auto": "Auto",
   "kiosk.perf.custom": "Personalizzato",

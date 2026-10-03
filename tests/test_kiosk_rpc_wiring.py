@@ -98,3 +98,13 @@ def test_kiosk_stop_leaves_room_inside_deckys_unload_grace(plugin):  # noqa: F81
     main = sys.modules["main"]
     decky_sigkill_after_s = 5.0
     assert main._KIOSK_STOP_TIMEOUT_S <= decky_sigkill_after_s / 2
+
+
+def test_kiosk_vitals_join_clocks_with_the_battery_reading(plugin, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    monkeypatch.setattr(main.kiosk_vitals, "read", lambda: {"cpu_mhz": 2093, "gpu_mhz": 220, "ram_used_gb": 5.4, "ram_total_gb": 11.2})
+    monkeypatch.setattr(plugin._battery, "read", lambda: {"power_now_w": 8.7, "status": "Discharging"})
+    assert asyncio.run(plugin.get_kiosk_vitals()) == {
+        "cpu_mhz": 2093, "gpu_mhz": 220, "ram_used_gb": 5.4, "ram_total_gb": 11.2,
+        "watts": 8.7, "charging": False,
+    }

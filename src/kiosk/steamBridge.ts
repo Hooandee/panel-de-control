@@ -28,6 +28,7 @@ interface PerfStore {
     is_manual_display_refresh_rate_available?: boolean;
     display_refresh_manual_hz_min?: number;
     display_refresh_manual_hz_max?: number;
+    disable_refresh_rate_management?: boolean;
   };
   msgSettingsPerApp?: { display_refresh_manual_hz?: number };
   SetDisplayRefreshRateManualHz?: (hz: number) => unknown;
@@ -76,6 +77,8 @@ export function createBridgeHandlers(deps: BridgeDeps): { handlers: Record<strin
       current: store.msgSettingsPerApp?.display_refresh_manual_hz ?? null,
       min: limits.display_refresh_manual_hz_min ?? null,
       max: limits.display_refresh_manual_hz_max ?? null,
+      // Steam reports the range but will not switch modes (AYN Thor under gamescope 3.16).
+      settable: !limits.disable_refresh_rate_management,
       store,
     };
   };
@@ -93,12 +96,12 @@ export function createBridgeHandlers(deps: BridgeDeps): { handlers: Record<strin
     },
     "refresh.get": () => {
       const r = refresh();
-      return r ? { current: r.current, min: r.min, max: r.max } : null;
+      return r ? { current: r.current, min: r.min, max: r.max, settable: r.settable } : null;
     },
     "refresh.set": ([value]) => {
       const r = refresh();
       const hz = Math.round(Number(value));
-      if (!r?.store.SetDisplayRefreshRateManualHz || r.min == null || r.max == null) throw new Error("unsupported");
+      if (!r?.settable || !r.store.SetDisplayRefreshRateManualHz || r.min == null || r.max == null) throw new Error("unsupported");
       if (!Number.isFinite(hz) || hz < r.min || hz > r.max) throw new Error("bad_value");
       r.store.SetDisplayRefreshRateManualHz(hz);
       return true;

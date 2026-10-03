@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { BatteryState, FanState, getBatteryState, getFanState, getKioskLive } from "../../../src/api";
+import { BatteryState, FanState, getBatteryState, getFanState, getKioskLive, getKioskVitals, KioskVitals } from "../../../src/api";
 import { pushSample } from "./deckMath";
 
 /** Poll `read` every `everyMs` while mounted; failures keep the last value. */
@@ -63,5 +63,6 @@ export const useLiveFrame = (): LiveFrame => useSyncExternalStore(subscribeFrame
 
 export const useFans = () => usePoll<FanState>(getFanState, 2000)[0];
 export const useBattery = () => usePoll<BatteryState>(getBatteryState, 15000)[0];
+export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 2000)[0];
 
 export const artUrl = (appid: string, kind: "hero" | "logo") => `/art/${encodeURIComponent(appid)}/${kind}`;
