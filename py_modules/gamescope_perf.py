@@ -28,7 +28,8 @@ _REGISTRY_ID = 2
 _SYNC_ID = 3
 _CONTROL_ID = 4
 
-WINDOW_S = 1.0
+# Same window MangoHud uses (fps_sampling_period, 500 ms) so the overlay and the bottom screen agree.
+WINDOW_S = 0.5
 STALE_S = 2.0
 
 
@@ -212,7 +213,7 @@ class GamescopePerf:
             self._frames.clear()
 
     def fps(self) -> float | None:
-        """Frames per second over the last second for the focused app, None when nothing recent."""
+        """Frames per second over the last half second for the focused app, None when nothing recent."""
         app_id = self._app_id()
         now = self._clock()
         with self._lock:

@@ -20,7 +20,8 @@ export function usePoll<T>(read: () => Promise<T>, everyMs: number): [T | null, 
 }
 
 const FPS_HISTORY = 60;
-const FRAME_POLL_MS = 1000;
+// Matches the overlay's 500 ms refresh so both show the same number at the same moment.
+const FRAME_POLL_MS = 500;
 
 export interface LiveFrame {
   fps: number | null;
