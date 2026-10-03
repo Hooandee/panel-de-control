@@ -63,6 +63,9 @@ class KioskController:
             "screen_off": self._screen_off,
         }
 
+    def rpc_calls(self) -> dict[str, list[float]]:
+        return {name: list(tally) for name, tally in self._server.calls.items()}
+
     def session(self):
         display = self._detection.display
         return display.session if display else None

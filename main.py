@@ -1177,7 +1177,15 @@ class Plugin:
 
     async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
         """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""
-        return await asyncio.to_thread(stack_sampler.sample, seconds)
+        before = self._kiosk.rpc_calls()
+        result = await asyncio.to_thread(stack_sampler.sample, seconds)
+        after = self._kiosk.rpc_calls()
+        result["kiosk_calls"] = {
+            name: {"calls": int(count - before.get(name, [0, 0.0])[0]), "seconds": round(spent - before.get(name, [0, 0.0])[1], 3)}
+            for name, (count, spent) in after.items()
+            if count != before.get(name, [0, 0.0])[0]
+        }
+        return result
 
     async def get_kiosk_vitals(self) -> dict:
         self._init()

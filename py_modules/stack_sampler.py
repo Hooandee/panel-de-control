@@ -10,7 +10,7 @@ import threading
 import time
 
 MAX_SECONDS = 10.0
-DEPTH = 4
+DEPTH = 8
 
 
 def _frame_key(frame) -> str:

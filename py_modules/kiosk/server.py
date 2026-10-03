@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import secrets
+import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Iterable
 
@@ -50,6 +51,8 @@ class KioskServer:
         self.token = secrets.token_urlsafe(24)
         self.port: int | None = None
         self._server: asyncio.AbstractServer | None = None
+        # Per-method call counts and total seconds, for "what does the bottom screen cost".
+        self.calls: dict[str, list[float]] = {}
 
     @property
     def url(self) -> str | None:
@@ -155,11 +158,16 @@ class KioskServer:
             return _json(400, {"error": "bad_request"})
         if name not in self.allowed:
             return _json(404, {"error": "unknown_method"})
+        started = time.monotonic()
         try:
             result = await self.dispatch(name, args)
         except Exception as exc:  # noqa: BLE001
             self.on_error(name, f"{type(exc).__name__}: {exc}")
             return _json(500, {"error": type(exc).__name__})
+        finally:
+            tally = self.calls.setdefault(name, [0, 0.0])
+            tally[0] += 1
+            tally[1] += time.monotonic() - started
         try:
             return _json(200, {"result": result})
         except (TypeError, ValueError) as exc:
