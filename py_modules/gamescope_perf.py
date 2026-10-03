@@ -34,7 +34,7 @@ _REGISTRY_ID = 2
 _SYNC_ID = 3
 _CONTROL_ID = 4
 
-WINDOW_S = 1.0
+WINDOW_S = 2.0
 STALE_S = 2.0
 # Longest random wait before the next question; longer than a 30 fps frame keeps the phase uniform.
 ASK_JITTER_S = 0.05
@@ -226,7 +226,7 @@ class GamescopePerf:
             self._frames.clear()
 
     def fps(self) -> float | None:
-        """Frames per second over the last second for the focused app, None when nothing recent."""
+        """Frames per second over the last two seconds for the focused app, None when nothing recent."""
         app_id = self._app_id()
         now = self._clock()
         with self._lock:
