@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 from kiosk import displays
 from kiosk.displays import Detection, SecondaryDisplay, detect, parse_device_env
@@ -60,7 +61,8 @@ def test_launch_script_keeps_firefox_on_x11_with_touch():
     script = launch_script()
     assert "exec /usr/bin/armada-run-bottom -- /usr/bin/env -u WAYLAND_DISPLAY" in script
     assert "MOZ_ENABLE_WAYLAND=0 GDK_BACKEND=x11 MOZ_USE_XINPUT2=1" in script
-    assert '--kiosk --no-remote --profile "$HOME/.cache/panel-de-control/kiosk" "$PDC_KIOSK_URL"' in script
+    assert '--kiosk --no-remote --profile "$HOME/.cache/panel-de-control/kiosk" "$0"' in script
+    assert script.endswith('"$PDC_KIOSK_URL"')
 
 
 def test_launch_script_is_valid_shell():
@@ -130,3 +132,43 @@ def test_firefox_runs_one_content_process_and_nothing_in_the_background():
     for pref in ('"dom.ipc.processCount", 1', '"fission.autostart", false', '"dom.ipc.processPrelaunch.enabled", false',
                  '"browser.safebrowsing.malware.enabled", false', '"network.captive-portal-service.enabled", false'):
         assert pref in script
+
+
+def test_webkit_is_tried_first_and_firefox_only_as_fallback(tmp_path):
+    webview = tmp_path / "Panel de Control" / "webview.py"
+    script = launch_script(webview=str(webview))
+    inner = script.split("/bin/sh -c ", 1)[1]
+    assert inner.index("/usr/bin/python3") < inner.index("exec /usr/bin/firefox")
+    assert "Panel de Control/webview.py" in script
+
+
+def test_launch_script_falls_back_when_the_webview_fails(tmp_path):
+    # Swap the compositor and both browsers for stubs and run the real script.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "log"
+    (bin_dir / "run-bottom").write_text('#!/bin/sh\nshift\nexec "$@"\n')
+    (bin_dir / "firefox").write_text(f'#!/bin/sh\necho firefox "$@" >> {log}\n')
+    for path in bin_dir.iterdir():
+        path.chmod(0o755)
+    for webview_body, expected in (("import sys; sys.exit(3)", "firefox"), ("pass", None)):
+        webview = tmp_path / "webview.py"
+        webview.write_text(webview_body)
+        log.write_text("")
+        script = launch_script(webview=str(webview))
+        script = script.replace("/usr/bin/armada-run-bottom", str(bin_dir / "run-bottom")).replace(
+            "/usr/bin/firefox", str(bin_dir / "firefox")).replace("/usr/bin/python3", sys.executable)
+        env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+        subprocess.run(["sh", "-c", script], env=env, check=False, timeout=20)
+        content = log.read_text()
+        if expected:
+            assert "firefox --kiosk" in content and "http://127.0.0.1:1/?k=t" in content
+        else:
+            assert content == ""
+
+
+def test_webview_reports_a_missing_webkit_instead_of_crashing(monkeypatch):
+    from kiosk import webview
+
+    monkeypatch.setitem(sys.modules, "gi", None)
+    assert webview.main("http://127.0.0.1:1/") == webview.UNAVAILABLE
