@@ -150,7 +150,10 @@ def _ask(wire: _Wire, app_id: int) -> None:
 Emit = Callable[[float, int, int], None]
 
 
-def pump_frames(root: str, skip: set[str], app_id: Callable[[], int | None], emit: Emit, stopped: Callable[[], bool]) -> None:
+def pump_frames(
+    root: str, skip: set[str], app_id: Callable[[], int | None], emit: Emit, stopped: Callable[[], bool],
+    tick: Callable[[], None] = lambda: None,
+) -> None:
     """Ask for every frame of the app `app_id()` names until `stopped()`; reconnects as needed."""
     while not stopped():
         wire = _connect(root, skip)
@@ -161,6 +164,7 @@ def pump_frames(root: str, skip: set[str], app_id: Callable[[], int | None], emi
         asked_at = 0.0
         try:
             while not stopped():
+                tick()
                 current = app_id()
                 if not current:
                     asked_for = None
@@ -183,10 +187,16 @@ def pump_frames(root: str, skip: set[str], app_id: Callable[[], int | None], emi
         time.sleep(1.0)
 
 
+# The helper sums frames into short buckets so the plugin handles a few lines a second, not one per
+# frame: parsing every frame cost the plugin about 10 % of a core under emulation at 40 fps.
+FLUSH_S = 0.25
+
+
 def _child_main(argv: list[str]) -> None:
-    """stdin: one app id per line (0 = none); stdout: "<monotonic> <app id> <frametime ns>" per frame."""
+    """stdin: one app id per line (0 = none); stdout: "<monotonic> <app id> <frames> <total ns>" per bucket."""
     root, skip = argv[0], set(argv[1:])
     state = {"app": None, "closed": False}
+    bucket = {"app": None, "frames": 0, "total": 0, "since": time.monotonic()}
 
     def app_id() -> int | None:
         while select.select([sys.stdin], [], [], 0)[0]:
@@ -197,12 +207,28 @@ def _child_main(argv: list[str]) -> None:
             state["app"] = int(line) or None
         return state["app"]
 
+    def flush(at: float) -> None:
+        if bucket["frames"]:
+            sys.stdout.write(f"{at:.6f} {bucket['app']} {bucket['frames']} {bucket['total']}\n")
+            sys.stdout.flush()
+        bucket.update(frames=0, total=0, since=at)
+
     def emit(at: float, app: int, frametime_ns: int) -> None:
-        sys.stdout.write(f"{at:.6f} {app} {frametime_ns}\n")
-        sys.stdout.flush()
+        if app != bucket["app"]:
+            flush(at)
+            bucket["app"] = app
+        bucket["frames"] += 1
+        bucket["total"] += frametime_ns
+        if at - bucket["since"] >= FLUSH_S:
+            flush(at)
+
+    def tick() -> None:
+        now = time.monotonic()
+        if now - bucket["since"] >= FLUSH_S:
+            flush(now)
 
     try:
-        pump_frames(root, skip, app_id, emit, lambda: state["closed"])
+        pump_frames(root, skip, app_id, emit, lambda: state["closed"], tick)
     except (BrokenPipeError, KeyboardInterrupt):
         return
 
@@ -227,16 +253,16 @@ class GamescopePerf:
         self._python = python if python is not None else shutil.which("python3", path="/usr/bin:/bin")
         self._env = env
         self._wrap = wrap
-        self._frames: deque[tuple[float, int, int]] = deque()
+        self._frames: deque[tuple[float, int, int, int]] = deque()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process: subprocess.Popen | None = None
 
-    def _record(self, app_id: int, frametime_ns: int, at: float | None = None) -> None:
+    def _record(self, app_id: int, frametime_ns: int, at: float | None = None, frames: int = 1) -> None:
         now = self._clock() if at is None else at
         with self._lock:
-            self._frames.append((now, app_id, frametime_ns))
+            self._frames.append((now, app_id, frames, frametime_ns))
             while self._frames and now - self._frames[0][0] > WINDOW_S:
                 self._frames.popleft()
 
@@ -259,8 +285,8 @@ class GamescopePerf:
                 buffer += chunk
                 *lines, buffer = buffer.split(b"\n")
                 for line in lines:
-                    at, app, frametime_ns = line.split()
-                    self._record(int(app), int(frametime_ns), float(at))
+                    at, app, frames, total_ns = line.split()
+                    self._record(int(app), int(total_ns), float(at), int(frames))
         except (OSError, ValueError):
             return
 
@@ -317,11 +343,12 @@ class GamescopePerf:
         app_id = self._app_id()
         now = self._clock()
         with self._lock:
-            times = [ft for at, app, ft in self._frames if app == app_id and now - at <= WINDOW_S]
+            recent = [(n, ns) for at, app, n, ns in self._frames if app == app_id and now - at <= WINDOW_S]
             newest = self._frames[-1][0] if self._frames else None
-        if not times or newest is None or now - newest > STALE_S:
+        total_ns = sum(ns for _n, ns in recent)
+        if not recent or newest is None or now - newest > STALE_S or total_ns <= 0:
             return None
-        return frame_rate(times)
+        return sum(n for n, _ns in recent) * 1e9 / total_ns
 
     def diagnostics(self) -> dict:
         process = self._process

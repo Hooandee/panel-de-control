@@ -105,7 +105,7 @@ def test_keeps_asking_for_the_focused_app(short_root, python):
     perf.start()
     try:
         deadline = time.monotonic() + 3
-        while fake.requests.count(4242) < 4 and time.monotonic() < deadline:
+        while (fake.requests.count(4242) < 4 or perf.fps() is None) and time.monotonic() < deadline:
             time.sleep(0.05)
         assert fake.requests.count(4242) >= 4
         assert round(perf.fps()) == 14
