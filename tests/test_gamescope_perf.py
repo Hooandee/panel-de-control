@@ -86,22 +86,25 @@ def _socket_dir(tmp_path):
     return run
 
 
-def test_frame_rate_counts_frames_over_their_duration():
-    assert gp.frame_rate([50_000_000, 100_000_000, 50_000_000]) == 15.0
+def test_frame_rate_corrects_for_long_frames_being_sampled_more():
+    # A game alternating 8.33 ms and 16.67 ms frames runs at 80 fps; sampled at random moments the
+    # long frame comes up twice as often as the short one.
+    samples = [8_333_333] + [16_666_667] * 2
+    assert round(gp.frame_rate(samples)) == 80
     assert gp.frame_rate([]) is None
 
 
-def test_reads_every_frame_of_the_focused_app(short_root):
+def test_keeps_asking_for_the_focused_app(short_root):
     run = _socket_dir(short_root)
     fake = FakeGamescope(str(run / "gamescope-0"), frametimes_ns=[71_428_571] * 10)
     perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root))
     perf.start()
     try:
         deadline = time.monotonic() + 3
-        while perf.fps() is None and time.monotonic() < deadline:
+        while fake.requests.count(4242) < 4 and time.monotonic() < deadline:
             time.sleep(0.05)
+        assert fake.requests.count(4242) >= 4
         assert round(perf.fps()) == 14
-        assert fake.requests.count(4242) >= 5
     finally:
         perf.stop()
         fake.close()
