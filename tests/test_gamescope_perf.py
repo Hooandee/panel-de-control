@@ -86,11 +86,10 @@ def _socket_dir(tmp_path):
     return run
 
 
-def test_frame_rate_corrects_for_long_frames_being_sampled_more():
-    # A game alternating 8.33 ms and 16.67 ms frames runs at 80 fps; sampled at random moments the
-    # long frame comes up twice as often as the short one.
-    samples = [8_333_333] + [16_666_667] * 2
-    assert round(gp.frame_rate(samples)) == 80
+def test_frame_rate_is_frames_over_their_duration():
+    # Odyssey on the Thor: uneven frames, mangoapp's log said ~12 fps; a mean of 1/frametime said 36.
+    frames = [20_000_000, 150_000_000, 20_000_000, 140_000_000, 30_000_000, 140_000_000]
+    assert round(gp.frame_rate(frames), 1) == 12.0
     assert gp.frame_rate([]) is None
 
 

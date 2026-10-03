@@ -1,21 +1,15 @@
-"""Game frame rate from gamescope's control protocol: the focused app's own present-to-present time.
+"""Game frame rate from gamescope's control protocol, the same per-frame timing the MangoHud overlay gets.
 
 The stats FIFO's `fps=` is the compositor's repaint rate averaged over 300 repaints: it is not the
-game's frame rate and goes silent whenever gamescope stops repainting. `request_app_performance_stats`
-answers with the delta between the app's next present and the one before it.
-
-Re-asking right after an answer misses the short frames that land inside the round trip, so the
-rate read low (60 for a game alternating 8 ms and 16 ms frames on a 120 Hz panel). Asking at a random
-moment instead lands inside each frame in proportion to its length, and the mean of 1/frametime over
-such samples is exactly frames per second whatever the mix.
-
-gamescope's mangoapp overlay defaults to output timing (`mangoapp_use_output_timing`), which counts
-screen updates rather than game frames; on a 120 Hz panel it reads above a game locked at 60.
+game's frame rate and goes silent whenever gamescope stops repainting. With the default
+`mangoapp_use_output_timing`, gamescope hands mangoapp and `request_app_performance_stats` the very
+same per-frame delta. Each answer clears the request, so asking again straight away catches every
+frame (measured on the AYN Thor: the deltas cover 100 % of wall time and match mangoapp's own log), and
+frames over their summed duration is the overlay's number.
 """
 
 import glob
 import os
-import random
 import socket
 import struct
 import threading
@@ -34,10 +28,8 @@ _REGISTRY_ID = 2
 _SYNC_ID = 3
 _CONTROL_ID = 4
 
-WINDOW_S = 2.0
+WINDOW_S = 1.0
 STALE_S = 2.0
-# Longest random wait before the next question; longer than a 30 fps frame keeps the phase uniform.
-ASK_JITTER_S = 0.05
 
 
 def _message(obj: int, opcode: int, payload: bytes = b"") -> bytes:
@@ -115,9 +107,8 @@ def bind_control(wire: _Wire, timeout: float = 2.0) -> str | None:
 
 
 def frame_rate(frametimes_ns: list[int]) -> float | None:
-    """Frames per second from frametimes sampled at random moments (see module docstring)."""
-    rates = [1e9 / ft for ft in frametimes_ns if ft > 0]
-    return sum(rates) / len(rates) if rates else None
+    total = sum(frametimes_ns)
+    return len(frametimes_ns) * 1e9 / total if total > 0 else None
 
 
 class GamescopePerf:
@@ -186,27 +177,22 @@ class GamescopePerf:
     def _pump(self, wire: _Wire) -> None:
         asked_for: int | None = None
         asked_at = 0.0
-        ask_after: float | None = 0.0
         while not self._stop.is_set():
             app_id = self._app_id()
             if not app_id:
                 asked_for = None
-                ask_after = 0.0
                 self._stop.wait(0.5)
                 continue
-            now = self._clock()
-            waiting = asked_for == app_id and now - asked_at <= STALE_S
-            if not waiting and (ask_after is None or now >= ask_after):
+            if asked_for != app_id or self._clock() - asked_at > STALE_S:
                 wire.send(_message(_CONTROL_ID, _REQ_APP_PERF_STATS, struct.pack("<I", app_id)))
-                asked_for, asked_at, ask_after = app_id, now, None
-            timeout = 0.5 if ask_after is None else max(0.001, min(0.5, ask_after - now))
-            for obj, opcode, data in wire.receive(timeout):
+                asked_for, asked_at = app_id, self._clock()
+            for obj, opcode, data in wire.receive(0.5):
                 if obj == _CONTROL_ID and opcode == _EVT_APP_PERF_STATS:
                     answered, lo, hi = struct.unpack_from("<III", data)
                     self._record(answered, hi << 32 | lo)
                     if answered == asked_for:
-                        asked_for = None
-                        ask_after = self._clock() + random.uniform(0.0, ASK_JITTER_S)
+                        wire.send(_message(_CONTROL_ID, _REQ_APP_PERF_STATS, struct.pack("<I", app_id)))
+                        asked_at = self._clock()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -226,7 +212,7 @@ class GamescopePerf:
             self._frames.clear()
 
     def fps(self) -> float | None:
-        """Frames per second over the last two seconds for the focused app, None when nothing recent."""
+        """Frames per second over the last second for the focused app, None when nothing recent."""
         app_id = self._app_id()
         now = self._clock()
         with self._lock:
