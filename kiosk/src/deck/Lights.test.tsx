@@ -26,6 +26,7 @@ function control(patch: Partial<ColoresControl> = {}): ColoresControl {
     state,
     setPower: vi.fn(async () => {}),
     patch: vi.fn(async () => {}),
+    preview: vi.fn(),
     install: vi.fn(async () => true),
     ...patch,
   };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { BatteryState, FanState, getBatteryState, getFanState, getKioskLive } from "../../../src/api";
 import { pushSample } from "./deckMath";
@@ -20,6 +20,7 @@ export function usePoll<T>(read: () => Promise<T>, everyMs: number): [T | null, 
 }
 
 const FPS_HISTORY = 60;
+const FRAME_POLL_MS = 1000;
 
 export interface LiveFrame {
   fps: number | null;
@@ -27,29 +28,38 @@ export interface LiveFrame {
   history: readonly number[];
 }
 
-/** Gamescope frame rate once a second, with a short history for the pacing line. */
-export function useLiveFrame(): LiveFrame {
-  const [frame, setFrame] = useState<LiveFrame>({ fps: null, playingS: null, history: [] });
-  const history = useRef<number[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const pull = () =>
-      getKioskLive()
-        .then((live) => {
-          if (!alive) return;
-          history.current = live.fps == null ? [] : pushSample(history.current, live.fps, FPS_HISTORY);
-          setFrame({ fps: live.fps, playingS: live.playing_s, history: history.current });
-        })
-        .catch(() => {});
-    pull();
-    const id = window.setInterval(pull, 1000);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, []);
-  return frame;
+// One poller shared by every reader; only the components that show it re-render each second.
+let frame: LiveFrame = { fps: null, playingS: null, history: [] };
+const frameListeners = new Set<() => void>();
+let frameTimer: number | null = null;
+
+function pullFrame(): void {
+  getKioskLive()
+    .then((live) => {
+      const history = live.fps == null ? [] : pushSample(frame.history, live.fps, FPS_HISTORY);
+      frame = { fps: live.fps, playingS: live.playing_s, history };
+      frameListeners.forEach((listener) => listener());
+    })
+    .catch(() => {});
 }
+
+function subscribeFrame(listener: () => void): () => void {
+  frameListeners.add(listener);
+  if (frameTimer == null) {
+    pullFrame();
+    frameTimer = window.setInterval(pullFrame, FRAME_POLL_MS);
+  }
+  return () => {
+    frameListeners.delete(listener);
+    if (frameListeners.size === 0 && frameTimer != null) {
+      window.clearInterval(frameTimer);
+      frameTimer = null;
+    }
+  };
+}
+
+/** Gamescope frame rate once a second, with a short history for the pacing line. */
+export const useLiveFrame = (): LiveFrame => useSyncExternalStore(subscribeFrame, () => frame);
 
 export const useFans = () => usePoll<FanState>(getFanState, 2000)[0];
 export const useBattery = () => usePoll<BatteryState>(getBatteryState, 15000)[0];

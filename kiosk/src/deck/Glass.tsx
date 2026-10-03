@@ -127,10 +127,15 @@ function useDrag(axis: Axis, value: number | null, onChange: (value: number) => 
 }
 
 /** Control Center–style tall slider; `value` null means Steam has not reported it yet. */
-export const VFader: FC<{ value: number | null; icon: ReactNode; label: string; className: string; onChange: (value: number) => void }> = ({
-  value, icon, label, className, onChange,
-}) => {
-  const { shown, dragging, handlers } = useDrag("y", value, onChange);
+export const VFader: FC<{
+  value: number | null;
+  icon: ReactNode;
+  label: string;
+  className: string;
+  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
+}> = ({ value, icon, label, className, onChange, onCommit }) => {
+  const { shown, dragging, handlers } = useDrag("y", value, onChange, onCommit);
   return (
     <div
       className={`g-vfader ${className}${dragging ? " is-drag" : ""}${value == null ? " is-off" : ""}`}
@@ -145,10 +150,14 @@ export const VFader: FC<{ value: number | null; icon: ReactNode; label: string; 
   );
 };
 
-export const HBar: FC<{ value: number | null; icon: ReactNode; label: string; onCommit: (value: number) => void }> = ({
-  value, icon, label, onCommit,
-}) => {
-  const { shown, handlers } = useDrag("x", value, () => {}, onCommit);
+export const HBar: FC<{
+  value: number | null;
+  icon: ReactNode;
+  label: string;
+  onChange?: (value: number) => void;
+  onCommit: (value: number) => void;
+}> = ({ value, icon, label, onChange = () => {}, onCommit }) => {
+  const { shown, handlers } = useDrag("x", value, onChange, onCommit);
   const pct = Math.round((shown ?? 0) * 100);
   return (
     <div className={`g-hbar${value == null ? " is-off" : ""}`} role="slider" aria-label={label} aria-valuenow={pct} {...handlers}>

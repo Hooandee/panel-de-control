@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import { kioskSteam } from "../../../src/api";
 import { coloresTarget, ColoresState } from "./deckMath";
 import { usePoll } from "./live";
+import { createCoalescedWriter } from "./writer";
 
 export class SteamActionError extends Error {}
 
@@ -12,22 +13,34 @@ export async function steamCall<T = unknown>(action: string, args: unknown[] = [
   return reply.result as T;
 }
 
-const WRITE_DEBOUNCE_MS = 90;
+// Steam applies brightness and volume instantly, so these follow the finger closely.
+const SCALAR_GAP_MS = 40;
+// A poll that lands mid-drag must not yank the slider back to an older reading.
+const POLL_HOLD_MS = 1500;
 
 /** Steam's brightness or volume as 0..1, null while Steam has not answered. */
 export function useSteamScalar(kind: "brightness" | "volume") {
-  const read = useCallback(async () => (await steamCall<{ value: number | null }>(`${kind}.get`)).value, [kind]);
+  const lastWrite = useRef(-Infinity);
+  const latest = useRef<number | null>(null);
+  const read = useCallback(async () => {
+    if (Date.now() - lastWrite.current < POLL_HOLD_MS) return latest.current;
+    return (await steamCall<{ value: number | null }>(`${kind}.get`)).value;
+  }, [kind]);
   const [value, setValue] = usePoll(read, 3000);
-  const timer = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (timer.current != null) window.clearTimeout(timer.current);
-  }, []);
-  const set = (next: number) => {
-    setValue(next);
-    if (timer.current != null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void steamCall(`${kind}.set`, [next]).catch(() => {}), WRITE_DEBOUNCE_MS);
+  latest.current = value;
+  const writer = useMemo(
+    () => createCoalescedWriter<number>((next) => steamCall(`${kind}.set`, [next]), SCALAR_GAP_MS),
+    [kind],
+  );
+  const write = (next: number) => {
+    lastWrite.current = Date.now();
+    writer.push(next);
   };
-  return { value, set };
+  const commit = (next: number) => {
+    write(next);
+    setValue(next);
+  };
+  return { value, write, commit };
 }
 
 export interface RefreshRange {
@@ -51,13 +64,22 @@ export interface ColoresControl {
   state: ColoresState | null;
   setPower: (on: boolean) => Promise<void>;
   patch: (changes: Record<string, unknown>, optimistic: Partial<ColoresState>) => Promise<void>;
+  /** Mid-drag preview: throttled, no re-read; finish with `patch`. */
+  preview: (changes: Record<string, unknown>) => void;
   install: () => Promise<boolean>;
 }
+
+// Every Colores write lands on the LED controller and its settings file.
+const LIGHTS_GAP_MS = 150;
 
 export function useColores(): ColoresControl {
   const read = useCallback(() => steamCall<{ installed: boolean; state?: ColoresState }>("colores.state"), []);
   const [snapshot, setSnapshot] = usePoll(read, 4000);
   const state = snapshot?.state ?? null;
+  const previewer = useMemo(
+    () => createCoalescedWriter<unknown[]>((args) => steamCall("colores.call", ["patch_profile", args]), LIGHTS_GAP_MS),
+    [],
+  );
   const settle = async (method: string, args: unknown[], optimistic: Partial<ColoresState>) => {
     if (snapshot?.state) setSnapshot({ ...snapshot, state: { ...snapshot.state, ...optimistic } });
     try {
@@ -73,7 +95,12 @@ export function useColores(): ColoresControl {
     patch: (changes, optimistic) => {
       if (!state) return Promise.resolve();
       const [scope, appKey] = coloresTarget(state);
-      return settle("patch_profile", [scope, appKey, changes], optimistic);
+      return previewer.flush().then(() => settle("patch_profile", [scope, appKey, changes], optimistic));
+    },
+    preview: (changes) => {
+      if (!state) return;
+      const [scope, appKey] = coloresTarget(state);
+      previewer.push([scope, appKey, changes]);
     },
     install: async () => {
       const ok = await steamCall<boolean>("colores.install");

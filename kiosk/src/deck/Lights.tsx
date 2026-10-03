@@ -81,15 +81,11 @@ export const LightsDialog: FC<{ colores: ColoresControl; onError: (error: unknow
     const effect = { ...state.effect, id };
     run(colores.patch({ mode: "effect", effect: { id, speed: effect.speed, use_gradient: effect.useGradient } }, { mode: "effect", effect }));
   };
-  const setSpeed = (fraction: number) => {
+  const speedChange = (fraction: number) => {
     const speed = Math.round(fraction * 100);
-    const effect = { ...state.effect, speed };
-    run(colores.patch({ effect: { id: effect.id, speed, use_gradient: effect.useGradient } }, { effect }));
+    return { change: { effect: { id: state.effect.id, speed, use_gradient: state.effect.useGradient } }, effect: { ...state.effect, speed } };
   };
-  const setBrightness = (fraction: number) => {
-    const brightness = Math.round(fraction * max);
-    run(colores.patch({ brightness }, { brightness }));
-  };
+  const brightnessChange = (fraction: number) => Math.round(fraction * max);
 
   const title = !state.power
     ? t("kiosk.lights.off")
@@ -137,7 +133,16 @@ export const LightsDialog: FC<{ colores: ColoresControl; onError: (error: unknow
             selected={state.effect.id}
             onPick={pickEffect}
           />
-          <HBar value={state.effect.speed / 100} icon={ICON.speed} label={t("kiosk.lights.speed")} onCommit={setSpeed} />
+          <HBar
+            value={state.effect.speed / 100}
+            icon={ICON.speed}
+            label={t("kiosk.lights.speed")}
+            onChange={(f) => colores.preview(speedChange(f).change)}
+            onCommit={(f) => {
+              const { change, effect } = speedChange(f);
+              run(colores.patch(change, { effect }));
+            }}
+          />
         </>
       )}
 
@@ -145,7 +150,16 @@ export const LightsDialog: FC<{ colores: ColoresControl; onError: (error: unknow
         <div className="g-note">{t(`kiosk.lights.note.${mode === "gradient" ? "gradient" : "auto"}`)}</div>
       )}
 
-      <HBar value={state.power ? state.brightness / max : null} icon={ICON.sun} label={t("kiosk.lights.brightness")} onCommit={setBrightness} />
+      <HBar
+        value={state.power ? state.brightness / max : null}
+        icon={ICON.sun}
+        label={t("kiosk.lights.brightness")}
+        onChange={(f) => colores.preview({ brightness: brightnessChange(f) })}
+        onCommit={(f) => {
+          const brightness = brightnessChange(f);
+          run(colores.patch({ brightness }, { brightness }));
+        }}
+      />
     </>
   );
 };

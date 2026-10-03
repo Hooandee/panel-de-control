@@ -25,6 +25,11 @@ type DialogId = "perf" | "fps" | "fan" | "hz" | "lights";
 const FAN_CHOICES: FanPreset[] = ["auto", "silent", "balanced", "performance"];
 const PICK_CLOSE_MS = 380;
 
+const LiveFps: FC = () => {
+  const { fps } = useLiveFrame();
+  return <>{fps == null ? "— fps" : `${Math.round(fps)} fps`}</>;
+};
+
 const Tile: FC<{
   area: string;
   small?: boolean;
@@ -49,7 +54,6 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
   const fan = useFanCurve();
   const cpu = useCpu();
   const fans = useFans();
-  const frame = useLiveFrame();
   const brightness = useSteamScalar("brightness");
   const volume = useSteamScalar("volume");
   const refresh = useRefreshRate();
@@ -99,7 +103,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
 
   return (
     <>
-      <Header frame={frame} target={target} celsius={temp} />
+      <Header target={target} celsius={temp} />
 
       <div className="t-grid">
         <Tile area="perf" disabled={!perfReady} onPress={() => setOpen("perf")}>
@@ -126,13 +130,14 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
           <span className="t-label">{rpm == null ? t("kiosk.fan") : rpm > 0 ? `${rpm.toLocaleString(lang)} rpm` : t("kiosk.fan.stopped")}</span>
         </Tile>
 
-        <VFader className="t-bri" value={brightness.value} icon={ICON.sun} label={t("kiosk.brightness")} onChange={brightness.set} />
+        <VFader className="t-bri" value={brightness.value} icon={ICON.sun} label={t("kiosk.brightness")} onChange={brightness.write} onCommit={brightness.commit} />
         <VFader
           className="t-vol"
           value={volume.value}
           icon={volume.value === 0 ? ICON.muted : ICON.speaker}
           label={t("kiosk.volume")}
-          onChange={volume.set}
+          onChange={volume.write}
+          onCommit={volume.commit}
         />
 
         <LightsTile colores={colores} onPress={() => setOpen("lights")} />
@@ -190,7 +195,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
             <>
               <Hero
                 bubble={ICON.target}
-                title={frame.fps == null ? "— fps" : `${Math.round(frame.fps)} fps`}
+                title={<LiveFps />}
                 detail={t(autoOn ? "kiosk.fps.onNote" : "kiosk.fps.offNote")}
               />
               <Orbs>

@@ -4,7 +4,7 @@ import { useI18n } from "../../../src/i18n";
 import { useRunningGame } from "../../../src/tdp/useRunningGame";
 import { batteryReading, formatMinutes } from "../now/metrics";
 import { formatPlaying, pacePath } from "./deckMath";
-import { artUrl, LiveFrame, useBattery } from "./live";
+import { artUrl, useBattery, useLiveFrame } from "./live";
 
 const PACE_W = 300;
 const PACE_H = 24;
@@ -35,8 +35,9 @@ const Art: FC<{ src: string | null; className: string }> = ({ src, className }) 
   );
 };
 
-export const Header: FC<{ frame: LiveFrame; target: number | null; celsius: number | null }> = ({ frame, target, celsius }) => {
+export const Header: FC<{ target: number | null; celsius: number | null }> = ({ target, celsius }) => {
   const { t, lang } = useI18n();
+  const frame = useLiveFrame();
   const game = useRunningGame();
   const battery = batteryReading(useBattery());
   const clock = useClock(lang);
