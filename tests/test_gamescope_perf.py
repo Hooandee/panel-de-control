@@ -3,6 +3,7 @@ import shutil
 import socket
 import tempfile
 import struct
+import sys
 import threading
 import time
 
@@ -80,6 +81,9 @@ class FakeGamescope:
         self.server.close()
 
 
+MODES = pytest.mark.parametrize("python", [sys.executable, ""], ids=["helper-process", "in-plugin-thread"])
+
+
 def _socket_dir(tmp_path):
     run = tmp_path / "run/user/1000"
     run.mkdir(parents=True)
@@ -93,10 +97,11 @@ def test_frame_rate_is_frames_over_their_duration():
     assert gp.frame_rate([]) is None
 
 
-def test_keeps_asking_for_the_focused_app(short_root):
+@MODES
+def test_keeps_asking_for_the_focused_app(short_root, python):
     run = _socket_dir(short_root)
     fake = FakeGamescope(str(run / "gamescope-0"), frametimes_ns=[71_428_571] * 10)
-    perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root))
+    perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root), python=python)
     perf.start()
     try:
         deadline = time.monotonic() + 3
@@ -109,11 +114,12 @@ def test_keeps_asking_for_the_focused_app(short_root):
         fake.close()
 
 
-def test_skips_the_bottom_screen_compositor(short_root):
+@MODES
+def test_skips_the_bottom_screen_compositor(short_root, python):
     run = _socket_dir(short_root)
     bottom = FakeGamescope(str(run / "gamescope-0"), connector="DSI-1")
     main = FakeGamescope(str(run / "gamescope-1"), connector="DSI-2", frametimes_ns=[8_333_333] * 20)
-    perf = gp.GamescopePerf(app_id=lambda: 4242, skip_connectors=lambda: {"DSI-1"}, root=str(short_root))
+    perf = gp.GamescopePerf(app_id=lambda: 4242, skip_connectors=lambda: {"DSI-1"}, root=str(short_root), python=python)
     perf.start()
     try:
         deadline = time.monotonic() + 3
@@ -127,10 +133,11 @@ def test_skips_the_bottom_screen_compositor(short_root):
         main.close()
 
 
-def test_old_gamescope_without_perf_query_is_left_alone(short_root):
+@MODES
+def test_old_gamescope_without_perf_query_is_left_alone(short_root, python):
     run = _socket_dir(short_root)
     fake = FakeGamescope(str(run / "gamescope-0"), version=5)
-    perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root))
+    perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root), python=python)
     perf.start()
     try:
         time.sleep(0.5)

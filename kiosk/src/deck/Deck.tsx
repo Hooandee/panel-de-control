@@ -158,7 +158,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
         </Tile>
 
         <Tile area="fan" small onPress={fanReady ? () => setOpen("fan") : undefined}>
-          <span className="t-icon"><FanIcon spinning={rpm != null && rpm > 0} /></span>
+          <span className="t-icon"><FanIcon /></span>
           <span className="t-label">{rpm == null ? t("kiosk.fan") : rpm > 0 ? `${rpm.toLocaleString(lang)} rpm` : t("kiosk.fan.stopped")}</span>
         </Tile>
 
@@ -254,7 +254,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
           {presence.shown === "fan" && fan.state && (
             <>
               <Hero
-                bubble={<FanIcon spinning={rpm != null && rpm > 0} />}
+                bubble={<FanIcon />}
                 title={rpm == null ? t("kiosk.fan") : `${rpm.toLocaleString(lang)} rpm`}
                 detail={temp != null ? `${Math.round(temp)} °C` : undefined}
               />

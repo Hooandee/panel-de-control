@@ -43,6 +43,10 @@ def launch_script(url_var: str = "PDC_KIOSK_URL") -> str:
     )
 
 
+NICE = 10
+CPU_WEIGHT = 20
+
+
 class KioskLauncher:
     def __init__(self, display: SecondaryDisplay, runner: Runner = _default_runner):
         self.display = display
@@ -56,6 +60,8 @@ class KioskLauncher:
         self._systemd(["systemctl", "--user", "reset-failed", UNIT])
         code, out = self._systemd([
             "systemd-run", "--user", f"--unit={UNIT}", "--collect", "--quiet",
+            # The bottom screen must never take CPU time from the game on the top one.
+            f"--nice={NICE}", f"--property=CPUWeight={CPU_WEIGHT}",
             f"--setenv=PDC_KIOSK_URL={url}",
             "/bin/sh", "-c", launch_script(),
         ])

@@ -4,8 +4,8 @@ const Icon: FC<{ className?: string; children: ReactNode }> = ({ className, chil
   <svg className={`g-i${className ? ` ${className}` : ""}`} viewBox="0 0 24 24" aria-hidden>{children}</svg>
 );
 
-export const FanIcon: FC<{ spinning?: boolean }> = ({ spinning }) => (
-  <Icon className={spinning ? "is-spin" : undefined}>
+export const FanIcon: FC = () => (
+  <Icon>
     <circle cx="12" cy="12" r="1.6" />
     <path d="M12 10.4c-.4-3 .3-6.4 3-6.9 2.4-.4 3.4 2.6 1.2 4.3-1.2.9-2.7 1.7-4.2 2.6zM13.6 12c3-.4 6.4.3 6.9 3 .4 2.4-2.6 3.4-4.3 1.2-.9-1.2-1.7-2.7-2.6-4.2zM12 13.6c.4 3-.3 6.4-3 6.9-2.4.4-3.4-2.6-1.2-4.3 1.2-.9 2.7-1.7 4.2-2.6zM10.4 12c-3 .4-6.4-.3-6.9-3-.4-2.4 2.6-3.4 4.3-1.2.9 1.2 1.7 2.7 2.6 4.2z" />
   </Icon>

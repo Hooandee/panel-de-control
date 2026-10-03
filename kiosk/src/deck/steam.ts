@@ -26,7 +26,7 @@ export function useSteamScalar(kind: "brightness" | "volume") {
     if (Date.now() - lastWrite.current < POLL_HOLD_MS) return latest.current;
     return (await steamCall<{ value: number | null }>(`${kind}.get`)).value;
   }, [kind]);
-  const [value, setValue] = usePoll(read, 3000);
+  const [value, setValue] = usePoll(read, 10_000);
   latest.current = value;
   const writer = useMemo(
     () => createCoalescedWriter<number>((next) => steamCall(`${kind}.set`, [next]), SCALAR_GAP_MS),
@@ -52,7 +52,7 @@ export interface RefreshRange {
 
 export function useRefreshRate() {
   const read = useCallback(() => steamCall<RefreshRange | null>("refresh.get"), []);
-  const [range, setRange] = usePoll(read, 5000);
+  const [range, setRange] = usePoll(read, 30_000);
   const set = async (hz: number) => {
     await steamCall("refresh.set", [hz]);
     setRange(await read());
@@ -75,7 +75,7 @@ const LIGHTS_GAP_MS = 150;
 
 export function useColores(): ColoresControl {
   const read = useCallback(() => steamCall<{ installed: boolean; state?: ColoresState }>("colores.state"), []);
-  const [snapshot, setSnapshot] = usePoll(read, 4000);
+  const [snapshot, setSnapshot] = usePoll(read, 10_000);
   const state = snapshot?.state ?? null;
   const previewer = useMemo(
     () => createCoalescedWriter<unknown[]>((args) => steamCall("colores.call", ["patch_profile", args]), LIGHTS_GAP_MS),

@@ -742,6 +742,7 @@ class Plugin:
         self._gamescope_perf = GamescopePerf(
             app_id=self._gamescope_focus_app,
             skip_connectors=lambda: {c} if (c := self._kiosk.secondary_connector()) else set(),
+            env=controller_detect.clean_env,
         )
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()

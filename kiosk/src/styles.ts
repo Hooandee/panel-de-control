@@ -28,9 +28,6 @@ button:disabled { cursor: default; }
 .k-asleep { position: fixed; inset: 0; z-index: 50; background: #000; }
 
 .g-i { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-/* 15° steps: the four-blade fan still reads as turning, at ~9 repaints a second instead of 60. */
-.g-i.is-spin { animation: g-spin 2.6s steps(24) infinite; }
-@keyframes g-spin { to { transform: rotate(360deg); } }
 
 .h-head { position: absolute; left: 0; right: 0; top: 0; height: 200px; pointer-events: none; }
 .h-banner { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 38%;
@@ -170,7 +167,7 @@ button:disabled { cursor: default; }
 .g-cta:disabled { opacity: .6; }
 
 @media (prefers-reduced-motion: reduce) {
-  .g-i.is-spin, .g-glass.is-on .g-orb { animation: none !important; }
+  .g-glass.is-on .g-orb { animation: none !important; }
 }
 
 .k-section { display: flex; flex-direction: column; gap: 6px; }

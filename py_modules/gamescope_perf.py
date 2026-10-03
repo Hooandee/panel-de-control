@@ -7,13 +7,18 @@ same per-frame delta. Each answer clears the request, so asking again straight a
 frame (measured on the AYN Thor: the deltas cover 100 % of wall time and match mangoapp's own log), and
 frames over their summed duration is the overlay's number.
 
-The asking runs in its own process: inside the plugin, the interpreter is busy enough (and under FEX
-on ARM slow enough) that a thread re-asks late and loses the short frames, reading 4-5 fps low.
+The asking runs in a separate system python (this file with --child): inside the plugin the
+interpreter is busy enough (and under FEX on ARM slow enough) that a thread re-asks late and loses the
+short frames, reading 4-5 fps low. Never fork the plugin for this: a forked copy inherits Decky's
+SIGTERM handler and runs the whole plugin unload, handing fans and power back to firmware.
 """
 
 import glob
-import multiprocessing
 import os
+import select
+import shutil
+import subprocess
+import sys
 import socket
 import struct
 import threading
@@ -142,51 +147,68 @@ def _ask(wire: _Wire, app_id: int) -> None:
     wire.send(_message(_CONTROL_ID, _REQ_APP_PERF_STATS, struct.pack("<I", app_id)))
 
 
-def _child_pump(conn, wire: _Wire, app_id: int | None) -> int | None:
-    asked_for: int | None = None
-    asked_at = 0.0
-    while True:
-        while conn.poll(0):
-            app_id = conn.recv()
-        if not app_id:
-            asked_for = None
-            conn.poll(0.5)
+Emit = Callable[[float, int, int], None]
+
+
+def pump_frames(root: str, skip: set[str], app_id: Callable[[], int | None], emit: Emit, stopped: Callable[[], bool]) -> None:
+    """Ask for every frame of the app `app_id()` names until `stopped()`; reconnects as needed."""
+    while not stopped():
+        wire = _connect(root, skip)
+        if wire is None:
+            time.sleep(2.0)
             continue
-        if asked_for != app_id or time.monotonic() - asked_at > STALE_S:
-            _ask(wire, app_id)
-            asked_for, asked_at = app_id, time.monotonic()
-        for obj, opcode, data in wire.receive(0.5):
-            if obj == _CONTROL_ID and opcode == _EVT_APP_PERF_STATS:
-                answered, lo, hi = struct.unpack_from("<III", data)
-                if answered == asked_for:
-                    _ask(wire, app_id)
-                    asked_at = time.monotonic()
-                conn.send((time.monotonic(), answered, hi << 32 | lo))
+        asked_for: int | None = None
+        asked_at = 0.0
+        try:
+            while not stopped():
+                current = app_id()
+                if not current:
+                    asked_for = None
+                    time.sleep(0.25)
+                    continue
+                if asked_for != current or time.monotonic() - asked_at > STALE_S:
+                    _ask(wire, current)
+                    asked_for, asked_at = current, time.monotonic()
+                for obj, opcode, data in wire.receive(0.25):
+                    if obj == _CONTROL_ID and opcode == _EVT_APP_PERF_STATS:
+                        answered, lo, hi = struct.unpack_from("<III", data)
+                        if answered == asked_for:
+                            _ask(wire, current)
+                            asked_at = time.monotonic()
+                        emit(time.monotonic(), answered, hi << 32 | lo)
+        except (OSError, ConnectionError, struct.error):
+            pass
+        finally:
+            wire._sock.close()
+        time.sleep(1.0)
 
 
-def _child_main(conn, root: str, skip: set[str]) -> None:
-    """Ask for every frame of the app the parent names; exits when the parent goes away."""
-    app_id: int | None = None
+def _child_main(argv: list[str]) -> None:
+    """stdin: one app id per line (0 = none); stdout: "<monotonic> <app id> <frametime ns>" per frame."""
+    root, skip = argv[0], set(argv[1:])
+    state = {"app": None, "closed": False}
+
+    def app_id() -> int | None:
+        while select.select([sys.stdin], [], [], 0)[0]:
+            line = sys.stdin.readline()
+            if not line:
+                state["closed"] = True
+                break
+            state["app"] = int(line) or None
+        return state["app"]
+
+    def emit(at: float, app: int, frametime_ns: int) -> None:
+        sys.stdout.write(f"{at:.6f} {app} {frametime_ns}\n")
+        sys.stdout.flush()
+
     try:
-        while True:
-            wire = _connect(root, skip)
-            if wire is None:
-                if conn.poll(2.0):
-                    app_id = conn.recv()
-                continue
-            try:
-                app_id = _child_pump(conn, wire, app_id)
-            except (OSError, ConnectionError, struct.error):
-                pass
-            finally:
-                wire._sock.close()
-            time.sleep(1.0)
-    except (EOFError, BrokenPipeError, KeyboardInterrupt):
+        pump_frames(root, skip, app_id, emit, lambda: state["closed"])
+    except (BrokenPipeError, KeyboardInterrupt):
         return
 
 
 class GamescopePerf:
-    """Frame rate of the focused app on the main gamescope display, read by a helper process."""
+    """Frame rate of the focused app on the main gamescope display."""
 
     def __init__(
         self,
@@ -194,16 +216,20 @@ class GamescopePerf:
         skip_connectors: Callable[[], set[str]] = set,
         root: str = "/",
         clock: Callable[[], float] = time.monotonic,
+        python: str | None = None,
+        env: Callable[[], dict] | None = None,
     ):
         self._app_id = app_id
         self._skip_connectors = skip_connectors
         self._root = root
         self._clock = clock
+        self._python = python if python is not None else shutil.which("python3", path="/usr/bin:/bin")
+        self._env = env
         self._frames: deque[tuple[float, int, int]] = deque()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._process = None
+        self._process: subprocess.Popen | None = None
 
     def _record(self, app_id: int, frametime_ns: int, at: float | None = None) -> None:
         now = self._clock() if at is None else at
@@ -212,48 +238,73 @@ class GamescopePerf:
             while self._frames and now - self._frames[0][0] > WINDOW_S:
                 self._frames.popleft()
 
-    def _drain(self, conn) -> None:
+    def _follow_child(self, process: subprocess.Popen) -> None:
         sent: int | None = None
+        buffer = b""
+        out = process.stdout.fileno()
         try:
             while not self._stop.is_set():
-                app_id = self._app_id()
-                if app_id != sent:
-                    conn.send(app_id)
-                    sent = app_id
-                while conn.poll(0.25):
-                    at, answered, frametime_ns = conn.recv()
-                    self._record(answered, frametime_ns, at)
-        except (EOFError, OSError):
+                current = self._app_id()
+                if current != sent:
+                    process.stdin.write(f"{current or 0}\n".encode())
+                    process.stdin.flush()
+                    sent = current
+                if not select.select([out], [], [], 0.25)[0]:
+                    continue
+                chunk = os.read(out, 65536)
+                if not chunk:
+                    return
+                buffer += chunk
+                *lines, buffer = buffer.split(b"\n")
+                for line in lines:
+                    at, app, frametime_ns = line.split()
+                    self._record(int(app), int(frametime_ns), float(at))
+        except (OSError, ValueError):
             return
+
+    def _spawn(self) -> subprocess.Popen | None:
+        if not self._python:
+            return None
+        try:
+            return subprocess.Popen(
+                [self._python, os.path.abspath(__file__), "--child", self._root, *sorted(self._skip_connectors())],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                env=self._env() if self._env else None, close_fds=True, start_new_session=True,
+            )
+        except OSError:
+            return None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        # fork: the plugin runs inside Decky's frozen loader, which cannot re-launch a Python interpreter.
-        context = multiprocessing.get_context("fork")
-        parent, child = context.Pipe()
-        self._process = context.Process(
-            target=_child_main, args=(child, self._root, set(self._skip_connectors())),
-            daemon=True, name="gamescope-perf",
-        )
-        self._process.start()
-        child.close()
-        self._thread = threading.Thread(target=self._drain, args=(parent,), daemon=True, name="gamescope-perf")
+        process = self._spawn()
+        if process is not None:
+            self._process = process
+            target, args = self._follow_child, (process,)
+        else:
+            target = pump_frames
+            args = (self._root, set(self._skip_connectors()), self._app_id,
+                    lambda at, app, ft: self._record(app, ft, at), self._stop.is_set)
+        self._thread = threading.Thread(target=target, args=args, daemon=True, name="gamescope-perf")
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
+        process, self._process = self._process, None
+        if process is not None:
+            for stream in (process.stdin, process.stdout):
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+            process.kill()
+            process.wait(timeout=2.0)
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.0)
             if not thread.is_alive():
                 self._thread = None
-        process = self._process
-        if process is not None:
-            process.terminate()
-            process.join(timeout=2.0)
-            self._process = None
         with self._lock:
             self._frames.clear()
 
@@ -270,4 +321,8 @@ class GamescopePerf:
 
     def diagnostics(self) -> dict:
         process = self._process
-        return {"alive": bool(process and process.is_alive())}
+        return {"helper": bool(process and process.poll() is None), "python": self._python}
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["--child"]:
+    _child_main(sys.argv[2:])
