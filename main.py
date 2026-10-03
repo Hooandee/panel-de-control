@@ -3347,7 +3347,8 @@ class Plugin:
         """Live driving temperature (max of CPU/GPU) for software-loop backends.
         Never raises; returns None if no temp is readable."""
         try:
-            cpu, gpu = extract_cpu_gpu_temps(self._fan_reader.read())
+            pair = self._fan_reader.driving_temps()
+            cpu, gpu = pair if pair is not None else extract_cpu_gpu_temps(self._fan_reader.read())
             vals = [t for t in (cpu, gpu) if t is not None]
             return max(vals) if vals else None
         except Exception:  # noqa: BLE001

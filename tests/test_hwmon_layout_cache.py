@@ -37,3 +37,34 @@ def test_a_vanished_chip_or_a_loaded_driver_refreshes_the_layout(tmp_path):
     _chip(tmp_path, 2, "nct6775", fans=[(1, 700)])
     assert len(reader.read()["fans"]) == 2
     assert hwmon._LAYOUT_TTL_S >= 30
+
+
+def _equivalent(reader):
+    from fans.hwmon import extract_cpu_gpu_temps
+
+    return reader.driving_temps() == extract_cpu_gpu_temps(reader.read())
+
+
+def test_driving_temps_match_the_full_read_on_a_snapdragon(tmp_path):
+    _chip(tmp_path, 0, "cpu7_middle_thermal", temps=[(1, 61200)])
+    _chip(tmp_path, 1, "cpuss0_thermal", temps=[(1, 58300)])
+    _chip(tmp_path, 2, "gpuss_0_thermal", temps=[(1, 55100)])
+    _chip(tmp_path, 3, "modem2_thermal", temps=[(1, 70000)])
+    _chip(tmp_path, 4, "pwmfan", fans=[(1, 3000)])
+    reader = FanReader(root=str(tmp_path))
+    assert reader.driving_temps() == (61.2, 55.1)
+    assert _equivalent(reader)
+
+
+def test_driving_temps_match_the_full_read_on_an_amd_handheld(tmp_path):
+    _chip(tmp_path, 0, "k10temp", temps=[(1, 72500)])
+    _chip(tmp_path, 1, "amdgpu", temps=[(1, 64000)])
+    _chip(tmp_path, 2, "nvme", temps=[(1, 45000)])
+    reader = FanReader(root=str(tmp_path))
+    assert reader.driving_temps() == (72.5, 64.0)
+    assert _equivalent(reader)
+
+
+def test_machines_without_known_sensors_fall_back_to_the_full_read(tmp_path):
+    _chip(tmp_path, 0, "acpitz", temps=[(1, 50000)])
+    assert FanReader(root=str(tmp_path)).driving_temps() is None

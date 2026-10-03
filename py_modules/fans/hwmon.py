@@ -96,40 +96,41 @@ def curate_fans(fans: list[dict]) -> list[dict]:
     return fans
 
 
+def _rank_temp(t: dict, desktop: bool = False, device_key: str | None = None) -> tuple[str, int]:
+    chip = t["chip"]
+    raw_label = str(t.get("label", "")).lower()
+    if desktop:
+        if device_key == "steam_machine" and chip == "acpitz":
+            return "CPU", 0
+        if chip in ("k10temp", "coretemp"):
+            return "CPU", 0
+        if chip in ("steamdeck_hwmon", "jupiter") and "cpu" in raw_label:
+            return "CPU", 0
+        if chip == "amdgpu":
+            if "junction" in raw_label:
+                return "GPU junction", 1
+            if "mem" in raw_label:
+                return "VRAM", 1
+            return "GPU", 1
+    if chip in _TEMP_RULES:
+        return _TEMP_RULES[chip]
+    soc = _soc_zone_rule(chip)
+    if soc is not None:
+        return soc
+    if any(chip.startswith(d) for d in _TEMP_DEMOTE):
+        return t["label"], 3
+    return t["label"], 2
+
+
 def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | None = None) -> list[dict]:
     """Show only the meaningful CPU/GPU sensors with friendly labels, dropping the
     generic noise (acpitz, wifi, nvme, battery…) that clutters the monitor. If a
     device exposes no recognized CPU/GPU sensor, fall back to showing everything
     (ranked) so the list is never silently empty."""
 
-    def rank(t: dict) -> tuple[str, int]:
-        chip = t["chip"]
-        raw_label = str(t.get("label", "")).lower()
-        if desktop:
-            if device_key == "steam_machine" and chip == "acpitz":
-                return "CPU", 0
-            if chip in ("k10temp", "coretemp"):
-                return "CPU", 0
-            if chip in ("steamdeck_hwmon", "jupiter") and "cpu" in raw_label:
-                return "CPU", 0
-            if chip == "amdgpu":
-                if "junction" in raw_label:
-                    return "GPU junction", 1
-                if "mem" in raw_label:
-                    return "VRAM", 1
-                return "GPU", 1
-        if chip in _TEMP_RULES:
-            return _TEMP_RULES[chip]
-        soc = _soc_zone_rule(chip)
-        if soc is not None:
-            return soc
-        if any(chip.startswith(d) for d in _TEMP_DEMOTE):
-            return t["label"], 3
-        return t["label"], 2
-
     decorated = []
     for i, t in enumerate(temps):
-        label, prio = rank(t)
+        label, prio = _rank_temp(t, desktop, device_key)
         decorated.append((prio, i, {"label": label, "celsius": t["celsius"]}))
     decorated.sort(key=lambda x: (x[0], x[1]))
     # Keep only recognized CPU/GPU (priority 0/1); fall back to all when none match.
@@ -204,6 +205,28 @@ class FanReader:
                 temps.append((inp, label))
             layout.append((name, fans, temps))
         return layout
+
+    def driving_temps(self) -> tuple[float | None, float | None] | None:
+        """(cpu, gpu) reading only the inputs ranked CPU/GPU, for loops that poll every second.
+        None when this machine has no recognized CPU/GPU sensor (callers then do a full read)."""
+        layout = self._layout()
+        if getattr(self, "_driving_for", None) is not layout:
+            self._driving_for = layout
+            self._driving = [
+                (label, inp)
+                for name, _fans, temps in layout
+                for inp, raw_label in temps
+                if (label := _rank_temp({"chip": name, "label": raw_label}, self._desktop, self._device_key)[0])
+                in ("CPU", "GPU")
+            ]
+        if not self._driving:
+            return None
+        hottest: dict[str, float] = {}
+        for label, inp in self._driving:
+            milli = _read_int(inp)
+            if milli is not None:
+                hottest[label] = max(hottest.get(label, float("-inf")), round(milli / 1000, 1))
+        return hottest.get("CPU"), hottest.get("GPU")
 
     def invalidate(self) -> None:
         """Forget the cached chip layout, after a fan driver is loaded or unloaded."""
