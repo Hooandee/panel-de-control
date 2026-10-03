@@ -18,6 +18,27 @@ FIREFOX_PREFS = (
     'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
     'user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);',
     'user_pref("app.update.enabled", false);',
+    # One local page: a single content process and nothing in the background, so the bottom
+    # screen stays small next to a game that already fills the memory of the handheld.
+    'user_pref("fission.autostart", false);',
+    'user_pref("dom.ipc.processCount", 1);',
+    'user_pref("dom.ipc.processCount.webIsolated", 1);',
+    'user_pref("dom.ipc.processPrelaunch.enabled", false);',
+    'user_pref("media.rdd-process.enabled", false);',
+    'user_pref("browser.cache.memory.capacity", 8192);',
+    'user_pref("browser.sessionhistory.max_total_viewers", 0);',
+    'user_pref("accessibility.force_disabled", 1);',
+    'user_pref("browser.safebrowsing.malware.enabled", false);',
+    'user_pref("browser.safebrowsing.phishing.enabled", false);',
+    'user_pref("browser.safebrowsing.downloads.enabled", false);',
+    'user_pref("browser.safebrowsing.blockedURIs.enabled", false);',
+    'user_pref("network.captive-portal-service.enabled", false);',
+    'user_pref("network.connectivity-service.enabled", false);',
+    'user_pref("app.normandy.enabled", false);',
+    'user_pref("toolkit.telemetry.enabled", false);',
+    'user_pref("datareporting.healthreport.uploadEnabled", false);',
+    'user_pref("extensions.update.enabled", false);',
+    'user_pref("browser.search.update", false);',
 )
 
 # gamescope's nested Wayland crashes Firefox (nsWaylandDisplay::Init); X11 + XInput2 gives touch.

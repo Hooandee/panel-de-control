@@ -123,3 +123,10 @@ def test_stop_does_not_wait_for_the_browser_to_exit():
     ok, _ = launcher.stop()
     assert ok
     assert [cmd[-3:] for cmd, _env, _identity in calls] == [["stop", "--no-block", UNIT]]
+
+
+def test_firefox_runs_one_content_process_and_nothing_in_the_background():
+    script = launch_script()
+    for pref in ('"dom.ipc.processCount", 1', '"fission.autostart", false', '"dom.ipc.processPrelaunch.enabled", false',
+                 '"browser.safebrowsing.malware.enabled", false', '"network.captive-portal-service.enabled", false'):
+        assert pref in script
