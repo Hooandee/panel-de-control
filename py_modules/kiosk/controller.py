@@ -63,6 +63,10 @@ class KioskController:
             "screen_off": self._screen_off,
         }
 
+    def session(self):
+        display = self._detection.display
+        return display.session if display else None
+
     def secondary_connector(self) -> str | None:
         display = self._detection.display
         return display.connector if display else None

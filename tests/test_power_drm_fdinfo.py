@@ -128,3 +128,21 @@ def test_a_scan_in_flight_is_not_started_twice(tmp_path, monkeypatch):
     release.set()
     first.join()
     assert len(scans) == 1
+
+
+def test_missing_amdgpu_sources_are_not_searched_on_every_read(tmp_path, monkeypatch):
+    from power import reader as power_reader
+
+    now = {"t": 0.0}
+    (tmp_path / "sys/class/devfreq/3d00000.gpu").mkdir(parents=True)
+    reader = power_reader.PowerReader(root=str(tmp_path), gpu_samples=1, gpu_sample_gap=0, clock=lambda: now["t"])
+    searches = []
+    monkeypatch.setattr(reader, "_find_amdgpu_dir", lambda: searches.append("amdgpu"))
+    monkeypatch.setattr(reader, "_find_gpu_busy_path", lambda: searches.append("busy"))
+    for _ in range(50):
+        reader.read()
+    assert searches == []
+    now["t"] = power_reader._REPROBE_S + 1
+    reader.read()
+    reader.read()
+    assert sorted(searches) == ["amdgpu", "busy"]

@@ -26,6 +26,7 @@ import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
 from gamescope_perf import GamescopePerf
+from user_session import spawn_args
 import stack_sampler
 from gamescope_stats import GamescopeStats
 import osinfo
@@ -744,6 +745,7 @@ class Plugin:
             app_id=self._gamescope_focus_app,
             skip_connectors=lambda: {c} if (c := self._kiosk.secondary_connector()) else set(),
             env=controller_detect.clean_env,
+            wrap=self._native_frame_helper,
         )
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
@@ -4260,6 +4262,16 @@ class Plugin:
     async def _sync_auto_stats_reader(self, active):
         self._auto_stats_reader_active = bool(active)
         await self._apply_stats_reader()
+
+    def _native_frame_helper(self, argv: list[str]):
+        # Started through the session's systemd so it runs the system python natively: launched
+        # from the plugin it would run under the same x86 emulation as the plugin on ARM.
+        session = self._kiosk.session()
+        if session is None:
+            return None
+        return spawn_args(session, [
+            "systemd-run", "--user", "--pipe", "--quiet", "--collect", "/usr/bin/python3", *argv[1:],
+        ])
 
     def _gamescope_focus_app(self) -> int | None:
         focus = self._gamescope_stats.focus()

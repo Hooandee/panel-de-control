@@ -134,3 +134,14 @@ def test_kiosk_vitals_join_clocks_with_the_battery_reading(plugin, monkeypatch):
         "cpu_mhz": 2093, "gpu_mhz": 220, "ram_used_gb": 5.4, "ram_total_gb": 11.2,
         "watts": 8.7, "charging": False,
     }
+
+
+def test_frame_helper_runs_the_system_python_through_the_session(plugin, monkeypatch):  # noqa: F811
+    from user_session import UserSession
+
+    monkeypatch.setattr(plugin._kiosk, "session", lambda: None)
+    assert plugin._native_frame_helper(["/fex/python3", "/plugin/gamescope_perf.py", "--child", "/"]) is None
+    monkeypatch.setattr(plugin._kiosk, "session", lambda: UserSession(1000, "/run/user/1000", "armada"))
+    command, env, _identity = plugin._native_frame_helper(["/fex/python3", "/plugin/gamescope_perf.py", "--child", "/"])
+    assert command[1:] == ["--user", "--pipe", "--quiet", "--collect", "/usr/bin/python3", "/plugin/gamescope_perf.py", "--child", "/"]
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"

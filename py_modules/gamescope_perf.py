@@ -218,6 +218,7 @@ class GamescopePerf:
         clock: Callable[[], float] = time.monotonic,
         python: str | None = None,
         env: Callable[[], dict] | None = None,
+        wrap: Callable[[list[str]], tuple[list[str], dict, dict] | None] | None = None,
     ):
         self._app_id = app_id
         self._skip_connectors = skip_connectors
@@ -225,6 +226,7 @@ class GamescopePerf:
         self._clock = clock
         self._python = python if python is not None else shutil.which("python3", path="/usr/bin:/bin")
         self._env = env
+        self._wrap = wrap
         self._frames: deque[tuple[float, int, int]] = deque()
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -265,11 +267,13 @@ class GamescopePerf:
     def _spawn(self) -> subprocess.Popen | None:
         if not self._python:
             return None
+        argv = [self._python, os.path.abspath(__file__), "--child", self._root, *sorted(self._skip_connectors())]
+        wrapped = self._wrap(argv) if self._wrap else None
+        command, env, identity = wrapped if wrapped else (argv, self._env() if self._env else None, {})
         try:
             return subprocess.Popen(
-                [self._python, os.path.abspath(__file__), "--child", self._root, *sorted(self._skip_connectors())],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                env=self._env() if self._env else None, close_fds=True, start_new_session=True,
+                command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                env=env, close_fds=True, start_new_session=True, **identity,
             )
         except OSError:
             return None
