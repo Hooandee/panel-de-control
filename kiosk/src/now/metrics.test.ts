@@ -1,19 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { BatteryState, FanState } from "../../../src/api";
-import { batteryReading, fanRpm, formatMinutes, hottest } from "./metrics";
-
-
-describe("sensors", () => {
-  const fans = { supported: true, fans: [{ label: "a", rpm: 2100, percent: 40 }, { label: "b", rpm: null, percent: null }], temps: [{ label: "cpu", celsius: 61 }, { label: "gpu", celsius: 66.5 }] } as FanState;
-
-  it("takes the hottest sensor and the fastest fan", () => {
-    expect(hottest(fans)).toBe(66.5);
-    expect(fanRpm(fans)).toBe(2100);
-    expect(hottest(null)).toBeNull();
-  });
-
-});
+import type { BatteryState } from "../../../src/api";
+import { batteryReading, formatMinutes } from "./metrics";
 
 describe("batteryReading", () => {
   const state = (battery: Partial<BatteryState["battery"]>) => ({ battery: { present: true, percent: 64, status: "Discharging", eta_seconds: 11_520, ac_online: false, ...battery } }) as BatteryState;

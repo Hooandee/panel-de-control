@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Iterable
 
 TOKEN_HEADER = "x-pdc-kiosk"
 MAX_BODY_BYTES = 1 << 20
+KEEPALIVE_IDLE_S = 30.0
 READ_TIMEOUT_S = 10.0
 STATIC_TYPES = {
     "index.html": "text/html; charset=utf-8",
@@ -53,6 +54,7 @@ class KioskServer:
         self._server: asyncio.AbstractServer | None = None
         # Per-method call counts and total seconds, for "what does the bottom screen cost".
         self.calls: dict[str, list[float]] = {}
+        self._clients: set[asyncio.StreamWriter] = set()
 
     @property
     def url(self) -> str | None:
@@ -67,41 +69,58 @@ class KioskServer:
     async def stop(self) -> None:
         if self._server is not None:
             self._server.close()
+            # Idle keep-alive connections would otherwise hold wait_closed() open.
+            for writer in list(self._clients):
+                writer.close()
             await self._server.wait_closed()
         self._server = None
         self.port = None
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        # Keep-alive: the bottom screen polls several times a second, and a fresh TCP connection
+        # per request costs more than the request under emulation on ARM handhelds.
+        self._clients.add(writer)
         try:
-            response = await asyncio.wait_for(self._handle(reader), READ_TIMEOUT_S)
-        except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError, ValueError):
-            response = _json(400, {"error": "bad_request"})
-        try:
-            writer.write(self._encode(response))
-            await writer.drain()
+            while True:
+                try:
+                    first = await asyncio.wait_for(reader.readline(), KEEPALIVE_IDLE_S)
+                except asyncio.TimeoutError:
+                    return
+                if not first:
+                    return
+                try:
+                    response, keep = await asyncio.wait_for(self._handle(first, reader), READ_TIMEOUT_S)
+                except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError, ValueError):
+                    response, keep = _json(400, {"error": "bad_request"}), False
+                writer.write(self._encode(response, keep))
+                await writer.drain()
+                if not keep:
+                    return
         except ConnectionError:
             pass
         finally:
+            self._clients.discard(writer)
             writer.close()
 
     @staticmethod
-    def _encode(response: Response) -> bytes:
+    def _encode(response: Response, keep_alive: bool = False) -> bytes:
         reason = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 413: "Payload Too Large",
                   500: "Internal Server Error"}.get(response.status, "OK")
         headers = {
             "Content-Type": response.content_type,
             "Content-Length": str(len(response.body)),
             "Cache-Control": "no-store",
-            "Connection": "close",
+            "Connection": "keep-alive" if keep_alive else "close",
             **response.headers,
         }
         head = f"HTTP/1.1 {response.status} {reason}\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers.items())
         return head.encode() + b"\r\n" + response.body
 
-    async def _handle(self, reader: asyncio.StreamReader) -> Response:
-        request_line = (await reader.readline()).decode("latin-1").strip()
+    async def _handle(self, first: bytes, reader: asyncio.StreamReader) -> tuple[Response, bool]:
+        request_line = first.decode("latin-1").strip()
         method, _, rest = request_line.partition(" ")
-        path = rest.partition(" ")[0].split("?", 1)[0]
+        target, _, version = rest.partition(" ")
+        path = target.split("?", 1)[0]
         headers: dict[str, str] = {}
         while True:
             line = (await reader.readline()).decode("latin-1")
@@ -109,17 +128,18 @@ class KioskServer:
                 break
             name, _, value = line.partition(":")
             headers[name.strip().lower()] = value.strip()
+        keep = version.strip() == "HTTP/1.1" and headers.get("connection", "").lower() != "close"
         if method == "GET" and path.startswith("/art/"):
-            return self._art(path)
+            return self._art(path), keep
         if method == "GET":
-            return self._static(path)
+            return self._static(path), keep
         if method == "POST" and path == "/rpc":
             length = int(headers.get("content-length", "0") or 0)
             if length > MAX_BODY_BYTES:
-                return _json(413, {"error": "too_large"})
+                return _json(413, {"error": "too_large"}), False
             body = await reader.readexactly(length) if length else b""
-            return await self._rpc(headers, body)
-        return _json(404, {"error": "not_found"})
+            return await self._rpc(headers, body), keep
+        return _json(404, {"error": "not_found"}), keep
 
     def _static(self, path: str) -> Response:
         name = "index.html" if path in ("", "/") else path.lstrip("/")

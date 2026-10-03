@@ -228,6 +228,16 @@ class FanReader:
                 hottest[label] = max(hottest.get(label, float("-inf")), round(milli / 1000, 1))
         return hottest.get("CPU"), hottest.get("GPU")
 
+    def fan_rpms(self) -> list[int]:
+        """Current fan speeds only (no temperatures, no curation)."""
+        rpms = []
+        for _name, fans, _temps in self._layout():
+            for inp, _label, _pwm, _max in fans:
+                rpm = _read_int(inp)
+                if rpm is not None and rpm != _INVALID_RPM:
+                    rpms.append(rpm)
+        return rpms
+
     def invalidate(self) -> None:
         """Forget the cached chip layout, after a fan driver is loaded or unloaded."""
         self._layout_cache = None

@@ -65,8 +65,9 @@ class _Domain:
         fraction = _FLOOR + (1 - _FLOOR) * (level - 1) / (_LEVELS - 1)
         return _snap_down(table, int(table[-1] * fraction))
 
-    def holds(self, ceiling, cooling_states):
-        observed = read_int(self.max_node)
+    def holds(self, ceiling, cooling_states, observed=None):
+        if observed is None:
+            observed = read_int(self.max_node)
         if observed == ceiling:
             return True
         # Thermal cooling lowers the effective limit below what was written.
@@ -142,9 +143,16 @@ class ArmPerformanceLevels(TDPBackend):
         )
 
     def read_applied(self):
+        # Read each node once and match levels in memory: this runs on every power poll.
         cooling_states = _cooling_states(self._root)
+        boost_on = _boost_on(self._root)
+        observed = [read_int(domain.max_node) for domain in self._domains]
         for level in range(_LEVELS, 0, -1):
-            if self._holds(level, cooling_states):
+            ceilings = self.ceilings(level, boost_on)
+            if all(
+                domain.holds(ceiling, cooling_states, seen)
+                for domain, ceiling, seen in zip(self._domains, ceilings, observed)
+            ):
                 return level
         return None
 

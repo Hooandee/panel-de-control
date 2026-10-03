@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { BatteryState, FanState, getBatteryState, getFanState, getKioskLive, getKioskVitals, KioskVitals } from "../../../src/api";
+import { BatteryState, getBatteryState, getKioskLive, getKioskVitals, KioskVitals } from "../../../src/api";
 import { pushSample } from "./deckMath";
 import { noteRunningGame } from "../runningGame";
 
@@ -64,7 +64,6 @@ function subscribeFrame(listener: () => void): () => void {
 /** Gamescope frame rate once a second, with a short history for the pacing line. */
 export const useLiveFrame = (): LiveFrame => useSyncExternalStore(subscribeFrame, () => frame);
 
-export const useFans = () => usePoll<FanState>(getFanState, 3000)[0];
 export const useBattery = () => usePoll<BatteryState>(getBatteryState, 15000)[0];
 export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 3000)[0];
 

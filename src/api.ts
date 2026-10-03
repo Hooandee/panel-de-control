@@ -116,6 +116,8 @@ export interface KioskVitals {
   ram_total_gb: number | null;
   watts: number | null;
   charging: boolean;
+  fan_rpm: number | null;
+  celsius: number | null;
 }
 export const getKioskVitals = callable<[], KioskVitals>("get_kiosk_vitals");
 export const setKioskScreenOff = callable<[off: boolean], KioskState>("set_kiosk_screen_off");

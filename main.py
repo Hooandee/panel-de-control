@@ -1197,10 +1197,14 @@ class Plugin:
 
         def read() -> dict:
             battery = self._battery.read()
+            rpms = self._fan_reader.fan_rpms()
+            temps = [t for t in (self._fan_reader.driving_temps() or ()) if t is not None]
             return {
                 **kiosk_vitals.read(),
                 "watts": battery.get("power_now_w"),
                 "charging": battery.get("status") == "Charging",
+                "fan_rpm": max(rpms) if rpms else None,
+                "celsius": max(temps) if temps else None,
             }
 
         return await asyncio.to_thread(read)
@@ -4993,7 +4997,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = self._observe_tdp_sync()
+            observation = await asyncio.to_thread(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)

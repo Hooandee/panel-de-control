@@ -1,14 +1,4 @@
-import type { BatteryState, FanState } from "../../../src/api";
-
-export function hottest(fans: FanState | null): number | null {
-  const temps = (fans?.temps ?? []).map((t) => t.celsius).filter((c) => Number.isFinite(c));
-  return temps.length ? Math.max(...temps) : null;
-}
-
-export function fanRpm(fans: FanState | null): number | null {
-  const rpms = (fans?.fans ?? []).map((f) => f.rpm).filter((r): r is number => r != null);
-  return rpms.length ? Math.max(...rpms) : null;
-}
+import type { BatteryState } from "../../../src/api";
 
 export type BatteryMood = "charging" | "full" | "low" | "normal";
 

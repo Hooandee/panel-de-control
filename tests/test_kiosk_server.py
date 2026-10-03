@@ -7,6 +7,10 @@ from kiosk.server import KioskServer, TOKEN_HEADER
 
 
 async def _request(port, raw: bytes) -> tuple[int, bytes]:
+    """One-shot client: asks the server to close after answering and reads to EOF."""
+    if b"\r\n" in raw and b"Connection:" not in raw:
+        line, rest = raw.split(b"\r\n", 1)
+        raw = line + b"\r\nConnection: close\r\n" + rest
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     writer.write(raw)
     await writer.drain()
@@ -170,3 +174,42 @@ def test_serves_only_resolved_game_art(static_dir, tmp_path):
     assert found == (200, b"jpeg")
     assert missing[0] == 404
     assert nested[0] == 404
+
+
+def test_one_connection_serves_several_requests(static_dir):
+    async def run():
+        server = _serve(static_dir)
+        await server.start()
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+            answers = []
+            for _ in range(3):
+                writer.write(_post(server.token, {"method": "get_tdp_state", "args": []}))
+                await writer.drain()
+                head = await reader.readuntil(b"\r\n\r\n")
+                length = int(next(line for line in head.split(b"\r\n") if line.lower().startswith(b"content-length")).split(b":")[1])
+                assert b"Connection: keep-alive" in head
+                answers.append(json.loads(await reader.readexactly(length)))
+            writer.close()
+            return answers
+        finally:
+            await server.stop()
+
+    answers = asyncio.run(run())
+    assert [a["result"]["method"] for a in answers] == ["get_tdp_state"] * 3
+
+
+def test_stopping_does_not_wait_for_idle_connections(static_dir):
+    async def run():
+        server = _serve(static_dir)
+        await server.start()
+        reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+        writer.write(_post(server.token, {"method": "get_tdp_state", "args": []}))
+        await writer.drain()
+        await reader.readuntil(b"\r\n\r\n")
+        started = asyncio.get_running_loop().time()
+        await asyncio.wait_for(server.stop(), 2)
+        writer.close()
+        return asyncio.get_running_loop().time() - started
+
+    assert asyncio.run(run()) < 1

@@ -11,13 +11,13 @@ import { isLevelUnit } from "../../../src/tdp/unit";
 import { useFanCurve } from "../../../src/fans/useFanCurve";
 import { useCpu } from "../../../src/system/useCpu";
 import { toaster } from "../shims/deckyApi";
-import { fanRpm, hottest } from "../now/metrics";
 import { fpsChoices, levelCaption, refreshChoices, stepRange } from "./deckMath";
 import { GlassDialog, Hero, Orb, Orbs, Steps, usePresence, VFader } from "./Glass";
 import { FAN_PRESET_ICON, FanIcon, ICON } from "./icons";
 import { Header } from "./Header";
 import { LightsDialog, LightsTile } from "./Lights";
-import { useFans, useLiveFrame, useVitals } from "./live";
+import { useLiveFrame, useVitals } from "./live";
+import type { KioskVitals } from "../../../src/api";
 import { SteamActionError, steamCall, useColores, useRefreshRate, useSteamScalar } from "./steam";
 
 type DialogId = "perf" | "fps" | "fan" | "hz" | "lights";
@@ -30,9 +30,8 @@ const LiveFps: FC = () => {
   return <>{fps == null ? "— fps" : `${Math.round(fps)} fps`}</>;
 };
 
-const Vitals: FC = () => {
+const Vitals: FC<{ vitals: KioskVitals | null }> = ({ vitals }) => {
   const { t, lang } = useI18n();
-  const vitals = useVitals();
   const number = (value: number, digits: number) =>
     value.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const items = [
@@ -85,7 +84,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
   const potencia = usePotencia();
   const fan = useFanCurve();
   const cpu = useCpu();
-  const fans = useFans();
+  const vitals = useVitals();
   const brightness = useSteamScalar("brightness");
   const volume = useSteamScalar("volume");
   const refresh = useRefreshRate();
@@ -124,8 +123,8 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
   const fill = shownLevel == null || range.max <= range.min ? 0 : (shownLevel - range.min) / (range.max - range.min);
   const lit = shownLevel == null ? 0 : Math.max(1, Math.round(fill * 10));
 
-  const rpm = fanRpm(fans);
-  const temp = hottest(fans);
+  const rpm = vitals?.fan_rpm ?? null;
+  const temp = vitals?.celsius ?? null;
   const fanPresets = new Set(["auto", ...(fan.state?.presets ?? []).map((p) => p.id)]);
   const fanChoices = FAN_CHOICES.filter((id) => fanPresets.has(id));
   const fanReady = Boolean(fan.state?.supported) && fanChoices.length > 1;
@@ -146,7 +145,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
             </div>
             <div className="t-perf-name">{perfReady ? perfName : t("kiosk.unavailable")}</div>
           </div>
-          <Vitals />
+          <Vitals vitals={vitals} />
           <div className="t-mini">
             {Array.from({ length: 10 }, (_, i) => <i key={i} className={i < lit ? "is-on" : undefined} />)}
           </div>

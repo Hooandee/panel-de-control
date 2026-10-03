@@ -130,9 +130,11 @@ def test_kiosk_vitals_join_clocks_with_the_battery_reading(plugin, monkeypatch):
     main = sys.modules["main"]
     monkeypatch.setattr(main.kiosk_vitals, "read", lambda: {"cpu_mhz": 2093, "gpu_mhz": 220, "ram_used_gb": 5.4, "ram_total_gb": 11.2})
     monkeypatch.setattr(plugin._battery, "read", lambda: {"power_now_w": 8.7, "status": "Discharging"})
+    monkeypatch.setattr(plugin._fan_reader, "fan_rpms", lambda: [3100, 0])
+    monkeypatch.setattr(plugin._fan_reader, "driving_temps", lambda: (71.5, 64.0))
     assert asyncio.run(plugin.get_kiosk_vitals()) == {
         "cpu_mhz": 2093, "gpu_mhz": 220, "ram_used_gb": 5.4, "ram_total_gb": 11.2,
-        "watts": 8.7, "charging": False,
+        "watts": 8.7, "charging": False, "fan_rpm": 3100, "celsius": 71.5,
     }
 
 
