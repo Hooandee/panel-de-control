@@ -1,5 +1,7 @@
 import asyncio
+import collections
 import copy
+import functools
 import inspect
 import json
 import math
@@ -1183,7 +1185,23 @@ class Plugin:
     async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
         """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""
         before = self._kiosk.rpc_calls()
-        result = await asyncio.to_thread(stack_sampler.sample, seconds)
+        loop = asyncio.get_running_loop()
+        offloaded: collections.Counter[str] = collections.Counter()
+        original = loop.run_in_executor
+
+        def counting(executor, func, *args):
+            target = func
+            while isinstance(target, functools.partial):
+                target = target.args[0] if target.func.__name__ == "run" and target.args else target.func
+            offloaded[getattr(target, "__qualname__", repr(target))] += 1
+            return original(executor, func, *args)
+
+        loop.run_in_executor = counting
+        try:
+            result = await loop.run_in_executor(None, stack_sampler.sample, seconds)
+        finally:
+            del loop.run_in_executor
+        result["offloaded"] = dict(offloaded.most_common(15))
         after = self._kiosk.rpc_calls()
         result["kiosk_calls"] = {
             name: {"calls": int(count - before.get(name, [0, 0.0])[0]), "seconds": round(spent - before.get(name, [0, 0.0])[1], 3)}
