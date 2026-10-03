@@ -83,12 +83,11 @@ button:disabled { cursor: default; }
 .t-level b { font-size: 64px; font-weight: 200; letter-spacing: -.06em; line-height: .85; }
 .t-level span { font-size: 14px; color: rgba(255,255,255,.6); }
 .t-perf-name { font-size: 16px; font-weight: 600; margin-top: 4px; }
-.t-perf-detail { font-size: 11.5px; color: rgba(255,255,255,.6); margin-top: 2px; }
-.t-vitals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0; }
+.t-vitals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
 .t-vitals div { min-width: 0; }
-.t-vitals dt { font-size: 9.5px; font-weight: 600; letter-spacing: .02em; color: rgba(255,255,255,.5); }
-.t-vitals dd { margin: 1px 0 0; font-size: 15px; font-weight: 450; letter-spacing: -.02em; white-space: nowrap; }
-.t-vitals small { margin-left: 1px; font-size: 9.5px; font-weight: 500; color: rgba(255,255,255,.55); }
+.t-vitals dt { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.5); }
+.t-vitals dd { margin: 1px 0 0; font-size: 19px; font-weight: 400; letter-spacing: -.02em; white-space: nowrap; }
+.t-vitals small { margin-left: 3px; font-size: 11px; font-weight: 500; color: rgba(255,255,255,.55); }
 .t-mini { display: flex; gap: 4px; }
 .t-mini i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.16); transition: background .25s; }
 .t-mini i.is-on { background: #fff; }

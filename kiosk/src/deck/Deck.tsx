@@ -145,7 +145,6 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
               <span>{levels ? `/ ${range.max}` : "W"}</span>
             </div>
             <div className="t-perf-name">{perfReady ? perfName : t("kiosk.unavailable")}</div>
-            {perfDetail && <div className="t-perf-detail">{perfDetail}</div>}
           </div>
           <Vitals />
           <div className="t-mini">
