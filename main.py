@@ -26,6 +26,7 @@ import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
 from gamescope_perf import GamescopePerf
+import stack_sampler
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -1171,6 +1172,10 @@ class Plugin:
             else None
         )
         return {"fps": round(fps, 1) if fps is not None else None, "reason": reason, "playing_s": playing_s}
+
+    async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
+        """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""
+        return await asyncio.to_thread(stack_sampler.sample, seconds)
 
     async def get_kiosk_vitals(self) -> dict:
         self._init()
