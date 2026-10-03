@@ -115,3 +115,10 @@ def test_backlight_power_writes_blank_codes_and_refuses_paths(tmp_path):
     assert (tmp_path / "ae94000.dsi.0" / "bl_power").read_text() == "0"
     assert not set_backlight_power("../../etc", False, sys_root=str(tmp_path))
     assert not set_backlight_power("", False, sys_root=str(tmp_path))
+
+
+def test_stop_does_not_wait_for_the_browser_to_exit():
+    launcher, calls = _launcher([(0, "")])
+    ok, _ = launcher.stop()
+    assert ok
+    assert [cmd[-3:] for cmd, _env, _identity in calls] == [["stop", "--no-block", UNIT]]

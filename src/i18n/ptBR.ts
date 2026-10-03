@@ -29,6 +29,7 @@ export const ptBR: Record<string, string> = {
   "settings.kiosk.noBrowser": "Falta o Firefox no sistema para usar a tela inferior.",
   "kiosk.header.playing": "Jogando · {time}",
   "kiosk.header.target": "fps · meta {fps}",
+  "kiosk.header.temp": "Temp.",
   "kiosk.perf.auto": "Auto",
   "kiosk.perf.custom": "Personalizado",
   "kiosk.perf.autoNote": "A meta de FPS está ajustando a potência. Coloque em Livre para escolher manualmente.",

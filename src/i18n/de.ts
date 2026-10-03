@@ -29,6 +29,7 @@ export const de: Record<string, string> = {
   "settings.kiosk.noBrowser": "Firefox fehlt im System, daher ist der untere Bildschirm nicht nutzbar.",
   "kiosk.header.playing": "Spielt · {time}",
   "kiosk.header.target": "fps · Ziel {fps}",
+  "kiosk.header.temp": "Temp.",
   "kiosk.perf.auto": "Auto",
   "kiosk.perf.custom": "Eigene",
   "kiosk.perf.autoNote": "Das FPS-Ziel regelt gerade die Leistung. Stelle es auf Frei, um sie selbst zu wählen.",

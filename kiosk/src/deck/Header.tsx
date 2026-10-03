@@ -35,7 +35,7 @@ const Art: FC<{ src: string | null; className: string }> = ({ src, className }) 
   );
 };
 
-export const Header: FC<{ frame: LiveFrame; target: number | null }> = ({ frame, target }) => {
+export const Header: FC<{ frame: LiveFrame; target: number | null; celsius: number | null }> = ({ frame, target, celsius }) => {
   const { t, lang } = useI18n();
   const game = useRunningGame();
   const battery = batteryReading(useBattery());
@@ -62,9 +62,17 @@ export const Header: FC<{ frame: LiveFrame; target: number | null }> = ({ frame,
         {game && <div className="h-name">{game.name}</div>}
         {playing && <div className="h-session">{t("kiosk.header.playing", { time: playing })}</div>}
       </div>
-      <div className="h-fps">
-        <b>{frame.fps == null ? "—" : Math.round(frame.fps)}</b>
-        <small>{target != null ? t("kiosk.header.target", { fps: target }) : "fps"}</small>
+      <div className="h-stats">
+        {celsius != null && (
+          <div className="h-temp">
+            <b>{Math.round(celsius)}°</b>
+            <small>{t("kiosk.header.temp")}</small>
+          </div>
+        )}
+        <div className="h-fps">
+          <b>{frame.fps == null ? "—" : Math.round(frame.fps)}</b>
+          <small>{target != null ? t("kiosk.header.target", { fps: target }) : "fps"}</small>
+        </div>
       </div>
       {pace.line && (
         <svg className="h-pace" viewBox={`0 0 ${PACE_W} ${PACE_H}`} preserveAspectRatio="none" aria-hidden>

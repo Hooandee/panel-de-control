@@ -66,6 +66,7 @@ class KioskLauncher:
         return code == 0 and out == "active"
 
     def stop(self) -> tuple[bool, str]:
-        code, out = self._systemd(["systemctl", "--user", "stop", UNIT])
-        self._systemd(["systemctl", "--user", "reset-failed", UNIT])
+        # --no-block: Decky SIGKILLs a plugin that takes 5 s to unload, and a killed plugin
+        # can leave the loader spinning. The transient unit is --collect, so nothing lingers.
+        code, out = self._systemd(["systemctl", "--user", "stop", "--no-block", UNIT])
         return code == 0, out

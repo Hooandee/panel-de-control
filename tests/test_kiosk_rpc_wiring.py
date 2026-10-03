@@ -92,3 +92,9 @@ def test_kiosk_session_time_counts_from_when_the_game_appeared(plugin, monkeypat
     assert asyncio.run(plugin.get_kiosk_live())["playing_s"] == 4321
     plugin._set_current_appid(None)
     assert asyncio.run(plugin.get_kiosk_live())["playing_s"] is None
+
+
+def test_kiosk_stop_leaves_room_inside_deckys_unload_grace(plugin):  # noqa: F811
+    main = sys.modules["main"]
+    decky_sigkill_after_s = 5.0
+    assert main._KIOSK_STOP_TIMEOUT_S <= decky_sigkill_after_s / 2

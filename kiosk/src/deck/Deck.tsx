@@ -99,7 +99,7 @@ export const Deck: FC<{ onScreenOff: () => void }> = ({ onScreenOff }) => {
 
   return (
     <>
-      <Header frame={frame} target={target} />
+      <Header frame={frame} target={target} celsius={temp} />
 
       <div className="t-grid">
         <Tile area="perf" disabled={!perfReady} onPress={() => setOpen("perf")}>

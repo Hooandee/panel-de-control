@@ -29,6 +29,7 @@ export const it: Record<string, string> = {
   "settings.kiosk.noBrowser": "Manca Firefox nel sistema: lo schermo inferiore non si può usare.",
   "kiosk.header.playing": "In gioco · {time}",
   "kiosk.header.target": "fps · obiettivo {fps}",
+  "kiosk.header.temp": "Temp.",
   "kiosk.perf.auto": "Auto",
   "kiosk.perf.custom": "Personalizzato",
   "kiosk.perf.autoNote": "L'obiettivo FPS sta regolando la potenza. Mettilo su Libero per sceglierla a mano.",

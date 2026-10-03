@@ -318,7 +318,7 @@ def _now_minutes() -> int:
     return t.hour * 60 + t.minute
 
 
-_KIOSK_STOP_TIMEOUT_S = 5.0
+_KIOSK_STOP_TIMEOUT_S = 1.5
 # The kiosk polls for frame rate; without a poll for this long, the gamescope reader is
 # released again unless Auto-TDP still needs it.
 _KIOSK_FPS_HOLD_S = 10.0

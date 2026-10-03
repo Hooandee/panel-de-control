@@ -47,7 +47,10 @@ button:disabled { cursor: default; }
 .h-name { font-size: 24px; font-weight: 650; letter-spacing: -.03em; line-height: 1.05; text-shadow: 0 2px 14px rgba(0,0,0,.7);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .h-session { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.75); text-shadow: 0 1px 8px rgba(0,0,0,.7); }
-.h-fps { position: absolute; right: 18px; top: 46px; text-align: right; }
+.h-stats { position: absolute; right: 18px; top: 46px; display: flex; align-items: flex-start; gap: 22px; text-align: right; }
+.h-temp { padding-top: 14px; }
+.h-temp b { font-size: 36px; font-weight: 250; letter-spacing: -.04em; line-height: .85; text-shadow: 0 2px 20px rgba(0,0,0,.45); }
+.h-temp small { display: block; margin-top: 6px; font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
 .h-fps b { font-size: 66px; font-weight: 200; letter-spacing: -.06em; line-height: .85; text-shadow: 0 2px 20px rgba(0,0,0,.45); }
 .h-fps small { display: block; font-size: 12px; font-weight: 500; color: rgba(255,255,255,.7); }
 .h-pace { position: absolute; left: 18px; right: 18px; top: 128px; width: calc(100% - 36px); height: 22px; }
@@ -99,7 +102,7 @@ button:disabled { cursor: default; }
 .g-vfader-fill { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.95);
   transition: height .18s cubic-bezier(.2,.8,.2,1); }
 .g-vfader.is-drag .g-vfader-fill { transition: none; }
-.g-vfader > svg { position: absolute; left: 50%; bottom: 16px; width: 24px; height: 24px; margin-left: -12px; stroke: #1c1c1e; stroke-width: 1.9; }
+.g-vfader > svg { position: absolute; left: 50%; bottom: 16px; width: 24px; height: 24px; margin-left: -12px; stroke: #8e8e93; stroke-width: 1.9; }
 
 .g-scrim { position: absolute; inset: 0; z-index: 10; background: rgba(0,0,0,.3); opacity: 0; transition: opacity .35s ease; }
 .g-scrim.is-on { opacity: 1; }

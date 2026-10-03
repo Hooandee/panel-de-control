@@ -5,6 +5,7 @@ vi.mock("@decky/ui", () => ({ Navigation: { OpenQuickAccessMenu: vi.fn() } }));
 vi.mock("../api", () => ({ kioskSteamResult: vi.fn(async () => true) }));
 vi.mock("../deckyInternal", () => ({ callBackend: vi.fn() }));
 vi.mock("../system/display", () => ({ displayBrightness: { subscribe: () => null, set: () => {} } }));
+vi.mock("../steam/performanceRuntime", () => ({ resolveSteamPerformanceStore: () => null }));
 vi.mock("../system/audio", () => ({ systemVolume: { subscribe: () => null, set: () => {} } }));
 vi.mock("../system/colores", () => ({
   COLORES_PLUGIN_NAME: "Colores",

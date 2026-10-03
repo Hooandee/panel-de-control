@@ -5,6 +5,7 @@ import { kioskSteamResult } from "../api";
 import { callBackend } from "../deckyInternal";
 import { displayBrightness } from "../system/display";
 import { systemVolume } from "../system/audio";
+import { resolveSteamPerformanceStore } from "../steam/performanceRuntime";
 import type { ScalarControl } from "../system/types";
 import {
   COLORES_PLUGIN_NAME,
@@ -136,7 +137,6 @@ export function createBridgeHandlers(deps: BridgeDeps): { handlers: Record<strin
 }
 
 interface SteamWindowGlobals {
-  SystemPerfStore?: PerfStore;
   SteamUIStore?: {
     m_WindowStore?: {
       MainWindowInstance?: { m_VirtualKeyboardManager?: { SetVirtualKeyboardVisible?: () => void } };
@@ -150,7 +150,7 @@ export function steamDeps(host: Window = window): BridgeDeps {
   return {
     brightness: displayBrightness,
     volume: systemVolume,
-    perfStore: () => globals.SystemPerfStore ?? null,
+    perfStore: () => (resolveSteamPerformanceStore() as PerfStore | null),
     showKeyboard: () => {
       const keyboard = globals.SteamUIStore?.m_WindowStore?.MainWindowInstance?.m_VirtualKeyboardManager;
       if (typeof keyboard?.SetVirtualKeyboardVisible !== "function") return false;
