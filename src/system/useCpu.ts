@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
+import { pollMs } from "./pollCadence";
 
 const POLL_MS = 3000; // topology/freq change rarely
 
@@ -69,7 +70,7 @@ export function useCpu(): CpuController {
         });
     };
     tick();
-    const poll = setInterval(tick, POLL_MS);
+    const poll = setInterval(tick, pollMs(POLL_MS));
     return () => {
       alive = false;
       clearInterval(poll);

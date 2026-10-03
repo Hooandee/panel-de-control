@@ -1173,7 +1173,12 @@ class Plugin:
             if self._current_appid is not None and since is not None
             else None
         )
-        return {"fps": round(fps, 1) if fps is not None else None, "reason": reason, "playing_s": playing_s}
+        return {
+            "fps": round(fps, 1) if fps is not None else None,
+            "reason": reason,
+            "playing_s": playing_s,
+            "appid": self._current_appid,
+        }
 
     async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
         """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""

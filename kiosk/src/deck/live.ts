@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { BatteryState, FanState, getBatteryState, getFanState, getKioskLive, getKioskVitals, KioskVitals } from "../../../src/api";
 import { pushSample } from "./deckMath";
+import { noteRunningGame } from "../runningGame";
 
 /** Poll `read` every `everyMs` while mounted; failures keep the last value. */
 export function usePoll<T>(read: () => Promise<T>, everyMs: number): [T | null, (next: T | null) => void] {
@@ -39,6 +40,7 @@ function pullFrame(): void {
     .then((live) => {
       const history = live.fps == null ? [] : pushSample(frame.history, live.fps, FPS_HISTORY);
       frame = { fps: live.fps, playingS: live.playing_s, history };
+      noteRunningGame(live.appid);
       frameListeners.forEach((listener) => listener());
     })
     .catch(() => {});
@@ -62,8 +64,8 @@ function subscribeFrame(listener: () => void): () => void {
 /** Gamescope frame rate once a second, with a short history for the pacing line. */
 export const useLiveFrame = (): LiveFrame => useSyncExternalStore(subscribeFrame, () => frame);
 
-export const useFans = () => usePoll<FanState>(getFanState, 2000)[0];
+export const useFans = () => usePoll<FanState>(getFanState, 3000)[0];
 export const useBattery = () => usePoll<BatteryState>(getBatteryState, 15000)[0];
-export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 2000)[0];
+export const useVitals = () => usePoll<KioskVitals>(getKioskVitals, 3000)[0];
 
 export const artUrl = (appid: string, kind: "hero" | "logo") => `/art/${encodeURIComponent(appid)}/${kind}`;

@@ -1,10 +1,9 @@
-import { getKioskGame, getTdpState } from "../../src/api";
+import { getKioskGame } from "../../src/api";
 import { GameOverview, isNonSteamKey, nonSteamName } from "../../src/tdp/gameIdentity";
 
 // Matches gameIdentity's shortcut detection so stableGameKey() hands back the same "ns:" key.
 const APP_TYPE_SHORTCUT = 1073741824;
 const SHORTCUT_APPID = 2147483648;
-const POLL_MS = 3000;
 
 let current: GameOverview | undefined;
 
@@ -21,19 +20,19 @@ export function overviewForKey(key: string | null | undefined, name: string | nu
   return { appid: key, display_name: name ?? key };
 }
 
-export function followRunningGame(): void {
-  let names: Record<string, string | null> = {};
-  const sync = async () => {
-    try {
-      const key = (await getTdpState()).appid;
-      if (key && !isNonSteamKey(key) && !(key in names)) {
-        names = { ...names, [key]: (await getKioskGame(key).catch(() => ({ name: null }))).name };
-      }
-      current = overviewForKey(key, key ? names[key] ?? null : null);
-    } catch {
-      /* keep the last known game until the backend answers again */
-    }
-  };
-  void sync();
-  window.setInterval(() => void sync(), POLL_MS);
+const names: Record<string, string | null> = {};
+const asked = new Set<string>();
+
+/** Fed from the bottom screen's live poll (get_kiosk_live carries the backend's current game). */
+export function noteRunningGame(key: string | null): void {
+  if (key && !isNonSteamKey(key) && !asked.has(key)) {
+    asked.add(key);
+    void getKioskGame(key)
+      .then((game) => {
+        names[key] = game.name;
+        if (current && String(current.appid) === key) current = overviewForKey(key, game.name);
+      })
+      .catch(() => asked.delete(key));
+  }
+  current = overviewForKey(key, key ? names[key] ?? null : null);
 }

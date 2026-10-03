@@ -75,7 +75,7 @@ def test_kiosk_frame_rate_holds_the_readers_only_while_polled(plugin, monkeypatc
     monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
 
     plugin._current_appid = None
-    assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 14.0, "reason": "ok", "playing_s": None}
+    assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 14.0, "reason": "ok", "playing_s": None, "appid": None}
     assert events == ["perf", "stats"]
     asyncio.run(plugin._sync_auto_stats_reader(False))
     assert events == ["perf", "stats"]

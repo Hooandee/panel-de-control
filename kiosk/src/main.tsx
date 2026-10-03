@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { I18nProvider } from "../../src/i18n";
 import { becomePrefsFollower, followBackendPrefs } from "../../src/system/pdcStorage";
 import { KioskApp } from "./KioskApp";
-import { followRunningGame } from "./runningGame";
+import { setPollFactor } from "../../src/system/pollCadence";
 import { KIOSK_CSS, KIOSK_LOGICAL_WIDTH } from "./styles";
 
 function fitToScreen(): void {
@@ -21,7 +21,8 @@ const PREFS_SYNC_MS = 10_000;
 
 becomePrefsFollower();
 
-followRunningGame();
+// Glanced at for hours next to a running game: shared hooks poll at a third of the QAM rate.
+setPollFactor(3);
 
 void followBackendPrefs().finally(() => {
   window.setInterval(() => void followBackendPrefs(), PREFS_SYNC_MS);

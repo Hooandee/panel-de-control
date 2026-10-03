@@ -106,6 +106,7 @@ export interface KioskLive {
   fps: number | null;
   reason: string | null;
   playing_s: number | null;
+  appid: string | null;
 }
 export const getKioskLive = callable<[], KioskLive>("get_kiosk_live");
 export interface KioskVitals {
