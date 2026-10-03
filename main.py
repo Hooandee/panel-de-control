@@ -3414,6 +3414,9 @@ class Plugin:
             # Unloading under a fan still in manual mode would strand it at its
             # last duty with no driver to move it again.
             state = driver.release_failed()
+        reader = getattr(self, "_fan_reader", None)
+        if reader is not None:
+            reader.invalidate()
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
@@ -12348,6 +12351,8 @@ class Plugin:
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         self._restore_board_fans()
+        if getattr(self, "_fan_reader", None) is not None:
+            self._fan_reader.invalidate()
         await self._offload_call(self._recover_fremont_fan_handoff)
         await self._prime_tdp_ownership()
         try:
