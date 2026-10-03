@@ -1,9 +1,17 @@
+import os
+import threading
+
+from power import drm_fdinfo
 from power.drm_fdinfo import DrmFdinfoGpuBusy
 
 
 def _client(root, pid, fd, client, busy_ns, driver="msm"):
     path = root / "proc" / str(pid) / "fdinfo"
     path.mkdir(parents=True, exist_ok=True)
+    links = root / "proc" / str(pid) / "fd"
+    links.mkdir(parents=True, exist_ok=True)
+    if not os.path.lexists(links / str(fd)):
+        os.symlink("/dev/dri/renderD128", links / str(fd))
     (path / str(fd)).write_text(
         f"pos:\t0\ndrm-driver:\t{driver}\ndrm-client-id:\t{client}\n"
         f"drm-engine-gpu:\t{busy_ns} ns\ndrm-cycles-gpu:\t0\n"
@@ -87,6 +95,36 @@ def test_new_gpu_clients_are_found_by_the_periodic_rescan(tmp_path):
     now["t"] = 1.0
     reader.read()
     assert len(reader._paths) == 1
-    now["t"] = 11.0
+    now["t"] = 1.0 + drm_fdinfo._RESCAN_S
     reader.read()
     assert len(reader._paths) == 2
+
+
+def test_only_descriptors_on_a_drm_device_are_read(tmp_path):
+    _client(tmp_path, 100, 5, "7", 0)
+    other = tmp_path / "proc" / "100"
+    (other / "fdinfo" / "6").write_text("pos:\t0\nflags:\t02\n")
+    os.symlink("/home/user/save.dat", other / "fd" / "6")
+    assert drm_fdinfo._gpu_fdinfo_paths(str(tmp_path)) == [str(other / "fdinfo" / "5")]
+
+
+def test_a_scan_in_flight_is_not_started_twice(tmp_path, monkeypatch):
+    _client(tmp_path, 100, 5, "7", 0)
+    reader = DrmFdinfoGpuBusy(root=str(tmp_path))
+    started, release = threading.Event(), threading.Event()
+    scans = []
+
+    def slow_scan(root, paths=None):
+        scans.append(root)
+        started.set()
+        release.wait(2)
+        return {}, []
+
+    monkeypatch.setattr(drm_fdinfo, "_clients", slow_scan)
+    first = threading.Thread(target=reader.read)
+    first.start()
+    started.wait(2)
+    assert reader.read() is None
+    release.set()
+    first.join()
+    assert len(scans) == 1

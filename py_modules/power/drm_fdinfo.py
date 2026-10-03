@@ -5,6 +5,7 @@ window is the caller's own cadence and no sampling sleep is needed."""
 
 import glob
 import os
+import threading
 import time
 
 _DRIVERS = frozenset({"msm", "panfrost", "panthor", "lima"})
@@ -37,11 +38,30 @@ def _parse(path: str):
     return (driver, client), busy
 
 
+def _gpu_fdinfo_paths(root: str) -> list[str]:
+    """fdinfo of descriptors that point at a DRM device: one readlink per fd instead of reading and
+    parsing every fdinfo on the system (thousands under a Proton game, seconds under emulation)."""
+    paths = []
+    for proc in glob.glob(os.path.join(root, "proc", "[0-9]*")):
+        try:
+            entries = list(os.scandir(os.path.join(proc, "fd")))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                target = os.readlink(entry.path)
+            except OSError:
+                continue
+            if target.startswith("/dev/dri/"):
+                paths.append(os.path.join(proc, "fdinfo", entry.name))
+    return paths
+
+
 def _clients(root: str, paths=None) -> tuple[dict[tuple[str, str], int], list[str]]:
     totals: dict[tuple[str, str], int] = {}
     found = []
     if paths is None:
-        paths = glob.glob(os.path.join(root, "proc", "[0-9]*", "fdinfo", "*"))
+        paths = _gpu_fdinfo_paths(root)
     for path in paths:
         parsed = _parse(path)
         if parsed is None:
@@ -55,9 +75,8 @@ def _clients(root: str, paths=None) -> tuple[dict[tuple[str, str], int], list[st
 # msm updates a client's busy time when a job completes, so a window much shorter
 # than a frame swings between 0 and 100; several callers share one reader.
 _MIN_WINDOW_S = 1.0
-# A full /proc scan costs ~150 ms under x86 emulation; between scans only the
-# descriptors already known to belong to a GPU client are re-read.
-_RESCAN_S = 10.0
+# Between full scans only the descriptors already known to belong to a GPU client are re-read.
+_RESCAN_S = 30.0
 
 
 class DrmFdinfoGpuBusy:
@@ -69,8 +88,19 @@ class DrmFdinfoGpuBusy:
         self._paths: list[str] = []
         self._scanned_at = float("-inf")
         self.has_clients = False
+        self._busy = threading.Lock()
 
     def read(self) -> int | None:
+        # Several RPCs ask at once; a second scan while one runs only piles up CPU (AYN Thor, 2026-10-03:
+        # eight concurrent scans held 1.4 cores during a game). Late callers get the last value.
+        if not self._busy.acquire(blocking=False):
+            return self._value
+        try:
+            return self._read()
+        finally:
+            self._busy.release()
+
+    def _read(self) -> int | None:
         now = self._clock()
         if self._last is not None and now - self._last[0] < _MIN_WINDOW_S:
             return self._value
