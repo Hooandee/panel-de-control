@@ -16,6 +16,7 @@ ACTIONS = frozenset({
     "screenshot", "keyboard", "quick_access",
     "colores.state", "colores.call", "colores.install",
     "perf.view", "perf.preset", "perf.level", "perf.target",
+    "snapshot",
 })
 
 Emit = Callable[..., Awaitable[Any]]

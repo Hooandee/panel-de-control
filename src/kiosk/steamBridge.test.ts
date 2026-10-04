@@ -103,4 +103,15 @@ describe("kiosk Steam bridge handlers", () => {
     expect(await missing.handlers["colores.state"]([])).toEqual({ installed: false });
     await expect(missing.handlers["colores.call"](["set_power", [true]])).rejects.toThrow("not_installed");
   });
+
+  it("answers a snapshot of every polled value in one round trip, each settled on its own", async () => {
+    const perf = { "perf.view": vi.fn(async () => ({ ready: true })) };
+    const { handlers } = createBridgeHandlers(deps({ perf, perfStore: () => null }));
+    const snapshot = (await handlers.snapshot([])) as Record<string, { ok: boolean; result?: unknown }>;
+    expect(snapshot["brightness.get"]).toEqual({ ok: true, result: { value: 0.62 } });
+    expect(snapshot["volume.get"]).toEqual({ ok: true, result: { value: 0.45 } });
+    expect(snapshot["refresh.get"]).toEqual({ ok: true, result: null });
+    expect(snapshot["perf.view"]).toEqual({ ok: true, result: { ready: true } });
+    expect(snapshot["colores.state"].ok).toBe(true);
+  });
 });

@@ -21,7 +21,14 @@ TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen
 LIVE_S = 0.5
 VITALS_S = 5.0
 BATTERY_S = 15.0
-SLOW_S = 10.0
+STEAM_S = 15.0
+STATE_S = 30.0
+PAUSED_CHECK_S = 5.0
+# One bridge round trip answers all of these; each comes back under the label a single read uses.
+SNAPSHOT_LABELS = {
+    "brightness.get": "brightness", "volume.get": "volume", "refresh.get": "refresh",
+    "perf.view": "perf", "colores.state": "colores",
+}
 CLOCK_S = 10.0
 SCALAR_HOLD_S = 1.5
 SCALAR_GAP_S = 0.04
@@ -92,9 +99,19 @@ class Worker(threading.Thread):
         self._next_write: dict[str, float] = {}
         self._schedule: list[tuple[float, str]] = []
         self.written_at: dict[str, float] = {}
+        # Nothing is polled while the bottom screen is dark; a touch wakes it and the polls resume.
+        self.paused = False
 
     def every(self, name: str) -> None:
         heapq.heappush(self._schedule, (0.0, name))
+
+    def set_paused(self, paused: bool) -> None:
+        with self._lock:
+            if self.paused and not paused:
+                self._schedule = [(0.0, name) for _, name in self._schedule]
+                heapq.heapify(self._schedule)
+            self.paused = paused
+            self._lock.notify()
 
     def act(self, label: str, method: str, *args) -> None:
         """Run `method` once; its result comes back under `label`."""
@@ -149,7 +166,8 @@ class Worker(threading.Thread):
             now = time.monotonic()
             while self._schedule and self._schedule[0][0] <= now:
                 _, name = heapq.heappop(self._schedule)
-                heapq.heappush(self._schedule, (now + self._poll(name), name))
+                wait = PAUSED_CHECK_S if self.paused else self._poll(name)
+                heapq.heappush(self._schedule, (now + wait, name))
 
     def _call(self, label: str, method: str, *args):
         try:
@@ -170,20 +188,18 @@ class Worker(threading.Thread):
         if name == "battery":
             self._call("battery", "get_battery_state")
             return BATTERY_S
-        if name == "slow":
-            for label, method, args in (
-                ("cpu", "get_cpu_state", ()),
-                ("prefs", "get_ui_prefs", ()),
-                ("brightness", "kiosk_steam", ("brightness.get", [])),
-                ("volume", "kiosk_steam", ("volume.get", [])),
-                ("refresh", "kiosk_steam", ("refresh.get", [])),
-                ("perf", "kiosk_steam", ("perf.view", [])),
-                ("colores", "kiosk_steam", ("colores.state", [])),
-                ("fan", "get_fan_curve_state", ()),
-            ):
-                self._call(label, method, *args)
-            return SLOW_S
-        return SLOW_S
+        if name == "steam":
+            reply = self._call("snapshot", "kiosk_steam", "snapshot", [])
+            if isinstance(reply, dict) and reply.get("ok"):
+                for action, value in (reply.get("result") or {}).items():
+                    if action in SNAPSHOT_LABELS:
+                        self.post(SNAPSHOT_LABELS[action], value)
+            return STEAM_S
+        if name == "state":
+            for label, method in (("cpu", "get_cpu_state"), ("prefs", "get_ui_prefs"), ("fan", "get_fan_curve_state")):
+                self._call(label, method)
+            return STATE_S
+        return STATE_S
 
 
 class App:
@@ -228,7 +244,7 @@ class App:
         self.touch = Touchscreen(device, self.panel.width, self.panel.height) if device else None
         self.wake = Wake()
         self.worker = Worker(self.rpc, self.wake)
-        for name in ("live", "vitals", "battery", "slow"):
+        for name in ("live", "vitals", "battery", "steam", "state"):
             self.worker.every(name)
         self.dirty = True
         self.last_frame = 0.0
@@ -421,6 +437,7 @@ class App:
             s.refresh = value.get("result")
         elif name == "screen_off" and isinstance(value, dict):
             self.screen_off = bool(value.get("screen_off"))
+            self.worker.set_paused(self.screen_off)
         else:
             return
         self.dirty = True

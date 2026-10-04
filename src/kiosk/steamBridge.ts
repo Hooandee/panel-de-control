@@ -134,6 +134,19 @@ export function createBridgeHandlers(deps: BridgeDeps): { handlers: Record<strin
     ...deps.perf,
   };
 
+  // The native bottom screen polls everything at once: one round trip through Steam instead of five.
+  const settle = async (action: string) => {
+    try {
+      return { ok: true, result: (await handlers[action]([])) ?? null };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+  handlers.snapshot = async () => {
+    const actions = ["brightness.get", "volume.get", "refresh.get", "perf.view", "colores.state"].filter((a) => handlers[a]);
+    return Object.fromEntries(await Promise.all(actions.map(async (action) => [action, await settle(action)])));
+  };
+
   return {
     handlers,
     stop: () => {
