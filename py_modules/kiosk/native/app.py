@@ -591,7 +591,11 @@ class App:
         elif action == "fan":
             game_scope = bool(s.appid) and (s.fan or {}).get("follows_global") is False
             s.fan = {**(s.fan or {}), "preset": value}
-            self.worker.act("fan", "set_fan_preset", value, "game" if game_scope else "global", s.appid if game_scope else None)
+            scope, appid = ("game", s.appid) if game_scope else ("global", None)
+            if value == "auto":
+                self.worker.act("fan", "set_fan_auto", scope, appid)
+            else:
+                self.worker.act("fan", "set_fan_preset", value, scope, appid)
         elif action == "hz":
             self.worker.act("refresh_set", "kiosk_steam", "refresh.set", [value])
             self.worker.act("refresh", "kiosk_steam", "refresh.get", [])
