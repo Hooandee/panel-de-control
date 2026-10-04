@@ -33,7 +33,7 @@ class KioskController:
         brightness: float | None = None,
     ):
         self.enabled = enabled
-        # The level the user chose for the secondary panel; the driver resets it on every boot.
+        # The driver resets the panel to full brightness on every boot.
         self._brightness = brightness
         self._journal = journal
         self._detect = detect
@@ -107,8 +107,7 @@ class KioskController:
             if self._launcher is None or self._launcher.display != detection.display:
                 await self._stop()
                 self._launcher = self._launcher_factory(detection.display)
-                # A unit still running from a Panel that died without stopping it points at that
-                # Panel's server (old port and token): restart it with ours.
+                # A unit left by a Panel that died points at that Panel's port and token.
                 if await asyncio.to_thread(self._launcher.is_active):
                     await asyncio.to_thread(self._launcher.stop)
                     self._journal("INFO", "stale_unit_restarted")
@@ -156,7 +155,6 @@ class KioskController:
         return await asyncio.to_thread(displays.backlight_level, display.backlight)
 
     async def set_brightness(self, fraction: float) -> float | None:
-        """Apply and remember the secondary panel's level; returns the level the driver reports."""
         display = self._detection.display
         if display is None or not display.backlight:
             return None

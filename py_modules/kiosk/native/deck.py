@@ -1,5 +1,3 @@
-"""The bottom-screen deck: header and tiles, laid out like the web kiosk in its 620x540 CSS space."""
-
 import time
 from dataclasses import dataclass, field
 
@@ -72,7 +70,6 @@ class Deck:
         self.open_dialog: str | None = None
         self.dialog_drag: tuple[str, object, object] | None = None
         self.installing = False
-        # The brightness fader drives the main screen or, toggled from its icon, this one.
         self.bri_target = "top"
 
     def t(self, key: str, **params) -> str:
@@ -82,7 +79,6 @@ class Deck:
             text = text.replace("{" + name + "}", str(value))
         return text
 
-    # ---- interaction -------------------------------------------------------------------------
 
     def hit(self, x: float, y: float) -> str | None:
         for name, rect in self.rects.items():
@@ -132,7 +128,6 @@ class Deck:
         rect = self.rects[name]
         return max(0.0, min(1.0, 1 - (y - rect.y) / rect.h))
 
-    # ---- painting ----------------------------------------------------------------------------
 
     def regions(self) -> dict[str, Rect]:
         return {"head": Rect(0, 0, WIDTH, GRID_Y - 1), **self.rects}
@@ -141,7 +136,6 @@ class Deck:
         return id(self.state.hero)
 
     def key(self, name: str) -> tuple:
-        """Everything a region shows; the region is repainted only when this changes."""
         s = self.state
         if name == "head":
             fps = round(s.fps) if s.fps is not None else None
@@ -430,7 +424,6 @@ class Deck:
             under_fill = value is not None and top + label.height > r.y + r.h * (1 - value)
             label.draw(ctx, r.x + (r.w - label.width) / 2, top, (0.11, 0.11, 0.12, 0.8) if under_fill else white(0.7))
 
-    # ---- dialogs -----------------------------------------------------------------------------
 
     def dialog_model(self) -> DialogModel | None:
         s = self.state

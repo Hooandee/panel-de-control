@@ -1,11 +1,8 @@
-"""Deck layout in the web kiosk's 620x540 CSS space, and its mapping onto the rotated panel."""
-
 from dataclasses import dataclass
 
 WIDTH, HEIGHT = 620, 540
 GRID_X, GRID_Y, GRID_W, GRID_H, GAP = 14, 160, 592, 364, 9
 
-# (column, row, columns spanned, rows spanned) on the 6x3 grid, as in the web kiosk's grid areas.
 AREAS = {
     "perf": (0, 0, 2, 2), "fps": (2, 0, 1, 1), "fan": (3, 0, 1, 1), "bri": (4, 0, 1, 2), "vol": (5, 0, 1, 2),
     "rgb": (2, 1, 2, 1), "hz": (0, 2, 1, 1), "turbo": (1, 2, 1, 1), "shot": (2, 2, 1, 1), "kbd": (3, 2, 1, 1),
@@ -34,12 +31,9 @@ def grid_rects() -> dict[str, Rect]:
 
 
 def logical_point(panel_x: float, panel_y: float, panel_w: int, panel_h: int) -> tuple[float, float]:
-    """Panel pixels (portrait, as touch reports them and scanout reads them) to deck CSS pixels."""
     return panel_y * WIDTH / panel_h, (panel_w - panel_x) * HEIGHT / panel_w
 
 
+# The panel is mounted a quarter turn clockwise.
 def rotation(panel_w: int, panel_h: int) -> tuple[float, float, float, float, float, float]:
-    """cairo.Matrix arguments taking deck CSS pixels to panel pixels: the inverse of `logical_point`.
-
-    The panel is mounted turned a quarter clockwise (gamescope's --force-orientation right)."""
     return (0.0, panel_h / WIDTH, -panel_w / HEIGHT, 0.0, float(panel_w), 0.0)

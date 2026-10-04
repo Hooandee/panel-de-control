@@ -1,5 +1,3 @@
-"""Cairo/Pango drawing primitives for the native bottom screen, sized in the web kiosk's CSS pixels."""
-
 import functools
 import io
 import math
@@ -35,7 +33,6 @@ def rounded_rect(ctx: cairo.Context, x: float, y: float, w: float, h: float, r: 
 
 
 def glass(ctx: cairo.Context, x: float, y: float, w: float, h: float, r: float = 24) -> None:
-    """The tile surface: a faint diagonal sheen with a lit top edge."""
     angle = math.radians(160 - 90)
     dx, dy = math.cos(angle) * w / 2, math.sin(angle) * h / 2
     sheen = cairo.LinearGradient(x + w / 2 - dx, y + h / 2 - dy, x + w / 2 + dx, y + h / 2 + dy)
@@ -66,15 +63,13 @@ def fill_rounded(ctx: cairo.Context, x: float, y: float, w: float, h: float, r: 
 def _font(size: float, weight: int) -> Pango.FontDescription:
     desc = Pango.FontDescription.from_string(FONT_FAMILY)
     desc.set_absolute_size(size * Pango.SCALE)
-    # GI only takes named weights; the variable Inter gets the exact one as a variation.
+    # GI accepts only named weights; the variable font gets the exact one as a variation.
     desc.set_weight(min(Pango.Weight.__enum_values__.values(), key=lambda named: abs(int(named) - weight)))
     desc.set_variations(f"wght={weight}")
     return desc
 
 
 class Text:
-    """One line of text; measure first, draw where it fits."""
-
     def __init__(self, ctx: cairo.Context, value: str, size: float, weight: int = 400, spacing: float = 0.0,
                  max_width: float | None = None, wrap_width: float | None = None):
         self.layout = PangoCairo.create_layout(ctx)
@@ -97,13 +92,11 @@ class Text:
         self.baseline = self.layout.get_baseline() / Pango.SCALE
 
     def draw(self, ctx: cairo.Context, x: float, y: float, rgba: RGBA = WHITE) -> None:
-        """`y` is the top of the line box."""
         ctx.move_to(x, y)
         ctx.set_source_rgba(*rgba)
         PangoCairo.show_layout(ctx, self.layout)
 
     def draw_centered(self, ctx: cairo.Context, x: float, y: float, width: float, rgba: RGBA = WHITE) -> None:
-        """A wrapped block, each line centred within `width`."""
         self.draw(ctx, x + (width - self.layout.get_width() / Pango.SCALE) / 2, y, rgba)
 
     def draw_baseline(self, ctx: cairo.Context, x: float, baseline: float, rgba: RGBA = WHITE) -> None:
@@ -147,7 +140,6 @@ class Icons:
 
 
 def decode_image(data: bytes, max_width: int) -> cairo.ImageSurface | None:
-    """JPEG/PNG bytes to a cairo surface no wider than `max_width` device pixels."""
     try:
         loader = GdkPixbuf.PixbufLoader()
         loader.write(data)
@@ -166,7 +158,6 @@ def decode_image(data: bytes, max_width: int) -> cairo.ImageSurface | None:
 
 def cover(ctx: cairo.Context, image: cairo.ImageSurface, x: float, y: float, w: float, h: float,
           focus_y: float = 0.5, alpha: float = 1.0) -> None:
-    """object-fit: cover with a vertical focus point."""
     scale = max(w / image.get_width(), h / image.get_height())
     drawn_w, drawn_h = image.get_width() * scale, image.get_height() * scale
     ctx.save()
@@ -181,7 +172,6 @@ def cover(ctx: cairo.Context, image: cairo.ImageSurface, x: float, y: float, w: 
 
 
 def contain(ctx: cairo.Context, image: cairo.ImageSurface, x: float, bottom: float, max_w: float, max_h: float) -> float:
-    """object-fit: contain anchored left-bottom; returns the drawn height."""
     scale = min(max_w / image.get_width(), max_h / image.get_height())
     drawn_h = image.get_height() * scale
     ctx.save()
@@ -195,7 +185,6 @@ def contain(ctx: cairo.Context, image: cairo.ImageSurface, x: float, bottom: flo
 
 
 def swatch_pattern(stops: tuple[tuple[int, int, int], ...], x: float, w: float) -> cairo.Pattern:
-    """A left-to-right run of colours, or one flat colour."""
     if len(stops) == 1:
         return cairo.SolidPattern(*(c / 255 for c in stops[0]))
     pattern = cairo.LinearGradient(x, 0, x + w, 0)

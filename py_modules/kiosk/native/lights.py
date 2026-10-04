@@ -1,5 +1,3 @@
-"""Colores' state as the bottom screen reads it, matching the web kiosk's deckMath."""
-
 RGB = tuple[int, int, int]
 
 COLORES_EFFECTS = ("breathing", "rainbow", "wave", "cycle", "spiral", "comet", "sparkle", "ripple", "aurora")
@@ -19,7 +17,6 @@ def rgb(value: dict | None) -> RGB:
 
 
 def modes(caps: dict | None) -> list[str]:
-    """The same mode list Colores offers in its own panel for these capabilities."""
     if not caps or not caps.get("color"):
         return []
     found = ["solid"]
@@ -36,19 +33,17 @@ def effects(caps: dict | None) -> list[str]:
 
 
 def target(state: dict) -> tuple[str, str | None]:
-    """The profile that is lit right now, so a change lands where it is visible."""
     ctx = state.get("profileContext") or {}
     if ctx.get("scope") == "game" and ctx.get("appKey") and not ctx.get("followsGlobal"):
         return "game", ctx["appKey"]
     return "global", None
 
 
-# Colores keeps brightness as a percentage; capabilities.maxBrightness is the LED driver's own scale.
+# Colores stores brightness as a percentage; capabilities.maxBrightness is the LED driver's scale.
 BRIGHTNESS_MAX = 100
 
 
 def swatch(state: dict | None) -> tuple[RGB, ...] | None:
-    """The colours the lights show right now, left to right; None when they are off."""
     if not state or not state.get("power"):
         return None
     mode = state.get("mode")

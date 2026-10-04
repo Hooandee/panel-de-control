@@ -21,7 +21,6 @@ BACKLIGHT_OFF = "4"
 BACKLIGHT_ON = "0"
 
 
-# Never let a level write leave the panel unreadably dark; turning it off is set_backlight_power's job.
 MIN_BACKLIGHT_FRACTION = 0.05
 
 
@@ -52,7 +51,6 @@ def _read_int(path: str) -> int | None:
 
 
 def backlight_level(backlight: str, sys_root: str = "/sys/class/backlight") -> float | None:
-    """The panel's brightness as a fraction of its maximum, read back from the driver."""
     folder = _backlight_dir(backlight, sys_root)
     if folder is None:
         return None
@@ -64,7 +62,6 @@ def backlight_level(backlight: str, sys_root: str = "/sys/class/backlight") -> f
 
 
 def set_backlight_level(backlight: str, fraction: float, sys_root: str = "/sys/class/backlight") -> float | None:
-    """Write a brightness fraction; returns what the driver reports afterwards, None if it refused."""
     folder = _backlight_dir(backlight, sys_root)
     maximum = _read_int(os.path.join(folder, "max_brightness")) if folder else None
     if folder is None or not maximum:

@@ -1,5 +1,3 @@
-"""Single-finger touch from the secondary panel's evdev node, in panel pixels."""
-
 import fcntl
 import os
 import struct
@@ -16,7 +14,7 @@ _EVIOCGABS = 0x80184540
 
 @dataclass(frozen=True)
 class TouchEvent:
-    kind: str  # "down" | "move" | "up"
+    kind: str
     x: float
     y: float
 
@@ -39,12 +37,10 @@ def find_device(name: str, root: str = "/sys/class/input") -> str | None:
 
 
 class TouchParser:
-    """Folds raw evdev events into down/move/up of the first finger, scaled to panel pixels."""
-
     def __init__(self, scale_x: float = 1.0, scale_y: float = 1.0, x: int = 0, y: int = 0):
         self.scale_x, self.scale_y = scale_x, scale_y
-        # The input core drops a position equal to the device's last one, so a finger landing where the
-        # previous touch lifted sends no coordinates at all: start from the device's current position.
+        # The input core drops a position equal to the last one: a tap where the previous one lifted
+        # carries no coordinates, so start from where the device says the finger was.
         self._x, self._y = x * scale_x, y * scale_y
         self._down = False
         self._was_down = False
@@ -90,13 +86,12 @@ class TouchParser:
 class Touchscreen:
     def __init__(self, path: str, width: int, height: int):
         self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
-        # The single-touch axes keep the last position; the multitouch ones report 0 outside an event.
+        # ABS_X/ABS_Y keep the last position; the multitouch axes read 0 between touches.
         x_now, x_max = self._axis(_ABS_X, _ABS_MT_X)
         y_now, y_max = self._axis(_ABS_Y, _ABS_MT_Y)
         self.parser = TouchParser(width / max(1, x_max + 1), height / max(1, y_max + 1), x_now, y_now)
 
     def _axis(self, *codes: int) -> tuple[int, int]:
-        """(current value, maximum) of the first axis the device reports."""
         for code in codes:
             info = bytearray(24)
             try:

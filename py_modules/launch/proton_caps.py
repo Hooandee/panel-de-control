@@ -32,8 +32,7 @@ def _builtin_folder(compat_name: str) -> str | None:
     """Map a built-in compat-tool id to its steamapps/common folder name."""
     n = (compat_name or "").lower()
     if n.endswith("-arm64"):
-        # Valve's ARM64 builds (seen on the AYN Thor): "Proton Experimental (ARM64)", "Proton 11.0 (ARM64)".
-        # Never fall back to the x86 folder of the same name.
+        # Valve's ARM64 builds install apart from the x86 ones; never read the x86 folder.
         base = n[: -len("-arm64")]
         if base == "proton-experimental":
             return "Proton Experimental (ARM64)"

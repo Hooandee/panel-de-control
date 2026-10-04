@@ -1,11 +1,3 @@
-"""Presents CPU-painted frames on the secondary panel through the compositor's DRM lease.
-
-The nested gamescope that armada-run-bottom starts composites every bottom-screen frame on the GPU
-the game is saturating, and each of those frames stalls the game (AYN Thor: about 50 hitches a
-minute at two updates a second). Flipping CPU-filled dumb buffers on the leased plane costs the game
-about 1 % even at 60 Hz, so the bottom screen paints itself and owns the lease directly.
-"""
-
 import ctypes as C
 import errno
 import fcntl
@@ -101,8 +93,7 @@ def _libdrm():
 
 
 def receive_lease(path: str = LEASE_SOCKET) -> tuple[socket.socket, int]:
-    """The compositor hands every client the same lease fd and keeps routing bottom-panel touch away
-    from itself while the socket stays open, so the socket lives as long as the screen does."""
+    # Keep the socket open: gamescope leaves bottom-panel touch alone only while a lease client is connected.
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(path)
     _, ancillary, _, _ = sock.recvmsg(1, socket.CMSG_SPACE(4))
@@ -121,13 +112,12 @@ class Buffer:
 
 
 class LeasedPanel:
-    """Two dumb buffers on the leased plane; `back` is painted, `present` flips it."""
-
     def __init__(self, path: str = LEASE_SOCKET):
         self._sock, self.fd = receive_lease(path)
         self._drm = _libdrm()
         drm = self._drm
         drm.drmSetClientCap(self.fd, _CAP_UNIVERSAL_PLANES, 1)
+        # The leased plane is not the CRTC's legacy primary: SetCrtc is refused, atomic commits work.
         if drm.drmSetClientCap(self.fd, _CAP_ATOMIC, 1) != 0:
             raise LeaseError("no_atomic")
         resources = drm.drmModeGetResources(self.fd)
@@ -157,7 +147,6 @@ class LeasedPanel:
         return 1 - self._shown
 
     def present(self) -> None:
-        """Flip the back buffer in; waits out a flip still in flight so frames are never torn."""
         self.wait_flip(timeout=0.1)
         target = 1 - self._shown
         self._commit(self.buffers[target].fb_id, modeset=False)

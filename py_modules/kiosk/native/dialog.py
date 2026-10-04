@@ -1,6 +1,3 @@
-"""The glass dialog of the bottom screen: a hero line over a stack of sections (orbs, colours, chips,
-bars, steps, a note, a call to action), drawn and hit-tested from one layout."""
-
 import math
 from dataclasses import dataclass, field
 
@@ -125,8 +122,6 @@ def _chip_width(label: str) -> float:
 
 
 def _orb_rows(items: tuple[Orb, ...]) -> list[tuple[Orb, ...]]:
-    """One row up to six orbs; a longer set (every Colores mode) splits into even rows instead of
-    squeezing its labels."""
     if len(items) <= ORBS_PER_ROW:
         return [items]
     rows = math.ceil(len(items) / ORBS_PER_ROW)
@@ -200,7 +195,6 @@ def layout(model: DialogModel) -> Layout:
 
 
 def hit(model: DialogModel, x: float, y: float) -> tuple[str, object, object]:
-    """(kind, key, value) under a finger: kind is orb, color, chip, bar, steps, cta, inside or outside."""
     placed = layout(model)
     for item in placed.placed:
         section = item.section
@@ -221,7 +215,6 @@ def hit(model: DialogModel, x: float, y: float) -> tuple[str, object, object]:
 
 
 def drag_value(model: DialogModel, kind: str, key: object, x: float) -> object:
-    """The value a bar or the step slider takes with the finger at `x`, for a drag that began on it."""
     for item in layout(model).placed:
         section = item.section
         if kind == "bar" and isinstance(section, Bar) and section.key == key:
@@ -247,8 +240,6 @@ def _resample(source: cairo.ImageSurface, width: int, height: int, smooth: cairo
 
 
 def frosted(scene: cairo.ImageSurface) -> cairo.ImageSurface:
-    """A soft blur of what is behind the glass, made once when the dialog opens: shrink in box-filtered
-    steps, then grow back in bilinear steps so no blocks show."""
     width, height = scene.get_width(), scene.get_height()
     current = scene
     for factor in (4, 4, 2):

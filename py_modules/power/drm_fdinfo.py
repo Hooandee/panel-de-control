@@ -91,8 +91,7 @@ class DrmFdinfoGpuBusy:
         self._busy = threading.Lock()
 
     def read(self) -> int | None:
-        # Several RPCs ask at once; a second scan while one runs only piles up CPU (AYN Thor, 2026-10-03:
-        # eight concurrent scans held 1.4 cores during a game). Late callers get the last value.
+        # Several RPCs ask at once; a second concurrent scan only piles up CPU. Late callers get the last value.
         if not self._busy.acquire(blocking=False):
             return self._value
         try:

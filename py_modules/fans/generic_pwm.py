@@ -9,11 +9,6 @@ an unrelated PWM. Graphics-driver chips are skipped: a discrete GPU's firmware o
 its fan, and driving it from the system curve starves the card under load. The
 hottest curve point stays above the safety floor, and a missing temp reading
 releases to auto rather than holding a stale duty.
-
-The kernel's ``pwm-fan`` driver (ARM boards) has no automatic mode of its own: only a
-thermal zone bound to its cooling device moves it, and a board without that binding and
-without a vendor daemon leaves the fan wherever it was last set. There, Auto is Panel's
-own balanced curve and letting go leaves the fan spinning at a safe duty instead of stuck.
 """
 
 import glob
@@ -26,7 +21,6 @@ from fans.software_loop import _HWMON, SoftwareLoopBackend
 _THERMAL = "sys/class/thermal"
 PWM_FAN_CHIP = "pwmfan"
 PWM_FAN_COOLING = "pwm-fan"
-# Duty left on a fan with no automatic mode when Panel lets go of it (unload, module off).
 FAILSAFE_DUTY = 128
 AUTO_PRESET = "balanced"
 
@@ -50,7 +44,7 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
         self.firmware_auto = self._has_firmware_auto()
 
     def _has_firmware_auto(self) -> bool:
-        """Whether something other than Panel moves the fan when Panel lets go of it."""
+        # pwm-fan has no automatic mode: only a thermal zone bound to its cooling device moves it.
         if self._dir is None or _read(os.path.join(self._dir, "name")) != PWM_FAN_CHIP:
             return True
         return pwm_fan_thermally_bound(self._root)
@@ -173,7 +167,6 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
 
 
 def pwm_fan_thermally_bound(root: str = "/") -> bool:
-    """True when a kernel thermal zone drives a pwm-fan cooling device (its own automatic)."""
     devices = set()
     for device in glob.glob(os.path.join(root, _THERMAL, "cooling_device*")):
         if _read(os.path.join(device, "type")) == PWM_FAN_COOLING:

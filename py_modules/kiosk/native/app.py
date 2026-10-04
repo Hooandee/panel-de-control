@@ -1,9 +1,3 @@
-"""Native bottom screen: paints the deck on the CPU and flips it straight onto the leased panel.
-
-Runs under the system python, outside Decky, as `python3 app.py <kiosk url> <assets dir>`. Exits with
-UNAVAILABLE when this machine has no lease to take or lacks cairo/Pango, so the launcher can fall back.
-"""
-
 import heapq
 import json
 import os
@@ -15,6 +9,7 @@ import time
 
 import lights
 
+# The launcher falls back to the web kiosk on this exit code.
 UNAVAILABLE = 3
 TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
 
@@ -25,7 +20,6 @@ BATTERY_S = 15.0
 STEAM_S = 15.0
 STATE_S = 30.0
 PAUSED_CHECK_S = 5.0
-# One bridge round trip answers all of these; each comes back under the label a single read uses.
 SNAPSHOT_LABELS = {
     "brightness.get": "brightness", "volume.get": "volume", "refresh.get": "refresh",
     "perf.view": "perf", "colores.state": "colores",
@@ -37,7 +31,6 @@ LIGHTS_GAP_S = 0.15
 FRAME_GAP_S = 1 / 30
 PRESS_RELEASE_S = 0.12
 PICK_CLOSE_S = 0.38
-# A dialog left open keeps repainting next to the game; it closes itself after a while untouched.
 DIALOG_IDLE_S = 20.0
 DIALOG_OF_TILE = {"perf": "perf", "fps": "fps", "fan": "fan", "hz": "hz", "rgb": "lights"}
 SNAPSHOT_PATH = "/tmp/pdc-kiosk-native.png"
@@ -45,7 +38,6 @@ FULL = "full"
 
 
 def _use_bundled_font(assets: str) -> None:
-    """Point fontconfig at the bundled Inter before Pango loads; system fonts stay available."""
     cache = os.path.join(os.path.expanduser("~"), ".cache", "panel-de-control", "fontconfig")
     os.makedirs(cache, exist_ok=True)
     conf = os.path.join(cache, "fonts.conf")
@@ -66,8 +58,6 @@ def _use_bundled_font(assets: str) -> None:
 
 
 class Wake:
-    """Self-pipe so worker threads can wake the select loop."""
-
     def __init__(self):
         self.read_fd, self.write_fd = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
 
@@ -86,8 +76,6 @@ class Wake:
 
 
 class Worker(threading.Thread):
-    """Polls Panel on a schedule and runs actions in order, off the paint loop."""
-
     def __init__(self, rpc, wake: Wake):
         super().__init__(daemon=True, name="pdc-kiosk-worker")
         self.rpc = rpc
@@ -100,7 +88,6 @@ class Worker(threading.Thread):
         self._next_write: dict[str, float] = {}
         self._schedule: list[tuple[float, str]] = []
         self.written_at: dict[str, float] = {}
-        # Nothing is polled while the bottom screen is dark; a touch wakes it and the polls resume.
         self.paused = False
 
     def every(self, name: str) -> None:
@@ -115,13 +102,11 @@ class Worker(threading.Thread):
             self._lock.notify()
 
     def act(self, label: str, method: str, *args) -> None:
-        """Run `method` once; its result comes back under `label`."""
         with self._lock:
             self._actions.append((label, method, args))
             self._lock.notify()
 
     def latest(self, slot: str, gap_s: float, label: str, method: str, *args) -> None:
-        """Live writes while a finger drags: only the newest per slot is sent, at most once per `gap_s`."""
         with self._lock:
             self._latest[slot] = (label, method, args)
             self._gaps[slot] = gap_s
@@ -234,7 +219,6 @@ class App:
             cairo.ImageSurface.create_for_data(buffer.memory, cairo.FORMAT_RGB24, self.panel.width, self.panel.height, buffer.pitch)
             for buffer in self.panel.buffers
         ]
-        # The scene is the deck upright at panel resolution; it is rotated into a buffer on copy.
         self.scale_x, self.scale_y = self.panel.height / WIDTH, self.panel.width / HEIGHT
         self.scene = cairo.ImageSurface(cairo.FORMAT_RGB24, self.panel.height, self.panel.width)
         self.background = cairo.ImageSurface(cairo.FORMAT_RGB24, self.panel.height, self.panel.width)
@@ -264,8 +248,6 @@ class App:
         signal.signal(signal.SIGUSR1, self._request_snapshot)
 
     def _native_frames(self):
-        """Read the game's frames from gamescope in this (native) process, so Panel, emulated on ARM,
-        does not have to; None keeps asking Panel instead."""
         try:
             from focus import FocusedApp
             from gamescope_perf import GamescopePerf
@@ -292,7 +274,6 @@ class App:
         self.wake.ring()
 
     def _write_snapshot(self) -> None:
-        """Diagnostics: the deck as the user sees it, upright, at panel resolution."""
         (self.screen if self.overlay_key is not None else self.scene).write_to_png(SNAPSHOT_PATH)
 
     def run(self) -> None:
@@ -338,7 +319,6 @@ class App:
                 self._paint()
 
     def _paint(self) -> None:
-        """Repaint only regions whose content changed, then copy what this buffer has missed."""
         cairo, deck = self.cairo, self.deck
         regions = {**deck.regions(), FULL: self.full}
         background_key = deck.background_key()
@@ -383,8 +363,6 @@ class App:
         if overlay_moved and self.overlay_key is None:
             self.backdrop = self.dialog.frosted(self.scene)
         self.overlay_key = overlay_key
-        # A dialog covers most of the screen and its glass blends with what is under it: any change
-        # while it is open recomposes the whole screen, and opening or closing it does too.
         whole = overlay_moved or (overlay is not None and changed)
         for pending in self.pending:
             if whole:
@@ -424,7 +402,6 @@ class App:
     def _apply(self, name: str, value) -> None:
         s = self.deck.state
         if name.startswith("error:"):
-            # A write that failed leaves the optimistic value on screen: read the truth back.
             refetch = {"perf": ("kiosk_steam", "perf.view", []), "fan": ("get_fan_curve_state",), "cpu": ("get_cpu_state",),
                        "colores_write": ("kiosk_steam", "colores.state", []), "colores_install": ("kiosk_steam", "colores.state", [])}
             label = name.split(":", 1)[1]
@@ -728,8 +705,7 @@ def main(argv: list[str]) -> int:
     url, assets = argv[1], argv[2]
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
-    # gamescope_perf sits two levels up, in py_modules, and needs nothing but the standard library.
-    sys.path.insert(1, os.path.dirname(os.path.dirname(here)))
+    sys.path.insert(1, os.path.dirname(os.path.dirname(here)))  # gamescope_perf lives in py_modules
     _use_bundled_font(assets)
     try:
         import cairo  # noqa: F401

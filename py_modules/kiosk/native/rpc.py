@@ -1,5 +1,3 @@
-"""Keep-alive client for Panel's loopback kiosk server."""
-
 import http.client
 import json
 import threading

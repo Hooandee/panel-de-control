@@ -1,17 +1,12 @@
-"""The app gamescope has in front on the main screen, from its X root property."""
-
 import ctypes as C
 
-# Steam's own UI (library, store, overlay) reports this app id: no game frame rate to show.
+# Steam's own UI (library, store, overlay).
 STEAM_UI_APP = 769
 _XA_CARDINAL = 6
 _SUCCESS = 0
 
 
 class FocusedApp:
-    """Reads GAMESCOPE_FOCUSED_APP on the main display. Call from one thread only (Xlib is not
-    thread safe here); `None` means Steam's UI, nothing focused or no readable display."""
-
     def __init__(self, display: str = ":0"):
         self._x = C.CDLL("libX11.so.6")
         self._x.XOpenDisplay.restype = C.c_void_p

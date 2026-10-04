@@ -71,9 +71,7 @@ def _default_runner(cmd: list[str], env: dict, identity: dict) -> tuple[int, str
 
 def launch_script(url_var: str = "PDC_KIOSK_URL", webview: str = WEBVIEW, native: str = NATIVE,
                   assets: str = NATIVE_ASSETS) -> str:
-    """The native screen first: it paints on the CPU straight onto the leased panel and leaves the game
-    alone. When the machine cannot run it (no lease, no cairo), the web kiosk inside armada-run-bottom:
-    WebKitGTK, then Firefox."""
+    """Native screen first; without a lease or cairo, the web kiosk (WebKitGTK, then Firefox)."""
     prefs = "\\n".join(FIREFOX_PREFS)
     inside = (
         f'{SYSTEM_PYTHON} {shlex.quote(webview)} "$0" && exit 0; '

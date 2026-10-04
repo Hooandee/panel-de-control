@@ -1,12 +1,4 @@
-"""Bottom screen browser: one WebKitGTK view, full screen, nothing else.
-
-Runs under the system python (not the plugin's) inside the nested compositor that armada-run-bottom
-starts. Next to a game that already fills the handheld's memory it costs a fraction of Firefox,
-whose idle footprint (about 650 MB on the AYN Thor) pushed the game into swap and stuttered it.
-GPU compositing is deliberate: painting the page in software took about 30 % of a core on the Thor
-while a game ran, against about 8 % on the GPU.
-Exits with status 3 when WebKitGTK is unavailable so the launcher can fall back to Firefox.
-"""
+"""Bottom screen browser: one WebKitGTK view, full screen; exits 3 when WebKitGTK is missing."""
 
 import sys
 

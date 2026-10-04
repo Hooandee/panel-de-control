@@ -108,7 +108,6 @@ class ArmadaFanBackend(GenericPwmFanBackend):
         self._verified_at = float("-inf")
 
     def _has_firmware_auto(self) -> bool:
-        # armada-powerd is the automatic: letting go hands the fan back to it.
         return True
 
     def _take(self) -> bool:
