@@ -217,3 +217,14 @@ def test_brightness_failures_are_journaled_and_not_remembered(monkeypatch):
     assert asyncio.run(controller.set_brightness(0.7)) is None
     assert controller.state()["brightness"] is None
     assert ("WARNING", "brightness_failed", {"backlight": "ae94000.dsi.0"}) in journal
+
+
+def test_a_unit_left_by_a_previous_panel_is_restarted_with_this_panels_address():
+    controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok")], launcher_kwargs={"active": True})
+    asyncio.run(controller.tick())
+    launcher = launchers[0]
+    assert launcher.stops == 1
+    assert launcher.started_with == ["http://127.0.0.1:4000/?k=t"]
+    assert ("INFO", "stale_unit_restarted", {}) in journal
+    asyncio.run(controller.tick())
+    assert launcher.stops == 1 and len(launcher.started_with) == 1

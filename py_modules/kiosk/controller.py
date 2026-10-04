@@ -107,6 +107,11 @@ class KioskController:
             if self._launcher is None or self._launcher.display != detection.display:
                 await self._stop()
                 self._launcher = self._launcher_factory(detection.display)
+                # A unit still running from a Panel that died without stopping it points at that
+                # Panel's server (old port and token): restart it with ours.
+                if await asyncio.to_thread(self._launcher.is_active):
+                    await asyncio.to_thread(self._launcher.stop)
+                    self._journal("INFO", "stale_unit_restarted")
             await self._ensure_running()
 
     async def _ensure_running(self) -> None:
