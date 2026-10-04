@@ -1169,18 +1169,22 @@ class Plugin:
         else:
             focus_reason = self._gamescope_stats.peek().get("reason")
             reason = focus_reason if focus_reason not in (None, "ok") else "fps_unavailable"
+        return {
+            "fps": round(fps, 1) if fps is not None else None,
+            "reason": reason,
+            **await self.get_kiosk_session(),
+        }
+
+    async def get_kiosk_session(self) -> dict:
+        """The running game and how long it has run, without starting any frame reader: the native
+        bottom screen reads frames from gamescope itself."""
         since = getattr(self, "_current_appid_at", None)
         playing_s = (
             round(time.monotonic() - since)
             if self._current_appid is not None and since is not None
             else None
         )
-        return {
-            "fps": round(fps, 1) if fps is not None else None,
-            "reason": reason,
-            "playing_s": playing_s,
-            "appid": self._current_appid,
-        }
+        return {"playing_s": playing_s, "appid": self._current_appid}
 
     async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
         """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""

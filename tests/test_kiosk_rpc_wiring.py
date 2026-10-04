@@ -84,6 +84,20 @@ def test_kiosk_frame_rate_holds_the_readers_only_while_polled(plugin, monkeypatc
     assert events == ["perf", "stats", "perf-stop", "stats-stop"]
 
 
+def test_kiosk_session_names_the_game_without_starting_frame_readers(plugin, monkeypatch):  # noqa: F811
+    main = sys.modules["main"]
+    events = []
+    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: events.append("stats"))
+    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: events.append("perf"))
+    now = [1000.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+    plugin._current_appid = "894020"
+    plugin._current_appid_at = 880.0
+    assert asyncio.run(plugin.get_kiosk_session()) == {"playing_s": 120, "appid": "894020"}
+    assert events == []
+    assert not plugin._kiosk_wants_fps()
+
+
 def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811
     monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: None)
     monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: None)

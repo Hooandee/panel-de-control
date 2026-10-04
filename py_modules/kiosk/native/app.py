@@ -19,6 +19,7 @@ UNAVAILABLE = 3
 TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
 
 LIVE_S = 0.5
+SESSION_S = 5.0
 VITALS_S = 5.0
 BATTERY_S = 15.0
 STEAM_S = 15.0
@@ -182,6 +183,9 @@ class Worker(threading.Thread):
         if name == "live":
             self._call("live", "get_kiosk_live")
             return LIVE_S
+        if name == "session":
+            self._call("session", "get_kiosk_session")
+            return SESSION_S
         if name == "vitals":
             self._call("vitals", "get_kiosk_vitals")
             return VITALS_S
@@ -244,7 +248,8 @@ class App:
         self.touch = Touchscreen(device, self.panel.width, self.panel.height) if device else None
         self.wake = Wake()
         self.worker = Worker(self.rpc, self.wake)
-        for name in ("live", "vitals", "battery", "steam", "state"):
+        self.frames = self._native_frames()
+        for name in ("session" if self.frames else "live", "vitals", "battery", "steam", "state"):
             self.worker.every(name)
         self.dirty = True
         self.last_frame = 0.0
@@ -255,6 +260,30 @@ class App:
         self.close_at = 0.0
         self.dialog_down: tuple | None = None
         signal.signal(signal.SIGUSR1, self._request_snapshot)
+
+    def _native_frames(self):
+        """Read the game's frames from gamescope in this (native) process, so Panel, emulated on ARM,
+        does not have to; None keeps asking Panel instead."""
+        try:
+            from focus import FocusedApp
+            from gamescope_perf import GamescopePerf
+            focus = FocusedApp()
+        except (ImportError, OSError):
+            return None
+        self.focused = focus.read()
+        reader = GamescopePerf(app_id=lambda: self.focused, python="")
+        reader.start()
+        return focus, reader
+
+    def _sample_frames(self) -> None:
+        focus, reader = self.frames
+        self.focused = focus.read()
+        fps = reader.fps()
+        s = self.deck.state
+        s.history = (s.history + [fps])[-self.fps_history:] if fps is not None else []
+        if fps != s.fps or fps is not None:
+            s.fps = fps
+            self.dirty = True
 
     def _request_snapshot(self, *_) -> None:
         self.snapshot_requested = True
@@ -267,10 +296,12 @@ class App:
     def run(self) -> None:
         self.worker.start()
         next_clock = time.monotonic() + CLOCK_S
+        next_frames = time.monotonic()
         watched = [self.wake.read_fd, self.panel.fd] + ([self.touch.fd] if self.touch else [])
         while True:
             now = time.monotonic()
-            timeout = max(0.0, min(next_clock - now, (self.last_frame + FRAME_GAP_S - now) if self.dirty else 1.0,
+            timeout = max(0.0, min(next_clock - now, (next_frames - now) if self.frames else 1.0,
+                                   (self.last_frame + FRAME_GAP_S - now) if self.dirty else 1.0,
                                    (self.press_until - now) if self.press_until else 1.0,
                                    (self.close_at - now) if self.close_at else 1.0))
             readable, _, _ = select.select(watched, [], [], timeout)
@@ -298,6 +329,9 @@ class App:
             if now >= next_clock:
                 next_clock = now + CLOCK_S
                 self.dirty = True
+            if self.frames and now >= next_frames and not self.screen_off:
+                next_frames = now + LIVE_S
+                self._sample_frames()
             if self.dirty and not self.screen_off and now - self.last_frame >= FRAME_GAP_S:
                 self._paint()
 
@@ -397,10 +431,12 @@ class App:
             if label in refetch:
                 self.worker.act(label.split("_")[0], *refetch[label])
             return
-        if name == "live" and isinstance(value, dict):
-            fps = value.get("fps")
-            s.history = (s.history + [fps])[-self.fps_history:] if fps is not None else []
-            s.fps, s.playing_s = fps, value.get("playing_s")
+        if name in ("live", "session") and isinstance(value, dict):
+            if name == "live":
+                fps = value.get("fps")
+                s.history = (s.history + [fps])[-self.fps_history:] if fps is not None else []
+                s.fps = fps
+            s.playing_s = value.get("playing_s")
             appid = value.get("appid")
             if appid != s.appid:
                 s.appid, s.game_name, s.hero, s.logo = appid, None, None, None
@@ -670,7 +706,10 @@ def main(argv: list[str]) -> int:
     if len(argv) < 3:
         return UNAVAILABLE
     url, assets = argv[1], argv[2]
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, here)
+    # gamescope_perf sits two levels up, in py_modules, and needs nothing but the standard library.
+    sys.path.insert(1, os.path.dirname(os.path.dirname(here)))
     _use_bundled_font(assets)
     try:
         import cairo  # noqa: F401
