@@ -7,6 +7,7 @@ vi.mock("../deckyInternal", () => ({ callBackend: vi.fn() }));
 vi.mock("../system/display", () => ({ displayBrightness: { subscribe: () => null, set: () => {} } }));
 vi.mock("../steam/performanceRuntime", () => ({ resolveSteamPerformanceStore: () => null }));
 vi.mock("../system/audio", () => ({ systemVolume: { subscribe: () => null, set: () => {} } }));
+vi.mock("./deckPerf", () => ({ steamDeckPerf: () => ({}) }));
 vi.mock("../system/colores", () => ({
   COLORES_PLUGIN_NAME: "Colores",
   installColores: vi.fn(),
@@ -27,6 +28,7 @@ function deps(patch: Partial<BridgeDeps> = {}): BridgeDeps & { sets: Record<stri
   });
   return {
     sets,
+    perf: {},
     brightness: scalar("brightness", 0.62),
     volume: scalar("volume", 0.45),
     perfStore: () => ({

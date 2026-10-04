@@ -6,6 +6,7 @@ import { callBackend } from "../deckyInternal";
 import { displayBrightness } from "../system/display";
 import { systemVolume } from "../system/audio";
 import { resolveSteamPerformanceStore } from "../steam/performanceRuntime";
+import { steamDeckPerf } from "./deckPerf";
 import type { ScalarControl } from "../system/types";
 import {
   COLORES_PLUGIN_NAME,
@@ -16,6 +17,8 @@ import {
 
 // Must match py_modules/kiosk/bridge.py (EVENT and ACTIONS).
 export const KIOSK_STEAM_EVENT = "pdc_kiosk_steam";
+
+type Handler = (args: unknown[]) => unknown | Promise<unknown>;
 
 // Colores RPCs the bottom screen may drive; everything else stays in Colores' own UI.
 export const COLORES_METHODS = new Set([
@@ -35,6 +38,7 @@ interface PerfStore {
 }
 
 export interface BridgeDeps {
+  perf: Record<string, Handler>;
   brightness: ScalarControl;
   volume: ScalarControl;
   perfStore: () => PerfStore | null;
@@ -48,7 +52,6 @@ export interface BridgeDeps {
   };
 }
 
-type Handler = (args: unknown[]) => unknown | Promise<unknown>;
 
 const fraction = (value: unknown): number => {
   const n = Number(value);
@@ -128,6 +131,7 @@ export function createBridgeHandlers(deps: BridgeDeps): { handlers: Record<strin
       return deps.colores.call(method, Array.isArray(args) ? args : []);
     },
     "colores.install": () => deps.colores.install(),
+    ...deps.perf,
   };
 
   return {
@@ -151,6 +155,7 @@ interface SteamWindowGlobals {
 export function steamDeps(host: Window = window): BridgeDeps {
   const globals = host as unknown as SteamWindowGlobals;
   return {
+    perf: steamDeckPerf(),
     brightness: displayBrightness,
     volume: systemVolume,
     perfStore: () => (resolveSteamPerformanceStore() as PerfStore | null),

@@ -13,6 +13,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules", "kiosk", "native"))
 
+import choices  # noqa: E402
 import drm  # noqa: E402
 import geometry  # noqa: E402
 import rpc  # noqa: E402
@@ -178,3 +179,38 @@ def test_rotation_and_touch_mapping_are_inverse(point):
 def test_top_left_of_the_deck_lands_on_the_panel_edge_the_landscape_top_faces():
     # Mounted a quarter turn clockwise: the deck's top edge is the panel's right (x = width) edge.
     assert geometry.logical_point(1080, 0, 1080, 1240) == (0, 0)
+
+
+def test_fps_choices_match_the_web_kiosk():
+    assert choices.fps_choices(60) == [30, 40, 45, 60]
+    assert choices.fps_choices(None) == [30, 40, 45, 60]
+    assert choices.fps_choices(144) == [40, 60, 90, 120, 144]
+    assert choices.fps_choices(10) == []
+
+
+def test_refresh_choices_hide_a_range_steam_will_not_switch():
+    assert choices.refresh_choices({"min": 60, "max": 120, "settable": True}) == [60, 90, 120]
+    assert choices.refresh_choices({"min": 40, "max": 60}) == [40, 60]
+    assert choices.refresh_choices({"min": 60, "max": 120, "settable": False}) == []
+    assert choices.refresh_choices(None) == []
+
+
+def test_fan_choices_need_a_real_choice():
+    presets = [{"id": "silent"}, {"id": "balanced"}, {"id": "custom"}]
+    assert choices.fan_choices({"supported": True, "presets": presets}) == ["auto", "silent", "balanced"]
+    assert choices.fan_choices({"supported": True, "presets": []}) == []
+    assert choices.fan_choices({"supported": False, "presets": presets}) == []
+
+
+def test_level_caption_reads_the_published_clocks():
+    freqs = {"6": {"cpu_khz": [2016000, 2803200], "gpu_mhz": 680}}
+    assert choices.level_caption(freqs, 6, decimal_comma=True) == "2,8 GHz · 680 MHz"
+    assert choices.level_caption(freqs, 6, decimal_comma=False) == "2.8 GHz · 680 MHz"
+    assert choices.level_caption(freqs, 3, decimal_comma=True) == ""
+    assert choices.level_caption(None, 6, decimal_comma=True) == ""
+
+
+def test_step_at_ignores_the_dead_edges():
+    assert choices.step_at(0, 222, 11, 1, 10) == 1
+    assert choices.step_at(222, 222, 11, 1, 10) == 10
+    assert choices.step_at(111, 222, 11, 1, 10) == 6

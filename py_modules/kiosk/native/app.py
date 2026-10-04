@@ -25,6 +25,9 @@ SCALAR_HOLD_S = 1.5
 SCALAR_GAP_S = 0.04
 FRAME_GAP_S = 1 / 30
 PRESS_RELEASE_S = 0.12
+PICK_CLOSE_S = 0.38
+# A dialog left open keeps repainting next to the game; it closes itself after a while untouched.
+DIALOG_IDLE_S = 20.0
 SNAPSHOT_PATH = "/tmp/pdc-kiosk-native.png"
 FULL = "full"
 
@@ -79,7 +82,7 @@ class Worker(threading.Thread):
         self.wake = wake
         self.results: list[tuple[str, object]] = []
         self._lock = threading.Condition()
-        self._actions: list[tuple[str, tuple]] = []
+        self._actions: list[tuple[str, str, tuple]] = []
         self._scalars: dict[str, float] = {}
         self._schedule: list[tuple[float, str]] = []
         self.scalar_written: dict[str, float] = {}
@@ -87,9 +90,10 @@ class Worker(threading.Thread):
     def every(self, name: str) -> None:
         heapq.heappush(self._schedule, (0.0, name))
 
-    def act(self, name: str, *args) -> None:
+    def act(self, label: str, method: str, *args) -> None:
+        """Run `method` once; its result comes back under `label`."""
         with self._lock:
-            self._actions.append((name, args))
+            self._actions.append((label, method, args))
             self._lock.notify()
 
     def scalar(self, kind: str, value: float) -> None:
@@ -119,8 +123,8 @@ class Worker(threading.Thread):
             for kind, value in scalars.items():
                 self._call(f"{kind}.set", "kiosk_steam", f"{kind}.set", [value])
                 time.sleep(SCALAR_GAP_S)
-            for name, args in actions:
-                self._call(name, name, *args)
+            for label, method, args in actions:
+                self._call(label, method, *args)
             now = time.monotonic()
             while self._schedule and self._schedule[0][0] <= now:
                 _, name = heapq.heappop(self._schedule)
@@ -148,11 +152,12 @@ class Worker(threading.Thread):
         if name == "slow":
             for label, method, args in (
                 ("cpu", "get_cpu_state", ()),
-                ("tdp", "get_tdp_state", ()),
                 ("prefs", "get_ui_prefs", ()),
                 ("brightness", "kiosk_steam", ("brightness.get", [])),
                 ("volume", "kiosk_steam", ("volume.get", [])),
                 ("refresh", "kiosk_steam", ("refresh.get", [])),
+                ("perf", "kiosk_steam", ("perf.view", [])),
+                ("fan", "get_fan_curve_state", ()),
             ):
                 self._call(label, method, *args)
             return SLOW_S
@@ -161,6 +166,7 @@ class Worker(threading.Thread):
 
 class App:
     def __init__(self, url: str, assets: str):
+        import dialog
         from deck import FPS_HISTORY, Deck
         from geometry import HEIGHT, WIDTH, Rect, logical_point, rotation
         from drm import LeasedPanel
@@ -170,6 +176,7 @@ class App:
         import cairo
 
         self.cairo = cairo
+        self.dialog = dialog
         self.logical_point = logical_point
         with open(os.path.join(assets, "strings.json")) as handle:
             strings = json.load(handle)
@@ -188,6 +195,9 @@ class App:
         self.scale_x, self.scale_y = self.panel.height / WIDTH, self.panel.width / HEIGHT
         self.scene = cairo.ImageSurface(cairo.FORMAT_RGB24, self.panel.height, self.panel.width)
         self.background = cairo.ImageSurface(cairo.FORMAT_RGB24, self.panel.height, self.panel.width)
+        self.screen = cairo.ImageSurface(cairo.FORMAT_RGB24, self.panel.height, self.panel.width)
+        self.backdrop = None
+        self.overlay_key: tuple | None = None
         self.full = Rect(0, 0, WIDTH, HEIGHT)
         self.background_key: object = None
         self.keys: dict[str, tuple] = {}
@@ -203,6 +213,9 @@ class App:
         self.screen_off = False
         self.press_until = 0.0
         self.snapshot_requested = False
+        self.last_touch = 0.0
+        self.close_at = 0.0
+        self.dialog_down: tuple | None = None
         signal.signal(signal.SIGUSR1, self._request_snapshot)
 
     def _request_snapshot(self, *_) -> None:
@@ -220,7 +233,8 @@ class App:
         while True:
             now = time.monotonic()
             timeout = max(0.0, min(next_clock - now, (self.last_frame + FRAME_GAP_S - now) if self.dirty else 1.0,
-                                   (self.press_until - now) if self.press_until else 1.0))
+                                   (self.press_until - now) if self.press_until else 1.0,
+                                   (self.close_at - now) if self.close_at else 1.0))
             readable, _, _ = select.select(watched, [], [], timeout)
             if self.wake.read_fd in readable:
                 self.wake.drain()
@@ -235,6 +249,10 @@ class App:
                 self.snapshot_requested = False
                 self._write_snapshot()
             now = time.monotonic()
+            if self.close_at and now >= self.close_at:
+                self._close_dialog()
+            if self.deck.open_dialog and now - self.last_touch >= DIALOG_IDLE_S:
+                self._close_dialog()
             if self.press_until and now >= self.press_until:
                 self.press_until = 0.0
                 self.deck.pressed = None
@@ -268,7 +286,10 @@ class App:
                 self.keys[name] = key
                 changed.add(name)
         self.dirty = False
-        if not changed and not self.pending[self.panel.back_index]:
+        overlay = deck.dialog_model()
+        overlay_key = deck.overlay_key()
+        overlay_moved = overlay_key != self.overlay_key
+        if not changed and not overlay_moved and not self.pending[self.panel.back_index]:
             return
         scene = cairo.Context(self.scene)
         scene.scale(self.scale_x, self.scale_y)
@@ -285,8 +306,28 @@ class App:
             deck.paint_region(scene, name)
             scene.restore()
         self.scene.flush()
+        if overlay_moved and self.overlay_key is None:
+            self.backdrop = self.dialog.frosted(self.scene)
+        self.overlay_key = overlay_key
+        # A dialog covers most of the screen and its glass blends with what is under it: any change
+        # while it is open recomposes the whole screen, and opening or closing it does too.
+        whole = overlay_moved or (overlay is not None and changed)
         for pending in self.pending:
-            pending.update(changed)
+            if whole:
+                pending.add(FULL)
+            else:
+                pending.update(changed)
+        source = self.scene
+        if overlay is not None:
+            ctx = cairo.Context(self.screen)
+            ctx.set_source_surface(self.scene, 0, 0)
+            ctx.set_operator(cairo.OPERATOR_SOURCE)
+            ctx.paint()
+            ctx.set_operator(cairo.OPERATOR_OVER)
+            ctx.scale(self.scale_x, self.scale_y)
+            self.dialog.paint(ctx, overlay, deck.icons, self.backdrop, (self.scale_x, self.scale_y), deck.dialog_drag)
+            self.screen.flush()
+            source = self.screen
 
         self.panel.wait_flip(timeout=0.1)
         index = self.panel.back_index
@@ -297,7 +338,7 @@ class App:
             rect = regions[name]
             out.rectangle(rect.x * self.scale_x, rect.y * self.scale_y, rect.w * self.scale_x, rect.h * self.scale_y)
         out.clip()
-        out.set_source_surface(self.scene, 0, 0)
+        out.set_source_surface(source, 0, 0)
         out.get_source().set_filter(cairo.FILTER_NEAREST)
         out.set_operator(cairo.OPERATOR_SOURCE)
         out.paint()
@@ -309,6 +350,11 @@ class App:
     def _apply(self, name: str, value) -> None:
         s = self.deck.state
         if name.startswith("error:"):
+            # A write that failed leaves the optimistic value on screen: read the truth back.
+            refetch = {"perf": ("kiosk_steam", "perf.view", []), "fan": ("get_fan_curve_state",), "cpu": ("get_cpu_state",)}
+            label = name.split(":", 1)[1]
+            if label in refetch:
+                self.worker.act(label, *refetch[label])
             return
         if name == "live" and isinstance(value, dict):
             fps = value.get("fps")
@@ -318,7 +364,7 @@ class App:
             if appid != s.appid:
                 s.appid, s.game_name, s.hero, s.logo = appid, None, None, None
                 if appid and str(appid).isdigit():
-                    self.worker.act("get_kiosk_game", str(appid))
+                    self.worker.act("get_kiosk_game", "get_kiosk_game", str(appid))
                     threading.Thread(target=self._load_art, args=(str(appid),), daemon=True).start()
         elif name == "get_kiosk_game" and isinstance(value, dict) and value.get("appid") == s.appid:
             s.game_name = value.get("name")
@@ -326,10 +372,13 @@ class App:
             appid, hero, logo = value
             if appid == s.appid:
                 s.hero, s.logo = hero, logo
-        elif name in ("vitals", "battery", "cpu", "tdp"):
+        elif name in ("vitals", "battery", "cpu", "fan") and isinstance(value, dict):
             setattr(s, name, value)
-        elif name == "set_cpu_boost" and isinstance(value, dict):
-            s.cpu = value
+        elif name == "perf" and isinstance(value, dict):
+            if value.get("ok"):
+                s.perf = value.get("result")
+            else:
+                self.worker.act("perf", "kiosk_steam", "perf.view", [])
         elif name == "prefs" and isinstance(value, dict):
             s.lang = value.get("panel-de-control-lang") or s.lang
         elif name in ("brightness", "volume") and isinstance(value, dict) and value.get("ok"):
@@ -338,7 +387,7 @@ class App:
                 setattr(s, name, (value.get("result") or {}).get("value"))
         elif name == "refresh" and isinstance(value, dict) and value.get("ok"):
             s.refresh = value.get("result")
-        elif name == "set_kiosk_screen_off" and isinstance(value, dict):
+        elif name == "screen_off" and isinstance(value, dict):
             self.screen_off = bool(value.get("screen_off"))
         else:
             return
@@ -354,11 +403,15 @@ class App:
         self.worker.post("art", (appid, hero, logo))
 
     def _touch(self, event) -> None:
+        self.last_touch = time.monotonic()
         if self.screen_off:
             if event.kind == "down":
-                self.worker.act("set_kiosk_screen_off", False)
+                self.worker.act("screen_off", "set_kiosk_screen_off", False)
             return
         x, y = self.logical_point(event.x, event.y, self.panel.width, self.panel.height)
+        if self.deck.open_dialog:
+            self._dialog_touch(event.kind, x, y)
+            return
         deck = self.deck
         if event.kind == "down":
             target = deck.hit(x, y)
@@ -382,6 +435,74 @@ class App:
                 deck.pressed = None
             self.dirty = True
 
+    def _dialog_touch(self, kind: str, x: float, y: float) -> None:
+        deck = self.deck
+        model = deck.dialog_model()
+        if model is None:
+            self._close_dialog()
+            return
+        if kind == "down":
+            where, value = self.dialog.hit(model, x, y)
+            self.dialog_down = (where, value)
+            if where == "steps":
+                deck.dialog_drag = value
+                self.dirty = True
+        elif kind == "move" and deck.dialog_drag is not None:
+            deck.dialog_drag = self.dialog.steps_value(model, x)
+            self.dirty = True
+        elif kind == "up":
+            down, self.dialog_down = self.dialog_down, None
+            if deck.dialog_drag is not None:
+                level, deck.dialog_drag = deck.dialog_drag, None
+                if model.steps and level != model.steps.value:
+                    self._perf_optimistic(level=level)
+                    self.worker.act("perf", "kiosk_steam", "perf.level", [level])
+                self.dirty = True
+                return
+            where, value = self.dialog.hit(model, x, y)
+            if down is None or (where, value) != down:
+                return
+            if where == "outside":
+                self._close_dialog()
+            elif where == "orb":
+                self._dialog_pick(value)
+
+    def _dialog_pick(self, key) -> None:
+        kind, value = key
+        s = self.deck.state
+        if kind == "preset":
+            self._perf_optimistic(preset=value)
+            self.worker.act("perf", "kiosk_steam", "perf.preset", [value])
+            return
+        if kind == "fps":
+            self.worker.act("perf", "kiosk_steam", "perf.target", [value])
+        elif kind == "fan":
+            game_scope = bool(s.appid) and (s.fan or {}).get("follows_global") is False
+            s.fan = {**(s.fan or {}), "preset": value}
+            self.worker.act("fan", "set_fan_preset", value, "game" if game_scope else "global", s.appid if game_scope else None)
+        elif kind == "hz":
+            self.worker.act("refresh_set", "kiosk_steam", "refresh.set", [value])
+            self.worker.act("refresh", "kiosk_steam", "refresh.get", [])
+        self.dirty = True
+        self.close_at = time.monotonic() + PICK_CLOSE_S
+
+    def _perf_optimistic(self, level: int | None = None, preset: str | None = None) -> None:
+        perf = dict(self.deck.state.perf or {})
+        if level is not None:
+            perf["shown"] = perf["value"] = level
+            perf["presets"] = [{**p, "active": False} for p in perf.get("presets") or []]
+        if preset is not None:
+            perf["presets"] = [{**p, "active": p["id"] == preset} for p in perf.get("presets") or []]
+        self.deck.state.perf = perf
+        self.dirty = True
+
+    def _close_dialog(self) -> None:
+        self.deck.open_dialog = None
+        self.deck.dialog_drag = None
+        self.dialog_down = None
+        self.close_at = 0.0
+        self.dirty = True
+
     def _fader(self, name: str, y: float) -> None:
         value = round(self.deck.fader_value(name, y), 3)
         kind = "brightness" if name == "bri" else "volume"
@@ -392,21 +513,24 @@ class App:
 
     def _activate(self, name: str) -> None:
         s = self.deck.state
-        if name == "turbo":
+        if name in ("perf", "fps", "fan", "hz"):
+            self.deck.open_dialog = name
+            self.dirty = True
+        elif name == "turbo":
             boost = (s.cpu or {}).get("boost") or {}
             enabled = not boost.get("enabled")
             s.cpu = {**(s.cpu or {}), "boost": {**boost, "enabled": enabled}}
             game_scope = bool(s.appid) and (s.cpu or {}).get("follows_global") is False
             scope = "game" if game_scope else "global"
-            self.worker.act("set_cpu_boost", enabled, scope, s.appid if game_scope else None, s.appid)
+            self.worker.act("cpu", "set_cpu_boost", enabled, scope, s.appid if game_scope else None, s.appid)
         elif name == "shot":
-            self.worker.act("kiosk_steam", "screenshot", [])
+            self.worker.act("steam", "kiosk_steam", "screenshot", [])
         elif name == "kbd":
-            self.worker.act("kiosk_steam", "keyboard", [])
+            self.worker.act("steam", "kiosk_steam", "keyboard", [])
         elif name == "qam":
-            self.worker.act("kiosk_steam", "quick_access", [])
+            self.worker.act("steam", "kiosk_steam", "quick_access", [])
         elif name == "off":
-            self.worker.act("set_kiosk_screen_off", True)
+            self.worker.act("screen_off", "set_kiosk_screen_off", True)
 
 
 def main(argv: list[str]) -> int:

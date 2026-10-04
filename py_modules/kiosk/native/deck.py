@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 
 import cairo
 
+from choices import fan_choices, fps_choices, level_caption, refresh_choices
+from dialog import DialogModel, Orb, Steps
 from geometry import GRID_Y, WIDTH, Rect, grid_rects
 from paint import Icons, Text, contain, cover, fill_rounded, glass, rounded_rect, white
 
@@ -27,10 +29,11 @@ class DeckState:
     vitals: dict | None = None
     battery: dict | None = None
     cpu: dict | None = None
-    tdp: dict | None = None
     refresh: dict | None = None
     brightness: float | None = None
     volume: float | None = None
+    perf: dict | None = None
+    fan: dict | None = None
 
 
 def _number(value: float, digits: int, lang: str) -> str:
@@ -62,6 +65,8 @@ class Deck:
         self.rects = grid_rects()
         self.pressed: str | None = None
         self.dragging: str | None = None
+        self.open_dialog: str | None = None
+        self.dialog_drag: int | None = None
 
     def t(self, key: str, **params) -> str:
         table = self.strings.get(self.state.lang) or self.strings.get("en") or {}
@@ -86,6 +91,14 @@ class Deck:
             return s.brightness is not None
         if name == "vol":
             return s.volume is not None
+        if name == "perf":
+            return bool((s.perf or {}).get("ready"))
+        if name == "fps":
+            return bool((s.perf or {}).get("autoReady"))
+        if name == "fan":
+            return bool(fan_choices(s.fan))
+        if name == "hz":
+            return len(refresh_choices(s.refresh)) > 1
         return name in ("shot", "kbd", "qam", "off")
 
     def fader_value(self, name: str, y: float) -> float:
@@ -112,10 +125,10 @@ class Deck:
         common = (s.lang, name == self.pressed, self.enabled(name))
         vitals = s.vitals or {}
         content = {
-            "perf": lambda: (repr(s.tdp and {k: s.tdp.get(k) for k in ("watts", "unit", "limits", "supported")}),
-                             vitals.get("cpu_mhz"), vitals.get("gpu_mhz"), vitals.get("watts"), vitals.get("charging"),
+            "perf": lambda: (repr(s.perf), vitals.get("cpu_mhz"), vitals.get("gpu_mhz"), vitals.get("watts"), vitals.get("charging"),
                              vitals.get("ram_used_gb")),
             "fan": lambda: (vitals.get("fan_rpm"),),
+            "fps": lambda: (self._target(),),
             "hz": lambda: ((s.refresh or {}).get("current"),),
             "turbo": lambda: (bool((s.cpu or {}).get("boost", {}).get("enabled")),),
             "bri": lambda: (s.brightness,),
@@ -234,7 +247,16 @@ class Deck:
         ctx.stroke()
 
     def _target(self) -> int | None:
-        return None
+        return (self.state.perf or {}).get("target")
+
+    def perf_name(self) -> str:
+        perf = self.state.perf or {}
+        if not perf.get("ready"):
+            return self.t("kiosk.unavailable")
+        if perf.get("autoOn"):
+            return self.t("kiosk.perf.auto")
+        active = next((p for p in perf.get("presets") or [] if p.get("active")), None)
+        return active["title"] if active else self.t("kiosk.perf.custom")
 
     def _paint_tile(self, ctx: cairo.Context, name: str, r: Rect) -> None:
         if name in FADERS:
@@ -264,18 +286,16 @@ class Deck:
 
     def _tile_perf(self, ctx: cairo.Context, r: Rect) -> None:
         s = self.state
-        tdp = s.tdp or {}
-        levels = tdp.get("unit") == "level"
-        limits = tdp.get("limits") or {}
-        value = round(tdp["watts"]) if tdp.get("watts") is not None else None
+        perf = s.perf or {}
+        value = perf.get("shown")
+        high, low = perf.get("max"), perf.get("min") or 0
         x, y = r.x + 16, r.y + 16
         level = Text(ctx, "—" if value is None else str(value), 64, 200, spacing=-0.06)
         level.draw_baseline(ctx, x, y + 64 * 0.85 * 0.82)
-        suffix = Text(ctx, f"/ {limits.get('max')}" if levels and limits.get("max") else "W", 14)
+        suffix = Text(ctx, f"/ {high}" if perf.get("levels") and high else "W", 14)
         suffix.draw_baseline(ctx, x + level.width + 6, y + 64 * 0.85 * 0.82, white(0.6))
-        title = Text(ctx, self.t("kiosk.perf.custom") if tdp.get("supported") else self.t("kiosk.unavailable"), 16, 600,
-                     max_width=r.w - 32)
-        title.draw(ctx, x, y + 64 * 0.85 + 4)
+        title = Text(ctx, self.perf_name(), 16, 600, max_width=r.w - 32)
+        title.draw(ctx, x, y + 64 * 0.85 + 4, white(1 if perf.get("ready") else DISABLED_ALPHA))
 
         vitals = s.vitals or {}
         items = []
@@ -298,15 +318,17 @@ class Deck:
             value_text.draw(ctx, cx, cy + 13)
             Text(ctx, unit, 11, 500).draw_baseline(ctx, cx + value_text.width + 3, cy + 13 + value_text.baseline, white(0.55))
 
-        span = max(1, (limits.get("max") or 1) - (limits.get("min") or 0))
-        lit = 0 if value is None else max(1, round((value - (limits.get("min") or 0)) / span * 10))
+        span = max(1, (high or 1) - low)
+        lit = 0 if value is None else max(1, round((value - low) / span * 10))
         bar_w = (r.w - 32 - 9 * 4) / 10
         for index in range(10):
             fill_rounded(ctx, x + index * (bar_w + 4), r.y + r.h - 16 - 6, bar_w, 6, 3,
                          (1, 1, 1, 1) if index < lit else white(0.16))
 
     def _tile_fps(self, ctx: cairo.Context, r: Rect) -> None:
-        self._big(ctx, r, "∞", self.t("kiosk.fps.free"), DISABLED_ALPHA)
+        target = self._target()
+        label = self.t("kiosk.fps.target") if target is not None else self.t("kiosk.fps.free")
+        self._big(ctx, r, "∞" if target is None else str(target), label, 1 if self.enabled("fps") else DISABLED_ALPHA)
 
     def _tile_fan(self, ctx: cairo.Context, r: Rect) -> None:
         rpm = (self.state.vitals or {}).get("fan_rpm")
@@ -315,7 +337,7 @@ class Deck:
 
     def _tile_hz(self, ctx: cairo.Context, r: Rect) -> None:
         current = (self.state.refresh or {}).get("current")
-        self._big(ctx, r, "—" if current is None else str(current), "Hz", DISABLED_ALPHA)
+        self._big(ctx, r, "—" if current is None else str(current), "Hz", 1 if self.enabled("hz") else DISABLED_ALPHA)
 
     def _tile_rgb(self, ctx: cairo.Context, r: Rect) -> None:
         Text(ctx, self.t("kiosk.lights"), 16, 600).draw(ctx, r.x + 14, r.y + 12, white(DISABLED_ALPHA))
@@ -349,3 +371,49 @@ class Deck:
             ctx.restore()
         icon = "sun" if name == "bri" else ("muted" if value == 0 else "speaker")
         self.icons.draw(ctx, icon, r.x + r.w / 2, r.y + r.h - 16 - 12, 24, (0x8E / 255, 0x8E / 255, 0x93 / 255, 1), 1.9)
+
+    # ---- dialogs -----------------------------------------------------------------------------
+
+    def dialog_model(self) -> DialogModel | None:
+        s = self.state
+        name = self.open_dialog
+        if name == "perf" and s.perf:
+            perf = s.perf
+            auto = bool(perf.get("autoOn"))
+            shown = perf.get("shown")
+            caption = level_caption(perf.get("frequencies"), shown, self._comma()) if perf.get("levels") else ""
+            detail = self.t("kiosk.perf.autoNote") if auto else (caption or (None if perf.get("levels") else f"{perf.get('value')} W"))
+            orbs = tuple(
+                Orb(("preset", p["id"]), p["title"], icon=f"preset.{p.get('icon')}", on=bool(p.get("active")), disabled=auto)
+                for p in perf.get("presets") or []
+            )
+            steps = Steps(shown if shown is not None else perf.get("min", 0), perf.get("min", 0), perf.get("max", 1), auto)
+            return DialogModel(self.perf_name(), detail, bubble_text="—" if shown is None else str(shown), orbs=orbs, steps=steps)
+        if name == "fps" and s.perf:
+            auto = bool(s.perf.get("autoOn"))
+            target = self._target()
+            orbs = tuple(Orb(("fps", fps), "fps", text=str(fps), on=auto and target == fps) for fps in fps_choices(s.perf.get("maxFps")))
+            orbs += (Orb(("fps", None), self.t("kiosk.fps.free"), icon="infinity", on=not auto),)
+            title = "— fps" if s.fps is None else f"{round(s.fps)} fps"
+            return DialogModel(title, self.t("kiosk.fps.onNote" if auto else "kiosk.fps.offNote"), bubble_icon="target", orbs=orbs)
+        if name == "fan" and s.fan:
+            rpm = (s.vitals or {}).get("fan_rpm")
+            celsius = (s.vitals or {}).get("celsius")
+            orbs = tuple(Orb(("fan", preset), self.t(f"fans.preset.{preset}"), icon=f"fan.{preset}",
+                             on=s.fan.get("preset") == preset) for preset in fan_choices(s.fan))
+            title = self.t("kiosk.fan") if rpm is None else f"{_grouped(rpm, s.lang)} rpm"
+            return DialogModel(title, None if celsius is None else f"{round(celsius)} °C", bubble_icon="fan", orbs=orbs)
+        if name == "hz":
+            rates = refresh_choices(s.refresh)
+            current = (s.refresh or {}).get("current")
+            labels = {0: self.t("kiosk.hz.saver"), len(rates) - 1: self.t("kiosk.hz.max")}
+            orbs = tuple(Orb(("hz", hz), labels.get(i, "Hz"), text=str(hz), on=current == hz) for i, hz in enumerate(rates))
+            return DialogModel(f"{current if current is not None else '—'} Hz", self.t("kiosk.hz.detail"), bubble_icon="display", orbs=orbs)
+        return None
+
+    def overlay_key(self) -> tuple | None:
+        model = self.dialog_model()
+        return None if model is None else (self.open_dialog, model, self.dialog_drag)
+
+    def _comma(self) -> bool:
+        return self.state.lang in ("es", "it", "de", "pt-BR")
