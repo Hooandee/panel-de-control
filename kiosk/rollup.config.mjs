@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { createRequire } from "module";
 import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Reuse the exact Rollup plugins @decky/rollup ships with, so the kiosk adds no dependencies.
@@ -37,7 +37,20 @@ const kioskAssets = {
   },
 };
 
-export default {
+const stringsModule = resolve(here, "../node_modules/.cache/pdc-kiosk/strings.mjs");
+
+// The native bottom screen is Python: it reads the same translations and icons as JSON.
+const nativeStrings = {
+  name: "pdc-kiosk-native-strings",
+  async writeBundle() {
+    const { STRINGS, ICONS } = await import(`${pathToFileURL(stringsModule).href}?t=${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(resolve(outDir, "strings.json"), JSON.stringify(STRINGS));
+    writeFileSync(resolve(outDir, "icons.json"), JSON.stringify(ICONS));
+  },
+};
+
+const web = {
   input: resolve(here, "src/main.tsx"),
   plugins: [
     deckyShims,
@@ -51,3 +64,19 @@ export default {
   context: "window",
   output: { file: resolve(outDir, "kiosk.js"), format: "iife", sourcemap: false },
 };
+
+const strings = {
+  input: resolve(here, "src/strings.tsx"),
+  plugins: [
+    deckyShims,
+    typescript({ tsconfig: resolve(here, "tsconfig.json") }),
+    json(),
+    commonjs(),
+    nodeResolve(),
+    replace({ preventAssignment: true, "process.env.NODE_ENV": JSON.stringify("production") }),
+    nativeStrings,
+  ],
+  output: { file: stringsModule, format: "es", sourcemap: false },
+};
+
+export default [web, strings];
