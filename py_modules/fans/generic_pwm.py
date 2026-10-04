@@ -9,6 +9,11 @@ an unrelated PWM. Graphics-driver chips are skipped: a discrete GPU's firmware o
 its fan, and driving it from the system curve starves the card under load. The
 hottest curve point stays above the safety floor, and a missing temp reading
 releases to auto rather than holding a stale duty.
+
+The kernel's ``pwm-fan`` driver (ARM boards) has no automatic mode of its own: only a
+thermal zone bound to its cooling device moves it, and a board without that binding and
+without a vendor daemon leaves the fan wherever it was last set. There, Auto is Panel's
+own balanced curve and letting go leaves the fan spinning at a safe duty instead of stuck.
 """
 
 import glob
@@ -17,6 +22,13 @@ import re
 
 from fans.control import _interp, _read, _read_int, _write, _SAFE_MAX_TEMP_FLOOR
 from fans.software_loop import _HWMON, SoftwareLoopBackend
+
+_THERMAL = "sys/class/thermal"
+PWM_FAN_CHIP = "pwmfan"
+PWM_FAN_COOLING = "pwm-fan"
+# Duty left on a fan with no automatic mode when Panel lets go of it (unload, module off).
+FAILSAFE_DUTY = 128
+AUTO_PRESET = "balanced"
 
 _ENABLE_MANUAL = 1
 _ENABLE_AUTO = 2
@@ -35,6 +47,35 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
         # can be an empty header or a semi-passive fan, and neither is taken.
         self._spinning_only = spinning_only
         super().__init__(temp_fn=temp_fn, root=root)
+        self.firmware_auto = self._has_firmware_auto()
+
+    def _has_firmware_auto(self) -> bool:
+        """Whether something other than Panel moves the fan when Panel lets go of it."""
+        if self._dir is None or _read(os.path.join(self._dir, "name")) != PWM_FAN_CHIP:
+            return True
+        return pwm_fan_thermally_bound(self._root)
+
+    def set_auto(self, fan_key=None) -> dict:
+        if self.firmware_auto or not self.supported:
+            return super().set_auto(fan_key)
+        from fans.presets import RESOLVED
+        result = self.apply_curve_all([list(point) for point in RESOLVED[AUTO_PRESET]])
+        return {"ok": result["ok"], "detail": "panel automatic curve (no firmware automatic mode)"}
+
+    def restore_auto(self) -> dict:
+        if self.firmware_auto or not self.supported:
+            return super().restore_auto()
+        self.stop()
+        with self._io_lock:
+            self._points = None
+            self._drive_ok = False
+            self._prev_target = None
+            ok = True
+            for m in self._fans:
+                manual = (_write(self._enable(m), str(_ENABLE_MANUAL))
+                          and _read_int(self._enable(m)) == _ENABLE_MANUAL)
+                ok = manual and _write(self._pwm(m), str(FAILSAFE_DUTY)) and ok
+        return {"ok": ok, "detail": f"left at fail-safe duty {FAILSAFE_DUTY} (no firmware automatic mode)"}
 
     def _find_chip(self):
         for d in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
@@ -127,4 +168,19 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
             rpm = _read_int(os.path.join(self._dir, f"fan{m}_input"))
             fans.append({"key": f"fan{m}", "enable": self._fan_enable(m),
                          "rpm": rpm, "points": []})
-        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans}
+        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans,
+                "firmware_auto": self.firmware_auto}
+
+
+def pwm_fan_thermally_bound(root: str = "/") -> bool:
+    """True when a kernel thermal zone drives a pwm-fan cooling device (its own automatic)."""
+    devices = set()
+    for device in glob.glob(os.path.join(root, _THERMAL, "cooling_device*")):
+        if _read(os.path.join(device, "type")) == PWM_FAN_COOLING:
+            devices.add(os.path.basename(device))
+    if not devices:
+        return False
+    for link in glob.glob(os.path.join(root, _THERMAL, "thermal_zone*", "cdev[0-9]*")):
+        if os.path.islink(link) and os.path.basename(os.readlink(link)) in devices:
+            return True
+    return False
