@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 import cairo
 
 from choices import fan_choices, fps_choices, level_caption, refresh_choices
-from dialog import DialogModel, Orb, Steps
+import lights
+from dialog import Bar, Chips, Colors, Cta, DialogModel, Note, Orb, Orbs, Steps
 from geometry import GRID_Y, WIDTH, Rect, grid_rects
-from paint import Icons, Text, contain, cover, fill_rounded, glass, rounded_rect, white
+from paint import Icons, Text, contain, cover, fill_rounded, glass, rounded_rect, swatch_pattern, white
 
 FPS_HISTORY = 60
 DISABLED_ALPHA = 0.45
@@ -34,6 +35,7 @@ class DeckState:
     volume: float | None = None
     perf: dict | None = None
     fan: dict | None = None
+    colores: dict | None = None
 
 
 def _number(value: float, digits: int, lang: str) -> str:
@@ -66,7 +68,8 @@ class Deck:
         self.pressed: str | None = None
         self.dragging: str | None = None
         self.open_dialog: str | None = None
-        self.dialog_drag: int | None = None
+        self.dialog_drag: tuple[str, object, object] | None = None
+        self.installing = False
 
     def t(self, key: str, **params) -> str:
         table = self.strings.get(self.state.lang) or self.strings.get("en") or {}
@@ -99,6 +102,8 @@ class Deck:
             return bool(fan_choices(s.fan))
         if name == "hz":
             return len(refresh_choices(s.refresh)) > 1
+        if name == "rgb":
+            return (s.colores or {}).get("installed") is not None
         return name in ("shot", "kbd", "qam", "off")
 
     def fader_value(self, name: str, y: float) -> float:
@@ -129,6 +134,7 @@ class Deck:
                              vitals.get("ram_used_gb")),
             "fan": lambda: (vitals.get("fan_rpm"),),
             "fps": lambda: (self._target(),),
+            "rgb": lambda: (repr(s.colores),),
             "hz": lambda: ((s.refresh or {}).get("current"),),
             "turbo": lambda: (bool((s.cpu or {}).get("boost", {}).get("enabled")),),
             "bri": lambda: (s.brightness,),
@@ -340,7 +346,32 @@ class Deck:
         self._big(ctx, r, "—" if current is None else str(current), "Hz", 1 if self.enabled("hz") else DISABLED_ALPHA)
 
     def _tile_rgb(self, ctx: cairo.Context, r: Rect) -> None:
-        Text(ctx, self.t("kiosk.lights"), 16, 600).draw(ctx, r.x + 14, r.y + 12, white(DISABLED_ALPHA))
+        colores = self.state.colores or {}
+        state = colores.get("state")
+        if colores.get("installed") is False:
+            summary = self.t("kiosk.lights.install")
+        elif not state:
+            summary = "—"
+        elif not state.get("power"):
+            summary = self.t("kiosk.lights.off")
+        else:
+            mode = state.get("mode")
+            name = self.t(f"kiosk.lights.effect.{(state.get('effect') or {}).get('id')}") if mode == "effect" \
+                else self.t(f"kiosk.lights.mode.{mode}")
+            summary = f"{name} · {round((state.get('brightness') or 0) / lights.BRIGHTNESS_MAX * 100)} %"
+        alpha = 1 if self.enabled("rgb") else DISABLED_ALPHA
+        title = Text(ctx, self.t("kiosk.lights"), 16, 600)
+        title.draw(ctx, r.x + 14, r.y + 12, white(alpha))
+        sub = Text(ctx, summary, 11, 400, max_width=r.w - 28 - title.width - 8)
+        sub.draw_baseline(ctx, r.x + r.w - 14 - sub.width, r.y + 12 + title.baseline, white(0.6 * alpha))
+        stops = lights.swatch(state)
+        strip_y = r.y + r.h - 12 - 14
+        if stops:
+            rounded_rect(ctx, r.x + 14, strip_y, r.w - 28, 14, 7)
+            ctx.set_source(swatch_pattern(stops, r.x + 14, r.w - 28))
+            ctx.fill()
+        else:
+            fill_rounded(ctx, r.x + 14, strip_y, r.w - 28, 14, 7, white(0.12))
 
     def _tile_turbo(self, ctx: cairo.Context, r: Rect) -> None:
         on = bool((self.state.cpu or {}).get("boost", {}).get("enabled"))
@@ -387,29 +418,69 @@ class Deck:
                 Orb(("preset", p["id"]), p["title"], icon=f"preset.{p.get('icon')}", on=bool(p.get("active")), disabled=auto)
                 for p in perf.get("presets") or []
             )
-            steps = Steps(shown if shown is not None else perf.get("min", 0), perf.get("min", 0), perf.get("max", 1), auto)
-            return DialogModel(self.perf_name(), detail, bubble_text="—" if shown is None else str(shown), orbs=orbs, steps=steps)
+            low, high = perf.get("min", 0), perf.get("max", 1)
+            sections = ((Orbs(orbs),) if orbs else ()) + (Steps(shown if shown is not None else low, low, high, auto),)
+            return DialogModel(self.perf_name(), detail, bubble_text="—" if shown is None else str(shown), sections=sections)
         if name == "fps" and s.perf:
             auto = bool(s.perf.get("autoOn"))
             target = self._target()
             orbs = tuple(Orb(("fps", fps), "fps", text=str(fps), on=auto and target == fps) for fps in fps_choices(s.perf.get("maxFps")))
             orbs += (Orb(("fps", None), self.t("kiosk.fps.free"), icon="infinity", on=not auto),)
             title = "— fps" if s.fps is None else f"{round(s.fps)} fps"
-            return DialogModel(title, self.t("kiosk.fps.onNote" if auto else "kiosk.fps.offNote"), bubble_icon="target", orbs=orbs)
+            return DialogModel(title, self.t("kiosk.fps.onNote" if auto else "kiosk.fps.offNote"), bubble_icon="target",
+                               sections=(Orbs(orbs),))
         if name == "fan" and s.fan:
             rpm = (s.vitals or {}).get("fan_rpm")
             celsius = (s.vitals or {}).get("celsius")
             orbs = tuple(Orb(("fan", preset), self.t(f"fans.preset.{preset}"), icon=f"fan.{preset}",
                              on=s.fan.get("preset") == preset) for preset in fan_choices(s.fan))
             title = self.t("kiosk.fan") if rpm is None else f"{_grouped(rpm, s.lang)} rpm"
-            return DialogModel(title, None if celsius is None else f"{round(celsius)} °C", bubble_icon="fan", orbs=orbs)
+            return DialogModel(title, None if celsius is None else f"{round(celsius)} °C", bubble_icon="fan", sections=(Orbs(orbs),))
         if name == "hz":
             rates = refresh_choices(s.refresh)
             current = (s.refresh or {}).get("current")
             labels = {0: self.t("kiosk.hz.saver"), len(rates) - 1: self.t("kiosk.hz.max")}
             orbs = tuple(Orb(("hz", hz), labels.get(i, "Hz"), text=str(hz), on=current == hz) for i, hz in enumerate(rates))
-            return DialogModel(f"{current if current is not None else '—'} Hz", self.t("kiosk.hz.detail"), bubble_icon="display", orbs=orbs)
+            return DialogModel(f"{current if current is not None else '—'} Hz", self.t("kiosk.hz.detail"), bubble_icon="display",
+                               sections=(Orbs(orbs),))
+        if name == "lights":
+            return self._lights_model()
         return None
+
+    def _lights_model(self) -> DialogModel | None:
+        colores = self.state.colores
+        if not colores:
+            return None
+        if colores.get("installed") is False:
+            busy = self.installing
+            return DialogModel(self.t("kiosk.lights.installTitle"), self.t("kiosk.lights.installDetail"), bubble_icon="rainbow",
+                               sections=(Note(self.t("kiosk.lights.installNote")),
+                                         Cta("install", self.t("kiosk.lights.installing" if busy else "kiosk.lights.install"), busy)))
+        state = colores.get("state")
+        if not state:
+            return None
+        power = bool(state.get("power"))
+        mode = state.get("mode") if power else None
+        effect = state.get("effect") or {}
+        top = self.t("kiosk.lights.off") if not power else (
+            self.t(f"kiosk.lights.effect.{effect.get('id')}") if mode == "effect" else self.t(f"kiosk.lights.mode.{mode}"))
+        orbs = (Orb(("power", not power), self.t("kiosk.lights.turnOff"), icon="power", on=not power),)
+        orbs += tuple(Orb(("mode", m), self.t(f"kiosk.lights.mode.{m}"), icon=f"light.{m}", on=mode == m)
+                      for m in lights.modes(state.get("capabilities")))
+        sections: tuple = (Orbs(orbs),)
+        if mode == "solid":
+            current = lights.rgb(state.get("color"))
+            sections += (Colors(tuple((color, color, color == current) for color in lights.SWATCHES)),)
+        elif mode == "effect":
+            sections += (
+                Chips(tuple((e, self.t(f"kiosk.lights.effect.{e}"), e == effect.get("id")) for e in lights.effects(state.get("capabilities")))),
+                Bar("speed", (effect.get("speed") or 0) / 100, "speed"),
+            )
+        elif mode is not None:
+            sections += (Note(self.t(f"kiosk.lights.note.{'gradient' if mode == 'gradient' else 'auto'}")),)
+        brightness = state.get("brightness") or 0
+        sections += (Bar("brightness", brightness / lights.BRIGHTNESS_MAX if power else None, "sun"),)
+        return DialogModel(top, self.t("kiosk.lights.detail"), bubble_fill=lights.swatch(state), sections=sections)
 
     def overlay_key(self) -> tuple | None:
         model = self.dialog_model()

@@ -76,7 +76,7 @@ class Text:
     """One line of text; measure first, draw where it fits."""
 
     def __init__(self, ctx: cairo.Context, value: str, size: float, weight: int = 400, spacing: float = 0.0,
-                 max_width: float | None = None):
+                 max_width: float | None = None, wrap_width: float | None = None):
         self.layout = PangoCairo.create_layout(ctx)
         self.layout.set_font_description(_font(size, weight))
         if spacing:
@@ -86,6 +86,10 @@ class Text:
         if max_width is not None:
             self.layout.set_width(int(max_width * Pango.SCALE))
             self.layout.set_ellipsize(Pango.EllipsizeMode.END)
+        elif wrap_width is not None:
+            self.layout.set_width(int(wrap_width * Pango.SCALE))
+            self.layout.set_wrap(Pango.WrapMode.WORD)
+            self.layout.set_alignment(Pango.Alignment.CENTER)
         self.layout.set_text(value, -1)
         _, logical = self.layout.get_pixel_extents()
         self.width = logical.width
@@ -97,6 +101,10 @@ class Text:
         ctx.move_to(x, y)
         ctx.set_source_rgba(*rgba)
         PangoCairo.show_layout(ctx, self.layout)
+
+    def draw_centered(self, ctx: cairo.Context, x: float, y: float, width: float, rgba: RGBA = WHITE) -> None:
+        """A wrapped block, each line centred within `width`."""
+        self.draw(ctx, x + (width - self.layout.get_width() / Pango.SCALE) / 2, y, rgba)
 
     def draw_baseline(self, ctx: cairo.Context, x: float, baseline: float, rgba: RGBA = WHITE) -> None:
         self.draw(ctx, x, baseline - self.baseline, rgba)
@@ -184,3 +192,13 @@ def contain(ctx: cairo.Context, image: cairo.ImageSurface, x: float, bottom: flo
     ctx.paint()
     ctx.restore()
     return drawn_h
+
+
+def swatch_pattern(stops: tuple[tuple[int, int, int], ...], x: float, w: float) -> cairo.Pattern:
+    """A left-to-right run of colours, or one flat colour."""
+    if len(stops) == 1:
+        return cairo.SolidPattern(*(c / 255 for c in stops[0]))
+    pattern = cairo.LinearGradient(x, 0, x + w, 0)
+    for index, (r, g, b) in enumerate(stops):
+        pattern.add_color_stop_rgb(index / (len(stops) - 1), r / 255, g / 255, b / 255)
+    return pattern

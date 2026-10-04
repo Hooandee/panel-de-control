@@ -12,7 +12,7 @@ afterEach(cleanup);
 
 const state: ColoresState = {
   power: true,
-  brightness: 128,
+  brightness: 50,
   mode: "effect",
   color: { r: 10, g: 132, b: 255 },
   gradient: [],

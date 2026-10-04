@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 
+import lights
+
 UNAVAILABLE = 3
 TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
 
@@ -23,11 +25,13 @@ SLOW_S = 10.0
 CLOCK_S = 10.0
 SCALAR_HOLD_S = 1.5
 SCALAR_GAP_S = 0.04
+LIGHTS_GAP_S = 0.15
 FRAME_GAP_S = 1 / 30
 PRESS_RELEASE_S = 0.12
 PICK_CLOSE_S = 0.38
 # A dialog left open keeps repainting next to the game; it closes itself after a while untouched.
 DIALOG_IDLE_S = 20.0
+DIALOG_OF_TILE = {"perf": "perf", "fps": "fps", "fan": "fan", "hz": "hz", "rgb": "lights"}
 SNAPSHOT_PATH = "/tmp/pdc-kiosk-native.png"
 FULL = "full"
 
@@ -83,9 +87,11 @@ class Worker(threading.Thread):
         self.results: list[tuple[str, object]] = []
         self._lock = threading.Condition()
         self._actions: list[tuple[str, str, tuple]] = []
-        self._scalars: dict[str, float] = {}
+        self._latest: dict[str, tuple[str, str, tuple]] = {}
+        self._gaps: dict[str, float] = {}
+        self._next_write: dict[str, float] = {}
         self._schedule: list[tuple[float, str]] = []
-        self.scalar_written: dict[str, float] = {}
+        self.written_at: dict[str, float] = {}
 
     def every(self, name: str) -> None:
         heapq.heappush(self._schedule, (0.0, name))
@@ -96,11 +102,17 @@ class Worker(threading.Thread):
             self._actions.append((label, method, args))
             self._lock.notify()
 
-    def scalar(self, kind: str, value: float) -> None:
+    def latest(self, slot: str, gap_s: float, label: str, method: str, *args) -> None:
+        """Live writes while a finger drags: only the newest per slot is sent, at most once per `gap_s`."""
         with self._lock:
-            self._scalars[kind] = value
-            self.scalar_written[kind] = time.monotonic()
+            self._latest[slot] = (label, method, args)
+            self._gaps[slot] = gap_s
+            self.written_at[slot] = time.monotonic()
             self._lock.notify()
+
+    def _due_latest(self, now: float) -> float | None:
+        waits = [self._next_write.get(slot, 0.0) for slot in self._latest]
+        return min(waits) if waits else None
 
     def take(self) -> list[tuple[str, object]]:
         with self._lock:
@@ -115,14 +127,23 @@ class Worker(threading.Thread):
     def run(self) -> None:
         while True:
             with self._lock:
-                due = self._schedule[0][0] if self._schedule else time.monotonic() + 1
-                while not self._actions and not self._scalars and time.monotonic() < due:
-                    self._lock.wait(max(0.0, due - time.monotonic()))
+                while True:
+                    now = time.monotonic()
+                    due = self._schedule[0][0] if self._schedule else now + 1
+                    latest_due = self._due_latest(now)
+                    if latest_due is not None:
+                        due = min(due, latest_due)
+                    if self._actions or now >= due:
+                        break
+                    self._lock.wait(due - now)
                 actions, self._actions = self._actions, []
-                scalars, self._scalars = self._scalars, {}
-            for kind, value in scalars.items():
-                self._call(f"{kind}.set", "kiosk_steam", f"{kind}.set", [value])
-                time.sleep(SCALAR_GAP_S)
+                now = time.monotonic()
+                ready = [slot for slot in self._latest if self._next_write.get(slot, 0.0) <= now]
+                writes = [self._latest.pop(slot) for slot in ready]
+                for slot in ready:
+                    self._next_write[slot] = now + self._gaps[slot]
+            for label, method, args in writes:
+                self._call(label, method, *args)
             for label, method, args in actions:
                 self._call(label, method, *args)
             now = time.monotonic()
@@ -157,6 +178,7 @@ class Worker(threading.Thread):
                 ("volume", "kiosk_steam", ("volume.get", [])),
                 ("refresh", "kiosk_steam", ("refresh.get", [])),
                 ("perf", "kiosk_steam", ("perf.view", [])),
+                ("colores", "kiosk_steam", ("colores.state", [])),
                 ("fan", "get_fan_curve_state", ()),
             ):
                 self._call(label, method, *args)
@@ -224,7 +246,7 @@ class App:
 
     def _write_snapshot(self) -> None:
         """Diagnostics: the deck as the user sees it, upright, at panel resolution."""
-        self.scene.write_to_png(SNAPSHOT_PATH)
+        (self.screen if self.overlay_key is not None else self.scene).write_to_png(SNAPSHOT_PATH)
 
     def run(self) -> None:
         self.worker.start()
@@ -351,10 +373,13 @@ class App:
         s = self.deck.state
         if name.startswith("error:"):
             # A write that failed leaves the optimistic value on screen: read the truth back.
-            refetch = {"perf": ("kiosk_steam", "perf.view", []), "fan": ("get_fan_curve_state",), "cpu": ("get_cpu_state",)}
+            refetch = {"perf": ("kiosk_steam", "perf.view", []), "fan": ("get_fan_curve_state",), "cpu": ("get_cpu_state",),
+                       "colores_write": ("kiosk_steam", "colores.state", []), "colores_install": ("kiosk_steam", "colores.state", [])}
             label = name.split(":", 1)[1]
+            if label == "colores_install":
+                self.deck.installing = False
             if label in refetch:
-                self.worker.act(label, *refetch[label])
+                self.worker.act(label.split("_")[0], *refetch[label])
             return
         if name == "live" and isinstance(value, dict):
             fps = value.get("fps")
@@ -374,6 +399,13 @@ class App:
                 s.hero, s.logo = hero, logo
         elif name in ("vitals", "battery", "cpu", "fan") and isinstance(value, dict):
             setattr(s, name, value)
+        elif name == "colores" and isinstance(value, dict) and value.get("ok"):
+            s.colores = value.get("result")
+        elif name == "colores_install":
+            self.deck.installing = False
+            self.worker.act("colores", "kiosk_steam", "colores.state", [])
+        elif name == "colores_write":
+            self.worker.act("colores", "kiosk_steam", "colores.state", [])
         elif name == "perf" and isinstance(value, dict):
             if value.get("ok"):
                 s.perf = value.get("result")
@@ -382,7 +414,7 @@ class App:
         elif name == "prefs" and isinstance(value, dict):
             s.lang = value.get("panel-de-control-lang") or s.lang
         elif name in ("brightness", "volume") and isinstance(value, dict) and value.get("ok"):
-            written = self.worker.scalar_written.get(name, 0.0)
+            written = self.worker.written_at.get(name, 0.0)
             if time.monotonic() - written > SCALAR_HOLD_S and self.deck.dragging != ("bri" if name == "brightness" else "vol"):
                 setattr(s, name, (value.get("result") or {}).get("value"))
         elif name == "refresh" and isinstance(value, dict) and value.get("ok"):
@@ -442,45 +474,125 @@ class App:
             self._close_dialog()
             return
         if kind == "down":
-            where, value = self.dialog.hit(model, x, y)
-            self.dialog_down = (where, value)
-            if where == "steps":
-                deck.dialog_drag = value
+            hit = self.dialog.hit(model, x, y)
+            self.dialog_down = hit
+            if hit[0] in ("bar", "steps"):
+                deck.dialog_drag = hit
+                self._dialog_drag_preview(hit)
                 self.dirty = True
         elif kind == "move" and deck.dialog_drag is not None:
-            deck.dialog_drag = self.dialog.steps_value(model, x)
-            self.dirty = True
+            drag_kind, key, _ = deck.dialog_drag
+            value = self.dialog.drag_value(model, drag_kind, key, x)
+            if value is not None and (drag_kind, key, value) != deck.dialog_drag:
+                deck.dialog_drag = (drag_kind, key, value)
+                self._dialog_drag_preview(deck.dialog_drag)
+                self.dirty = True
         elif kind == "up":
             down, self.dialog_down = self.dialog_down, None
             if deck.dialog_drag is not None:
-                level, deck.dialog_drag = deck.dialog_drag, None
-                if model.steps and level != model.steps.value:
-                    self._perf_optimistic(level=level)
-                    self.worker.act("perf", "kiosk_steam", "perf.level", [level])
+                drag, deck.dialog_drag = deck.dialog_drag, None
+                self._dialog_drag_commit(model, drag)
                 self.dirty = True
                 return
-            where, value = self.dialog.hit(model, x, y)
-            if down is None or (where, value) != down:
+            hit = self.dialog.hit(model, x, y)
+            if down is None or hit[:2] != down[:2]:
                 return
-            if where == "outside":
+            if hit[0] == "outside":
                 self._close_dialog()
-            elif where == "orb":
-                self._dialog_pick(value)
+            elif hit[0] in ("orb", "color", "chip", "cta"):
+                self._dialog_pick(hit[0], hit[1])
 
-    def _dialog_pick(self, key) -> None:
-        kind, value = key
+    def _dialog_drag_preview(self, drag: tuple) -> None:
+        kind, key, value = drag
+        if kind == "bar":
+            change = self._lights_bar_change(key, value)
+            if change is not None:
+                self.worker.latest("colores", LIGHTS_GAP_S, "colores_preview", "kiosk_steam", "colores.call",
+                                   ["patch_profile", [*self._lights_target(), change]])
+
+    def _dialog_drag_commit(self, model, drag: tuple) -> None:
+        kind, key, value = drag
+        if kind == "steps":
+            current = next((section.value for section in model.sections if isinstance(section, self.dialog.Steps)), None)
+            if value != current:
+                self._perf_optimistic(level=value)
+                self.worker.act("perf", "kiosk_steam", "perf.level", [value])
+        elif kind == "bar":
+            change = self._lights_bar_change(key, value)
+            if change is not None:
+                self._lights_optimistic(change)
+                self.worker.act("colores_write", "kiosk_steam", "colores.call", ["patch_profile", [*self._lights_target(), change]])
+
+    def _lights_state(self) -> dict:
+        return (self.deck.state.colores or {}).get("state") or {}
+
+    def _lights_target(self) -> list:
+        return list(lights.target(self._lights_state()))
+
+    def _lights_bar_change(self, key: object, fraction: float) -> dict | None:
+        state = self._lights_state()
+        if not state:
+            return None
+        if key == "brightness":
+            return {"brightness": round(fraction * lights.BRIGHTNESS_MAX)}
+        effect = state.get("effect") or {}
+        return {"effect": {"id": effect.get("id"), "speed": round(fraction * 100), "use_gradient": bool(effect.get("useGradient"))}}
+
+    def _lights_optimistic(self, change: dict) -> None:
+        colores = self.deck.state.colores or {}
+        state = dict(colores.get("state") or {})
+        for name, value in change.items():
+            if name == "effect":
+                state["effect"] = {**(state.get("effect") or {}), "id": value["id"], "speed": value["speed"],
+                                   "useGradient": value["use_gradient"]}
+            elif name == "color":
+                state["color"] = {"r": value[0], "g": value[1], "b": value[2]}
+            else:
+                state[name] = value
+        self.deck.state.colores = {**colores, "state": state}
+        self.dirty = True
+
+    def _lights_write(self, change: dict) -> None:
+        self._lights_optimistic(change)
+        self.worker.act("colores_write", "kiosk_steam", "colores.call", ["patch_profile", [*self._lights_target(), change]])
+
+    def _dialog_pick(self, kind: str, key) -> None:
         s = self.deck.state
-        if kind == "preset":
+        if kind == "cta" and key == "install":
+            self.deck.installing = True
+            self.worker.act("colores_install", "kiosk_steam", "colores.install", [])
+            self.dirty = True
+            return
+        if kind == "color":
+            self._lights_write({"color": list(key), "mode": "solid"})
+            return
+        if kind == "chip":
+            effect = self._lights_state().get("effect") or {}
+            self._lights_write({"mode": "effect", "effect": {"id": key, "speed": effect.get("speed", 50),
+                                                             "use_gradient": bool(effect.get("useGradient"))}})
+            return
+        action, value = key
+        if action == "power":
+            self._lights_optimistic({"power": value})
+            self.worker.act("colores_write", "kiosk_steam", "colores.call", ["set_power", [value]])
+            return
+        if action == "mode":
+            if not self._lights_state().get("power"):
+                self._lights_optimistic({"power": True})
+                self.worker.act("colores_write", "kiosk_steam", "colores.call", ["set_power", [True]])
+            self._lights_write({"mode": value})
+            return
+        if action == "preset":
             self._perf_optimistic(preset=value)
             self.worker.act("perf", "kiosk_steam", "perf.preset", [value])
             return
-        if kind == "fps":
+        if action == "fps":
             self.worker.act("perf", "kiosk_steam", "perf.target", [value])
-        elif kind == "fan":
+        elif action == "fan":
             game_scope = bool(s.appid) and (s.fan or {}).get("follows_global") is False
             s.fan = {**(s.fan or {}), "preset": value}
             self.worker.act("fan", "set_fan_preset", value, "game" if game_scope else "global", s.appid if game_scope else None)
-        elif kind == "hz":
+        elif action == "hz":
             self.worker.act("refresh_set", "kiosk_steam", "refresh.set", [value])
             self.worker.act("refresh", "kiosk_steam", "refresh.get", [])
         self.dirty = True
@@ -508,13 +620,13 @@ class App:
         kind = "brightness" if name == "bri" else "volume"
         if getattr(self.deck.state, kind) != value:
             setattr(self.deck.state, kind, value)
-            self.worker.scalar(kind, value)
+            self.worker.latest(kind, SCALAR_GAP_S, f"{kind}.set", "kiosk_steam", f"{kind}.set", [value])
             self.dirty = True
 
     def _activate(self, name: str) -> None:
         s = self.deck.state
-        if name in ("perf", "fps", "fan", "hz"):
-            self.deck.open_dialog = name
+        if name in DIALOG_OF_TILE:
+            self.deck.open_dialog = DIALOG_OF_TILE[name]
             self.dirty = True
         elif name == "turbo":
             boost = (s.cpu or {}).get("boost") or {}

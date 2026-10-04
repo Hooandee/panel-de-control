@@ -2,7 +2,7 @@ import { FC, useState } from "react";
 
 import { useI18n } from "../../../src/i18n";
 import {
-  coloresEffects, coloresMaxBrightness, coloresModes, lightsSwatch, Rgb, sameRgb, SWATCHES,
+  COLORES_BRIGHTNESS_MAX, coloresEffects, coloresModes, lightsSwatch, Rgb, sameRgb, SWATCHES,
 } from "./deckMath";
 import { Chips, HBar, Hero, Orb, Orbs } from "./Glass";
 import { ICON, LIGHT_MODE_ICON } from "./icons";
@@ -15,7 +15,7 @@ function useLightsText(colores: ColoresControl): string {
   if (!state) return "—";
   if (!state.power) return t("kiosk.lights.off");
   const name = state.mode === "effect" ? t(`kiosk.lights.effect.${state.effect.id}`) : t(`kiosk.lights.mode.${state.mode}`);
-  return `${name} · ${Math.round((state.brightness / coloresMaxBrightness(state)) * 100)} %`;
+  return `${name} · ${Math.round((state.brightness / COLORES_BRIGHTNESS_MAX) * 100)} %`;
 }
 
 export const LightsTile: FC<{ colores: ColoresControl; onPress: () => void }> = ({ colores, onPress }) => {
@@ -68,7 +68,7 @@ export const LightsDialog: FC<{ colores: ColoresControl; onError: (error: unknow
   if (colores.installed === false) return <InstallColores colores={colores} onError={onError} />;
   if (!state) return null;
 
-  const max = coloresMaxBrightness(state);
+  const max = COLORES_BRIGHTNESS_MAX;
   const modes = coloresModes(state.capabilities);
   const effects = coloresEffects(state.capabilities);
   const run = (write: Promise<void>) => void write.catch(onError);

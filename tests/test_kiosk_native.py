@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py_modules", "
 import choices  # noqa: E402
 import drm  # noqa: E402
 import geometry  # noqa: E402
+import lights  # noqa: E402
 import rpc  # noqa: E402
 import touch  # noqa: E402
 
@@ -214,3 +215,29 @@ def test_step_at_ignores_the_dead_edges():
     assert choices.step_at(0, 222, 11, 1, 10) == 1
     assert choices.step_at(222, 222, 11, 1, 10) == 10
     assert choices.step_at(111, 222, 11, 1, 10) == 6
+
+
+def test_lights_modes_follow_colores_capabilities():
+    assert lights.modes({"color": True, "zones": 2, "batteryMode": True, "ambilight": True}) == [
+        "solid", "gradient", "effect", "battery", "ambient"]
+    assert lights.modes({"color": True}) == ["solid", "effect"]
+    assert lights.modes({"color": False}) == []
+    assert lights.effects({"supportedEffects": ["wave", "breathing"]}) == ["breathing", "wave"]
+    assert lights.effects({}) == list(lights.COLORES_EFFECTS)
+
+
+def test_lights_target_the_profile_that_is_lit():
+    game = {"profileContext": {"scope": "game", "appKey": "894020", "followsGlobal": False}}
+    assert lights.target(game) == ("game", "894020")
+    assert lights.target({"profileContext": {"scope": "game", "appKey": "894020", "followsGlobal": True}}) == ("global", None)
+    assert lights.target({}) == ("global", None)
+
+
+def test_lights_swatch_shows_what_the_leds_show():
+    red, blue = {"r": 255, "g": 0, "b": 0}, {"r": 0, "g": 0, "b": 255}
+    base = {"power": True, "color": red, "gradient": [red, blue], "effect": {"id": "rainbow", "useGradient": False}}
+    assert lights.swatch({**base, "mode": "solid"}) == ((255, 0, 0),)
+    assert lights.swatch({**base, "mode": "gradient"}) == ((255, 0, 0), (0, 0, 255))
+    assert lights.swatch({**base, "mode": "effect"}) == lights.SPECTRUM
+    assert lights.swatch({**base, "mode": "effect", "effect": {"id": "breathing"}}) == ((255, 0, 0),)
+    assert lights.swatch({**base, "power": False, "mode": "solid"}) is None

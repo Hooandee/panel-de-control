@@ -129,7 +129,8 @@ export function coloresTarget(state: ColoresState): [scope: "global" | "game", a
   return ["global", null];
 }
 
-export const coloresMaxBrightness = (state: ColoresState): number => state.capabilities.maxBrightness || 100;
+/** Colores keeps brightness as a percentage; capabilities.maxBrightness is the LED driver's own scale. */
+export const COLORES_BRIGHTNESS_MAX = 100;
 
 const rgbCss = ({ r, g, b }: Rgb) => `rgb(${r},${g},${b})`;
 const SPECTRUM = "linear-gradient(90deg,#ff4d5e,#ffd93d,#4cd964,#4ea1ff,#a463f2,#ff4d5e)";
