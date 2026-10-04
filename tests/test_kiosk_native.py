@@ -44,6 +44,13 @@ def test_touch_parser_reports_down_move_up_of_the_first_finger_in_panel_pixels()
     assert [(e.kind, e.x, e.y) for e in events] == [("down", 50, 80), ("move", 60, 80), ("up", 60, 80)]
 
 
+def test_touch_parser_starts_from_the_devices_current_position():
+    # The input core drops a repeated position: a tap where the last one lifted carries no coordinates.
+    parser = touch.TouchParser(scale_x=1.0, scale_y=1.0, x=368, y=337)
+    events = parser.feed(ev(EV_ABS, ABS_MT_TRACKING_ID, 9) + ev(EV_KEY, BTN_TOUCH, 1) + syn())
+    assert [(e.kind, e.x, e.y) for e in events] == [("down", 368, 337)]
+
+
 def test_touch_parser_ignores_other_fingers_and_split_reads():
     parser = touch.TouchParser()
     stream = (
