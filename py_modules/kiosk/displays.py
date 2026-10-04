@@ -21,15 +21,61 @@ BACKLIGHT_OFF = "4"
 BACKLIGHT_ON = "0"
 
 
-def set_backlight_power(backlight: str, on: bool, sys_root: str = "/sys/class/backlight") -> bool:
+# Never let a level write leave the panel unreadably dark; turning it off is set_backlight_power's job.
+MIN_BACKLIGHT_FRACTION = 0.05
+
+
+def _backlight_dir(backlight: str, sys_root: str) -> str | None:
     if not backlight or "/" in backlight or backlight.startswith("."):
+        return None
+    return os.path.join(sys_root, backlight)
+
+
+def set_backlight_power(backlight: str, on: bool, sys_root: str = "/sys/class/backlight") -> bool:
+    folder = _backlight_dir(backlight, sys_root)
+    if folder is None:
         return False
     try:
-        with open(os.path.join(sys_root, backlight, "bl_power"), "w") as handle:
+        with open(os.path.join(folder, "bl_power"), "w") as handle:
             handle.write(BACKLIGHT_ON if on else BACKLIGHT_OFF)
         return True
     except OSError:
         return False
+
+
+def _read_int(path: str) -> int | None:
+    try:
+        with open(path) as handle:
+            return int(handle.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def backlight_level(backlight: str, sys_root: str = "/sys/class/backlight") -> float | None:
+    """The panel's brightness as a fraction of its maximum, read back from the driver."""
+    folder = _backlight_dir(backlight, sys_root)
+    if folder is None:
+        return None
+    value = _read_int(os.path.join(folder, "brightness"))
+    maximum = _read_int(os.path.join(folder, "max_brightness"))
+    if value is None or not maximum:
+        return None
+    return round(value / maximum, 3)
+
+
+def set_backlight_level(backlight: str, fraction: float, sys_root: str = "/sys/class/backlight") -> float | None:
+    """Write a brightness fraction; returns what the driver reports afterwards, None if it refused."""
+    folder = _backlight_dir(backlight, sys_root)
+    maximum = _read_int(os.path.join(folder, "max_brightness")) if folder else None
+    if folder is None or not maximum:
+        return None
+    wanted = min(1.0, max(MIN_BACKLIGHT_FRACTION, float(fraction)))
+    try:
+        with open(os.path.join(folder, "brightness"), "w") as handle:
+            handle.write(str(max(1, round(wanted * maximum))))
+    except OSError:
+        return None
+    return backlight_level(backlight, sys_root)
 
 
 @dataclass(frozen=True)

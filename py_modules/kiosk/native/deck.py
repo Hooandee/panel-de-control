@@ -15,6 +15,7 @@ FPS_HISTORY = 60
 DISABLED_ALPHA = 0.45
 PRESS_SCALE = 0.95
 FADERS = ("bri", "vol")
+FADER_ICON_ZONE = 56
 
 
 @dataclass
@@ -32,6 +33,7 @@ class DeckState:
     cpu: dict | None = None
     refresh: dict | None = None
     brightness: float | None = None
+    bottom_brightness: float | None = None
     volume: float | None = None
     perf: dict | None = None
     fan: dict | None = None
@@ -70,6 +72,8 @@ class Deck:
         self.open_dialog: str | None = None
         self.dialog_drag: tuple[str, object, object] | None = None
         self.installing = False
+        # The brightness fader drives the main screen or, toggled from its icon, this one.
+        self.bri_target = "top"
 
     def t(self, key: str, **params) -> str:
         table = self.strings.get(self.state.lang) or self.strings.get("en") or {}
@@ -91,7 +95,7 @@ class Deck:
         if name == "turbo":
             return bool((s.cpu or {}).get("boost", {}).get("supported"))
         if name == "bri":
-            return s.brightness is not None
+            return s.brightness is not None or s.bottom_brightness is not None
         if name == "vol":
             return s.volume is not None
         if name == "perf":
@@ -105,6 +109,24 @@ class Deck:
         if name == "rgb":
             return (s.colores or {}).get("installed") is not None
         return name in ("shot", "kbd", "qam", "off")
+
+    def bri_value(self) -> float | None:
+        return self.state.bottom_brightness if self.bri_target == "bottom" else self.state.brightness
+
+    def has_bottom_brightness(self) -> bool:
+        return self.state.bottom_brightness is not None
+
+    def in_fader_icon(self, name: str, y: float) -> bool:
+        rect = self.rects[name]
+        return y >= rect.y + rect.h - FADER_ICON_ZONE
+
+    def toggle_bri_target(self) -> None:
+        if self.bri_target == "top" and self.has_bottom_brightness():
+            self.bri_target = "bottom"
+        elif self.bri_target == "bottom" and self.state.brightness is not None:
+            self.bri_target = "top"
+        elif self.state.brightness is None:
+            self.bri_target = "bottom"
 
     def fader_value(self, name: str, y: float) -> float:
         rect = self.rects[name]
@@ -137,7 +159,7 @@ class Deck:
             "rgb": lambda: (repr(s.colores),),
             "hz": lambda: ((s.refresh or {}).get("current"),),
             "turbo": lambda: (bool((s.cpu or {}).get("boost", {}).get("enabled")),),
-            "bri": lambda: (s.brightness,),
+            "bri": lambda: (s.brightness, s.bottom_brightness, self.bri_target),
             "vol": lambda: (s.volume,),
         }.get(name, tuple)
         return common + content()
@@ -390,7 +412,7 @@ class Deck:
         self._small(ctx, r, "screenOff", self.t("kiosk.screenOff"))
 
     def _paint_fader(self, ctx: cairo.Context, name: str, r: Rect) -> None:
-        value = self.state.brightness if name == "bri" else self.state.volume
+        value = self.bri_value() if name == "bri" else self.state.volume
         fill_rounded(ctx, r.x, r.y, r.w, r.h, 24, white(0.12))
         if value is not None and value > 0:
             ctx.save()
@@ -402,6 +424,11 @@ class Deck:
             ctx.restore()
         icon = "sun" if name == "bri" else ("muted" if value == 0 else "speaker")
         self.icons.draw(ctx, icon, r.x + r.w / 2, r.y + r.h - 16 - 12, 24, (0x8E / 255, 0x8E / 255, 0x93 / 255, 1), 1.9)
+        if name == "bri" and self.has_bottom_brightness() and self.state.brightness is not None:
+            label = Text(ctx, self.t(f"kiosk.brightness.{self.bri_target}"), 11, 600, max_width=r.w - 12)
+            top = r.y + 12
+            under_fill = value is not None and top + label.height > r.y + r.h * (1 - value)
+            label.draw(ctx, r.x + (r.w - label.width) / 2, top, (0.11, 0.11, 0.12, 0.8) if under_fill else white(0.7))
 
     # ---- dialogs -----------------------------------------------------------------------------
 

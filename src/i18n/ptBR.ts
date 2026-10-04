@@ -43,6 +43,8 @@ export const ptBR: Record<string, string> = {
   "kiosk.fan": "Ventoinha",
   "kiosk.fan.stopped": "Parada",
   "kiosk.brightness": "Brilho",
+  "kiosk.brightness.top": "Em cima",
+  "kiosk.brightness.bottom": "Embaixo",
   "kiosk.volume": "Volume",
   "kiosk.hz.detail": "Taxa de atualização da tela principal",
   "kiosk.hz.saver": "Economia",

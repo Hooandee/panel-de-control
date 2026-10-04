@@ -158,3 +158,62 @@ def test_screen_off_turns_back_on_when_the_kiosk_stops(monkeypatch):
     asyncio.run(controller.set_enabled(False))
     assert calls == [("ae94000.dsi.0", False), ("ae94000.dsi.0", True)]
     assert ("INFO", "screen_off", {}) in journal
+
+
+def _backlight(tmp_path, value, maximum):
+    folder = tmp_path / "ae94000.dsi.0"
+    folder.mkdir()
+    (folder / "brightness").write_text(f"{value}\n")
+    (folder / "max_brightness").write_text(f"{maximum}\n")
+    return folder
+
+
+def test_backlight_level_reads_and_writes_a_fraction_of_the_panel_maximum(tmp_path):
+    from kiosk import displays
+
+    folder = _backlight(tmp_path, 255, 255)
+    assert displays.backlight_level("ae94000.dsi.0", str(tmp_path)) == 1.0
+    assert displays.set_backlight_level("ae94000.dsi.0", 0.5, str(tmp_path)) == 0.502
+    assert (folder / "brightness").read_text() == "128"
+
+
+def test_backlight_level_never_writes_the_panel_dark(tmp_path):
+    from kiosk import displays
+
+    folder = _backlight(tmp_path, 255, 255)
+    displays.set_backlight_level("ae94000.dsi.0", 0.0, str(tmp_path))
+    assert int((folder / "brightness").read_text()) == round(displays.MIN_BACKLIGHT_FRACTION * 255)
+
+
+def test_backlight_level_refuses_paths_outside_the_backlight_class(tmp_path):
+    from kiosk import displays
+
+    _backlight(tmp_path, 10, 255)
+    assert displays.backlight_level("../ae94000.dsi.0", str(tmp_path)) is None
+    assert displays.set_backlight_level("missing", 0.5, str(tmp_path)) is None
+
+
+def test_saved_brightness_is_reapplied_whenever_the_kiosk_launches(monkeypatch):
+    from kiosk import displays as display_module
+
+    writes = []
+    monkeypatch.setattr(display_module, "set_backlight_level", lambda bl, f: writes.append((bl, f)) or f)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, _, _ = _controller([Detection(lit, "ok")])
+    controller._brightness = 0.4
+    asyncio.run(controller.tick())
+    assert writes == [("ae94000.dsi.0", 0.4)]
+    assert asyncio.run(controller.set_brightness(0.7)) == 0.7
+    assert controller.state()["brightness"] == 0.7
+
+
+def test_brightness_failures_are_journaled_and_not_remembered(monkeypatch):
+    from kiosk import displays as display_module
+
+    monkeypatch.setattr(display_module, "set_backlight_level", lambda bl, f: None)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, journal, _ = _controller([Detection(lit, "ok")])
+    asyncio.run(controller.tick())
+    assert asyncio.run(controller.set_brightness(0.7)) is None
+    assert controller.state()["brightness"] is None
+    assert ("WARNING", "brightness_failed", {"backlight": "ae94000.dsi.0"}) in journal

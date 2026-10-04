@@ -355,6 +355,8 @@ DEFAULTS = {
     # Unit of the saved power values: "W" on PC, "level" on ARM.
     "tdp_unit": "W",
     "kiosk_enabled": False,
+    # Secondary panel level the user chose (fraction); None leaves the driver's own level.
+    "kiosk_brightness": None,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -478,6 +480,7 @@ class Plugin:
             journal=_kiosk_journal,
             enabled=bool(self._settings.get("kiosk_enabled")),
             art=lambda appid, kind: kiosk_steam_game.art_file(_user_home(), appid, kind),
+            brightness=self._settings.get("kiosk_brightness"),
         )
         self._kiosk_bridge = SteamBridge(_emit_to_frontend)
         self._kiosk_fps_at = None
@@ -1237,6 +1240,16 @@ class Plugin:
     async def get_kiosk_game(self, appid: str) -> dict:
         name = await asyncio.to_thread(kiosk_steam_game.game_name, _user_home(), str(appid))
         return {"appid": str(appid), "name": name}
+
+    async def get_kiosk_brightness(self) -> dict:
+        return {"value": await self._kiosk.brightness()}
+
+    async def set_kiosk_brightness(self, value: float) -> dict:
+        applied = await self._kiosk.set_brightness(float(value))
+        if applied is not None:
+            self._settings["kiosk_brightness"] = applied
+            self._save()
+        return {"value": applied}
 
     async def set_kiosk_enabled(self, enabled: bool) -> dict:
         self._settings["kiosk_enabled"] = bool(enabled)
@@ -12606,6 +12619,7 @@ class Plugin:
             "fan_experimental": self._settings.get("fan_experimental"),
             "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
             "kiosk_enabled": self._settings.get("kiosk_enabled"),
+            "kiosk_brightness": self._settings.get("kiosk_brightness"),
         }
 
     async def _support_call(self, name: str):

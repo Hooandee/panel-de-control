@@ -43,6 +43,8 @@ export const de: Record<string, string> = {
   "kiosk.fan": "Lüfter",
   "kiosk.fan.stopped": "Steht",
   "kiosk.brightness": "Helligkeit",
+  "kiosk.brightness.top": "Oben",
+  "kiosk.brightness.bottom": "Unten",
   "kiosk.volume": "Lautstärke",
   "kiosk.hz.detail": "Bildwiederholrate des Hauptbildschirms",
   "kiosk.hz.saver": "Sparen",

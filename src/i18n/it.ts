@@ -43,6 +43,8 @@ export const it: Record<string, string> = {
   "kiosk.fan": "Ventola",
   "kiosk.fan.stopped": "Ferma",
   "kiosk.brightness": "Luminosità",
+  "kiosk.brightness.top": "Sopra",
+  "kiosk.brightness.bottom": "Sotto",
   "kiosk.volume": "Volume",
   "kiosk.hz.detail": "Frequenza dello schermo principale",
   "kiosk.hz.saver": "Risparmio",

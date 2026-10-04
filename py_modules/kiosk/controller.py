@@ -30,8 +30,11 @@ class KioskController:
         server_factory: Callable[..., KioskServer] = KioskServer,
         clock: Callable[[], float] = time.monotonic,
         art: Callable[[str, str], "tuple[str, str] | None"] = lambda _appid, _kind: None,
+        brightness: float | None = None,
     ):
         self.enabled = enabled
+        # The level the user chose for the secondary panel; the driver resets it on every boot.
+        self._brightness = brightness
         self._journal = journal
         self._detect = detect
         self._launcher_factory = launcher_factory
@@ -61,6 +64,7 @@ class KioskController:
             "mechanism": self._detection.display.mechanism if self._detection.display else None,
             "last_error": self._last_error,
             "screen_off": self._screen_off,
+            "brightness": self._brightness,
         }
 
     def rpc_calls(self) -> dict[str, list[float]]:
@@ -123,6 +127,8 @@ class KioskController:
         if ok:
             self._last_error = None
             self._journal("INFO", "launched", mechanism=self._launcher.display.mechanism)
+            if self._brightness is not None and self._launcher.display.backlight:
+                await asyncio.to_thread(displays.set_backlight_level, self._launcher.display.backlight, self._brightness)
         else:
             self._last_error = detail or "start_failed"
             self._journal("WARNING", "launch_failed", detail=self._last_error)
@@ -137,6 +143,24 @@ class KioskController:
         else:
             self._journal("WARNING", "backlight_failed", backlight=display.backlight)
         return self.state()
+
+    async def brightness(self) -> float | None:
+        display = self._detection.display
+        if display is None or not display.backlight:
+            return None
+        return await asyncio.to_thread(displays.backlight_level, display.backlight)
+
+    async def set_brightness(self, fraction: float) -> float | None:
+        """Apply and remember the secondary panel's level; returns the level the driver reports."""
+        display = self._detection.display
+        if display is None or not display.backlight:
+            return None
+        applied = await asyncio.to_thread(displays.set_backlight_level, display.backlight, fraction)
+        if applied is None:
+            self._journal("WARNING", "brightness_failed", backlight=display.backlight)
+            return None
+        self._brightness = applied
+        return applied
 
     async def _stop(self) -> None:
         if self._screen_off and self._detection.display is not None:

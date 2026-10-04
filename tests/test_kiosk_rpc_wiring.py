@@ -33,6 +33,7 @@ def test_kiosk_state_is_reported_without_side_effects(plugin):  # noqa: F811
         "mechanism": None,
         "last_error": None,
         "screen_off": False,
+        "brightness": None,
     }
 
 
@@ -96,6 +97,21 @@ def test_kiosk_session_names_the_game_without_starting_frame_readers(plugin, mon
     assert asyncio.run(plugin.get_kiosk_session()) == {"playing_s": 120, "appid": "894020"}
     assert events == []
     assert not plugin._kiosk_wants_fps()
+
+
+def test_kiosk_brightness_is_saved_only_when_the_panel_took_it(plugin, monkeypatch):  # noqa: F811
+    async def took(value):
+        return round(value, 3)
+
+    async def refused(_value):
+        return None
+
+    monkeypatch.setattr(plugin._kiosk, "set_brightness", took)
+    assert asyncio.run(plugin.set_kiosk_brightness(0.42)) == {"value": 0.42}
+    assert plugin._settings["kiosk_brightness"] == 0.42
+    monkeypatch.setattr(plugin._kiosk, "set_brightness", refused)
+    assert asyncio.run(plugin.set_kiosk_brightness(0.9)) == {"value": None}
+    assert plugin._settings["kiosk_brightness"] == 0.42
 
 
 def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811

@@ -200,7 +200,8 @@ class Worker(threading.Thread):
                         self.post(SNAPSHOT_LABELS[action], value)
             return STEAM_S
         if name == "state":
-            for label, method in (("cpu", "get_cpu_state"), ("prefs", "get_ui_prefs"), ("fan", "get_fan_curve_state")):
+            for label, method in (("cpu", "get_cpu_state"), ("prefs", "get_ui_prefs"), ("fan", "get_fan_curve_state"),
+                                  ("bottom_brightness", "get_kiosk_brightness")):
                 self._call(label, method)
             return STATE_S
         return STATE_S
@@ -259,6 +260,7 @@ class App:
         self.last_touch = 0.0
         self.close_at = 0.0
         self.dialog_down: tuple | None = None
+        self.bri_toggle = False
         signal.signal(signal.SIGUSR1, self._request_snapshot)
 
     def _native_frames(self):
@@ -469,6 +471,11 @@ class App:
             written = self.worker.written_at.get(name, 0.0)
             if time.monotonic() - written > SCALAR_HOLD_S and self.deck.dragging != ("bri" if name == "brightness" else "vol"):
                 setattr(s, name, (value.get("result") or {}).get("value"))
+        elif name == "bottom_brightness" and isinstance(value, dict):
+            written = self.worker.written_at.get("bottom_brightness", 0.0)
+            dragging = self.deck.dragging == "bri" and self.deck.bri_target == "bottom"
+            if value.get("value") is not None and time.monotonic() - written > SCALAR_HOLD_S and not dragging:
+                s.bottom_brightness = value["value"]
         elif name == "refresh" and isinstance(value, dict) and value.get("ok"):
             s.refresh = value.get("result")
         elif name == "screen_off" and isinstance(value, dict):
@@ -501,7 +508,9 @@ class App:
         if event.kind == "down":
             target = deck.hit(x, y)
             deck.pressed = target
-            if target in ("bri", "vol"):
+            if target == "bri" and deck.in_fader_icon("bri", y) and deck.has_bottom_brightness():
+                self.bri_toggle = True
+            elif target in ("bri", "vol"):
                 deck.dragging = target
                 self._fader(target, y)
             self.dirty = True
@@ -509,7 +518,12 @@ class App:
             self._fader(deck.dragging, y)
         elif event.kind == "up":
             target = deck.pressed
-            if deck.dragging:
+            if self.bri_toggle:
+                self.bri_toggle = False
+                deck.pressed = None
+                if deck.hit(x, y) == "bri":
+                    deck.toggle_bri_target()
+            elif deck.dragging:
                 self._fader(deck.dragging, y)
                 deck.dragging = None
                 deck.pressed = None
@@ -674,6 +688,12 @@ class App:
 
     def _fader(self, name: str, y: float) -> None:
         value = round(self.deck.fader_value(name, y), 3)
+        if name == "bri" and self.deck.bri_target == "bottom":
+            if self.deck.state.bottom_brightness != value:
+                self.deck.state.bottom_brightness = value
+                self.worker.latest("bottom_brightness", SCALAR_GAP_S, "bottom_brightness", "set_kiosk_brightness", value)
+                self.dirty = True
+            return
         kind = "brightness" if name == "bri" else "volume"
         if getattr(self.deck.state, kind) != value:
             setattr(self.deck.state, kind, value)
