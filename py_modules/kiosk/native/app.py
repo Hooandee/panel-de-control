@@ -161,7 +161,8 @@ class Worker(threading.Thread):
 
 class App:
     def __init__(self, url: str, assets: str):
-        from deck import HEIGHT, WIDTH, Deck, Rect, logical_point, rotation_matrix
+        from deck import FPS_HISTORY, Deck
+        from geometry import HEIGHT, WIDTH, Rect, logical_point, rotation
         from drm import LeasedPanel
         from paint import Icons
         from rpc import PanelRpc
@@ -175,9 +176,10 @@ class App:
         with open(os.path.join(assets, "icons.json")) as handle:
             icons = Icons(json.load(handle))
         self.deck = Deck(strings, icons)
+        self.fps_history = FPS_HISTORY
         self.rpc = PanelRpc(url)
         self.panel = LeasedPanel()
-        self.matrix = rotation_matrix(self.panel.width, self.panel.height)
+        self.matrix = cairo.Matrix(*rotation(self.panel.width, self.panel.height))
         self.surfaces = [
             cairo.ImageSurface.create_for_data(buffer.memory, cairo.FORMAT_RGB24, self.panel.width, self.panel.height, buffer.pitch)
             for buffer in self.panel.buffers
@@ -310,7 +312,7 @@ class App:
             return
         if name == "live" and isinstance(value, dict):
             fps = value.get("fps")
-            s.history = (s.history + [fps])[-60:] if fps is not None else []
+            s.history = (s.history + [fps])[-self.fps_history:] if fps is not None else []
             s.fps, s.playing_s = fps, value.get("playing_s")
             appid = value.get("appid")
             if appid != s.appid:

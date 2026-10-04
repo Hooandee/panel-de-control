@@ -11,7 +11,11 @@ from user_session import spawn_args
 UNIT = "pdc-kiosk"
 PROFILE_DIR = "$HOME/.cache/panel-de-control/kiosk"
 SYSTEM_PYTHON = "/usr/bin/python3"
-WEBVIEW = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webview.py")
+_HERE = os.path.dirname(os.path.abspath(__file__))
+WEBVIEW = os.path.join(_HERE, "webview.py")
+NATIVE = os.path.join(_HERE, "native", "app.py")
+NATIVE_ASSETS = os.path.join(os.path.dirname(os.path.dirname(_HERE)), "dist", "kiosk")
+UNAVAILABLE = 3
 
 
 # Fresh kiosk profile: no first-run pages, restore prompts or default-browser nags.
@@ -65,14 +69,19 @@ def _default_runner(cmd: list[str], env: dict, identity: dict) -> tuple[int, str
         return 1, str(exc)
 
 
-def launch_script(url_var: str = "PDC_KIOSK_URL", webview: str = WEBVIEW) -> str:
-    """WebKitGTK first (a fraction of Firefox's memory next to a game); Firefox if it is missing or fails."""
+def launch_script(url_var: str = "PDC_KIOSK_URL", webview: str = WEBVIEW, native: str = NATIVE,
+                  assets: str = NATIVE_ASSETS) -> str:
+    """The native screen first: it paints on the CPU straight onto the leased panel and leaves the game
+    alone. When the machine cannot run it (no lease, no cairo), the web kiosk inside armada-run-bottom:
+    WebKitGTK, then Firefox."""
     prefs = "\\n".join(FIREFOX_PREFS)
     inside = (
         f'{SYSTEM_PYTHON} {shlex.quote(webview)} "$0" && exit 0; '
         f'exec {FIREFOX} --kiosk --no-remote --profile "{PROFILE_DIR}" "$0"'
     )
     return (
+        f'{SYSTEM_PYTHON} {shlex.quote(native)} "${url_var}" {shlex.quote(assets)}; '
+        f'code=$?; [ "$code" -eq {UNAVAILABLE} ] || exit "$code"; '
         f'mkdir -p "{PROFILE_DIR}" && printf \'{prefs}\\n\' > "{PROFILE_DIR}/user.js" && '
         f"exec {ARMADA_RUN_BOTTOM} -- /usr/bin/env -u WAYLAND_DISPLAY {' '.join(BROWSER_ENV)} "
         f'/bin/sh -c {shlex.quote(inside)} "${url_var}"'

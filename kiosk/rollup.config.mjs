@@ -33,6 +33,8 @@ const kioskAssets = {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(resolve(outDir, "index.html"), readFileSync(resolve(here, "index.html")));
     copyFileSync(resolve(here, "assets/inter.woff2"), resolve(outDir, "inter.woff2"));
+    // Pango cannot read WOFF2: the native bottom screen loads the same font as TrueType.
+    copyFileSync(resolve(here, "assets/inter.ttf"), resolve(outDir, "inter.ttf"));
     copyFileSync(resolve(here, "assets/Inter-OFL.txt"), resolve(outDir, "Inter-OFL.txt"));
   },
 };

@@ -103,7 +103,7 @@ def _libdrm():
 def receive_lease(path: str = LEASE_SOCKET) -> tuple[socket.socket, int]:
     """The compositor hands every client the same lease fd and keeps routing bottom-panel touch away
     from itself while the socket stays open, so the socket lives as long as the screen does."""
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(path)
     _, ancillary, _, _ = sock.recvmsg(1, socket.CMSG_SPACE(4))
     for level, kind, data in ancillary:

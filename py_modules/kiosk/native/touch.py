@@ -38,16 +38,60 @@ def find_device(name: str, root: str = "/sys/class/input") -> str | None:
     return None
 
 
-class Touchscreen:
-    def __init__(self, path: str, width: int, height: int):
-        self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
-        self._scale_x = width / max(1, self._axis_max(_ABS_MT_X, _ABS_X) + 1)
-        self._scale_y = height / max(1, self._axis_max(_ABS_MT_Y, _ABS_Y) + 1)
+class TouchParser:
+    """Folds raw evdev events into down/move/up of the first finger, scaled to panel pixels."""
+
+    def __init__(self, scale_x: float = 1.0, scale_y: float = 1.0):
+        self.scale_x, self.scale_y = scale_x, scale_y
         self._x = self._y = 0.0
         self._down = False
         self._was_down = False
         self._moved = False
         self._slot = 0
+        self._partial = b""
+
+    def feed(self, chunk: bytes) -> list[TouchEvent]:
+        data = self._partial + chunk
+        whole = len(data) - len(data) % _EVENT.size
+        self._partial = data[whole:]
+        events: list[TouchEvent] = []
+        for offset in range(0, whole, _EVENT.size):
+            _, _, kind, code, value = _EVENT.unpack_from(data, offset)
+            self._event(kind, code, value, events)
+        return events
+
+    def _event(self, kind: int, code: int, value: int, events: list[TouchEvent]) -> None:
+        if kind == _EV_ABS:
+            if code == _ABS_MT_SLOT:
+                self._slot = value
+            elif self._slot != 0:
+                return
+            elif code in (_ABS_MT_X, _ABS_X):
+                self._x, self._moved = value * self.scale_x, True
+            elif code in (_ABS_MT_Y, _ABS_Y):
+                self._y, self._moved = value * self.scale_y, True
+            elif code == _ABS_MT_TRACKING_ID:
+                self._down = value >= 0
+        elif kind == _EV_KEY and code == _BTN_TOUCH:
+            self._down = value != 0
+        elif kind == _EV_SYN and code == _SYN_REPORT:
+            if self._down and not self._was_down:
+                events.append(TouchEvent("down", self._x, self._y))
+            elif self._down and self._moved:
+                events.append(TouchEvent("move", self._x, self._y))
+            elif not self._down and self._was_down:
+                events.append(TouchEvent("up", self._x, self._y))
+            self._was_down = self._down
+            self._moved = False
+
+
+class Touchscreen:
+    def __init__(self, path: str, width: int, height: int):
+        self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+        self.parser = TouchParser(
+            width / max(1, self._axis_max(_ABS_MT_X, _ABS_X) + 1),
+            height / max(1, self._axis_max(_ABS_MT_Y, _ABS_Y) + 1),
+        )
 
     def _axis_max(self, *codes: int) -> int:
         for code in codes:
@@ -70,33 +114,7 @@ class Touchscreen:
                 return events
             if not chunk:
                 return events
-            for offset in range(0, len(chunk) - _EVENT.size + 1, _EVENT.size):
-                _, _, kind, code, value = _EVENT.unpack_from(chunk, offset)
-                self._feed(kind, code, value, events)
-
-    def _feed(self, kind: int, code: int, value: int, events: list[TouchEvent]) -> None:
-        if kind == _EV_ABS:
-            if code == _ABS_MT_SLOT:
-                self._slot = value
-            elif self._slot != 0:
-                return
-            elif code in (_ABS_MT_X, _ABS_X):
-                self._x, self._moved = value * self._scale_x, True
-            elif code in (_ABS_MT_Y, _ABS_Y):
-                self._y, self._moved = value * self._scale_y, True
-            elif code == _ABS_MT_TRACKING_ID:
-                self._down = value >= 0
-        elif kind == _EV_KEY and code == _BTN_TOUCH:
-            self._down = value != 0
-        elif kind == _EV_SYN and code == _SYN_REPORT:
-            if self._down and not self._was_down:
-                events.append(TouchEvent("down", self._x, self._y))
-            elif self._down and self._moved:
-                events.append(TouchEvent("move", self._x, self._y))
-            elif not self._down and self._was_down:
-                events.append(TouchEvent("up", self._x, self._y))
-            self._was_down = self._down
-            self._moved = False
+            events.extend(self.parser.feed(chunk))
 
     def close(self) -> None:
         os.close(self.fd)

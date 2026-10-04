@@ -5,40 +5,13 @@ from dataclasses import dataclass, field
 
 import cairo
 
+from geometry import GRID_Y, WIDTH, Rect, grid_rects
 from paint import Icons, Text, contain, cover, fill_rounded, glass, rounded_rect, white
 
-WIDTH, HEIGHT = 620, 540
-GRID_X, GRID_Y, GRID_W, GRID_H, GAP = 14, 160, 592, 364, 9
 FPS_HISTORY = 60
 DISABLED_ALPHA = 0.45
 PRESS_SCALE = 0.95
-
-AREAS = {
-    "perf": (0, 0, 2, 2), "fps": (2, 0, 1, 1), "fan": (3, 0, 1, 1), "bri": (4, 0, 1, 2), "vol": (5, 0, 1, 2),
-    "rgb": (2, 1, 2, 1), "hz": (0, 2, 1, 1), "turbo": (1, 2, 1, 1), "shot": (2, 2, 1, 1), "kbd": (3, 2, 1, 1),
-    "qam": (4, 2, 1, 1), "off": (5, 2, 1, 1),
-}
 FADERS = ("bri", "vol")
-
-
-@dataclass
-class Rect:
-    x: float
-    y: float
-    w: float
-    h: float
-
-    def contains(self, x: float, y: float) -> bool:
-        return self.x <= x <= self.x + self.w and self.y <= y <= self.y + self.h
-
-
-def _grid_rects() -> dict[str, Rect]:
-    col = (GRID_W - 5 * GAP) / 6
-    row = (GRID_H - 2 * GAP) / 3
-    return {
-        name: Rect(GRID_X + c * (col + GAP), GRID_Y + r * (row + GAP), w * col + (w - 1) * GAP, h * row + (h - 1) * GAP)
-        for name, (c, r, w, h) in AREAS.items()
-    }
 
 
 @dataclass
@@ -86,7 +59,7 @@ class Deck:
         self.strings = strings
         self.icons = icons
         self.state = DeckState()
-        self.rects = _grid_rects()
+        self.rects = grid_rects()
         self.pressed: str | None = None
         self.dragging: str | None = None
 
@@ -376,13 +349,3 @@ class Deck:
             ctx.restore()
         icon = "sun" if name == "bri" else ("muted" if value == 0 else "speaker")
         self.icons.draw(ctx, icon, r.x + r.w / 2, r.y + r.h - 16 - 12, 24, (0x8E / 255, 0x8E / 255, 0x93 / 255, 1), 1.9)
-
-
-def logical_point(panel_x: float, panel_y: float, panel_w: int, panel_h: int) -> tuple[float, float]:
-    """Panel pixels (portrait, touch and scanout) to deck CSS pixels (landscape)."""
-    return panel_y * WIDTH / panel_h, (panel_w - panel_x) * HEIGHT / panel_w
-
-
-def rotation_matrix(panel_w: int, panel_h: int) -> cairo.Matrix:
-    """Deck CSS pixels to panel pixels, the inverse of `logical_point` (panel mounted rotated)."""
-    return cairo.Matrix(0, panel_h / WIDTH, -panel_w / HEIGHT, 0, panel_w, 0)

@@ -142,29 +142,43 @@ def test_webkit_is_tried_first_and_firefox_only_as_fallback(tmp_path):
     assert "Panel de Control/webview.py" in script
 
 
-def test_launch_script_falls_back_when_the_webview_fails(tmp_path):
-    # Swap the compositor and both browsers for stubs and run the real script.
+def _run_launch_script(tmp_path, native_body: str, webview_body: str) -> str:
+    """Run the real script with the compositor and every screen swapped for stubs; returns what ran."""
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(exist_ok=True)
     log = tmp_path / "log"
     (bin_dir / "run-bottom").write_text('#!/bin/sh\nshift\nexec "$@"\n')
     (bin_dir / "firefox").write_text(f'#!/bin/sh\necho firefox "$@" >> {log}\n')
     for path in bin_dir.iterdir():
         path.chmod(0o755)
-    for webview_body, expected in (("import sys; sys.exit(3)", "firefox"), ("pass", None)):
-        webview = tmp_path / "webview.py"
-        webview.write_text(webview_body)
-        log.write_text("")
-        script = launch_script(webview=str(webview))
-        script = script.replace("/usr/bin/armada-run-bottom", str(bin_dir / "run-bottom")).replace(
-            "/usr/bin/firefox", str(bin_dir / "firefox")).replace("/usr/bin/python3", sys.executable)
-        env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
-        subprocess.run(["sh", "-c", script], env=env, check=False, timeout=20)
-        content = log.read_text()
-        if expected:
-            assert "firefox --kiosk" in content and "http://127.0.0.1:1/?k=t" in content
-        else:
-            assert content == ""
+    native = tmp_path / "native.py"
+    native.write_text(f"import sys\nopen({str(log)!r}, 'a').write('native ' + ' '.join(sys.argv[1:]) + '\\n')\n{native_body}\n")
+    webview = tmp_path / "webview.py"
+    webview.write_text(f"import sys\nopen({str(log)!r}, 'a').write('webview\\n')\n{webview_body}\n")
+    log.write_text("")
+    script = launch_script(webview=str(webview), native=str(native), assets="/assets")
+    script = script.replace("/usr/bin/armada-run-bottom", str(bin_dir / "run-bottom")).replace(
+        "/usr/bin/firefox", str(bin_dir / "firefox")).replace("/usr/bin/python3", sys.executable)
+    env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    subprocess.run(["sh", "-c", script], env=env, check=False, timeout=20)
+    return log.read_text()
+
+
+def test_native_screen_runs_first_and_alone_when_it_works(tmp_path):
+    ran = _run_launch_script(tmp_path, "sys.exit(0)", "")
+    assert ran == "native http://127.0.0.1:1/?k=t /assets\n"
+
+
+def test_native_crash_is_left_to_the_supervisor_instead_of_falling_back(tmp_path):
+    ran = _run_launch_script(tmp_path, "sys.exit(1)", "")
+    assert "webview" not in ran and "firefox" not in ran
+
+
+def test_launch_script_falls_back_to_webkit_then_firefox(tmp_path):
+    ran = _run_launch_script(tmp_path, "sys.exit(3)", "sys.exit(3)")
+    assert ran.splitlines()[1] == "webview"
+    assert "firefox --kiosk" in ran and "http://127.0.0.1:1/?k=t" in ran
+    assert "firefox" not in _run_launch_script(tmp_path, "sys.exit(3)", "sys.exit(0)")
 
 
 def test_webview_reports_a_missing_webkit_instead_of_crashing(monkeypatch):
