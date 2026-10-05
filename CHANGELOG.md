@@ -5,9 +5,40 @@
 ## [0.62.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.1...panel-de-control-v0.62.0) (2026-10-05)
 
 
-### Features
+### Español
 
-* first-class ARM support ([#829](https://github.com/Hooandee/panel-de-control/issues/829)) ([758fac4](https://github.com/Hooandee/panel-de-control/commit/758fac4d61a7d508aebd5e156b6f095307a22eca))
+* **ARM:** Panel ya funciona en consolas ARM. La AYN Thor se reconoce por su nombre y cualquier otra ARM aparece con su modelo y su chip reales, no como un PC genérico. Como el Snapdragon no tiene límite en vatios, la potencia va por niveles del 1 al 10 que limitan a la vez la CPU y la GPU, y debajo ves las frecuencias reales de cada nivel. Los presets, los perfiles por juego, el modo Descarga y el Auto-TDP también funcionan con niveles.
+* **ARM:** La ventana de frecuencia de la CPU, los núcleos activos y el reloj de la GPU funcionan en el Snapdragon. Las curvas de ventilador le quitan el ventilador a Armada mientras las usas y se lo devuelven en Auto, la batería enseña el consumo y la autonomía de verdad, y el color, el modo nocturno, el HUD, el ecualizador y las opciones de lanzamiento con Proton ARM64 también funcionan. Lo que el hardware no permite, como el límite de carga de la Thor, se oculta en vez de fingir que funciona.
+* **AYN Thor:** Panel puede ocupar la pantalla de abajo en modo juego: un panel táctil con rendimiento, objetivo de FPS, ventilador, brillo de las dos pantallas, volumen, luces, Turbo, captura, teclado y acceso al menú rápido, con los FPS reales del juego arriba. Se dibuja directamente sobre esa pantalla, así que el juego de arriba no pierde fotogramas. Se activa en Ajustes.
+* **Opciones de lanzamiento:** Ahora también se encuentran las versiones de Proton instaladas por el sistema, como el proton-cachyos de CachyOS, y se muestran sus opciones de verdad.
+
+### English
+
+* **ARM:** Panel now works on ARM handhelds. The AYN Thor is recognised by name and any other ARM device shows up with its real model and chip instead of as a generic PC. Snapdragon has no watt limit, so power works in levels from 1 to 10 that cap the CPU and GPU together, with the real frequencies of each level shown underneath. Presets, per-game profiles, Download mode and Auto-TDP work with levels too.
+* **ARM:** The CPU frequency window, active cores and GPU clock work on Snapdragon. Fan curves take the fan from Armada while you use them and hand it back in Auto, the battery shows real power draw and time left, and colour, night mode, the HUD, the equalizer and launch options with ARM64 Proton work as well. Anything the hardware doesn't allow, like the Thor's charge limit, is hidden instead of pretending to work.
+* **AYN Thor:** Panel can take over the bottom screen in game mode: a touch deck with performance, FPS target, fan, brightness for both screens, volume, lights, Turbo, screenshot, keyboard and the quick access menu, with the game's real frame rate on top. It's drawn straight onto that screen, so the game on top doesn't lose frames. Turn it on in Settings.
+* **Launch options:** Proton builds installed system-wide, like CachyOS's proton-cachyos, are now found too, and their real options are shown.
+
+### Italiano
+
+* **ARM:** Panel ora funziona sulle console ARM. La AYN Thor viene riconosciuta per nome e qualsiasi altra ARM appare con il suo modello e il suo chip reali, non come un PC generico. Lo Snapdragon non ha un limite in watt, quindi la potenza funziona a livelli da 1 a 10 che limitano insieme CPU e GPU, con le frequenze reali di ogni livello mostrate sotto. Anche i preset, i profili per gioco, la modalità Download e l'Auto-TDP funzionano a livelli.
+* **ARM:** La finestra di frequenza della CPU, i core attivi e il clock della GPU funzionano sullo Snapdragon. Le curve della ventola prendono la ventola da Armada mentre le usi e gliela restituiscono in Auto, la batteria mostra il consumo e l'autonomia reali, e anche il colore, la modalità notte, l'HUD, l'equalizzatore e le opzioni di avvio con Proton ARM64 funzionano. Quello che l'hardware non permette, come il limite di carica della Thor, viene nascosto invece di fingere che funzioni.
+* **AYN Thor:** Panel può occupare lo schermo inferiore in modalità gioco: un pannello touch con prestazioni, obiettivo FPS, ventola, luminosità di entrambi gli schermi, volume, luci, Turbo, screenshot, tastiera e accesso al menu rapido, con gli FPS reali del gioco in alto. Viene disegnato direttamente su quello schermo, così il gioco sopra non perde fotogrammi. Si attiva nelle Impostazioni.
+* **Opzioni di avvio:** Ora vengono trovate anche le versioni di Proton installate dal sistema, come proton-cachyos di CachyOS, e se ne mostrano le opzioni reali.
+
+### Deutsch
+
+* **ARM:** Panel funktioniert jetzt auf ARM-Handhelds. Die AYN Thor wird mit Namen erkannt, und jedes andere ARM-Gerät erscheint mit seinem echten Modell und Chip statt als generischer PC. Snapdragon hat kein Watt-Limit, deshalb läuft die Leistung über Stufen von 1 bis 10, die CPU und GPU gemeinsam begrenzen, und darunter stehen die echten Frequenzen jeder Stufe. Presets, Profile pro Spiel, der Download-Modus und Auto-TDP funktionieren ebenfalls mit Stufen.
+* **ARM:** Das CPU-Frequenzfenster, die aktiven Kerne und der GPU-Takt funktionieren auf Snapdragon. Lüfterkurven übernehmen den Lüfter von Armada, solange du sie nutzt, und geben ihn in Auto zurück. Der Akku zeigt den echten Verbrauch und die Restlaufzeit, und auch Farbe, Nachtmodus, HUD, Equalizer und Startoptionen mit ARM64-Proton funktionieren. Was die Hardware nicht erlaubt, etwa das Ladelimit der Thor, wird ausgeblendet, statt so zu tun, als würde es funktionieren.
+* **AYN Thor:** Panel kann im Spielmodus den unteren Bildschirm übernehmen: ein Touch-Panel mit Leistung, FPS-Ziel, Lüfter, Helligkeit beider Bildschirme, Lautstärke, Beleuchtung, Turbo, Screenshot, Tastatur und Schnellzugriffsmenü, oben mit den echten FPS des Spiels. Es wird direkt auf diesen Bildschirm gezeichnet, sodass das Spiel oben keine Bilder verliert. Einschalten in den Einstellungen.
+* **Startoptionen:** Systemweit installierte Proton-Versionen wie proton-cachyos von CachyOS werden jetzt ebenfalls gefunden, und ihre echten Optionen werden angezeigt.
+
+### Português (Brasil)
+
+* **ARM:** O Panel agora funciona em portáteis ARM. O AYN Thor é reconhecido pelo nome e qualquer outro ARM aparece com o modelo e o chip reais, não como um PC genérico. Como o Snapdragon não tem limite em watts, a potência funciona em níveis de 1 a 10 que limitam a CPU e a GPU ao mesmo tempo, com as frequências reais de cada nível logo abaixo. Os presets, os perfis por jogo, o modo Download e o Auto-TDP também funcionam com níveis.
+* **ARM:** A janela de frequência da CPU, os núcleos ativos e o clock da GPU funcionam no Snapdragon. As curvas de ventoinha pegam a ventoinha do Armada enquanto você usa e devolvem no Auto, a bateria mostra o consumo e a autonomia de verdade, e a cor, o modo noturno, o HUD, o equalizador e as opções de inicialização com Proton ARM64 também funcionam. O que o hardware não permite, como o limite de carga do Thor, fica escondido em vez de fingir que funciona.
+* **AYN Thor:** O Panel pode ocupar a tela de baixo no modo de jogo: um painel touch com desempenho, meta de FPS, ventoinha, brilho das duas telas, volume, luzes, Turbo, captura de tela, teclado e acesso ao menu rápido, com o FPS real do jogo no topo. Ele é desenhado direto nessa tela, então o jogo de cima não perde quadros. Ative em Ajustes.
+* **Opções de inicialização:** Agora as versões do Proton instaladas pelo sistema, como o proton-cachyos do CachyOS, também são encontradas, e as opções reais delas aparecem.
 
 ## [0.61.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.0...panel-de-control-v0.61.1) (2026-10-02)
 
