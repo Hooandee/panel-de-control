@@ -273,3 +273,24 @@ def test_stop_discards_samples_from_the_previous_auto_session():
     assert reading["available"] is False
     assert reading["reason"] == "no_game_focus"
     assert reading["fps"] is None
+
+
+def test_peek_shows_the_latest_fps_without_stealing_autos_minimum():
+    clock = Clock()
+    stats = GamescopeStats(clock=clock)
+    for fps in (40, 35, 40):
+        stats._apply_line(f"fps={fps}")
+        stats._apply_line("focus=42")
+        clock.now += 1.0
+
+    assert stats.peek()["fps"] == 40.0
+    assert stats.peek()["fps"] == 40.0
+    assert stats.read()["fps"] == 35.0
+
+
+def test_peek_reports_no_game_without_a_focused_game():
+    stats = GamescopeStats(clock=Clock())
+    stats._apply_line("fps=60")
+    assert stats.peek() == {
+        "fps": None, "focus": None, "age_s": None, "sample_at": None, "available": False, "reason": "no_game_focus",
+    }

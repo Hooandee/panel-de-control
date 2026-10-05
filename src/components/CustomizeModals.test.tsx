@@ -13,7 +13,10 @@ vi.mock("@decky/ui", () => ({
   ButtonItem: ({ children }: { children: ReactNode }) => <button>{children}</button>,
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock("../api", () => ({ getBatteryState: async () => ({ charge_limit: { supported: false } }) }));
+vi.mock("../api", () => ({
+  getBatteryState: async () => ({ charge_limit: { supported: false } }),
+  getKioskState: async () => ({ supported: false }),
+}));
 vi.mock("../customize/store", () => ({ useLayout: () => layout, saveLayout: vi.fn(), resetLayout: vi.fn() }));
 vi.mock("../customize/modules", () => ({ useModules: () => disabled, setModuleDisabled: vi.fn(), resetModules: vi.fn() }));
 vi.mock("../customize/homePreference", () => ({ resetHomeMode: vi.fn(), updateShowHome: vi.fn() }));

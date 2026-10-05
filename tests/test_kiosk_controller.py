@@ -8,7 +8,7 @@ DISPLAY = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", UserSe
 
 
 class FakeServer:
-    def __init__(self, *_args, on_error=None):
+    def __init__(self, *_args, on_error=None, art=None):
         self.port = None
         self.starts = 0
 
@@ -46,6 +46,9 @@ class FakeLauncher:
         self.active = False
         return True, ""
 
+    def last_words(self):
+        return "pdc-kiosk native: no_lease_fd"
+
 
 def _controller(detections, launcher_kwargs=None, enabled=True, now=None):
     journal = []
@@ -58,7 +61,6 @@ def _controller(detections, launcher_kwargs=None, enabled=True, now=None):
         return launcher
 
     controller = KioskController(
-        "/static",
         dispatch=None,
         allowed_methods=(),
         journal=lambda level, event, **fields: journal.append((level, event, fields)),
@@ -79,14 +81,14 @@ def test_enabled_with_a_display_serves_and_launches():
     assert ("INFO", "launched", {"mechanism": "armada-lease"}) in journal
 
 
-def test_disabled_never_starts_the_server_or_browser():
+def test_disabled_never_starts_the_server_or_bottom_screen():
     controller, launchers, _, _ = _controller([Detection(DISPLAY, "ok")], enabled=False)
     asyncio.run(controller.tick())
     assert launchers == []
     assert controller._server.port is None
 
 
-def test_leaving_game_mode_stops_the_browser_and_server():
+def test_leaving_game_mode_stops_the_bottom_screen_and_server():
     controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok"), Detection(None, "not_in_game_mode")])
     asyncio.run(controller.tick())
     asyncio.run(controller.tick())
@@ -121,13 +123,14 @@ def test_failed_launches_back_off_and_are_journaled():
     assert ("WARNING", "launch_failed", {"detail": "boom"}) in journal
 
 
-def test_a_crashed_browser_is_relaunched():
-    controller, launchers, _, clock = _controller([Detection(DISPLAY, "ok")])
+def test_a_crashed_bottom_screen_is_relaunched_and_its_last_words_journaled():
+    controller, launchers, journal, clock = _controller([Detection(DISPLAY, "ok")])
     asyncio.run(controller.tick())
     launchers[0].active = False
     clock[0] = 10.0
     asyncio.run(controller.tick())
     assert len(launchers[0].started_with) == 2
+    assert ("WARNING", "exited", {"detail": "pdc-kiosk native: no_lease_fd"}) in journal
 
 
 def test_disabling_tears_everything_down():
@@ -144,3 +147,87 @@ def test_refresh_reports_availability_without_launching():
     state = asyncio.run(controller.refresh())
     assert (state["supported"], state["available"], state["running"]) == (True, True, False)
     assert launchers == []
+
+
+def test_screen_off_turns_back_on_when_the_kiosk_stops(monkeypatch):
+    from kiosk import displays as display_module
+
+    calls = []
+    monkeypatch.setattr(display_module, "set_backlight_power", lambda bl, on: calls.append((bl, on)) or True)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, journal, _ = _controller([Detection(lit, "ok")])
+    asyncio.run(controller.tick())
+    assert asyncio.run(controller.set_screen_off(True))["screen_off"] is True
+    asyncio.run(controller.set_enabled(False))
+    assert calls == [("ae94000.dsi.0", False), ("ae94000.dsi.0", True)]
+    assert ("INFO", "screen_off", {}) in journal
+
+
+def _backlight(tmp_path, value, maximum):
+    folder = tmp_path / "ae94000.dsi.0"
+    folder.mkdir()
+    (folder / "brightness").write_text(f"{value}\n")
+    (folder / "max_brightness").write_text(f"{maximum}\n")
+    return folder
+
+
+def test_backlight_level_reads_and_writes_a_fraction_of_the_panel_maximum(tmp_path):
+    from kiosk import displays
+
+    folder = _backlight(tmp_path, 255, 255)
+    assert displays.backlight_level("ae94000.dsi.0", str(tmp_path)) == 1.0
+    assert displays.set_backlight_level("ae94000.dsi.0", 0.5, str(tmp_path)) == 0.502
+    assert (folder / "brightness").read_text() == "128"
+
+
+def test_backlight_level_never_writes_the_panel_dark(tmp_path):
+    from kiosk import displays
+
+    folder = _backlight(tmp_path, 255, 255)
+    displays.set_backlight_level("ae94000.dsi.0", 0.0, str(tmp_path))
+    assert int((folder / "brightness").read_text()) == round(displays.MIN_BACKLIGHT_FRACTION * 255)
+
+
+def test_backlight_level_refuses_paths_outside_the_backlight_class(tmp_path):
+    from kiosk import displays
+
+    _backlight(tmp_path, 10, 255)
+    assert displays.backlight_level("../ae94000.dsi.0", str(tmp_path)) is None
+    assert displays.set_backlight_level("missing", 0.5, str(tmp_path)) is None
+
+
+def test_saved_brightness_is_reapplied_whenever_the_kiosk_launches(monkeypatch):
+    from kiosk import displays as display_module
+
+    writes = []
+    monkeypatch.setattr(display_module, "set_backlight_level", lambda bl, f: writes.append((bl, f)) or f)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, _, _ = _controller([Detection(lit, "ok")])
+    controller._brightness = 0.4
+    asyncio.run(controller.tick())
+    assert writes == [("ae94000.dsi.0", 0.4)]
+    assert asyncio.run(controller.set_brightness(0.7)) == 0.7
+    assert controller.state()["brightness"] == 0.7
+
+
+def test_brightness_failures_are_journaled_and_not_remembered(monkeypatch):
+    from kiosk import displays as display_module
+
+    monkeypatch.setattr(display_module, "set_backlight_level", lambda bl, f: None)
+    lit = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", DISPLAY.session, "ae94000.dsi.0")
+    controller, _, journal, _ = _controller([Detection(lit, "ok")])
+    asyncio.run(controller.tick())
+    assert asyncio.run(controller.set_brightness(0.7)) is None
+    assert controller.state()["brightness"] is None
+    assert ("WARNING", "brightness_failed", {"backlight": "ae94000.dsi.0"}) in journal
+
+
+def test_a_unit_left_by_a_previous_panel_is_restarted_with_this_panels_address():
+    controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok")], launcher_kwargs={"active": True})
+    asyncio.run(controller.tick())
+    launcher = launchers[0]
+    assert launcher.stops == 1
+    assert launcher.started_with == ["http://127.0.0.1:4000/?k=t"]
+    assert ("INFO", "stale_unit_restarted", {}) in journal
+    asyncio.run(controller.tick())
+    assert launcher.stops == 1 and len(launcher.started_with) == 1

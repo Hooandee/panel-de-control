@@ -6,6 +6,9 @@ from power.drm_fdinfo import DrmFdinfoGpuBusy
 from power.intel import IntelGpuUtil
 
 
+_REPROBE_S = 60.0
+
+
 class PowerReader:
     """Reads actual APU/GPU power draw in watts and GPU utilisation from sysfs.
 
@@ -26,8 +29,11 @@ class PowerReader:
     across its outer window; biasing this reading upward would corrupt both
     branches. Cheap: ~12 microsecond sysfs reads over ~120 ms vs a 2 s loop."""
 
-    def __init__(self, root="/", gpu_samples=12, gpu_sample_gap=0.01):
+    def __init__(self, root="/", gpu_samples=12, gpu_sample_gap=0.01, clock=time.monotonic):
         self._root = root
+        self._clock = clock
+        # A source that is missing (every amdgpu node on ARM) is looked for again only after this long.
+        self._retry_at = {"amdgpu": clock() + _REPROBE_S, "busy": clock() + _REPROBE_S}
         self._gpu_samples = max(1, gpu_samples)
         self._gpu_sample_gap = max(0.0, gpu_sample_gap)
         self._amdgpu_hwmon = self._find_amdgpu_dir()
@@ -135,11 +141,23 @@ class PowerReader:
                 return round(uw / 1_000_000, 1)
         return None
 
+    def _due(self, source: str) -> bool:
+        now = self._clock()
+        if now < self._retry_at[source]:
+            return False
+        self._retry_at[source] = now + _REPROBE_S
+        return True
+
+    def _amdgpu(self) -> str | None:
+        if self._amdgpu_hwmon is not None and os.path.isdir(self._amdgpu_hwmon):
+            return self._amdgpu_hwmon
+        if self._amdgpu_hwmon is not None or self._due("amdgpu"):
+            self._amdgpu_hwmon = self._find_amdgpu_dir()
+        return self._amdgpu_hwmon
+
     def read_watts(self):
         """Actual power draw in watts (float, 1 decimal), or None if unavailable."""
-        if self._amdgpu_hwmon is None or not os.path.isdir(self._amdgpu_hwmon):
-            self._amdgpu_hwmon = self._find_amdgpu_dir()
-        return self._read_watts_from(self._amdgpu_hwmon)
+        return self._read_watts_from(self._amdgpu())
 
     def _read_gpu_busy_from(self, path):
         if path is None:
@@ -161,12 +179,12 @@ class PowerReader:
         Sub-samples a short burst and returns the mean of the valid reads, to
         de-noise the instantaneous sensor (see class docstring). Honest: returns
         None only if EVERY read failed (never fabricates a 0)."""
-        if self._gpu_busy_path is None or not os.path.exists(self._gpu_busy_path):
+        if self._gpu_busy_path is not None and not os.path.exists(self._gpu_busy_path):
+            self._gpu_busy_path = self._find_gpu_busy_path()
+        elif self._gpu_busy_path is None and self._due("busy"):
             self._gpu_busy_path = self._find_gpu_busy_path()
         if self._gpu_busy_path is None:
-            if self._amdgpu_hwmon is None or not os.path.isdir(self._amdgpu_hwmon):
-                self._amdgpu_hwmon = self._find_amdgpu_dir()
-            if self._amdgpu_hwmon is not None:
+            if self._amdgpu() is not None:
                 self._gpu_busy_diagnostics = {
                     "source": "amdgpu",
                     "state": "busy_unavailable",
