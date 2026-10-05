@@ -1,5 +1,5 @@
 import { FC, useRef } from "react";
-import { DialogButton, showModal } from "@decky/ui";
+import { DialogButton, Focusable, showModal } from "@decky/ui";
 import { LuPuzzle } from "react-icons/lu";
 
 import type {
@@ -71,7 +71,7 @@ export const MagicModulesCard: FC<Props> = ({ modules, pending, result, onAction
           {t("mandos.modules.unavailable")}
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.xs }}>
+      <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.xs }}>
         {ACTIONS.map(({ action, label }, index) => (
           <DialogButton
             key={action}
@@ -82,7 +82,7 @@ export const MagicModulesCard: FC<Props> = ({ modules, pending, result, onAction
             {pending === action ? t("mandos.modules.running") : t(label)}
           </DialogButton>
         ))}
-      </div>
+      </Focusable>
       {result && (
         <div role="status" style={{ fontSize: theme.font.caption, color: result.outcome === "confirmed" ? theme.color.ok : theme.color.warn, lineHeight: 1.4, marginTop: theme.space.sm }}>
           {t(outcomeKey(result.outcome))}

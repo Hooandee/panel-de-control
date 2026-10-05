@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { theme } from "../theme";
@@ -21,7 +21,7 @@ vi.mock("@decky/ui", () => ({
       <button aria-label="modal-escape" onClick={onEscKeypress}>escape</button>
     </div>
   ),
-  Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Focusable: ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => <div style={style}>{children}</div>,
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button onClick={onClick} disabled={disabled}>{children}</button>
   ),
