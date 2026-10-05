@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import time
 from typing import Callable
 
 from kiosk.displays import SYSTEM_PYTHON, SecondaryDisplay
@@ -36,12 +37,14 @@ class KioskLauncher:
     def __init__(self, display: SecondaryDisplay, runner: Runner = _default_runner):
         self.display = display
         self.runner = runner
+        self._started_at: int | None = None
 
     def _systemd(self, argv: list[str]) -> tuple[int, str]:
         cmd, env, identity = spawn_args(self.display.session, argv)
         return self.runner(cmd, env, identity)
 
     def start(self, url: str) -> tuple[bool, str]:
+        self._started_at = int(time.time())
         self._systemd(["systemctl", "--user", "reset-failed", UNIT])
         code, out = self._systemd([
             "systemd-run", "--user", f"--unit={UNIT}", "--collect", "--quiet",
@@ -54,7 +57,11 @@ class KioskLauncher:
         return code == 0, out
 
     def last_words(self) -> str:
-        code, out = self._systemd(["journalctl", "--user", f"--unit={UNIT}", "--lines=2", "--output=cat", "--no-pager"])
+        if self._started_at is None:
+            return ""
+        # The unit's own output only, not the service manager's lines about it.
+        code, out = self._systemd(["journalctl", "--user", f"_SYSTEMD_USER_UNIT={UNIT}.service",
+                                   f"--since=@{self._started_at}", "--lines=2", "--output=cat", "--no-pager"])
         return out[-300:] if code == 0 else ""
 
     def is_active(self) -> bool:
