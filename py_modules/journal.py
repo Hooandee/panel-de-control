@@ -706,20 +706,23 @@ def trace_calls(
     untraced: frozenset[str] = frozenset(),
     hidden_arguments: frozenset[str] = frozenset(),
     automatic: frozenset[str] = frozenset(),
+    untraced_when: dict[str, Callable[[tuple], bool]] | None = None,
 ) -> None:
     """Calls made from inside another traced call are the backend's own, not the
     user's, and stay out."""
     for name, function in list(vars(cls).items()):
         if name.startswith(untraced_prefixes) or name in untraced or not inspect.iscoroutinefunction(function):
             continue
-        setattr(cls, name, _traced(name, function, name in hidden_arguments, name in automatic))
+        setattr(cls, name, _traced(name, function, name in hidden_arguments, name in automatic,
+                                   (untraced_when or {}).get(name)))
 
 
-def _traced(name: str, function: Callable, hide_arguments: bool, automatic: bool) -> Callable:
+def _traced(name: str, function: Callable, hide_arguments: bool, automatic: bool,
+            untraced_when: Callable[[tuple], bool] | None = None) -> Callable:
     @functools.wraps(function)
     async def call(self, *args, **kwargs):
         journal = active
-        if journal is None or _inside_call.get():
+        if journal is None or _inside_call.get() or (untraced_when is not None and untraced_when(args)):
             return await function(self, *args, **kwargs)
         arguments = None if hide_arguments else _summary(list(args) + ([kwargs] if kwargs else []))
         marks = {"auto": True} if automatic else {}

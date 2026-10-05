@@ -145,3 +145,19 @@ describe("resolveItems", () => {
     expect(resolveItems(st, builtinWatts, false, 15, MAX, FLAT).visible.find((i) => i.id === "c2")!.active).toBe(true);
   });
 });
+
+describe("preset labels on ARM", () => {
+  it("formats builtin presets as levels when a formatter is given", () => {
+    const state = { order: ["quiet", "balanced", "turbo"], hidden: [], custom: {} };
+    const resolved = resolveItems(
+      state as never,
+      { quiet: 1, balanced: 6, turbo: 10, turbo_ac: 10 },
+      false,
+      6,
+      10,
+      { mode: "estable", off2: 0, off3: 0 },
+      (level) => `Level ${level}`,
+    );
+    expect(resolved.manager.map((item) => item.label)).toEqual(["Level 1", "Level 6", "Level 10"]);
+  });
+});

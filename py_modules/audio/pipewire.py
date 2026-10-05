@@ -17,8 +17,9 @@ import journal
 from audio.const import balance_channels
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
-from controllers.detect import clean_env, resolve_bin
+from controllers.detect import resolve_bin
 from osinfo import _parse_os_release
+from user_session import UserSession, spawn_args
 
 _DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
@@ -246,31 +247,9 @@ class PipeWireEq:
     def _session_cmd(self, argv):
         if not self._session:
             return None, None, None
-        uid, runtime, user = self._session
-        env = clean_env()
-        env["XDG_RUNTIME_DIR"] = runtime
-        env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime}/bus"
+        cmd, env, identity = spawn_args(UserSession(*self._session), argv, resolve=lambda name: resolve_bin(name))
         env["LC_ALL"] = "C"  # pactl field labels ("Name:", "Active Port:") must stay English to parse
-        identity = {}
-        if os.geteuid() == 0:
-            # Not runuser: it opens a PAM login session per call (logind scope, lastlog2
-            # write), and at watcher cadence that churn can take systemd down.
-            try:
-                account = pwd.getpwuid(uid)
-                gid, home, shell = account.pw_gid, account.pw_dir, account.pw_shell
-            except KeyError:
-                gid, home, shell = uid, None, None
-            try:
-                groups = os.getgrouplist(user, gid)
-            except OSError:
-                groups = [gid]
-            identity = {"user": uid, "group": gid, "extra_groups": groups}
-            env["USER"] = env["LOGNAME"] = user
-            if home:
-                env["HOME"] = home
-            if shell:
-                env["SHELL"] = shell
-        return [resolve_bin(argv[0]), *argv[1:]], env, identity
+        return cmd, env, identity
 
     def _run(self, argv, timeout=8):
         cmd, env, identity = self._session_cmd(argv)

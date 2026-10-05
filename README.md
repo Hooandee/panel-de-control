@@ -234,6 +234,19 @@ hasta 80 W con el cargador; con la refrigeración líquida externa conectada se 
 desde Ajustes) y la **OneXPlayer 3** (Intel Arc G3 Extreme, hasta 35 W, y 45 W experimentales con
 el cargador si se desbloquean a mano), las dos experimentales.
 
+Las **consolas ARM** también entran. El **AYN Thor** (Snapdragon 8 Gen 2) se reconoce por su
+nombre y entra como experimental, y cualquier otra máquina ARM aparece con su nombre real y su chip
+en vez de como un PC genérico. En ARM, Decky corre emulado como si fuera un PC con Intel, así que la
+identidad se saca del propio sistema y nunca se tocan las vías pensadas para PC (TDP en vatios,
+ryzenadj o los relojes de gráficas AMD e Intel). Las funciones van llegando con su equivalente en
+ARM; mientras, lo que todavía no responde se oculta en vez de fingir que funciona.
+
+En el **AYN Thor**, Panel también puede ocupar la **pantalla inferior** en modo juego: un panel
+táctil con rendimiento, objetivo de FPS, ventilador, brillo de las dos pantallas, volumen, luces,
+Turbo, captura, teclado y acceso al menú rápido. Se dibuja directamente sobre esa pantalla, sin
+navegador ni un segundo compositor de por medio, así que el juego de arriba no pierde fotogramas.
+Se activa en Ajustes y es experimental.
+
 Los **PC de sobremesa** (cualquiera que no sea la Steam Machine) ya no salen como equipo genérico.
 Se reconocen porque no tienen batería y su chasis no es portátil, y entran en modo sobremesa:
 potencia de CPU en Intel y de la gráfica AMD dedicada, siempre sin pasar de los límites que marca

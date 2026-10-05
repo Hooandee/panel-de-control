@@ -273,6 +273,25 @@ def test_traced_calls_record_arguments_and_failures(tmp_path):
     assert "private words" not in json.dumps(records)
 
 
+def test_reads_through_a_mixed_call_stay_out_of_the_journal(tmp_path):
+    class Plugin:
+        async def kiosk_steam(self, action, args=None):
+            return {"ok": True}
+
+    trace_calls(Plugin, untraced_when={"kiosk_steam": lambda args: bool(args) and args[0] == "snapshot"})
+    j = Journal(str(tmp_path), coalesce_s=0)
+    j.start()
+    journal.active = j
+    try:
+        for _ in range(5):
+            asyncio.run(Plugin().kiosk_steam("snapshot", []))
+        asyncio.run(Plugin().kiosk_steam("screenshot", []))
+    finally:
+        journal.active = None
+        j.stop()
+    assert [(r["m"], r.get("a")) for r in _lines(str(tmp_path))] == [("kiosk_steam", '["screenshot",[]]')]
+
+
 def test_watchdog_reports_a_stuck_loop_once_and_its_recovery(tmp_path):
     from journal import LoopWatchdog
 

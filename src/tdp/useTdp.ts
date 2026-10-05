@@ -9,6 +9,7 @@ import { PresetItem } from "./powerPresets";
 import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { useRunningGame } from "./useRunningGame";
 import { useScopeSync } from "../useScopeSync";
+import { isLevelUnit } from "./unit";
 import { notifyLearningStatusChanged } from "../learning/statusInvalidation";
 import { effectiveAutoRange } from "./autoView";
 
@@ -280,6 +281,7 @@ export function useTdp(): TdpControl {
             onAutoTdp(true);
           },
           onCancel: () => {},
+          levels: isLevelUnit(tdp.unit),
         });
         return;
       }

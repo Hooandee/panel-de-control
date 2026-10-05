@@ -1549,6 +1549,7 @@ def test_game_profiles_overview_includes_the_full_auto_configuration(Plugin):
     row = next(r for r in rows if r["appid"] == "g")
 
     assert row["tdp"] == {
+        "unit": "W",
         "pl1": 10,
         "auto": True,
         "target_fps": 55,
@@ -1584,6 +1585,7 @@ def test_game_profiles_overview_keeps_own_auto_values_while_following_global(Plu
     row = next(r for r in rows if r["appid"] == "g")
 
     assert row["tdp"] == {
+        "unit": "W",
         "pl1": 10,
         "auto": True,
         "target_fps": 55,

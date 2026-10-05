@@ -21,6 +21,7 @@ import re
 import stat
 import urllib.parse
 
+import device_tree
 from report import connected_devices
 from sysfs import read_str
 
@@ -479,6 +480,7 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b",
         "-t", "steamos-manager", "-t", "powerstation",
         "-t", "power-profiles-daemon", "-t", "tuned", "-t", "tuned-ppd",
+        "-t", "armada-powerd",
         "-n", "200", "--no-pager",
     ],
     # How the previous boot ended: a clean reboot leaves the systemd/logind shutdown
@@ -824,6 +826,47 @@ def _snap_cpu_gpu_power(root: str) -> dict:
     return out
 
 
+def _snap_arm(root: str) -> dict:
+    if not device_tree.is_arm(root):
+        return {"arch": "x86"}
+    tree = device_tree.read_device_tree(root)
+    soc = os.path.join(root, "sys/devices/soc0")
+    cpuinfo = read_str(os.path.join(root, "proc/cpuinfo"))
+    devfreq = []
+    for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]:
+        devfreq.append({
+            "name": os.path.basename(device),
+            "governor": read_str(os.path.join(device, "governor")),
+            "min_hz": read_str(os.path.join(device, "min_freq")),
+            "max_hz": read_str(os.path.join(device, "max_freq")),
+            "cur_hz": read_str(os.path.join(device, "cur_freq")),
+            "available_hz": read_str(os.path.join(device, "available_frequencies")),
+        })
+    backlight = [
+        {
+            "name": os.path.basename(device),
+            "brightness": read_str(os.path.join(device, "brightness")),
+            "max_brightness": read_str(os.path.join(device, "max_brightness")),
+        }
+        for device in sorted(_glob(root, "sys/class/backlight/*"))[:_SNAP_MAX_CHIPS]
+    ]
+    return {
+        "arch": "arm",
+        "midr_el1": read_str(
+            os.path.join(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1")
+        ),
+        "model": tree.model or None,
+        "compatible": list(tree.compatible[:_SNAP_MAX_NAMES]),
+        "soc": {
+            key: read_str(os.path.join(soc, key))
+            for key in ("family", "machine", "soc_id")
+        },
+        "x86_emulated": bool(re.search(r"GenuineIntel|AuthenticAMD", cpuinfo or "")),
+        "devfreq": devfreq,
+        "backlight": backlight,
+    }
+
+
 def _snap_desktop(root: str) -> dict:
     """What a desktop PC can be controlled through: board fan drivers, CPU RAPL
     bounds, AMD GPU power/overdrive/fan surfaces and the desktop detection inputs.
@@ -1003,7 +1046,7 @@ def sysfs_snapshot(
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
                   "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
-                  "connected_devices": {}}
+                  "arm": {}, "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1065,6 +1108,10 @@ def sysfs_snapshot(
     except Exception:  # noqa: BLE001
         pass
     try:
+        snap["arm"] = _snap_arm(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         snap["connected_devices"] = connected_devices.snapshot(root)
     except Exception:  # noqa: BLE001
         pass
@@ -1084,14 +1131,16 @@ def sysfs_snapshot(
     # The EC dump is raw hardware register bytes as hex (no PII). Exempt it from the
     # serial-run scrubber, which would otherwise shred a real 512-char hex string.
     ec_dump = snap["ec"].pop("dump", None) if isinstance(snap.get("ec"), dict) else None
-    # The desktop section holds only fixed module names, kernel values and
-    # numbers; the serial-run scrubber would otherwise shred "w83627ehf" or a
-    # ppfeaturemask like "0xfff7bfff".
+    # The desktop and ARM sections hold only fixed module names, kernel values and
+    # numbers; the serial-run scrubber would otherwise shred "w83627ehf", a
+    # ppfeaturemask like "0xfff7bfff" or a MIDR register value.
     desktop = snap.pop("desktop", {})
+    arm = snap.pop("arm", {})
     result = redact_obj(snap, home=home, hostname=hostname)
     if isinstance(result.get("ec"), dict):
         result["ec"]["dump"] = ec_dump
     result["desktop"] = desktop
+    result["arm"] = arm
     return result
 
 

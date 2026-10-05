@@ -1,9 +1,16 @@
 import glob
 import os
 
+import device_tree
 from sysfs import read_int, read_str
 
 _SUPPLY = "sys/class/power_supply"
+
+
+def _disagrees(reported_uw, measured_uw):
+    return abs(reported_uw - measured_uw) > 1_000_000 and (
+        reported_uw > 2 * measured_uw or measured_uw > 2 * reported_uw
+    )
 
 
 class BatteryReader:
@@ -19,6 +26,7 @@ class BatteryReader:
     (µAh) × voltage_now (µV) for devices that only expose charge units."""
 
     def __init__(self, root="/"):
+        self._arm = device_tree.is_arm(root)
         self._root = root
         self._bat_dir = self._find_battery_dir()
 
@@ -72,11 +80,19 @@ class BatteryReader:
         # (µV) for devices that only expose current (e.g. Steam Deck). 0 is a real
         # reading (idle) — only None means "unknown".
         power_uw = read_int(os.path.join(d, "power_now"))
+        current_ua = read_int(os.path.join(d, "current_now"))
+        voltage_now = read_int(os.path.join(d, "voltage_now"))
+        vi_uw = (
+            round(current_ua * voltage_now / 1_000_000)
+            if current_ua is not None and voltage_now
+            else None
+        )
         if power_uw is None:
-            current_ua = read_int(os.path.join(d, "current_now"))
-            voltage_now = read_int(os.path.join(d, "voltage_now"))
-            if current_ua is not None and voltage_now:
-                power_uw = round(current_ua * voltage_now / 1_000_000)
+            power_uw = vi_uw
+        elif self._arm and vi_uw is not None and _disagrees(abs(power_uw), abs(vi_uw)):
+            # Some firmware (Snapdragon pmic-glink on the AYN Thor) reports power_now
+            # an order of magnitude off while voltage and current are right.
+            power_uw = abs(vi_uw)
         power_w = round(power_uw / 1_000_000, 1) if power_uw is not None else None
 
         # cycle_count: many handhelds (ASUS Ally, Steam Deck, MSI Claw) expose the

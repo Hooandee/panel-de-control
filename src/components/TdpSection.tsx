@@ -2,14 +2,16 @@ import { PanelSectionRow, SliderField, Focusable, ToggleField } from "@decky/ui"
 import { FC, useCallback, useMemo } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
-import { resetWatts, offsetOf } from "../tdp/logic";
+import { resetWatts } from "../tdp/logic";
 import { extraZone, manualCeiling } from "../tdp/extraZone";
-import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
+import { PresetItem } from "../tdp/powerPresets";
+import { resolveLivePresets } from "../tdp/livePresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { PowerArc } from "./PowerArc";
+import { isLevelUnit, levelFrequencySummary } from "../tdp/unit";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
@@ -48,18 +50,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
   // Falls back to a builtins-only library if the custom library hasn't loaded.
-  const resolved = useMemo(() => {
-    if (!tdp) return null;
-    const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
-    const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-    const w = scope === "global" ? tdp.global_watts : tdp.watts;
-    const lv = scope === "global"
-      ? (tdp.global_requested_levels ?? tdp.global_levels)
-      : (tdp.requested_levels ?? tdp.levels);
-    const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
-    const liveBoost = { mode, off2: offsetOf(lv.pl2, lv.pl1), off3: offsetOf(lv.pl3, lv.pl2) };
-    return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
-  }, [tdp, presets, scope]);
+  const resolved = useMemo(
+    () => (tdp ? resolveLivePresets(tdp, presets, scope, t) : null),
+    [tdp, presets, scope, t],
+  );
 
   // Stable identity so the memoized chip row doesn't re-render on every tick. Edit range is
   // the charger ceiling so a charger-made preset isn't clipped when edited on battery.
@@ -77,8 +71,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
       pl2Max: tdp.level_limits.pl2?.max ?? tdp.limits.max_ac,
       pl3Max: tdp.level_limits.pl3?.max ?? tdp.limits.max_ac,
       onClose: refreshPresets,
+      formatValue: isLevelUnit(tdp.unit) ? (level) => t("tdp.level.value", { level }) : undefined,
     });
-  }, [tdp, scope, refreshPresets]);
+  }, [tdp, scope, refreshPresets, t]);
 
   if (!tdp) return <Loading />;
 
@@ -133,6 +128,11 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const pptVisualMax = deckPptActive ? Math.max(activeMax, slowPpt ?? 0, fastPpt ?? 0) : null;
   const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? STEAM_DECK_NOMINAL_MAX_W : null;
 
+  const levelUnit = isLevelUnit(tdp.unit);
+  const levelSummary = levelUnit
+    ? levelFrequencySummary(tdp.level_frequencies?.[String(Math.round(Math.min(shownWatts, activeMax)))])
+    : null;
+
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
     return (
@@ -154,6 +154,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
             slowMarkerWatts={slowPpt}
             fastMarkerWatts={fastPpt}
             overclocked={tdp.overclock?.detected ?? false}
+            unit={tdp.unit}
           />
         </PanelSectionRow>
       </>
@@ -176,6 +177,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
           overclocked={tdp.overclock?.detected ?? false}
+          unit={tdp.unit}
           safeMin={deckPptActive ? null : tdp.limits.min}
           safeMax={deckPptActive ? null : activeMax}
           manualMax={deckPptActive ? null : (tdp.manual_max_ac ?? null)}
@@ -202,6 +204,18 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               onChange={onWatts}
             />
           </PanelSectionRow>
+          {levelSummary && (
+            <PanelSectionRow>
+              <div style={{
+                textAlign: "center",
+                color: theme.color.textMuted,
+                fontSize: theme.font.caption,
+                fontVariantNumeric: "tabular-nums",
+              }}>
+                {levelSummary}
+              </div>
+            </PanelSectionRow>
+          )}
           {!inFwMode && tdp.low_battery_hold?.available && (
             <PanelSectionRow>
               <ToggleField
@@ -218,7 +232,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               />
             </PanelSectionRow>
           )}
-          {extraMessage && (
+          {extraMessage && !levelUnit && (
             <PanelSectionRow>
               <div style={{
                 display: "flex",
@@ -239,7 +253,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               </div>
             </PanelSectionRow>
           )}
-          {atCeiling && (
+          {atCeiling && !levelUnit && (
             <PanelSectionRow>
               <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
                 {tdp.on_ac
@@ -296,7 +310,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                     onActivate={() => onWatts(resetTarget)}
                     onClick={() => onWatts(resetTarget)}
                   >
-                    {t("tdp.reset.default", { w: resetTarget })}
+                    {levelUnit
+                      ? t("tdp.reset.default.level", { w: resetTarget })
+                      : t("tdp.reset.default", { w: resetTarget })}
                   </Focusable>
                 </PanelSectionRow>
               )}

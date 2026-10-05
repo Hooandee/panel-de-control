@@ -1,6 +1,5 @@
 import os
 
-import launch.proton_caps as proton_caps
 from launch.proton_caps import detect_capabilities
 
 
@@ -121,7 +120,7 @@ def test_resolves_compat_tool_id_from_manifest(tmp_path):
     assert "FSR4_UPGRADE" in caps["envs"]
 
 
-def test_scans_system_wide_compat_root(tmp_path, monkeypatch):
+def test_scans_system_wide_compat_root(tmp_path):
     # CachyOS installs Proton-CachyOS into /usr/share/steam/compatibilitytools.d.
     sys_root = os.path.join(str(tmp_path), "usr", "share", "steam", "compatibilitytools.d")
     d = os.path.join(sys_root, "Proton-CachyOS Latest")
@@ -130,8 +129,9 @@ def test_scans_system_wide_compat_root(tmp_path, monkeypatch):
         f.write('self.check_environment("PROTON_USE_OPTISCALER", "optiscaler")\n')
     with open(os.path.join(d, "toolmanifest.vdf"), "w") as f:
         f.write('"compat_tool_name"\t\t"proton-cachyos-11.0-2026-07-03"\n')
-    monkeypatch.setattr(proton_caps, "_SYSTEM_COMPAT_ROOTS", (sys_root,))
-    caps = detect_capabilities("proton-cachyos-11.0-2026-07-03", home=str(tmp_path))
+    caps = detect_capabilities(
+        "proton-cachyos-11.0-2026-07-03", home=str(tmp_path), system_dirs=(sys_root,),
+    )
     assert caps["found"] is True
     assert "PROTON_USE_OPTISCALER" in caps["envs"]
 
@@ -192,3 +192,44 @@ def test_reports_short_upscaler_names_from_script(tmp_path):
     caps = detect_capabilities("Proton-CachyOS Latest", home=str(tmp_path))
     assert caps["found"] is True
     assert "FSR4_UPGRADE" in caps["envs"]
+
+
+def _write_system_proton(system_dir, folder, body):
+    d = os.path.join(system_dir, folder)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "proton"), "w") as f:
+        f.write(body)
+
+
+def test_reads_system_wide_compat_tool(tmp_path):
+    system_dir = str(tmp_path / "usr-share-steam-compat")
+    _write_system_proton(system_dir, "proton-cachyos-11.0-arm64", PROTON_BODY)
+    caps = detect_capabilities(
+        "proton-cachyos-11.0-arm64", home=str(tmp_path / "home"), system_dirs=(system_dir,),
+    )
+    assert caps["found"] is True
+    assert "PROTON_ENABLE_HDR" in caps["envs"]
+
+
+def test_user_compat_tool_wins_over_system_copy(tmp_path):
+    home = str(tmp_path / "home")
+    system_dir = str(tmp_path / "system")
+    _write_proton(home, "proton-cachyos", PROTON_BODY)
+    _write_system_proton(system_dir, "proton-cachyos", "# stripped system build")
+    caps = detect_capabilities("proton-cachyos", home=home, system_dirs=(system_dir,))
+    assert "PROTON_ENABLE_HDR" in caps["envs"]
+
+
+def test_arm64_builtin_never_reads_the_x86_build(tmp_path):
+    _write_builtin_proton(str(tmp_path), "Proton - Experimental", PROTON_BODY)
+    caps = detect_capabilities("proton-experimental-arm64", home=str(tmp_path), system_dirs=())
+    assert caps == {"envs": [], "found": False}
+
+
+def test_arm64_builtins_read_valves_arm64_folders(tmp_path):
+    _write_builtin_proton(str(tmp_path), "Proton Experimental (ARM64)", PROTON_BODY)
+    _write_builtin_proton(str(tmp_path), "Proton 11.0 (ARM64)", PROTON_BODY)
+    for name in ("proton-experimental-arm64", "proton_11-arm64"):
+        caps = detect_capabilities(name, home=str(tmp_path), system_dirs=())
+        assert caps["found"] is True and "PROTON_LOG" in caps["envs"], name
+    assert detect_capabilities("proton_hotfix-arm64", home=str(tmp_path), system_dirs=())["found"] is False

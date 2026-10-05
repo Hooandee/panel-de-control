@@ -473,6 +473,12 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
         for backend in experimental_ec_backends(temp_fn=temp_fn, root=root):
             if backend.eligible:
                 return backend
+    if getattr(device, "arch", "x86") == "arm":
+        from fans.armada import ArmadaFanBackend, powerd_present
+        if powerd_present(root):
+            armada = ArmadaFanBackend(temp_fn=temp_fn, root=root)
+            if armada.supported:
+                return armada
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
     generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)

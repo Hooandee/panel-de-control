@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { HTMLAttributes, ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -170,6 +170,22 @@ describe("HudSection QAM composition", () => {
     expect(badge.style.borderRadius).toBe("999px");
     expect(badge.style.whiteSpace).toBe("nowrap");
     expect(badge.style.boxShadow).not.toBe("");
+  });
+
+  it("keeps reading Steam's overlay setting until Steam has loaded it", () => {
+    vi.useFakeTimers();
+    mocks.hudEnabled = true;
+    mocks.steamMasterEnabled = null;
+    render(<HudSection />);
+    expect(screen.getByText("copy:hud.steam.unavailable")).toBeTruthy();
+
+    mocks.steamMasterEnabled = false;
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.queryByText("copy:hud.steam.unavailable")).toBeNull();
+    expect(screen.getByText("copy:hud.steam.hidden")).toBeTruthy();
   });
 
   it("activates Steam when the user enables the HUD", () => {

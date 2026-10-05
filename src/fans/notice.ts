@@ -13,3 +13,8 @@ export function fanCurveNotice(cs: FanCurveState, t: Translate): string {
   if (cs.has_firmware_modes) return t("fans.curve.custom_mode");
   return t("fans.curve.unsupported", { os: cs.os_name || t("fans.curve.thisSystem") });
 }
+
+/** The system daemon that owns the fan in Auto and hands it over while a curve runs. */
+export function fanHandoffNotice(cs: FanCurveState, t: Translate): string | null {
+  return cs.source === "armada-pwm" ? t("fans.armadaHandoff") : null;
+}

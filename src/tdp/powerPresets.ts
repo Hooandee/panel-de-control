@@ -76,6 +76,7 @@ export function resolveItems(
   currentWatts: number,
   activeMax: number,
   liveBoost: PowerPresetBoost,
+  formatValue: (value: number) => string = (value) => `${value}W`,
 ): ResolvedPresets {
   const hidden = new Set(state.hidden);
   const cur = Math.round(currentWatts);
@@ -88,7 +89,7 @@ export function resolveItems(
     if (isBuiltin(id)) {
       const w = builtinWattsFor(id, watts, onAc);
       rows.push({
-        id, kind: "builtin", watts: w, label: `${w}W`, name: "", icon: BUILTIN_ICON[id], boost: null,
+        id, kind: "builtin", watts: w, label: formatValue(w), name: "", icon: BUILTIN_ICON[id], boost: null,
         hidden: hidden.has(id), active: false, editable: false, deletable: false,
         wm: Math.round(w) === cur,
       });
@@ -99,7 +100,7 @@ export function resolveItems(
         // watts the current source can't reach (apply re-clamps server-side too).
         const w = Math.min(c.watts, activeMax);
         rows.push({
-          id, kind: "custom", watts: w, label: `${w}W`, name: c.name ?? "", icon: c.icon, boost: c.boost,
+          id, kind: "custom", watts: w, label: formatValue(w), name: c.name ?? "", icon: c.icon, boost: c.boost,
           hidden: hidden.has(id), active: false, editable: true, deletable: true,
           wm: Math.round(w) === cur,
         });

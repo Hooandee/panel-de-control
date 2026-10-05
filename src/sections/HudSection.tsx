@@ -1,4 +1,4 @@
-import { FC, ReactNode, useState } from "react";
+import { FC, ReactNode, useEffect, useState } from "react";
 import { PanelSectionRow, ToggleField, TextField, Spinner, showModal } from "@decky/ui";
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
@@ -215,6 +215,10 @@ const RowAction: FC<{
   </QamAction>
 );
 
+
+// Steam fills its performance settings a moment after the QAM page mounts.
+const STEAM_SETTING_RETRIES = 10;
+const STEAM_SETTING_RETRY_MS = 1_000;
 export const HudSection: FC = () => {
   const { t } = useI18n();
   const {
@@ -232,6 +236,19 @@ export const HudSection: FC = () => {
   const [steamMasterEnabled, setSteamMasterEnabled] = useState<boolean | null>(
     () => steamOverlay.diagnostics().master_enabled,
   );
+  useEffect(() => {
+    if (steamMasterEnabled !== null) return undefined;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      const enabled = steamOverlay.diagnostics().master_enabled;
+      if (enabled !== null || tries >= STEAM_SETTING_RETRIES) {
+        window.clearInterval(timer);
+        if (enabled !== null) setSteamMasterEnabled(enabled);
+      }
+    }, STEAM_SETTING_RETRY_MS);
+    return () => window.clearInterval(timer);
+  }, [steamMasterEnabled]);
 
   if (!state) {
     return (
