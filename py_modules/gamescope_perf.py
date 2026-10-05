@@ -27,7 +27,10 @@ from collections import deque
 from typing import Callable
 
 # gamescope_control (protocol/gamescope-control.xml): request and event indices.
+_REQ_TAKE_SCREENSHOT = 2
 _REQ_APP_PERF_STATS = 6
+_EVT_SCREENSHOT_TAKEN = 2
+_SCREENSHOT_ALL_REAL_LAYERS = 2
 _EVT_ACTIVE_DISPLAY_INFO = 1
 _EVT_APP_PERF_STATS = 3
 _MIN_VERSION = 6
@@ -141,6 +144,27 @@ def _connect(root: str, skip: set[str]) -> _Wire | None:
             continue
         return wire
     return None
+
+
+def take_screenshot(path: str, root: str = "/", skip: frozenset[str] = frozenset(), timeout: float = 5.0) -> bool:
+    # gamescope announces the result to every control client; Steam files it into the game's gallery.
+    wire = _connect(root, set(skip))
+    if wire is None:
+        return False
+    try:
+        wire.send(_message(_CONTROL_ID, _REQ_TAKE_SCREENSHOT,
+                           _wl_string(path) + struct.pack("<II", _SCREENSHOT_ALL_REAL_LAYERS, 0)))
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            for obj, opcode, data in wire.receive(max(0.0, end - time.monotonic())):
+                if obj == _CONTROL_ID and opcode == _EVT_SCREENSHOT_TAKEN:
+                    if _read_string(data, 0)[0] == path:
+                        return True
+        return False
+    except (OSError, ConnectionError, struct.error):
+        return False
+    finally:
+        wire._sock.close()
 
 
 def _ask(wire: _Wire, app_id: int) -> None:

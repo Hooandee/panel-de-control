@@ -663,6 +663,16 @@ class App:
         self.close_at = 0.0
         self.dirty = True
 
+    def _screenshot(self) -> None:
+        try:
+            from gamescope_perf import take_screenshot
+            path = time.strftime("/tmp/gamescope_%Y-%m-%d_%H-%M-%S.png")
+            if take_screenshot(path):
+                return
+        except ImportError:
+            pass
+        self.worker.act("steam", "kiosk_steam", "screenshot", [])
+
     def _fader(self, name: str, y: float) -> None:
         value = round(self.deck.fader_value(name, y), 3)
         if name == "bri" and self.deck.bri_target == "bottom":
@@ -690,7 +700,7 @@ class App:
             scope = "game" if game_scope else "global"
             self.worker.act("cpu", "set_cpu_boost", enabled, scope, s.appid if game_scope else None, s.appid)
         elif name == "shot":
-            self.worker.act("steam", "kiosk_steam", "screenshot", [])
+            threading.Thread(target=self._screenshot, daemon=True).start()
         elif name == "kbd":
             self.worker.act("steam", "kiosk_steam", "keyboard", [])
         elif name == "qam":

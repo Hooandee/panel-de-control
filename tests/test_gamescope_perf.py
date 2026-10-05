@@ -33,6 +33,7 @@ class FakeGamescope:
         self.frametimes = list(frametimes_ns)
         self.app_id = app_id
         self.requests = []
+        self.screenshots = []
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(path)
         self.server.listen(4)
@@ -67,6 +68,11 @@ class FakeGamescope:
                     elif obj == 2 and opcode == 0:
                         new_id = struct.unpack_from("<I", data, len(data) - 4)[0]
                         conn.sendall(_event(new_id, gp._EVT_ACTIVE_DISPLAY_INFO, gp._wl_string(self.connector) + gp._wl_string("x") * 2 + struct.pack("<I", 0) + struct.pack("<I", 0)))
+                    elif obj == gp._CONTROL_ID and opcode == gp._REQ_TAKE_SCREENSHOT:
+                        size = struct.unpack_from("<I", data)[0]
+                        path = data[4:4 + size - 1].decode()
+                        self.screenshots.append(path)
+                        conn.sendall(_event(gp._CONTROL_ID, gp._EVT_SCREENSHOT_TAKEN, gp._wl_string(path)))
                     elif obj == gp._CONTROL_ID and opcode == gp._REQ_APP_PERF_STATS:
                         app = struct.unpack_from("<I", data)[0]
                         self.requests.append(app)
@@ -155,3 +161,16 @@ def test_no_frames_means_no_reading(tmp_path):
     assert round(perf.fps()) == 60
     now[0] += gp.STALE_S + 0.1
     assert perf.fps() is None
+
+
+def test_screenshot_is_requested_from_gamescope_and_confirmed(short_root):
+    fake = FakeGamescope(str(_socket_dir(short_root) / "gamescope-0"))
+    try:
+        assert gp.take_screenshot("/tmp/gamescope_2026.png", root=str(short_root)) is True
+        assert fake.screenshots == ["/tmp/gamescope_2026.png"]
+    finally:
+        fake.close()
+
+
+def test_screenshot_reports_failure_without_gamescope(short_root):
+    assert gp.take_screenshot("/tmp/x.png", root=str(short_root), timeout=0.5) is False
