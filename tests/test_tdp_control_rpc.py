@@ -110,8 +110,10 @@ def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
         get_limits=lambda: TdpLimits(5, 20, 42, 42),
     )
 
-    assert plugin._limits().max_ac_w == 42
-    assert plugin._profile_storage_limits().max_ac_w == 65
+    assert plugin._safe_limits().max_ac_w == 42
+    assert plugin._profile_storage_limits().max_ac_w == 120
+    assert plugin._profile_storage_limits(extra=False).max_ac_w == 65
+    assert plugin._auto_request_limits().max_ac_w == 65
 
 
 def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
@@ -1322,3 +1324,47 @@ def test_repeated_identical_backend_transition_is_logged_once(Plugin, monkeypatc
     )
     transitions = [a for a in warnings if a and a[0] == "TDP backend transition %s"]
     assert len(transitions) == 2
+
+
+def _hhd_plugin(Plugin):
+    import main as main_mod
+
+    p = Plugin()
+    p._init()
+    p._controller_backend.manager = main_mod.controller_detect.HHD
+    return p
+
+
+def test_startup_takes_tdp_back_from_hhd_after_the_player_chose_panel(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+    assert asyncio.run(p.take_tdp_control())["ok"] is True
+    p._restore_hhd_tdp()
+    assert fake_hhd.value is True
+
+    rebooted = _hhd_plugin(Plugin)
+    asyncio.run(rebooted._resume_hhd_takeover())
+
+    assert fake_hhd.value is False
+
+
+def test_startup_leaves_hhd_alone_when_the_player_never_took_control(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+
+    asyncio.run(p._resume_hhd_takeover())
+
+    assert fake_hhd.value is True
+
+
+def test_turning_panel_tdp_off_forgets_the_takeover(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+    asyncio.run(p.take_tdp_control())
+    asyncio.run(p.set_tdp_control_enabled(False))
+    assert fake_hhd.value is True
+
+    rebooted = _hhd_plugin(Plugin)
+    asyncio.run(rebooted._resume_hhd_takeover())
+
+    assert fake_hhd.value is True

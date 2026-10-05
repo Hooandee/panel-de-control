@@ -102,7 +102,7 @@ export const AutoTdpCard: FC<Props> = ({
     live.reason === "ui_active"
     || live.reason === "no_game_focus"
   );
-  const maintainedWatts = live?.held_watts ?? live?.setpoint ?? config.initial_tdp;
+  const maintainedWatts = live?.held_watts ?? live?.setpoint ?? initialTdp;
   const statusValues: Record<string, string | number> = live?.state === "holding"
     || live?.state === "optimizing"
     || live?.state === "recovering"

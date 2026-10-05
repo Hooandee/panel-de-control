@@ -201,9 +201,9 @@ describe("useTdp game context", () => {
   });
 
   it.each([
-    { endpoint: "min" as const, watts: 22, minimum: 22, maximum: 22, initial: 22 },
-    { endpoint: "max" as const, watts: 8, minimum: 8, maximum: 8, initial: 8 },
-  ])("moves both endpoints and the initial TDP atomically when $endpoint crosses", async ({ endpoint, watts, minimum, maximum, initial }) => {
+    { endpoint: "min" as const, watts: 22, minimum: 22, maximum: 22, initial: 15 },
+    { endpoint: "max" as const, watts: 8, minimum: 8, maximum: 8, initial: 15 },
+  ])("moves both endpoints and keeps the stored initial TDP when $endpoint crosses", async ({ endpoint, watts, minimum, maximum, initial }) => {
     mocks.getTdpState.mockResolvedValue({
       ...TDP_STATE,
       global_auto_config: { ...TDP_STATE.global_auto_config, min_tdp: 10, max_tdp: 20 },
@@ -216,13 +216,21 @@ describe("useTdp game context", () => {
     expect(mocks.setAutoTdpConfig).toHaveBeenCalledExactlyOnceWith(40, initial, "global", null, "100", minimum, maximum);
   });
 
-  it("preserves a charger-capable requested range while clamping the initial TDP on battery", async () => {
+  it("preserves a charger-capable requested range and the stored initial TDP on battery", async () => {
     const { result } = renderHook(() => useTdp());
     await settle();
     act(() => result.current.onAutoMinTdp(30));
-    expect(result.current.tdp?.global_auto_config).toMatchObject({ min_tdp: 30, max_tdp: null, initial_tdp: 25 });
+    expect(result.current.tdp?.global_auto_config).toMatchObject({ min_tdp: 30, max_tdp: null, initial_tdp: 15 });
     await act(async () => vi.advanceTimersByTimeAsync(200));
-    expect(mocks.setAutoTdpConfig).toHaveBeenCalledExactlyOnceWith(40, 25, "global", null, "100", 30, null);
+    expect(mocks.setAutoTdpConfig).toHaveBeenCalledExactlyOnceWith(40, 15, "global", null, "100", 30, null);
+  });
+
+  it("returns the initial TDP to the player's value when the range widens again", async () => {
+    const { result } = renderHook(() => useTdp());
+    await settle();
+    act(() => result.current.onAutoMaxTdp(10));
+    act(() => result.current.onAutoMaxTdp(30));
+    expect(result.current.tdp?.global_auto_config.initial_tdp).toBe(15);
   });
 
   it("preserves explicit endpoints when only FPS changes", async () => {

@@ -143,6 +143,60 @@ describe("QamPanelGate", () => {
     expect(screen.getByTestId("initial-panel")).toBeTruthy();
   });
 
+  it("keeps an initially visible panel mounted while tall content is clipped vertically", () => {
+    const tallRect = {
+      left: 49.75,
+      right: 349.75,
+      top: 92.56,
+      bottom: 884.35,
+      width: 300,
+      height: 791.79,
+    } as DOMRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(tallRect);
+    render(
+      <QamPanelGate lifecycle={new AbortController().signal}>
+        <div data-testid="tall-panel" />
+      </QamPanelGate>,
+    );
+    const host = screen.getByTestId("qam-panel-gate");
+
+    act(() => intersectionCallback([{
+      ...visibleIntersection(host),
+      boundingClientRect: tallRect,
+      intersectionRect: { ...tallRect, bottom: 553, height: 460.44 } as DOMRectReadOnly,
+      intersectionRatio: 0.5815,
+    }], intersectionObserver as unknown as IntersectionObserver));
+
+    expect(screen.getByTestId("tall-panel")).toBeTruthy();
+  });
+
+  it("mounts a settled panel whose clip edge differs by a subpixel", () => {
+    render(
+      <QamPanelGate lifecycle={new AbortController().signal}>
+        <div data-testid="heavy-panel" />
+      </QamPanelGate>,
+    );
+    const host = screen.getByTestId("qam-panel-gate");
+    const hostRect = {
+      left: 49.75,
+      right: 349.77,
+      top: 92.56,
+      bottom: 93.56,
+      width: 300.02,
+      height: 0.996,
+    } as DOMRect;
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(hostRect);
+
+    act(() => intersectionCallback([{
+      ...visibleIntersection(host),
+      boundingClientRect: hostRect,
+      intersectionRect: { ...hostRect, right: 349.75, width: 300 } as DOMRectReadOnly,
+      intersectionRatio: 300 / 300.02,
+    }], intersectionObserver as unknown as IntersectionObserver));
+
+    expect(screen.getByTestId("heavy-panel")).toBeTruthy();
+  });
+
   it("renders only the newest visible Panel surface", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       left: 0,
@@ -274,7 +328,7 @@ describe("QamPanelGate", () => {
       intersectionRatio: 68 / 268,
     }], intersectionObserver as unknown as IntersectionObserver));
     expect(screen.queryByTestId("heavy-panel")).toBeNull();
-    expect(intersectionOptions?.threshold).toEqual([0, 1]);
+    expect(intersectionOptions?.threshold).toEqual([0, 0.99, 0.995, 0.999, 1]);
 
     rect.mockReturnValue({
       left: 0,

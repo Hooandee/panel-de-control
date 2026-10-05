@@ -14,10 +14,11 @@ class AmdDptcBackend(FirmwareAttrBackend):
         root="/",
         write_max=None,
         write_max_ac=None,
+        rail_max_ac=None,
         safety_lock_path=None,
         ownership_lock_path=None,
     ):
-        self._write_max = max(fallback.max_ac_w, write_max or 0, write_max_ac or 0)
+        self._rail_ceiling = max(fallback.max_ac_w, write_max or 0, rail_max_ac or 0)
         super().__init__(
             "amd-dptc",
             fallback,
@@ -28,6 +29,7 @@ class AmdDptcBackend(FirmwareAttrBackend):
             safety_lock_path=safety_lock_path,
             restore_on_release=True,
             ownership_lock_path=ownership_lock_path,
+            write_max_ac=write_max_ac,
         )
         self.name = "amd-dptc"
         self.supported = (
@@ -48,7 +50,7 @@ class AmdDptcBackend(FirmwareAttrBackend):
 
     def _profile_rail_max(self, attr):
         if attr == "ppt_pl2_sppt":
-            return round(self._write_max * 1.2)
+            return round(self._rail_ceiling * 1.2)
         if attr == "ppt_pl3_fppt":
-            return round(self._write_max * 1.4)
-        return self._write_max
+            return round(self._rail_ceiling * 1.4)
+        return self._rail_ceiling

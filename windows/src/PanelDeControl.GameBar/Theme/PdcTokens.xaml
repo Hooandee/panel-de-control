@@ -5,6 +5,8 @@
     <Color x:Key="PdcBoostColor">#FFFF8A3D</Color>
     <Color x:Key="PdcBrightnessColor">#FFF5C542</Color>
     <Color x:Key="PdcDangerColor">#FFE05A5A</Color>
+    <Color x:Key="PdcExtraColor">#FFB98CFF</Color>
+    <Color x:Key="PdcExtraLowColor">#FF8FD8FF</Color>
     <Color x:Key="PdcHairlineColor">#0FFFFFFF</Color>
     <Color x:Key="PdcOkColor">#FF7EE0A0</Color>
     <Color x:Key="PdcOnAccentColor">#FF06121F</Color>
@@ -17,6 +19,8 @@
     <SolidColorBrush x:Key="PdcBoostBrush" Color="{StaticResource PdcBoostColor}" />
     <SolidColorBrush x:Key="PdcBrightnessBrush" Color="{StaticResource PdcBrightnessColor}" />
     <SolidColorBrush x:Key="PdcDangerBrush" Color="{StaticResource PdcDangerColor}" />
+    <SolidColorBrush x:Key="PdcExtraBrush" Color="{StaticResource PdcExtraColor}" />
+    <SolidColorBrush x:Key="PdcExtraLowBrush" Color="{StaticResource PdcExtraLowColor}" />
     <SolidColorBrush x:Key="PdcHairlineBrush" Color="{StaticResource PdcHairlineColor}" />
     <SolidColorBrush x:Key="PdcOkBrush" Color="{StaticResource PdcOkColor}" />
     <SolidColorBrush x:Key="PdcOnAccentBrush" Color="{StaticResource PdcOnAccentColor}" />

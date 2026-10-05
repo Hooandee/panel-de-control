@@ -55,6 +55,11 @@ a pantalla completa, además de guardar un perfil global o uno propio por juego.
 - **Boost.** Si tu firmware lo permite, eliges cómo se comportan los raíles SPPT y FPPT: Estable
   (lo que fijas es lo que gasta, el modo por defecto), Auto (un margen de boost gestionado) o
   Personalizado (ajustas los márgenes a mano).
+- **Zona extra.** Con el cargador, el deslizador pasa del máximo que homologa el fabricante hasta
+  40 W en los AMD (120 W en los Strix Halo, con su refrigeración externa si la necesitan), y por
+  abajo baja hasta 3 W, como en SimpleDeckyTDP. Esa parte se marca en morado o en azul claro: Panel
+  pide el valor, pero es el firmware el que decide si lo acepta, y el dial enseña lo que se aplica
+  de verdad. Los presets y el Auto-TDP no salen nunca del rango seguro.
 - **TDP con batería baja (experimental).** Mantiene el valor que hayas elegido cuando la batería
   llega al 20 % o menos. Viene desactivado.
 - **Frecuencia de GPU.** Fija el reloj mínimo y máximo de la gráfica.

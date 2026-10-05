@@ -29,6 +29,9 @@ const color = {
   // Warm/bright orange for the transient HW-boost segment on the power arc — a
   // hotter tone than `warn` so it reads as "extra on top", not a warning.
   boost: "#ff8a3d",
+  // Manual TDP requests outside the range Panel de Control stands behind.
+  extra: "#b98cff",
+  extraLow: "#8fd8ff",
   brightness: "#f5c542",
 } as const;
 

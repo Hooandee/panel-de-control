@@ -900,6 +900,11 @@ def test_arm_levels_can_request_the_lowest_level(tmp_path, monkeypatch):
     p._tdp_backend.unit = "level"
     p._tdp_backend.get_limits = lambda: TdpLimits(1, 6, 10, 10)
     assert p._tdp_request_min() == 1
+    assert p._clamp_tdp_request(1, 10) == 1
+    assert asyncio.run(p.get_tdp_state())["request_min"] == 1
+    p._tdp_profiles.set_pl1("global", 1)
+    p._retry_tdp_storage_migrations()
+    assert p._tdp_profiles.effective(None)["pl1"] == 1
 
 
 def test_turning_power_off_lifts_level_ceilings_before_cpu_and_gpu_reapply(tmp_path, monkeypatch):

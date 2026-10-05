@@ -315,7 +315,10 @@ export interface TdpState {
   backend: string;
   recovery_pending?: boolean;
   request_min?: number;
+  // Safe range; manual requests may go past it up to manual_max_ac on the charger.
   limits: TdpLimits;
+  manual_max_ac?: number;
+  extra_needs_accessory?: boolean;
   auto_limits: TdpLimits;
   auto_request_limits: TdpLimits;
   overclock?: {
