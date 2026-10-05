@@ -29,6 +29,7 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
         "kind": "remap",
         "device_key": device_key,
         "device_known": ip_profile.is_known_device(device_key),
+        "extra_buttons": ip_profile.has_extra_buttons(device_key),
         "buttons": [
             {"source": cap, "label": label, "target": overrides.get(cap)}
             for (cap, label) in buttons

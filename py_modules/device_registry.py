@@ -2,7 +2,15 @@ import dataclasses
 import os
 
 from cpu.info import read_cpu_model
-from device_profiles import DESKTOP_PC, DEVICE_TABLE, GENERIC, DeviceProfile
+import device_tree
+from device_profiles import (
+    ARM_DEVICE_TABLE,
+    DESKTOP_PC,
+    DEVICE_TABLE,
+    GENERIC,
+    GENERIC_ARM,
+    DeviceProfile,
+)
 
 # SMBIOS chassis types that can carry a battery or be held (portable, laptop,
 # notebook, hand held, docking station, sub notebook, tablet, convertible,
@@ -75,6 +83,21 @@ def _generic_for(root: str) -> DeviceProfile:
     return dataclasses.replace(base, vendor=vendor, chip=chip)
 
 
+def _detect_arm(root: str) -> DeviceProfile:
+    tree = device_tree.read_device_tree(root)
+    compatible = set(tree.compatible)
+    chip = device_tree.soc_name(tree, root)
+    for profile in ARM_DEVICE_TABLE:
+        if compatible.intersection(profile.dt_compatible):
+            return dataclasses.replace(profile, chip=chip or profile.chip)
+    return dataclasses.replace(
+        GENERIC_ARM,
+        display_name=tree.model or GENERIC_ARM.display_name,
+        chip=chip or GENERIC_ARM.chip,
+        vendor=device_tree.soc_vendor(tree) or GENERIC_ARM.vendor,
+    )
+
+
 def gpu_generation(vendor: str, chip: str) -> str:
     """AMD RDNA generation (or "intel"/"unknown") derived from the real chip name,
     used to gate FSR/XeSS upgrade launch options. Best-effort by silicon family;
@@ -113,4 +136,6 @@ def detect(product_name: str | None = None, root: str = "/") -> DeviceProfile:
         for needle in profile.match_names:
             if needle.lower() in lname:
                 return profile
+    if device_tree.is_arm(root):
+        return _detect_arm(root)
     return _generic_for(root)

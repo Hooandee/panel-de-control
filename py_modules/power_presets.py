@@ -100,6 +100,10 @@ class PowerPresetStore:
         seq = max(_as_int(raw.get("seq"), 0), highest)
         return {"order": order, "hidden": hidden, "custom": custom, "seq": seq}
 
+    def reset(self):
+        atomic_json_save(self._path, {})
+        self._data = self._load()
+
     def _save(self):
         try:
             atomic_json_save(self._path, self._data)

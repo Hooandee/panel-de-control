@@ -52,6 +52,14 @@ describe("buildLaunchOptions", () => {
     expect(out).toBe("gamemoderun mangohud ~/lsfg ~/.local/bin/mako-run %command%");
   });
 
+  it("puts wrappers outside Armada's launcher and keeps env first", () => {
+    const out = buildLaunchOptions(
+      parse("/usr/libexec/armada/armada-game-launch %command%"),
+      { gamemode: true, protonLog: true },
+    );
+    expect(out).toBe("PROTON_LOG=1 gamemoderun /usr/libexec/armada/armada-game-launch %command%");
+  });
+
   it("langEs sets LANG to Spanish", () => {
     expect(buildLaunchOptions(parse(""), { langEs: true })).toBe("LANG=es_ES.UTF-8 %command%");
   });

@@ -3,18 +3,33 @@
 import os
 
 
+# Under x86 emulation (FEX on ARM handhelds) a path that also exists in the
+# emulator's rootfs resolves there, so /etc/os-release names the rootfs distro.
+# /proc/self/root is never redirected and is "/" on a native host.
+_HOST_ROOT = "/proc/self/root"
+
+
+def _os_release_paths(root: str) -> list[str]:
+    paths = [os.path.join(root, "etc/os-release")]
+    if root == "/":
+        paths.insert(0, os.path.join(_HOST_ROOT, "etc/os-release"))
+    return paths
+
+
 def _parse_os_release(root: str = "/") -> dict:
     """All KEY=value pairs from /etc/os-release (quotes stripped). {} if unreadable."""
-    rel: dict = {}
-    try:
-        with open(os.path.join(root, "etc/os-release")) as f:
-            for line in f:
-                if "=" in line:
-                    k, v = line.rstrip().split("=", 1)
-                    rel[k] = v.strip('"')
-    except OSError:
-        return {}
-    return rel
+    for path in _os_release_paths(root):
+        rel: dict = {}
+        try:
+            with open(path) as f:
+                for line in f:
+                    if "=" in line:
+                        k, v = line.rstrip().split("=", 1)
+                        rel[k] = v.strip('"')
+        except OSError:
+            continue
+        return rel
+    return {}
 
 
 def read_os_name(root: str = "/") -> str | None:

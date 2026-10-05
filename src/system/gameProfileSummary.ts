@@ -12,7 +12,10 @@ export interface SectionLine {
 export function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine | null {
   if (section === "tdp" && row.tdp) {
     if (!row.tdp.auto) {
-      return { label: t("gameProfiles.sec.tdp"), text: `${row.tdp.pl1} W`, dim: row.tdp.follows_global };
+      const text = row.tdp.unit === "level"
+        ? t("tdp.level.value", { level: row.tdp.pl1 })
+        : `${row.tdp.pl1} W`;
+      return { label: t("gameProfiles.sec.tdp"), text, dim: row.tdp.follows_global };
     }
     const details = [
       t("gameProfiles.auto"),

@@ -15,6 +15,7 @@ import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
 import { useDesktopState } from "../desktop/useDesktop";
 import { QamShortcutSetting } from "../components/QamShortcutSetting";
+import { KioskSetting } from "../components/KioskSetting";
 import { ExperimentalTdpUnlock } from "../components/ExperimentalTdpUnlock";
 import { desktopUiActive } from "../desktop/presentation";
 
@@ -188,6 +189,8 @@ export const AjustesSection: FC = () => {
         )}
 
         <QamShortcutSetting />
+
+        <KioskSetting />
 
         <ToggleField
           label={t("settings.valueToast")}

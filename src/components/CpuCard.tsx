@@ -122,7 +122,13 @@ export const CpuCard: FC<Props> = ({
         </div>
       )}
 
+      {frequency.supported && frequency.managed_by_power && (
+        <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>
+          {t("power.managedFrequency")}
+        </div>
+      )}
       {frequency.supported
+        && !frequency.managed_by_power
         && frequency.range_min_khz !== null
         && frequency.range_max_khz !== null
         && frequencyMin !== null

@@ -79,3 +79,13 @@ def test_unknown_metric_returns_none(metric):
 
 def test_every_formatter_handles_an_empty_snapshot():
     assert all(isinstance(pdc.render(metric, {}), str) for metric in pdc.FORMATTERS)
+
+
+def test_arm_levels_show_as_levels_in_the_hud():
+    from mangohud import pdc_metrics
+
+    snap = {"applied": 6, "auto": True, "tdp_unit": "level", "_locale": "es"}
+    assert pdc_metrics.tdp(snap) == "Auto Nv 6"
+    band = {"tdp_unit": "level", "_locale": "en", "learn": {"enough": True, "floor": 3, "ceil": 7}}
+    assert pdc_metrics.tdp_learn(band) == "Lv 3-7"
+    assert pdc_metrics.tdp({"applied": 15, "_locale": "es"}) == "15W"

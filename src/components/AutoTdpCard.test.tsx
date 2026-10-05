@@ -178,13 +178,22 @@ describe("AutoTdpCard", () => {
     },
   );
 
+  it("shows ARM performance levels instead of watts", () => {
+    renderCard({
+      unit: "level",
+      live: { ...live, state: "holding", reason: "above_target", setpoint: 6, held_watts: null, fps: 40 },
+    });
+
+    expect(screen.getByText("tdp.auto.status.holding 40 tdp.level.inline 6")).toBeTruthy();
+  });
+
   it.each([
-    ["holding", "above_target", 14, null, 40.2, "tdp.auto.status.holding 40 14"],
-    ["paused", "no_game_focus", 5, 19, null, "tdp.auto.status.paused_menu 19"],
+    ["holding", "above_target", 14, null, 40.2, "tdp.auto.status.holding 40 14 W"],
+    ["paused", "no_game_focus", 5, 19, null, "tdp.auto.status.paused_menu 19 W"],
     ["paused", "ui_active", 5, null, null, "tdp.auto.status.paused_menu_stable"],
-    ["warming", "warming", 16, null, null, "tdp.auto.status.warming 16"],
-    ["paused", "fps_stale", 16, null, null, "tdp.auto.status.paused_signal 16"],
-    ["paused", "focus_mismatch", 15, null, null, "tdp.auto.status.paused 15"],
+    ["warming", "warming", 16, null, null, "tdp.auto.status.warming 16 W"],
+    ["paused", "fps_stale", 16, null, null, "tdp.auto.status.paused_signal 16 W"],
+    ["paused", "focus_mismatch", 15, null, null, "tdp.auto.status.paused 15 W"],
   ] as const)(
     "maps %s/%s to its user-facing status",
     (state, reason, setpoint, heldWatts, fps, expected) => {

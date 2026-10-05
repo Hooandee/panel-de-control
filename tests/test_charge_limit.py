@@ -305,3 +305,70 @@ def test_select_oxp_uses_standard_threshold_if_present(tmp_path):
     cl = select_charge_limit(_OxpApex(), root=str(tmp_path))
     assert isinstance(cl, SysfsChargeLimit)
     assert cl.get() == 85
+
+
+def _qcom_battery(tmp_path, value="0"):
+    import os
+
+    bat = tmp_path / "sys/class/power_supply/battery"
+    bat.mkdir(parents=True)
+    (bat / "charge_control_end_threshold").write_text(value + "\n")
+    (bat / "uevent").write_text("DEVTYPE=power_supply\nOF_NAME=pmic-glink\nOF_COMPATIBLE_0=qcom,sm8550-pmic-glink\n")
+    return str(tmp_path), os.path.join(str(bat), "charge_control_end_threshold")
+
+
+def test_qcom_reports_no_limit_as_zero_and_disable_is_a_no_op(tmp_path):
+    from types import SimpleNamespace
+
+    from battery.charge_limit import select_charge_limit
+
+    root, _ = _qcom_battery(tmp_path)
+    backend = select_charge_limit(SimpleNamespace(key="ayn_thor", arch="arm"), root=root)
+    assert backend.name == "qcom-battmgr"
+    assert backend.disable() is True
+
+
+def test_qcom_firmware_that_ignores_the_limit_turns_the_feature_off(tmp_path, monkeypatch):
+    import battery.charge_limit as charge_limit
+
+    root, _ = _qcom_battery(tmp_path)
+    monkeypatch.setattr(charge_limit, "write_str", lambda path, value: True)
+    backend = charge_limit.QcomBattmgrChargeLimit(root)
+    assert backend.supported is True
+    assert backend.set(80) is False
+    assert backend.supported is True
+    assert backend.set(80) is False
+    assert backend.supported is False
+
+
+def test_qcom_range_matches_the_driver_clamp(tmp_path):
+    import battery.charge_limit as charge_limit
+
+    root, path = _qcom_battery(tmp_path)
+    backend = charge_limit.QcomBattmgrChargeLimit(root)
+    assert backend.range() == (55, 100)
+    assert backend.set(30) is True
+    assert backend.get() == 55
+
+
+def test_qcom_firmware_that_applies_the_limit_keeps_it(tmp_path):
+    import battery.charge_limit as charge_limit
+
+    root, path = _qcom_battery(tmp_path)
+    backend = charge_limit.QcomBattmgrChargeLimit(root)
+    assert backend.set(80) is True
+    assert backend.get() == 80
+    assert backend.supported is True
+
+
+def test_non_qualcomm_arm_keeps_the_standard_threshold(tmp_path):
+    from types import SimpleNamespace
+
+    from battery.charge_limit import select_charge_limit
+
+    bat = tmp_path / "sys/class/power_supply/BAT0"
+    bat.mkdir(parents=True)
+    (bat / "charge_control_end_threshold").write_text("100\n")
+    (bat / "uevent").write_text("POWER_SUPPLY_NAME=BAT0\n")
+    backend = select_charge_limit(SimpleNamespace(key="generic_arm", arch="arm"), root=str(tmp_path))
+    assert backend.name == "sysfs-threshold"

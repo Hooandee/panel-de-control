@@ -2,6 +2,7 @@ import glob
 import os
 import re
 
+import device_tree
 from sysfs import read_int, read_str, write_str
 
 _CPU = "sys/devices/system/cpu"
@@ -103,6 +104,7 @@ class CoreControl:
 
     def __init__(self, root="/"):
         self._base = os.path.join(root, _CPU)
+        self._arm = device_tree.is_arm(root)
         # Bring every offlined CPU back first: the kernel drops the topology of an offline
         # CPU, so a prior core-limit would make the map (and max_cores) reflect only the
         # online subset. Online all → read the true hardware topology → _apply_cpu
@@ -123,13 +125,35 @@ class CoreControl:
                 write_str(p, 1)
 
     def _map(self):
+        if not self._arm:
+            by_core = {}
+            for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
+                match = re.search(r"cpu(\d+)", p)
+                cid = read_int(p)
+                if match and cid is not None:
+                    by_core.setdefault(cid, []).append(int(match.group(1)))
+            return dict(sorted(by_core.items()))
+        capacity = {}
         m = {}
         for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
             match = re.search(r"cpu(\d+)", p)
             cid = read_int(p)
             if match and cid is not None:
-                m.setdefault(cid, []).append(int(match.group(1)))
-        return dict(sorted(m.items()))
+                idx = int(match.group(1))
+                cluster = read_int(os.path.join(self._base, f"cpu{idx}", "topology", "cluster_id"))
+                m.setdefault((cluster or 0, cid), []).append(idx)
+                cap = read_int(os.path.join(self._base, f"cpu{idx}", "cpu_capacity"))
+                if cap is not None:
+                    capacity[idx] = cap
+        cores = sorted(m.values(), key=min)
+        if capacity:
+            # big.LITTLE: keep cpu0's core (it cannot go offline), then the most
+            # capable cores, so a lower count sheds the weakest cores first.
+            first = [c for c in cores if 0 in c]
+            rest = sorted((c for c in cores if 0 not in c),
+                          key=lambda c: (-max(capacity.get(i, 0) for i in c), min(c)))
+            cores = first + rest
+        return dict(enumerate(cores))
 
     def _online_path(self, idx):
         return os.path.join(self._base, f"cpu{idx}", "online")

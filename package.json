@@ -4,7 +4,7 @@
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c && rollup -c kiosk/rollup.config.mjs",
     "watch": "rollup -c -w",
     "typecheck": "tsc --noEmit",
     "test:fe": "vitest run",

@@ -37,3 +37,21 @@ def test_ignores_malformed_lines(tmp_path):
 def test_empty_returns_none(tmp_path):
     _write_os_release(str(tmp_path), "")
     assert read_os_name(root=str(tmp_path)) is None
+
+
+def test_host_root_wins_over_an_emulator_rootfs(monkeypatch, tmp_path):
+    import osinfo
+
+    host = tmp_path / "host"
+    (host / "etc").mkdir(parents=True)
+    (host / "etc/os-release").write_text('NAME="Armada"\nID=armada\n')
+    monkeypatch.setattr(osinfo, "_HOST_ROOT", str(host))
+    assert osinfo.read_os_id() == "armada"
+    assert osinfo.read_os_name() == "Armada"
+
+
+def test_unreadable_host_root_falls_back_to_the_given_root(monkeypatch, tmp_path):
+    import osinfo
+
+    monkeypatch.setattr(osinfo, "_HOST_ROOT", str(tmp_path / "missing"))
+    assert osinfo._os_release_paths("/")[-1] == "/etc/os-release"

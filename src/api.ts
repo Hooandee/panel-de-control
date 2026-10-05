@@ -1,3 +1,4 @@
+import type { LevelFrequencies, PowerUnit } from "./tdp/unit";
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
@@ -85,6 +86,18 @@ export interface ProtonCaps {
   found: boolean;
 }
 export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
+export interface KioskState {
+  supported: boolean;
+  available: boolean;
+  reason: string;
+  enabled: boolean;
+  running: boolean;
+  mechanism: string | null;
+  last_error: string | null;
+}
+export const getKioskState = callable<[], KioskState>("get_kiosk_state");
+export const setKioskEnabled = callable<[enabled: boolean], KioskState>("set_kiosk_enabled");
+export const kioskSteamResult = callable<[requestId: number, ok: boolean, result: unknown], boolean>("kiosk_steam_result");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
@@ -109,7 +122,8 @@ export interface DeviceInfo {
   key: string;
   display_name: string;
   chip: string;
-  vendor: "amd" | "intel";
+  vendor: string;
+  arch?: "x86" | "arm";
   tdp_min: number;
   tdp_default: number;
   tdp_max: number;
@@ -294,6 +308,9 @@ export interface LowBatteryTdpHoldState {
 
 export interface TdpState {
   supported: boolean;
+  // "level" on ARM: values are performance levels, never watts.
+  unit?: PowerUnit;
+  level_frequencies?: Record<string, LevelFrequencies> | null;
   auto_supported?: boolean;
   backend: string;
   recovery_pending?: boolean;
@@ -726,6 +743,7 @@ export interface CpuFrequencyPolicyState {
 
 export interface CpuFrequencyState {
   supported: boolean;
+  managed_by_power?: boolean;
   backend: string;
   manual: boolean;
   range_min_khz: number | null;
@@ -769,6 +787,7 @@ export const setCpuFollowGlobal = callable<[follow: boolean, appid: string | nul
 export interface EcoState {
   enabled: boolean;
   tdp_min_w: number;
+  tdp_unit?: PowerUnit;
   affects_boost: boolean;
   // Brightness % to wake back to (the pre-eco snapshot).
   wake_brightness: number;
@@ -843,9 +862,12 @@ export interface ColorState extends ColorPreset {
 
 export interface GpuClockState {
   supported: boolean;
+  managed_by_power?: boolean;
   manual: boolean;
   range_min: number | null;
   range_max: number | null;
+  // Discrete frequencies (MHz) on table-driven GPUs; null when any MHz value is valid.
+  levels?: number[] | null;
   min: number | null;
   max: number | null;
   configured_min: number | null;
@@ -951,6 +973,7 @@ export interface ControllerConfig {
   // Whether we have a known button map for this model. When false,
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
+  extra_buttons?: boolean;
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];
@@ -1026,6 +1049,7 @@ export const runControllerAction =
 export interface GameProfileRow {
   appid: string;
   tdp?: {
+    unit?: PowerUnit;
     pl1: number;
     auto: boolean;
     target_fps: number;
