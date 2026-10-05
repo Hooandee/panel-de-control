@@ -1106,6 +1106,8 @@ export const ptBR: Record<string, string> = {
   "tdp.autotdp.p1": "Escolha os FPS que deseja manter e defina o mesmo limite no jogo.",
   "tdp.autotdp.p2": "Ele começa no TDP inicial escolhido ou em um valor confiável já aprendido para este jogo.",
   "tdp.autotdp.p3": "Ele só reduz a potência de 1 W em 1 W quando tudo está estável e a recupera rapidamente quando necessário.",
+  "tdp.autotdp.p2.level": "Ele começa no nível inicial escolhido ou em um nível confiável já aprendido para este jogo.",
+  "tdp.autotdp.p3.level": "Ele só desce um nível por vez quando tudo está estável e volta a subir rapidamente quando necessário.",
   "tdp.autotdp.confirm": "Ativar Auto-TDP",
   "tdp.autotdp.cancel": "Agora não",
   "tdp.autotdp.once": "Não será exibido novamente.",

@@ -46,7 +46,7 @@ export interface DeckPerfDeps {
   game: () => { appid: string } | null;
   autoModuleOn: () => boolean;
   t: (key: string, vars?: Record<string, string | number>) => string;
-  confirmAutoNotice: (onConfirm: () => void) => void;
+  confirmAutoNotice: (onConfirm: () => void, levels: boolean) => void;
   call: {
     applyPreset: typeof applyPowerPreset;
     setWatts: typeof setTdpWatts;
@@ -116,7 +116,7 @@ export function createDeckPerf(deps: DeckPerfDeps) {
       deps.confirmAutoNotice(() => {
         void deps.call.seenNotice(true);
         void on();
-      });
+      }, s.view.levels);
       return;
     }
     return on();
@@ -163,7 +163,7 @@ export function steamDeckPerf() {
     game: readRunningGame,
     autoModuleOn: () => effectiveEnabled("autoTdp", new Set(getDisabled())),
     t: translate,
-    confirmAutoNotice: (onConfirm) => openAutoTdpNoticeModal({ onConfirm, onCancel: () => {} }),
+    confirmAutoNotice: (onConfirm, levels) => openAutoTdpNoticeModal({ onConfirm, onCancel: () => {}, levels }),
     call: {
       applyPreset: applyPowerPreset,
       setWatts: setTdpWatts,

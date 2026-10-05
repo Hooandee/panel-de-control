@@ -1106,6 +1106,8 @@ export const de: Record<string, string> = {
   "tdp.autotdp.p1": "Wähle die gewünschten FPS und stelle im Spiel dasselbe Limit ein.",
   "tdp.autotdp.p2": "Sie startet mit deiner gewählten TDP oder einem zuverlässigen Wert, der bereits für dieses Spiel gelernt wurde.",
   "tdp.autotdp.p3": "Sie senkt die Leistung nur bei stabilem Spiel schrittweise um 1 W und stellt sie bei Bedarf schnell wieder her.",
+  "tdp.autotdp.p2.level": "Sie startet mit deiner gewählten Stufe oder einer zuverlässigen, die bereits für dieses Spiel gelernt wurde.",
+  "tdp.autotdp.p3.level": "Sie senkt nur bei stabilem Spiel um jeweils eine Stufe und erhöht sie bei Bedarf schnell wieder.",
   "tdp.autotdp.confirm": "Auto‑TDP aktivieren",
   "tdp.autotdp.cancel": "Jetzt nicht",
   "tdp.autotdp.once": "Wird nicht erneut angezeigt.",

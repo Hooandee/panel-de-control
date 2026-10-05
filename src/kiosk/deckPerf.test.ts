@@ -96,7 +96,8 @@ describe("deck performance view", () => {
     const { d, call } = deps(tdpState({ seen_autotdp_notice: false }));
     await createDeckPerf(d)["perf.target"]([45]);
     expect(call.setAuto).not.toHaveBeenCalled();
-    const confirm = (d.confirmAutoNotice as ReturnType<typeof vi.fn>).mock.calls[0][0] as () => void;
+    const [confirm, levels] = (d.confirmAutoNotice as ReturnType<typeof vi.fn>).mock.calls[0] as [() => void, boolean];
+    expect(levels).toBe(true);
     confirm();
     expect(call.seenNotice).toHaveBeenCalledWith(true);
     expect(call.setAuto).toHaveBeenCalledWith(true, "global", null, null);
