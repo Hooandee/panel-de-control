@@ -2,6 +2,7 @@ import glob
 import os
 import time
 
+import device_tree
 from power.drm_fdinfo import DrmFdinfoGpuBusy
 from power.intel import IntelGpuUtil
 
@@ -32,6 +33,7 @@ class PowerReader:
     def __init__(self, root="/", gpu_samples=12, gpu_sample_gap=0.01, clock=time.monotonic):
         self._root = root
         self._clock = clock
+        self._throttle_probes = device_tree.is_arm(root)
         # A source that is missing (every amdgpu node on ARM) is looked for again only after this long.
         self._retry_at = {"amdgpu": clock() + _REPROBE_S, "busy": clock() + _REPROBE_S}
         self._gpu_samples = max(1, gpu_samples)
@@ -142,6 +144,8 @@ class PowerReader:
         return None
 
     def _due(self, source: str) -> bool:
+        if not self._throttle_probes:
+            return True
         now = self._clock()
         if now < self._retry_at[source]:
             return False

@@ -176,6 +176,7 @@ class FanReader:
         self._device_key = device_key
         self._layout_cache: list[tuple] | None = None
         self._layout_until = 0.0
+        self._layout_names: tuple[tuple[str, str], ...] = ()
         self._driving: list[tuple[str, str]] | None = None
 
     def set_desktop(self, enabled: bool) -> None:
@@ -249,10 +250,17 @@ class FanReader:
         """Forget the cached chip layout, after a fan driver is loaded or unloaded."""
         self._layout_cache = None
 
+    def _chip_names(self) -> tuple[tuple[str, str], ...]:
+        return tuple((d, _read(os.path.join(d, "name")) or "") for d in self._chips())
+
     def _layout(self) -> list[tuple]:
+        # Drivers can register again in another order (resume, reload): a chip list or
+        # name that no longer matches means the cached paths point at other sensors.
         now = time.monotonic()
-        if self._layout_cache is None or now >= self._layout_until:
+        names = self._chip_names()
+        if self._layout_cache is None or now >= self._layout_until or names != self._layout_names:
             self._layout_cache = self._scan_layout()
+            self._layout_names = names
             self._layout_until = now + _LAYOUT_TTL_S
             self._driving = None
         return self._layout_cache

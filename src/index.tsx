@@ -33,7 +33,7 @@ import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
 import { startPluginListLocalizer } from "./pluginListLocalizer";
-import { startKioskSteamBridge } from "./kiosk/steamBridge";
+import { startKioskSteamBridgeWhenSupported } from "./kiosk/steamBridge";
 import {
   shutdownUiActivity,
   startQamDocumentActivity,
@@ -158,7 +158,7 @@ export default definePlugin(() => {
   const stopValueToast = startValueToast();
   const stopContextMenu = installGameContextMenu();
   const stopListLocalizer = startPluginListLocalizer();
-  const stopKioskSteamBridge = startKioskSteamBridge();
+  const stopKioskSteamBridge = startKioskSteamBridgeWhenSupported();
   const standardLifecycle = new AbortController();
   const stopThemesRuntime = startThemesRuntime({
     client: themesClient,

@@ -13,9 +13,15 @@ export const KioskSetting: FC = () => {
 
   useEffect(() => {
     let alive = true;
-    const read = () => getKioskState().then((next) => alive && setState(next)).catch(() => {});
+    let id: number | undefined;
+    const read = () => getKioskState().then((next) => {
+      if (!alive) return;
+      setState(next);
+      // Machines without a second screen never gain one: stop asking.
+      if (!next.supported && id !== undefined) window.clearInterval(id);
+    }).catch(() => {});
     read();
-    const id = window.setInterval(read, POLL_MS);
+    id = window.setInterval(read, POLL_MS);
     return () => {
       alive = false;
       window.clearInterval(id);

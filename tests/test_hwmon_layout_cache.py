@@ -87,5 +87,24 @@ def test_a_vanished_driving_sensor_refreshes_the_layout(tmp_path):
     assert reader.driving_temps() == (72.5, None)
     shutil.rmtree(tmp_path / "sys/class/hwmon/hwmon0")
     _chip(tmp_path, 3, "k10temp", temps=[(1, 70000)])
-    assert reader.driving_temps() == (None, None)
     assert reader.driving_temps() == (70.0, None)
+
+
+def test_drivers_that_register_again_in_another_order_are_followed_at_once(tmp_path):
+    _chip(tmp_path, 0, "k10temp", temps=[(1, 72500)])
+    _chip(tmp_path, 1, "nvme", temps=[(1, 40000)])
+    reader = FanReader(root=str(tmp_path))
+    assert reader.driving_temps() == (72.5, None)
+    (tmp_path / "sys/class/hwmon/hwmon0/name").write_text("nvme\n")
+    (tmp_path / "sys/class/hwmon/hwmon0/temp1_input").write_text("41000\n")
+    (tmp_path / "sys/class/hwmon/hwmon1/name").write_text("k10temp\n")
+    (tmp_path / "sys/class/hwmon/hwmon1/temp1_input").write_text("70000\n")
+    assert reader.driving_temps() == (70.0, None)
+
+
+def test_a_new_sensor_chip_shows_up_without_waiting(tmp_path):
+    _chip(tmp_path, 0, "k10temp", temps=[(1, 72500)])
+    reader = FanReader(root=str(tmp_path))
+    assert reader.driving_temps() == (72.5, None)
+    _chip(tmp_path, 1, "amdgpu", temps=[(1, 64000)])
+    assert reader.driving_temps() == (72.5, 64.0)

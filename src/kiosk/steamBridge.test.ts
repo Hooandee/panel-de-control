@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@decky/api", () => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }));
 vi.mock("@decky/ui", () => ({ Navigation: { OpenQuickAccessMenu: vi.fn() } }));
-vi.mock("../api", () => ({ kioskSteamResult: vi.fn(async () => true) }));
+vi.mock("../api", () => ({ kioskSteamResult: vi.fn(async () => true), getKioskState: vi.fn(async () => ({ supported: false })) }));
 vi.mock("../deckyInternal", () => ({ callBackend: vi.fn() }));
 vi.mock("../system/display", () => ({ displayBrightness: { subscribe: () => null, set: () => {} } }));
 vi.mock("../steam/performanceRuntime", () => ({ resolveSteamPerformanceStore: () => null }));
@@ -15,7 +15,7 @@ vi.mock("../system/colores", () => ({
   waitForColoresInstalled: vi.fn(),
 }));
 
-import { BridgeDeps, createBridgeHandlers } from "./steamBridge";
+import { BridgeDeps, createBridgeHandlers, startKioskSteamBridgeWhenSupported } from "./steamBridge";
 
 function deps(patch: Partial<BridgeDeps> = {}): BridgeDeps & { sets: Record<string, number[]> } {
   const sets: Record<string, number[]> = { brightness: [], volume: [] };
@@ -113,5 +113,32 @@ describe("kiosk Steam bridge handlers", () => {
     expect(snapshot["refresh.get"]).toEqual({ ok: true, result: null });
     expect(snapshot["perf.view"]).toEqual({ ok: true, result: { ready: true } });
     expect(snapshot["colores.state"].ok).toBe(true);
+  });
+});
+
+describe("startKioskSteamBridgeWhenSupported", () => {
+  it("never starts on machines without a bottom screen", async () => {
+    const start = vi.fn(() => () => {});
+    startKioskSteamBridgeWhenSupported(async () => false, start);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("starts where the bottom screen exists and stops on unload, even before the answer", async () => {
+    const stopBridge = vi.fn();
+    const start = vi.fn(() => stopBridge);
+    const stop = startKioskSteamBridgeWhenSupported(async () => true, start);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(start).toHaveBeenCalledTimes(1);
+    stop();
+    expect(stopBridge).toHaveBeenCalledTimes(1);
+
+    const late = vi.fn(() => () => {});
+    startKioskSteamBridgeWhenSupported(async () => true, late)();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(late).not.toHaveBeenCalled();
   });
 });

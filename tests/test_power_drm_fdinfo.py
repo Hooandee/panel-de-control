@@ -130,11 +130,14 @@ def test_a_scan_in_flight_is_not_started_twice(tmp_path, monkeypatch):
     assert len(scans) == 1
 
 
-def test_missing_amdgpu_sources_are_not_searched_on_every_read(tmp_path, monkeypatch):
+def test_missing_amdgpu_sources_are_not_searched_on_every_read_on_arm(tmp_path, monkeypatch):
     from power import reader as power_reader
 
     now = {"t": 0.0}
     (tmp_path / "sys/class/devfreq/3d00000.gpu").mkdir(parents=True)
+    midr = tmp_path / "sys/devices/system/cpu/cpu0/regs/identification/midr_el1"
+    midr.parent.mkdir(parents=True)
+    midr.write_text("0x00000000411fd403\n")
     reader = power_reader.PowerReader(root=str(tmp_path), gpu_samples=1, gpu_sample_gap=0, clock=lambda: now["t"])
     searches = []
     monkeypatch.setattr(reader, "_find_amdgpu_dir", lambda: searches.append("amdgpu"))
@@ -146,3 +149,14 @@ def test_missing_amdgpu_sources_are_not_searched_on_every_read(tmp_path, monkeyp
     reader.read()
     reader.read()
     assert sorted(searches) == ["amdgpu", "busy"]
+
+
+def test_pc_looks_for_a_vanished_amdgpu_source_on_every_read_as_before(tmp_path, monkeypatch):
+    from power import reader as power_reader
+
+    reader = power_reader.PowerReader(root=str(tmp_path), gpu_samples=1, gpu_sample_gap=0, clock=lambda: 0.0)
+    searches = []
+    monkeypatch.setattr(reader, "_find_amdgpu_dir", lambda: searches.append("amdgpu"))
+    for _ in range(3):
+        reader.read_watts()
+    assert searches == ["amdgpu"] * 3

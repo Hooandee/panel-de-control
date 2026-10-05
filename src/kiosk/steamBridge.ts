@@ -1,7 +1,7 @@
 import { addEventListener, removeEventListener } from "@decky/api";
 import { Navigation } from "@decky/ui";
 
-import { kioskSteamResult } from "../api";
+import { getKioskState, kioskSteamResult } from "../api";
 import { callBackend } from "../deckyInternal";
 import { displayBrightness } from "../system/display";
 import { systemVolume } from "../system/audio";
@@ -208,5 +208,21 @@ export function startKioskSteamBridge(deps: BridgeDeps = steamDeps()): () => voi
   return () => {
     removeEventListener(KIOSK_STEAM_EVENT, listener);
     stop();
+  };
+}
+
+/** Starts the bridge only on machines that have a bottom screen; the rest never subscribe to Steam. */
+export function startKioskSteamBridgeWhenSupported(
+  supported: () => Promise<boolean> = () => getKioskState().then((state) => state.supported),
+  start: () => () => void = startKioskSteamBridge,
+): () => void {
+  let stop: (() => void) | null = null;
+  let stopped = false;
+  supported().then((yes) => {
+    if (yes && !stopped) stop = start();
+  }).catch(() => {});
+  return () => {
+    stopped = true;
+    stop?.();
   };
 }
