@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const decky = vi.hoisted(() => ({ show: vi.fn(), close: vi.fn() }));
-const focus = vi.hoisted(() => vi.fn(() => true));
+const focus = vi.hoisted(() => vi.fn((element: HTMLElement) => {
+  element.classList.add("gpfocus");
+  return true;
+}));
 
 vi.mock("@decky/ui", () => ({ showModal: decky.show }));
 vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus }) }));
@@ -42,11 +45,11 @@ describe("showModal focus return", () => {
     showModal("modal", window, { fnOnClose: onClose });
     openedProps().fnOnClose();
 
-    return new Promise<void>((resolve) => requestAnimationFrame(() => {
+    return new Promise<void>((resolve) => setTimeout(() => {
       expect(onClose).toHaveBeenCalledOnce();
       expect(focus).toHaveBeenCalledWith(opener);
       resolve();
-    }));
+    }, 20));
   });
 
   it("leaves focus alone for a modal opened from another modal", () => {
@@ -59,14 +62,14 @@ describe("showModal focus return", () => {
     showModal("inner", window);
     openedProps().fnOnClose();
 
-    return new Promise<void>((resolve) => requestAnimationFrame(() => {
+    return new Promise<void>((resolve) => setTimeout(() => {
       expect(focus).not.toHaveBeenCalled();
       outer.fnOnClose();
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         expect(focus).toHaveBeenCalledWith(opener);
         resolve();
-      });
-    }));
+      }, 20);
+    }, 20));
   });
 
   it("finds the opener again by its label after the panel remounts", () => {
@@ -79,11 +82,27 @@ describe("showModal focus return", () => {
     const remounted = panelControl("Glosario", false);
     openedProps().fnOnClose();
 
-    return new Promise<void>((resolve) => requestAnimationFrame(() => {
+    return new Promise<void>((resolve) => setTimeout(() => {
       expect(opener.isConnected).toBe(false);
       expect(focus).toHaveBeenCalledWith(remounted);
       resolve();
-    }));
+    }, 20));
+  });
+
+  it("stops returning focus once the user has moved within the panel", () => {
+    const opener = panelControl("Glosario");
+    setQamDocument(document);
+    decky.show.mockReturnValue({ Close: decky.close, Update: vi.fn() });
+
+    showModal("modal", window);
+    opener.classList.remove("gpfocus");
+    panelControl("Otro");
+    openedProps().fnOnClose();
+
+    return new Promise<void>((resolve) => setTimeout(() => {
+      expect(focus).not.toHaveBeenCalled();
+      resolve();
+    }, 20));
   });
 
   it("closing twice runs the caller's close handler once", () => {

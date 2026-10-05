@@ -4,7 +4,8 @@ import { getQamDocument } from "../qamDocument";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 
 const gamepadNavigation = createThemeNavigationAccess();
-const REMOUNT_FRAMES = 60;
+const RETURN_RETRY_MS = 50;
+const RETURN_WINDOW_MS = 2000;
 let openModals = 0;
 
 function controlLabel(element: Element): string {
@@ -20,19 +21,24 @@ function findOpener(doc: Document, opener: HTMLElement, label: string): HTMLElem
     .find((element) => controlLabel(element) === label) ?? null;
 }
 
+// The reopened QAM registers its navigation tree a moment after the modal closes,
+// later still with a game running; retry until the control really holds focus.
 function returnFocus(doc: Document, opener: HTMLElement, label: string): void {
   const view = doc.defaultView;
   if (!view) return;
-  let frames = 0;
+  const deadline = Date.now() + RETURN_WINDOW_MS;
   const attempt = () => {
-    const target = findOpener(getQamDocument() ?? doc, opener, label);
+    const current = getQamDocument() ?? doc;
+    const target = findOpener(current, opener, label);
+    const moved = current.querySelector(".pdc-root .gpfocus");
+    if (moved && moved !== target) return;
     if (target) {
       gamepadNavigation.focus(target);
-      return;
+      if (target.classList.contains("gpfocus")) return;
     }
-    if (++frames < REMOUNT_FRAMES) view.requestAnimationFrame(attempt);
+    if (Date.now() < deadline) view.setTimeout(attempt, RETURN_RETRY_MS);
   };
-  view.requestAnimationFrame(attempt);
+  view.setTimeout(attempt, 0);
 }
 
 // Steam drops gamepad focus to the QAM tab strip when a modal closes; hand it back
