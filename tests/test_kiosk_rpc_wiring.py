@@ -79,10 +79,12 @@ def test_kiosk_frame_rate_holds_the_readers_only_while_polled(plugin, monkeypatc
     assert asyncio.run(plugin.get_kiosk_live()) == {"fps": 14.0, "reason": "ok", "playing_s": None, "appid": None}
     assert events == ["perf", "stats"]
     asyncio.run(plugin._sync_auto_stats_reader(False))
-    assert events == ["perf", "stats"]
+    assert events == ["perf", "stats", "perf"]
     now[0] += main._KIOSK_FPS_HOLD_S + 1
     asyncio.run(plugin._sync_auto_stats_reader(False))
-    assert events == ["perf", "stats", "perf-stop", "stats-stop"]
+    assert events == ["perf", "stats", "perf", "perf-stop", "stats-stop"]
+    asyncio.run(plugin._sync_auto_stats_reader(False))
+    assert events[-1] == "stats-stop"
 
 
 def test_kiosk_session_names_the_game_without_starting_frame_readers(plugin, monkeypatch):  # noqa: F811
@@ -194,3 +196,9 @@ def test_stock_distro_hostnames_are_not_scrubbed_from_reports(plugin, monkeypatc
     assert plugin._redact_ids()[1] is None
     monkeypatch.setattr(socket, "gethostname", lambda: "juans-thor")
     assert plugin._redact_ids()[1] == "juans-thor"
+
+
+def test_bridge_replies_stay_out_of_the_journal(plugin):  # noqa: F811
+    main = sys.modules["main"]
+    assert not hasattr(main.Plugin.kiosk_steam_result, "__wrapped__")
+    assert hasattr(main.Plugin.kiosk_steam, "__wrapped__")

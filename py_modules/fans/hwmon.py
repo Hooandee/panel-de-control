@@ -261,7 +261,7 @@ class FanReader:
                     vanished = vanished or not os.path.exists(inp)
                     continue
                 if rpm == _INVALID_RPM:
-                    rpm = None  # glitch read — keep the fan, report speed unknown
+                    rpm = None  # glitch read: keep the fan, report speed unknown
                 pwm = _read_int(pwm_path)
                 percent = round(pwm / 255 * 100) if pwm is not None else None
                 raw_fans.append({"chip": name, "label": label, "rpm": rpm,

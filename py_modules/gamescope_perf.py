@@ -4,8 +4,8 @@ The stats FIFO's `fps=` is the compositor's repaint rate averaged over 300 repai
 game's frame rate and goes silent whenever gamescope stops repainting. With the default
 `mangoapp_use_output_timing`, gamescope hands mangoapp and `request_app_performance_stats` the very
 same per-frame delta. Each answer clears the request, so asking again straight away catches every
-frame (measured on the AYN Thor: the deltas cover 100 % of wall time and match mangoapp's own log), and
-frames over their summed duration is the overlay's number.
+frame (the deltas cover all of wall time and match mangoapp's own log), and frames over their summed
+duration is the overlay's number.
 
 The asking runs in a separate system python (this file with --child): inside the plugin the
 interpreter is busy enough (and under FEX on ARM slow enough) that a thread re-asks late and loses the
@@ -67,6 +67,9 @@ class _Wire:
 
     def send(self, data: bytes) -> None:
         self._sock.sendall(data)
+
+    def close(self) -> None:
+        self._sock.close()
 
     def receive(self, timeout: float) -> list[tuple[int, int, bytes]]:
         self._sock.settimeout(timeout)
@@ -136,7 +139,7 @@ def _connect(root: str, skip: set[str]) -> _Wire | None:
             sock.connect(path)
             wire = _Wire(sock)
             connector = bind_control(wire)
-        except OSError:
+        except (OSError, struct.error):
             sock.close()
             continue
         if connector is None or connector in skip:
@@ -164,7 +167,7 @@ def take_screenshot(path: str, root: str = "/", skip: frozenset[str] = frozenset
     except (OSError, ConnectionError, struct.error):
         return False
     finally:
-        wire._sock.close()
+        wire.close()
 
 
 def _ask(wire: _Wire, app_id: int) -> None:
@@ -207,7 +210,7 @@ def pump_frames(
         except (OSError, ConnectionError, struct.error):
             pass
         finally:
-            wire._sock.close()
+            wire.close()
         time.sleep(1.0)
 
 
@@ -329,8 +332,10 @@ class GamescopePerf:
             return None
 
     def start(self) -> None:
+        """Idempotent; also brings back a reader whose helper died."""
         if self._thread is not None and self._thread.is_alive():
             return
+        self._reap()
         self._stop.clear()
         process = self._spawn()
         if process is not None:
@@ -343,8 +348,7 @@ class GamescopePerf:
         self._thread = threading.Thread(target=target, args=args, daemon=True, name="gamescope-perf")
         self._thread.start()
 
-    def stop(self) -> None:
-        self._stop.set()
+    def _reap(self) -> None:
         process, self._process = self._process, None
         if process is not None:
             for stream in (process.stdin, process.stdout):
@@ -354,6 +358,10 @@ class GamescopePerf:
                     pass
             process.kill()
             process.wait(timeout=2.0)
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._reap()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.0)

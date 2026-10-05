@@ -6,10 +6,10 @@ import signal
 import sys
 import threading
 import time
+from xml.sax.saxutils import escape
 
 import lights
 
-# The launcher falls back to the web kiosk on this exit code.
 UNAVAILABLE = 3
 TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
 
@@ -33,7 +33,7 @@ PRESS_RELEASE_S = 0.12
 PICK_CLOSE_S = 0.38
 DIALOG_IDLE_S = 20.0
 DIALOG_OF_TILE = {"perf": "perf", "fps": "fps", "fan": "fan", "hz": "hz", "rgb": "lights"}
-SNAPSHOT_PATH = "/tmp/pdc-kiosk-native.png"
+SNAPSHOT_NAME = "pdc-kiosk-native.png"
 FULL = "full"
 
 
@@ -44,7 +44,7 @@ def _use_bundled_font(assets: str) -> None:
     body = (
         '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'
         '<include ignore_missing="yes">/etc/fonts/fonts.conf</include>'
-        f"<dir>{assets}</dir><cachedir>{cache}</cachedir></fontconfig>"
+        f"<dir>{escape(assets)}</dir><cachedir>{escape(cache)}</cachedir></fontconfig>"
     )
     try:
         with open(conf) as handle:
@@ -274,7 +274,9 @@ class App:
         self.wake.ring()
 
     def _write_snapshot(self) -> None:
-        (self.screen if self.overlay_key is not None else self.scene).write_to_png(SNAPSHOT_PATH)
+        folder = os.environ.get("XDG_RUNTIME_DIR")
+        if folder:
+            (self.screen if self.overlay_key is not None else self.scene).write_to_png(os.path.join(folder, SNAPSHOT_NAME))
 
     def run(self) -> None:
         self.worker.start()

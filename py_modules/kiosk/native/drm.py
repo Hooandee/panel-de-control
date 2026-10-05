@@ -120,17 +120,7 @@ class LeasedPanel:
         # The leased plane is not the CRTC's legacy primary: SetCrtc is refused, atomic commits work.
         if drm.drmSetClientCap(self.fd, _CAP_ATOMIC, 1) != 0:
             raise LeaseError("no_atomic")
-        resources = drm.drmModeGetResources(self.fd)
-        planes = drm.drmModeGetPlaneResources(self.fd)
-        if not resources or not planes or resources.contents.count_crtcs < 1 or planes.contents.count_planes < 1:
-            raise LeaseError("empty_lease")
-        self._crtc = resources.contents.crtcs[0]
-        self._plane = planes.contents.planes[0]
-        connector = drm.drmModeGetConnector(self.fd, resources.contents.connectors[0])
-        if not connector or connector.contents.count_modes < 1:
-            raise LeaseError("no_mode")
-        self._connector = connector.contents.connector_id
-        self._mode = _Mode.from_buffer_copy(connector.contents.modes[0])
+        self._crtc, self._plane, self._connector, self._mode = self._lease_objects()
         self.width, self.height = self._mode.timings[0], self._mode.timings[5]
         self._props = {
             "plane": self._properties(self._plane, _OBJECT_PLANE),
@@ -169,16 +159,42 @@ class LeasedPanel:
             buffer.memory.close()
         self._sock.close()
 
+    def _lease_objects(self) -> tuple[int, int, int, _Mode]:
+        drm = self._drm
+        resources = drm.drmModeGetResources(self.fd)
+        planes = drm.drmModeGetPlaneResources(self.fd)
+        connector = None
+        try:
+            if not resources or not planes or resources.contents.count_crtcs < 1 or planes.contents.count_planes < 1 \
+                    or resources.contents.count_connectors < 1:
+                raise LeaseError("empty_lease")
+            connector = drm.drmModeGetConnector(self.fd, resources.contents.connectors[0])
+            if not connector or connector.contents.count_modes < 1:
+                raise LeaseError("no_mode")
+            return (resources.contents.crtcs[0], planes.contents.planes[0], connector.contents.connector_id,
+                    _Mode.from_buffer_copy(connector.contents.modes[0]))
+        finally:
+            if connector:
+                drm.drmModeFreeConnector(connector)
+            if planes:
+                drm.drmModeFreePlaneResources(planes)
+            if resources:
+                drm.drmModeFreeResources(resources)
+
     def _properties(self, obj: int, kind: int) -> dict[str, int]:
         drm = self._drm
         props = drm.drmModeObjectGetProperties(self.fd, obj, kind)
         if not props:
             raise LeaseError("no_properties")
         found = {}
-        for index in range(props.contents.count_props):
-            prop = drm.drmModeGetProperty(self.fd, props.contents.props[index])
-            if prop:
-                found[prop.contents.name.decode()] = props.contents.props[index]
+        try:
+            for index in range(props.contents.count_props):
+                prop = drm.drmModeGetProperty(self.fd, props.contents.props[index])
+                if prop:
+                    found[prop.contents.name.decode()] = props.contents.props[index]
+                    drm.drmModeFreeProperty(prop)
+        finally:
+            drm.drmModeFreeObjectProperties(props)
         return found
 
     def _dumb_buffer(self) -> Buffer:

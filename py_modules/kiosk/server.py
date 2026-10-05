@@ -69,8 +69,8 @@ class KioskServer:
         self.port = None
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        # Keep-alive: the bottom screen polls several times a second, and a fresh TCP connection
-        # per request costs more than the request under emulation on ARM handhelds.
+        # Keep-alive: the bottom screen polls all the time, and a fresh TCP connection per request
+        # costs more than the request under emulation on ARM handhelds.
         self._clients.add(writer)
         try:
             while True:

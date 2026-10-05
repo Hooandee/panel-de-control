@@ -4321,12 +4321,11 @@ class Plugin:
 
     async def _apply_stats_reader(self):
         kiosk = self._kiosk_wants_fps()
-        if kiosk != getattr(self, "_perf_reader_running", False):
-            self._perf_reader_running = kiosk
-            if kiosk:
-                self._gamescope_perf.start()
-            else:
-                await asyncio.to_thread(self._gamescope_perf.stop)
+        if kiosk:
+            self._gamescope_perf.start()
+        elif getattr(self, "_perf_reader_running", False):
+            await asyncio.to_thread(self._gamescope_perf.stop)
+        self._perf_reader_running = kiosk
         wanted = bool(getattr(self, "_auto_stats_reader_active", False)) or kiosk
         if wanted == getattr(self, "_stats_reader_running", False):
             return
@@ -12838,7 +12837,7 @@ class Plugin:
 
 journal.trace_calls(
     Plugin,
-    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs"}),
+    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},

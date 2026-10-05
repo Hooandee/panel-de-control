@@ -248,3 +248,15 @@ def test_lights_swatch_shows_what_the_leds_show():
     assert lights.swatch({**base, "mode": "effect"}) == lights.SPECTRUM
     assert lights.swatch({**base, "mode": "effect", "effect": {"id": "breathing"}}) == ((255, 0, 0),)
     assert lights.swatch({**base, "power": False, "mode": "solid"}) is None
+
+
+def test_bundled_font_config_is_valid_xml_for_any_plugin_folder(tmp_path, monkeypatch):
+    import xml.etree.ElementTree as ET
+
+    import app
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("FONTCONFIG_FILE", raising=False)
+    app._use_bundled_font("/home/deck/plugins/R&D <Panel>/dist/kiosk")
+    tree = ET.parse(os.environ["FONTCONFIG_FILE"])
+    assert tree.find("dir").text == "/home/deck/plugins/R&D <Panel>/dist/kiosk"

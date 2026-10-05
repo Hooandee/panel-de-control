@@ -97,7 +97,7 @@ def _socket_dir(tmp_path):
 
 
 def test_frame_rate_is_frames_over_their_duration():
-    # Odyssey on the Thor: uneven frames, mangoapp's log said ~12 fps; a mean of 1/frametime said 36.
+    # Uneven frames: ~12 fps really drawn, while a mean of 1/frametime would say 36.
     frames = [20_000_000, 150_000_000, 20_000_000, 140_000_000, 30_000_000, 140_000_000]
     assert round(gp.frame_rate(frames), 1) == 12.0
     assert gp.frame_rate([]) is None
@@ -174,3 +174,24 @@ def test_screenshot_is_requested_from_gamescope_and_confirmed(short_root):
 
 def test_screenshot_reports_failure_without_gamescope(short_root):
     assert gp.take_screenshot("/tmp/x.png", root=str(short_root), timeout=0.5) is False
+
+
+def test_a_dead_helper_is_reaped_and_replaced_on_the_next_start(short_root):
+    run = _socket_dir(short_root)
+    fake = FakeGamescope(str(run / "gamescope-0"), frametimes_ns=[71_428_571] * 400)
+    perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root), python=sys.executable)
+    perf.start()
+    try:
+        first = perf._process
+        first.kill()
+        perf._thread.join(timeout=3)
+        perf.start()
+        assert first.returncode is not None
+        assert perf._process is not first and perf._process.poll() is None
+        deadline = time.monotonic() + 3
+        while perf.fps() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert perf.fps() is not None
+    finally:
+        perf.stop()
+        fake.close()
