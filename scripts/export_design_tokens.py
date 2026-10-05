@@ -39,10 +39,6 @@ def _numbers(source, name):
 
 
 def _argb(value):
-    # Linux surfaces can be restyled through CSS variables; other platforms take the fallback.
-    fallback = re.fullmatch(r"var\(--[\w-]+,\s*(.+)\)", value)
-    if fallback:
-        value = fallback.group(1).strip()
     value = value.strip()
     hex_match = re.fullmatch(r"#([0-9a-fA-F]{6})", value)
     if hex_match:

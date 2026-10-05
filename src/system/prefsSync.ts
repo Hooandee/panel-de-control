@@ -24,17 +24,3 @@ export function planPrefsSync(
   }
   return { heal, migrate };
 }
-
-// A second surface (the kiosk) mirrors the backend exactly and never migrates:
-// its stale local copy must not resurrect a key the QAM already removed.
-export function planFollowBackend(
-  backend: Record<string, string>,
-  local: Record<string, string>,
-): { set: Record<string, string>; remove: string[] } {
-  const set: Record<string, string> = {};
-  for (const [k, v] of Object.entries(backend)) {
-    if (isDurableKey(k) && local[k] !== v) set[k] = v;
-  }
-  const remove = Object.keys(local).filter((k) => isDurableKey(k) && !(k in backend));
-  return { set, remove };
-}

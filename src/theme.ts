@@ -4,8 +4,7 @@ import { currentAccentHex, currentAccentRgb } from "./system/accentColor";
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
 const color = {
   surface: "#060608",
-  // A CSS variable so other surfaces (the kiosk, themes) can restyle every card at once.
-  surfaceRaised: "var(--pdc-surface-raised, #0c0c10)",
+  surfaceRaised: "#0c0c10",
   hairline: "rgba(255,255,255,0.06)",
   textPrimary: "rgba(255,255,255,0.92)",
   textMuted: "rgba(255,255,255,0.45)",
