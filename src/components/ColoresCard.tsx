@@ -1,5 +1,6 @@
 import { FC, ReactNode, useRef } from "react";
-import { Focusable, PanelSectionRow, showModal } from "@decky/ui";
+import { Focusable, PanelSectionRow } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuLightbulb, LuStore } from "react-icons/lu";
 
 import { useI18n } from "../i18n";

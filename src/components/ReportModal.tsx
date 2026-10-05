@@ -1,12 +1,6 @@
 import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  ModalRoot,
-  showModal,
-  Focusable,
-  DialogButton,
-  TextField,
-  getFocusNavController,
-} from "@decky/ui";
+import { ModalRoot, Focusable, DialogButton, TextField, getFocusNavController } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuBug, LuLightbulb } from "react-icons/lu";
 
 import { useI18n } from "../i18n";

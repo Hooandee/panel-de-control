@@ -29,7 +29,7 @@ const ColorBlock: FC = () => {
   const state = color.state;
   if (!state?.supported) return null;
   const active = !isNativeColor(state);
-  const chip = (on: boolean) => ({ ...segmentItemStyle(on), flex: 1, padding: "6px 4px" });
+  const chip = (on: boolean) => ({ ...segmentItemStyle(on), flex: "1 1 0", minWidth: 0, padding: "6px 0", fontSize: theme.font.caption });
   return (
     <>
       <PanelSectionRow>
@@ -40,7 +40,7 @@ const ColorBlock: FC = () => {
               {t("display.look")}
             </span>
           </div>
-          <Focusable style={segmentGroupStyle}>
+          <Focusable style={{ ...segmentGroupStyle, gap: 2 }}>
             {state.presets.map((key) => (
               <Focusable key={key} style={chip(state.active_preset === key)}
                 onActivate={() => color.onPreset(key)} onClick={() => color.onPreset(key)}>
@@ -72,19 +72,19 @@ const ColorBlock: FC = () => {
         summary={isCalibrated(state) ? t("display.custom") : t("display.native")}
       >
         <AdvancedColor state={state} onChange={color.onCalibration} />
-        {active && (
-          <Focusable
-            style={{
-              display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
-              borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
-              boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-              color: theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
-            }}
-            onActivate={color.onReset} onClick={color.onReset}
-          >
-            {t("display.reset")}
-          </Focusable>
-        )}
+        <Focusable
+          aria-disabled={!active}
+          style={{
+            display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
+            borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
+            boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+            color: theme.color.textPrimary, fontSize: theme.font.body,
+            cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
+          }}
+          onActivate={active ? color.onReset : undefined} onClick={active ? color.onReset : undefined}
+        >
+          {t("display.reset")}
+        </Focusable>
       </Collapsible>
     </>
   );

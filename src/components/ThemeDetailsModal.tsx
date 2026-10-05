@@ -1,4 +1,5 @@
-import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, Navigation, showModal } from "@decky/ui";
+import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, Navigation } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 

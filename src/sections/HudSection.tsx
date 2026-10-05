@@ -1,5 +1,6 @@
 import { FC, ReactNode, useEffect, useState } from "react";
-import { PanelSectionRow, ToggleField, TextField, Spinner, showModal } from "@decky/ui";
+import { PanelSectionRow, ToggleField, TextField, Spinner } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
   LuChevronUp, LuChevronDown, LuChevronRight, LuX, LuRotateCcw, LuRefreshCw,

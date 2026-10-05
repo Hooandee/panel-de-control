@@ -1,5 +1,6 @@
 import { FC, useRef } from "react";
-import { DialogButton, showModal } from "@decky/ui";
+import { DialogButton } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuPuzzle } from "react-icons/lu";
 
 import type {

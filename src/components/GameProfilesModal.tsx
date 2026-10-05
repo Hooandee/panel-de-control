@@ -1,5 +1,6 @@
 import { FC, useEffect, useMemo, useState } from "react";
-import { ModalRoot, showModal, Focusable } from "@decky/ui";
+import { ModalRoot, Focusable } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuTrash2, LuGamepad2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";

@@ -1,5 +1,6 @@
 import { FC, useState } from "react";
-import { DialogButton, ModalRoot, TextField, showModal } from "@decky/ui";
+import { DialogButton, ModalRoot, TextField } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";

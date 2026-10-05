@@ -1,5 +1,6 @@
 import { FC, useEffect, useMemo, useRef, useState } from "react";
-import { Focusable, ModalRoot, SliderField, showModal } from "@decky/ui";
+import { Focusable, ModalRoot, SliderField } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 
 import { DesktopFanChannel, getFanCurveState, setDesktopFanCurve } from "../api";
 import { GEOM, Point, clampMonotonic, percentToPwm, pwmToPercent } from "../fans/curve";

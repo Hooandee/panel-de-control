@@ -1,5 +1,6 @@
 import { FC, Fragment, ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
+import { ModalRoot, Focusable, ButtonItem } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
