@@ -9,7 +9,7 @@ const RETURN_WINDOW_MS = 2000;
 let openModals = 0;
 
 function controlLabel(element: Element): string {
-  return (element.getAttribute("aria-label") || element.textContent || "").trim();
+  return (element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || "").trim();
 }
 
 // Steam closes the QAM under a modal and reopens it afterwards, which remounts the

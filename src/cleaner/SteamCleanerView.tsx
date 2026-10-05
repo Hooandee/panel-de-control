@@ -93,7 +93,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
   const installation = game.entries[0].installation;
   return (
     <div style={{ ...theme.card, ...column, gap: 0, padding: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <CleanerAction label={t(canSelectCaches ? "cleaner.selectGameCaches" : "cleaner.chooseGameData", { name })} checked={canSelectCaches ? allSelected ? true : partiallySelected ? "mixed" : false : undefined} disabled={disabled || selectable.length === 0} onActivate={canSelectCaches ? onCaches : () => setOpen(true)} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
             <GameCover urls={game.coverUrls} name={name} width={38} />
@@ -109,7 +109,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
         <div style={{ width: 36, flexShrink: 0 }}>
           <CleanerAction label={t("cleaner.gameDetails", { name })} onActivate={() => setOpen((value) => !value)} style={{ padding: 8, background: "transparent", boxShadow: "none" }}><Chevron size={18} /></CleanerAction>
         </div>
-      </div>
+      </Focusable>
       {selectedCount > 0 && <div style={{ ...caption, color: theme.color.accent, padding: "2px 8px 6px" }}>{selectedKinds.map((kind) => t(`cleaner.kind.${kind}`)).join(" · ")}</div>}
       {open && <div style={{ ...column, padding: "6px" }}>
         {(!game.name || game.entries.some((entry) => entry.requires_manual_selection)) && <div style={caption}>{t("cleaner.steamIdentifier", { id: game.entries[0].appid })}</div>}
@@ -224,11 +224,11 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
         </div>}
         {hasScanData && !scanId && !busy && <CleanerAction label={t("cleaner.scanAfterCleanup")} primary onActivate={() => void controller.scan()}><LuRefreshCw size={16} />{t("cleaner.scanAfterCleanup")}</CleanerAction>}
         {hasScanData && !calculatingGames && <>
-          <div style={{ display: "flex", gap: 8 }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}><CleanerAction label={t("cleaner.filterLabel")} onActivate={() => setFilter((value) => FILTERS[(FILTERS.indexOf(value) + 1) % FILTERS.length])} style={{ justifyContent: "flex-start", paddingInline: 9 }}><LuFilter size={14} style={{ flexShrink: 0 }} /><span>{t(`cleaner.filter.${filter}`)}</span><span style={{ ...caption, marginLeft: "auto" }}>{shown.length}</span></CleanerAction></div>
             <div style={{ width: 36, flexShrink: 0 }}><CleanerAction label={`${t("cleaner.sortLabel")}: ${t(`cleaner.sort.${sort}`)}`} onActivate={() => setSort((value) => value === "size" ? "name" : "size")} style={{ padding: 8 }}><LuArrowDownUp size={15} /></CleanerAction></div>
             <div style={{ width: 42, flexShrink: 0 }}><CleanerAction label={t("cleaner.search")} onActivate={() => { setSearchOpen((value) => !value); setQuery(""); }} style={{ padding: 10 }}><LuSearch size={16} color={searchOpen ? theme.color.accent : undefined} /></CleanerAction></div>
-          </div>
+          </Focusable>
           {searchOpen && <TextField label={t("cleaner.search")} value={query} onChange={(event) => setQuery(event.target.value)} />}
           {helpVisible && <div style={{ ...theme.card, ...column, gap: 6, padding: "9px 10px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -240,10 +240,10 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
             </div>
             <CleanerAction label={t("cleaner.help.dismiss")} onActivate={() => { writeFlag(HELP_DISMISSED_KEY, true); setHelpVisible(false); }} style={{ minHeight: 28, padding: "5px 8px", background: "transparent", boxShadow: "none", color: theme.color.accent }}>{t("cleaner.help.dismiss")}</CleanerAction>
           </div>}
-          <div style={{ display: "flex", gap: 8 }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: 8 }}>
             <CleanerAction label={t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")} disabled={selectionDisabled || shownCaches.length === 0} onActivate={() => setSelected((value) => toggleCaches(shownEntries, value))} style={{ padding: "5px 3px", minHeight: 30, background: "transparent", boxShadow: "none", justifyContent: "flex-start", color: theme.color.textMuted }}><LuCheck size={15} style={{ flexShrink: 0 }} /><span>{t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")}</span></CleanerAction>
             {selected.size > 0 && <div style={{ width: 32, flexShrink: 0 }}><CleanerAction label={t("cleaner.clearSelection")} disabled={selectionDisabled} onActivate={() => setSelected(new Set())} style={{ padding: 6, minHeight: 30, background: "transparent", boxShadow: "none" }}><LuX size={15} /></CleanerAction></div>}
-          </div>
+          </Focusable>
           {shown.map((game) => <GameRow key={game.id} game={game} selected={selected} disabled={selectionDisabled} onCaches={() => setSelected((value) => toggleCaches(game.entries, value))} onEntry={(entry) => setSelected((value) => toggleEntry(entry, value))} />)}
           {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? (state?.entries.length ? "cleaner.noCleanable" : "cleaner.empty") : filter === "cleanable" && !query ? "cleaner.noCleanable" : filter === "not_installed" && !query ? "cleaner.noRecommendations" : "cleaner.noMatch")}</div>}
           {(plan || chosen.length > 0) && <CleanerActionTray>

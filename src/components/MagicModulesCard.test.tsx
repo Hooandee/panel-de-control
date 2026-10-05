@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
-import { ReactNode } from "react";
+import { ReactNode, CSSProperties } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const decky = vi.hoisted(() => ({ modal: null as ReactNode | null, showCount: 0 }));
 
 vi.mock("@decky/ui", () => ({
+  Focusable: ({ children, style, "flow-children": flow }: { children?: ReactNode; style?: CSSProperties; "flow-children"?: string }) => (
+    <div style={style} data-flow={flow}>{children}</div>
+  ),
   DialogButton: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button disabled={disabled} onClick={onClick}>{children}</button>
   ),

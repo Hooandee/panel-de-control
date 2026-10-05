@@ -49,7 +49,7 @@ export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLa
           ))}
         </Focusable>
       ) : (
-        <Focusable style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           {resolved.visible.map((it) => (
             <Focusable key={it.id} style={rowChipStyle(it.active)} onActivate={() => onPick(it)} onClick={() => onPick(it)}>
               {presetIconNode(it.icon, 15)}

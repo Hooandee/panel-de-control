@@ -54,7 +54,7 @@ const ExpansionRow: FC<{
 }> = ({ label, icon, indent = 0, hidden, onToggleHide, off, onToggleOff }) => {
   const { t } = useI18n();
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm + indent, opacity: off || hidden ? 0.55 : 1 }}>
+    <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm + indent, opacity: off || hidden ? 0.55 : 1 }}>
       <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
       <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={onToggleHide}>
@@ -67,7 +67,7 @@ const ExpansionRow: FC<{
       ) : (
         <span style={{ width: 30 }} />
       )}
-    </div>
+    </Focusable>
   );
 };
 
@@ -93,14 +93,14 @@ const AccentPicker: FC = () => {
   return (
     <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+      <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
         <AccentSwatch id={THEME_ACCENT_ID} hex={followed} on={active.id === THEME_ACCENT_ID} label={t("accent.default")}>
           <LuSparkles size={13} color="#fff" />
         </AccentSwatch>
         {ACCENTS.map((a) => (
           <AccentSwatch key={a.id} id={a.id} hex={a.hex} on={a.id === active.id} label={t(`accent.${a.id}`)} />
         ))}
-      </div>
+      </Focusable>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.accentHint")}</span>
     </div>
   );
@@ -231,7 +231,7 @@ const CustomizeBody: FC = () => {
             const name = v.name || t("customize.views.namePlaceholder");
             return (
               <div key={id} style={{ ...theme.card, padding: `${theme.space.sm + 2}px ${theme.space.md}px`, opacity: hidden ? 0.55 : 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+                <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
                   <Focusable
                     style={{ display: "flex", alignItems: "center", gap: theme.space.sm, flex: 1, minWidth: 0, cursor: editing ? "default" : "pointer" }}
                     aria-label={name}
@@ -269,7 +269,7 @@ const CustomizeBody: FC = () => {
                       </IconAction>
                     </>
                   )}
-                </div>
+                </Focusable>
               </div>
             );
           }
@@ -287,7 +287,7 @@ const CustomizeBody: FC = () => {
           const stateNote = off ? t("customize.state.disabled") : hidden ? t("customize.state.background") : "";
           return (
             <div key={id} style={{ ...theme.card, padding: `${theme.space.sm + 2}px ${theme.space.md}px`, opacity: off ? 0.5 : 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+              <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
                 <Focusable
                   style={{ display: "flex", alignItems: "center", gap: theme.space.sm, flex: 1, minWidth: 0, cursor: expandable ? "pointer" : "default" }}
                   aria-label={meta ? t(meta.labelKey) : id}
@@ -341,7 +341,7 @@ const CustomizeBody: FC = () => {
                     )}
                   </>
                 )}
-              </div>
+              </Focusable>
 
               {open && (
                 <div style={{ marginTop: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}`, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
