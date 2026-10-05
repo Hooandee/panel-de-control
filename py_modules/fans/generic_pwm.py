@@ -174,6 +174,9 @@ def pwm_fan_thermally_bound(root: str = "/") -> bool:
     if not devices:
         return False
     for link in glob.glob(os.path.join(root, _THERMAL, "thermal_zone*", "cdev[0-9]*")):
-        if os.path.islink(link) and os.path.basename(os.readlink(link)) in devices:
-            return True
+        try:
+            if os.path.basename(os.readlink(link)) in devices:
+                return True
+        except OSError:
+            continue
     return False

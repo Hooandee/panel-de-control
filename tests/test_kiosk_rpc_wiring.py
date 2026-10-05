@@ -116,6 +116,20 @@ def test_kiosk_brightness_is_saved_only_when_the_panel_took_it(plugin, monkeypat
     assert plugin._settings["kiosk_brightness"] == 0.42
 
 
+def test_kiosk_brightness_drags_apply_without_writing_settings(plugin, monkeypatch):  # noqa: F811
+    async def took(value):
+        return value
+
+    saves = []
+    monkeypatch.setattr(plugin._kiosk, "set_brightness", took)
+    monkeypatch.setattr(plugin, "_save", lambda: saves.append(dict(plugin._settings)))
+    for value in (0.3, 0.35, 0.4):
+        assert asyncio.run(plugin.set_kiosk_brightness(value, False)) == {"value": value}
+    assert saves == []
+    asyncio.run(plugin.set_kiosk_brightness(0.4))
+    assert [saved["kiosk_brightness"] for saved in saves] == [0.4]
+
+
 def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811
     monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: None)
     monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: None)

@@ -68,3 +68,24 @@ def test_driving_temps_match_the_full_read_on_an_amd_handheld(tmp_path):
 def test_machines_without_known_sensors_fall_back_to_the_full_read(tmp_path):
     _chip(tmp_path, 0, "acpitz", temps=[(1, 50000)])
     assert FanReader(root=str(tmp_path)).driving_temps() is None
+
+
+def test_desktop_mode_reranks_the_driving_sensors(tmp_path):
+    _chip(tmp_path, 0, "steamdeck_hwmon", temps=[(1, 61000)])
+    (tmp_path / "sys/class/hwmon/hwmon0/temp1_label").write_text("CPU Temp\n")
+    reader = FanReader(root=str(tmp_path), device_key="steam_machine")
+    assert reader.driving_temps() is None
+    reader.set_desktop(True)
+    assert reader.driving_temps() == (61.0, None)
+
+
+def test_a_vanished_driving_sensor_refreshes_the_layout(tmp_path):
+    import shutil
+
+    _chip(tmp_path, 0, "k10temp", temps=[(1, 72500)])
+    reader = FanReader(root=str(tmp_path))
+    assert reader.driving_temps() == (72.5, None)
+    shutil.rmtree(tmp_path / "sys/class/hwmon/hwmon0")
+    _chip(tmp_path, 3, "k10temp", temps=[(1, 70000)])
+    assert reader.driving_temps() == (None, None)
+    assert reader.driving_temps() == (70.0, None)

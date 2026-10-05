@@ -1215,9 +1215,9 @@ class Plugin:
     async def get_kiosk_brightness(self) -> dict:
         return {"value": await self._kiosk.brightness()}
 
-    async def set_kiosk_brightness(self, value: float) -> dict:
+    async def set_kiosk_brightness(self, value: float, persist: bool = True) -> dict:
         applied = await self._kiosk.set_brightness(float(value))
-        if applied is not None:
+        if applied is not None and persist:
             self._settings["kiosk_brightness"] = applied
             self._save()
         return {"value": applied}

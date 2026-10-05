@@ -503,7 +503,7 @@ class App:
                 if deck.hit(x, y) == "bri":
                     deck.toggle_bri_target()
             elif deck.dragging:
-                self._fader(deck.dragging, y)
+                self._fader(deck.dragging, y, final=True)
                 deck.dragging = None
                 deck.pressed = None
             elif target and deck.hit(x, y) == target:
@@ -675,13 +675,15 @@ class App:
             pass
         self.worker.act("steam", "kiosk_steam", "screenshot", [])
 
-    def _fader(self, name: str, y: float) -> None:
+    def _fader(self, name: str, y: float, final: bool = False) -> None:
         value = round(self.deck.fader_value(name, y), 3)
         if name == "bri" and self.deck.bri_target == "bottom":
             if self.deck.state.bottom_brightness != value:
                 self.deck.state.bottom_brightness = value
-                self.worker.latest("bottom_brightness", SCALAR_GAP_S, "bottom_brightness", "set_kiosk_brightness", value)
+                self.worker.latest("bottom_brightness", SCALAR_GAP_S, "bottom_brightness", "set_kiosk_brightness", value, False)
                 self.dirty = True
+            if final:
+                self.worker.act("bottom_brightness", "set_kiosk_brightness", value, True)
             return
         kind = "brightness" if name == "bri" else "volume"
         if getattr(self.deck.state, kind) != value:

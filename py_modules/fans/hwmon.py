@@ -174,9 +174,13 @@ class FanReader:
         self._root = root
         self._desktop = bool(desktop)
         self._device_key = device_key
+        self._layout_cache: list[tuple] | None = None
+        self._layout_until = 0.0
+        self._driving: list[tuple[str, str]] | None = None
 
     def set_desktop(self, enabled: bool) -> None:
         self._desktop = bool(enabled)
+        self._driving = None
 
     def _chips(self) -> list[str]:
         return sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*")))
@@ -210,8 +214,7 @@ class FanReader:
         """(cpu, gpu) reading only the inputs ranked CPU/GPU, for loops that poll every second.
         None when this machine has no recognized CPU/GPU sensor (callers then do a full read)."""
         layout = self._layout()
-        if getattr(self, "_driving_for", None) is not layout:
-            self._driving_for = layout
+        if self._driving is None:
             self._driving = [
                 (label, inp)
                 for name, _fans, temps in layout
@@ -226,6 +229,8 @@ class FanReader:
             milli = _read_int(inp)
             if milli is not None:
                 hottest[label] = max(hottest.get(label, float("-inf")), round(milli / 1000, 1))
+            elif not os.path.exists(inp):
+                self.invalidate()
         return hottest.get("CPU"), hottest.get("GPU")
 
     def fan_rpms(self) -> list[int]:
@@ -236,6 +241,8 @@ class FanReader:
                 rpm = _read_int(inp)
                 if rpm is not None and rpm != _INVALID_RPM:
                     rpms.append(rpm)
+                elif rpm is None and not os.path.exists(inp):
+                    self.invalidate()
         return rpms
 
     def invalidate(self) -> None:
@@ -244,9 +251,10 @@ class FanReader:
 
     def _layout(self) -> list[tuple]:
         now = time.monotonic()
-        if getattr(self, "_layout_cache", None) is None or now >= self._layout_until:
+        if self._layout_cache is None or now >= self._layout_until:
             self._layout_cache = self._scan_layout()
             self._layout_until = now + _LAYOUT_TTL_S
+            self._driving = None
         return self._layout_cache
 
     def read(self) -> dict:
@@ -275,7 +283,7 @@ class FanReader:
                 raw_temps.append({"chip": name, "label": label, "celsius": round(milli / 1000, 1)})
 
         if vanished:
-            self._layout_cache = None
+            self.invalidate()
 
         fans = curate_fans(raw_fans)
         temps = curate_temps(raw_temps, desktop=self._desktop, device_key=self._device_key)
