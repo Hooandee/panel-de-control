@@ -355,7 +355,6 @@ DEFAULTS = {
     # Unit of the saved power values: "W" on PC, "level" on ARM.
     "tdp_unit": "W",
     "kiosk_enabled": False,
-    # Secondary panel level the user chose (fraction); None leaves the driver's own level.
     "kiosk_brightness": None,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
@@ -1179,8 +1178,6 @@ class Plugin:
         }
 
     async def get_kiosk_session(self) -> dict:
-        """The running game and how long it has run, without starting any frame reader: the native
-        bottom screen reads frames from gamescope itself."""
         since = getattr(self, "_current_appid_at", None)
         playing_s = (
             round(time.monotonic() - since)
