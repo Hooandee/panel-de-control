@@ -714,9 +714,10 @@ class App:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 3:
+    url = os.environ.get("PDC_KIOSK_URL")
+    if len(argv) < 2 or not url:
         return UNAVAILABLE
-    url, assets = argv[1], argv[2]
+    assets = argv[1]
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     sys.path.insert(1, os.path.dirname(os.path.dirname(here)))  # gamescope_perf lives in py_modules

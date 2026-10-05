@@ -61,11 +61,14 @@ def test_bottom_screen_is_the_native_app_with_the_url_from_the_unit_env(tmp_path
     log = tmp_path / "log"
     native = tmp_path / "Panel de Control" / "app.py"
     native.parent.mkdir()
-    native.write_text(f"import sys\nopen({str(log)!r}, 'w').write(' '.join(sys.argv[1:]))\n")
+    native.write_text(
+        "import os, sys\n"
+        f"open({str(log)!r}, 'w').write(os.environ['PDC_KIOSK_URL'] + ' ' + ' '.join(sys.argv[1:]))\n"
+    )
     argv = launch_argv(native=str(native), assets="/assets dir")
-    argv[-1] = argv[-1].replace("/usr/bin/python3", sys.executable)
+    assert argv[0] == "/usr/bin/python3" and not any("?k=" in part for part in argv)
     env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "PATH": "/usr/bin:/bin"}
-    assert subprocess.run(argv, env=env, check=False, timeout=20).returncode == 0
+    assert subprocess.run([sys.executable, *argv[1:]], env=env, check=False, timeout=20).returncode == 0
     assert log.read_text() == "http://127.0.0.1:1/?k=t /assets dir"
 
 

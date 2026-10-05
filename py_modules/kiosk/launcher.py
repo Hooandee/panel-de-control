@@ -1,7 +1,6 @@
 """Start, watch and stop the bottom screen as a transient user unit in the game session."""
 
 import os
-import shlex
 import subprocess
 from typing import Callable
 
@@ -9,6 +8,7 @@ from kiosk.displays import SYSTEM_PYTHON, SecondaryDisplay
 from user_session import spawn_args
 
 UNIT = "pdc-kiosk"
+URL_ENV = "PDC_KIOSK_URL"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 NATIVE = os.path.join(_HERE, "native", "app.py")
 NATIVE_ASSETS = os.path.join(os.path.dirname(os.path.dirname(_HERE)), "dist", "kiosk")
@@ -24,8 +24,8 @@ def _default_runner(cmd: list[str], env: dict, identity: dict) -> tuple[int, str
         return 1, str(exc)
 
 
-def launch_argv(url_var: str = "PDC_KIOSK_URL", native: str = NATIVE, assets: str = NATIVE_ASSETS) -> list[str]:
-    return ["/bin/sh", "-c", f'exec {SYSTEM_PYTHON} {shlex.quote(native)} "${url_var}" {shlex.quote(assets)}']
+def launch_argv(native: str = NATIVE, assets: str = NATIVE_ASSETS) -> list[str]:
+    return [SYSTEM_PYTHON, native, assets]
 
 
 NICE = 10
@@ -47,7 +47,8 @@ class KioskLauncher:
             "systemd-run", "--user", f"--unit={UNIT}", "--collect", "--quiet",
             # The bottom screen must never take CPU time from the game on the top one.
             f"--nice={NICE}", f"--property=CPUWeight={CPU_WEIGHT}",
-            f"--setenv=PDC_KIOSK_URL={url}",
+            # In the environment, not argv: any local user can read a command line.
+            f"--setenv={URL_ENV}={url}",
             *launch_argv(),
         ])
         return code == 0, out
