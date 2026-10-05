@@ -86,6 +86,18 @@ export interface ProtonCaps {
   found: boolean;
 }
 export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
+export interface KioskState {
+  supported: boolean;
+  available: boolean;
+  reason: string;
+  enabled: boolean;
+  running: boolean;
+  mechanism: string | null;
+  last_error: string | null;
+}
+export const getKioskState = callable<[], KioskState>("get_kiosk_state");
+export const setKioskEnabled = callable<[enabled: boolean], KioskState>("set_kiosk_enabled");
+export const kioskSteamResult = callable<[requestId: number, ok: boolean, result: unknown], boolean>("kiosk_steam_result");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");

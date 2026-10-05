@@ -9,6 +9,7 @@ on:
       - "release-please-config.json"
       - "shared/fixtures/**"
       - "src/**"
+      - "kiosk/**"
       - "py_modules/**"
       - "main.py"
       - "package.json"

@@ -278,3 +278,55 @@ def test_desktop_drives_only_spinning_board_headers_above_the_floor(tmp_path):
 def test_desktop_without_board_fans_is_read_only(tmp_path):
     _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
     assert isinstance(select_fan_backend(_desktop(), root=str(tmp_path)), NullFanBackend)
+
+
+def _pwm_fan_board(root, bound=False):
+    """An ARM board with the kernel pwm-fan driver: enable 3 = regulator off, no automatic."""
+    chip = _mk_pwm_chip(root, name="pwmfan", enable="3")
+    thermal = os.path.join(root, "sys/class/thermal")
+    cooling = os.path.join(thermal, "cooling_device3")
+    os.makedirs(cooling)
+    _w(cooling, "type", "pwm-fan")
+    zone = os.path.join(thermal, "thermal_zone0")
+    os.makedirs(zone)
+    if bound:
+        os.symlink("../cooling_device3", os.path.join(zone, "cdev0"))
+    return chip
+
+
+def test_pwm_fan_without_a_thermal_binding_has_no_firmware_automatic(tmp_path):
+    _pwm_fan_board(tmp_path)
+    assert _backend(tmp_path).firmware_auto is False
+
+
+def test_pwm_fan_bound_to_a_thermal_zone_keeps_the_kernel_automatic(tmp_path):
+    _pwm_fan_board(tmp_path, bound=True)
+    backend = _backend(tmp_path)
+    assert backend.firmware_auto is True
+    assert backend.set_auto()["ok"] is True
+
+
+def test_pc_fan_chips_keep_their_firmware_automatic(tmp_path):
+    _mk_pwm_chip(tmp_path)
+    assert _backend(tmp_path).firmware_auto is True
+
+
+def test_auto_without_a_firmware_automatic_runs_panels_own_curve(tmp_path):
+    chip = _pwm_fan_board(tmp_path)
+    backend = _backend(tmp_path, temp=70.0)
+    result = backend.set_auto()
+    assert result["ok"] is True
+    assert _r(chip, "pwm1_enable") == "1"
+    from fans.presets import RESOLVED
+    expected = dict(RESOLVED["balanced"])[70]
+    assert int(_r(chip, "pwm1")) == expected
+
+
+def test_letting_go_without_a_firmware_automatic_leaves_the_fan_spinning(tmp_path):
+    chip = _pwm_fan_board(tmp_path)
+    backend = _backend(tmp_path, temp=40.0)
+    backend.set_auto()
+    result = backend.restore_auto()
+    assert result["ok"] is True
+    assert _r(chip, "pwm1_enable") == "1"
+    assert _r(chip, "pwm1") == str(generic_pwm.FAILSAFE_DUTY)

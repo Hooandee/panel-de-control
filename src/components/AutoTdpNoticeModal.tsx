@@ -9,6 +9,7 @@ import { FocusRoot } from "./FocusRoot";
 interface Props {
   onConfirm: () => void;
   onCancel: () => void;
+  levels?: boolean;
   closeModal?: () => void;
 }
 
@@ -34,8 +35,9 @@ const Point: FC<{ icon: ReactNode; color: string; text: string }> = ({ icon, col
   </div>
 );
 
-const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, closeModal }) => {
+const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, levels, closeModal }) => {
   const { t } = useI18n();
+  const unit = levels ? ".level" : "";
   return (
     <div
       style={{
@@ -79,8 +81,8 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, closeModal }) => {
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
         <Point icon={<LuTarget size={15} />} color={theme.color.accent} text={t("tdp.autotdp.p1")} />
-        <Point icon={<LuGauge size={15} />} color={theme.color.accent} text={t("tdp.autotdp.p2")} />
-        <Point icon={<LuShieldCheck size={15} />} color={theme.color.ok} text={t("tdp.autotdp.p3")} />
+        <Point icon={<LuGauge size={15} />} color={theme.color.accent} text={t(`tdp.autotdp.p2${unit}`)} />
+        <Point icon={<LuShieldCheck size={15} />} color={theme.color.ok} text={t(`tdp.autotdp.p3${unit}`)} />
       </div>
 
       <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
@@ -108,14 +110,14 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, closeModal }) => {
   );
 };
 
-const AutoTdpNoticeModal: FC<Props> = ({ onConfirm, onCancel, closeModal }) => (
+const AutoTdpNoticeModal: FC<Props> = ({ onConfirm, onCancel, levels, closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
     <FocusRoot>
-      <AutoTdpNoticeBody onConfirm={onConfirm} onCancel={onCancel} closeModal={closeModal} />
+      <AutoTdpNoticeBody onConfirm={onConfirm} onCancel={onCancel} levels={levels} closeModal={closeModal} />
     </FocusRoot>
   </ModalRoot>
 );
 
-export function openAutoTdpNoticeModal(opts: { onConfirm: () => void; onCancel: () => void }): void {
-  showModal(<AutoTdpNoticeModal onConfirm={opts.onConfirm} onCancel={opts.onCancel} />, window);
+export function openAutoTdpNoticeModal(opts: { onConfirm: () => void; onCancel: () => void; levels?: boolean }): void {
+  showModal(<AutoTdpNoticeModal onConfirm={opts.onConfirm} onCancel={opts.onCancel} levels={opts.levels} />, window);
 }

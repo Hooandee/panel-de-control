@@ -34,3 +34,10 @@ it("keeps the experimental status visible before enabling AutoTDP", () => {
 
   expect(screen.getByText("tdp.auto.experimental")).toBeTruthy();
 });
+
+it("talks about levels instead of watts on machines that step in levels", () => {
+  openAutoTdpNoticeModal({ onConfirm: vi.fn(), onCancel: vi.fn(), levels: true });
+  render(captured.modal);
+  expect(screen.getByText("tdp.autotdp.p3.level")).toBeTruthy();
+  expect(screen.queryByText("tdp.autotdp.p3")).toBeNull();
+});

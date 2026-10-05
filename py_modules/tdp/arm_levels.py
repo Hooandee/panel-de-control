@@ -31,6 +31,10 @@ def _cooling_states(root):
     return states
 
 
+def _boost_on(root):
+    return read_str(os.path.join(root, _CPUFREQ, "boost")) != "0"
+
+
 class _Domain:
     def __init__(self, root, path, cpu):
         self.root = root
@@ -50,18 +54,20 @@ class _Domain:
             self._boost = set()
             self.cooling = f"devfreq-{os.path.basename(path)}"
 
-    def table(self):
-        boost_on = read_str(os.path.join(self.root, _CPUFREQ, "boost")) != "0"
+    def table(self, boost_on=None):
+        if boost_on is None:
+            boost_on = _boost_on(self.root)
         values = self._base | (self._boost if boost_on else set())
         return tuple(sorted(values))
 
-    def ceiling(self, level):
-        table = self.table()
+    def ceiling(self, level, boost_on=None):
+        table = self.table(boost_on)
         fraction = _FLOOR + (1 - _FLOOR) * (level - 1) / (_LEVELS - 1)
         return _snap_down(table, int(table[-1] * fraction))
 
-    def holds(self, ceiling, cooling_states):
-        observed = read_int(self.max_node)
+    def holds(self, ceiling, cooling_states, observed=None):
+        if observed is None:
+            observed = read_int(self.max_node)
         if observed == ceiling:
             return True
         # Thermal cooling lowers the effective limit below what was written.
@@ -111,13 +117,16 @@ class ArmPerformanceLevels(TDPBackend):
     def get_limits(self):
         return TdpLimits(min_w=1, default_w=6, max_w=_LEVELS, max_ac_w=_LEVELS)
 
-    def ceilings(self, level):
-        return [domain.ceiling(level) for domain in self._domains]
+    def ceilings(self, level, boost_on=None):
+        if boost_on is None:
+            boost_on = _boost_on(self._root)
+        return [domain.ceiling(level, boost_on) for domain in self._domains]
 
     def level_table(self):
         table = {}
+        boost_on = _boost_on(self._root)
         for level in range(1, _LEVELS + 1):
-            ceilings = self.ceilings(level)
+            ceilings = self.ceilings(level, boost_on)
             table[str(level)] = {
                 "cpu_khz": [c for d, c in zip(self._domains, ceilings) if d.cpu],
                 "gpu_mhz": next(
@@ -134,9 +143,16 @@ class ArmPerformanceLevels(TDPBackend):
         )
 
     def read_applied(self):
+        # Read each node once and match levels in memory: this runs on every power poll.
         cooling_states = _cooling_states(self._root)
+        boost_on = _boost_on(self._root)
+        observed = [read_int(domain.max_node) for domain in self._domains]
         for level in range(_LEVELS, 0, -1):
-            if self._holds(level, cooling_states):
+            ceilings = self.ceilings(level, boost_on)
+            if all(
+                domain.holds(ceiling, cooling_states, seen)
+                for domain, ceiling, seen in zip(self._domains, ceilings, observed)
+            ):
                 return level
         return None
 
