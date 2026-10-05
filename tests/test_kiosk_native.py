@@ -260,3 +260,11 @@ def test_bundled_font_config_is_valid_xml_for_any_plugin_folder(tmp_path, monkey
     app._use_bundled_font("/home/deck/plugins/R&D <Panel>/dist/kiosk")
     tree = ET.parse(os.environ["FONTCONFIG_FILE"])
     assert tree.find("dir").text == "/home/deck/plugins/R&D <Panel>/dist/kiosk"
+
+
+def test_an_unavailable_bottom_screen_says_why(monkeypatch, capsys):
+    import app
+
+    monkeypatch.delenv("PDC_KIOSK_URL", raising=False)
+    assert app.main(["app.py", "/assets"]) == app.UNAVAILABLE
+    assert "PDC_KIOSK_URL" in capsys.readouterr().err

@@ -713,26 +713,30 @@ class App:
             self.worker.act("screen_off", "set_kiosk_screen_off", True)
 
 
+def _unavailable(reason: object) -> int:
+    print(f"pdc-kiosk native: {reason}", file=sys.stderr)
+    return UNAVAILABLE
+
+
 def main(argv: list[str]) -> int:
     url = os.environ.get("PDC_KIOSK_URL")
     if len(argv) < 2 or not url:
-        return UNAVAILABLE
+        return _unavailable("missing assets folder or PDC_KIOSK_URL")
     assets = argv[1]
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     sys.path.insert(1, os.path.dirname(os.path.dirname(here)))  # gamescope_perf lives in py_modules
-    _use_bundled_font(assets)
     try:
+        _use_bundled_font(assets)
         import cairo  # noqa: F401
         import paint  # noqa: F401
         from drm import LeaseError
-    except (ImportError, ValueError):
-        return UNAVAILABLE
+    except (ImportError, ValueError, OSError) as error:
+        return _unavailable(error)
     try:
         app = App(url, assets)
     except (LeaseError, OSError) as error:
-        print(f"pdc-kiosk native: {error}", file=sys.stderr)
-        return UNAVAILABLE
+        return _unavailable(error)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     app.run()
     return 0

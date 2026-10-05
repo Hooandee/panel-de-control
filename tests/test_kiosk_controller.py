@@ -46,6 +46,9 @@ class FakeLauncher:
         self.active = False
         return True, ""
 
+    def last_words(self):
+        return "pdc-kiosk native: no_lease_fd"
+
 
 def _controller(detections, launcher_kwargs=None, enabled=True, now=None):
     journal = []
@@ -78,14 +81,14 @@ def test_enabled_with_a_display_serves_and_launches():
     assert ("INFO", "launched", {"mechanism": "armada-lease"}) in journal
 
 
-def test_disabled_never_starts_the_server_or_browser():
+def test_disabled_never_starts_the_server_or_bottom_screen():
     controller, launchers, _, _ = _controller([Detection(DISPLAY, "ok")], enabled=False)
     asyncio.run(controller.tick())
     assert launchers == []
     assert controller._server.port is None
 
 
-def test_leaving_game_mode_stops_the_browser_and_server():
+def test_leaving_game_mode_stops_the_bottom_screen_and_server():
     controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok"), Detection(None, "not_in_game_mode")])
     asyncio.run(controller.tick())
     asyncio.run(controller.tick())
@@ -120,13 +123,14 @@ def test_failed_launches_back_off_and_are_journaled():
     assert ("WARNING", "launch_failed", {"detail": "boom"}) in journal
 
 
-def test_a_crashed_browser_is_relaunched():
-    controller, launchers, _, clock = _controller([Detection(DISPLAY, "ok")])
+def test_a_crashed_bottom_screen_is_relaunched_and_its_last_words_journaled():
+    controller, launchers, journal, clock = _controller([Detection(DISPLAY, "ok")])
     asyncio.run(controller.tick())
     launchers[0].active = False
     clock[0] = 10.0
     asyncio.run(controller.tick())
     assert len(launchers[0].started_with) == 2
+    assert ("WARNING", "exited", {"detail": "pdc-kiosk native: no_lease_fd"}) in journal
 
 
 def test_disabling_tears_everything_down():

@@ -128,7 +128,6 @@ class Deck:
         rect = self.rects[name]
         return max(0.0, min(1.0, 1 - (y - rect.y) / rect.h))
 
-
     def regions(self) -> dict[str, Rect]:
         return {"head": Rect(0, 0, WIDTH, GRID_Y - 1), **self.rects}
 

@@ -95,6 +95,12 @@ def test_start_runs_a_transient_user_unit_in_the_session():
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
 
 
+def test_last_words_come_from_the_unit_journal():
+    launcher, calls = _launcher([(0, "Traceback\npdc-kiosk native: no_lease_fd")])
+    assert launcher.last_words().endswith("no_lease_fd")
+    assert calls[0][0][-5:] == ["journalctl", "--user", f"--unit={UNIT}", "--lines=2", "--output=cat", "--no-pager"][-5:]
+
+
 def test_is_active_requires_the_exact_state():
     launcher, _ = _launcher([(0, "active")])
     assert launcher.is_active()

@@ -53,6 +53,10 @@ class KioskLauncher:
         ])
         return code == 0, out
 
+    def last_words(self) -> str:
+        code, out = self._systemd(["journalctl", "--user", f"--unit={UNIT}", "--lines=2", "--output=cat", "--no-pager"])
+        return out[-300:] if code == 0 else ""
+
     def is_active(self) -> bool:
         code, out = self._systemd(["systemctl", "--user", "is-active", UNIT])
         return code == 0 and out == "active"

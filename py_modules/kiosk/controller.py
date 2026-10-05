@@ -116,7 +116,10 @@ class KioskController:
         assert self._launcher is not None
         if self._server.port is None:
             await self._server.start()
+        was_running = self._running
         self._running = await asyncio.to_thread(self._launcher.is_active)
+        if was_running and not self._running:
+            self._journal("WARNING", "exited", detail=await asyncio.to_thread(self._launcher.last_words))
         if self._running:
             self._retry_delay = RETRY_MIN_S
             return
