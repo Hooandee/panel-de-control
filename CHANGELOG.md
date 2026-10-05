@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.62.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.1...panel-de-control-v0.62.0) (2026-10-05)
+
+
+### Features
+
+* first-class ARM support ([#829](https://github.com/Hooandee/panel-de-control/issues/829)) ([758fac4](https://github.com/Hooandee/panel-de-control/commit/758fac4d61a7d508aebd5e156b6f095307a22eca))
+
 ## [0.61.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.0...panel-de-control-v0.61.1) (2026-10-02)
 
 
