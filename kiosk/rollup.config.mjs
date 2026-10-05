@@ -1,10 +1,10 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "fs";
 import { createRequire } from "module";
 import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-// Reuse the exact Rollup plugins @decky/rollup ships with, so the kiosk adds no dependencies.
+// Reuse the exact Rollup plugins @decky/rollup ships with, so the bottom screen adds no dependencies.
 const fromDecky = createRequire(createRequire(import.meta.url).resolve("@decky/rollup/package.json"));
 const load = (name) => {
   const mod = fromDecky(name);
@@ -17,37 +17,43 @@ const replace = load("@rollup/plugin-replace");
 const { nodeResolve } = fromDecky("@rollup/plugin-node-resolve");
 
 const outDir = resolve(here, "../dist/kiosk");
-const SHIMS = {
-  "@decky/ui": resolve(here, "src/shims/deckyUi.tsx"),
-  "@decky/api": resolve(here, "src/shims/deckyApi.ts"),
+const stringsModule = resolve(here, "../node_modules/.cache/pdc-kiosk/strings.mjs");
+
+// The translations reach Decky's modules through src/api.ts; exporting them never calls into Decky.
+const DECKY_STUBS = {
+  "@decky/api": "export const callable = () => async () => { throw new Error('unavailable'); };",
+  "@decky/ui": "export {};",
 };
 
-const deckyShims = {
-  name: "pdc-kiosk-decky-shims",
-  resolveId: (source) => SHIMS[source] ?? null,
+const deckyStubs = {
+  name: "pdc-kiosk-decky-stubs",
+  resolveId: (source) => (source in DECKY_STUBS ? `\0${source}` : null),
+  load: (id) => (id.startsWith("\0") ? DECKY_STUBS[id.slice(1)] ?? null : null),
 };
 
-const kioskAssets = {
-  name: "pdc-kiosk-assets",
-  writeBundle() {
+// The native bottom screen is Python: it reads the same translations and icons as JSON.
+const nativeAssets = {
+  name: "pdc-kiosk-native-assets",
+  async writeBundle() {
+    const { STRINGS, ICONS } = await import(`${pathToFileURL(stringsModule).href}?t=${Date.now()}`);
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(resolve(outDir, "index.html"), readFileSync(resolve(here, "index.html")));
-    copyFileSync(resolve(here, "assets/inter.woff2"), resolve(outDir, "inter.woff2"));
+    writeFileSync(resolve(outDir, "strings.json"), JSON.stringify(STRINGS));
+    writeFileSync(resolve(outDir, "icons.json"), JSON.stringify(ICONS));
+    copyFileSync(resolve(here, "assets/inter.ttf"), resolve(outDir, "inter.ttf"));
     copyFileSync(resolve(here, "assets/Inter-OFL.txt"), resolve(outDir, "Inter-OFL.txt"));
   },
 };
 
 export default {
-  input: resolve(here, "src/main.tsx"),
+  input: resolve(here, "src/strings.tsx"),
   plugins: [
-    deckyShims,
-    typescript({ tsconfig: resolve(here, "tsconfig.json") }),
+    deckyStubs,
+    typescript({ tsconfig: resolve(here, "../tsconfig.json"), noEmitOnError: true }),
     json(),
     commonjs(),
-    nodeResolve({ browser: true }),
+    nodeResolve(),
     replace({ preventAssignment: true, "process.env.NODE_ENV": JSON.stringify("production") }),
-    kioskAssets,
+    nativeAssets,
   ],
-  context: "window",
-  output: { file: resolve(outDir, "kiosk.js"), format: "iife", sourcemap: false },
+  output: { file: stringsModule, format: "es", sourcemap: false },
 };

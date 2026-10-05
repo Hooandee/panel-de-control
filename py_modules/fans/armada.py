@@ -107,6 +107,9 @@ class ArmadaFanBackend(GenericPwmFanBackend):
         self._powerd_stopped = False
         self._verified_at = float("-inf")
 
+    def _has_firmware_auto(self) -> bool:
+        return True
+
     def _take(self) -> bool:
         if not self._control.start_guard():
             return False

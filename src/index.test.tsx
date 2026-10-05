@@ -80,6 +80,7 @@ vi.mock("./customize/store", () => ({ reloadLayout: vi.fn() }));
 vi.mock("./customize/modules", () => ({ hydrateModules: vi.fn() }));
 vi.mock("./launch/gameContextMenu", () => ({ installGameContextMenu: () => () => {} }));
 vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => {} }));
+vi.mock("./kiosk/steamBridge", () => ({ startKioskSteamBridge: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({
   shutdownUiActivity: persistentServices.shutdownUiActivity,
   startQamDocumentActivity: persistentServices.startQamActivity,

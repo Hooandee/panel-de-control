@@ -16,6 +16,6 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
+  "include": ["src", "kiosk/src"],
   "exclude": ["node_modules"]
 }

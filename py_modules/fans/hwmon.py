@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 _HWMON = "sys/class/hwmon"
 
@@ -57,6 +58,9 @@ _MAX_FANS = 2  # no target device has >2 physical fans; extra hwmon channels are
 # mid-ramp; it is not a real speed (handheld fans top out ~8000 RPM), so we report
 # it as unknown rather than a fake 65535.
 _INVALID_RPM = 0xFFFF
+# Which chips, inputs and labels exist only changes on hotplug; listing and re-reading them on
+# every poll (the software fan loop polls each second) cost more than the readings themselves.
+_LAYOUT_TTL_S = 60.0
 
 # The lenovo_wmi_other driver exposes a fixed two-channel layout regardless of how
 # many fans are populated (it logs "all fans exposed. Use with caution"). The Legion
@@ -92,40 +96,41 @@ def curate_fans(fans: list[dict]) -> list[dict]:
     return fans
 
 
+def _rank_temp(t: dict, desktop: bool = False, device_key: str | None = None) -> tuple[str, int]:
+    chip = t["chip"]
+    raw_label = str(t.get("label", "")).lower()
+    if desktop:
+        if device_key == "steam_machine" and chip == "acpitz":
+            return "CPU", 0
+        if chip in ("k10temp", "coretemp"):
+            return "CPU", 0
+        if chip in ("steamdeck_hwmon", "jupiter") and "cpu" in raw_label:
+            return "CPU", 0
+        if chip == "amdgpu":
+            if "junction" in raw_label:
+                return "GPU junction", 1
+            if "mem" in raw_label:
+                return "VRAM", 1
+            return "GPU", 1
+    if chip in _TEMP_RULES:
+        return _TEMP_RULES[chip]
+    soc = _soc_zone_rule(chip)
+    if soc is not None:
+        return soc
+    if any(chip.startswith(d) for d in _TEMP_DEMOTE):
+        return t["label"], 3
+    return t["label"], 2
+
+
 def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | None = None) -> list[dict]:
     """Show only the meaningful CPU/GPU sensors with friendly labels, dropping the
     generic noise (acpitz, wifi, nvme, battery…) that clutters the monitor. If a
     device exposes no recognized CPU/GPU sensor, fall back to showing everything
     (ranked) so the list is never silently empty."""
 
-    def rank(t: dict) -> tuple[str, int]:
-        chip = t["chip"]
-        raw_label = str(t.get("label", "")).lower()
-        if desktop:
-            if device_key == "steam_machine" and chip == "acpitz":
-                return "CPU", 0
-            if chip in ("k10temp", "coretemp"):
-                return "CPU", 0
-            if chip in ("steamdeck_hwmon", "jupiter") and "cpu" in raw_label:
-                return "CPU", 0
-            if chip == "amdgpu":
-                if "junction" in raw_label:
-                    return "GPU junction", 1
-                if "mem" in raw_label:
-                    return "VRAM", 1
-                return "GPU", 1
-        if chip in _TEMP_RULES:
-            return _TEMP_RULES[chip]
-        soc = _soc_zone_rule(chip)
-        if soc is not None:
-            return soc
-        if any(chip.startswith(d) for d in _TEMP_DEMOTE):
-            return t["label"], 3
-        return t["label"], 2
-
     decorated = []
     for i, t in enumerate(temps):
-        label, prio = rank(t)
+        label, prio = _rank_temp(t, desktop, device_key)
         decorated.append((prio, i, {"label": label, "celsius": t["celsius"]}))
     decorated.sort(key=lambda x: (x[0], x[1]))
     # Keep only recognized CPU/GPU (priority 0/1); fall back to all when none match.
@@ -169,48 +174,116 @@ class FanReader:
         self._root = root
         self._desktop = bool(desktop)
         self._device_key = device_key
+        self._layout_cache: list[tuple] | None = None
+        self._layout_until = 0.0
+        self._driving: list[tuple[str, str]] | None = None
 
     def set_desktop(self, enabled: bool) -> None:
         self._desktop = bool(enabled)
+        self._driving = None
 
     def _chips(self) -> list[str]:
         return sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*")))
 
-    def read(self) -> dict:
-        raw_fans: list[dict] = []
-        raw_temps: list[dict] = []
-
+    def _scan_layout(self) -> list[tuple]:
+        layout = []
         for d in self._chips():
             name = _read(os.path.join(d, "name")) or ""
-
+            fans = []
             for inp in sorted(glob.glob(os.path.join(d, "fan*_input"))):
-                rpm = _read_int(inp)
-                if rpm is None:
-                    continue
-                if rpm == _INVALID_RPM:
-                    rpm = None  # glitch read — keep the fan, report speed unknown
                 n = os.path.basename(inp)[len("fan"):-len("_input")]
                 # Vendor chips like lenovo_wmi_other expose no fanN_label; fall back to
                 # a clean generic ("Fan 1"), never the raw chip name. The monitor UI
                 # localizes this to "Ventilador N" anyway; this keeps the label honest
                 # in exported diagnostics too.
                 label = _read(os.path.join(d, f"fan{n}_label")) or f"Fan {n}"
-                pwm = _read_int(os.path.join(d, f"pwm{n}"))
-                percent = round(pwm / 255 * 100) if pwm is not None else None
                 max_rpm = _read_int(os.path.join(d, f"fan{n}_max"))
                 if (max_rpm is None and self._device_key == "steam_machine"
                         and name in ("steamdeck_hwmon", "jupiter")):
                     max_rpm = 1800
+                fans.append((inp, label, os.path.join(d, f"pwm{n}"), max_rpm))
+            temps = []
+            for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
+                n = os.path.basename(inp)[len("temp"):-len("_input")]
+                label = _read(os.path.join(d, f"temp{n}_label")) or f"{name or 'temp'} {n}".strip()
+                temps.append((inp, label))
+            layout.append((name, fans, temps))
+        return layout
+
+    def driving_temps(self) -> tuple[float | None, float | None] | None:
+        """(cpu, gpu) reading only the inputs ranked CPU/GPU, for loops that poll every second.
+        None when this machine has no recognized CPU/GPU sensor (callers then do a full read)."""
+        layout = self._layout()
+        if self._driving is None:
+            self._driving = [
+                (label, inp)
+                for name, _fans, temps in layout
+                for inp, raw_label in temps
+                if (label := _rank_temp({"chip": name, "label": raw_label}, self._desktop, self._device_key)[0])
+                in ("CPU", "GPU")
+            ]
+        if not self._driving:
+            return None
+        hottest: dict[str, float] = {}
+        for label, inp in self._driving:
+            milli = _read_int(inp)
+            if milli is not None:
+                hottest[label] = max(hottest.get(label, float("-inf")), round(milli / 1000, 1))
+            elif not os.path.exists(inp):
+                self.invalidate()
+        return hottest.get("CPU"), hottest.get("GPU")
+
+    def fan_rpms(self) -> list[int]:
+        """Current fan speeds only (no temperatures, no curation)."""
+        rpms = []
+        for _name, fans, _temps in self._layout():
+            for inp, _label, _pwm, _max in fans:
+                rpm = _read_int(inp)
+                if rpm is not None and rpm != _INVALID_RPM:
+                    rpms.append(rpm)
+                elif rpm is None and not os.path.exists(inp):
+                    self.invalidate()
+        return rpms
+
+    def invalidate(self) -> None:
+        """Forget the cached chip layout, after a fan driver is loaded or unloaded."""
+        self._layout_cache = None
+
+    def _layout(self) -> list[tuple]:
+        now = time.monotonic()
+        if self._layout_cache is None or now >= self._layout_until:
+            self._layout_cache = self._scan_layout()
+            self._layout_until = now + _LAYOUT_TTL_S
+            self._driving = None
+        return self._layout_cache
+
+    def read(self) -> dict:
+        raw_fans: list[dict] = []
+        raw_temps: list[dict] = []
+        vanished = False
+
+        for name, fans, temps in self._layout():
+            for inp, label, pwm_path, max_rpm in fans:
+                rpm = _read_int(inp)
+                if rpm is None:
+                    vanished = vanished or not os.path.exists(inp)
+                    continue
+                if rpm == _INVALID_RPM:
+                    rpm = None  # glitch read: keep the fan, report speed unknown
+                pwm = _read_int(pwm_path)
+                percent = round(pwm / 255 * 100) if pwm is not None else None
                 raw_fans.append({"chip": name, "label": label, "rpm": rpm,
                                  "percent": percent, "max_rpm": max_rpm})
 
-            for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
+            for inp, label in temps:
                 milli = _read_int(inp)
                 if milli is None:
+                    vanished = vanished or not os.path.exists(inp)
                     continue
-                n = os.path.basename(inp)[len("temp"):-len("_input")]
-                label = _read(os.path.join(d, f"temp{n}_label")) or f"{name or 'temp'} {n}".strip()
                 raw_temps.append({"chip": name, "label": label, "celsius": round(milli / 1000, 1)})
+
+        if vanished:
+            self.invalidate()
 
         fans = curate_fans(raw_fans)
         temps = curate_temps(raw_temps, desktop=self._desktop, device_key=self._device_key)
