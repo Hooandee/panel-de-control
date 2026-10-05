@@ -1,8 +1,6 @@
 import { FC, ReactNode } from "react";
 
-const Icon: FC<{ className?: string; children: ReactNode }> = ({ className, children }) => (
-  <svg className={`g-i${className ? ` ${className}` : ""}`} viewBox="0 0 24 24" aria-hidden>{children}</svg>
-);
+const Icon: FC<{ children: ReactNode }> = ({ children }) => <svg viewBox="0 0 24 24">{children}</svg>;
 
 export const FanIcon: FC = () => (
   <Icon>

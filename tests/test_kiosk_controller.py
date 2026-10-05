@@ -58,7 +58,6 @@ def _controller(detections, launcher_kwargs=None, enabled=True, now=None):
         return launcher
 
     controller = KioskController(
-        "/static",
         dispatch=None,
         allowed_methods=(),
         journal=lambda level, event, **fields: journal.append((level, event, fields)),

@@ -34,9 +34,8 @@ const FORBIDDEN_SUFFIXES = new Set([
   ".zip",
 ]);
 
-// Public, OFL-licensed font the kiosk ships with (its license sits next to it): WOFF2 for the web
-// page, TrueType for the native bottom screen.
-const ALLOWED_PAYLOAD_FILES = new Set(["dist/kiosk/inter.woff2", "dist/kiosk/inter.ttf"]);
+// Public, OFL-licensed font the bottom screen draws with (its license sits next to it).
+const ALLOWED_PAYLOAD_FILES = new Set(["dist/kiosk/inter.ttf"]);
 
 function fail(message) {
   throw new Error(message);

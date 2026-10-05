@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { DICTS } from "../../src/i18n";
 import { PRESET_ICON_KEYS, presetIconNode } from "../../src/tdp/powerPresetIcons";
-import { FAN_PRESET_ICON, FanIcon, ICON, LIGHT_MODE_ICON } from "./deck/icons";
+import { FAN_PRESET_ICON, FanIcon, ICON, LIGHT_MODE_ICON } from "./icons";
 
 const NATIVE_PREFIXES = ["kiosk.", "fans.preset.", "tdp.preset."];
 

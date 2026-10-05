@@ -141,4 +141,4 @@ jobs:
         run: pnpm build
       - name: Verify build output exists
         if: needs.changes.outputs.frontend == 'true'
-        run: test -f dist/index.js && test -f dist/kiosk/kiosk.js && test -f dist/kiosk/inter.woff2 && test -f dist/kiosk/inter.ttf && test -f dist/kiosk/strings.json && test -f dist/kiosk/icons.json
+        run: test -f dist/index.js && test -f dist/kiosk/inter.ttf && test -f dist/kiosk/strings.json && test -f dist/kiosk/icons.json

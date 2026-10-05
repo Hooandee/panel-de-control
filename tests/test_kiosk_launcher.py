@@ -3,7 +3,7 @@ import sys
 
 from kiosk import displays
 from kiosk.displays import Detection, SecondaryDisplay, detect, parse_device_env
-from kiosk.launcher import KioskLauncher, UNIT, launch_script
+from kiosk.launcher import KioskLauncher, UNIT, launch_argv
 from user_session import UserSession
 
 THOR_ENV = """ARMADA_DEVICE_ID=ayn-thor
@@ -21,7 +21,7 @@ def _exists(*present):
     return lambda path: path in present
 
 
-ALL_PRESENT = (displays.ARMADA_RUN_BOTTOM, displays.FIREFOX, displays.ARMADA_LEASE_SOCKET)
+ALL_PRESENT = (displays.ARMADA_RUN_BOTTOM, displays.SYSTEM_PYTHON, displays.ARMADA_LEASE_SOCKET)
 
 
 def test_parses_armada_device_env_shell_quoting():
@@ -43,8 +43,8 @@ def test_every_missing_piece_has_its_own_reason(monkeypatch):
     cases = [
         (_exists(), THOR_ENV, "no_mechanism"),
         (_exists(*ALL_PRESENT), single, "no_secondary_display"),
-        (_exists(displays.ARMADA_RUN_BOTTOM, displays.ARMADA_LEASE_SOCKET), THOR_ENV, "no_browser"),
-        (_exists(displays.ARMADA_RUN_BOTTOM, displays.FIREFOX), THOR_ENV, "not_in_game_mode"),
+        (_exists(displays.ARMADA_RUN_BOTTOM, displays.ARMADA_LEASE_SOCKET), THOR_ENV, "no_runtime"),
+        (_exists(displays.ARMADA_RUN_BOTTOM, displays.SYSTEM_PYTHON), THOR_ENV, "not_in_game_mode"),
     ]
     for exists, env, reason in cases:
         found = detect(exists=exists, owner_uid=lambda _p: 1000, run=lambda _a, env=env: env)
@@ -57,16 +57,16 @@ def test_unknown_lease_owner_is_not_guessed(monkeypatch):
     assert found == Detection(None, "no_session")
 
 
-def test_launch_script_keeps_firefox_on_x11_with_touch():
-    script = launch_script()
-    assert "exec /usr/bin/armada-run-bottom -- /usr/bin/env -u WAYLAND_DISPLAY" in script
-    assert "MOZ_ENABLE_WAYLAND=0 GDK_BACKEND=x11 MOZ_USE_XINPUT2=1" in script
-    assert '--kiosk --no-remote --profile "$HOME/.cache/panel-de-control/kiosk" "$0"' in script
-    assert script.endswith('"$PDC_KIOSK_URL"')
-
-
-def test_launch_script_is_valid_shell():
-    assert subprocess.run(["sh", "-n", "-c", launch_script()], check=False).returncode == 0
+def test_bottom_screen_is_the_native_app_with_the_url_from_the_unit_env(tmp_path):
+    log = tmp_path / "log"
+    native = tmp_path / "Panel de Control" / "app.py"
+    native.parent.mkdir()
+    native.write_text(f"import sys\nopen({str(log)!r}, 'w').write(' '.join(sys.argv[1:]))\n")
+    argv = launch_argv(native=str(native), assets="/assets dir")
+    argv[-1] = argv[-1].replace("/usr/bin/python3", sys.executable)
+    env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "PATH": "/usr/bin:/bin"}
+    assert subprocess.run(argv, env=env, check=False, timeout=20).returncode == 0
+    assert log.read_text() == "http://127.0.0.1:1/?k=t /assets dir"
 
 
 def _launcher(results):
@@ -120,69 +120,8 @@ def test_backlight_power_writes_blank_codes_and_refuses_paths(tmp_path):
     assert not set_backlight_power("", False, sys_root=str(tmp_path))
 
 
-def test_stop_does_not_wait_for_the_browser_to_exit():
+def test_stop_does_not_wait_for_the_bottom_screen_to_exit():
     launcher, calls = _launcher([(0, "")])
     ok, _ = launcher.stop()
     assert ok
     assert [cmd[-3:] for cmd, _env, _identity in calls] == [["stop", "--no-block", UNIT]]
-
-
-def test_firefox_runs_one_content_process_and_nothing_in_the_background():
-    script = launch_script()
-    for pref in ('"dom.ipc.processCount", 1', '"fission.autostart", false', '"dom.ipc.processPrelaunch.enabled", false',
-                 '"browser.safebrowsing.malware.enabled", false', '"network.captive-portal-service.enabled", false'):
-        assert pref in script
-
-
-def test_webkit_is_tried_first_and_firefox_only_as_fallback(tmp_path):
-    webview = tmp_path / "Panel de Control" / "webview.py"
-    script = launch_script(webview=str(webview))
-    inner = script.split("/bin/sh -c ", 1)[1]
-    assert inner.index("/usr/bin/python3") < inner.index("exec /usr/bin/firefox")
-    assert "Panel de Control/webview.py" in script
-
-
-def _run_launch_script(tmp_path, native_body: str, webview_body: str) -> str:
-    """Run the real script with the compositor and every screen swapped for stubs; returns what ran."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    log = tmp_path / "log"
-    (bin_dir / "run-bottom").write_text('#!/bin/sh\nshift\nexec "$@"\n')
-    (bin_dir / "firefox").write_text(f'#!/bin/sh\necho firefox "$@" >> {log}\n')
-    for path in bin_dir.iterdir():
-        path.chmod(0o755)
-    native = tmp_path / "native.py"
-    native.write_text(f"import sys\nopen({str(log)!r}, 'a').write('native ' + ' '.join(sys.argv[1:]) + '\\n')\n{native_body}\n")
-    webview = tmp_path / "webview.py"
-    webview.write_text(f"import sys\nopen({str(log)!r}, 'a').write('webview\\n')\n{webview_body}\n")
-    log.write_text("")
-    script = launch_script(webview=str(webview), native=str(native), assets="/assets")
-    script = script.replace("/usr/bin/armada-run-bottom", str(bin_dir / "run-bottom")).replace(
-        "/usr/bin/firefox", str(bin_dir / "firefox")).replace("/usr/bin/python3", sys.executable)
-    env = {"PDC_KIOSK_URL": "http://127.0.0.1:1/?k=t", "HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
-    subprocess.run(["sh", "-c", script], env=env, check=False, timeout=20)
-    return log.read_text()
-
-
-def test_native_screen_runs_first_and_alone_when_it_works(tmp_path):
-    ran = _run_launch_script(tmp_path, "sys.exit(0)", "")
-    assert ran == "native http://127.0.0.1:1/?k=t /assets\n"
-
-
-def test_native_crash_is_left_to_the_supervisor_instead_of_falling_back(tmp_path):
-    ran = _run_launch_script(tmp_path, "sys.exit(1)", "")
-    assert "webview" not in ran and "firefox" not in ran
-
-
-def test_launch_script_falls_back_to_webkit_then_firefox(tmp_path):
-    ran = _run_launch_script(tmp_path, "sys.exit(3)", "sys.exit(3)")
-    assert ran.splitlines()[1] == "webview"
-    assert "firefox --kiosk" in ran and "http://127.0.0.1:1/?k=t" in ran
-    assert "firefox" not in _run_launch_script(tmp_path, "sys.exit(3)", "sys.exit(0)")
-
-
-def test_webview_reports_a_missing_webkit_instead_of_crashing(monkeypatch):
-    from kiosk import webview
-
-    monkeypatch.setitem(sys.modules, "gi", None)
-    assert webview.main("http://127.0.0.1:1/") == webview.UNAVAILABLE

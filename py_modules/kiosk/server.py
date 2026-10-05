@@ -1,9 +1,8 @@
-"""Loopback HTTP server for the kiosk page: static bundle plus the same RPCs Decky exposes."""
+"""Loopback HTTP server for the bottom screen: game art plus the same RPCs Decky exposes."""
 
 import asyncio
 import hmac
 import json
-import os
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -13,11 +12,6 @@ TOKEN_HEADER = "x-pdc-kiosk"
 MAX_BODY_BYTES = 1 << 20
 KEEPALIVE_IDLE_S = 30.0
 READ_TIMEOUT_S = 10.0
-STATIC_TYPES = {
-    "index.html": "text/html; charset=utf-8",
-    "kiosk.js": "text/javascript; charset=utf-8",
-    "inter.woff2": "font/woff2",
-}
 
 Dispatch = Callable[[str, list], Awaitable[Any]]
 ArtResolver = Callable[[str, str], "tuple[str, str] | None"]
@@ -38,13 +32,11 @@ def _json(status: int, payload: dict) -> Response:
 class KioskServer:
     def __init__(
         self,
-        static_dir: str,
         dispatch: Dispatch,
         allowed_methods: Iterable[str],
         on_error: Callable[[str, str], None] = lambda _method, _error: None,
         art: ArtResolver = lambda _appid, _kind: None,
     ):
-        self.static_dir = static_dir
         self.dispatch = dispatch
         self.allowed = frozenset(allowed_methods)
         self.on_error = on_error
@@ -131,8 +123,6 @@ class KioskServer:
         keep = version.strip() == "HTTP/1.1" and headers.get("connection", "").lower() != "close"
         if method == "GET" and path.startswith("/art/"):
             return self._art(path), keep
-        if method == "GET":
-            return self._static(path), keep
         if method == "POST" and path == "/rpc":
             length = int(headers.get("content-length", "0") or 0)
             if length > MAX_BODY_BYTES:
@@ -140,17 +130,6 @@ class KioskServer:
             body = await reader.readexactly(length) if length else b""
             return await self._rpc(headers, body), keep
         return _json(404, {"error": "not_found"}), keep
-
-    def _static(self, path: str) -> Response:
-        name = "index.html" if path in ("", "/") else path.lstrip("/")
-        content_type = STATIC_TYPES.get(name)
-        if content_type is None:
-            return _json(404, {"error": "not_found"})
-        try:
-            with open(os.path.join(self.static_dir, name), "rb") as handle:
-                return Response(200, handle.read(), content_type)
-        except OSError:
-            return _json(404, {"error": "not_found"})
 
     def _art(self, path: str) -> Response:
         parts = path.split("/")

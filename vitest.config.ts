@@ -5,7 +5,6 @@ export default defineConfig({
     include: [
       "src/**/*.{test,spec}.?(c|m)[jt]s?(x)",
       "tests/**/*.{test,spec}.?(c|m)[jt]s?(x)",
-      "kiosk/src/**/*.{test,spec}.?(c|m)[jt]s?(x)",
     ],
   },
 });

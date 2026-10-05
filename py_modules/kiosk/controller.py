@@ -1,4 +1,4 @@
-"""Kiosk lifecycle: detect the secondary display, serve the page, keep the browser alive."""
+"""Kiosk lifecycle: detect the secondary display, serve its RPCs, keep the bottom screen alive."""
 
 import asyncio
 import time
@@ -20,7 +20,6 @@ Journal = Callable[..., None]
 class KioskController:
     def __init__(
         self,
-        static_dir: str,
         dispatch: Callable[[str, list], Awaitable[Any]],
         allowed_methods: Iterable[str],
         journal: Journal,
@@ -40,7 +39,7 @@ class KioskController:
         self._launcher_factory = launcher_factory
         self._clock = clock
         self._server = server_factory(
-            static_dir, dispatch, allowed_methods,
+            dispatch, allowed_methods,
             on_error=lambda method, error: journal("WARNING", "rpc_failed", method=method, error=error),
             art=art,
         )

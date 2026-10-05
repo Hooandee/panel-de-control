@@ -12,7 +12,7 @@ from user_session import UserSession, session_for_uid
 ARMADA_RUN_BOTTOM = "/usr/bin/armada-run-bottom"
 ARMADA_DEVICE_ENV = "/usr/libexec/armada/device-env"
 ARMADA_LEASE_SOCKET = "/tmp/gamescope-lease.sock"
-FIREFOX = "/usr/bin/firefox"
+SYSTEM_PYTHON = "/usr/bin/python3"
 
 Run = Callable[[list[str]], str]
 
@@ -123,8 +123,8 @@ def detect(
     touchscreen = env.get("ARMADA_SECONDARY_TOUCHSCREEN", "")
     if not connector or not touchscreen:
         return Detection(None, "no_secondary_display")
-    if not exists(FIREFOX):
-        return Detection(None, "no_browser")
+    if not exists(SYSTEM_PYTHON):
+        return Detection(None, "no_runtime")
     if not exists(ARMADA_LEASE_SOCKET):
         return Detection(None, "not_in_game_mode")
     try:

@@ -12,7 +12,6 @@ import { useScopeSync } from "../useScopeSync";
 import { isLevelUnit } from "./unit";
 import { notifyLearningStatusChanged } from "../learning/statusInvalidation";
 import { effectiveAutoRange } from "./autoView";
-import { pollMs } from "../system/pollCadence";
 
 const RECOVERY_RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
 
@@ -153,7 +152,7 @@ export function useTdp(): TdpControl {
         })
         .catch(() => {});
     tick();
-    const id = setInterval(tick, pollMs(1000));
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [refresh]);
 

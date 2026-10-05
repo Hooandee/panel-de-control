@@ -9,7 +9,6 @@ import {
   tdpConflict,
 } from "./conflict";
 import { disablePlugin, disabledPlugins, installedPlugins } from "./deckyPlugins";
-import { pollMs } from "../system/pollCadence";
 
 export interface TdpConflictHook {
   conflict: boolean;
@@ -46,7 +45,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
   useEffect(() => {
     alive.current = true;
     void refetch();
-    const id = setInterval(() => void refetch(), pollMs(3000));
+    const id = setInterval(() => void refetch(), 3000);
     return () => {
       alive.current = false;
       clearInterval(id);

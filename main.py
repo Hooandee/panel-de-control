@@ -1,7 +1,5 @@
 import asyncio
-import collections
 import copy
-import functools
 import inspect
 import json
 import math
@@ -29,7 +27,6 @@ from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
-import stack_sampler
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -473,7 +470,6 @@ class Plugin:
         )
         self._settings = self._store.load(DEFAULTS)
         self._kiosk = KioskController(
-            os.path.join(_plugin_dir(), "dist", "kiosk"),
             plugin_dispatch(self),
             public_rpc_methods(self),
             journal=_kiosk_journal,
@@ -1185,34 +1181,6 @@ class Plugin:
             else None
         )
         return {"playing_s": playing_s, "appid": self._current_appid}
-
-    async def sample_backend_stacks(self, seconds: float = 5.0) -> dict:
-        """Diagnostics: which Python stacks are busy, sampled for up to 10 s off the event loop."""
-        before = self._kiosk.rpc_calls()
-        loop = asyncio.get_running_loop()
-        offloaded: collections.Counter[str] = collections.Counter()
-        original = loop.run_in_executor
-
-        def counting(executor, func, *args):
-            target = func
-            while isinstance(target, functools.partial):
-                target = target.args[0] if target.func.__name__ == "run" and target.args else target.func
-            offloaded[getattr(target, "__qualname__", repr(target))] += 1
-            return original(executor, func, *args)
-
-        loop.run_in_executor = counting
-        try:
-            result = await loop.run_in_executor(None, stack_sampler.sample, seconds)
-        finally:
-            del loop.run_in_executor
-        result["offloaded"] = dict(offloaded.most_common(15))
-        after = self._kiosk.rpc_calls()
-        result["kiosk_calls"] = {
-            name: {"calls": int(count - before.get(name, [0, 0.0])[0]), "seconds": round(spent - before.get(name, [0, 0.0])[1], 3)}
-            for name, (count, spent) in after.items()
-            if count != before.get(name, [0, 0.0])[0]
-        }
-        return result
 
     async def get_kiosk_vitals(self) -> dict:
         self._init()

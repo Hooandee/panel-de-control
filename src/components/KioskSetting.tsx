@@ -34,7 +34,7 @@ export const KioskSetting: FC = () => {
       label={t("settings.kiosk")}
       description={t(kioskDescriptionKey(state))}
       checked={state.enabled}
-      disabled={state.reason === "no_browser"}
+      disabled={state.reason === "no_runtime"}
       onChange={onChange}
       bottomSeparator="none"
     />
