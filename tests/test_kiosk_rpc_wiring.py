@@ -177,3 +177,20 @@ def test_frame_helper_runs_the_system_python_through_the_session(plugin, monkeyp
     command, env, _identity = plugin._native_frame_helper(["/fex/python3", "/plugin/gamescope_perf.py", "--child", "/"])
     assert command[1:] == ["--user", "--pipe", "--quiet", "--collect", "/usr/bin/python3", "/plugin/gamescope_perf.py", "--child", "/"]
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+
+
+def test_reports_carry_the_bottom_screen_state(plugin):  # noqa: F811
+    state = plugin._kiosk_report_state()
+    assert {"enabled", "running", "reason", "screen_off", "brightness", "rpc_calls"} <= set(state)
+
+
+def test_stock_distro_hostnames_are_not_scrubbed_from_reports(plugin, monkeypatch):  # noqa: F811
+    import socket
+
+    plugin._os_id = "armada"
+    monkeypatch.setattr(socket, "gethostname", lambda: "armada")
+    assert plugin._redact_ids()[1] is None
+    monkeypatch.setattr(socket, "gethostname", lambda: "steamdeck")
+    assert plugin._redact_ids()[1] is None
+    monkeypatch.setattr(socket, "gethostname", lambda: "juans-thor")
+    assert plugin._redact_ids()[1] == "juans-thor"

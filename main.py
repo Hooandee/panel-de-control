@@ -149,7 +149,7 @@ from kiosk.controller import KioskController
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
-from kiosk.bridge import BridgeError, SteamBridge
+from kiosk.bridge import READS as kiosk_bridge_reads, BridgeError, SteamBridge
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -1238,6 +1238,12 @@ class Plugin:
         name = await asyncio.to_thread(kiosk_steam_game.game_name, _user_home(), str(appid))
         return {"appid": str(appid), "name": name}
 
+    def _kiosk_report_state(self) -> dict:
+        kiosk = getattr(self, "_kiosk", None)
+        if kiosk is None:
+            return {"available": False}
+        return {**kiosk.state(), "rpc_calls": {name: int(count) for name, (count, _spent) in kiosk.rpc_calls().items()}}
+
     async def get_kiosk_brightness(self) -> dict:
         return {"value": await self._kiosk.brightness()}
 
@@ -2202,6 +2208,11 @@ class Plugin:
             hostname = socket.gethostname()
         except Exception:  # noqa: BLE001
             hostname = None
+        # A distro's stock hostname names no one, and scrubbing it would mangle its own
+        # service names ("armada-pwm" on Armada OS).
+        stock = {"localhost", "steamdeck", str(getattr(self, "_os_id", "") or "").lower()}
+        if hostname and hostname.lower() in stock:
+            hostname = None
         return home, hostname
 
     async def _build_report_bundle(self, categories, text, home, hostname, context=None) -> dict:
@@ -2264,6 +2275,7 @@ class Plugin:
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
             "ui_diagnostics": self._ui_diagnostics_snapshot(),
+            "kiosk": self._kiosk_report_state(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -12861,4 +12873,5 @@ journal.trace_calls(
     untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs"}),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report"}),
+    untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

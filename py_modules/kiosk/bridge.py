@@ -19,6 +19,9 @@ ACTIONS = frozenset({
     "snapshot",
 })
 
+# Polled by the bottom screen; they change nothing, so they stay out of the journal.
+READS = frozenset({"brightness.get", "volume.get", "refresh.get", "perf.view", "colores.state", "snapshot"})
+
 Emit = Callable[..., Awaitable[Any]]
 
 
