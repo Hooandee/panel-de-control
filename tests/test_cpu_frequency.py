@@ -1314,6 +1314,7 @@ def _read_khz(root, rel):
 
 def test_table_driven_policies_get_targets_snapped_to_real_frequencies(tmp_path):
     root = str(tmp_path)
+    _write(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1", "0x00000000411fd403")
     little = _policy(root, 0, hw_min=307_200, hw_max=2_016_000, driver="qcom-cpufreq-hw", cpus="0-2")
     _write(root, f"{little}/scaling_available_frequencies",
            "307200 1459200 1555200 1785600 2016000 ")
@@ -1334,6 +1335,7 @@ def test_table_driven_policies_get_targets_snapped_to_real_frequencies(tmp_path)
 
 def test_table_snap_never_inverts_a_narrow_window(tmp_path):
     root = str(tmp_path)
+    _write(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1", "0x00000000411fd403")
     base = _policy(root, 0, hw_min=307_200, hw_max=2_016_000, driver="qcom-cpufreq-hw", cpus="0-2")
     _write(root, f"{base}/scaling_available_frequencies", "307200 1459200 1785600 2016000")
 
@@ -1346,6 +1348,7 @@ def test_table_snap_never_inverts_a_narrow_window(tmp_path):
 
 def test_boost_only_top_frequency_stays_reachable_and_auto_restores_it(tmp_path):
     root = str(tmp_path)
+    _write(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1", "0x00000000411fd403")
     prime = _policy(root, 7, hw_min=595_200, hw_max=3_187_200, driver="qcom-cpufreq-hw", cpus="7")
     _write(root, f"{prime}/scaling_available_frequencies", "595200 1708800 2956800")
     _write(root, f"{prime}/scaling_boost_frequencies", "3187200 ")
@@ -1360,3 +1363,13 @@ def test_boost_only_top_frequency_stays_reachable_and_auto_restores_it(tmp_path)
     assert result.ok is True
     assert result.status == "restored"
     assert _read_khz(root, f"{prime}/scaling_max_freq") == 3_187_200
+
+
+def test_pc_table_drivers_keep_the_exact_window_they_were_given(tmp_path):
+    root = str(tmp_path)
+    base = _policy(root, 0, hw_min=400_000, hw_max=3_000_000, driver="acpi-cpufreq", cpus="0-3")
+    _write(root, f"{base}/scaling_available_frequencies", "3000000 2200000 1400000 400000")
+
+    assert select_cpu_frequency(root=root).set_window(600_000, 1_804_800).ok is True
+    assert _read_khz(root, f"{base}/scaling_min_freq") == 600_000
+    assert _read_khz(root, f"{base}/scaling_max_freq") == 1_804_800

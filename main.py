@@ -5043,7 +5043,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = await asyncio.to_thread(self._observe_tdp_sync)
+            observation = await self._offload_call(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)

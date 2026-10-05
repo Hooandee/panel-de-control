@@ -6,6 +6,7 @@ import os
 import re
 import time
 
+import device_tree
 from sysfs import read_int, read_str, write_str
 
 
@@ -859,7 +860,11 @@ class LinuxCpuFrequency:
         }
 
 
-def _read_frequency_table(path):
+def _read_frequency_table(path, arm):
+    # Only ARM drivers (qcom-cpufreq-hw, cpufreq-dt, scmi) store the nearest table entry;
+    # x86 drivers keep the written limit, so their writes stay exactly as before.
+    if not arm:
+        return ()
     values = set()
     for name in ("scaling_available_frequencies", "scaling_boost_frequencies"):
         text = read_str(os.path.join(path, name)) or ""
@@ -868,6 +873,7 @@ def _read_frequency_table(path):
 
 
 def _discover_policies(root):
+    arm = device_tree.is_arm(root)
     base = os.path.join(root, _CPUFREQ)
     candidates = []
     seen = set()
@@ -916,7 +922,7 @@ def _discover_policies(root):
             affected_cpus=_parse_cpu_list(affected_text),
             hardware_min_khz=values["hardware_min"],
             hardware_max_khz=values["hardware_max"],
-            available_khz=_read_frequency_table(path),
+            available_khz=_read_frequency_table(path, arm),
         ))
     if not policies:
         return None, "no_policies"

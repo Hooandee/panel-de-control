@@ -4,6 +4,13 @@ from cpu.controls import CoreControl
 from cpu.info import read_cpu_info
 
 
+def _mark_arm(root):
+    midr = os.path.join(root, "sys/devices/system/cpu/cpu0/regs/identification/midr_el1")
+    os.makedirs(os.path.dirname(midr), exist_ok=True)
+    with open(midr, "w") as handle:
+        handle.write("0x00000000411fd403")
+
+
 def _cpu(root, idx, core_id, capacity, cluster=0, max_khz=None):
     base = os.path.join(root, "sys/devices/system/cpu", f"cpu{idx}")
     os.makedirs(os.path.join(base, "topology"), exist_ok=True)
@@ -20,6 +27,7 @@ def _cpu(root, idx, core_id, capacity, cluster=0, max_khz=None):
 
 def _thor(tmp_path, repeated_ids=False):
     root = str(tmp_path)
+    _mark_arm(root)
     layout = [(0, 222, 0), (1, 222, 0), (2, 222, 0), (3, 657, 1), (4, 657, 1),
               (5, 657, 1), (6, 657, 1), (7, 1024, 2)]
     for idx, cap, cluster in layout:
@@ -66,3 +74,27 @@ def test_max_frequency_includes_the_boost_step_while_boost_is_off(tmp_path):
         with open(os.path.join(path, name), "w") as handle:
             handle.write(value)
     assert read_cpu_info(root)["max_khz"] == 3187200
+
+
+def test_pc_keeps_its_core_order_even_when_capacities_are_published(tmp_path):
+    root = str(tmp_path)
+    for idx, cap in enumerate((1024, 1024, 512, 512)):
+        _cpu(root, idx, idx, cap)
+    core = CoreControl(root=root)
+    assert list(core._cores.values()) == [[0], [1], [2], [3]]
+    for idx, cap in enumerate((512, 512, 1024, 1024)):
+        _cpu(root, idx, idx, cap)
+    assert list(CoreControl(root=root)._cores.values()) == [[0], [1], [2], [3]]
+
+
+def test_pc_max_frequency_is_still_policy0(tmp_path):
+    root = str(tmp_path)
+    _cpu(root, 0, 0, 1024)
+    for policy, khz in ((0, 4_800_000), (1, 5_100_000)):
+        path = os.path.join(root, "sys/devices/system/cpu/cpufreq", f"policy{policy}")
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "cpuinfo_max_freq"), "w") as handle:
+            handle.write(str(khz))
+        with open(os.path.join(path, "scaling_available_frequencies"), "w") as handle:
+            handle.write("5500000 400000")
+    assert read_cpu_info(root)["max_khz"] == 4_800_000

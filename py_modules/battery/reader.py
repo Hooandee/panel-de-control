@@ -1,6 +1,7 @@
 import glob
 import os
 
+import device_tree
 from sysfs import read_int, read_str
 
 _SUPPLY = "sys/class/power_supply"
@@ -25,6 +26,7 @@ class BatteryReader:
     (µAh) × voltage_now (µV) for devices that only expose charge units."""
 
     def __init__(self, root="/"):
+        self._arm = device_tree.is_arm(root)
         self._root = root
         self._bat_dir = self._find_battery_dir()
 
@@ -87,7 +89,7 @@ class BatteryReader:
         )
         if power_uw is None:
             power_uw = vi_uw
-        elif vi_uw is not None and _disagrees(abs(power_uw), abs(vi_uw)):
+        elif self._arm and vi_uw is not None and _disagrees(abs(power_uw), abs(vi_uw)):
             # Some firmware (Snapdragon pmic-glink on the AYN Thor) reports power_now
             # an order of magnitude off while voltage and current are right.
             power_uw = abs(vi_uw)

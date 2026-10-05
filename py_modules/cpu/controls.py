@@ -2,6 +2,7 @@ import glob
 import os
 import re
 
+import device_tree
 from sysfs import read_int, read_str, write_str
 
 _CPU = "sys/devices/system/cpu"
@@ -103,6 +104,7 @@ class CoreControl:
 
     def __init__(self, root="/"):
         self._base = os.path.join(root, _CPU)
+        self._arm = device_tree.is_arm(root)
         # Bring every offlined CPU back first: the kernel drops the topology of an offline
         # CPU, so a prior core-limit would make the map (and max_cores) reflect only the
         # online subset. Online all → read the true hardware topology → _apply_cpu
@@ -123,6 +125,14 @@ class CoreControl:
                 write_str(p, 1)
 
     def _map(self):
+        if not self._arm:
+            by_core = {}
+            for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
+                match = re.search(r"cpu(\d+)", p)
+                cid = read_int(p)
+                if match and cid is not None:
+                    by_core.setdefault(cid, []).append(int(match.group(1)))
+            return dict(sorted(by_core.items()))
         capacity = {}
         m = {}
         for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
