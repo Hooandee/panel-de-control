@@ -25,6 +25,8 @@ import decky
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
+from gamescope_perf import GamescopePerf
+from user_session import spawn_args
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -143,6 +145,8 @@ from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
+from kiosk import vitals as kiosk_vitals
+from kiosk.bridge import READS as kiosk_bridge_reads, BridgeError, SteamBridge
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -317,7 +321,17 @@ def _now_minutes() -> int:
     return t.hour * 60 + t.minute
 
 
-_KIOSK_STOP_TIMEOUT_S = 5.0
+_KIOSK_STOP_TIMEOUT_S = 1.5
+# The kiosk polls for frame rate; without a poll for this long, the gamescope reader is
+# released again unless Auto-TDP still needs it.
+_KIOSK_FPS_HOLD_S = 10.0
+
+
+async def _emit_to_frontend(event: str, *args) -> None:
+    emit = getattr(decky, "emit", None)
+    if emit is None:
+        raise BridgeError("unsupported")
+    await emit(event, *args)
 
 
 def _plugin_dir() -> str:
@@ -338,6 +352,7 @@ DEFAULTS = {
     # Unit of the saved power values: "W" on PC, "level" on ARM.
     "tdp_unit": "W",
     "kiosk_enabled": False,
+    "kiosk_brightness": None,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -455,13 +470,15 @@ class Plugin:
         )
         self._settings = self._store.load(DEFAULTS)
         self._kiosk = KioskController(
-            os.path.join(_plugin_dir(), "dist", "kiosk"),
             plugin_dispatch(self),
             public_rpc_methods(self),
             journal=_kiosk_journal,
             enabled=bool(self._settings.get("kiosk_enabled")),
             art=lambda appid, kind: kiosk_steam_game.art_file(_user_home(), appid, kind),
+            brightness=self._settings.get("kiosk_brightness"),
         )
+        self._kiosk_bridge = SteamBridge(_emit_to_frontend)
+        self._kiosk_fps_at = None
         self._os_id = osinfo.read_os_id()
         self._os_name = osinfo.read_os_name()
         self._platform = platform_support.describe(self._os_id)
@@ -724,6 +741,12 @@ class Plugin:
         )
         self._power_reader = PowerReader()
         self._gamescope_stats = GamescopeStats()
+        self._gamescope_perf = GamescopePerf(
+            app_id=self._gamescope_focus_app,
+            skip_connectors=lambda: {c} if (c := self._kiosk.secondary_connector()) else set(),
+            env=controller_detect.clean_env,
+            wrap=self._native_frame_helper,
+        )
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -1124,9 +1147,80 @@ class Plugin:
     async def get_kiosk_state(self) -> dict:
         return await self._kiosk.refresh()
 
+    async def kiosk_steam(self, action: str, args: list | None = None) -> dict:
+        try:
+            result = await self._kiosk_bridge.call(str(action), list(args or []))
+        except BridgeError as error:
+            _kiosk_journal("WARNING", "steam_action_failed", action=str(action)[:40], error=str(error))
+            return {"ok": False, "error": str(error)}
+        return {"ok": True, "result": result}
+
+    async def kiosk_steam_result(self, request_id: int, ok: bool, result=None) -> bool:
+        return self._kiosk_bridge.resolve(int(request_id), bool(ok), result)
+
+    async def get_kiosk_live(self) -> dict:
+        self._kiosk_fps_at = time.monotonic()
+        await self._apply_stats_reader()
+        fps = self._gamescope_perf.fps()
+        if fps is not None:
+            reason = "ok"
+        else:
+            focus_reason = self._gamescope_stats.peek().get("reason")
+            reason = focus_reason if focus_reason not in (None, "ok") else "fps_unavailable"
+        return {
+            "fps": round(fps, 1) if fps is not None else None,
+            "reason": reason,
+            **await self.get_kiosk_session(),
+        }
+
+    async def get_kiosk_session(self) -> dict:
+        since = getattr(self, "_current_appid_at", None)
+        playing_s = (
+            round(time.monotonic() - since)
+            if self._current_appid is not None and since is not None
+            else None
+        )
+        return {"playing_s": playing_s, "appid": self._current_appid}
+
+    async def get_kiosk_vitals(self) -> dict:
+        self._init()
+
+        def read() -> dict:
+            battery = self._battery.read()
+            rpms = self._fan_reader.fan_rpms()
+            temps = [t for t in (self._fan_reader.driving_temps() or ()) if t is not None]
+            return {
+                **kiosk_vitals.read(),
+                "watts": battery.get("power_now_w"),
+                "charging": battery.get("status") == "Charging",
+                "fan_rpm": max(rpms) if rpms else None,
+                "celsius": max(temps) if temps else None,
+            }
+
+        return await asyncio.to_thread(read)
+
+    async def set_kiosk_screen_off(self, off: bool) -> dict:
+        return await self._kiosk.set_screen_off(bool(off))
+
     async def get_kiosk_game(self, appid: str) -> dict:
         name = await asyncio.to_thread(kiosk_steam_game.game_name, _user_home(), str(appid))
         return {"appid": str(appid), "name": name}
+
+    def _kiosk_report_state(self) -> dict:
+        kiosk = getattr(self, "_kiosk", None)
+        if kiosk is None:
+            return {"available": False}
+        return {**kiosk.state(), "rpc_calls": {name: int(count) for name, (count, _spent) in kiosk.rpc_calls().items()}}
+
+    async def get_kiosk_brightness(self) -> dict:
+        return {"value": await self._kiosk.brightness()}
+
+    async def set_kiosk_brightness(self, value: float, persist: bool = True) -> dict:
+        applied = await self._kiosk.set_brightness(float(value))
+        if applied is not None and persist:
+            self._settings["kiosk_brightness"] = applied
+            self._save()
+        return {"value": applied}
 
     async def set_kiosk_enabled(self, enabled: bool) -> dict:
         self._settings["kiosk_enabled"] = bool(enabled)
@@ -2082,6 +2176,11 @@ class Plugin:
             hostname = socket.gethostname()
         except Exception:  # noqa: BLE001
             hostname = None
+        # A distro's stock hostname names no one, and scrubbing it would mangle its own
+        # service names ("armada-pwm" on Armada OS).
+        stock = {"localhost", "steamdeck", str(getattr(self, "_os_id", "") or "").lower()}
+        if hostname and hostname.lower() in stock:
+            hostname = None
         return home, hostname
 
     async def _build_report_bundle(self, categories, text, home, hostname, context=None) -> dict:
@@ -2144,6 +2243,7 @@ class Plugin:
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
             "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
             "ui_diagnostics": self._ui_diagnostics_snapshot(),
+            "kiosk": self._kiosk_report_state(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -3263,7 +3363,8 @@ class Plugin:
         """Live driving temperature (max of CPU/GPU) for software-loop backends.
         Never raises; returns None if no temp is readable."""
         try:
-            cpu, gpu = extract_cpu_gpu_temps(self._fan_reader.read())
+            pair = self._fan_reader.driving_temps()
+            cpu, gpu = pair if pair is not None else extract_cpu_gpu_temps(self._fan_reader.read())
             vals = [t for t in (cpu, gpu) if t is not None]
             return max(vals) if vals else None
         except Exception:  # noqa: BLE001
@@ -3335,6 +3436,9 @@ class Plugin:
             # Unloading under a fan still in manual mode would strand it at its
             # last duty with no driver to move it again.
             state = driver.release_failed()
+        reader = getattr(self, "_fan_reader", None)
+        if reader is not None:
+            reader.invalidate()
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
@@ -4189,14 +4293,46 @@ class Plugin:
         return {**config, "target_fps": maximum}
 
     async def _sync_auto_stats_reader(self, active):
-        active = bool(active)
-        if active == getattr(self, "_auto_stats_reader_active", False):
+        self._auto_stats_reader_active = bool(active)
+        await self._apply_stats_reader()
+
+    def _native_frame_helper(self, argv: list[str]):
+        # Started through the session's systemd so it runs the system python natively: launched
+        # from the plugin it would run under the same x86 emulation as the plugin on ARM.
+        session = self._kiosk.session()
+        if session is None:
+            return None
+        return spawn_args(session, [
+            "systemd-run", "--user", "--pipe", "--quiet", "--collect", "/usr/bin/python3", *argv[1:],
+        ])
+
+    def _gamescope_focus_app(self) -> int | None:
+        focus = self._gamescope_stats.focus()
+        if focus == "steam":
+            return None
+        if focus and focus.isdigit() and int(focus) > 0:
+            return int(focus)
+        current = getattr(self, "_current_appid", None)
+        return int(current) if current and str(current).isdigit() else None
+
+    def _kiosk_wants_fps(self) -> bool:
+        polled = getattr(self, "_kiosk_fps_at", None)
+        return polled is not None and time.monotonic() - polled < _KIOSK_FPS_HOLD_S
+
+    async def _apply_stats_reader(self):
+        kiosk = self._kiosk_wants_fps()
+        if kiosk:
+            self._gamescope_perf.start()
+        elif getattr(self, "_perf_reader_running", False):
+            await asyncio.to_thread(self._gamescope_perf.stop)
+        self._perf_reader_running = kiosk
+        wanted = bool(getattr(self, "_auto_stats_reader_active", False)) or kiosk
+        if wanted == getattr(self, "_stats_reader_running", False):
             return
-        if active:
+        self._stats_reader_running = wanted
+        if wanted:
             self._gamescope_stats.start()
-            self._auto_stats_reader_active = True
         else:
-            self._auto_stats_reader_active = False
             await asyncio.to_thread(self._gamescope_stats.stop)
 
     def _start_auto_loop(self) -> None:
@@ -4217,6 +4353,7 @@ class Plugin:
         if stats is not None:
             stats.stop()
         self._auto_stats_reader_active = False
+        self._stats_reader_running = False
 
     def _reset_auto_session(self, reason="inactive") -> None:
         stats = getattr(self, "_gamescope_stats", None)
@@ -4871,7 +5008,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = self._observe_tdp_sync()
+            observation = await asyncio.to_thread(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)
@@ -8904,6 +9041,7 @@ class Plugin:
         if stats is not None:
             stats.clear()
         self._current_appid = current
+        self._current_appid_at = time.monotonic()
         if getattr(self, "_auto_controller", None) is not None:
             self._reset_auto_session("context_changed")
         self._next_gpu_generation()
@@ -12234,6 +12372,8 @@ class Plugin:
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         self._restore_board_fans()
+        if getattr(self, "_fan_reader", None) is not None:
+            self._fan_reader.invalidate()
         await self._offload_call(self._recover_fremont_fan_handoff)
         await self._prime_tdp_ownership()
         try:
@@ -12455,6 +12595,7 @@ class Plugin:
             "fan_experimental": self._settings.get("fan_experimental"),
             "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
             "kiosk_enabled": self._settings.get("kiosk_enabled"),
+            "kiosk_brightness": self._settings.get("kiosk_brightness"),
         }
 
     async def _support_call(self, name: str):
@@ -12696,7 +12837,8 @@ class Plugin:
 
 journal.trace_calls(
     Plugin,
-    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs"}),
+    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report"}),
+    untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

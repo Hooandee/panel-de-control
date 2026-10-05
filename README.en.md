@@ -233,6 +233,12 @@ from the system and the PC-only paths (watt-based TDP, ryzenadj, AMD and Intel G
 touched. Features arrive with their ARM equivalent; until then, anything that doesn't respond yet is
 hidden instead of pretending to work.
 
+On the **AYN Thor**, Panel can also take over the **bottom screen** in game mode: a touch deck with
+performance, FPS target, fan, brightness for both screens, volume, lights, Turbo, screenshot,
+keyboard and a shortcut to the quick access menu. It's drawn straight onto that screen, with no
+browser or second compositor in between, so the game on top doesn't lose frames. Turn it on in
+Settings; it's experimental.
+
 **Desktop PCs** (anything that isn't the Steam Machine) no longer show up as a generic device.
 They're recognised by having no battery and a non-portable chassis, and get desktop mode: CPU
 power on Intel and dedicated AMD graphics power, never past the limits their firmware sets, plus

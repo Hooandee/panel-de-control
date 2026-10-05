@@ -97,7 +97,7 @@ export interface KioskState {
 }
 export const getKioskState = callable<[], KioskState>("get_kiosk_state");
 export const setKioskEnabled = callable<[enabled: boolean], KioskState>("set_kiosk_enabled");
-export const getKioskGame = callable<[appid: string], { appid: string; name: string | null }>("get_kiosk_game");
+export const kioskSteamResult = callable<[requestId: number, ok: boolean, result: unknown], boolean>("kiosk_steam_result");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");

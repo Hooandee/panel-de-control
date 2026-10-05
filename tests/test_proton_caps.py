@@ -117,3 +117,12 @@ def test_arm64_builtin_never_reads_the_x86_build(tmp_path):
     _write_builtin_proton(str(tmp_path), "Proton - Experimental", PROTON_BODY)
     caps = detect_capabilities("proton-experimental-arm64", home=str(tmp_path), system_dirs=())
     assert caps == {"envs": [], "found": False}
+
+
+def test_arm64_builtins_read_valves_arm64_folders(tmp_path):
+    _write_builtin_proton(str(tmp_path), "Proton Experimental (ARM64)", PROTON_BODY)
+    _write_builtin_proton(str(tmp_path), "Proton 11.0 (ARM64)", PROTON_BODY)
+    for name in ("proton-experimental-arm64", "proton_11-arm64"):
+        caps = detect_capabilities(name, home=str(tmp_path), system_dirs=())
+        assert caps["found"] is True and "PROTON_LOG" in caps["envs"], name
+    assert detect_capabilities("proton_hotfix-arm64", home=str(tmp_path), system_dirs=())["found"] is False

@@ -3,8 +3,9 @@ import { FC, useCallback, useMemo } from "react";
 import { LuInfo } from "react-icons/lu";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
-import { resetWatts, offsetOf } from "../tdp/logic";
-import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
+import { resetWatts } from "../tdp/logic";
+import { PresetItem } from "../tdp/powerPresets";
+import { resolveLivePresets } from "../tdp/livePresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -49,21 +50,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
   // Falls back to a builtins-only library if the custom library hasn't loaded.
-  const resolved = useMemo(() => {
-    if (!tdp) return null;
-    const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
-    const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-    const w = scope === "global" ? tdp.global_watts : tdp.watts;
-    const lv = scope === "global"
-      ? (tdp.global_requested_levels ?? tdp.global_levels)
-      : (tdp.requested_levels ?? tdp.levels);
-    const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
-    const liveBoost = { mode, off2: offsetOf(lv.pl2, lv.pl1), off3: offsetOf(lv.pl3, lv.pl2) };
-    return resolveItems(
-      lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost,
-      isLevelUnit(tdp.unit) ? (level) => t("tdp.level.value", { level }) : undefined,
-    );
-  }, [tdp, presets, scope, t]);
+  const resolved = useMemo(
+    () => (tdp ? resolveLivePresets(tdp, presets, scope, t) : null),
+    [tdp, presets, scope, t],
+  );
 
   // Stable identity so the memoized chip row doesn't re-render on every tick. Edit range is
   // the charger ceiling so a charger-made preset isn't clipped when edited on battery.

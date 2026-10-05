@@ -1,12 +1,14 @@
 import asyncio
 import json
 
-import pytest
-
 from kiosk.server import KioskServer, TOKEN_HEADER
 
 
 async def _request(port, raw: bytes) -> tuple[int, bytes]:
+    """One-shot client: asks the server to close after answering and reads to EOF."""
+    if b"\r\n" in raw and b"Connection:" not in raw:
+        line, rest = raw.split(b"\r\n", 1)
+        raw = line + b"\r\nConnection: close\r\n" + rest
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     writer.write(raw)
     await writer.drain()
@@ -24,47 +26,36 @@ def _post(token: str, payload: dict) -> bytes:
     ).encode() + body
 
 
-@pytest.fixture
-def static_dir(tmp_path):
-    (tmp_path / "index.html").write_text("<p>kiosk</p>")
-    (tmp_path / "kiosk.js").write_text("1")
-    (tmp_path / "secret.txt").write_text("nope")
-    return tmp_path
-
-
-def _serve(static_dir, dispatch=None, allowed=("get_tdp_state",), errors=None):
+def _serve(dispatch=None, allowed=("get_tdp_state",), errors=None):
     async def default(name, args):
         return {"method": name, "args": args}
 
     return KioskServer(
-        str(static_dir),
         dispatch or default,
         allowed,
         on_error=(lambda m, e: errors.append((m, e))) if errors is not None else (lambda m, e: None),
     )
 
 
-def test_serves_only_the_bundle_files(static_dir):
+def test_serves_nothing_but_rpc_and_game_art():
     async def run():
-        server = _serve(static_dir)
+        server = _serve()
         await server.start()
         try:
-            index = await _request(server.port, b"GET /?k=abc HTTP/1.1\r\n\r\n")
-            secret = await _request(server.port, b"GET /secret.txt HTTP/1.1\r\n\r\n")
+            root = await _request(server.port, b"GET /?k=abc HTTP/1.1\r\n\r\n")
             escape = await _request(server.port, b"GET /../main.py HTTP/1.1\r\n\r\n")
         finally:
             await server.stop()
-        return index, secret, escape
+        return root, escape
 
-    index, secret, escape = asyncio.run(run())
-    assert index == (200, b"<p>kiosk</p>")
-    assert secret[0] == 404
+    root, escape = asyncio.run(run())
+    assert root[0] == 404
     assert escape[0] == 404
 
 
-def test_rpc_requires_the_launch_token(static_dir):
+def test_rpc_requires_the_launch_token():
     async def run():
-        server = _serve(static_dir)
+        server = _serve()
         await server.start()
         try:
             wrong = await _request(server.port, _post("guess", {"method": "get_tdp_state", "args": []}))
@@ -81,9 +72,9 @@ def test_rpc_requires_the_launch_token(static_dir):
     assert json.loads(right[1]) == {"result": {"method": "get_tdp_state", "args": [1]}}
 
 
-def test_rpc_rejects_methods_decky_does_not_expose(static_dir):
+def test_rpc_rejects_methods_decky_does_not_expose():
     async def run():
-        server = _serve(static_dir)
+        server = _serve()
         await server.start()
         try:
             return await _request(server.port, _post(server.token, {"method": "_main", "args": []}))
@@ -95,14 +86,14 @@ def test_rpc_rejects_methods_decky_does_not_expose(static_dir):
     assert json.loads(body) == {"error": "unknown_method"}
 
 
-def test_rpc_failures_are_reported_not_hidden(static_dir):
+def test_rpc_failures_are_reported_not_hidden():
     errors = []
 
     async def boom(name, args):
         raise RuntimeError("sysfs gone")
 
     async def run():
-        server = _serve(static_dir, dispatch=boom, errors=errors)
+        server = _serve(dispatch=boom, errors=errors)
         await server.start()
         try:
             return await _request(server.port, _post(server.token, {"method": "get_tdp_state", "args": []}))
@@ -115,9 +106,9 @@ def test_rpc_failures_are_reported_not_hidden(static_dir):
     assert errors == [("get_tdp_state", "RuntimeError: sysfs gone")]
 
 
-def test_rpc_rejects_malformed_and_oversized_bodies(static_dir):
+def test_rpc_rejects_malformed_and_oversized_bodies():
     async def run():
-        server = _serve(static_dir)
+        server = _serve()
         await server.start()
         try:
             bad = await _request(server.port, _post(server.token, {"args": []}))
@@ -134,9 +125,9 @@ def test_rpc_rejects_malformed_and_oversized_bodies(static_dir):
     assert huge[0] == 413
 
 
-def test_url_carries_port_and_token(static_dir):
+def test_url_carries_port_and_token():
     async def run():
-        server = _serve(static_dir)
+        server = _serve()
         await server.start()
         url = server.url
         port, token = server.port, server.token
@@ -148,13 +139,13 @@ def test_url_carries_port_and_token(static_dir):
     assert after is None
 
 
-def test_serves_only_resolved_game_art(static_dir, tmp_path):
+def test_serves_only_resolved_game_art(tmp_path):
     hero = tmp_path / "hero.jpg"
     hero.write_bytes(b"jpeg")
 
     async def run():
         server = KioskServer(
-            str(static_dir), lambda *_: None, (),
+            lambda *_: None, (),
             art=lambda appid, kind: (str(hero), "image/jpeg") if (appid, kind) == ("413150", "hero") else None,
         )
         await server.start()
@@ -170,3 +161,42 @@ def test_serves_only_resolved_game_art(static_dir, tmp_path):
     assert found == (200, b"jpeg")
     assert missing[0] == 404
     assert nested[0] == 404
+
+
+def test_one_connection_serves_several_requests():
+    async def run():
+        server = _serve()
+        await server.start()
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+            answers = []
+            for _ in range(3):
+                writer.write(_post(server.token, {"method": "get_tdp_state", "args": []}))
+                await writer.drain()
+                head = await reader.readuntil(b"\r\n\r\n")
+                length = int(next(line for line in head.split(b"\r\n") if line.lower().startswith(b"content-length")).split(b":")[1])
+                assert b"Connection: keep-alive" in head
+                answers.append(json.loads(await reader.readexactly(length)))
+            writer.close()
+            return answers
+        finally:
+            await server.stop()
+
+    answers = asyncio.run(run())
+    assert [a["result"]["method"] for a in answers] == ["get_tdp_state"] * 3
+
+
+def test_stopping_does_not_wait_for_idle_connections():
+    async def run():
+        server = _serve()
+        await server.start()
+        reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+        writer.write(_post(server.token, {"method": "get_tdp_state", "args": []}))
+        await writer.drain()
+        await reader.readuntil(b"\r\n\r\n")
+        started = asyncio.get_running_loop().time()
+        await asyncio.wait_for(server.stop(), 2)
+        writer.close()
+        return asyncio.get_running_loop().time() - started
+
+    assert asyncio.run(run()) < 1

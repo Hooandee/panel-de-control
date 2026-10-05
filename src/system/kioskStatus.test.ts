@@ -20,6 +20,6 @@ describe("kioskDescriptionKey", () => {
     expect(kioskDescriptionKey({ ...base, last_error: "boom" })).toBe("settings.kiosk.retrying");
     expect(kioskDescriptionKey({ ...base, available: false, reason: "not_in_game_mode" })).toBe("settings.kiosk.waiting");
     expect(kioskDescriptionKey(base)).toBe("settings.kiosk.starting");
-    expect(kioskDescriptionKey({ ...base, reason: "no_browser", available: false })).toBe("settings.kiosk.noBrowser");
+    expect(kioskDescriptionKey({ ...base, reason: "no_runtime", available: false })).toBe("settings.kiosk.noRuntime");
   });
 });
