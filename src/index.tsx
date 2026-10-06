@@ -13,6 +13,10 @@ import {
   getThemeInstallRecoveries,
   getThemeActivationRecovery,
   listThemeExtensions,
+  getThemeData,
+  saveThemeData,
+  listThemeData as listThemeDataRpc,
+  resetThemeData as resetThemeDataRpc,
   loadThemeExtension,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -52,6 +56,7 @@ import {
 } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
 import { getThemesClient } from "./themes/useThemes";
+import { configureThemeDataRpcHost } from "./themes/themeDataClient";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
@@ -101,6 +106,12 @@ export default definePlugin(() => {
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
     list: listThemeExtensions,
     load: loadThemeExtension,
+  });
+  const releaseThemeDataHost = configureThemeDataRpcHost({
+    get: getThemeData,
+    save: saveThemeData,
+    list: listThemeDataRpc,
+    reset: resetThemeDataRpc,
   });
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
@@ -198,6 +209,7 @@ export default definePlugin(() => {
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
       releaseThemeExtensionHost();
+      releaseThemeDataHost();
       releaseThemeFailureReporter();
       releaseSectionHandoffStore();
       releaseCssLoaderHost();

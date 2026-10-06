@@ -42,6 +42,10 @@ export const prepareRemoteThemeInstall = callable<[
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
+export const getThemeData = callable<[catalogId: string], unknown>("get_theme_data");
+export const saveThemeData = callable<[catalogId: string, summary: string, value: unknown], unknown>("save_theme_data");
+export const listThemeData = callable<[], unknown>("list_theme_data");
+export const resetThemeData = callable<[catalogId: string], unknown>("reset_theme_data");
 export const getThemePatchLabels = callable<[
   catalogId: string,
   cssLoaderName: string,

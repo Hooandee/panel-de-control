@@ -769,3 +769,75 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(logs.join(" ")).not.toContain("example-theme");
   });
 });
+
+describe("ThemeExtensionRuntimeHost theme data", () => {
+  function bridge() {
+    const released: string[] = [];
+    const bound: string[] = [];
+    return {
+      released,
+      bound,
+      forTheme: (catalogId: string) => {
+        bound.push(catalogId);
+        return {
+          read: vi.fn(async () => null),
+          write: vi.fn(async () => "saved" as const),
+          subscribe: vi.fn(() => () => { released.push(catalogId); }),
+        };
+      },
+    };
+  }
+
+  it.each([1, 2] as const)("gives ABI-v%s runtimes their own data and releases its subscriptions on unmount", async (abi) => {
+    const data = bridge();
+    let seen: Record<string, unknown> | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: abi }]),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      data,
+      evaluate: () => Object.freeze({
+        abiVersion: abi,
+        mount: (context: ThemeExtensionMountContext) => {
+          seen = context.data as unknown as Record<string, unknown>;
+          context.data?.subscribe(() => {});
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(data.bound).toEqual(["example-theme"]);
+    expect(Object.isFrozen(seen)).toBe(true);
+    expect(Object.keys(seen ?? {}).sort()).toEqual(["read", "subscribe", "write"]);
+    expect(data.released).toEqual([]);
+    host.dispose();
+    expect(data.released).toEqual(["example-theme"]);
+  });
+
+  it("releases a subscription taken after the theme was unmounted", async () => {
+    const data = bridge();
+    let late: (() => void) | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      data,
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          late = () => context.data?.subscribe(() => {});
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    host.dispose();
+    late?.();
+
+    expect(data.released).toEqual(["example-theme"]);
+  });
+});

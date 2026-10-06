@@ -34,6 +34,7 @@ import journal
 import journal_context
 import self_updater
 import theme_activation
+import theme_data
 import theme_packages
 import theme_remote
 import theme_transport
@@ -207,6 +208,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "recent_failures",
         )),
         ("_support_custom_artwork", None),
+        ("_support_theme_data", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -1885,6 +1887,74 @@ class Plugin:
                 type(error).__name__,
             )
             raise RuntimeError("extension_unavailable") from None
+
+    # Theme runtimes keep their own data (a home layout, folders) through Panel: one file per theme in
+    # Panel's settings, so it outlives theme updates and reinstalls until the user resets it.
+    def _theme_data_dir(self) -> Path:
+        return Path(decky.DECKY_PLUGIN_SETTINGS_DIR)
+
+    async def get_theme_data(self, catalog_id: str) -> dict | None:
+        self._init()
+        try:
+            return await self._offload_theme_call(lambda: theme_data.read(self._theme_data_dir(), catalog_id))
+        except theme_data.ThemeDataError as error:
+            decky.logger.warning("Theme data read rejected (%s)", error.code)
+            return None
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme data read failed (%s)", type(error).__name__)
+            return None
+
+    async def save_theme_data(self, catalog_id: str, summary: str, value: object) -> dict:
+        self._init()
+
+        def save() -> dict:
+            installed = {
+                receipt["catalogId"]
+                for receipt in theme_packages.list_theme_extensions(self._themes_root(), self._theme_receipts_path())
+            }
+            if catalog_id not in installed:
+                raise theme_data.ThemeDataError("not_installed")
+            return theme_data.write(self._theme_data_dir(), catalog_id, summary, value, now=time.time())
+
+        try:
+            return {"ok": True, "record": await self._offload_theme_call(save)}
+        except theme_data.ThemeDataError as error:
+            decky.logger.warning("Theme data save rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme data save failed: %s", type(error).__name__)
+            return {"ok": False, "code": "save_failed"}
+
+    async def list_theme_data(self) -> list[dict]:
+        self._init()
+        try:
+            return await self._offload_theme_call(lambda: theme_data.list_records(self._theme_data_dir()))
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme data inventory failed (%s)", type(error).__name__)
+            return []
+
+    async def reset_theme_data(self, catalog_id: str) -> dict:
+        self._init()
+        try:
+            deleted = await self._offload_theme_call(lambda: theme_data.delete(self._theme_data_dir(), catalog_id))
+        except theme_data.ThemeDataError as error:
+            decky.logger.warning("Theme data reset rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme data reset failed: %s", type(error).__name__)
+            return {"ok": False, "code": "reset_failed"}
+        decky.logger.info("Theme data reset for %s (existed: %s)", catalog_id, deleted)
+        return {"ok": True, "deleted": deleted}
+
+    def _support_theme_data(self) -> dict:
+        try:
+            records = theme_data.list_records(self._theme_data_dir())
+        except Exception:  # noqa: BLE001
+            return {"theme_data": "unavailable"}
+        return {"theme_data": [
+            {"catalogId": record["catalogId"], "bytes": record["bytes"], "updatedAt": record["updatedAt"]}
+            for record in records
+        ]}
 
     async def get_device(self) -> dict:
         self._init()
@@ -12908,7 +12978,7 @@ class Plugin:
 journal.trace_calls(
     Plugin,
     untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
-    automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report"}),
+    automatic=frozenset({"load_theme_extension", "save_theme_data"}),
+    hidden_arguments=frozenset({"submit_report", "save_theme_data"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

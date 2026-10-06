@@ -1,4 +1,5 @@
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
+import { createThemeDataBridge } from "../themeDataClient";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
   ThemeExtensionRuntimeHost,
@@ -78,6 +79,7 @@ export function createSteamRuntimeBridge(
   createManager: (doc: Document) => RuntimeManagerLike = (doc) => new ThemeExtensionRuntimeHost({
     client: createThemeExtensionClient(),
     doc,
+    data: createThemeDataBridge(),
   }),
   onCssLoaderStylesChanged?: () => void,
 ): SteamRuntimeBridge {
@@ -174,6 +176,7 @@ export function startThemesRuntime({
       qam,
       library,
       navigation,
+      data: createThemeDataBridge(),
     }),
     () => { void client.refresh(); },
   );

@@ -4,6 +4,7 @@ import type {
   ThemeExtensionDescriptor,
   ThemeExtensionPayload,
 } from "../themeExtensionClient";
+import type { ThemeDataAccess, ThemeDataBridge } from "../themeDataClient";
 import type { ThemeExtensionLibraryAccess } from "./libraryAccess";
 import type { ThemeExtensionNavigationAccess } from "./navigationAccess";
 import { SECTION_ON, sectionKeyOf } from "../sectionOwnership";
@@ -23,6 +24,7 @@ export interface ThemeExtensionMountContextV1 {
   host: Readonly<ThemeExtensionHostDescriptor>;
   qam?: never;
   navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
+  data?: Readonly<ThemeDataAccess>;
 }
 
 export interface ThemeExtensionMountContextV2 {
@@ -32,6 +34,7 @@ export interface ThemeExtensionMountContextV2 {
   qam: Readonly<ThemeExtensionQamAccess>;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  data?: Readonly<ThemeDataAccess>;
 }
 
 export type ThemeExtensionMountContext =
@@ -70,6 +73,7 @@ interface ThemeExtensionRuntimeHostOptions {
   qam?: ThemeExtensionQamAccess;
   library?: ThemeExtensionLibraryAccess;
   navigation?: ThemeExtensionNavigationAccess;
+  data?: ThemeDataBridge;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -213,6 +217,7 @@ export class ThemeExtensionRuntimeHost {
   private readonly qam: Readonly<ThemeExtensionQamAccess> | undefined;
   private readonly library: Readonly<ThemeExtensionLibraryAccess> | undefined;
   private readonly navigation: Readonly<ThemeExtensionNavigationAccess> | undefined;
+  private readonly data: ThemeDataBridge | undefined;
   private readonly evaluate: ExtensionEvaluator;
   private readonly log: (code: ExtensionLogCode) => void;
   private descriptors: readonly ThemeExtensionDescriptor[] | null = null;
@@ -234,6 +239,7 @@ export class ThemeExtensionRuntimeHost {
     qam,
     library,
     navigation,
+    data,
     evaluate = evaluateThemeExtensionBundle,
     log = (code) => console.warn(`[themes:${code}]`),
   }: ThemeExtensionRuntimeHostOptions) {
@@ -253,6 +259,7 @@ export class ThemeExtensionRuntimeHost {
       focus: navigation.focus,
       capture: navigation.capture,
     }) : undefined;
+    this.data = data;
     this.evaluate = evaluate;
     this.log = log;
   }
@@ -425,18 +432,35 @@ export class ThemeExtensionRuntimeHost {
     if (!this.isCurrent(selection.fingerprint, generation)) return this.abandon(selection.fingerprint, generation);
     const scope = new MountScope(this.log);
     try {
+      // Each runtime only reaches its own theme's data; a reset reaches it through subscribe.
+      const themeData = this.data?.forTheme(selection.descriptor.catalogId);
       const sharedContext = {
         theme: freezeTheme(selection.theme),
         document: this.doc,
         host: HOST_DESCRIPTOR,
+        ...(themeData ? {
+          data: Object.freeze({
+            read: themeData.read,
+            write: themeData.write,
+            subscribe: (listener: Parameters<ThemeDataAccess["subscribe"]>[0]) => scope.track(themeData.subscribe(listener)),
+          }),
+        } : {}),
       };
       let stop: () => void;
       if (extension.abiVersion === 1) {
         const navigation = this.navigation;
-        stop = extension.mount(Object.freeze({
+        const themeStop = extension.mount(Object.freeze({
           ...sharedContext,
           ...(navigation ? { navigation: Object.freeze({ focus: navigation.focus }) } : {}),
         }));
+        if (typeof themeStop !== "function") throw new Error("Theme extension disposer is invalid");
+        stop = () => {
+          try {
+            themeStop();
+          } finally {
+            scope.releaseAll();
+          }
+        };
       } else {
         if (!this.qam) throw new Error("QAM access is unavailable");
         const qam = this.qam;
