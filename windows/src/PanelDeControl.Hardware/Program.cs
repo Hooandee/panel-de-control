@@ -81,7 +81,7 @@ public static class Program
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
-            var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
+            var snapshotTask = ServeSnapshotsAsync(snapshotServer, brokerLifetime.Token);
             var volumeTask = volumeServer.RunUntilCancelledAsync(
                 brokerLifetime.Token);
             var brightnessTask = brightnessServer.RunUntilCancelledAsync(
@@ -114,6 +114,16 @@ public static class Program
         {
             CompanionLog.Write("fatal", exception);
             return 1;
+        }
+    }
+
+    // The snapshot server stops when the widget goes idle; the companion itself stays up because
+    // it keeps Steam themed while Game Bar is closed.
+    private static async Task ServeSnapshotsAsync(SnapshotPipeServer server, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await server.RunAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

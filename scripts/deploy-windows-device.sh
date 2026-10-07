@@ -132,7 +132,7 @@ try {
   Get-AppxPackage -Name '${PACKAGE_NAME}' | Remove-AppxPackage
   if (Test-Path \$layout) { Remove-Item -LiteralPath \$layout -Recurse -Force }
   Move-Item -LiteralPath \$incoming -Destination \$layout
-  Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml')
+  Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml') -ForceApplicationShutdown
   Get-AppxPackage -Name '${PACKAGE_NAME}' | Select-Object Name, Version, InstallLocation | Format-List | Out-String | Out-File -Append \$log
   \$code = 0
 } catch {

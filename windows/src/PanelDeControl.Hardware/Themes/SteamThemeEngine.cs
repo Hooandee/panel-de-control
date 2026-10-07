@@ -58,6 +58,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
 
     private readonly ISteamDevTools devTools;
     private readonly ISteamInstallation steam;
@@ -148,7 +149,8 @@ public sealed class SteamThemeEngine
                 }
 
                 Publish(result with { InputsGeneration = loadedGeneration });
-                await wake.WaitAsync(CycleInterval, cancellationToken).ConfigureAwait(false);
+                var interval = inputs is { Enabled.Count: 0 } && pages.Count == 0 ? IdleCycleInterval : CycleInterval;
+                await wake.WaitAsync(interval, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
