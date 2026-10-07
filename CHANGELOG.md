@@ -7,28 +7,33 @@
 
 ### Español
 
-* **Personalizar:** El color de acento tiene una opción nueva, «Por defecto», que viene marcada de serie. Con ella Panel toma el color del tema que tengas puesto, si el tema lo indica, y si no se queda con el azul de siempre. Con Eclipse, al cambiar de planeta en las opciones del tema, Panel cambia de color al momento. Si eliges un color concreto, ese manda.
-* **Temas:** Eclipse, el tema nuevo pensado para pantallas OLED, ya aparece en Temas con su propia portada. Además, las descripciones de los temas Hooandee ya se leen en alemán y en portugués en vez de salir en inglés.
+* **Temas:** Llega Eclipse, un tema nuevo inspirado en el espacio y los eclipses. En el Inicio tus juegos son planetas sobre el horizonte, con un satélite que orbita el que tienes seleccionado, y al pulsar A se abre un menú rápido alrededor del juego para jugar, ver detalles, ajustes o el mando. Todo va sobre negro puro, con estrellas y un brillo suave solo en lo que miras, así que en pantallas OLED luce especialmente bien. Viste también el menú de Steam, el menú rápido, la biblioteca, los ajustes, los amigos y el propio Panel y Colores, y trae nueve colores de planeta y opciones para las estrellas, las animaciones, la barra superior y la ayuda de botones. Se instala desde Temas, donde aparece con su portada.
+* **Personalizar:** El color de acento tiene una opción nueva, «Por defecto», que viene marcada de serie. Con ella Panel se pone el color del tema que tengas, y con Eclipse cambia al momento cuando eliges otro planeta. Si eliges un color concreto, ese manda.
+* **Temas:** Las descripciones de los temas ya se leen en alemán y en portugués en vez de salir en inglés.
 
 ### English
 
-* **Customize:** The accent colour has a new "Default" option, selected out of the box. With it, Panel takes the colour of the theme you have on, if the theme provides one, and otherwise keeps its usual blue. With Eclipse, switching planets in the theme options recolours Panel instantly. If you pick a specific colour, that one wins.
-* **Themes:** Eclipse, the new theme made for OLED screens, now shows up in Themes with its own cover. The Hooandee theme descriptions also read in German and Portuguese instead of falling back to English.
+* **Themes:** Meet Eclipse, a new theme inspired by space and eclipses. On Home your games are planets over the horizon, with a satellite orbiting the one you have selected, and pressing A opens a quick menu around the game to play, see details, settings or the controller. Everything sits on pure black, with stars and a soft glow only on what you're looking at, so it looks especially good on OLED screens. It also restyles Steam's menu, the quick access menu, the library, settings, friends and Panel and Colores themselves, and comes with nine planet colours plus options for the stars, animations, the top bar and the button hints. Install it from Themes, where it shows up with its own cover.
+* **Customize:** The accent colour has a new "Default" option, selected out of the box. With it Panel takes the colour of the theme you have on, and with Eclipse it changes instantly when you pick another planet. If you choose a specific colour, that one wins.
+* **Themes:** Theme descriptions now read in German and Portuguese instead of falling back to English.
 
 ### Italiano
 
-* **Personalizza:** Il colore d'accento ha una nuova opzione, «Predefinito», selezionata di serie. Con questa Panel prende il colore del tema che hai attivo, se il tema lo indica, altrimenti resta il solito blu. Con Eclipse, cambiando pianeta nelle opzioni del tema, Panel cambia colore all'istante. Se scegli un colore preciso, vale quello.
-* **Temi:** Eclipse, il nuovo tema pensato per gli schermi OLED, ora compare in Temi con la sua copertina. Inoltre le descrizioni dei temi Hooandee si leggono in tedesco e in portoghese invece di comparire in inglese.
+* **Temi:** Arriva Eclipse, un nuovo tema ispirato allo spazio e alle eclissi. Nella Home i tuoi giochi sono pianeti sull'orizzonte, con un satellite che orbita intorno a quello selezionato, e premendo A si apre un menu rapido attorno al gioco per giocare, vedere i dettagli, le impostazioni o il controller. Tutto è su nero puro, con le stelle e un bagliore leggero solo su ciò che guardi, quindi sugli schermi OLED rende particolarmente bene. Veste anche il menu di Steam, il menu di accesso rapido, la libreria, le impostazioni, gli amici e lo stesso Panel e Colores, e porta nove colori di pianeta e opzioni per le stelle, le animazioni, la barra superiore e la legenda dei tasti. Si installa da Temi, dove compare con la sua copertina.
+* **Personalizza:** Il colore d'accento ha una nuova opzione, «Predefinito», selezionata di serie. Con questa Panel prende il colore del tema che hai attivo, e con Eclipse cambia all'istante quando scegli un altro pianeta. Se scegli un colore preciso, vale quello.
+* **Temi:** Le descrizioni dei temi ora si leggono in tedesco e in portoghese invece di comparire in inglese.
 
 ### Deutsch
 
-* **Anpassen:** Die Akzentfarbe hat eine neue Option „Standard“, die von Anfang an ausgewählt ist. Damit übernimmt Panel die Farbe des aktiven Themes, sofern das Theme eine vorgibt, und bleibt sonst beim gewohnten Blau. Mit Eclipse färbt sich Panel sofort um, wenn du in den Theme-Optionen den Planeten wechselst. Wählst du eine bestimmte Farbe, gilt diese.
-* **Themes:** Eclipse, das neue Theme für OLED-Bildschirme, erscheint jetzt unter Themes mit eigenem Cover. Außerdem sind die Beschreibungen der Hooandee-Themes jetzt auf Deutsch und Portugiesisch statt auf Englisch.
+* **Themes:** Neu ist Eclipse, ein Theme, inspiriert vom Weltall und von Sonnenfinsternissen. Auf dem Startbildschirm sind deine Spiele Planeten über dem Horizont, ein Satellit umkreist den ausgewählten, und mit A öffnet sich rund um das Spiel ein Schnellmenü zum Spielen, für Details, Einstellungen oder den Controller. Alles liegt auf reinem Schwarz, mit Sternen und einem sanften Leuchten nur dort, wo du hinschaust, deshalb sieht es auf OLED-Bildschirmen besonders gut aus. Es gestaltet auch das Steam-Menü, das Schnellzugriffsmenü, die Bibliothek, die Einstellungen, die Freunde sowie Panel und Colores selbst, und bringt neun Planetenfarben sowie Optionen für Sterne, Animationen, die obere Leiste und die Tastenhinweise mit. Installiert wird es unter Themes, wo es mit eigenem Cover erscheint.
+* **Anpassen:** Die Akzentfarbe hat eine neue Option „Standard“, die von Anfang an ausgewählt ist. Damit übernimmt Panel die Farbe deines Themes, und mit Eclipse wechselt sie sofort, wenn du einen anderen Planeten wählst. Wählst du eine bestimmte Farbe, gilt diese.
+* **Themes:** Die Theme-Beschreibungen sind jetzt auf Deutsch und Portugiesisch statt auf Englisch.
 
 ### Português (Brasil)
 
-* **Personalizar:** A cor de destaque ganhou uma opção nova, "Padrão", que já vem marcada. Com ela o Panel pega a cor do tema que você está usando, se o tema indicar uma, e senão fica com o azul de sempre. Com o Eclipse, ao trocar de planeta nas opções do tema, o Panel muda de cor na hora. Se você escolher uma cor específica, vale ela.
-* **Temas:** O Eclipse, o tema novo pensado para telas OLED, agora aparece em Temas com a capa dele. Além disso, as descrições dos temas Hooandee agora aparecem em alemão e português em vez de inglês.
+* **Temas:** Chegou o Eclipse, um tema novo inspirado no espaço e nos eclipses. No Início seus jogos são planetas sobre o horizonte, com um satélite orbitando o que está selecionado, e ao apertar A abre um menu rápido em volta do jogo para jogar, ver detalhes, ajustes ou o controle. Tudo fica sobre preto puro, com estrelas e um brilho suave só no que você está olhando, então em telas OLED ele fica especialmente bonito. Ele também veste o menu do Steam, o menu de acesso rápido, a biblioteca, os ajustes, os amigos e o próprio Panel e Colores, e traz nove cores de planeta e opções para as estrelas, as animações, a barra superior e a legenda dos botões. É só instalar em Temas, onde ele aparece com a capa dele.
+* **Personalizar:** A cor de destaque ganhou uma opção nova, "Padrão", que já vem marcada. Com ela o Panel usa a cor do tema que você está usando, e com o Eclipse muda na hora quando você escolhe outro planeta. Se você escolher uma cor específica, vale ela.
+* **Temas:** As descrições dos temas agora aparecem em alemão e português em vez de inglês.
 
 ## [0.62.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.1...panel-de-control-v0.62.0) (2026-10-05)
 
