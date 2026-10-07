@@ -450,6 +450,8 @@ export const de: Record<string, string> = {
   "themes.data.reset": "Zurücksetzen",
   "themes.data.confirm": "Zum Zurücksetzen erneut drücken",
   "themes.data.failed": "Die Daten konnten nicht zurückgesetzt werden.",
+  "themes.data.cleared": "Zurückgesetzt",
+  "themes.data.empty": "Keine gespeicherten Daten",
   "themes.cssLoader.missing": "Zum Installieren und Verwenden von Themes brauchst du CSS Loader. Installiere ihn aus dem Decky Store und wähle danach Erneut prüfen.",
   "themes.cssLoader.disabled": "CSS Loader ist installiert, aber deaktiviert. Aktiviere ihn in Decky und versuche es erneut.",
   "themes.cssLoader.error": "CSS Loader konnte nicht sicher geprüft werden.",

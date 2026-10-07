@@ -450,6 +450,8 @@ export const ptBR: Record<string, string> = {
   "themes.data.reset": "Redefinir",
   "themes.data.confirm": "Pressione de novo para redefinir",
   "themes.data.failed": "Não foi possível redefinir os dados.",
+  "themes.data.cleared": "Redefinido",
+  "themes.data.empty": "Nenhum dado salvo",
   "themes.cssLoader.missing": "Você precisa do CSS Loader para instalar e usar temas. Instale na Loja Decky e depois selecione “Verificar novamente”.",
   "themes.cssLoader.disabled": "O CSS Loader está instalado, mas desativado. Ative-o no Decky e tente novamente.",
   "themes.cssLoader.error": "Não foi possível verificar o CSS Loader com segurança.",
