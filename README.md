@@ -159,7 +159,8 @@ Idioma desde un selector compacto, el interruptor de "aprender de mi uso" (la te
 reordenas y ocultas pestañas y bloques, activas o desactivas módulos enteros (desactivar apaga esa
 función en todo el panel; ocultar solo deja de mostrarla), creas tus propias pestañas (vistas
 personalizadas) con los bloques que quieras de cualquier categoría y las colocas en el orden que
-prefieras entre las demás, y eliges el color de acento de una paleta.
+prefieras entre las demás, y eliges el color de acento de una paleta o lo dejas en "Por defecto"
+para que siga al tema activo.
 
 Todo el panel se maneja al 100% con el mando: el elemento en el que está el cursor se marca con un
 borde de acento claro, así que no hace falta la pantalla táctil.

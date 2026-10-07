@@ -157,7 +157,7 @@ can be turned off), and a button to erase what has been learned. Under "Customiz
 reorder and hide tabs and blocks, turn whole modules on or off (disabling stops that feature across
 the panel; hiding just stops showing it here), build your own tabs (custom views) from whichever
 blocks you want across categories and place them anywhere in the tab order, and pick the panel's
-accent color from a palette.
+accent color from a palette or leave it on "Default" so it follows the active theme.
 
 The whole panel is fully controller-navigable: whatever the cursor is on gets a clear accent outline,
 so you never need the touchscreen.
