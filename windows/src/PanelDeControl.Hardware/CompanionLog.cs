@@ -9,7 +9,11 @@ public static class CompanionLog
         "PanelDeControl",
         "companion.log");
 
-    public static void Write(string step, Exception exception)
+    public static void Write(string step, Exception exception) => Append($"{step} {exception}");
+
+    public static void Write(string step, string detail) => Append($"{step} {detail}");
+
+    private static void Append(string entry)
     {
         try
         {
@@ -21,7 +25,7 @@ public static class CompanionLog
 
             File.AppendAllText(
                 FilePath,
-                $"[{DateTimeOffset.Now:O}] {step} {exception}{Environment.NewLine}");
+                $"[{DateTimeOffset.Now:O}] {entry}{Environment.NewLine}");
         }
         catch
         {
