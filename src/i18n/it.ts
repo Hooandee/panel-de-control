@@ -1104,6 +1104,8 @@ export const it: Record<string, string> = {
   "customize.qam.loading": "Lettura delle voci attuali del QAM…",
   "customize.qam.reset": "Ripristina QAM",
   "customize.accent": "Colore principale",
+  "customize.accentHint": "Predefinito usa il colore del tema attivo quando lo propone.",
+  "accent.default": "Predefinito",
   "accent.blue": "Blu",
   "accent.sky": "Celeste",
   "accent.cyan": "Ciano",
