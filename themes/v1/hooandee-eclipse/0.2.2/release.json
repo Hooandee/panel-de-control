@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-eclipse",
+  "cssLoaderName": "Hooandee Eclipse",
+  "version": "0.2.2",
+  "displayName": {
+    "es": "Eclipse",
+    "en": "Eclipse",
+    "it": "Eclipse"
+  },
+  "description": {
+    "es": "Un tema inspirado en el espacio y los eclipses. Tus juegos se convierten en planetas sobre un fondo negro de verdad, con estrellas y un brillo suave en lo que tienes seleccionado. Pensado para pantallas OLED, que es donde más luce.",
+    "en": "A theme inspired by space and eclipses. Your games become planets over a truly black background, with stars and a soft glow on whatever you have selected. Made for OLED screens, which is where it looks its best.",
+    "it": "Un tema ispirato allo spazio e alle eclissi. I tuoi giochi diventano pianeti su uno sfondo nero davvero, con le stelle e un bagliore leggero su ciò che hai selezionato. Pensato per gli schermi OLED, dove rende al meglio."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.2/theme.zip",
+    "size": 61154,
+    "sha256": "a1c9fe707d81411e627b241b3fd5dbe4830b85e08cfabbab3e195f3aa7fe23f2"
+  },
+  "minimumVersions": {
+    "panel": "0.56.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  }
+}
