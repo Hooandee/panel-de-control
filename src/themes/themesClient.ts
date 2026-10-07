@@ -8,6 +8,12 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
+import {
+  inheritedPerformanceMode,
+  planPerformanceMode,
+  type PerformanceModeStore,
+  type PerformancePatchRef,
+} from "./performanceMode";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
@@ -92,6 +98,7 @@ export interface ThemesDependencies {
   publication?: ThemePublicationClient;
   reportFailure?: (failure: ThemeFailureReport) => void;
   sectionHandoffs?: SectionHandoffStore;
+  performanceMode?: PerformanceModeStore;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
@@ -107,7 +114,8 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string };
+  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "performance" };
 
 export interface ThemesClientSnapshot {
   loading: boolean;
@@ -120,6 +128,7 @@ export interface ThemesClientSnapshot {
   errorCode: string | null;
   sectionHandoff: SectionHandoffNotice | null;
   publication: ThemePublicationState;
+  performanceMode: boolean;
 }
 
 const BLOCKING_RECOVERY_CODES = new Set([
@@ -133,6 +142,7 @@ const MAX_INSTALL_RECONCILE_FAILURES = 3;
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
 let sectionHandoffStore: SectionHandoffStore | undefined;
+let performanceModeStore: PerformanceModeStore | undefined;
 
 export function configureThemeFailureReporter(
   reporter: (failure: ThemeFailureReport) => unknown,
@@ -140,6 +150,13 @@ export function configureThemeFailureReporter(
   failureReporter = reporter;
   return () => {
     if (failureReporter === reporter) failureReporter = undefined;
+  };
+}
+
+export function configurePerformanceModeStore(store: PerformanceModeStore): () => void {
+  performanceModeStore = store;
+  return () => {
+    if (performanceModeStore === store) performanceModeStore = undefined;
   };
 }
 
@@ -165,8 +182,16 @@ export function createProductionThemesDependencies(): ThemesDependencies {
       read: () => sectionHandoffStore?.read() ?? {},
       write: (handoffs) => sectionHandoffStore?.write(handoffs),
     },
+    performanceMode: {
+      read: () => performanceModeStore?.read() ?? null,
+      write: (on) => performanceModeStore?.write(on),
+    },
   };
   return productionDependencies;
+}
+
+function performancePatchKey(ref: PerformancePatchRef): string {
+  return `${ref.themeName}\u0000${ref.value}`;
 }
 
 function errorMessage(error: unknown): string {
@@ -202,6 +227,7 @@ export class ThemesClient {
     errorCode: null,
     sectionHandoff: null,
     publication: { status: "unchecked" },
+    performanceMode: false,
   };
   private readonly subscriptions = new Map<symbol, {
     listener: () => void;
@@ -222,7 +248,11 @@ export class ThemesClient {
   private pendingSectionHandoff: SectionHandoffNotice | null = null;
   private lastReportedFailure: string | null = null;
 
-  constructor(readonly dependencies: ThemesDependencies) {}
+  private readonly failedPerformancePatches = new Set<string>();
+
+  constructor(readonly dependencies: ThemesDependencies) {
+    this.current = { ...this.current, performanceMode: dependencies.performanceMode?.read() ?? false };
+  }
 
   getSnapshot = (): ThemesClientSnapshot => this.current;
 
@@ -291,6 +321,7 @@ export class ThemesClient {
         }
       }
       const snapshot = recovered ?? await this.dependencies.adapter.inspect();
+      if (request === this.requestSequence) this.schedulePerformanceReconcile(snapshot);
       if (request === this.requestSequence) {
         this.update({
           snapshot,
@@ -339,13 +370,13 @@ export class ThemesClient {
     }
     return this.mutate(
       { kind: "activating", themeId },
-      async () => this.handOffSections(
+      async () => this.applyPerformanceMode(await this.handOffSections(
         await this.reclaimSections(
           await this.dependencies.activator.activate(themeId, themes),
           target.cssLoaderName,
         ),
         target.cssLoaderName,
-      ),
+      )),
     );
   };
 
@@ -405,7 +436,7 @@ export class ThemesClient {
           );
           await this.dependencies.installer.commit(installed.transaction);
           this.recoveryChecked = true;
-          return verified;
+          return this.applyPerformanceMode(verified);
         } catch (installError) {
           this.recoveryChecked = false;
           try {
@@ -521,6 +552,53 @@ export class ThemesClient {
       },
     );
   };
+
+  setPerformanceMode = (on: boolean): Promise<boolean> => {
+    if (this.current.snapshot.status !== "ready") return Promise.resolve(false);
+    this.dependencies.performanceMode?.write(on);
+    this.failedPerformancePatches.clear();
+    this.update({ performanceMode: on });
+    return this.mutate(
+      { kind: "performance" },
+      async () => this.applyPerformanceMode(await this.dependencies.adapter.inspect()),
+    );
+  };
+
+  // Never throws: a theme that refuses the option keeps its look and the failure is reported,
+  // so the operation that called this (install, activation) is not rolled back over it.
+  private async applyPerformanceMode(snapshot: CssLoaderSnapshot): Promise<CssLoaderSnapshot> {
+    if (snapshot.status !== "ready") return snapshot;
+    let current = snapshot;
+    for (const ref of planPerformanceMode(snapshot.themes, this.hooandeeThemeNames(), this.current.performanceMode)) {
+      try {
+        current = await this.dependencies.adapter.setPatchValue(ref.themeName, ref.patchName, ref.value);
+        this.failedPerformancePatches.delete(performancePatchKey(ref));
+      } catch (error) {
+        this.failedPerformancePatches.add(performancePatchKey(ref));
+        this.report("performance", error, "performance_mode_failed");
+      }
+    }
+    return current;
+  }
+
+  // CSS Loader's own menu or a newly installed theme can leave a theme out of step with the mode.
+  private schedulePerformanceReconcile(snapshot: CssLoaderSnapshot): void {
+    if (snapshot.status !== "ready") return;
+    let stored = this.dependencies.performanceMode?.read() ?? null;
+    if (stored === null && this.currentPublicationThemes().length > 0) {
+      stored = inheritedPerformanceMode(snapshot.themes, this.hooandeeThemeNames());
+      if (stored) this.dependencies.performanceMode?.write(true);
+    }
+    if (stored === null) return;
+    if (stored !== this.current.performanceMode) this.update({ performanceMode: stored });
+    const pending = planPerformanceMode(snapshot.themes, this.hooandeeThemeNames(), this.current.performanceMode)
+      .filter((ref) => !this.failedPerformancePatches.has(performancePatchKey(ref)));
+    if (pending.length === 0) return;
+    queueMicrotask(() => {
+      if (this.operationLocked) return;
+      void this.mutate({ kind: "performance" }, async () => this.applyPerformanceMode(snapshot));
+    });
+  }
 
   private hooandeeThemeNames(): ReadonlySet<string> {
     return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));

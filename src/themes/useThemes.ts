@@ -26,6 +26,7 @@ export interface ThemesController {
   errorCode: string | null;
   sectionHandoff: SectionHandoffNotice | null;
   publication: ThemePublicationState;
+  performanceMode: boolean;
   refresh(): Promise<void>;
   refreshPublication(): Promise<void>;
   install(themeId: string, confirmation?: ThemeInstallConfirmation): Promise<boolean>;
@@ -33,6 +34,7 @@ export interface ThemesController {
   activate(themeId: string): Promise<boolean>;
   deactivate(themeId: string): Promise<boolean>;
   setPatch(themeId: string, patchName: string, value: string): Promise<boolean>;
+  setPerformanceMode(on: boolean): Promise<boolean>;
 }
 
 const clients = new WeakMap<ThemesDependencies, ThemesClient>();
@@ -65,5 +67,6 @@ export function useThemes(dependencies?: ThemesDependencies): ThemesController {
     activate: client.activate,
     deactivate: client.deactivate,
     setPatch: client.setPatch,
+    setPerformanceMode: client.setPerformanceMode,
   };
 }

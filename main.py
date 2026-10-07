@@ -12660,6 +12660,7 @@ class Plugin:
         return {
             "language": prefs.get("panel-de-control-lang"),
             "qam_layout": prefs.get("pdc:qamLayout"),
+            "theme_performance_mode": prefs.get("pdc:themePerformanceMode"),
             "disabled_modules": self._settings.get("disabled_modules"),
             "telemetry_enabled": self._settings.get("telemetry_enabled"),
             "fan_experimental": self._settings.get("fan_experimental"),

@@ -28,7 +28,7 @@ import { setUiEventSink } from "./system/uiEvents";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
-import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
+import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeFlag, writeString } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
@@ -44,8 +44,10 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { PERFORMANCE_MODE_KEY } from "./themes/performanceMode";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
+  configurePerformanceModeStore,
   configureSectionHandoffStore,
   configureThemeFailureReporter,
   createProductionThemesDependencies,
@@ -105,6 +107,13 @@ export default definePlugin(() => {
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
+  const releasePerformanceModeStore = configurePerformanceModeStore({
+    read: () => {
+      const stored = readString(PERFORMANCE_MODE_KEY);
+      return stored === null ? null : stored === "1";
+    },
+    write: (on) => writeFlag(PERFORMANCE_MODE_KEY, on),
+  });
   const releaseSectionHandoffStore = configureSectionHandoffStore({
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),
     write: (handoffs) => writeString("pdc:themeSectionHandoffs", JSON.stringify(handoffs)),
@@ -200,6 +209,7 @@ export default definePlugin(() => {
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
       releaseSectionHandoffStore();
+      releasePerformanceModeStore();
       releaseCssLoaderHost();
     },
   };

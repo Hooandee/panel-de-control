@@ -76,6 +76,8 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true),
     setPatch: vi.fn(async () => true),
+    performanceMode: false,
+    setPerformanceMode: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -545,6 +547,46 @@ describe("ThemeDetailsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Motion" }));
     expect(activate).toHaveBeenCalledWith("example-theme");
     expect(setPatch).toHaveBeenCalledWith("example-theme", "Motion", "No");
+  });
+
+  it("hides the performance switch and locks the other options while performance mode is on", () => {
+    const base = controller();
+    const option = (name: string, value: string) => ({
+      name, defaultValue: "No", value, options: ["No", "Yes"], type: "checkbox" as const, rawType: "checkbox",
+    });
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+      author: "Example Author", enabled: true, patches: [option("Motion", "Yes"), option("Performance mode", "Yes")],
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [installedTheme] },
+      cards: [{ ...base.cards[0], installed: true, active: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" }],
+      performanceMode: true,
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.queryByRole("button", { name: "Performance mode" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Motion" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("themes.performance.locked")).toBeTruthy();
+  });
+
+  it("leaves the options of a theme without performance mode editable", () => {
+    const base = controller();
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+      author: "Example Author", enabled: true, patches: [{
+        name: "Motion", defaultValue: "Yes", value: "Yes", options: ["No", "Yes"], type: "checkbox" as const, rawType: "checkbox",
+      }],
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [installedTheme] },
+      cards: [{ ...base.cards[0], installed: true, active: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" }],
+      performanceMode: true,
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect((screen.getByRole("button", { name: "Motion" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText("themes.performance.locked")).toBeNull();
   });
 
   it("disables activation for an incompatible installed release", () => {

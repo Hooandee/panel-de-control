@@ -13,6 +13,9 @@ vi.mock("@decky/ui", () => ({
   ),
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   Navigation: { Navigate: mocks.navigate },
+  ToggleField: ({ label, description, checked, disabled, onChange }: { label: string; description: string; checked: boolean; disabled?: boolean; onChange(on: boolean): void }) => (
+    <div><label>{label}<input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} /></label><span>{description}</span></div>
+  ),
 }));
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../components/ThemeCard", () => ({ ThemeCard: ({ card, onOpen }: { card: { id: string }; onOpen(): void }) => <button onClick={onOpen}>{card.id}</button> }));
@@ -47,6 +50,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     refresh: vi.fn(async () => {}), refreshPublication: vi.fn(async () => {}),
     install: vi.fn(async () => true), uninstall: vi.fn(async () => true), activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true), setPatch: vi.fn(async () => true),
+    performanceMode: false, setPerformanceMode: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -62,6 +66,33 @@ describe("TemasSection", () => {
     expect(screen.getByText("themes.cssLoader.missing")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.cssLoader.openStore" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/decky/store");
+  });
+
+  it("offers the performance mode switch once CSS Loader is ready", () => {
+    const setPerformanceMode = vi.fn(async () => true);
+    mocks.controller = controller({ snapshot: { status: "ready", themes: [] }, setPerformanceMode });
+    render(<TemasSection />);
+
+    fireEvent.click(screen.getByLabelText("themes.performance.title"));
+    expect(setPerformanceMode).toHaveBeenCalledWith(true);
+    expect(screen.getByText("themes.performance.description")).toBeTruthy();
+  });
+
+  it("says when the active theme has no performance mode yet", () => {
+    const base = controller();
+    const active = { id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3", author: "A", enabled: true, patches: [] };
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [active] },
+      cards: [{ ...base.cards[0], installed: true, active: true, cssLoaderTheme: active }],
+    });
+    render(<TemasSection />);
+    expect(screen.getByText("themes.performance.unsupported")).toBeTruthy();
+  });
+
+  it("hides the switch while CSS Loader is unavailable", () => {
+    mocks.controller = controller();
+    render(<TemasSection />);
+    expect(screen.queryByText("themes.performance.title")).toBeNull();
   });
 
   it("does not flash a false missing state while CSS Loader inspection is pending", () => {

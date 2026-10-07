@@ -5,6 +5,7 @@ import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
+import { isPerformancePatch, supportsPerformanceMode } from "../themes/performanceMode";
 import { localizePublishedText } from "../themes/remotePublication";
 import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
 import { labelsForPatch } from "../themes/themePatchLabels";
@@ -278,7 +279,10 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const displayName = localizePublishedText(card.release.displayName, lang);
   const description = themeDescriptionFor(card.release, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
-  const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
+  const groups = groupThemePatches((card.cssLoaderTheme?.patches ?? []).filter((patch) => !isPerformancePatch(patch)), card.id);
+  const lockedByPerformance = controller.performanceMode
+    && card.cssLoaderTheme !== undefined
+    && supportsPerformanceMode(card.cssLoaderTheme);
   const fullSizeLayout = card.installed && groups.length > 0;
   const availableCover = themeCoverFor(card.release);
   const cover = availableCover === failedCover ? undefined : availableCover;
@@ -519,6 +523,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
             {card.installed && groups.length === 0 ? (
               <div data-pdc-theme-status-surface="true" style={STATUS_SURFACE}><span data-pdc-theme-muted>{t("themes.patches.empty")}</span></div>
             ) : null}
+            {card.installed && groups.length > 0 && lockedByPerformance ? (
+              <div role="status" data-pdc-theme-status-surface="true" style={STATUS_SURFACE}><span data-pdc-theme-muted>{t("themes.performance.locked")}</span></div>
+            ) : null}
             {card.installed && groups.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                 {groups.map((group) => {
@@ -534,7 +541,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                       <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
                         {group.patches.map((patch) => (
                           <div key={patch.name} role="listitem">
-                            <ThemePatchControl patch={patch} labels={labelsForPatch(patchLabels, patch.name, lang)} disabled={actionsBlocked} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
+                            <ThemePatchControl patch={patch} labels={labelsForPatch(patchLabels, patch.name, lang)} disabled={actionsBlocked || lockedByPerformance} onChange={(value) => void controller.setPatch(card.id, patch.name, value)} />
                           </div>
                         ))}
                       </div>

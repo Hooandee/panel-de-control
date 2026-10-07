@@ -1,4 +1,4 @@
-import { ButtonItem, Navigation, PanelSectionRow } from "@decky/ui";
+import { ButtonItem, Navigation, PanelSectionRow, ToggleField } from "@decky/ui";
 import { useState } from "react";
 import { LuPaintbrush, LuRefreshCw } from "react-icons/lu";
 
@@ -9,6 +9,7 @@ import { ThemeCard } from "../components/ThemeCard";
 import { openThemeDetailsModal } from "../components/ThemeDetailsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { supportsPerformanceMode } from "../themes/performanceMode";
 import { useThemes, type ThemesController } from "../themes/useThemes";
 
 export function TemasSection() {
@@ -50,6 +51,8 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
       </div>
       <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.45, marginTop: theme.space.xs }}>{t("themes.engine")}</div>
     </div>
+
+    {controller.snapshot.status === "ready" ? <PerformanceModeCard controller={controller} /> : null}
 
     {controller.loading ? (
       <div role="status" aria-live="polite" style={{ ...theme.card, padding: theme.space.md, color: theme.color.textMuted }}>{t("themes.loading")}</div>
@@ -134,5 +137,23 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
       </div>
     ) : null}
     </>
+  );
+}
+
+function PerformanceModeCard({ controller }: { controller: ThemesController }) {
+  const { t } = useI18n();
+  const active = controller.cards.find((card) => card.active)?.cssLoaderTheme;
+  const unsupported = active !== undefined && !supportsPerformanceMode(active);
+  return (
+    <div style={{ ...theme.card, padding: `${theme.space.xs}px ${theme.space.md}px` }}>
+      <ToggleField
+        label={t("themes.performance.title")}
+        description={t(unsupported ? "themes.performance.unsupported" : "themes.performance.description")}
+        checked={controller.performanceMode}
+        disabled={controller.operation !== null || controller.recoveryBlocked}
+        onChange={(on) => void controller.setPerformanceMode(on)}
+        bottomSeparator="none"
+      />
+    </div>
   );
 }

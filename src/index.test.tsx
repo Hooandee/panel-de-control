@@ -101,6 +101,7 @@ vi.mock("./themes/themeExtensionClient", () => ({ configureThemeExtensionRpcHost
 vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
 vi.mock("./themes/themesClient", () => ({
   configureThemeFailureReporter: () => () => undefined,
+  configurePerformanceModeStore: () => () => undefined,
   configureSectionHandoffStore: () => () => undefined,
   createProductionThemesDependencies: () => ({}),
 }));
