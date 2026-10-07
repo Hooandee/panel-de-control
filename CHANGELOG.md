@@ -5,9 +5,30 @@
 ## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
 
 
-### Features
+### Español
 
-* let the active theme drive Panel's default accent ([#878](https://github.com/Hooandee/panel-de-control/issues/878)) ([b9292e0](https://github.com/Hooandee/panel-de-control/commit/b9292e0baa0ef59be2dbd87738cd29c19f59c0b2))
+* **Personalizar:** El color de acento tiene una opción nueva, «Por defecto», que viene marcada de serie. Con ella Panel toma el color del tema que tengas puesto, si el tema lo indica, y si no se queda con el azul de siempre. Con Eclipse, al cambiar de planeta en las opciones del tema, Panel cambia de color al momento. Si eliges un color concreto, ese manda.
+* **Temas:** Eclipse, el tema nuevo pensado para pantallas OLED, ya aparece en Temas con su propia portada. Además, las descripciones de los temas Hooandee ya se leen en alemán y en portugués en vez de salir en inglés.
+
+### English
+
+* **Customize:** The accent colour has a new "Default" option, selected out of the box. With it, Panel takes the colour of the theme you have on, if the theme provides one, and otherwise keeps its usual blue. With Eclipse, switching planets in the theme options recolours Panel instantly. If you pick a specific colour, that one wins.
+* **Themes:** Eclipse, the new theme made for OLED screens, now shows up in Themes with its own cover. The Hooandee theme descriptions also read in German and Portuguese instead of falling back to English.
+
+### Italiano
+
+* **Personalizza:** Il colore d'accento ha una nuova opzione, «Predefinito», selezionata di serie. Con questa Panel prende il colore del tema che hai attivo, se il tema lo indica, altrimenti resta il solito blu. Con Eclipse, cambiando pianeta nelle opzioni del tema, Panel cambia colore all'istante. Se scegli un colore preciso, vale quello.
+* **Temi:** Eclipse, il nuovo tema pensato per gli schermi OLED, ora compare in Temi con la sua copertina. Inoltre le descrizioni dei temi Hooandee si leggono in tedesco e in portoghese invece di comparire in inglese.
+
+### Deutsch
+
+* **Anpassen:** Die Akzentfarbe hat eine neue Option „Standard“, die von Anfang an ausgewählt ist. Damit übernimmt Panel die Farbe des aktiven Themes, sofern das Theme eine vorgibt, und bleibt sonst beim gewohnten Blau. Mit Eclipse färbt sich Panel sofort um, wenn du in den Theme-Optionen den Planeten wechselst. Wählst du eine bestimmte Farbe, gilt diese.
+* **Themes:** Eclipse, das neue Theme für OLED-Bildschirme, erscheint jetzt unter Themes mit eigenem Cover. Außerdem sind die Beschreibungen der Hooandee-Themes jetzt auf Deutsch und Portugiesisch statt auf Englisch.
+
+### Português (Brasil)
+
+* **Personalizar:** A cor de destaque ganhou uma opção nova, "Padrão", que já vem marcada. Com ela o Panel pega a cor do tema que você está usando, se o tema indicar uma, e senão fica com o azul de sempre. Com o Eclipse, ao trocar de planeta nas opções do tema, o Panel muda de cor na hora. Se você escolher uma cor específica, vale ela.
+* **Temas:** O Eclipse, o tema novo pensado para telas OLED, agora aparece em Temas com a capa dele. Além disso, as descrições dos temas Hooandee agora aparecem em alemão e português em vez de inglês.
 
 ## [0.62.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.1...panel-de-control-v0.62.0) (2026-10-05)
 
