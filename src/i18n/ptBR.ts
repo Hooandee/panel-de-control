@@ -1211,6 +1211,8 @@ export const ptBR: Record<string, string> = {
   "customize.qam.loading": "Lendo as entradas atuais do QAM…",
   "customize.qam.reset": "Restaurar QAM",
   "customize.accent": "Cor de destaque",
+  "customize.accentHint": "Padrão usa a cor do tema ativo quando ele oferece uma.",
+  "accent.default": "Padrão",
   "accent.blue": "Azul",
   "accent.sky": "Céu",
   "accent.cyan": "Ciano",

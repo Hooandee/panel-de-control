@@ -1211,6 +1211,8 @@ export const de: Record<string, string> = {
   "customize.qam.loading": "Aktuelle QAM-Einträge werden gelesen…",
   "customize.qam.reset": "QAM wiederherstellen",
   "customize.accent": "Akzentfarbe",
+  "customize.accentHint": "Standard übernimmt die Farbe des aktiven Themes, wenn es eine vorgibt.",
+  "accent.default": "Standard",
   "accent.blue": "Blau",
   "accent.sky": "Himmelblau",
   "accent.cyan": "Cyan",
