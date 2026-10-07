@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { localizePublishedText } from "../themes/remotePublication";
 import type { ThemeCardModel } from "../themes/state";
-import { themeCoverFor } from "../themes/themePresentation";
+import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
 import type { ThemesOperation } from "../themes/useThemes";
 
 interface Props {
@@ -88,7 +88,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const activating = useRef(false);
   const busy = operation !== null;
   const name = localizePublishedText(card.release.displayName, lang);
-  const description = localizePublishedText(card.release.description, lang);
+  const description = themeDescriptionFor(card.release, lang);
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;

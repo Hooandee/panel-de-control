@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
-import { themeCoverFor } from "../themes/themePresentation";
+import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
 import { labelsForPatch } from "../themes/themePatchLabels";
 import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
@@ -276,7 +276,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const activating = controller.operation?.kind === "activating" && controller.operation.themeId === card.id;
   const deactivating = controller.operation?.kind === "deactivating" && controller.operation.themeId === card.id;
   const displayName = localizePublishedText(card.release.displayName, lang);
-  const description = localizePublishedText(card.release.description, lang);
+  const description = themeDescriptionFor(card.release, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
   const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
   const fullSizeLayout = card.installed && groups.length > 0;
