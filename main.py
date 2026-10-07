@@ -260,6 +260,7 @@ _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
     "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
+    "performance",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240

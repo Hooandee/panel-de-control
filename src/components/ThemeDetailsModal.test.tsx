@@ -556,7 +556,7 @@ describe("ThemeDetailsModal", () => {
     });
     const installedTheme = {
       id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
-      author: "Example Author", enabled: true, patches: [option("Motion", "Yes"), option("Performance mode", "Yes")],
+      author: "Example Author", enabled: true, patches: [option("Motion", "Yes"), option("Modo rendimiento", "Yes")],
     };
     mocks.controller = controller({
       snapshot: { status: "ready", themes: [installedTheme] },
@@ -565,7 +565,7 @@ describe("ThemeDetailsModal", () => {
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
 
-    expect(screen.queryByRole("button", { name: "Performance mode" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Modo rendimiento" })).toBeNull();
     expect((screen.getByRole("button", { name: "Motion" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("themes.performance.locked")).toBeTruthy();
   });

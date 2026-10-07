@@ -2,7 +2,7 @@ import type { CssLoaderPatch, CssLoaderTheme } from "./cssLoaderTypes";
 
 // Reserved CSS Loader option a theme ships to offer a static, effect-free variant. An older Panel
 // just shows it as one more checkbox, so declaring it never breaks an install there.
-export const PERFORMANCE_PATCH = "Performance mode";
+export const PERFORMANCE_PATCH = "Modo rendimiento";
 export const PERFORMANCE_ON = "Yes";
 export const PERFORMANCE_OFF = "No";
 export const PERFORMANCE_MODE_KEY = "pdc:themePerformanceMode";
@@ -28,6 +28,10 @@ export function isPerformancePatch(patch: CssLoaderPatch): boolean {
 
 export function supportsPerformanceMode(theme: CssLoaderTheme): boolean {
   return theme.patches.some(isPerformancePatch);
+}
+
+export function performanceValueOf(theme: CssLoaderTheme): string | undefined {
+  return theme.patches.find(isPerformancePatch)?.value;
 }
 
 // Before Panel offered the switch, an older Panel showed the option as a plain checkbox; adopt

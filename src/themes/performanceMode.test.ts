@@ -197,4 +197,28 @@ describe("ThemesClient performance mode", () => {
     expect(setup.stored()).toBeNull();
     expect(setup.setPatchValue).not.toHaveBeenCalled();
   });
+
+  it("follows a change made in CSS Loader's own menu instead of undoing it", async () => {
+    const setup = client(ready(theme("Hooandee Eclipse", [performancePatch("No")])), false);
+    await setup.themes.refreshPublication();
+    await setup.themes.refresh();
+    await settle(setup.themes);
+
+    setup.reset(ready(theme("Hooandee Eclipse", [performancePatch("Yes")]), theme("Hooandee Gallery", [performancePatch("No")])));
+    await setup.themes.refresh();
+    await settle(setup.themes);
+
+    expect(setup.stored()).toBe(true);
+    expect(setup.themes.getSnapshot().performanceMode).toBe(true);
+    expect(setup.setPatchValue).not.toHaveBeenCalledWith("Hooandee Eclipse", PERFORMANCE_PATCH, "No");
+  });
+
+  it("keeps the notice of the last operation while it reconciles in the background", async () => {
+    const setup = client(ready(theme("Hooandee Eclipse", [performancePatch("No")])), true);
+    await setup.themes.refresh();
+    await setup.themes.refreshPublication();
+    await vi.waitFor(() => expect(setup.setPatchValue).toHaveBeenCalledWith("Hooandee Eclipse", PERFORMANCE_PATCH, "Yes"));
+
+    expect(setup.themes.getSnapshot().operation).toBeNull();
+  });
 });

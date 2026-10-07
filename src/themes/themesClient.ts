@@ -10,6 +10,8 @@ import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
 import {
   inheritedPerformanceMode,
+  PERFORMANCE_ON,
+  performanceValueOf,
   planPerformanceMode,
   type PerformanceModeStore,
   type PerformancePatchRef,
@@ -249,6 +251,7 @@ export class ThemesClient {
   private lastReportedFailure: string | null = null;
 
   private readonly failedPerformancePatches = new Set<string>();
+  private readonly observedPerformance = new Map<string, string>();
 
   constructor(readonly dependencies: ThemesDependencies) {
     this.current = { ...this.current, performanceMode: dependencies.performanceMode?.read() ?? false };
@@ -518,6 +521,7 @@ export class ThemesClient {
       if (request === this.publicationRequestSequence) {
         this.publicationResolvedAtMs = Date.now();
         this.update({ publication });
+        this.schedulePerformanceReconcile(this.current.snapshot);
       }
     }).catch(() => {
       if (request === this.publicationRequestSequence) {
@@ -578,13 +582,44 @@ export class ThemesClient {
         this.report("performance", error, "performance_mode_failed");
       }
     }
+    this.observePerformance(current);
     return current;
   }
 
-  // CSS Loader's own menu or a newly installed theme can leave a theme out of step with the mode.
+  private observePerformance(snapshot: CssLoaderSnapshot): void {
+    if (snapshot.status !== "ready") return;
+    const hooandee = this.hooandeeThemeNames();
+    for (const theme of snapshot.themes) {
+      const value = performanceValueOf(theme);
+      if (hooandee.has(theme.name) && value !== undefined) this.observedPerformance.set(theme.name, value);
+    }
+  }
+
+  // The option a user flips in CSS Loader's own menu, as opposed to one a theme starts with.
+  private externalPerformanceChange(snapshot: CssLoaderSnapshot): boolean | null {
+    if (snapshot.status !== "ready") return null;
+    const hooandee = this.hooandeeThemeNames();
+    for (const theme of snapshot.themes) {
+      const value = performanceValueOf(theme);
+      const seen = this.observedPerformance.get(theme.name);
+      if (hooandee.has(theme.name) && value !== undefined && seen !== undefined && seen !== value) {
+        return value === PERFORMANCE_ON;
+      }
+    }
+    return null;
+  }
+
+  // A theme Panel has not seen yet takes the mode; a change made in CSS Loader's own menu becomes it.
   private schedulePerformanceReconcile(snapshot: CssLoaderSnapshot): void {
     if (snapshot.status !== "ready") return;
     let stored = this.dependencies.performanceMode?.read() ?? null;
+    const external = this.externalPerformanceChange(snapshot);
+    this.observePerformance(snapshot);
+    if (external !== null && external !== stored) {
+      stored = external;
+      this.dependencies.performanceMode?.write(external);
+      this.failedPerformancePatches.clear();
+    }
     if (stored === null && this.currentPublicationThemes().length > 0) {
       stored = inheritedPerformanceMode(snapshot.themes, this.hooandeeThemeNames());
       if (stored) this.dependencies.performanceMode?.write(true);
@@ -594,10 +629,20 @@ export class ThemesClient {
     const pending = planPerformanceMode(snapshot.themes, this.hooandeeThemeNames(), this.current.performanceMode)
       .filter((ref) => !this.failedPerformancePatches.has(performancePatchKey(ref)));
     if (pending.length === 0) return;
-    queueMicrotask(() => {
-      if (this.operationLocked) return;
-      void this.mutate({ kind: "performance" }, async () => this.applyPerformanceMode(snapshot));
-    });
+    queueMicrotask(() => void this.reconcilePerformanceQuietly(snapshot));
+  }
+
+  // Runs behind a refresh: it must not clear the notices of the operation the user just did.
+  private async reconcilePerformanceQuietly(snapshot: CssLoaderSnapshot): Promise<void> {
+    if (this.operationLocked || this.current.recoveryBlocked) return;
+    this.operationLocked = true;
+    const request = ++this.requestSequence;
+    try {
+      const after = await this.applyPerformanceMode(snapshot);
+      if (request === this.requestSequence) this.update({ snapshot: after });
+    } finally {
+      this.operationLocked = false;
+    }
   }
 
   private hooandeeThemeNames(): ReadonlySet<string> {
