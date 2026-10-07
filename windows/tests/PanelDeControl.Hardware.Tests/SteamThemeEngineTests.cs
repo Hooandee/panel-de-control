@@ -53,7 +53,7 @@ public sealed class SteamThemeEngineTests : IDisposable
         Assert.Equal(SteamThemeConnection.Connected, status.Connection);
         Assert.Equal(2, devTools.Pages["bp"].Sheets.Count);
         Assert.Single(devTools.Pages["qam"].Sheets);
-        Assert.False(devTools.Pages.ContainsKey("menu"));
+        Assert.Equal(0, devTools.Pages["menu"].Applies);
         Assert.Equal(new ThemeApplication(2, 2, false, false), status.Themes["Hooandee Eclipse"]);
     }
 
@@ -142,6 +142,22 @@ public sealed class SteamThemeEngineTests : IDisposable
         await engine.InvalidateAndCycleAsync();
 
         Assert.Empty(devTools.Pages["bp"].Sheets);
+    }
+
+    [Fact]
+    public async Task RemovesSheetsLeftByAnEarlierRunEvenWithNothingEnabled()
+    {
+        devTools.Targets = new[] { Page("bp", "SP", BigPictureUrl), Page("qam", "QuickAccess_uid2") };
+        devTools.Pages["bp"] = new FakePage { Fingerprint = "OLD" };
+        devTools.Pages["bp"].Sheets["pdc-theme:Old:tokens.css"] = ":root{}";
+        var engine = new SteamThemeEngine(devTools, steam, () => Inputs(Array.Empty<ThemeSelection>()), () => "host", new FixedTable(null));
+
+        await engine.CycleAsync(default);
+        await engine.CycleAsync(default);
+
+        Assert.Empty(devTools.Pages["bp"].Sheets);
+        Assert.Equal(1, devTools.Pages["bp"].Applies);
+        Assert.Equal(0, devTools.Pages.TryGetValue("qam", out var qam) ? qam.Applies : 0);
     }
 
     private SteamThemeEngine Engine(InstalledTheme theme, IClassTableSource? table = null, bool extension = false) => new(
@@ -285,6 +301,11 @@ public sealed class SteamThemeEngineTests : IDisposable
             }
 
             var page = Pages.TryGetValue(id, out var existing) ? existing : Pages[id] = new FakePage();
+            if (expression.StartsWith("document.head?.querySelectorAll", StringComparison.Ordinal))
+            {
+                return Json(page.Sheets.Count.ToString());
+            }
+
             var probe = FingerprintProbe.Match(expression);
             if (probe.Success && !expression.Contains("const sheets", StringComparison.Ordinal))
             {

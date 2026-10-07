@@ -67,6 +67,7 @@ public sealed class SteamThemeEngine
     private readonly IClassTableSource classTable;
     private readonly Dictionary<string, PageSession> pages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> cssCache = new(StringComparer.Ordinal);
+    private readonly HashSet<string> inspectedPages = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim wake = new(0, int.MaxValue);
     private readonly object statusGate = new();
     private ThemeEngineInputs? inputs;
@@ -228,7 +229,8 @@ public sealed class SteamThemeEngine
             var steamTarget = new SteamTarget(target.Id, target.Title, target.Url, pages.TryGetValue(target.Id, out var known) ? known.Classes : new HashSet<string>());
             bigPictureSeen |= ThemeTargetMatcher.IsBigPicture(steamTarget);
             var sheets = ThemeComposer.SheetsFor(steamTarget, current.Enabled);
-            if (sheets.Count == 0 && !pages.ContainsKey(target.Id))
+            if (sheets.Count == 0 && !pages.ContainsKey(target.Id)
+                && !await HasLeftoverSheetsAsync(target, cancellationToken).ConfigureAwait(false))
             {
                 continue;
             }
@@ -293,6 +295,35 @@ public sealed class SteamThemeEngine
         }
 
         completed.TrySetResult(result);
+    }
+
+    // Sheets outlive the companion that wrote them (a crash, an uninstall, an older build), so each
+    // page is looked at once even when no theme targets it.
+    private async Task<bool> HasLeftoverSheetsAsync(DevToolsTarget target, CancellationToken cancellationToken)
+    {
+        if (!inspectedPages.Add(target.Id))
+        {
+            return false;
+        }
+
+        try
+        {
+            var session = await SessionAsync(target, cancellationToken).ConfigureAwait(false);
+            var count = await session.EvaluateAsync(
+                """document.head?.querySelectorAll("style[data-pdc-theme]").length ?? 0""",
+                cancellationToken).ConfigureAwait(false);
+            if (count.ValueKind == JsonValueKind.Number && count.GetInt32() > 0)
+            {
+                return true;
+            }
+
+            await DropAsync(target.Id).ConfigureAwait(false);
+            return false;
+        }
+        catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException or IOException)
+        {
+            return false;
+        }
     }
 
     private async Task<ICdpSession> SessionAsync(DevToolsTarget target, CancellationToken cancellationToken)
