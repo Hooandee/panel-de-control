@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
+
+
+### Features
+
+* let the active theme drive Panel's default accent ([#878](https://github.com/Hooandee/panel-de-control/issues/878)) ([b9292e0](https://github.com/Hooandee/panel-de-control/commit/b9292e0baa0ef59be2dbd87738cd29c19f59c0b2))
+
 ## [0.62.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.61.1...panel-de-control-v0.62.0) (2026-10-05)
 
 
