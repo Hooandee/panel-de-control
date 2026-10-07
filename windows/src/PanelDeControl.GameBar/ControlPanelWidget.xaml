@@ -575,6 +575,12 @@
                 </Border>
             </Grid>
 
+            <ContentControl
+                x:Name="ThemeLibraryHost"
+                Tag="themes.library"
+                HorizontalContentAlignment="Stretch"
+                IsTabStop="False" />
+
             <Border x:Name="AccentCard" Tag="themes.accent" Style="{StaticResource PdcCardStyle}">
                 <StackPanel>
                     <TextBlock x:Uid="AccentLabel" Style="{StaticResource PdcTitleStyle}" />

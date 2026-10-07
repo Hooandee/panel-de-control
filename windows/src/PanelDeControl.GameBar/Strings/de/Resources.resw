@@ -400,4 +400,37 @@
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Kapazität</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Zyklen</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Steam-Designs</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Die Designs von Panel de Control für Steam im Big-Picture-Modus.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>Der Designdienst antwortet nicht</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>In wenigen Sekunden wird es erneut versucht.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>Steam ist nicht installiert</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Designs werden auf Steam im Big-Picture-Modus angewendet.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>Steam muss neu gestartet werden</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Damit Designs funktionieren, muss Steam mit aktiviertem Remote-Debugging starten. Es wird aktiviert und Steam startet in Big Picture neu; das ist nur einmal nötig.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Aktivieren und Steam neu starten</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>Steam ist geschlossen</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>Das aktive Design wird angewendet, sobald Steam in Big Picture geöffnet wird.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>Warten auf Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>Steam ist im Desktopmodus geöffnet. Das Design wird beim Wechsel zu Big Picture angewendet.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Mit Steam verbunden</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>Änderungen erscheinen sofort in Big Picture.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Das konnte nicht abgeschlossen werden: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Designkatalog wird geladen…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Der Katalog konnte nicht geladen werden. Eine Internetverbindung ist nötig.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Installieren · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Auf {0} aktualisieren</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Wird installiert…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Optionen</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>Die installierte Kopie ist beschädigt und muss neu installiert werden.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Nicht installiert</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>auf {0} Ansichten angewendet</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>wird beim Öffnen von Big Picture angewendet</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>auf {0} von {1} Ansichten angewendet</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>der Stil ist aktiv, die Animationen fehlen</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>das heruntergeladene Paket hat die Prüfung nicht bestanden</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>der Katalog ist nicht verfügbar oder hat sich geändert</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam hat zu lange gebraucht</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>unerwarteter Fehler; er wurde protokolliert</value></data>
 </root>

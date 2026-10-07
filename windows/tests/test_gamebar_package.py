@@ -233,6 +233,17 @@ class GameBarProjectTests(unittest.TestCase):
             r"HardwareBroker\PanelDeControl.Hardware.exe",
             full_trust.attrib["Executable"],
         )
+        startup = root.find(
+            ".//desktop:Extension[@Category='windows.startupTask']",
+            namespaces,
+        )
+        self.assertIsNotNone(startup)
+        self.assertEqual(full_trust.attrib["Executable"], startup.attrib["Executable"])
+        self.assertEqual("Windows.FullTrustApplication", startup.attrib["EntryPoint"])
+        self.assertEqual(
+            "true",
+            startup.find(".//desktop:StartupTask", namespaces).attrib["Enabled"],
+        )
         parameter_group = full_trust.find(".//desktop:ParameterGroup", namespaces)
         self.assertEqual("HardwareBroker", parameter_group.attrib["GroupId"])
         self.assertEqual("--gamebar", parameter_group.attrib["Parameters"])

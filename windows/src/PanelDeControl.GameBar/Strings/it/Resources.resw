@@ -400,4 +400,37 @@
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacità</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cicli</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Temi di Steam</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>I temi di Panel de Control per Steam in modalità Big Picture.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>Il servizio dei temi non risponde</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>Si riproverà tra qualche secondo.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>Steam non è installato</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>I temi si applicano a Steam in modalità Big Picture.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>Serve riavviare Steam</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Per applicare i temi, Steam deve avviarsi con il debug remoto attivo. Viene attivato e Steam si riavvia in Big Picture; serve una sola volta.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Attiva e riavvia Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>Steam è chiuso</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>Il tema attivo verrà applicato appena Steam si apre in Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>In attesa di Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>Steam è aperto in modalità desktop. Il tema verrà applicato passando a Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Collegato a Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>Le modifiche si vedono subito in Big Picture.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Non è stato possibile completare: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Caricamento del catalogo dei temi…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Impossibile caricare il catalogo. Serve una connessione a internet.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Installa · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Aggiorna a {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Installazione…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Opzioni</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>La copia installata è danneggiata e va reinstallata.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Non installato</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Versione {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>applicato su {0} schermate</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>verrà applicato all'apertura di Big Picture</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>applicato su {0} di {1} schermate</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>lo stile c'è, mancano le animazioni</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>il pacchetto scaricato non ha superato la verifica</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>il catalogo non è disponibile o è cambiato</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam ha impiegato troppo a rispondere</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>errore imprevisto; è stato annotato nel registro</value></data>
 </root>

@@ -47,6 +47,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly TdpControlClient tdpClient = new();
     private readonly RefreshRateClient refreshClient = new();
     private readonly CpuControlClient cpuClient = new();
+    private readonly ThemesView themesView = new();
     private CancellationTokenSource? cpuDebounce;
     private bool cpuRefreshInProgress;
     private bool cpuWritePending;
@@ -96,6 +97,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     public ControlPanelWidget()
     {
         InitializeComponent();
+        ThemeLibraryHost.Content = themesView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
@@ -316,7 +318,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
             ApplyTdpWhenReadyAsync(currentRefreshGeneration),
             ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration),
-            ApplyCpuWhenReadyAsync(currentRefreshGeneration));
+            ApplyCpuWhenReadyAsync(currentRefreshGeneration),
+            RefreshThemesWhenShownAsync());
+    }
+
+    private Task RefreshThemesWhenShownAsync()
+    {
+        var shown = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        return shown ? themesView.RefreshAsync() : Task.CompletedTask;
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -1444,7 +1453,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void SelectSection(int index)
     {
+        var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
         selectedSection = index;
+        if (!wasThemes && sections[index].Definition.Id == "themes")
+        {
+            _ = themesView.RefreshAsync();
+        }
+
         var current = sections[index].Definition;
         var accent = ToColor(current.AccentArgb);
         for (var position = 0; position < sections.Count; position++)

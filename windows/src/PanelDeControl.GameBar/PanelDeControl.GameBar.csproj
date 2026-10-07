@@ -60,6 +60,8 @@
     <Compile Include="InventoryClient.cs" />
     <Compile Include="TelemetryClient.cs" />
     <Compile Include="TdpControlClient.cs" />
+    <Compile Include="ThemesClient.cs" />
+    <Compile Include="ThemesView.cs" />
     <Compile Include="VolumeControlClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

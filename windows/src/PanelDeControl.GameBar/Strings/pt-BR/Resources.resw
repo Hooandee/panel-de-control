@@ -400,4 +400,37 @@
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacidade</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Ciclos</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Temas do Steam</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Os temas do Panel de Control para o Steam no modo Big Picture.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>O serviço de temas não responde</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>Uma nova tentativa será feita em alguns segundos.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>O Steam não está instalado</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Os temas são aplicados ao Steam no modo Big Picture.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>É preciso reiniciar o Steam</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Para aplicar temas, o Steam precisa iniciar com a depuração remota ativada. Ela é ativada e o Steam reinicia no Big Picture; só é preciso uma vez.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Ativar e reiniciar o Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>O Steam está fechado</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>O tema ativo será aplicado assim que o Steam abrir no Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>Aguardando o Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>O Steam está aberto no modo área de trabalho. O tema será aplicado ao mudar para o Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Conectado ao Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>As mudanças aparecem na hora no Big Picture.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Não foi possível concluir: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Carregando o catálogo de temas…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Não foi possível carregar o catálogo. É preciso conexão com a internet.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Instalar · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Atualizar para {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Instalando…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Opções</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>A cópia instalada está danificada e precisa ser instalada de novo.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Não instalado</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Versão {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>aplicado em {0} telas</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>será aplicado ao abrir o Big Picture</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>aplicado em {0} de {1} telas</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>o estilo está ativo, faltam as animações</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>o pacote baixado não passou na verificação</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>o catálogo não está disponível ou mudou</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>o Steam demorou demais para responder</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>erro inesperado; ficou anotado no registro</value></data>
 </root>

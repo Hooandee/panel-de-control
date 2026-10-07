@@ -444,4 +444,37 @@
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacity</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cycles</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Steam themes</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Panel de Control themes for Steam in Big Picture mode.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>The theme service is not responding</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>It will try again in a few seconds.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>Steam is not installed</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Themes are applied to Steam in Big Picture mode.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>Steam needs a restart</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>To apply themes, Steam has to start with remote debugging on. It gets switched on and Steam restarts in Big Picture; this is only needed once.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Turn on and restart Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>Steam is closed</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>The active theme will be applied as soon as Steam opens in Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>Waiting for Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>Steam is open in desktop mode. The theme will be applied when it switches to Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Connected to Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>Changes show up in Big Picture right away.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>It could not be completed: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Loading the theme catalog…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>The catalog could not be loaded. An internet connection is needed.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Install · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Update to {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Installing…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Options</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>The installed copy is damaged and needs to be installed again.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Not installed</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>applied on {0} screens</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>will be applied when Big Picture opens</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>applied on {0} of {1} screens</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>the style is on, its animations are missing</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>the downloaded package failed verification</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>the catalog is unavailable or has changed</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam took too long to respond</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>unexpected error; it was written to the log</value></data>
 </root>
