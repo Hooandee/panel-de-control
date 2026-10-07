@@ -5,7 +5,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-eclipse",
       "cssLoaderName": "Hooandee Eclipse",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "displayName": {
         "es": "Eclipse",
         "en": "Eclipse",
@@ -19,9 +19,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.4/theme.zip",
-        "size": 62808,
-        "sha256": "0cdc5c7183afe2151ec2ada1f6d5d253eee85f4d075c5883122b2d60359af273"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.5/theme.zip",
+        "size": 62848,
+        "sha256": "c8da01e28119eae00f9a05148f756a9a43fc3b03635de1c90e95f8e6c1fe7e43"
       },
       "minimumVersions": {
         "panel": "0.56.0",
