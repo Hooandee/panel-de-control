@@ -74,6 +74,8 @@ public sealed class SteamThemeEngine
     private ClassTranslator translator = ClassTranslator.Identity;
     private IReadOnlySet<string>? liveClasses;
     private string? liveClassesSession;
+    private object? translatorTable;
+    private IReadOnlySet<string>? translatorClasses;
     private long hostRevision;
     private string? hostInputsFingerprint;
     private ThemeEngineStatus status = ThemeEngineStatus.Initial;
@@ -439,6 +441,13 @@ public sealed class SteamThemeEngine
         }
 
         var table = classTable.Current(steam.BetaClient);
+        if (ReferenceEquals(table, translatorTable) && ReferenceEquals(liveClasses, translatorClasses))
+        {
+            return;
+        }
+
+        translatorTable = table;
+        translatorClasses = liveClasses;
         var next = table is null ? ClassTranslator.Identity : ClassTranslator.Create(table, liveClasses);
         if (next.Fingerprint != translator.Fingerprint)
         {

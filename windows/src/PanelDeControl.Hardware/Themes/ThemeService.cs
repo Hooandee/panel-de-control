@@ -58,6 +58,7 @@ public sealed record ThemeCatalogState(IReadOnlyList<ThemeRelease> Releases, str
 public sealed class ThemeService
 {
     private static readonly TimeSpan CatalogFreshness = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan CatalogRetry = TimeSpan.FromMinutes(1);
 
     private readonly string libraryRoot;
     private readonly ThemeSettingsStore settings;
@@ -66,6 +67,7 @@ public sealed class ThemeService
     private readonly ISteamInstallation steam;
     private readonly SemaphoreSlim operations = new(1, 1);
     private ThemeCatalogState catalog = new(Array.Empty<ThemeRelease>(), null, null);
+    private int catalogRefreshing;
 
     public ThemeService(string libraryRoot, IThemeCatalogSource channel, ISteamInstallation steam)
     {
@@ -85,11 +87,32 @@ public sealed class ThemeService
 
     public async Task<ThemeCatalogState> RefreshCatalogAsync(bool force, CancellationToken cancellationToken)
     {
-        if (!force && catalog.CheckedAt is { } checkedAt && DateTimeOffset.UtcNow - checkedAt < CatalogFreshness && catalog.ErrorCode is null)
+        var freshness = catalog.ErrorCode is null ? CatalogFreshness : CatalogRetry;
+        if (!force && catalog.CheckedAt is { } checkedAt && DateTimeOffset.UtcNow - checkedAt < freshness)
         {
             return catalog;
         }
 
+        if (!force && Interlocked.CompareExchange(ref catalogRefreshing, 1, 0) != 0)
+        {
+            return catalog;
+        }
+
+        try
+        {
+            return await FetchCatalogAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!force)
+            {
+                Interlocked.Exchange(ref catalogRefreshing, 0);
+            }
+        }
+    }
+
+    private async Task<ThemeCatalogState> FetchCatalogAsync(CancellationToken cancellationToken)
+    {
         try
         {
             var releases = ThemeCatalog.Parse(await channel.CatalogAsync(cancellationToken).ConfigureAwait(false));
@@ -286,7 +309,7 @@ public sealed class ThemeService
     // there on Linux. A copy keeps the URLs working without a link or elevation.
     private void MirrorAssets(InstalledTheme theme)
     {
-        if (ThemesCustomRoot is not { } root)
+        if (ThemesCustomRoot is not { } root || IsForeignLink(root))
         {
             return;
         }
@@ -311,7 +334,7 @@ public sealed class ThemeService
 
     private void MirrorAssetsIfStale(InstalledTheme theme)
     {
-        if (ThemesCustomRoot is not { } root)
+        if (ThemesCustomRoot is not { } root || IsForeignLink(root))
         {
             return;
         }
@@ -328,6 +351,14 @@ public sealed class ThemeService
         {
             MirrorAssets(theme);
         }
+    }
+
+    // CSS Loader Desktop links steamui\themes_custom to its own theme folder; writing through that
+    // link would replace the copy it manages.
+    private static bool IsForeignLink(string root)
+    {
+        var directory = new DirectoryInfo(root);
+        return directory.Exists && (directory.LinkTarget is not null || directory.Attributes.HasFlag(FileAttributes.ReparsePoint));
     }
 
     private static void CopyTree(string source, string destination)
