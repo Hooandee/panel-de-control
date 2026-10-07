@@ -133,6 +133,8 @@ try {
   if (Test-Path \$layout) { Remove-Item -LiteralPath \$layout -Recurse -Force }
   Move-Item -LiteralPath \$incoming -Destination \$layout
   Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml') -ForceApplicationShutdown
+  # Game Bar keeps the widget list it read at start; a restart makes it list the new registration.
+  Get-Process GameBar, GameBarFTServer, XboxGameBarWidgets -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   Get-AppxPackage -Name '${PACKAGE_NAME}' | Select-Object Name, Version, InstallLocation | Format-List | Out-String | Out-File -Append \$log
   \$code = 0
 } catch {

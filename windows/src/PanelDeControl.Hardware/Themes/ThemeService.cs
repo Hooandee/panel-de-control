@@ -259,9 +259,11 @@ public sealed class ThemeService
             MirrorAssetsIfStale(selection.Theme);
         }
 
-        var extensions = enabled
-            .Where(selection => selection.Theme.Marker?.Extension is not null)
-            .Select(selection => (selection.Theme, source: ThemeLibrary.ReadExtension(selection.Theme)))
+        // The shared runtime lists receipts once per installed name/version, like Linux, so every
+        // installed extension is offered; enabling a theme later then needs no new listing.
+        var extensions = library.Themes
+            .Where(theme => theme.Marker?.Extension is not null)
+            .Select(theme => (Theme: theme, source: ThemeLibrary.ReadExtension(theme)))
             .Where(pair => pair.source is not null)
             .Select(pair => new ThemeHostExtension(
                 pair.Theme.Marker!.CatalogIdentity,

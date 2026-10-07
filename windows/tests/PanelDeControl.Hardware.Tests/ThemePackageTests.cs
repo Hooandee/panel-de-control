@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using PanelDeControl.Hardware.Themes;
@@ -155,6 +156,24 @@ public sealed class ThemePackageTests : IDisposable
     }
 
     [Fact]
+    public void EngineInputsOfferEveryInstalledExtensionNotOnlyEnabledOnes()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var service = new ThemeService(root, new NoChannel(), new NoSteam());
+
+        var disabled = service.EngineInputs();
+        service.SetEnabled(Name, true);
+        var enabled = service.EngineInputs();
+
+        Assert.Empty(disabled.Enabled);
+        Assert.Equal("hooandee-eclipse", Assert.Single(disabled.Extensions).CatalogId);
+        Assert.Single(enabled.Enabled);
+        Assert.Equal(disabled.Extensions.Single().Sha256, enabled.Extensions.Single().Sha256);
+    }
+
+    [Fact]
     public void SettingsRoundTripInOrder()
     {
         var store = new ThemeSettingsStore(root);
@@ -225,5 +244,29 @@ public sealed class ThemePackageTests : IDisposable
         }
 
         return buffer.ToArray();
+    }
+
+    private sealed class NoChannel : IThemeCatalogSource
+    {
+        public Task<byte[]> CatalogAsync(CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+
+        public Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+    }
+
+    private sealed class NoSteam : ISteamInstallation
+    {
+        public string? SteamPath => null;
+
+        public bool DebuggingEnabled => false;
+
+        public bool BetaClient => false;
+
+        public bool IsRunning => false;
+
+        public void EnableDebugging()
+        {
+        }
+
+        public Task RestartAsync(bool bigPicture, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
