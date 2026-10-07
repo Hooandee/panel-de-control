@@ -64,7 +64,12 @@ def _encode_value(value: object) -> str:
 
 
 def _folder(settings_dir: Path) -> Path:
-    return Path(settings_dir) / FOLDER_NAME
+    base = Path(settings_dir)
+    folder = base / FOLDER_NAME
+    # Panel writes here as root inside the user's home: a link planted there must not redirect it.
+    if base.is_symlink() or folder.is_symlink():
+        raise ThemeDataError("unsafe_folder")
+    return folder
 
 
 def _path(settings_dir: Path, catalog_id: str) -> Path:
@@ -169,18 +174,33 @@ def delete(settings_dir: Path, catalog_id: object) -> bool:
 
 
 def adopt_legacy(shared_dir: Path, legacy_dir: Path) -> list[str]:
-    """Moves records from the folder Panel used before into the shared one; never overwrites."""
+    """Moves records from the folder Panel used before into the shared one; never overwrites.
+
+    Raises `adoption_incomplete` when a record could not be moved, so the caller tries again later
+    instead of leaving the user's data behind where nothing reads it.
+    """
     source = _folder(legacy_dir)
     if not source.is_dir():
         return []
     moved: list[str] = []
+    failed: list[str] = []
     for path in sorted(source.glob("*.json")):
         catalog_id = path.stem
-        if _SAFE_ID.fullmatch(catalog_id) is None or _load(path, catalog_id) is None:
+        record = _load(path, catalog_id) if _SAFE_ID.fullmatch(catalog_id) else None
+        if record is None or _path(shared_dir, catalog_id).exists():
             continue
-        if _path(shared_dir, catalog_id).exists():
-            continue
-        _folder(shared_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.replace(path, _path(shared_dir, catalog_id))
+        try:
+            _folder(shared_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.replace(path, _path(shared_dir, catalog_id))
+        except OSError:
+            # The two folders can sit on different file systems; copy, then drop the original.
+            try:
+                write(shared_dir, catalog_id, record["summary"], record["value"], now=record["updatedAt"])
+                path.unlink()
+            except (OSError, ThemeDataError):
+                failed.append(catalog_id)
+                continue
         moved.append(catalog_id)
+    if failed:
+        raise ThemeDataError("adoption_incomplete")
     return moved

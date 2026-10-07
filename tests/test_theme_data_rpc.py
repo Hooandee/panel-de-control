@@ -81,3 +81,22 @@ def test_old_panel_records_move_to_the_shared_folder(installed):
     main.theme_data.write(main.Path(fake.DECKY_PLUGIN_SETTINGS_DIR), "hooandee-bubble", "", {"pages": 4}, now=1.0)
 
     assert run(plugin.get_theme_data("hooandee-bubble"))["value"] == {"pages": 4}
+
+
+def test_an_unfinished_adoption_is_tried_again(installed, monkeypatch):
+    main, plugin, fake = installed
+    main.theme_data.write(main.Path(fake.DECKY_PLUGIN_SETTINGS_DIR), "hooandee-bubble", "", {"pages": 4}, now=1.0)
+    real_adopt = main.theme_data.adopt_legacy
+    calls = []
+
+    def flaky(shared, legacy):
+        calls.append(1)
+        if len(calls) == 1:
+            raise main.theme_data.ThemeDataError("adoption_incomplete")
+        return real_adopt(shared, legacy)
+
+    monkeypatch.setattr(main.theme_data, "adopt_legacy", flaky)
+
+    assert run(plugin.get_theme_data("hooandee-bubble")) is None
+    assert run(plugin.get_theme_data("hooandee-bubble"))["value"] == {"pages": 4}
+    assert len(calls) == 2

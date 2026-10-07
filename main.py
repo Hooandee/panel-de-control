@@ -1901,9 +1901,11 @@ class Plugin:
         # would save a fresh record that the move then refuses to overwrite.
         with self._theme_data_adoption_lock:
             if not self._theme_data_adopted:
-                self._theme_data_adopted = True
                 try:
                     theme_data.adopt_legacy(shared, Path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+                    self._theme_data_adopted = True
+                except theme_data.ThemeDataError as error:
+                    decky.logger.warning("Theme data adoption incomplete (%s)", error.code)
                 except OSError as error:
                     decky.logger.warning("Theme data adoption failed (%s)", type(error).__name__)
         return shared

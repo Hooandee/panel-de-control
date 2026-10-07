@@ -451,3 +451,20 @@ def test_a_failed_hardware_write_is_recorded_with_its_os_error(tmp_path):
     assert (record["s"], record["m"], record["error"]) == ("hw", "write_failed", "EISDIR")
     assert record["target"] == str(tmp_path) and record["value"] == "15"
     assert record["by"] == "test_journal.py:test_a_failed_hardware_write_is_recorded_with_its_os_error"
+
+
+def test_a_failure_reported_by_code_keeps_its_code(tmp_path):
+    class Plugin:
+        async def save_value(self, value):
+            return {"ok": False, "code": "too_large"}
+
+    trace_calls(Plugin)
+    j = Journal(str(tmp_path), coalesce_s=0)
+    j.start()
+    journal.active = j
+    try:
+        asyncio.run(Plugin().save_value(1))
+    finally:
+        journal.active = None
+        j.stop()
+    assert _lines(str(tmp_path))[-1]["r"] == {"ok": False, "error": '"too_large"'}

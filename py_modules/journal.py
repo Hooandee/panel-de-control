@@ -694,7 +694,7 @@ def _where(error: BaseException) -> str:
 
 def _outcome(result: Any) -> dict | None:
     if isinstance(result, dict) and result.get("ok") is False:
-        detail = result.get("error") or result.get("detail") or result.get("reason")
+        detail = result.get("error") or result.get("detail") or result.get("reason") or result.get("code")
         return {"ok": False, "error": _summary(detail)[:160]} if detail is not None else {"ok": False}
     return None
 

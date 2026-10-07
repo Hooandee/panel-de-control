@@ -138,3 +138,50 @@ def test_adoption_never_overwrites_newer_shared_data(tmp_path):
 
     assert theme_data.adopt_legacy(shared, legacy) == []
     assert theme_data.read(shared, "hooandee-bubble")["value"] == {"pages": 9}
+
+
+def test_adoption_copies_when_the_folders_live_on_different_disks(tmp_path, monkeypatch):
+    legacy = tmp_path / "panel-settings"
+    shared = tmp_path / "shared"
+    theme_data.write(legacy, "hooandee-bubble", "3 páginas", {"pages": 3}, now=5.0)
+    real_replace = os.replace
+
+    def cross_device(source, target):
+        if str(source).startswith(str(legacy)):
+            raise OSError(18, "Invalid cross-device link")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(theme_data.os, "replace", cross_device)
+
+    assert theme_data.adopt_legacy(shared, legacy) == ["hooandee-bubble"]
+    assert theme_data.read(shared, "hooandee-bubble")["value"] == {"pages": 3}
+    assert theme_data.read(shared, "hooandee-bubble")["updatedAt"] == 5
+    assert not (legacy / "theme-data" / "hooandee-bubble.json").exists()
+
+
+def test_adoption_that_cannot_move_a_record_says_so_and_keeps_it(tmp_path, monkeypatch):
+    legacy = tmp_path / "panel-settings"
+    shared = tmp_path / "shared"
+    theme_data.write(legacy, "hooandee-bubble", "", {"pages": 3}, now=1.0)
+    monkeypatch.setattr(theme_data, "write", lambda *args, **kwargs: (_ for _ in ()).throw(OSError(28, "No space")))
+    monkeypatch.setattr(theme_data.os, "replace", lambda *args: (_ for _ in ()).throw(OSError(18, "cross-device")))
+
+    with pytest.raises(theme_data.ThemeDataError) as raised:
+        theme_data.adopt_legacy(shared, legacy)
+
+    assert raised.value.code == "adoption_incomplete"
+    assert (legacy / "theme-data" / "hooandee-bubble.json").exists()
+
+
+def test_refuses_a_data_folder_that_is_a_link(tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "theme-data").symlink_to(elsewhere)
+
+    with pytest.raises(theme_data.ThemeDataError) as raised:
+        theme_data.write(shared, "hooandee-bubble", "", {}, now=1.0)
+
+    assert raised.value.code == "unsafe_folder"
+    assert list(elsewhere.iterdir()) == []
