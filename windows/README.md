@@ -108,6 +108,30 @@ habilitan por capacidades estándar de Windows. El audio requiere un endpoint
 predeterminado y el brillo la coincidencia verificable del panel integrado
 descrita arriba.
 
+## Temas de Steam
+
+Los temas de Panel de Control también funcionan en Windows, sin CSS Loader ni
+Decky. El companion hace ese trabajo: descarga el tema del catálogo oficial,
+comprueba su tamaño y su SHA-256, lo instala y lo aplica en Steam en modo Big
+Picture (inicio, acceso rápido, menú y notificaciones). Las animaciones y
+efectos propios de cada tema, como el menú orbital o los planetas que siguen la
+curva en Eclipse, usan el mismo código que en Linux.
+
+Para que funcione, Steam tiene que arrancar con la depuración remota activada
+(el fichero `.cef-enable-remote-debugging` en la carpeta de Steam). Desde la
+sección Temas del widget se activa con un botón que también reinicia Steam; solo
+hace falta una vez. Ese puerto solo escucha en el propio equipo, igual que en
+SteamOS con Decky.
+
+Los nombres de clase de Steam cambian entre versiones. Para que un tema no se
+rompa al actualizar Steam, cada clase se traduce a la que usa de verdad el Steam
+instalado, con la misma tabla pública que usa CSS Loader.
+
+El widget solo da un tema por aplicado cuando Steam lo confirma en todas sus
+pantallas y, si el tema trae animaciones, cuando también están en marcha. Los
+temas se vuelven a aplicar solos si Steam recarga una pantalla o se reinicia, y
+el companion arranca al iniciar sesión para que el tema esté desde el principio.
+
 ## Compilar
 
 Requisitos:
