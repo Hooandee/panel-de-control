@@ -117,3 +117,24 @@ def test_a_file_renamed_to_another_theme_is_not_served(tmp_path):
     (folder / "hooandee-bubble.json").rename(folder / "hooandee-gallery.json")
 
     assert theme_data.read(tmp_path, "hooandee-gallery") is None
+
+
+def test_adopts_records_left_in_the_old_folder_once(tmp_path):
+    legacy = tmp_path / "panel-settings"
+    shared = tmp_path / "shared"
+    theme_data.write(legacy, "hooandee-bubble", "3 páginas", {"pages": 3}, now=1.0)
+
+    assert theme_data.adopt_legacy(shared, legacy) == ["hooandee-bubble"]
+    assert theme_data.read(shared, "hooandee-bubble")["value"] == {"pages": 3}
+    assert theme_data.read(legacy, "hooandee-bubble") is None
+    assert theme_data.adopt_legacy(shared, legacy) == []
+
+
+def test_adoption_never_overwrites_newer_shared_data(tmp_path):
+    legacy = tmp_path / "panel-settings"
+    shared = tmp_path / "shared"
+    theme_data.write(legacy, "hooandee-bubble", "viejo", {"pages": 1}, now=1.0)
+    theme_data.write(shared, "hooandee-bubble", "nuevo", {"pages": 9}, now=2.0)
+
+    assert theme_data.adopt_legacy(shared, legacy) == []
+    assert theme_data.read(shared, "hooandee-bubble")["value"] == {"pages": 9}

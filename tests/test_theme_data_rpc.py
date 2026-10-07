@@ -64,3 +64,20 @@ def test_support_logs_name_the_themes_without_their_content(installed):
     assert support["theme_data"][0]["catalogId"] == "hooandee-bubble"
     assert "summary" not in support["theme_data"][0]
     assert "value" not in support["theme_data"][0]
+
+
+def test_theme_data_lives_outside_panel_settings(installed):
+    main, plugin, fake = installed
+
+    run(plugin.save_theme_data("hooandee-bubble", "", {"pages": 1}))
+
+    shared = main.Path(fake.DECKY_USER_HOME) / "homebrew" / "data" / "hooandee-themes" / "theme-data"
+    assert (shared / "hooandee-bubble.json").is_file()
+    assert not (main.Path(fake.DECKY_PLUGIN_SETTINGS_DIR) / "theme-data").exists()
+
+
+def test_old_panel_records_move_to_the_shared_folder(installed):
+    main, plugin, fake = installed
+    main.theme_data.write(main.Path(fake.DECKY_PLUGIN_SETTINGS_DIR), "hooandee-bubble", "", {"pages": 4}, now=1.0)
+
+    assert run(plugin.get_theme_data("hooandee-bubble"))["value"] == {"pages": 4}

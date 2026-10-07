@@ -464,6 +464,8 @@ class Plugin:
     # unless the user confirms — the "changing screen resolution" safety pattern.
     _COLOR_REVERT_SECS = 15
 
+    _theme_data_adopted = False
+
     # Lazy, idempotent init called at the top of EVERY RPC method and _main.
     # RPC can be invoked before _main finishes; without this, methods AttributeError
     # on a half-built instance and the UI hangs on its spinner.
@@ -1888,10 +1890,18 @@ class Plugin:
             )
             raise RuntimeError("extension_unavailable") from None
 
-    # Theme runtimes keep their own data (a home layout, folders) through Panel: one file per theme in
-    # Panel's settings, so it outlives theme updates and reinstalls until the user resets it.
+    # Theme runtimes keep their own data (a home layout, folders) in a folder no plugin owns, so it
+    # outlives theme updates and reinstalls of Panel itself until the user resets it. Records an older
+    # Panel left in its own settings move over once.
     def _theme_data_dir(self) -> Path:
-        return Path(decky.DECKY_PLUGIN_SETTINGS_DIR)
+        shared = Path(decky.DECKY_USER_HOME) / "homebrew" / "data" / "hooandee-themes"
+        if not self._theme_data_adopted:
+            self._theme_data_adopted = True
+            try:
+                theme_data.adopt_legacy(shared, Path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+            except OSError as error:
+                decky.logger.warning("Theme data adoption failed (%s)", type(error).__name__)
+        return shared
 
     async def get_theme_data(self, catalog_id: str) -> dict | None:
         self._init()

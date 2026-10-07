@@ -166,3 +166,21 @@ def delete(settings_dir: Path, catalog_id: object) -> bool:
     except FileNotFoundError:
         return False
     return True
+
+
+def adopt_legacy(shared_dir: Path, legacy_dir: Path) -> list[str]:
+    """Moves records from the folder Panel used before into the shared one; never overwrites."""
+    source = _folder(legacy_dir)
+    if not source.is_dir():
+        return []
+    moved: list[str] = []
+    for path in sorted(source.glob("*.json")):
+        catalog_id = path.stem
+        if _SAFE_ID.fullmatch(catalog_id) is None or _load(path, catalog_id) is None:
+            continue
+        if _path(shared_dir, catalog_id).exists():
+            continue
+        _folder(shared_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(path, _path(shared_dir, catalog_id))
+        moved.append(catalog_id)
+    return moved
