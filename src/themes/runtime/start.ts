@@ -2,6 +2,7 @@ import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
   ThemeExtensionRuntimeHost,
+  type ThemeExtensionExport,
   type ThemeExtensionQamAccess,
 } from "./extensionHost";
 import {
@@ -143,6 +144,8 @@ interface ThemesRuntimeOptions {
   subscribeQamDocument?(listener: (doc: Document) => void): () => void;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  evaluate?(source: string): ThemeExtensionExport;
+  log?(code: string): void;
   createManager?(
     doc: Document,
     qam?: Readonly<ThemeExtensionQamAccess>,
@@ -158,6 +161,8 @@ export function startThemesRuntime({
   subscribeQamDocument,
   library = createThemeLibraryAccess(),
   navigation = createThemeNavigationAccess(),
+  evaluate,
+  log,
   createManager,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
@@ -174,6 +179,8 @@ export function startThemesRuntime({
       qam,
       library,
       navigation,
+      evaluate,
+      log,
     }),
     () => { void client.refresh(); },
   );
