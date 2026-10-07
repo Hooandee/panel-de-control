@@ -1,3 +1,5 @@
+using PanelDeControl.Hardware.Themes;
+
 namespace PanelDeControl.Hardware;
 
 public static class Program
@@ -8,6 +10,14 @@ public static class Program
         {
             return 1;
         }
+
+        // The companion starts both at sign-in (themes) and from the widget; one copy owns the pipes.
+        using var singleInstance = new Mutex(initiallyOwned: true, @"Local\PanelDeControl.Companion", out var ownsInstance);
+        if (!ownsInstance)
+        {
+            return 0;
+        }
+
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
@@ -54,6 +64,22 @@ public static class Program
                 new PackagedWidgetClientValidator(),
                 PackageNamedPipeServerFactory.CreateControl);
 
+            using var steamDevTools = new SteamDevTools();
+            using var themeChannel = new OfficialThemeCatalogSource();
+            using var classTable = new ClassTableSource(ThemeLibrary.DefaultRoot);
+            var steam = new SteamInstallation();
+            var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam);
+            var themeEngine = new SteamThemeEngine(
+                steamDevTools,
+                steam,
+                themeService.EngineInputs,
+                SteamThemeHostBundle.Read,
+                classTable);
+            var themesServer = new ThemesPipeServer(
+                ThemesPipeServer.PackagedPipeName,
+                new ThemesController(themeService, themeEngine),
+                PackageNamedPipeServerFactory.CreateControl);
+
             using var brokerLifetime = new CancellationTokenSource();
             var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
             var volumeTask = volumeServer.RunUntilCancelledAsync(
@@ -66,10 +92,12 @@ public static class Program
                 brokerLifetime.Token);
             var cpuTask = cpuServer.RunUntilCancelledAsync(
                 brokerLifetime.Token);
+            var themeEngineTask = themeEngine.RunAsync(brokerLifetime.Token);
+            var themesTask = themesServer.RunUntilCancelledAsync(brokerLifetime.Token);
             try
             {
                 var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask)
+                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask, themeEngineTask, themesTask)
                     .ConfigureAwait(false);
                 await completedTask.ConfigureAwait(false);
             }
@@ -77,7 +105,7 @@ public static class Program
             {
                 brokerLifetime.Cancel();
                 await Task
-                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask)
+                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask, themeEngineTask, themesTask)
                     .ConfigureAwait(false);
             }
             return 0;
