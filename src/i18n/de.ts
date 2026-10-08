@@ -452,7 +452,7 @@ export const de: Record<string, string> = {
   "themes.retry": "Erneut prüfen",
   "themes.operation.failed": "Der Vorgang wurde nicht abgeschlossen. Versuche es erneut; wenn es weiterhin fehlschlägt, sende einen Bericht aus den Einstellungen.",
   "themes.operation.code": "Code: {code}",
-  "themes.health.title": "Theme-Check",
+  "themes.health.title": "Probleme mit einem Theme?",
   "themes.health.summary.checking": "Themes, Ordner und Anzeige werden geprüft…",
   "themes.health.summary.unavailable": "Der Theme-Ordner konnte nicht geprüft werden.",
   "themes.health.summary.clean": "Alles in Ordnung: Nichts sollte die Themes stören.",

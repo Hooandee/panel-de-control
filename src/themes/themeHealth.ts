@@ -243,7 +243,9 @@ export function diagnoseThemeHealth(
   } else if (backend.panel && display.width !== null && display.height !== null) {
     const drawn = [display.width, display.height].sort((a, b) => b - a);
     const native = [backend.panel.width, backend.panel.height].sort((a, b) => b - a);
-    if (drawn[0] !== native[0] || drawn[1] !== native[1]) {
+    // CEF rounds the CSS viewport up, so the drawn size can exceed the panel by up to one CSS pixel.
+    const tolerance = Math.ceil(display.pixelRatio ?? 1);
+    if (Math.abs(drawn[0] - native[0]) > tolerance || Math.abs(drawn[1] - native[1]) > tolerance) {
       findings.push({
         id: "resolution",
         severity: "setting",

@@ -452,7 +452,7 @@ export const ptBR: Record<string, string> = {
   "themes.retry": "Verificar novamente",
   "themes.operation.failed": "A operação não foi concluída. Tente novamente; se continuar falhando, envie um relatório pelas Configurações.",
   "themes.operation.code": "Código: {code}",
-  "themes.health.title": "Diagnóstico de temas",
+  "themes.health.title": "Problemas com um tema?",
   "themes.health.summary.checking": "Verificando temas, pastas e tela…",
   "themes.health.summary.unavailable": "Não foi possível verificar a pasta de temas.",
   "themes.health.summary.clean": "Tudo certo: nada deve interferir nos temas.",

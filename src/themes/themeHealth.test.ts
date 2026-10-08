@@ -105,6 +105,13 @@ describe("diagnoseThemeHealth", () => {
       .toEqual([{ id: "external_display", severity: "info" }]);
   });
 
+  it("accepts the rounded viewport of a Deck LCD at its stock 1.5 scale", () => {
+    const deckLcd = backend({ panel: { width: 800, height: 1280 } });
+    const display = { ...NO_STYLES, scale: 1.5, autoScale: 1.5, pixelRatio: 1.5, width: 1281, height: 801 };
+
+    expect(diagnoseThemeHealth(ready(), deckLcd, display, new Set())).toEqual([]);
+  });
+
   it("stays silent about settings Steam did not report", () => {
     const unknown = { ...NO_STYLES, scale: null, autoScale: null, usingAutoScale: null, beta: null, width: null, height: null };
 
