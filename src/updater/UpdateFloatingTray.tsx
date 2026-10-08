@@ -43,7 +43,9 @@ function useReservedScrollPadding(cardRef: { current: HTMLDivElement | null }): 
     const container = card && scrollContainer(card);
     if (!card || !container) return;
     const previous = container.style.scrollPaddingBottom;
-    const reserve = () => { container.style.scrollPaddingBottom = `${card.getBoundingClientRect().height + TRAY_INSET * 2}px`; };
+    const reserve = () => {
+      container.style.scrollPaddingBottom = `${card.getBoundingClientRect().height + TRAY_INSET * 2}px`;
+    };
     const view = card.ownerDocument.defaultView;
     const resize = view && typeof view.ResizeObserver === "function" ? new view.ResizeObserver(reserve) : null;
     resize?.observe(card);

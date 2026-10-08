@@ -942,18 +942,16 @@ describe("ControlCenterShell", () => {
     expect(container.querySelectorAll(".pdc-root")).toHaveLength(1);
     expect(getQamDocument()).toBe(container.ownerDocument);
   });
-});
 
-
-it("preserves the settings alert dot after dismissing the floating update", () => {
-  setShellMode("tabs");
-  const { container } = renderShell({
-    hasUpdate: true,
-    updateInfo: { current: "1", latest: "2", has_update: true, notes: "", download_url: "", error: "" },
+  it("preserves the settings alert dot after dismissing the floating update", () => {
+    setShellMode("tabs");
+    const { container } = renderShell({
+      hasUpdate: true,
+      updateInfo: { current: "1", latest: "2", has_update: true, notes: "", download_url: "", error: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector('[data-update-tray="card"]')).toBeNull();
+    expect(alertDotWithin(container)).toBeTruthy();
   });
-  fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
-  expect(screen.queryByRole("status")).toBeNull();
-  expect(container.querySelector('[data-update-tray="card"]')).toBeNull();
-  expect(alertDotWithin(container)).toBeTruthy();
-  cleanup();
 });

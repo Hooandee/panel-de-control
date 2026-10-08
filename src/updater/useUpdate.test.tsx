@@ -47,7 +47,6 @@ describe("useUpdate Italian notification", () => {
   });
 });
 
-
 describe("shared update session", () => {
   it("publishes one pending check to mounted consumers and later remounts", async () => {
     let resolve!: (info: Awaited<ReturnType<typeof mocks.checkUpdate>>) => void;
