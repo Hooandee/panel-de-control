@@ -107,6 +107,12 @@ function FindingRow({ finding }: { finding: ThemeHealthFinding }) {
   );
 }
 
+function undoDescriptionKey(undo: { moved: number; disabled: number }): string {
+  if (!undo.disabled) return "themes.health.undo.descFolders";
+  if (!undo.moved) return "themes.health.undo.descThemes";
+  return "themes.health.undo.desc";
+}
+
 function summaryKey(health: ThemeHealthView): string {
   if (health.checking && health.findings.length === 0) return "themes.health.summary.checking";
   if (health.unavailable) return "themes.health.summary.unavailable";
@@ -193,7 +199,7 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
           </ButtonItem>
         ) : null}
         {health.undo?.available ? (
-          <ButtonItem layout="below" disabled={busy || !cssReady} description={t("themes.health.undo.desc", { moved: health.undo.moved, disabled: health.undo.disabled })} onClick={() => void runAction(health.undoCleanup, "restored")}>
+          <ButtonItem layout="below" disabled={busy || !cssReady} description={t(undoDescriptionKey(health.undo), { moved: health.undo.moved, disabled: health.undo.disabled })} onClick={() => void runAction(health.undoCleanup, "restored")}>
             <LuUndo2 size={14} aria-hidden /> {t(controller.operation?.kind === "restoring" ? "themes.health.restoring" : "themes.health.undo")}
           </ButtonItem>
         ) : null}
