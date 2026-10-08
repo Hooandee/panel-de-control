@@ -3,7 +3,7 @@ import { ErrorBoundary, Focusable, getFocusNavController, PanelSection, PanelSec
 import { ReportingBoundary } from "./ReportingBoundary";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import type { DeviceInfo, LearningStatus } from "../api";
+import type { DeviceInfo, LearningStatus, UpdateInfo } from "../api";
 import { PINNED_TAB } from "../customize/manifest";
 import { useI18n } from "../i18n";
 import { resolveShellState } from "../sections/shellNavigation";
@@ -11,6 +11,8 @@ import { setShellMode, type ShellMode, useShellMode } from "../sections/shellMod
 import type { SectionDef } from "../sections/types";
 import { useShoulderNav } from "../sections/useShoulderNav";
 import { theme } from "../theme";
+import { UpdateFloatingTray } from "../updater/UpdateFloatingTray";
+import type { UpdateStatus } from "../updater/useUpdate";
 import { AlertDot } from "../updater/AlertDot";
 import { Dashboard } from "./Dashboard";
 import { DeviceHeader } from "./DeviceHeader";
@@ -28,6 +30,8 @@ export interface ControlCenterShellProps {
   showHome: boolean;
   showDeviceHeader: boolean;
   hasUpdate: boolean;
+  updateInfo?: UpdateInfo | null;
+  updateStatus?: UpdateStatus;
   initialMode?: ShellMode;
   onSelectSection: (id: string) => void;
 }
@@ -83,10 +87,12 @@ export function ControlCenterShell({
   showHome,
   showDeviceHeader,
   hasUpdate,
+  updateInfo = null,
+  updateStatus = "idle",
   initialMode,
   onSelectSection,
 }: ControlCenterShellProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const shellSurface = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef<{ mode: ShellMode; previousFocus: Element | null } | null>(null);
   const storedMode = useShellMode();
@@ -236,6 +242,7 @@ export function ControlCenterShell({
               </ReportingBoundary>
             </ErrorBoundary>
           ) : null}
+          <UpdateFloatingTray lang={lang} info={updateInfo} status={updateStatus} />
         </Focusable>
       </FocusRoot>
     </PanelSection>

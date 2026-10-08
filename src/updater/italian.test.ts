@@ -4,6 +4,7 @@ import { getUpdaterStrings } from "./strings";
 describe("Italian updater strings", () => {
   it("returns the complete Italian updater copy", () => {
     expect(getUpdaterStrings("it")).toEqual({
+      floating: { title: "Nuova versione disponibile", update: "Aggiorna", later: "Più tardi" },
       panel: {
         version: "Versione",
         latest: "(più recente)",
