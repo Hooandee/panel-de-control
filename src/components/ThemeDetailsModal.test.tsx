@@ -76,6 +76,8 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true),
     setPatch: vi.fn(async () => true),
+    cleanUp: vi.fn(async () => true),
+    undoCleanup: vi.fn(async () => true),
     ...overrides,
   };
 }

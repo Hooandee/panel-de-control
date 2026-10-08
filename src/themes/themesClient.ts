@@ -8,6 +8,7 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
+import { createThemeCleanupHost } from "./themeCleanupHost";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
@@ -47,6 +48,17 @@ export interface ThemesAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
   setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot>;
+  disableAllExcept?(before: CssLoaderReadySnapshot, keep: ReadonlySet<string>): Promise<CssLoaderReadySnapshot>;
+  enableAgain?(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+    names: readonly string[],
+  ): Promise<CssLoaderReadySnapshot>;
+}
+
+export interface ThemeCleanupHost {
+  setAside(disabled: readonly string[]): Promise<void>;
+  restore(): Promise<readonly string[]>;
 }
 
 export interface ThemesInstaller {
@@ -92,6 +104,7 @@ export interface ThemesDependencies {
   publication?: ThemePublicationClient;
   reportFailure?: (failure: ThemeFailureReport) => void;
   sectionHandoffs?: SectionHandoffStore;
+  cleanup?: ThemeCleanupHost;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
@@ -107,7 +120,9 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string };
+  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "cleaning" }
+  | { kind: "restoring" };
 
 export interface ThemesClientSnapshot {
   loading: boolean;
@@ -165,6 +180,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
       read: () => sectionHandoffStore?.read() ?? {},
       write: (handoffs) => sectionHandoffStore?.write(handoffs),
     },
+    cleanup: createThemeCleanupHost(),
   };
   return productionDependencies;
 }
@@ -521,6 +537,27 @@ export class ThemesClient {
       },
     );
   };
+
+  cleanUp = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.disableAllExcept || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    const before = await adapter.requireReady();
+    await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
+    return adapter.disableAllExcept(before, kept);
+  });
+
+  undoCleanup = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "restoring" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.enableAgain || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    const before = await adapter.requireReady();
+    return adapter.enableAgain(before, kept, await cleanup.restore());
+  });
 
   private hooandeeThemeNames(): ReadonlySet<string> {
     return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));

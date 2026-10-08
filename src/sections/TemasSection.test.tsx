@@ -17,6 +17,7 @@ vi.mock("@decky/ui", () => ({
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../components/ThemeCard", () => ({ ThemeCard: ({ card, onOpen }: { card: { id: string }; onOpen(): void }) => <button onClick={onOpen}>{card.id}</button> }));
 vi.mock("../components/ThemeDetailsModal", () => ({ openThemeDetailsModal: mocks.open }));
+vi.mock("../components/ThemeHealth", () => ({ ThemeHealthCard: () => <div>theme-health-card</div> }));
 vi.mock("../assets/keyboards-preview.jpg", () => ({ default: "keyboards-preview.jpg" }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 
@@ -47,6 +48,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     refresh: vi.fn(async () => {}), refreshPublication: vi.fn(async () => {}),
     install: vi.fn(async () => true), uninstall: vi.fn(async () => true), activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true), setPatch: vi.fn(async () => true),
+    cleanUp: vi.fn(async () => true), undoCleanup: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -62,6 +64,12 @@ describe("TemasSection", () => {
     expect(screen.getByText("themes.cssLoader.missing")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.cssLoader.openStore" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/decky/store");
+  });
+
+  it("always offers the theme check-up, even without CSS Loader", () => {
+    mocks.controller = controller({ cards: [] });
+    render(<TemasSection />);
+    expect(screen.getByText("theme-health-card")).toBeTruthy();
   });
 
   it("does not flash a false missing state while CSS Loader inspection is pending", () => {

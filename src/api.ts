@@ -42,6 +42,9 @@ export const prepareRemoteThemeInstall = callable<[
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
+export const getThemeHealth = callable<[], unknown>("get_theme_health");
+export const setAsideThemeLeftovers = callable<[disabled: string[]], unknown>("set_aside_theme_leftovers");
+export const restoreThemeCleanup = callable<[], unknown>("restore_theme_cleanup");
 export const getThemePatchLabels = callable<[
   catalogId: string,
   cssLoaderName: string,

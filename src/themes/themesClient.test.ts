@@ -675,3 +675,59 @@ describe("ThemesClient", () => {
     });
   });
 });
+
+describe("ThemesClient cleanup", () => {
+  const OTHER: CssLoaderTheme = { ...INSTALLED_THEME, id: "Other", name: "Other", displayName: "Other" };
+
+  it("records what it turns off before touching CSS Loader, keeping catalog themes", async () => {
+    const order: string[] = [];
+    const before: CssLoaderReadySnapshot = { status: "ready", themes: [INSTALLED_THEME, OTHER] };
+    const after: CssLoaderReadySnapshot = { status: "ready", themes: [INSTALLED_THEME, { ...OTHER, enabled: false }] };
+    const disableAllExcept = vi.fn(async () => { order.push("css-loader"); return after; });
+    const setAside = vi.fn(async () => { order.push("set-aside"); });
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []) } });
+    deps.adapter.requireReady = vi.fn(async () => before);
+    deps.adapter.inspect = vi.fn(async () => before);
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.cleanUp(["Local Hooandee"])).resolves.toBe(true);
+
+    expect(order).toEqual(["set-aside", "css-loader"]);
+    expect(setAside).toHaveBeenCalledWith(["Other"]);
+    expect(disableAllExcept).toHaveBeenCalledWith(before, new Set(["Local Hooandee", "Example Theme"]));
+    expect(client.getSnapshot()).toMatchObject({ snapshot: after, operation: null, error: null });
+  });
+
+  it("does not touch CSS Loader when the backend refuses to record the cleanup", async () => {
+    const disableAllExcept = vi.fn(async () => READY);
+    const failure = Object.assign(new Error("refused"), { code: "invalid_record" });
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => { throw failure; }), restore: vi.fn(async () => []) } });
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+
+    expect(disableAllExcept).not.toHaveBeenCalled();
+    expect(client.getSnapshot().errorCode).toBe("invalid_record");
+  });
+
+  it("brings back the recorded themes on undo", async () => {
+    const enableAgain = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]) } });
+    deps.adapter.enableAgain = enableAgain;
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(true);
+
+    expect(enableAgain).toHaveBeenCalledWith(READY, new Set(), ["Other"]);
+  });
+
+  it("fails closed without a cleanup backend", async () => {
+    const client = new ThemesClient(dependencies());
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+    expect(client.getSnapshot().errorCode).toBe("transport");
+  });
+});

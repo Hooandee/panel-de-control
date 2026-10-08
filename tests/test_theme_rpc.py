@@ -526,8 +526,9 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     }
 
 
-def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rpc):
+def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rpc, monkeypatch):
     main, plugin, _ = theme_rpc
+    monkeypatch.setattr(main.theme_health, "internal_panel_mode", lambda: {"width": 1280, "height": 800})
     themes_root = plugin._themes_root()
     themes_root.mkdir(parents=True)
     work = themes_root.parent / f".panel-theme-transaction-{'r' * 43}"
@@ -556,6 +557,11 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "unreadable_theme_folders": 0,
         "installed": [],
         "other_active_themes": 0,
+        "health": {
+            "folders": {},
+            "cleanup": {"available": False, "moved": 0, "disabled": 0},
+            "panel": {"width": 1280, "height": 800},
+        },
     }
 
 
@@ -700,3 +706,51 @@ def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rp
     ]
     assert diagnostics["other_active_themes"] == 1
     assert "Someone Private" not in str(diagnostics)
+
+
+def test_theme_health_rpcs_set_aside_and_restore_leftovers(theme_rpc, monkeypatch):
+    main, plugin, _ = theme_rpc
+    monkeypatch.setattr(main.theme_health, "internal_panel_mode", lambda: None)
+    root = plugin._themes_root()
+    (root / "Residue").mkdir(parents=True)
+    (root / "Other").mkdir()
+    (root / "Other" / "theme.json").write_text(json.dumps({"name": "Other"}), encoding="utf-8")
+
+    health = asyncio.run(plugin.get_theme_health())
+    assert {item["folder"]: item["kind"] for item in health["folders"]} == {
+        "Other": "third_party",
+        "Residue": "leftover",
+    }
+    assert health["undo"]["available"] is False
+
+    result = asyncio.run(plugin.set_aside_theme_leftovers(["Other"]))
+    assert result == {"ok": True, "moved": ["Residue"], "failed": []}
+    assert plugin._theme_report_diagnostics()["health"]["cleanup"] == {
+        "available": True, "moved": 1, "disabled": 1,
+    }
+
+    restored = asyncio.run(plugin.restore_theme_cleanup())
+    assert restored == {"ok": True, "restored": ["Residue"], "kept": [], "reenable": ["Other"]}
+    assert (root / "Residue").is_dir()
+
+
+def test_theme_cleanup_rpc_answers_refusals_without_raising(theme_rpc):
+    _, plugin, _ = theme_rpc
+    plugin._themes_root().mkdir(parents=True)
+
+    assert asyncio.run(plugin.set_aside_theme_leftovers("Other")) == {
+        "ok": False, "code": "invalid_request",
+    }
+
+
+def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
+    main, _, _ = theme_rpc
+
+    themes = main.Plugin._with_theme_display({"installed": []}, {"theme_display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+        "beta_name": "private", "width": float("nan"), "nested": {"x": 1},
+    }})
+
+    assert themes == {"installed": [], "display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+    }}

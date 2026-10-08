@@ -13,6 +13,9 @@ import {
   getThemeInstallRecoveries,
   getThemeActivationRecovery,
   listThemeExtensions,
+  getThemeHealth,
+  setAsideThemeLeftovers,
+  restoreThemeCleanup,
   loadThemeExtension,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -51,6 +54,7 @@ import {
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
@@ -98,6 +102,11 @@ export default definePlugin(() => {
     acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeHealthHost = configureThemeHealthHost({
+    health: getThemeHealth,
+    setAside: setAsideThemeLeftovers,
+    restore: restoreThemeCleanup,
+  });
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
     list: listThemeExtensions,
     load: loadThemeExtension,
@@ -197,6 +206,7 @@ export default definePlugin(() => {
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
+      releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
       releaseSectionHandoffStore();

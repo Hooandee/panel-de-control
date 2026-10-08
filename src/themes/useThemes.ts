@@ -33,6 +33,8 @@ export interface ThemesController {
   activate(themeId: string): Promise<boolean>;
   deactivate(themeId: string): Promise<boolean>;
   setPatch(themeId: string, patchName: string, value: string): Promise<boolean>;
+  cleanUp(keep: readonly string[]): Promise<boolean>;
+  undoCleanup(keep: readonly string[]): Promise<boolean>;
 }
 
 const clients = new WeakMap<ThemesDependencies, ThemesClient>();
@@ -65,5 +67,7 @@ export function useThemes(dependencies?: ThemesDependencies): ThemesController {
     activate: client.activate,
     deactivate: client.deactivate,
     setPatch: client.setPatch,
+    cleanUp: client.cleanUp,
+    undoCleanup: client.undoCleanup,
   };
 }
