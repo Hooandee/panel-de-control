@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.64.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.63.0...panel-de-control-v0.64.0) (2026-10-08)
+
+
+### Features
+
+* **themes:** show a theme's extra options in their own group ([#890](https://github.com/Hooandee/panel-de-control/issues/890)) ([2afc280](https://github.com/Hooandee/panel-de-control/commit/2afc280b70b493a07490975b5b607bd60661c039))
+
 ## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
 
 
