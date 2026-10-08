@@ -24,7 +24,6 @@ export interface ThemeHealthView {
   plan: ThemeCleanupPlan | null;
   needsCleanup: boolean;
   undo: ThemeHealthBackend["undo"] | null;
-  display: SteamDisplayState | null;
   recheck(): Promise<void>;
   cleanUp(): Promise<boolean>;
   undoCleanup(): Promise<boolean>;
@@ -113,7 +112,6 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     plan,
     needsCleanup: plan !== null && cleanupNeeded(plan),
     undo: backend?.undo ?? null,
-    display,
     recheck,
     cleanUp: () => run((keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments()))),
     undoCleanup: () => run(controller.undoCleanup),

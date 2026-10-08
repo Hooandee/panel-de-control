@@ -34,7 +34,9 @@ const persistentServices = vi.hoisted(() => {
   };
 });
 
-vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
+vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, toaster: { toast: vi.fn() } }));
+vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
+vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
   getUiPrefs: prefs.get,
   setUiPrefs: prefs.set,

@@ -1,5 +1,5 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
-import { definePlugin } from "@decky/api";
+import { definePlugin, toaster } from "@decky/api";
 import { FC } from "react";
 import { LuSlidersVertical } from "react-icons/lu";
 
@@ -24,6 +24,8 @@ import {
   settleThemeActivation,
 } from "./api";
 import { I18nProvider, translate } from "./i18n";
+import { openThemeHealthModal } from "./components/ThemeHealth";
+import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { startFrontendErrorReporting } from "./system/uiDiagnostics";
@@ -168,6 +170,11 @@ export default definePlugin(() => {
   const stopContextMenu = installGameContextMenu();
   const stopListLocalizer = startPluginListLocalizer();
   const stopKioskSteamBridge = startKioskSteamBridgeWhenSupported();
+  const stopQamCoverWatch = watchQamCover(() => toaster.toast({
+    title: translate("themes.health.covered.title"),
+    body: translate("themes.health.covered.body"),
+    onClick: () => openThemeHealthModal(),
+  }));
   const standardLifecycle = new AbortController();
   const stopThemesRuntime = startThemesRuntime({
     client: themesClient,
@@ -203,6 +210,7 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      stopQamCoverWatch();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();

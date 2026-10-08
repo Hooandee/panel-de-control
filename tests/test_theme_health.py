@@ -184,3 +184,10 @@ def test_internal_panel_mode_is_unknown_without_a_connected_built_in_screen(tmp_
     (connector / "modes").write_text("1920x1080\n")
 
     assert theme_health.internal_panel_mode(str(tmp_path)) is None
+
+
+def test_set_aside_leaves_no_trace_when_there_is_nothing_to_do(themes):
+    _theme(themes, "Eclipse", {"name": "Eclipse"}, marker=True)
+
+    assert theme_health.set_aside(themes, []) == {"moved": [], "failed": []}
+    assert not (themes.parent / theme_health.CLEANUP_DIRECTORY).exists()

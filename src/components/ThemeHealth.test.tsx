@@ -42,10 +42,9 @@ function health(overrides: Partial<ThemeHealthView> = {}): ThemeHealthView {
     checking: false,
     unavailable: false,
     findings: [],
-    plan: { keep: ["Eclipse"], disable: [], setAside: 0, ghostStyles: false },
+    plan: { disable: [], setAside: 0, ghostStyles: false },
     needsCleanup: false,
     undo: { available: false, moved: 0, disabled: 0 },
-    display: null,
     recheck: vi.fn(async () => {}),
     cleanUp: vi.fn(async () => true),
     undoCleanup: vi.fn(async () => true),
@@ -75,7 +74,7 @@ describe("ThemeHealth", () => {
         { id: "other_active", severity: "problem", names: ["Other"] },
         { id: "steam_scale", severity: "setting", scale: 1.25, autoScale: 1 },
       ],
-      plan: { keep: ["Eclipse"], disable: ["Other"], setAside: 2, ghostStyles: false },
+      plan: { disable: ["Other"], setAside: 2, ghostStyles: false },
       needsCleanup: true,
     });
     openModal();

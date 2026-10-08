@@ -109,10 +109,9 @@ def summary(findings: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for item in findings:
         counts[item["kind"]] = counts.get(item["kind"], 0) + 1
-        if item["active"] and item["kind"] != "hooandee":
-            counts["other_active"] = counts.get("other_active", 0) + 1
-        if item["active"] and item["kind"] == "hooandee":
-            counts["hooandee_active"] = counts.get("hooandee_active", 0) + 1
+        if item["active"]:
+            key = "hooandee_active" if item["kind"] == "hooandee" else "other_active"
+            counts[key] = counts.get(key, 0) + 1
     return counts
 
 
@@ -205,13 +204,14 @@ def set_aside(themes_root: str | Path, disabled: list[str]) -> dict[str, Any]:
     directory = _cleanup_root(root)
     with theme_packages.theme_mutation_lock(root):
         record = _read_record(directory)
+        candidates = [item for item in scan(root) if item["kind"] in SET_ASIDE_KINDS]
+        if not disabled and not candidates:
+            return {"moved": [], "failed": []}
         record["disabled"] = list(dict.fromkeys([*record["disabled"], *disabled]))
         _write_record(directory, record)
         moved: list[str] = []
         failed: list[str] = []
-        for item in scan(root):
-            if item["kind"] not in SET_ASIDE_KINDS:
-                continue
+        for item in candidates:
             source = root / item["folder"]
             stored = item["folder"]
             suffix = 1

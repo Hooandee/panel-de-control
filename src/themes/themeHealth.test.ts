@@ -69,7 +69,6 @@ describe("diagnoseThemeHealth", () => {
       },
     ]);
     expect(cleanupPlan(snapshot, findings, hooandeeNames(health, []))).toEqual({
-      keep: ["Eclipse"],
       disable: ["Other", "Mine.profile", "Old"],
       setAside: 2,
       ghostStyles: false,

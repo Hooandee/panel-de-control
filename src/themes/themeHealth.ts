@@ -9,7 +9,7 @@ export type ThemeFolderKind =
   | "leftover"
   | "duplicate";
 
-export const SET_ASIDE_KINDS: ReadonlySet<ThemeFolderKind> = new Set(["legacy", "broken", "leftover", "duplicate"]);
+const SET_ASIDE_KINDS: ReadonlySet<ThemeFolderKind> = new Set(["legacy", "broken", "leftover", "duplicate"]);
 
 export interface ThemeFolder {
   folder: string;
@@ -36,8 +36,6 @@ export interface SteamDisplayState {
   cssLoaderStyles: number | null;
 }
 
-export type ThemeHealthSeverity = "problem" | "setting" | "info";
-
 export type ThemeHealthFinding =
   | { id: "css_loader"; severity: "problem"; status: CssLoaderSnapshot["status"] }
   | { id: "other_active"; severity: "problem"; names: string[] }
@@ -51,7 +49,6 @@ export type ThemeHealthFinding =
   | { id: "steam_beta"; severity: "setting" };
 
 export interface ThemeCleanupPlan {
-  keep: string[];
   disable: string[];
   setAside: number;
   ghostStyles: boolean;
@@ -293,7 +290,6 @@ export function cleanupPlan(
 ): ThemeCleanupPlan {
   const setAside = findings.find((finding) => finding.id === "set_aside");
   return {
-    keep: [...keep],
     disable: snapshot.themes.filter((theme) => theme.enabled && !keep.has(theme.name)).map((theme) => theme.name),
     setAside: setAside?.id === "set_aside" ? setAside.folders.length : 0,
     ghostStyles: findings.some((finding) => finding.id === "ghost_styles"),
