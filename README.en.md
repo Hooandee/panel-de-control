@@ -311,7 +311,7 @@ first, then:
 2. In Decky, use **Developer Mode → Install Plugin from ZIP** (or your preferred manual install
    method).
 
-Once installed, the plugin can update itself from within its settings.
+Once installed, the plugin can update itself from within its settings. When a new version is out, a notice shows up at the bottom of the quick access menu with a button to update.
 
 ### Verifying a download (recommended)
 

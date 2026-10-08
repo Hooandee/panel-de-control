@@ -318,7 +318,7 @@ Panel de Control se distribuye fuera de la tienda de Decky. Instala primero
 2. En Decky, usa **Modo desarrollador → Instalar plugin desde ZIP** (o tu método de instalación
    manual preferido).
 
-Una vez instalado, el plugin puede actualizarse solo desde sus ajustes.
+Una vez instalado, el plugin puede actualizarse solo desde sus ajustes. Cuando sale una versión nueva, aparece un aviso abajo en el menú rápido con un botón para actualizar.
 
 ### Verificar la descarga (recomendado)
 
