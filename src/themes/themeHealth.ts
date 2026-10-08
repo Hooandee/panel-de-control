@@ -231,7 +231,10 @@ export function diagnoseThemeHealth(
   const profiles = new Set(backend.folders.filter((folder) => folder.kind === "profile").map((folder) => folder.name));
   const enabled = snapshot.themes.filter((theme) => theme.enabled);
   const foreign = enabled.filter((theme) => !keep.has(theme.name));
-  const others = foreign.filter((theme) => !profiles.has(theme.name)).map((theme) => theme.displayName || theme.name);
+  const setAsideNames = new Set(backend.folders.filter((folder) => SET_ASIDE_KINDS.has(folder.kind)).map((folder) => folder.name));
+  const others = foreign
+    .filter((theme) => !profiles.has(theme.name) && !setAsideNames.has(theme.name))
+    .map((theme) => theme.displayName || theme.name);
   const activeProfiles = foreign.filter((theme) => profiles.has(theme.name)).map((theme) => theme.displayName || theme.name);
   if (others.length) findings.push({ id: "other_active", severity: "problem", names: others });
   if (activeProfiles.length) findings.push({ id: "profile_active", severity: "problem", names: activeProfiles });

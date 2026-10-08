@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@decky/ui", () => ({
   ButtonItem: ({ children, onClick, disabled, description }: { children?: ReactNode; onClick?: () => void; disabled?: boolean; description?: ReactNode }) => (
-    <button onClick={onClick} disabled={disabled} title={typeof description === "string" ? description : undefined}>{children}</button>
+    <div><button onClick={onClick} disabled={disabled}>{children}</button>{description ? <span>{description}</span> : null}</div>
   ),
   DialogButton: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -65,7 +65,7 @@ describe("ThemeHealth", () => {
     render(<ThemeHealthCard controller={mocks.controller as unknown as ThemesController} />);
 
     expect(screen.getByText("themes.health.summary.clean {\"count\":0}")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "themes.health.open" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.health.title" })).toBeTruthy();
   });
 
   it("asks before cleaning and reports the result", async () => {
@@ -83,8 +83,7 @@ describe("ThemeHealth", () => {
     expect(screen.getByText("themes.health.steam_scale.detail {\"scale\":\"125 %\",\"auto\":\"100 %\"}")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
     expect(mocks.health.cleanUp).not.toHaveBeenCalled();
-    expect(screen.getByText("themes.health.confirm.disable {\"count\":1}")).toBeTruthy();
-    expect(screen.getByText("themes.health.confirm.setAside {\"count\":2}")).toBeTruthy();
+    expect(screen.getByText('themes.health.confirm.themesOne themes.health.confirm.foldersMany {"count":2} themes.health.confirm.nothingDeleted')).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "themes.health.clean.ok" }));
 
@@ -106,7 +105,7 @@ describe("ThemeHealth", () => {
     expect(clean.disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Gallery" }));
-    expect(screen.getByText("themes.health.confirm.ours {\"count\":1}")).toBeTruthy();
+    expect(screen.getByText("themes.health.confirm.themesOne themes.health.confirm.nothingDeleted")).toBeTruthy();
     expect(clean.disabled).toBe(false);
     fireEvent.click(clean);
 

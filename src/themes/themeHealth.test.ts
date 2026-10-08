@@ -60,7 +60,7 @@ describe("diagnoseThemeHealth", () => {
     const findings = diagnoseThemeHealth(snapshot, health, CLEAN_DISPLAY, hooandeeNames(health, []));
 
     expect(findings).toEqual([
-      { id: "other_active", severity: "problem", names: ["Other", "Old"] },
+      { id: "other_active", severity: "problem", names: ["Other"] },
       { id: "profile_active", severity: "problem", names: ["Mine.profile"] },
       {
         id: "set_aside",
