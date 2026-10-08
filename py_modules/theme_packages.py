@@ -58,6 +58,7 @@ _MAX_REMOTE_TARGETS = 8
 _MAX_REMOTE_TEXT_BYTES = 4096
 _PATCH_LABEL_LOCALES = frozenset({"es", "en", "it", "de", "pt-BR"})
 _MAX_PATCH_LABEL_CHARS = 120
+_PATCH_LABEL_GROUPS = frozenset({"extra"})
 _REMOTE_MANIFEST_VERSION = 9
 _REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
     "name",
@@ -631,6 +632,9 @@ def _usable_patch_labels(value: object) -> dict[str, Any]:
             }
             if options:
                 usable["values"] = options
+        group = entry.get("group")
+        if isinstance(group, str) and group in _PATCH_LABEL_GROUPS:
+            usable["group"] = group
         if usable:
             labels[patch] = usable
     return labels
