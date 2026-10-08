@@ -1,4 +1,4 @@
-import { type FC, useRef, useSyncExternalStore } from "react";
+import { type FC, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { Focusable, showModal } from "@decky/ui";
 import { LuDownload } from "react-icons/lu";
 
@@ -27,6 +27,34 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
+function scrollContainer(node: HTMLElement): HTMLElement | null {
+  const view = node.ownerDocument.defaultView;
+  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+    const overflow = view?.getComputedStyle(parent).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return parent;
+  }
+  return null;
+}
+
+// Steam scrolls gamepad focus into view without knowing the sticky card covers the bottom edge.
+function useReservedScrollPadding(cardRef: { current: HTMLDivElement | null }): void {
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const container = card && scrollContainer(card);
+    if (!card || !container) return;
+    const previous = container.style.scrollPaddingBottom;
+    const reserve = () => { container.style.scrollPaddingBottom = `${card.getBoundingClientRect().height + TRAY_INSET * 2}px`; };
+    const view = card.ownerDocument.defaultView;
+    const resize = view && typeof view.ResizeObserver === "function" ? new view.ResizeObserver(reserve) : null;
+    resize?.observe(card);
+    reserve();
+    return () => {
+      resize?.disconnect();
+      container.style.scrollPaddingBottom = previous;
+    };
+  }, [cardRef]);
+}
+
 function dismiss(): void {
   sessionDismissed = true;
   listeners.forEach((listener) => listener());
@@ -34,7 +62,9 @@ function dismiss(): void {
 
 const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info }) => {
   const t = getUpdaterStrings(lang).floating;
+  const cardRef = useRef<HTMLDivElement>(null);
   const locked = useRef(false);
+  useReservedScrollPadding(cardRef);
   const run = async (action: () => void) => {
     if (locked.current) return;
     locked.current = true;
@@ -61,6 +91,7 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
 
   return (
     <div
+      ref={cardRef}
       data-update-tray="card"
       role="status"
       aria-live="polite"

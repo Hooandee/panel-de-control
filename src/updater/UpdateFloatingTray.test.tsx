@@ -123,4 +123,16 @@ describe("UpdateFloatingTray", () => {
     expect(card.style.position).toBe("sticky");
     expect(card.style.bottom).toBe("16px");
   });
+
+  it("reserves its height as scroll padding so gamepad focus stays visible, and restores it on dismissal", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 268, this.getAttribute("role") === "status" ? 120 : 500);
+    });
+    const view = render(<div data-testid="scroller" style={{ overflowY: "auto", scrollPaddingBottom: "4px" }}>{tray()}</div>);
+    const scroller = screen.getByTestId("scroller");
+    expect(scroller.style.scrollPaddingBottom).toBe("152px");
+    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
+    expect(scroller.style.scrollPaddingBottom).toBe("4px");
+    view.unmount();
+  });
 });
