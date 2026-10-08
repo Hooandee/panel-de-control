@@ -150,6 +150,15 @@ Supports native Steam on Linux and its libraries. Data in use or that cannot be 
 Steam may rebuild or download Shader Cache again, so the next launch may take longer. The result
 shows the approximate size of deleted data and can be dismissed.
 
+### Themes (Temas)
+
+Installs and updates the Hooandee themes through CSS Loader. If a theme looks off, "Trouble with a
+theme?" checks what usually breaks them: other themes or profiles active at the same time,
+leftovers CSS Loader still loads even though they are not in its list, styles that get stuck and
+display settings that are not the default (scale, resolution, Steam beta). "Fix problems" keeps only
+the Hooandee themes active, sets leftovers aside without deleting anything and can be undone. If a
+theme ends up covering the Quick Access menu, Panel shows a notification that opens this same check.
+
 ### Settings (Ajustes)
 
 Language from a compact selector, the "learn from my usage" switch (telemetry is 100% local and

@@ -34,7 +34,9 @@ const persistentServices = vi.hoisted(() => {
   };
 });
 
-vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
+vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, toaster: { toast: vi.fn() } }));
+vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
+vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
   getUiPrefs: prefs.get,
   setUiPrefs: prefs.set,
@@ -48,6 +50,10 @@ vi.mock("./api", () => ({
   getThemeInstallRecoveries: vi.fn(),
   getThemeActivationRecovery: vi.fn(),
   listThemeExtensions: vi.fn(),
+  getThemeHealth: vi.fn(),
+  setAsideThemeLeftovers: vi.fn(),
+  restoreThemeCleanup: vi.fn(),
+  acknowledgeThemeCleanupUndo: vi.fn(),
   loadThemeExtension: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
   rollbackThemeInstall: vi.fn(),

@@ -6,6 +6,7 @@ import keyboardsPreview from "../assets/keyboards-preview.jpg";
 import { ComingSoonCard } from "../components/ComingSoonCard";
 import { SegmentedTabs } from "../components/SegmentedTabs";
 import { ThemeCard } from "../components/ThemeCard";
+import { ThemeHealthCard } from "../components/ThemeHealth";
 import { openThemeDetailsModal } from "../components/ThemeDetailsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -133,6 +134,8 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
         ))}
       </div>
     ) : null}
+
+    <ThemeHealthCard controller={controller} />
     </>
   );
 }

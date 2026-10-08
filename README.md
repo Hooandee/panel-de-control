@@ -152,6 +152,15 @@ Funciona con Steam nativo en Linux y sus bibliotecas. Los datos en uso o que no 
 se conservan. Steam puede volver a crear o descargar la Shader Cache; el próximo inicio puede
 tardar más. El resultado muestra el tamaño aproximado de los datos borrados y se puede cerrar.
 
+### Temas
+
+Instala y actualiza los temas Hooandee a través de CSS Loader. Si un tema se ve raro, "¿Problemas
+con un tema?" revisa lo que suele romperlos: otros temas o perfiles activos a la vez, restos que
+CSS Loader sigue cargando aunque no salgan en su lista, estilos que se quedan pegados y ajustes de
+pantalla fuera de lo normal (escala, resolución, Steam beta). "Solucionar problemas" deja activos solo los
+temas Hooandee, aparta los restos sin borrar nada y se puede deshacer. Si un tema llega a tapar el
+menú rápido, Panel avisa con una notificación que abre esta misma ayuda.
+
 ### Ajustes
 
 Idioma desde un selector compacto, el interruptor de "aprender de mi uso" (la telemetría es

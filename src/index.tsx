@@ -1,5 +1,5 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
-import { definePlugin } from "@decky/api";
+import { definePlugin, toaster } from "@decky/api";
 import { FC } from "react";
 import { LuSlidersVertical } from "react-icons/lu";
 
@@ -13,6 +13,10 @@ import {
   getThemeInstallRecoveries,
   getThemeActivationRecovery,
   listThemeExtensions,
+  getThemeHealth,
+  setAsideThemeLeftovers,
+  restoreThemeCleanup,
+  acknowledgeThemeCleanupUndo,
   loadThemeExtension,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -21,6 +25,8 @@ import {
   settleThemeActivation,
 } from "./api";
 import { I18nProvider, translate } from "./i18n";
+import { openThemeHealthModal } from "./components/ThemeHealth";
+import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { startFrontendErrorReporting } from "./system/uiDiagnostics";
@@ -51,6 +57,7 @@ import {
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
@@ -98,6 +105,12 @@ export default definePlugin(() => {
     acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeHealthHost = configureThemeHealthHost({
+    health: getThemeHealth,
+    setAside: setAsideThemeLeftovers,
+    restore: restoreThemeCleanup,
+    acknowledgeRestore: acknowledgeThemeCleanupUndo,
+  });
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
     list: listThemeExtensions,
     load: loadThemeExtension,
@@ -159,6 +172,11 @@ export default definePlugin(() => {
   const stopContextMenu = installGameContextMenu();
   const stopListLocalizer = startPluginListLocalizer();
   const stopKioskSteamBridge = startKioskSteamBridgeWhenSupported();
+  const stopQamCoverWatch = watchQamCover(() => toaster.toast({
+    title: translate("themes.health.covered.title"),
+    body: translate("themes.health.covered.body"),
+    onClick: () => openThemeHealthModal(),
+  }));
   const standardLifecycle = new AbortController();
   const stopThemesRuntime = startThemesRuntime({
     client: themesClient,
@@ -194,9 +212,11 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      stopQamCoverWatch();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
+      releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
       releaseSectionHandoffStore();
