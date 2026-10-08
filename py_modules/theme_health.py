@@ -65,11 +65,15 @@ def _is_active(folder: Path) -> bool:
     return isinstance(config, dict) and config.get("active") is True
 
 
-def _has_theme_files(folder: Path) -> bool:
+def _is_file(path: Path) -> bool:
     try:
-        return (folder / "theme.css").is_file() or any((folder / item).is_file() for item in _SFP_FILES)
+        return path.is_file()
     except OSError:
         return False
+
+
+def _has_theme_files(folder: Path) -> bool:
+    return _is_file(folder / "theme.css") or any(_is_file(folder / item) for item in _SFP_FILES)
 
 
 def _classify(folder: Path) -> dict[str, Any] | None:
@@ -79,7 +83,7 @@ def _classify(folder: Path) -> dict[str, Any] | None:
         preset = isinstance(flags, list) and any(
             isinstance(flag, str) and flag.upper() == "PRESET" for flag in flags
         )
-        if (folder / "panel-theme.json").is_file():
+        if _is_file(folder / "panel-theme.json"):
             kind = "hooandee"
         else:
             kind = "profile" if preset else "third_party"
@@ -217,6 +221,7 @@ def _settle_record(directory: Path, record: dict[str, Any]) -> None:
         return
     try:
         (directory / _RECORD).unlink(missing_ok=True)
+        (directory / _DAMAGED_RECORD).unlink(missing_ok=True)
         directory.rmdir()
     except OSError:
         pass

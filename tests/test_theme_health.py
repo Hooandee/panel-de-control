@@ -149,7 +149,7 @@ def test_a_damaged_record_is_rebuilt_from_what_is_stored(themes):
 
     assert restored["restored"] == ["Residue"]
     assert (themes / "Residue").is_dir()
-    assert (cleanup / "record.damaged.json").is_file()
+    assert not cleanup.exists()
 
 
 def test_restore_ignores_record_entries_that_escape_the_cleanup_folder(themes):
