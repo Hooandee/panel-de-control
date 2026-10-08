@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
+
+
+### Features
+
+* **updater:** show a floating update card in the quick access menu ([#896](https://github.com/Hooandee/panel-de-control/issues/896)) ([a2ae267](https://github.com/Hooandee/panel-de-control/commit/a2ae2676111473c8b412a94c9d84dcffb6a11db5))
+
 ## [0.65.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.64.0...panel-de-control-v0.65.0) (2026-10-08)
 
 
