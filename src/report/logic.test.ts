@@ -114,6 +114,18 @@ describe("buildReportContext", () => {
     });
   });
 
+  it("adds the Steam display state read for a theme report", () => {
+    expect(buildReportContext(
+      ["themes"],
+      {},
+      {},
+      { rendered_count: 1, rendered_unique_count: 1 },
+      "bug",
+      undefined,
+      { scale: 1.25, using_auto_scale: false },
+    )).toMatchObject({ theme_display: { scale: 1.25, using_auto_scale: false } });
+  });
+
   it("includes bounded QAM diagnostics with the existing frontend context", () => {
     expect(buildReportContext(
       ["other"],

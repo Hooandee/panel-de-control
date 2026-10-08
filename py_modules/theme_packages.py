@@ -112,6 +112,9 @@ def _durable_replace(source: Path, destination: Path) -> None:
         _fsync_directory(destination_parent)
 
 
+durable_replace = _durable_replace
+
+
 def _durable_remove_tree(path: Path) -> None:
     if not path.exists():
         return
@@ -171,6 +174,9 @@ def _mutation_lock(themes_root: Path) -> Iterator[None]:
                     fcntl.flock(descriptor, fcntl.LOCK_UN)
             finally:
                 os.close(descriptor)
+
+
+theme_mutation_lock = _mutation_lock
 
 
 def _read_json(path: Path, code: str) -> dict[str, Any]:
