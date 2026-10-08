@@ -598,6 +598,9 @@ export class ThemesClient {
   });
 
   private async deactivateOursExcept(snapshot: CssLoaderSnapshot, keepActive: string): Promise<void> {
+    if (!snapshot.themes.some((theme) => theme.name === keepActive && theme.enabled)) {
+      throw new CssLoaderOperationError("verification_failed", "The theme chosen to stay active is no longer active");
+    }
     const catalog = this.currentPublicationThemes();
     for (const theme of snapshot.themes) {
       if (!theme.enabled || theme.name === keepActive) continue;

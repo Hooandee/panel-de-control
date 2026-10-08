@@ -843,3 +843,19 @@ describe("ThemesClient cleanup with several Hooandee themes", () => {
     expect(deps.adapter.disableAllExcept).toHaveBeenCalledWith(both, new Set(["Local Keyboard", "Example Theme", "Second Theme"]));
   });
 });
+
+describe("ThemesClient cleanup with a stale choice", () => {
+  it("turns nothing off when the chosen theme was switched off meanwhile", async () => {
+    const deactivate = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "ready" as const, themes: [{ ...INSTALLED_THEME, enabled: false }] }));
+    deps.adapter.disableAllExcept = vi.fn(async () => READY);
+    deps.activator.deactivate = deactivate;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], undefined, "Example Theme")).resolves.toBe(false);
+
+    expect(deactivate).not.toHaveBeenCalled();
+    expect(deps.adapter.disableAllExcept).not.toHaveBeenCalled();
+  });
+});
