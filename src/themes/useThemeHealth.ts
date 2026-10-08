@@ -28,7 +28,7 @@ export interface ThemeHealthView {
   needsCleanup: boolean;
   undo: ThemeHealthBackend["undo"] | null;
   recheck(): Promise<ThemeHealthBackend | null>;
-  cleanUp(): Promise<ThemeHealthOutcome>;
+  cleanUp(keepActive?: string): Promise<ThemeHealthOutcome>;
   undoCleanup(): Promise<ThemeHealthOutcome>;
 }
 
@@ -123,8 +123,8 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     needsCleanup: plan !== null && cleanupNeeded(plan),
     undo: backend?.undo ?? null,
     recheck,
-    cleanUp: () => run(
-      (keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments())),
+    cleanUp: (keepActive) => run(
+      (keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments()), keepActive),
       (health) => health.folders.some((folder) => SET_ASIDE_KINDS.has(folder.kind)),
     ),
     undoCleanup: () => run(controller.undoCleanup, (health) => health.undo.available),

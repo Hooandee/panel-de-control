@@ -1,6 +1,6 @@
 import { ButtonItem, DialogButton, Focusable, ModalRoot, showModal } from "@decky/ui";
 import { type CSSProperties, type ReactNode, useState } from "react";
-import { LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck, LuSparkles, LuUndo2 } from "react-icons/lu";
+import { LuCheck, LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck, LuSparkles, LuUndo2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -35,6 +35,22 @@ const PRIMARY_STYLE: CSSProperties = {
   color: theme.color.textPrimary,
   fontWeight: 780,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.42)`,
+};
+
+const CHOICE_STYLE: CSSProperties = {
+  width: "auto",
+  minWidth: 0,
+  padding: "6px 14px",
+  borderRadius: theme.radius.sm,
+  background: "rgba(255,255,255,0.028)",
+  color: theme.color.textPrimary,
+  boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+};
+
+const CHOICE_SELECTED_STYLE: CSSProperties = {
+  ...CHOICE_STYLE,
+  background: `rgba(${theme.color.accentRgb},0.16)`,
+  boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.6)`,
 };
 
 const SECONDARY_STYLE: CSSProperties = {
@@ -127,11 +143,14 @@ function summaryKey(health: ThemeHealthView): string {
 function HealthBody({ controller, health, closeModal }: { controller: ThemesController; health: ThemeHealthView; closeModal?: () => void }) {
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
+  const [keepActive, setKeepActive] = useState<string | null>(null);
   const [result, setResult] = useState<ResultKey | null>(null);
   const busy = health.checking || controller.operation !== null;
   const problems = health.findings.filter((finding) => !DISPLAY_FINDINGS.has(finding.id));
   const display = health.findings.filter((finding) => DISPLAY_FINDINGS.has(finding.id));
   const plan = health.plan;
+  const mustChoose = (plan?.chooseOne.length ?? 0) > 1;
+  const chosen = mustChoose && plan?.chooseOne.some((theme) => theme.name === keepActive) ? keepActive : null;
   const cssReady = controller.snapshot.status === "ready";
   const cssLoaderGone = controller.snapshot.status === "missing" || controller.snapshot.status === "disabled";
 
@@ -183,7 +202,30 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
       {confirming && plan ? (
         <div role="group" style={{ ...theme.card, padding: theme.space.md, boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.35)` }}>
           <div style={{ fontWeight: 760 }}>{t("themes.health.confirm.title")}</div>
+          {mustChoose ? (
+            <div role="group" aria-label={t("themes.health.choose.title")} style={{ marginTop: theme.space.sm }}>
+              <div style={{ fontWeight: 700 }}>{t("themes.health.choose.title")}</div>
+              <div data-pdc-muted style={{ fontSize: theme.font.caption, marginTop: 2 }}>{t("themes.health.choose.hint")}</div>
+              <Focusable style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, marginTop: theme.space.sm }}>
+                {plan.chooseOne.map((option) => {
+                  const selected = option.name === chosen;
+                  return (
+                    <DialogButton
+                      key={option.name}
+                      style={selected ? CHOICE_SELECTED_STYLE : CHOICE_STYLE}
+                      onClick={() => setKeepActive(option.name)}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {selected ? <LuCheck size={14} aria-hidden /> : null}{option.label}
+                      </span>
+                    </DialogButton>
+                  );
+                })}
+              </Focusable>
+            </div>
+          ) : null}
           <ul data-pdc-muted style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.5 }}>
+            {chosen ? <li>{t("themes.health.confirm.ours", { count: plan.chooseOne.length - 1 })}</li> : null}
             {plan.disable.length ? <li>{t("themes.health.confirm.disable", { count: plan.disable.length })}</li> : null}
             {plan.setAside ? <li>{t("themes.health.confirm.setAside", { count: plan.setAside })}</li> : null}
             <li>{t(cssLoaderGone ? "themes.health.confirm.strip" : "themes.health.confirm.reload")}</li>
@@ -191,7 +233,11 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
           </ul>
           <Focusable style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md }}>
             <DialogButton style={SECONDARY_STYLE} onClick={() => setConfirming(false)}>{t("themes.install.confirm.cancel")}</DialogButton>
-            <DialogButton style={PRIMARY_STYLE} disabled={busy} onClick={() => void runAction(health.cleanUp, cssLoaderGone ? "cleanedWithoutLoader" : "cleaned", "cleanedPartial")}>
+            <DialogButton
+              style={PRIMARY_STYLE}
+              disabled={busy || (mustChoose && !chosen)}
+              onClick={() => void runAction(() => health.cleanUp(chosen ?? undefined), cssLoaderGone ? "cleanedWithoutLoader" : "cleaned", "cleanedPartial")}
+            >
               <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><LuSparkles size={15} aria-hidden />{t("themes.health.clean.ok")}</span>
             </DialogButton>
           </Focusable>

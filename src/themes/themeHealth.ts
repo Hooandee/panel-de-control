@@ -42,7 +42,7 @@ export type ThemeHealthFinding =
   | { id: "profile_active"; severity: "problem"; names: string[] }
   | { id: "ghost_styles"; severity: "problem"; count: number }
   | { id: "set_aside"; severity: "problem"; folders: { folder: string; kind: ThemeFolderKind }[] }
-  | { id: "several_hooandee"; severity: "info"; names: string[] }
+  | { id: "several_hooandee"; severity: "problem"; names: string[]; themes: { name: string; label: string }[] }
   | { id: "steam_scale"; severity: "setting"; scale: number; autoScale: number }
   | { id: "resolution"; severity: "setting"; width: number; height: number; panelWidth: number; panelHeight: number }
   | { id: "external_display"; severity: "info" }
@@ -50,6 +50,8 @@ export type ThemeHealthFinding =
 
 export interface ThemeCleanupPlan {
   disable: string[];
+  // Active Hooandee themes the user must narrow down to one.
+  chooseOne: { name: string; label: string }[];
   setAside: number;
   ghostStyles: boolean;
 }
@@ -247,7 +249,8 @@ export function diagnoseThemeHealth(
 
   const ours = enabled.filter((theme) => keep.has(theme.name));
   if (ours.length > 1) {
-    findings.push({ id: "several_hooandee", severity: "info", names: ours.map((theme) => theme.displayName || theme.name) });
+    const themes = ours.map((theme) => ({ name: theme.name, label: theme.displayName || theme.name }));
+    findings.push({ id: "several_hooandee", severity: "problem", names: themes.map((theme) => theme.label), themes });
   }
 
   if (
@@ -288,7 +291,9 @@ export function cleanupPlan(
   keep: ReadonlySet<string>,
 ): ThemeCleanupPlan {
   const setAside = findings.find((finding) => finding.id === "set_aside");
+  const several = findings.find((finding) => finding.id === "several_hooandee");
   return {
+    chooseOne: several?.id === "several_hooandee" ? several.themes : [],
     disable: snapshot.themes.filter((theme) => theme.enabled && !keep.has(theme.name)).map((theme) => theme.name),
     setAside: setAside?.id === "set_aside" ? setAside.folders.length : 0,
     ghostStyles: findings.some((finding) => finding.id === "ghost_styles"),
@@ -296,5 +301,5 @@ export function cleanupPlan(
 }
 
 export function cleanupNeeded(plan: ThemeCleanupPlan): boolean {
-  return plan.disable.length > 0 || plan.setAside > 0 || plan.ghostStyles;
+  return plan.disable.length > 0 || plan.setAside > 0 || plan.ghostStyles || plan.chooseOne.length > 1;
 }

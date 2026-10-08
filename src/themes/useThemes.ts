@@ -33,7 +33,7 @@ export interface ThemesController {
   activate(themeId: string): Promise<boolean>;
   deactivate(themeId: string): Promise<boolean>;
   setPatch(themeId: string, patchName: string, value: string): Promise<boolean>;
-  cleanUp(keep: readonly string[], removeLeftoverStyles?: () => void): Promise<boolean>;
+  cleanUp(keep: readonly string[], removeLeftoverStyles?: () => void, keepActive?: string): Promise<boolean>;
   undoCleanup(keep: readonly string[]): Promise<boolean>;
 }
 

@@ -70,6 +70,7 @@ describe("diagnoseThemeHealth", () => {
     ]);
     expect(cleanupPlan(snapshot, findings, hooandeeNames(health, []))).toEqual({
       disable: ["Other", "Mine.profile", "Old"],
+      chooseOne: [],
       setAside: 2,
       ghostStyles: false,
     });
@@ -128,7 +129,7 @@ describe("diagnoseThemeHealth", () => {
     expect(diagnoseThemeHealth(ready(), backend(), unknown, new Set())).toEqual([]);
   });
 
-  it("notes several Hooandee themes active at once without asking to clean", () => {
+  it("asks to narrow several active Hooandee themes down to one", () => {
     const findings = diagnoseThemeHealth(
       ready(theme("Eclipse", true), theme("Hooandee Gallery", true)),
       backend(),
@@ -136,8 +137,10 @@ describe("diagnoseThemeHealth", () => {
       new Set(["Eclipse", "Hooandee Gallery"]),
     );
 
-    expect(findings).toEqual([{ id: "several_hooandee", severity: "info", names: ["Eclipse", "Hooandee Gallery"] }]);
-    expect(cleanupNeeded(cleanupPlan(ready(), findings, new Set()))).toBe(false);
+    const themes = [{ name: "Eclipse", label: "Eclipse" }, { name: "Hooandee Gallery", label: "Hooandee Gallery" }];
+    expect(findings).toEqual([{ id: "several_hooandee", severity: "problem", names: ["Eclipse", "Hooandee Gallery"], themes }]);
+    expect(cleanupPlan(ready(), findings, new Set()).chooseOne).toEqual(themes);
+    expect(cleanupNeeded(cleanupPlan(ready(), findings, new Set()))).toBe(true);
   });
 });
 

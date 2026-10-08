@@ -42,7 +42,7 @@ function health(overrides: Partial<ThemeHealthView> = {}): ThemeHealthView {
     checking: false,
     unavailable: false,
     findings: [],
-    plan: { disable: [], setAside: 0, ghostStyles: false },
+    plan: { disable: [], chooseOne: [], setAside: 0, ghostStyles: false },
     needsCleanup: false,
     undo: { available: false, moved: 0, disabled: 0 },
     recheck: vi.fn(async () => null),
@@ -74,7 +74,7 @@ describe("ThemeHealth", () => {
         { id: "other_active", severity: "problem", names: ["Other"] },
         { id: "steam_scale", severity: "setting", scale: 1.25, autoScale: 1 },
       ],
-      plan: { disable: ["Other"], setAside: 2, ghostStyles: false },
+      plan: { disable: ["Other"], chooseOne: [], setAside: 2, ghostStyles: false },
       needsCleanup: true,
     });
     openModal();
@@ -92,10 +92,31 @@ describe("ThemeHealth", () => {
     expect(mocks.health.cleanUp).toHaveBeenCalledTimes(1);
   });
 
+  it("asks which Hooandee theme stays active before cleaning", async () => {
+    const themes = [{ name: "Hooandee Eclipse", label: "Eclipse" }, { name: "Hooandee Gallery", label: "Gallery" }];
+    mocks.health = health({
+      findings: [{ id: "several_hooandee", severity: "problem", names: ["Eclipse", "Gallery"], themes }],
+      plan: { disable: [], chooseOne: themes, setAside: 0, ghostStyles: false },
+      needsCleanup: true,
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    const clean = screen.getByRole("button", { name: "themes.health.clean.ok" }) as HTMLButtonElement;
+    expect(clean.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gallery" }));
+    expect(screen.getByText("themes.health.confirm.ours {\"count\":1}")).toBeTruthy();
+    expect(clean.disabled).toBe(false);
+    fireEvent.click(clean);
+
+    await waitFor(() => expect(mocks.health?.cleanUp).toHaveBeenCalledWith("Hooandee Gallery"));
+  });
+
   it("says when the cleanup could only partly finish", async () => {
     mocks.health = health({
       findings: [{ id: "set_aside", severity: "problem", folders: [{ folder: "Stuck", kind: "legacy" }] }],
-      plan: { disable: [], setAside: 1, ghostStyles: false },
+      plan: { disable: [], chooseOne: [], setAside: 1, ghostStyles: false },
       needsCleanup: true,
       cleanUp: vi.fn(async () => "partial" as const),
     });

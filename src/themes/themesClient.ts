@@ -554,9 +554,12 @@ export class ThemesClient {
 
   // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
   // set aside and the styles it left behind removed from the Steam windows the caller can reach.
+  // `keepActive` names the one Hooandee theme to leave on when several are; the others go off
+  // through the same path as their own Deactivate button, before CSS Loader reloads.
   cleanUp = (
     keep: readonly string[],
     removeLeftoverStyles?: () => void,
+    keepActive?: string,
   ): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
     const { adapter, cleanup } = this.dependencies;
     if (!adapter.disableAllExcept || !cleanup) {
@@ -569,6 +572,7 @@ export class ThemesClient {
       return current;
     }
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    if (keepActive !== undefined) await this.deactivateOursExcept(current, kept, keepActive);
     const before = await adapter.requireReady();
     await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
     const after = await withoutThemeNames(adapter.disableAllExcept(before, kept));
@@ -592,6 +596,23 @@ export class ThemesClient {
     await cleanup.acknowledgeRestore();
     return after;
   });
+
+  private async deactivateOursExcept(
+    snapshot: CssLoaderSnapshot,
+    kept: Set<string>,
+    keepActive: string,
+  ): Promise<void> {
+    const catalog = this.currentPublicationThemes();
+    for (const theme of snapshot.themes) {
+      if (!theme.enabled || !kept.has(theme.name) || theme.name === keepActive) continue;
+      const release = catalog.find((entry) => entry.cssLoaderName === theme.name);
+      if (release) {
+        await this.restoreSections(await this.dependencies.activator.deactivate(release.catalogId, catalog), theme.name);
+      } else {
+        kept.delete(theme.name);
+      }
+    }
+  }
 
   private hooandeeThemeNames(): ReadonlySet<string> {
     return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));

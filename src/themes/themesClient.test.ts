@@ -812,3 +812,29 @@ describe("ThemesClient cleanup without CSS Loader", () => {
     expect(disableAllExcept).not.toHaveBeenCalled();
   });
 });
+
+describe("ThemesClient cleanup with several Hooandee themes", () => {
+  it("turns the other Hooandee themes off through the activator before reloading CSS Loader", async () => {
+    const second: PublishedThemeRelease = { ...RELEASE, catalogId: "second-theme", cssLoaderName: "Second Theme" };
+    const order: string[] = [];
+    const both: CssLoaderReadySnapshot = {
+      status: "ready",
+      themes: [INSTALLED_THEME, { ...INSTALLED_THEME, id: "Second Theme", name: "Second Theme", displayName: "Second Theme" }],
+    };
+    const deps = dependencies({
+      publication: { check: vi.fn(async () => ({ status: "published" as const, checkedAt: 10, themes: [RELEASE, second] })) },
+      cleanup: { setAside: vi.fn(async () => { order.push("set-aside"); }), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) },
+    });
+    deps.adapter.inspect = vi.fn(async () => both);
+    deps.adapter.requireReady = vi.fn(async () => both);
+    deps.activator.deactivate = vi.fn(async (themeId: string) => { order.push(`deactivate:${themeId}`); return READY; });
+    deps.adapter.disableAllExcept = vi.fn(async () => { order.push("css-loader"); return READY; });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+    await client.refreshPublication();
+
+    await expect(client.cleanUp([], undefined, "Example Theme")).resolves.toBe(true);
+
+    expect(order).toEqual(["deactivate:second-theme", "set-aside", "css-loader"]);
+  });
+});
