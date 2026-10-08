@@ -1,9 +1,11 @@
-import { FC, useLayoutEffect, useRef, useState } from "react";
+import { FC, useRef } from "react";
 import { Focusable } from "@decky/ui";
 import { LuCheck, LuUndo2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { useFloatingTrayClaim } from "./useFloatingTrayClaim";
+import { useFloatingTrayPosition } from "./useFloatingTrayPosition";
 
 interface Props {
   seconds: number;
@@ -12,76 +14,11 @@ interface Props {
   onDiscard: () => void | Promise<void>;
 }
 
-interface TrayPosition {
-  left: number;
-  width: number;
-  bottom: number;
-}
-
-const PANEL_INSET = 16;
-const POSITION_POLL_MS = 100;
-
-function scrollViewport(anchor: HTMLElement): HTMLElement | null {
-  const qamContent = anchor.closest<HTMLElement>("[id^='quickaccess_content_']");
-  if (qamContent) return qamContent;
-  const view = anchor.ownerDocument.defaultView;
-  for (let node = anchor.parentElement; node; node = node.parentElement) {
-    const overflow = view?.getComputedStyle(node).overflowY || node.style.overflowY;
-    if (overflow === "auto" || overflow === "scroll") return node;
-  }
-  return null;
-}
-
-function trayPosition(anchor: HTMLElement): TrayPosition {
-  const view = anchor.ownerDocument.defaultView ?? window;
-  const viewport = scrollViewport(anchor)?.getBoundingClientRect();
-  const left = viewport?.left ?? 0;
-  const width = viewport?.width ?? view.innerWidth;
-  const bottom = viewport ? view.innerHeight - viewport.bottom : 0;
-  return {
-    left: left + PANEL_INSET,
-    width: Math.max(0, width - PANEL_INSET * 2),
-    bottom: Math.max(0, bottom) + PANEL_INSET,
-  };
-}
-
 export const ColorPreviewConfirm: FC<Props> = ({ seconds, saving, onSave, onDiscard }) => {
   const { t } = useI18n();
-  const anchorRef = useRef<HTMLSpanElement>(null);
+  const { anchorRef, position } = useFloatingTrayPosition();
   const locked = useRef(false);
-  const [position, setPosition] = useState<TrayPosition>({
-    left: PANEL_INSET,
-    width: Math.max(0, window.innerWidth - PANEL_INSET * 2),
-    bottom: PANEL_INSET,
-  });
-
-  useLayoutEffect(() => {
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-    const view = anchor.ownerDocument.defaultView ?? window;
-    const viewport = scrollViewport(anchor);
-    const update = () => setPosition((current) => {
-      const next = trayPosition(anchor);
-      return current.left === next.left
-        && current.width === next.width
-        && current.bottom === next.bottom
-        ? current
-        : next;
-    });
-    const resize = viewport && typeof view.ResizeObserver === "function"
-      ? new view.ResizeObserver(update)
-      : null;
-    if (resize && viewport) resize.observe(viewport);
-    view.addEventListener("resize", update);
-    // QAM slides with transforms, which do not notify ResizeObserver.
-    const poll = view.setInterval(update, POSITION_POLL_MS);
-    update();
-    return () => {
-      resize?.disconnect();
-      view.removeEventListener("resize", update);
-      view.clearInterval(poll);
-    };
-  }, []);
+  useFloatingTrayClaim(true);
 
   const actionStyle = {
     display: "flex",

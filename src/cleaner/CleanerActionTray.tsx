@@ -1,4 +1,5 @@
 import { FC, ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { useFloatingTrayClaim } from "../components/useFloatingTrayClaim";
 import { theme } from "../theme";
 
 interface TrayLayout {
@@ -65,6 +66,8 @@ export const CleanerActionTray: FC<{ children: ReactNode }> = ({ children }) => 
       view.clearInterval(poll);
     };
   }, []);
+
+  useFloatingTrayClaim(Boolean(layout?.floating));
 
   return (
     <div ref={anchorRef} data-cleaner-action="anchor" style={{ height: layout?.height, paddingBottom: INSET, boxSizing: "content-box" }}>

@@ -5,6 +5,7 @@ import { getUpdaterStrings } from "./strings";
 describe("Brazilian Portuguese updater copy", () => {
   it("returns natural Brazilian copy for every updater surface", () => {
     expect(getUpdaterStrings("pt-BR")).toEqual({
+      floating: { title: "Nova versão disponível", update: "Atualizar", later: "Mais tarde" },
       panel: {
         version: "Versão",
         latest: "(mais recente)",

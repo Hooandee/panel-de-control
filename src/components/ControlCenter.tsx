@@ -81,7 +81,7 @@ export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
   }, []);
   const game = useRunningGame();
   const { status: learning } = useLearningStatus(game?.appid ?? null);
-  const { hasUpdate } = useUpdate(lang);
+  const { hasUpdate, info: updateInfo, status: updateStatus } = useUpdate(lang);
   useAccent();
 
   useEffect(() => acquireUiActivity(), []);
@@ -130,6 +130,8 @@ export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
       showHome={layout.showHome}
       showDeviceHeader={layout.showDeviceHeader}
       hasUpdate={hasUpdate}
+      updateInfo={updateInfo}
+      updateStatus={updateStatus}
       initialMode={target?.kind === "home" ? "home" : resolvedTargetId ? "detail" : undefined}
       onSelectSection={setActiveId}
     />
