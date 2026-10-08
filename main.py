@@ -12973,6 +12973,6 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report"}),
+    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

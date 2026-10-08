@@ -403,7 +403,7 @@ export class CssLoaderAdapter {
     const after = await this.reassertKept(before, keep);
     const stray = after.themes.find((theme) => theme.enabled && !keep.has(theme.name));
     if (stray) {
-      throw new CssLoaderOperationError("verification_failed", `CSS Loader kept ${stray.name} enabled`);
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader kept another theme enabled");
     }
     return after;
   }
@@ -424,7 +424,7 @@ export class CssLoaderAdapter {
     const after = await this.reassertKept(before, keep);
     const missing = present.find((name) => !after.themes.find((theme) => theme.name === name)?.enabled);
     if (missing) {
-      throw new CssLoaderOperationError("verification_failed", `CSS Loader did not enable ${missing}`);
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not enable a restored theme");
     }
     return after;
   }

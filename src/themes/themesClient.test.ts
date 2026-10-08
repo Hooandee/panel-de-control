@@ -731,3 +731,22 @@ describe("ThemesClient cleanup", () => {
     expect(client.getSnapshot().errorCode).toBe("transport");
   });
 });
+
+describe("ThemesClient cleanup privacy", () => {
+  it("reports cleanup failures without CSS Loader's theme names", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure, cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []) } });
+    deps.adapter.disableAllExcept = vi.fn(async () => {
+      throw new CssLoaderOperationError("mutation_failed", "Did not find theme Someone Private.profile");
+    });
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+
+    expect(reportFailure).toHaveBeenCalledWith({
+      operation: "cleaning",
+      code: "mutation_failed",
+      message: "CSS Loader could not finish the theme cleanup",
+    });
+  });
+});

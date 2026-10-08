@@ -194,6 +194,18 @@ function errorCode(error: unknown): string {
   return typeof code === "string" && code.length > 0 ? code : "unknown";
 }
 
+// Failure messages reach the logs in reports; other themes and profiles can carry personal names.
+async function withoutThemeNames<T>(operation: Promise<T>): Promise<T> {
+  try {
+    return await operation;
+  } catch (error) {
+    throw new CssLoaderOperationError(
+      error instanceof CssLoaderOperationError ? error.code : "transport",
+      "CSS Loader could not finish the theme cleanup",
+    );
+  }
+}
+
 function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
   return error instanceof CssLoaderOperationError && ANSWERED_CSS_LOADER_CODES.has(error.code);
 }
@@ -546,7 +558,7 @@ export class ThemesClient {
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
     const before = await adapter.requireReady();
     await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
-    return adapter.disableAllExcept(before, kept);
+    return withoutThemeNames(adapter.disableAllExcept(before, kept));
   });
 
   undoCleanup = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "restoring" }, async () => {
@@ -556,7 +568,7 @@ export class ThemesClient {
     }
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
     const before = await adapter.requireReady();
-    return adapter.enableAgain(before, kept, await cleanup.restore());
+    return withoutThemeNames(adapter.enableAgain(before, kept, await cleanup.restore()));
   });
 
   private hooandeeThemeNames(): ReadonlySet<string> {
