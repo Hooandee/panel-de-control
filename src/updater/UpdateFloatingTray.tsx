@@ -1,10 +1,11 @@
-import { type FC, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { type FC, useRef, useSyncExternalStore } from "react";
 import { Focusable, showModal } from "@decky/ui";
 import { LuDownload } from "react-icons/lu";
 
 import type { UpdateInfo } from "../api";
 import type { Lang } from "../i18n";
 import { useFloatingTrayClaimed } from "../components/useFloatingTrayClaim";
+import { stickyTrayStyle, useStickyTray } from "../components/useStickyTray";
 import { theme } from "../theme";
 import { getUpdaterStrings } from "./strings";
 import { UpdateModal } from "./UpdateModal";
@@ -16,8 +17,6 @@ interface Props {
   status: UpdateStatus;
 }
 
-const TRAY_INSET = 16;
-
 let dismissedVersion: string | null = null;
 const listeners = new Set<() => void>();
 const getDismissedVersion = () => dismissedVersion;
@@ -25,36 +24,6 @@ const getDismissedVersion = () => dismissedVersion;
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
-}
-
-function scrollContainer(node: HTMLElement): HTMLElement | null {
-  const view = node.ownerDocument.defaultView;
-  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
-    const overflow = view?.getComputedStyle(parent).overflowY;
-    if (overflow === "auto" || overflow === "scroll") return parent;
-  }
-  return null;
-}
-
-// Steam scrolls gamepad focus into view without knowing the sticky card covers the bottom edge.
-function useReservedScrollPadding(cardRef: { current: HTMLDivElement | null }): void {
-  useLayoutEffect(() => {
-    const card = cardRef.current;
-    const container = card && scrollContainer(card);
-    if (!card || !container) return;
-    const previous = container.style.scrollPaddingBottom;
-    const reserve = () => {
-      container.style.scrollPaddingBottom = `${card.getBoundingClientRect().height + TRAY_INSET * 2}px`;
-    };
-    const view = card.ownerDocument.defaultView;
-    const resize = view && typeof view.ResizeObserver === "function" ? new view.ResizeObserver(reserve) : null;
-    resize?.observe(card);
-    reserve();
-    return () => {
-      resize?.disconnect();
-      container.style.scrollPaddingBottom = previous;
-    };
-  }, [cardRef]);
 }
 
 function dismiss(version: string): void {
@@ -66,7 +35,7 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
   const t = getUpdaterStrings(lang).floating;
   const cardRef = useRef<HTMLDivElement>(null);
   const locked = useRef(false);
-  useReservedScrollPadding(cardRef);
+  useStickyTray(cardRef);
   const run = async (action: () => void) => {
     if (locked.current) return;
     locked.current = true;
@@ -98,12 +67,7 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
       role="status"
       aria-live="polite"
       style={{
-        // A fixed card inside the transformed QAM blanks the panel while gamepad focus scrolls it.
-        position: "sticky",
-        bottom: TRAY_INSET,
-        zIndex: 1,
-        marginTop: TRAY_INSET,
-        boxSizing: "border-box",
+        ...stickyTrayStyle,
         padding: theme.space.md,
         borderRadius: theme.radius.md,
         background: theme.color.surfaceRaised,

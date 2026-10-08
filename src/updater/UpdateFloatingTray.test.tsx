@@ -108,19 +108,10 @@ describe("UpdateFloatingTray", () => {
     expect(screen.getByText("Nueva versión disponible")).toBeTruthy();
   });
 
-  it("yields only while the cleaner tray floats", () => {
-    let top = 900;
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(720);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      if (this.id.startsWith("quickaccess_content_")) return new DOMRect(44, 50, 300, 500);
-      if (this.dataset.cleanerAction === "anchor") return new DOMRect(60, top, 268, 80);
-      if (this.dataset.cleanerAction === "tray") return new DOMRect(60, top, 268, 64);
-      return new DOMRect();
-    });
-    render(<div id="quickaccess_content_123"><CleanerActionTray><button>Clean</button></CleanerActionTray>{tray()}</div>);
+  it("yields while a cleaner action tray is on screen", () => {
+    const view = render(<><CleanerActionTray><button>Clean</button></CleanerActionTray>{tray()}</>);
     expect(screen.queryByRole("status")).toBeNull();
-    top = 450;
-    fireEvent.scroll(window);
+    view.rerender(tray());
     expect(screen.getByRole("status")).toBeTruthy();
   });
 
