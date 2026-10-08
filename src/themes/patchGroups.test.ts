@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CssLoaderPatch } from "./cssLoaderTypes";
 import { groupThemePatches } from "./patchGroups";
+import { parseThemePatchLabels } from "./themePatchLabels";
 
 function patch(name: string): CssLoaderPatch {
   return { name, defaultValue: "No", value: "No", options: ["No", "Yes"], type: "checkbox", rawType: "checkbox" };
@@ -67,5 +68,27 @@ describe("groupThemePatches", () => {
     const groups = groupThemePatches([patch("Estilizar Inicio")], "someone-else");
 
     expect(groups.map((group) => group.id)).toEqual(["appearance"]);
+  });
+
+  it("moves the options a theme labels as extra to a last group of their own", () => {
+    const labels = parseThemePatchLabels({
+      "Oscuridad del fondo": { group: "extra" },
+      "Banner de la ficha": { group: "extra" },
+    });
+    const groups = groupThemePatches([
+      patch("Banner de la ficha"),
+      patch("Acento"),
+      patch("Estilizar Inicio"),
+      patch("Oscuridad del fondo"),
+      patch("Movimiento"),
+    ], "hooandee-eclipse", labels);
+
+    expect(groups.map((group) => [group.id, group.patches.map((item) => item.name)]))
+      .toEqual([
+        ["appearance", ["Acento"]],
+        ["animations", ["Movimiento"]],
+        ["sections", ["Estilizar Inicio"]],
+        ["extra", ["Banner de la ficha", "Oscuridad del fondo"]],
+      ]);
   });
 });

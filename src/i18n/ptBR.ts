@@ -499,6 +499,8 @@ export const ptBR: Record<string, string> = {
   "themes.group.compatibility": "Compatibilidade",
   "themes.group.sections": "Seções do tema",
   "themes.group.sectionsDescription": "Escolha em quais partes do Steam o tema será aplicado.",
+  "themes.group.extra": "Extra",
+  "themes.group.extraDescription": "Ajustes que fogem do design original do tema.",
   "audio.unsupported": "O equalizador não está disponível nesta versão do sistema.",
   "audio.inherit": "Usa a configuração global até que você mude algo aqui.",
   "audio.enable": "Equalizador",
