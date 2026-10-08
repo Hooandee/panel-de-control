@@ -130,7 +130,7 @@ export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
       showHome={layout.showHome}
       showDeviceHeader={layout.showDeviceHeader}
       hasUpdate={hasUpdate}
-      updateInfo={updateInfo}
+      updateInfo={target ? null : updateInfo}
       updateStatus={updateStatus}
       initialMode={target?.kind === "home" ? "home" : resolvedTargetId ? "detail" : undefined}
       onSelectSection={setActiveId}
