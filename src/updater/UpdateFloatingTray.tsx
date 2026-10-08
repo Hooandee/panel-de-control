@@ -5,7 +5,6 @@ import { LuDownload } from "react-icons/lu";
 import type { UpdateInfo } from "../api";
 import type { Lang } from "../i18n";
 import { useFloatingTrayClaimed } from "../components/useFloatingTrayClaim";
-import { PANEL_INSET, useFloatingTrayPosition } from "../components/useFloatingTrayPosition";
 import { theme } from "../theme";
 import { getUpdaterStrings } from "./strings";
 import { UpdateModal } from "./UpdateModal";
@@ -16,6 +15,8 @@ interface Props {
   info: UpdateInfo | null;
   status: UpdateStatus;
 }
+
+const TRAY_INSET = 16;
 
 let sessionDismissed = false;
 const listeners = new Set<() => void>();
@@ -33,7 +34,6 @@ function dismiss(): void {
 
 const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info }) => {
   const t = getUpdaterStrings(lang).floating;
-  const { anchorRef, trayRef, position, height } = useFloatingTrayPosition();
   const locked = useRef(false);
   const run = async (action: () => void) => {
     if (locked.current) return;
@@ -60,57 +60,54 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
   } as const;
 
   return (
-    <>
-      <span ref={anchorRef} data-update-tray="spacer" aria-hidden style={{ display: "block", height: height + PANEL_INSET }} />
-      <div
-        ref={trayRef}
-        role="status"
-        aria-live="polite"
-        style={{
-          position: "fixed",
-          left: position.left,
-          bottom: position.bottom,
-          zIndex: 1000,
-          width: position.width,
-          boxSizing: "border-box",
-          padding: theme.space.md,
-          borderRadius: theme.radius.md,
-          background: theme.color.surfaceRaised,
-          boxShadow: `0 10px 32px rgba(0,0,0,0.42), inset 0 0 0 1px ${theme.color.accent}`,
-        }}
-      >
-        <div style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>{t.title}</div>
-        <div style={{ marginTop: 2, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {`v${info.current} → v${info.latest}`}
-        </div>
-        <div style={{ display: "flex", gap: theme.space.sm, marginTop: theme.space.sm }}>
-          <Focusable
-            role="button"
-            aria-label={t.update}
-            style={{ ...actionStyle, flex: 1, minWidth: 0, background: theme.color.accent, color: "#ffffff" }}
-            onActivate={() => run(update)}
-            onClick={() => run(update)}
-          >
-            <LuDownload size={16} />
-            {t.update}
-          </Focusable>
-          <Focusable
-            role="button"
-            aria-label={t.later}
-            style={{
-              ...actionStyle,
-              background: "rgba(255,255,255,0.08)",
-              color: theme.color.textPrimary,
-              boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-            }}
-            onActivate={() => run(dismiss)}
-            onClick={() => run(dismiss)}
-          >
-            {t.later}
-          </Focusable>
-        </div>
+    <div
+      data-update-tray="card"
+      role="status"
+      aria-live="polite"
+      style={{
+        // A fixed card inside the transformed QAM blanks the panel while gamepad focus scrolls it.
+        position: "sticky",
+        bottom: TRAY_INSET,
+        zIndex: 1,
+        marginTop: TRAY_INSET,
+        boxSizing: "border-box",
+        padding: theme.space.md,
+        borderRadius: theme.radius.md,
+        background: theme.color.surfaceRaised,
+        boxShadow: `0 10px 32px rgba(0,0,0,0.42), inset 0 0 0 1px ${theme.color.accent}`,
+      }}
+    >
+      <div style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>{t.title}</div>
+      <div style={{ marginTop: 2, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+        {`v${info.current} → v${info.latest}`}
       </div>
-    </>
+      <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm, marginTop: theme.space.sm }}>
+        <Focusable
+          role="button"
+          aria-label={t.update}
+          style={{ ...actionStyle, flex: 1, minWidth: 0, background: theme.color.accent, color: "#ffffff" }}
+          onActivate={() => run(update)}
+          onClick={() => run(update)}
+        >
+          <LuDownload size={16} />
+          {t.update}
+        </Focusable>
+        <Focusable
+          role="button"
+          aria-label={t.later}
+          style={{
+            ...actionStyle,
+            background: "rgba(255,255,255,0.08)",
+            color: theme.color.textPrimary,
+            boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+          }}
+          onActivate={() => run(dismiss)}
+          onClick={() => run(dismiss)}
+        >
+          {t.later}
+        </Focusable>
+      </Focusable>
+    </div>
   );
 };
 

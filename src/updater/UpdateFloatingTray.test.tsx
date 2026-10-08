@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateInfo } from "../api";
 
@@ -64,38 +64,14 @@ describe("UpdateFloatingTray", () => {
     expect(modal.props).toEqual({ lang: "es", latest: "0.64.0", notes: "Release notes" });
   });
 
-  it("removes the reserved space during installation and restores it on error", () => {
+  it("hides during installation and returns on error", () => {
     const view = render(tray());
     view.rerender(<UpdateFloatingTray lang="es" info={info} status="installing" />);
     expect(view.container.innerHTML).toBe("");
     view.rerender(<UpdateFloatingTray lang="es" info={info} status="error" />);
     expect(screen.getByRole("button", { name: "Actualizar" })).toBeTruthy();
-    expect(view.container.querySelector('[data-update-tray="spacer"]')).toBeTruthy();
     view.rerender(<UpdateFloatingTray lang="es" info={info} status="done" />);
     expect(view.container.innerHTML).toBe("");
-  });
-
-  it("measures height changes from ResizeObserver and disconnects on dismissal", () => {
-    let resize!: () => void;
-    const observe = vi.fn();
-    const disconnect = vi.fn();
-    vi.spyOn(window, "ResizeObserver").mockImplementation(class {
-      constructor(callback: () => void) { resize = callback; }
-      observe = observe;
-      disconnect = disconnect;
-      unobserve = vi.fn();
-    } as any);
-    let height = 100;
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return new DOMRect(0, 0, 300, this.getAttribute("role") === "status" ? height : 500);
-    });
-    const view = render(<div id="quickaccess_content_123">{tray()}</div>);
-    expect(observe).toHaveBeenCalledWith(screen.getByRole("status"));
-    height = 145;
-    act(() => resize());
-    expect(view.container.querySelector<HTMLElement>('[data-update-tray="spacer"]')!.style.height).toBe("161px");
-    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
-    expect(disconnect).toHaveBeenCalledOnce();
   });
 
   it("keeps dismissal across remounts without changing availability", () => {
@@ -140,29 +116,11 @@ describe("UpdateFloatingTray", () => {
     expect(screen.getByRole("status")).toBeTruthy();
   });
 
-  it("tracks card height and QAM movement and releases resources", () => {
-    vi.useFakeTimers();
-    let height = 110;
-    let left = 44;
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(720);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      if (this.id.startsWith("quickaccess_content_")) return new DOMRect(left, 50, 300, 500);
-      if (this.getAttribute("role") === "status") return new DOMRect(left + 16, 424, 268, height);
-      return new DOMRect();
-    });
-    const view = render(<div id="quickaccess_content_123">{tray()}</div>);
+
+  it("sticks to the bottom of the QAM scroll instead of floating over a transformed ancestor", () => {
+    render(tray());
     const card = screen.getByRole("status");
-    const spacer = view.container.querySelector<HTMLElement>('[data-update-tray="spacer"]')!;
-    expect(card.style.left).toBe("60px");
-    expect(card.style.width).toBe("268px");
-    expect(card.style.bottom).toBe("186px");
-    expect(spacer.style.height).toBe("126px");
-    height = 140;
-    left = 80;
-    act(() => vi.advanceTimersByTime(100));
-    expect(card.style.left).toBe("96px");
-    expect(spacer.style.height).toBe("156px");
-    view.unmount();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(card.style.position).toBe("sticky");
+    expect(card.style.bottom).toBe("16px");
   });
 });

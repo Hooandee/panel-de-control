@@ -205,7 +205,6 @@ describe("ControlCenterShell", () => {
     });
     const surface = screen.getByTestId("shell-surface");
     expect(surface.lastElementChild).toBe(screen.getByRole("status"));
-    expect(surface.querySelector('[data-update-tray="spacer"]')).toBeTruthy();
     expect(screen.getByText("v1 → v2")).toBeTruthy();
     if (mode !== "detail") expect(alertDotWithin(container)).toBeTruthy();
   });
@@ -954,7 +953,7 @@ it("preserves the settings alert dot after dismissing the floating update", () =
   });
   fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
   expect(screen.queryByRole("status")).toBeNull();
-  expect(container.querySelector('[data-update-tray="spacer"]')).toBeNull();
+  expect(container.querySelector('[data-update-tray="card"]')).toBeNull();
   expect(alertDotWithin(container)).toBeTruthy();
   cleanup();
 });
