@@ -116,14 +116,15 @@ function summaryKey(health: ThemeHealthView): string {
 function HealthBody({ controller, health, closeModal }: { controller: ThemesController; health: ThemeHealthView; closeModal?: () => void }) {
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<"cleaned" | "restored" | "failed" | null>(null);
+  const [result, setResult] = useState<"cleaned" | "cleanedWithoutLoader" | "restored" | "failed" | null>(null);
   const busy = health.checking || controller.operation !== null;
   const problems = health.findings.filter((finding) => !DISPLAY_FINDINGS.has(finding.id));
   const display = health.findings.filter((finding) => DISPLAY_FINDINGS.has(finding.id));
   const plan = health.plan;
   const cssReady = controller.snapshot.status === "ready";
+  const cssLoaderGone = controller.snapshot.status === "missing" || controller.snapshot.status === "disabled";
 
-  const runAction = async (action: () => Promise<boolean>, success: "cleaned" | "restored") => {
+  const runAction = async (action: () => Promise<boolean>, success: "cleaned" | "cleanedWithoutLoader" | "restored") => {
     setConfirming(false);
     setResult(null);
     setResult(await action() ? success : "failed");
@@ -173,12 +174,12 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
           <ul data-pdc-muted style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.5 }}>
             {plan.disable.length ? <li>{t("themes.health.confirm.disable", { count: plan.disable.length })}</li> : null}
             {plan.setAside ? <li>{t("themes.health.confirm.setAside", { count: plan.setAside })}</li> : null}
-            <li>{t("themes.health.confirm.reload")}</li>
+            <li>{t(cssLoaderGone ? "themes.health.confirm.strip" : "themes.health.confirm.reload")}</li>
             <li>{t("themes.health.confirm.undo")}</li>
           </ul>
           <Focusable style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md }}>
             <DialogButton style={SECONDARY_STYLE} onClick={() => setConfirming(false)}>{t("themes.install.confirm.cancel")}</DialogButton>
-            <DialogButton style={PRIMARY_STYLE} disabled={busy} onClick={() => void runAction(health.cleanUp, "cleaned")}>
+            <DialogButton style={PRIMARY_STYLE} disabled={busy} onClick={() => void runAction(health.cleanUp, cssLoaderGone ? "cleanedWithoutLoader" : "cleaned")}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><LuSparkles size={15} aria-hidden />{t("themes.health.clean.ok")}</span>
             </DialogButton>
           </Focusable>
@@ -187,7 +188,7 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
 
       <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {health.needsCleanup && !confirming ? (
-          <ButtonItem layout="below" disabled={busy || !cssReady} onClick={() => setConfirming(true)}>
+          <ButtonItem layout="below" disabled={busy || !(cssReady || cssLoaderGone)} onClick={() => setConfirming(true)}>
             <LuSparkles size={14} aria-hidden /> {t(controller.operation?.kind === "cleaning" ? "themes.health.cleaning" : "themes.health.clean")}
           </ButtonItem>
         ) : null}

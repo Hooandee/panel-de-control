@@ -750,3 +750,21 @@ describe("ThemesClient cleanup privacy", () => {
     });
   });
 });
+
+describe("ThemesClient cleanup without CSS Loader", () => {
+  it("sets folders aside and removes leftover styles without calling CSS Loader", async () => {
+    const setAside = vi.fn(async () => {});
+    const removeLeftoverStyles = vi.fn();
+    const disableAllExcept = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []) } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "disabled" as const, themes: [] }));
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], removeLeftoverStyles)).resolves.toBe(true);
+
+    expect(setAside).toHaveBeenCalledWith([]);
+    expect(removeLeftoverStyles).toHaveBeenCalledTimes(1);
+    expect(disableAllExcept).not.toHaveBeenCalled();
+  });
+});

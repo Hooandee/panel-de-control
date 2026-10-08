@@ -550,10 +550,21 @@ export class ThemesClient {
     );
   };
 
-  cleanUp = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
+  // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
+  // set aside and the styles it left behind removed from the Steam windows the caller can reach.
+  cleanUp = (
+    keep: readonly string[],
+    removeLeftoverStyles?: () => void,
+  ): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
     const { adapter, cleanup } = this.dependencies;
     if (!adapter.disableAllExcept || !cleanup) {
       throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.setAside([]);
+      removeLeftoverStyles?.();
+      return current;
     }
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
     const before = await adapter.requireReady();

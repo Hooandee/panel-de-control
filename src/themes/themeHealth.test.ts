@@ -4,10 +4,12 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import {
   cleanupNeeded,
   cleanupPlan,
+  countCssLoaderStyles,
   diagnoseThemeHealth,
   hooandeeNames,
   parseThemeHealth,
   readSteamSettings,
+  removeCssLoaderStyles,
   steamDisplayState,
   type SteamDisplayState,
   type ThemeHealthBackend,
@@ -79,6 +81,15 @@ describe("diagnoseThemeHealth", () => {
 
     expect(findings).toEqual([{ id: "ghost_styles", severity: "problem", count: 3 }]);
     expect(cleanupNeeded(cleanupPlan(ready(), findings, new Set()))).toBe(true);
+  });
+
+  it("treats every CSS Loader style as left behind once CSS Loader is off or removed", () => {
+    for (const status of ["disabled", "missing"] as const) {
+      expect(diagnoseThemeHealth({ status, themes: [] }, backend(), CLEAN_DISPLAY, new Set())).toEqual([
+        { id: "css_loader", severity: "problem", status },
+        { id: "ghost_styles", severity: "problem", count: 3 },
+      ]);
+    }
   });
 
   it("does not guess about styles while CSS Loader cannot be read", () => {
@@ -181,10 +192,25 @@ describe("Steam display", () => {
 
     expect(steamDisplayState(
       { flCurrentDisplayScaleFactor: 1.25, flAutoDisplayScaleFactor: 1, bDisplayIsUsingAutoScale: false, bDisplayIsExternal: false, bIsInClientBeta: true },
-      { devicePixelRatio: 1.25, innerWidth: 1024, innerHeight: 640, document: document as unknown as Document },
+      { devicePixelRatio: 1.25, innerWidth: 1024, innerHeight: 640 },
+      [document as unknown as Document, document as unknown as Document],
     )).toEqual({
       scale: 1.25, autoScale: 1, usingAutoScale: false, external: false, beta: true,
-      pixelRatio: 1.25, width: 1280, height: 800, cssLoaderStyles: 2,
+      pixelRatio: 1.25, width: 1280, height: 800, cssLoaderStyles: 4,
     });
+  });
+});
+
+describe("CSS Loader styles", () => {
+  it("counts and removes them only from documents that answer", () => {
+    const style = () => ({ remove: vi.fn() });
+    const styles = [style(), style()];
+    const reachable = { querySelectorAll: () => styles } as unknown as Document;
+    const gone = { querySelectorAll: () => { throw new Error("detached"); } } as unknown as Document;
+
+    expect(countCssLoaderStyles([gone])).toBeNull();
+    expect(countCssLoaderStyles([reachable, gone])).toBe(2);
+    expect(removeCssLoaderStyles([reachable, gone])).toBe(2);
+    expect(styles.every((item) => item.remove.mock.calls.length === 1)).toBe(true);
   });
 });

@@ -153,17 +153,40 @@ export function readSteamSettings(
   });
 }
 
+const CSS_LOADER_STYLE = "style.css-loader-style";
+
+export function countCssLoaderStyles(documents: readonly Document[]): number | null {
+  let total: number | null = null;
+  for (const document of documents) {
+    try {
+      total = (total ?? 0) + document.querySelectorAll(CSS_LOADER_STYLE).length;
+    } catch {}
+  }
+  return total;
+}
+
+export function removeCssLoaderStyles(documents: readonly Document[]): number {
+  let removed = 0;
+  for (const document of documents) {
+    try {
+      document.querySelectorAll(CSS_LOADER_STYLE).forEach((style) => {
+        style.remove();
+        removed += 1;
+      });
+    } catch {}
+  }
+  return removed;
+}
+
 export function steamDisplayState(
   settings: SteamSettingsSnapshot | null,
-  view: { devicePixelRatio?: number; innerWidth?: number; innerHeight?: number; document?: Document } | null,
+  view: { devicePixelRatio?: number; innerWidth?: number; innerHeight?: number } | null,
+  documents: readonly Document[] = [],
 ): SteamDisplayState {
   const pixelRatio = finiteNumber(view?.devicePixelRatio);
   const innerWidth = finiteNumber(view?.innerWidth);
   const innerHeight = finiteNumber(view?.innerHeight);
-  let cssLoaderStyles: number | null = null;
-  try {
-    cssLoaderStyles = view?.document?.querySelectorAll("style.css-loader-style").length ?? null;
-  } catch {}
+  const cssLoaderStyles = countCssLoaderStyles(documents);
   return {
     scale: finiteNumber(settings?.flCurrentDisplayScaleFactor),
     autoScale: finiteNumber(settings?.flAutoDisplayScaleFactor),
@@ -215,7 +238,9 @@ export function diagnoseThemeHealth(
   if (others.length) findings.push({ id: "other_active", severity: "problem", names: others });
   if (activeProfiles.length) findings.push({ id: "profile_active", severity: "problem", names: activeProfiles });
 
-  if (snapshot.status === "ready" && enabled.length === 0 && (display.cssLoaderStyles ?? 0) > 0) {
+  // With CSS Loader off or removed nothing owns its styles; while it runs, only an empty list proves it.
+  const cssLoaderGone = snapshot.status === "missing" || snapshot.status === "disabled";
+  if ((cssLoaderGone || (snapshot.status === "ready" && enabled.length === 0)) && (display.cssLoaderStyles ?? 0) > 0) {
     findings.push({ id: "ghost_styles", severity: "problem", count: display.cssLoaderStyles ?? 0 });
   }
 

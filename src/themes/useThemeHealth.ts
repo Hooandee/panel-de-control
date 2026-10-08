@@ -1,4 +1,4 @@
-import { findSP } from "@decky/ui";
+import { findSP, getGamepadNavigationTrees } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { readThemeHealth } from "./themeCleanupHost";
@@ -8,6 +8,7 @@ import {
   diagnoseThemeHealth,
   hooandeeNames,
   readSteamSettings,
+  removeCssLoaderStyles,
   steamDisplayState,
   type SteamDisplayState,
   type ThemeCleanupPlan,
@@ -29,6 +30,27 @@ export interface ThemeHealthView {
   undoCleanup(): Promise<boolean>;
 }
 
+interface NavigationTree {
+  m_Root?: { m_element?: Element | null };
+}
+
+// Big Picture, the main menu and the Quick Access menu each own a document; notification toasts
+// are not reachable from here.
+export function steamDocuments(): Document[] {
+  const documents = new Set<Document>();
+  try {
+    const main = findSP()?.document;
+    if (main) documents.add(main);
+  } catch {}
+  try {
+    for (const tree of (getGamepadNavigationTrees() ?? []) as NavigationTree[]) {
+      const document = tree?.m_Root?.m_element?.ownerDocument;
+      if (document) documents.add(document);
+    }
+  } catch {}
+  return [...documents];
+}
+
 export async function readSteamDisplay(): Promise<SteamDisplayState> {
   const steam = typeof SteamClient === "undefined" ? undefined : SteamClient;
   const settings = await readSteamSettings(steam?.Settings as Parameters<typeof readSteamSettings>[0]);
@@ -36,7 +58,7 @@ export async function readSteamDisplay(): Promise<SteamDisplayState> {
   try {
     view = findSP() ?? null;
   } catch {}
-  return steamDisplayState(settings, view);
+  return steamDisplayState(settings, view, steamDocuments());
 }
 
 export function useThemeHealth(controller: ThemesController): ThemeHealthView {
@@ -93,7 +115,7 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     undo: backend?.undo ?? null,
     display,
     recheck,
-    cleanUp: () => run(controller.cleanUp),
+    cleanUp: () => run((keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments()))),
     undoCleanup: () => run(controller.undoCleanup),
   };
 }
