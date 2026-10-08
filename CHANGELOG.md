@@ -5,9 +5,25 @@
 ## [0.64.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.63.0...panel-de-control-v0.64.0) (2026-10-08)
 
 
-### Features
+### Español
 
-* **themes:** show a theme's extra options in their own group ([#890](https://github.com/Hooandee/panel-de-control/issues/890)) ([2afc280](https://github.com/Hooandee/panel-de-control/commit/2afc280b70b493a07490975b5b607bd60661c039))
+* **Temas:** Los ajustes de un tema pueden tener ahora un apartado «Extra» al final, con opciones que se salen de su diseño original. Eclipse lo estrena: ahí puedes quitar la oscuridad del fondo de Inicio y ver la imagen de la ficha del juego entera, sin el eclipse.
+
+### English
+
+* **Themes:** A theme's settings can now have an "Extra" section at the end, with options that step outside its original design. Eclipse is the first to use it: there you can drop the Home background darkness and see the game page image in full, without the eclipse.
+
+### Italiano
+
+* **Temi:** Le impostazioni di un tema ora possono avere una sezione «Extra» in fondo, con opzioni che escono dal suo design originale. Eclipse è il primo a usarla: lì puoi togliere l'oscuramento dello sfondo della Home e vedere l'immagine della scheda del gioco per intero, senza l'eclissi.
+
+### Deutsch
+
+* **Themes:** Die Einstellungen eines Themes können jetzt am Ende einen Bereich „Extra“ haben, mit Optionen, die vom ursprünglichen Design abweichen. Eclipse nutzt ihn als Erstes: Dort kannst du die Abdunklung des Startseiten-Hintergrunds abschalten und das Bild der Spielseite vollständig sehen, ohne Verfinsterung.
+
+### Português (Brasil)
+
+* **Temas:** Os ajustes de um tema agora podem ter uma seção "Extra" no final, com opções que fogem do design original. O Eclipse é o primeiro a usar: lá dá para tirar o escurecimento do fundo do Início e ver a imagem da página do jogo inteira, sem o eclipse.
 
 ## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
 
