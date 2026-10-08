@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.65.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.64.0...panel-de-control-v0.65.0) (2026-10-08)
+
+
+### Features
+
+* **themes:** add "Trouble with a theme?" check-up and cleanup ([#894](https://github.com/Hooandee/panel-de-control/issues/894)) ([0b6f795](https://github.com/Hooandee/panel-de-control/commit/0b6f7950cf591f581b5daf5deb2c22ac106bbbe4))
+
 ## [0.64.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.63.0...panel-de-control-v0.64.0) (2026-10-08)
 
 
