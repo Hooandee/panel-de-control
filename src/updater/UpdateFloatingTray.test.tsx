@@ -74,6 +74,14 @@ describe("UpdateFloatingTray", () => {
     expect(view.container.innerHTML).toBe("");
   });
 
+  it("shows a newer release again after dismissing the previous one", () => {
+    const view = render(tray());
+    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    view.rerender(tray({ ...info, latest: "0.65.0" }));
+    expect(screen.getByText("v0.63.0 → v0.65.0")).toBeTruthy();
+  });
+
   it("keeps dismissal across remounts without changing availability", () => {
     const view = render(tray());
     fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));

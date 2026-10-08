@@ -947,7 +947,7 @@ describe("ControlCenterShell", () => {
     setShellMode("tabs");
     const { container } = renderShell({
       hasUpdate: true,
-      updateInfo: { current: "1", latest: "2", has_update: true, notes: "", download_url: "", error: "" },
+      updateInfo: { current: "1", latest: "3", has_update: true, notes: "", download_url: "", error: "" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
     expect(screen.queryByRole("status")).toBeNull();
