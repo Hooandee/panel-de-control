@@ -536,7 +536,6 @@ export const ptBR: Record<string, string> = {
   "themes.action.update": "Atualizar tema",
   "themes.action.updating": "Atualizando…",
   "themes.details.unavailable": "Este tema não está mais disponível no catálogo.",
-  "themes.install.ready": "Pronto para instalar",
   "themes.install.confirm.title": "Instalar {name}?",
   "themes.install.confirm.desc": "Será adicionado ao CSS Loader. Você pode ativá-lo e personalizá-lo depois.",
   "themes.install.confirm.ok": "Instalar",

@@ -536,7 +536,6 @@ export const de: Record<string, string> = {
   "themes.action.update": "Theme aktualisieren",
   "themes.action.updating": "Wird aktualisiert…",
   "themes.details.unavailable": "Dieses Theme ist nicht mehr im Katalog verfügbar.",
-  "themes.install.ready": "Bereit zur Installation",
   "themes.install.confirm.title": "{name} installieren?",
   "themes.install.confirm.desc": "Das Theme wird zu CSS Loader hinzugefügt. Danach kannst du es aktivieren und anpassen.",
   "themes.install.confirm.ok": "Installieren",

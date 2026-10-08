@@ -164,7 +164,7 @@ describe("ThemeDetailsModal", () => {
     expect(screen.getByTestId("theme-details-cover").style.inset).toBe("-2px");
     expect(screen.getByTestId("theme-details-cover").style.width).toBe("calc(100% + 4px)");
     expect(screen.getByTestId("theme-details-cover-gradient")).toBeTruthy();
-    expect(screen.getByTestId("theme-details-cover-copy").style.textShadow).not.toBe("");
+    expect(screen.getByTestId("theme-details-cover-copy").closest("header")?.style.textShadow).not.toBe("");
   });
 
   it("keeps generic themes neutral and falls back if the HOOANDEE cover fails", () => {
@@ -237,9 +237,9 @@ describe("ThemeDetailsModal", () => {
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
 
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
-    expect(screen.queryByRole("group", { name: "themes.install.ready" })).toBeNull();
+    const header = screen.getByRole("heading").closest("header") as HTMLElement;
+    fireEvent.click(within(header).getByRole("button", { name: "themes.action.install" }));
+    expect(screen.queryByRole("button", { name: "themes.action.install" })).toBeNull();
 
     const confirmation = screen.getByRole("group", { name: "themes.install.confirm.title" });
     expect(within(confirmation).getByText("themes.remote.card.version")).toBeTruthy();
@@ -270,7 +270,7 @@ describe("ThemeDetailsModal", () => {
     const cancel = screen.getByRole("button", { name: "themes.install.confirm.cancel" });
     expect((cancel as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(cancel);
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.action.install" })).toBeTruthy();
   });
 
   it("uses Escape to restore the offer before closing the modal", () => {
@@ -282,7 +282,7 @@ describe("ThemeDetailsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
     fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.action.install" })).toBeTruthy();
     expect(closeModal).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
