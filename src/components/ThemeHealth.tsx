@@ -1,5 +1,5 @@
-import { ButtonItem, DialogButton, Focusable, ModalRoot, showModal } from "@decky/ui";
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, showModal } from "@decky/ui";
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { LuCheck, LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck, LuSparkles, LuUndo2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -109,6 +109,16 @@ function FindingRow({ finding }: { finding: ThemeHealthFinding }) {
   );
 }
 
+function useInitialFocus(target: RefObject<HTMLDivElement | null>, key: unknown): void {
+  useEffect(() => {
+    const element = target.current;
+    if (!element) return;
+    const controller = getFocusNavController();
+    if (controller?.FocusElement) controller.FocusElement(element);
+    else element.focus();
+  }, [target, key]);
+}
+
 function summaryKey(health: ThemeHealthView): string {
   if (health.checking && health.findings.length === 0) return "themes.health.summary.checking";
   if (health.unavailable) return "themes.health.summary.unavailable";
@@ -129,9 +139,16 @@ function planSummary(t: (key: string, params?: Params) => string, plan: ThemeCle
   ].filter(Boolean).join(" ");
 }
 
-function HealthBody({ controller, health, closeModal }: { controller: ThemesController; health: ThemeHealthView; closeModal?: () => void }) {
+interface HealthBodyProps {
+  controller: ThemesController;
+  health: ThemeHealthView;
+  confirming: boolean;
+  setConfirming(value: boolean): void;
+  closeModal?: () => void;
+}
+
+function HealthBody({ controller, health, confirming, setConfirming, closeModal }: HealthBodyProps) {
   const { t } = useI18n();
-  const [confirming, setConfirming] = useState(false);
   const [keepActive, setKeepActive] = useState<string | null>(null);
   const [result, setResult] = useState<ResultKey | null>(null);
   const busy = health.checking || controller.operation !== null;
@@ -142,6 +159,8 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
   const cssLoaderGone = controller.snapshot.status === "missing" || controller.snapshot.status === "disabled";
   const canAct = cssReady || cssLoaderGone;
   const issues = problemCount(health.findings);
+  const firstAction = useRef<HTMLDivElement>(null);
+  useInitialFocus(firstAction, `${confirming}:${health.needsCleanup}:${health.checking}`);
 
   const runAction = async (action: () => Promise<ThemeHealthOutcome>, done: ResultKey, partial: ResultKey) => {
     setConfirming(false);
@@ -177,15 +196,15 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
       ) : null}
 
       {confirming && plan ? (
-        <div role="group" aria-label={t("themes.health.confirm.title")} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+        <Focusable flow-children="column" role="group" aria-label={t("themes.health.confirm.title")} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           {mustChoose ? (
             <>
               <div style={{ fontWeight: 720 }}>{t("themes.health.choose.title")}</div>
-              <Focusable style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
-                {plan.chooseOne.map((option) => {
+              <Focusable flow-children="row" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+                {plan.chooseOne.map((option, index) => {
                   const selected = option.name === chosen;
                   return (
-                    <DialogButton key={option.name} style={selected ? CHOICE_SELECTED_STYLE : CHOICE_STYLE} onClick={() => setKeepActive(option.name)}>
+                    <DialogButton key={option.name} ref={index === 0 ? firstAction : undefined} style={selected ? CHOICE_SELECTED_STYLE : CHOICE_STYLE} onClick={() => setKeepActive(option.name)}>
                       <IconLabel icon={selected ? <LuCheck size={14} aria-hidden /> : null}>{option.label}</IconLabel>
                     </DialogButton>
                   );
@@ -194,9 +213,10 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
             </>
           ) : null}
           <div data-pdc-muted style={{ fontSize: theme.font.caption, lineHeight: 1.45 }}>{planSummary(t, plan, chosen)}</div>
-          <Focusable style={{ display: "flex", gap: theme.space.sm }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
             <DialogButton style={BUTTON_STYLE} onClick={() => setConfirming(false)}>{t("themes.install.confirm.cancel")}</DialogButton>
             <DialogButton
+              ref={mustChoose ? undefined : firstAction}
               style={PRIMARY_STYLE}
               disabled={busy || (mustChoose && !chosen)}
               onClick={() => void runAction(() => health.cleanUp(chosen ?? undefined), cssLoaderGone ? "cleanedWithoutLoader" : "cleaned", "cleanedPartial")}
@@ -204,11 +224,11 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
               <IconLabel icon={<LuSparkles size={15} aria-hidden />}>{t("themes.health.clean.ok")}</IconLabel>
             </DialogButton>
           </Focusable>
-        </div>
+        </Focusable>
       ) : (
-        <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+        <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           {health.needsCleanup ? (
-            <DialogButton style={PRIMARY_STYLE} disabled={busy || !canAct} onClick={() => setConfirming(true)}>
+            <DialogButton ref={firstAction} style={PRIMARY_STYLE} disabled={busy || !canAct} onClick={() => setConfirming(true)}>
               <IconLabel icon={<LuSparkles size={15} aria-hidden />}>
                 {t(controller.operation?.kind === "cleaning" ? "themes.health.cleaning" : "themes.health.clean")}
               </IconLabel>
@@ -221,14 +241,19 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
               </IconLabel>
             </DialogButton>
           ) : null}
-          <div style={{ display: "flex", gap: theme.space.sm }}>
-            <DialogButton style={BUTTON_STYLE} disabled={busy} onClick={() => { setResult(null); void controller.refresh().then(health.recheck); }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
+            <DialogButton
+              ref={health.needsCleanup ? undefined : firstAction}
+              style={BUTTON_STYLE}
+              disabled={busy}
+              onClick={() => { setResult(null); void controller.refresh().then(health.recheck); }}
+            >
               <IconLabel icon={<LuRefreshCw size={14} aria-hidden />}>{t("themes.health.recheck")}</IconLabel>
             </DialogButton>
             <DialogButton style={BUTTON_STYLE} onClick={() => { closeModal?.(); openReportModal(["themes"]); }}>
               <IconLabel icon={<LuSend size={14} aria-hidden />}>{t("themes.health.report")}</IconLabel>
             </DialogButton>
-          </div>
+          </Focusable>
         </Focusable>
       )}
     </div>
@@ -238,10 +263,12 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
 function ThemeHealthModal({ closeModal }: { closeModal?: () => void }) {
   const controller = useThemes();
   const health = useThemeHealth(controller);
+  const [confirming, setConfirming] = useState(false);
+  const cancel = confirming ? () => setConfirming(false) : closeModal;
   return (
-    <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
+    <ModalRoot onCancel={cancel} onEscKeypress={cancel}>
       <FocusRoot>
-        <HealthBody controller={controller} health={health} closeModal={closeModal} />
+        <HealthBody controller={controller} health={health} confirming={confirming} setConfirming={setConfirming} closeModal={closeModal} />
       </FocusRoot>
     </ModalRoot>
   );

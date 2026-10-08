@@ -23,7 +23,10 @@ vi.mock("@decky/ui", () => ({
   ),
   DialogButton: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  ModalRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  getFocusNavController: () => null,
+  ModalRoot: ({ children, onCancel }: { children?: ReactNode; onCancel?: () => void }) => (
+    <div><button onClick={onCancel}>modal-back</button>{children}</div>
+  ),
   showModal: (element: ReactElement) => { mocks.modal = element; },
 }));
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
@@ -110,6 +113,22 @@ describe("ThemeHealth", () => {
     fireEvent.click(clean);
 
     await waitFor(() => expect(mocks.health?.cleanUp).toHaveBeenCalledWith("Hooandee Gallery"));
+  });
+
+  it("goes back from the confirmation to the list with B instead of closing", () => {
+    mocks.health = health({
+      findings: [{ id: "other_active", severity: "problem", names: ["Other"] }],
+      plan: { disable: ["Other"], chooseOne: [], setAside: 0, ghostStyles: false },
+      needsCleanup: true,
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    expect(screen.getByRole("button", { name: "themes.health.clean.ok" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "modal-back" }));
+
+    expect(screen.queryByRole("button", { name: "themes.health.clean.ok" })).toBeNull();
+    expect(screen.getByRole("button", { name: "themes.health.clean" })).toBeTruthy();
   });
 
   it("says when the cleanup could only partly finish", async () => {

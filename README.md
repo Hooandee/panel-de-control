@@ -157,7 +157,7 @@ tardar más. El resultado muestra el tamaño aproximado de los datos borrados y 
 Instala y actualiza los temas Hooandee a través de CSS Loader. Si un tema se ve raro, "¿Problemas
 con un tema?" revisa lo que suele romperlos: otros temas o perfiles activos a la vez, restos que
 CSS Loader sigue cargando aunque no salgan en su lista, estilos que se quedan pegados y ajustes de
-pantalla fuera de lo normal (escala, resolución, Steam beta). "Dejar limpio" deja activos solo los
+pantalla fuera de lo normal (escala, resolución, Steam beta). "Solucionar problemas" deja activos solo los
 temas Hooandee, aparta los restos sin borrar nada y se puede deshacer. Si un tema llega a tapar el
 menú rápido, Panel avisa con una notificación que abre esta misma ayuda.
 
