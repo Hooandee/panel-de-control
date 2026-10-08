@@ -16,6 +16,7 @@ import {
   getThemeHealth,
   setAsideThemeLeftovers,
   restoreThemeCleanup,
+  acknowledgeThemeCleanupUndo,
   loadThemeExtension,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -108,6 +109,7 @@ export default definePlugin(() => {
     health: getThemeHealth,
     setAside: setAsideThemeLeftovers,
     restore: restoreThemeCleanup,
+    acknowledgeRestore: acknowledgeThemeCleanupUndo,
   });
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
     list: listThemeExtensions,

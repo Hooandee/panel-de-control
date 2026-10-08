@@ -9,7 +9,7 @@ export type ThemeFolderKind =
   | "leftover"
   | "duplicate";
 
-const SET_ASIDE_KINDS: ReadonlySet<ThemeFolderKind> = new Set(["legacy", "broken", "leftover", "duplicate"]);
+export const SET_ASIDE_KINDS: ReadonlySet<ThemeFolderKind> = new Set(["legacy", "broken", "leftover", "duplicate"]);
 
 export interface ThemeFolder {
   folder: string;
@@ -21,7 +21,7 @@ export interface ThemeFolder {
 export interface ThemeHealthBackend {
   folders: ThemeFolder[];
   panel: { width: number; height: number } | null;
-  undo: { available: boolean; moved: number; disabled: number; error?: string };
+  undo: { available: boolean; moved: number; disabled: number };
 }
 
 export interface SteamDisplayState {
@@ -101,7 +101,6 @@ export function parseThemeHealth(raw: unknown): ThemeHealthBackend {
       available: undo?.available === true,
       moved: finiteNumber(undo?.moved) ?? 0,
       disabled: finiteNumber(undo?.disabled) ?? 0,
-      ...(typeof undo?.error === "string" ? { error: undo.error } : {}),
     },
   };
 }

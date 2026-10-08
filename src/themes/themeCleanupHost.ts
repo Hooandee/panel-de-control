@@ -5,6 +5,7 @@ export interface ThemeHealthRpcHost {
   health(): Promise<unknown>;
   setAside(disabled: string[]): Promise<unknown>;
   restore(): Promise<unknown>;
+  acknowledgeRestore(): Promise<unknown>;
 }
 
 export class ThemeCleanupError extends Error {
@@ -58,6 +59,9 @@ export function createThemeCleanupHost(host?: ThemeHealthRpcHost): ThemeCleanupH
       const result = answered(await requireHost(host).restore());
       const names = result.reenable;
       return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string") : [];
+    },
+    async acknowledgeRestore() {
+      answered(await requireHost(host).acknowledgeRestore());
     },
   };
 }

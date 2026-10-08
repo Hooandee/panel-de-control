@@ -5,7 +5,7 @@ import { LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import type { ThemeHealthFinding } from "../themes/themeHealth";
-import { useThemeHealth, type ThemeHealthView } from "../themes/useThemeHealth";
+import { useThemeHealth, type ThemeHealthOutcome, type ThemeHealthView } from "../themes/useThemeHealth";
 import { useThemes, type ThemesController } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
 import { openReportModal } from "./ReportModal";
@@ -45,8 +45,10 @@ const SECONDARY_STYLE: CSSProperties = {
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
 };
 
+type ResultKey = "cleaned" | "cleanedWithoutLoader" | "cleanedPartial" | "restored" | "restoredPartial" | "failed";
+
 function problemCount(findings: readonly ThemeHealthFinding[]): number {
-  return findings.filter((finding) => finding.severity !== "info").length;
+  return findings.filter((finding) => finding.severity === "problem").length;
 }
 
 function percent(value: number): string {
@@ -116,13 +118,16 @@ function undoDescriptionKey(undo: { moved: number; disabled: number }): string {
 function summaryKey(health: ThemeHealthView): string {
   if (health.checking && health.findings.length === 0) return "themes.health.summary.checking";
   if (health.unavailable) return "themes.health.summary.unavailable";
-  return problemCount(health.findings) === 0 ? "themes.health.summary.clean" : "themes.health.summary.issues";
+  if (problemCount(health.findings)) return "themes.health.summary.issues";
+  return health.findings.some((finding) => finding.severity === "setting")
+    ? "themes.health.summary.settings"
+    : "themes.health.summary.clean";
 }
 
 function HealthBody({ controller, health, closeModal }: { controller: ThemesController; health: ThemeHealthView; closeModal?: () => void }) {
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<"cleaned" | "cleanedWithoutLoader" | "restored" | "failed" | null>(null);
+  const [result, setResult] = useState<ResultKey | null>(null);
   const busy = health.checking || controller.operation !== null;
   const problems = health.findings.filter((finding) => !DISPLAY_FINDINGS.has(finding.id));
   const display = health.findings.filter((finding) => DISPLAY_FINDINGS.has(finding.id));
@@ -130,10 +135,11 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
   const cssReady = controller.snapshot.status === "ready";
   const cssLoaderGone = controller.snapshot.status === "missing" || controller.snapshot.status === "disabled";
 
-  const runAction = async (action: () => Promise<boolean>, success: "cleaned" | "cleanedWithoutLoader" | "restored") => {
+  const runAction = async (action: () => Promise<ThemeHealthOutcome>, done: ResultKey, partial: ResultKey) => {
     setConfirming(false);
     setResult(null);
-    setResult(await action() ? success : "failed");
+    const outcome = await action();
+    setResult(outcome === "done" ? done : outcome === "partial" ? partial : "failed");
   };
 
   return (
@@ -185,7 +191,7 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
           </ul>
           <Focusable style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md }}>
             <DialogButton style={SECONDARY_STYLE} onClick={() => setConfirming(false)}>{t("themes.install.confirm.cancel")}</DialogButton>
-            <DialogButton style={PRIMARY_STYLE} disabled={busy} onClick={() => void runAction(health.cleanUp, cssLoaderGone ? "cleanedWithoutLoader" : "cleaned")}>
+            <DialogButton style={PRIMARY_STYLE} disabled={busy} onClick={() => void runAction(health.cleanUp, cssLoaderGone ? "cleanedWithoutLoader" : "cleaned", "cleanedPartial")}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><LuSparkles size={15} aria-hidden />{t("themes.health.clean.ok")}</span>
             </DialogButton>
           </Focusable>
@@ -199,7 +205,7 @@ function HealthBody({ controller, health, closeModal }: { controller: ThemesCont
           </ButtonItem>
         ) : null}
         {health.undo?.available ? (
-          <ButtonItem layout="below" disabled={busy || !cssReady} description={t(undoDescriptionKey(health.undo), { moved: health.undo.moved, disabled: health.undo.disabled })} onClick={() => void runAction(health.undoCleanup, "restored")}>
+          <ButtonItem layout="below" disabled={busy || !(cssReady || cssLoaderGone)} description={t(undoDescriptionKey(health.undo), { moved: health.undo.moved, disabled: health.undo.disabled })} onClick={() => void runAction(health.undoCleanup, "restored", "restoredPartial")}>
             <LuUndo2 size={14} aria-hidden /> {t(controller.operation?.kind === "restoring" ? "themes.health.restoring" : "themes.health.undo")}
           </ButtonItem>
         ) : null}

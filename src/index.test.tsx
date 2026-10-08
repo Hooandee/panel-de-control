@@ -53,6 +53,7 @@ vi.mock("./api", () => ({
   getThemeHealth: vi.fn(),
   setAsideThemeLeftovers: vi.fn(),
   restoreThemeCleanup: vi.fn(),
+  acknowledgeThemeCleanupUndo: vi.fn(),
   loadThemeExtension: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
   rollbackThemeInstall: vi.fn(),

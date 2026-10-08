@@ -15,6 +15,7 @@ describe("theme cleanup host", () => {
       health: async () => health,
       setAside,
       restore: async () => ({ ok: true, restored: [], kept: [], reenable: ["Other", 4] }),
+      acknowledgeRestore: async () => ({ ok: true }),
     });
     const host = createThemeCleanupHost();
 
@@ -30,9 +31,11 @@ describe("theme cleanup host", () => {
       health: async () => health,
       setAside: async () => ({ ok: false, code: "transaction_busy" }),
       restore: async () => null,
+      acknowledgeRestore: async () => ({ ok: false, code: "transaction_busy" }),
     });
 
     await expect(host.setAside([])).rejects.toEqual(new ThemeCleanupError("transaction_busy", "Theme cleanup was refused (transaction_busy)"));
     await expect(host.restore()).rejects.toMatchObject({ code: "malformed_response" });
+    await expect(host.acknowledgeRestore()).rejects.toMatchObject({ code: "transaction_busy" });
   });
 });

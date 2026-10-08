@@ -7,16 +7,22 @@ import { qamCovered, watchQamCover } from "./qamCoverWatch";
 
 function documentWithStyle(): Document {
   document.body.style.filter = "";
+  const style = document.createElement("style");
+  style.className = "css-loader-style";
+  style.textContent = ".elsewhere { filter: invert(1) }";
+  document.head.append(style);
   return document;
 }
 
 describe("QAM cover watch", () => {
   afterEach(() => { vi.useRealTimers(); document.head.innerHTML = ""; document.body.style.filter = ""; });
 
-  it("only treats a filter on the root as covering", () => {
+  it("only treats a filter on the root that a CSS Loader style can explain as covering", () => {
     expect(qamCovered(documentWithStyle())).toBe(false);
     document.body.style.filter = "hue-rotate(120deg)";
     expect(qamCovered(document)).toBe(true);
+    document.head.innerHTML = "";
+    expect(qamCovered(document)).toBe(false);
   });
 
   it("warns once when a style covers the menu and again only after it recovers", async () => {
@@ -42,13 +48,17 @@ describe("QAM cover watch", () => {
     stop();
   });
 
-  it("gives up looking for the menu after a few bounded retries", async () => {
+  it("keeps looking for the menu, slowing down, until it is stopped", async () => {
     vi.useFakeTimers();
     const find = vi.fn(() => null);
     const stop = watchQamCover(vi.fn(), find);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(21_000);
     expect(find).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(find).toHaveBeenCalledTimes(6);
     stop();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(find).toHaveBeenCalledTimes(6);
   });
 });

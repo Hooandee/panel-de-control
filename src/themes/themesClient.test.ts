@@ -685,7 +685,7 @@ describe("ThemesClient cleanup", () => {
     const after: CssLoaderReadySnapshot = { status: "ready", themes: [INSTALLED_THEME, { ...OTHER, enabled: false }] };
     const disableAllExcept = vi.fn(async () => { order.push("css-loader"); return after; });
     const setAside = vi.fn(async () => { order.push("set-aside"); });
-    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []) } });
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
     deps.adapter.requireReady = vi.fn(async () => before);
     deps.adapter.inspect = vi.fn(async () => before);
     deps.adapter.disableAllExcept = disableAllExcept;
@@ -703,7 +703,7 @@ describe("ThemesClient cleanup", () => {
   it("does not touch CSS Loader when the backend refuses to record the cleanup", async () => {
     const disableAllExcept = vi.fn(async () => READY);
     const failure = Object.assign(new Error("refused"), { code: "invalid_record" });
-    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => { throw failure; }), restore: vi.fn(async () => []) } });
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => { throw failure; }), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
     deps.adapter.disableAllExcept = disableAllExcept;
     const client = new ThemesClient(deps);
 
@@ -713,15 +713,59 @@ describe("ThemesClient cleanup", () => {
     expect(client.getSnapshot().errorCode).toBe("invalid_record");
   });
 
-  it("brings back the recorded themes on undo", async () => {
+  it("brings back the recorded themes on undo and only then forgets them", async () => {
     const enableAgain = vi.fn(async () => READY);
-    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]) } });
+    const acknowledgeRestore = vi.fn(async () => {});
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]), acknowledgeRestore } });
     deps.adapter.enableAgain = enableAgain;
     const client = new ThemesClient(deps);
 
     await expect(client.undoCleanup([])).resolves.toBe(true);
 
     expect(enableAgain).toHaveBeenCalledWith(READY, new Set(), ["Other"]);
+    expect(acknowledgeRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the themes to enable again when CSS Loader cannot confirm them", async () => {
+    const acknowledgeRestore = vi.fn(async () => {});
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]), acknowledgeRestore } });
+    deps.adapter.enableAgain = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not enable a restored theme");
+    });
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(false);
+
+    expect(acknowledgeRestore).not.toHaveBeenCalled();
+  });
+
+  it("brings folders back without CSS Loader and leaves the themes for later", async () => {
+    const restore = vi.fn(async () => ["Other"]);
+    const acknowledgeRestore = vi.fn(async () => {});
+    const enableAgain = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore, acknowledgeRestore } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "missing" as const, themes: [] }));
+    deps.adapter.enableAgain = enableAgain;
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(true);
+
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(enableAgain).not.toHaveBeenCalled();
+    expect(acknowledgeRestore).not.toHaveBeenCalled();
+  });
+
+  it("removes leftover styles once no theme is left enabled", async () => {
+    const removeLeftoverStyles = vi.fn();
+    const before: CssLoaderReadySnapshot = { status: "ready", themes: [OTHER] };
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.requireReady = vi.fn(async () => before);
+    deps.adapter.disableAllExcept = vi.fn(async () => ({ status: "ready" as const, themes: [{ ...OTHER, enabled: false }] }));
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], removeLeftoverStyles)).resolves.toBe(true);
+
+    expect(removeLeftoverStyles).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed without a cleanup backend", async () => {
@@ -735,7 +779,7 @@ describe("ThemesClient cleanup", () => {
 describe("ThemesClient cleanup privacy", () => {
   it("reports cleanup failures without CSS Loader's theme names", async () => {
     const reportFailure = vi.fn();
-    const deps = dependencies({ reportFailure, cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []) } });
+    const deps = dependencies({ reportFailure, cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
     deps.adapter.disableAllExcept = vi.fn(async () => {
       throw new CssLoaderOperationError("mutation_failed", "Did not find theme Someone Private.profile");
     });
@@ -756,7 +800,7 @@ describe("ThemesClient cleanup without CSS Loader", () => {
     const setAside = vi.fn(async () => {});
     const removeLeftoverStyles = vi.fn();
     const disableAllExcept = vi.fn(async () => READY);
-    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []) } });
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
     deps.adapter.inspect = vi.fn(async () => ({ status: "disabled" as const, themes: [] }));
     deps.adapter.disableAllExcept = disableAllExcept;
     const client = new ThemesClient(deps);

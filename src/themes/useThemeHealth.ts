@@ -9,6 +9,7 @@ import {
   hooandeeNames,
   readSteamSettings,
   removeCssLoaderStyles,
+  SET_ASIDE_KINDS,
   steamDisplayState,
   type SteamDisplayState,
   type ThemeCleanupPlan,
@@ -17,6 +18,8 @@ import {
 } from "./themeHealth";
 import type { ThemesController } from "./useThemes";
 
+export type ThemeHealthOutcome = "done" | "partial" | "failed";
+
 export interface ThemeHealthView {
   checking: boolean;
   unavailable: boolean;
@@ -24,9 +27,9 @@ export interface ThemeHealthView {
   plan: ThemeCleanupPlan | null;
   needsCleanup: boolean;
   undo: ThemeHealthBackend["undo"] | null;
-  recheck(): Promise<void>;
-  cleanUp(): Promise<boolean>;
-  undoCleanup(): Promise<boolean>;
+  recheck(): Promise<ThemeHealthBackend | null>;
+  cleanUp(): Promise<ThemeHealthOutcome>;
+  undoCleanup(): Promise<ThemeHealthOutcome>;
 }
 
 interface NavigationTree {
@@ -74,11 +77,13 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
       readThemeHealth().catch(() => null),
       readSteamDisplay(),
     ]);
-    if (current !== request.current) return;
-    setBackend(health);
-    setUnavailable(health === null);
-    setDisplay(steamDisplay);
-    setChecking(false);
+    if (current === request.current) {
+      setBackend(health);
+      setUnavailable(health === null);
+      setDisplay(steamDisplay);
+      setChecking(false);
+    }
+    return health;
   }, []);
 
   useEffect(() => {
@@ -98,11 +103,16 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     [controller.snapshot, findings, keep],
   );
 
-  const run = useCallback(async (action: (keep: readonly string[]) => Promise<boolean>) => {
-    if (!keep) return false;
+  // A run the backend could only partly finish leaves folders behind; the fresh scan tells.
+  const run = useCallback(async (
+    action: (keep: readonly string[]) => Promise<boolean>,
+    leftBehind: (health: ThemeHealthBackend) => boolean,
+  ): Promise<ThemeHealthOutcome> => {
+    if (!keep) return "failed";
     const ok = await action([...keep]);
-    await recheck();
-    return ok;
+    const health = await recheck();
+    if (!ok) return "failed";
+    return health && leftBehind(health) ? "partial" : "done";
   }, [keep, recheck]);
 
   return {
@@ -113,7 +123,10 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     needsCleanup: plan !== null && cleanupNeeded(plan),
     undo: backend?.undo ?? null,
     recheck,
-    cleanUp: () => run((keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments()))),
-    undoCleanup: () => run(controller.undoCleanup),
+    cleanUp: () => run(
+      (keep) => controller.cleanUp(keep, () => removeCssLoaderStyles(steamDocuments())),
+      (health) => health.folders.some((folder) => SET_ASIDE_KINDS.has(folder.kind)),
+    ),
+    undoCleanup: () => run(controller.undoCleanup, (health) => health.undo.available),
   };
 }

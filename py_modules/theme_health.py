@@ -13,10 +13,11 @@ import theme_packages
 
 CLEANUP_DIRECTORY = ".panel-theme-cleanup"
 _RECORD = "record.json"
+_DAMAGED_RECORD = "record.damaged.json"
 _RECORD_SCHEMA = 1
 _FOLDER_LIMIT = 200
 _MANIFEST_BYTES = 256 * 1024
-_NAME_CHARS = 120
+_NAME_CHARS = 255
 # CSS Loader rejects manifests newer than the version it understands (css_theme.CSS_LOADER_VER).
 _CSS_LOADER_MANIFEST_VERSION = 9
 # Steam Friends Patcher files that CSS Loader injects without a theme.json (css_sfp_compat.py).
@@ -38,9 +39,9 @@ class ThemeHealthError(Exception):
 
 def _read_manifest(path: Path) -> tuple[dict[str, Any] | None, bool]:
     """Returns (manifest, present). A present manifest that CSS Loader cannot use is (None, True)."""
-    if not path.is_file():
-        return None, False
     try:
+        if not path.is_file():
+            return None, False
         if path.stat().st_size > _MANIFEST_BYTES:
             return None, True
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -64,7 +65,14 @@ def _is_active(folder: Path) -> bool:
     return isinstance(config, dict) and config.get("active") is True
 
 
-def _classify(folder: Path) -> dict[str, Any]:
+def _has_theme_files(folder: Path) -> bool:
+    try:
+        return (folder / "theme.css").is_file() or any((folder / item).is_file() for item in _SFP_FILES)
+    except OSError:
+        return False
+
+
+def _classify(folder: Path) -> dict[str, Any] | None:
     manifest, present = _read_manifest(folder / "theme.json")
     if manifest is not None:
         flags = manifest.get("flags")
@@ -78,8 +86,11 @@ def _classify(folder: Path) -> dict[str, Any]:
         name = manifest["name"]
     elif present:
         kind, name = "broken", folder.name
-    elif (folder / "theme.css").is_file() or any((folder / item).is_file() for item in _SFP_FILES):
+    elif _has_theme_files(folder):
         kind, name = "legacy", folder.name
+    elif folder.name.startswith("."):
+        # CSS Loader skips it as "not a theme"; hidden folders such as .git are not ours to move.
+        return None
     else:
         kind, name = "leftover", folder.name
     return {
@@ -96,7 +107,7 @@ def scan(themes_root: str | Path) -> list[dict[str, Any]]:
         folders = sorted(entry for entry in root.iterdir() if entry.is_dir())
     except OSError:
         return []
-    findings = [_classify(folder) for folder in folders[:_FOLDER_LIMIT]]
+    findings = [item for item in map(_classify, folders[:_FOLDER_LIMIT]) if item is not None]
     ours = {item["name"] for item in findings if item["kind"] == "hooandee"}
     for item in findings:
         if item["kind"] != "hooandee" and item["name"] in ours:
@@ -139,28 +150,55 @@ def _cleanup_root(themes_root: Path) -> Path:
     return themes_root.parent / CLEANUP_DIRECTORY
 
 
-def _read_record(directory: Path) -> dict[str, Any]:
+def _load_record(directory: Path) -> dict[str, Any] | None:
+    """The stored record, an empty one when there is none, or None when it is damaged."""
     try:
         value = json.loads((directory / _RECORD).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {"schema": _RECORD_SCHEMA, "moved": [], "disabled": []}
-    except (OSError, ValueError) as error:
-        raise ThemeHealthError("invalid_record", "Theme cleanup record is unreadable") from error
-    if (
-        not isinstance(value, dict)
-        or value.get("schema") != _RECORD_SCHEMA
-        or not isinstance(value.get("moved"), list)
-        or not isinstance(value.get("disabled"), list)
-        or not all(
+    except (OSError, ValueError):
+        return None
+    valid = (
+        isinstance(value, dict)
+        and value.get("schema") == _RECORD_SCHEMA
+        and isinstance(value.get("moved"), list)
+        and isinstance(value.get("disabled"), list)
+        and all(
             isinstance(entry, dict)
             and isinstance(entry.get("folder"), str)
             and isinstance(entry.get("stored"), str)
             for entry in value["moved"]
         )
-        or not all(isinstance(name, str) for name in value["disabled"])
-    ):
-        raise ThemeHealthError("invalid_record", "Theme cleanup record is invalid")
-    return value
+        and all(isinstance(name, str) for name in value["disabled"])
+    )
+    return value if valid else None
+
+
+def _stored_names(directory: Path) -> list[str]:
+    return sorted(
+        entry.name for entry in directory.iterdir()
+        if entry.name not in {_RECORD, _DAMAGED_RECORD} and not entry.name.startswith(f".{_RECORD}")
+    )
+
+
+def _read_record(directory: Path) -> dict[str, Any]:
+    """Under the mutation lock. A damaged record is rebuilt from what is stored, so nothing set
+    aside becomes unreachable."""
+    record = _load_record(directory)
+    if record is not None:
+        return record
+    try:
+        os.replace(directory / _RECORD, directory / _DAMAGED_RECORD)
+        stored = _stored_names(directory)
+    except OSError as error:
+        raise ThemeHealthError("invalid_record", "Theme cleanup record is unreadable") from error
+    record = {
+        "schema": _RECORD_SCHEMA,
+        "moved": [{"folder": name, "stored": name, "kind": "unknown"} for name in stored],
+        "disabled": [],
+    }
+    _write_record(directory, record)
+    return record
 
 
 def _write_record(directory: Path, record: dict[str, Any]) -> None:
@@ -173,11 +211,26 @@ def _write_record(directory: Path, record: dict[str, Any]) -> None:
     theme_packages.durable_replace(temporary, directory / _RECORD)
 
 
-def undo_state(themes_root: str | Path) -> dict[str, Any]:
+def _settle_record(directory: Path, record: dict[str, Any]) -> None:
+    if record["moved"] or record["disabled"]:
+        _write_record(directory, record)
+        return
     try:
-        record = _read_record(_cleanup_root(Path(themes_root)))
-    except ThemeHealthError:
-        return {"available": False, "moved": 0, "disabled": 0, "error": "invalid_record"}
+        (directory / _RECORD).unlink(missing_ok=True)
+        directory.rmdir()
+    except OSError:
+        pass
+
+
+def undo_state(themes_root: str | Path) -> dict[str, Any]:
+    directory = _cleanup_root(Path(themes_root))
+    record = _load_record(directory)
+    if record is None:
+        try:
+            moved = len(_stored_names(directory))
+        except OSError:
+            moved = 0
+        return {"available": moved > 0, "moved": moved, "disabled": 0, "damaged": True}
     moved, disabled = len(record["moved"]), len(record["disabled"])
     return {"available": bool(moved or disabled), "moved": moved, "disabled": disabled}
 
@@ -195,7 +248,7 @@ def _safe_folder_name(name: object) -> bool:
 def set_aside(themes_root: str | Path, disabled: list[str]) -> dict[str, Any]:
     """Records the themes the caller is about to disable, then moves every folder whose kind is
     in SET_ASIDE_KINDS out of the CSS Loader themes folder. The kinds come from a fresh scan,
-    never from the caller."""
+    never from the caller. Each move is recorded before it happens."""
     root = Path(themes_root)
     if not isinstance(disabled, list) or not all(
         isinstance(name, str) and 0 < len(name) <= _NAME_CHARS for name in disabled
@@ -203,71 +256,76 @@ def set_aside(themes_root: str | Path, disabled: list[str]) -> dict[str, Any]:
         raise ThemeHealthError("invalid_request", "Disabled theme names are invalid")
     directory = _cleanup_root(root)
     with theme_packages.theme_mutation_lock(root):
-        record = _read_record(directory)
         candidates = [item for item in scan(root) if item["kind"] in SET_ASIDE_KINDS]
         if not disabled and not candidates:
             return {"moved": [], "failed": []}
+        record = _read_record(directory)
         record["disabled"] = list(dict.fromkeys([*record["disabled"], *disabled]))
         _write_record(directory, record)
         moved: list[str] = []
         failed: list[str] = []
         for item in candidates:
-            source = root / item["folder"]
             stored = item["folder"]
             suffix = 1
-            while (directory / stored).exists() or stored == _RECORD:
+            while os.path.lexists(directory / stored) or stored in {_RECORD, _DAMAGED_RECORD}:
                 stored = f"{item['folder']}.{suffix}"
                 suffix += 1
+            entry = {"folder": item["folder"], "stored": stored, "kind": item["kind"]}
+            record["moved"].append(entry)
+            _write_record(directory, record)
             try:
-                theme_packages.durable_replace(source, directory / stored)
+                theme_packages.durable_replace(root / item["folder"], directory / stored)
             except OSError:
+                record["moved"].remove(entry)
+                _write_record(directory, record)
                 failed.append(item["folder"])
                 continue
-            record["moved"].append({"folder": item["folder"], "stored": stored, "kind": item["kind"]})
-            _write_record(directory, record)
             moved.append(item["folder"])
     return {"moved": moved, "failed": failed}
 
 
 def restore(themes_root: str | Path) -> dict[str, Any]:
-    """Moves set-aside folders back and returns the theme names to enable again. Folders whose
-    original name is taken again stay set aside and are reported."""
+    """Moves set-aside folders back and returns the theme names to enable again; those stay
+    recorded until forget_reenabled confirms them. A folder whose original name is taken again
+    stays set aside and is reported."""
     root = Path(themes_root)
     directory = _cleanup_root(root)
     with theme_packages.theme_mutation_lock(root):
         record = _read_record(directory)
         restored: list[str] = []
-        kept: list[dict[str, Any]] = []
-        for entry in record["moved"]:
+        for entry in list(record["moved"]):
             folder, stored = entry["folder"], entry["stored"]
-            source = directory / stored
-            destination = root / folder
             if (
                 not _safe_folder_name(folder)
                 or not _safe_folder_name(stored)
-                or stored == _RECORD
-                or not source.is_dir()
-                or destination.exists()
+                or stored in {_RECORD, _DAMAGED_RECORD}
             ):
-                kept.append(entry)
+                continue
+            source, destination = directory / stored, root / folder
+            if not os.path.lexists(source):
+                # Moved back before an interruption, or removed by hand: nothing left to restore.
+                record["moved"].remove(entry)
+                _write_record(directory, record)
+                continue
+            if os.path.lexists(destination):
                 continue
             try:
                 theme_packages.durable_replace(source, destination)
             except OSError:
-                kept.append(entry)
                 continue
+            record["moved"].remove(entry)
+            _write_record(directory, record)
             restored.append(folder)
-        reenable = record["disabled"]
-        if kept:
-            _write_record(directory, {**record, "moved": kept, "disabled": []})
-        else:
-            try:
-                (directory / _RECORD).unlink()
-                directory.rmdir()
-            except OSError:
-                pass
-    return {
-        "restored": restored,
-        "kept": [entry["folder"] for entry in kept],
-        "reenable": reenable,
-    }
+        kept = [entry["folder"] for entry in record["moved"]]
+        reenable = list(record["disabled"])
+        _settle_record(directory, record)
+    return {"restored": restored, "kept": kept, "reenable": reenable}
+
+
+def forget_reenabled(themes_root: str | Path) -> None:
+    root = Path(themes_root)
+    directory = _cleanup_root(root)
+    with theme_packages.theme_mutation_lock(root):
+        record = _read_record(directory)
+        record["disabled"] = []
+        _settle_record(directory, record)

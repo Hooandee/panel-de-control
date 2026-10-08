@@ -58,7 +58,9 @@ export interface ThemesAdapter {
 
 export interface ThemeCleanupHost {
   setAside(disabled: readonly string[]): Promise<void>;
+  // Moves folders back and returns the themes to enable again; they stay recorded until acknowledged.
   restore(): Promise<readonly string[]>;
+  acknowledgeRestore(): Promise<void>;
 }
 
 export interface ThemesInstaller {
@@ -569,7 +571,9 @@ export class ThemesClient {
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
     const before = await adapter.requireReady();
     await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
-    return withoutThemeNames(adapter.disableAllExcept(before, kept));
+    const after = await withoutThemeNames(adapter.disableAllExcept(before, kept));
+    if (!after.themes.some((theme) => theme.enabled)) removeLeftoverStyles?.();
+    return after;
   });
 
   undoCleanup = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "restoring" }, async () => {
@@ -577,9 +581,16 @@ export class ThemesClient {
     if (!adapter.enableAgain || !cleanup) {
       throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
     }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.restore();
+      return current;
+    }
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
     const before = await adapter.requireReady();
-    return withoutThemeNames(adapter.enableAgain(before, kept, await cleanup.restore()));
+    const after = await withoutThemeNames(adapter.enableAgain(before, kept, await cleanup.restore()));
+    await cleanup.acknowledgeRestore();
+    return after;
   });
 
   private hooandeeThemeNames(): ReadonlySet<string> {

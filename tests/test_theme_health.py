@@ -97,6 +97,10 @@ def test_set_aside_moves_only_scanned_kinds_and_restore_brings_them_back(themes)
     assert restored["kept"] == []
     assert restored["reenable"] == ["Other"]
     assert (themes / "OldCss" / "config_USER.json").is_file()
+    assert theme_health.undo_state(themes) == {"available": True, "moved": 0, "disabled": 1}
+
+    theme_health.forget_reenabled(themes)
+
     assert not (themes.parent / theme_health.CLEANUP_DIRECTORY).exists()
     assert theme_health.undo_state(themes)["available"] is False
 
@@ -134,18 +138,18 @@ def test_set_aside_rejects_invalid_names_before_touching_disk(themes):
     assert (themes / "Residue").is_dir()
 
 
-def test_corrupted_record_blocks_cleanup_and_undo(themes):
-    _theme(themes, "Residue")
+def test_a_damaged_record_is_rebuilt_from_what_is_stored(themes):
     cleanup = themes.parent / theme_health.CLEANUP_DIRECTORY
-    cleanup.mkdir()
+    (cleanup / "Residue").mkdir(parents=True)
     (cleanup / "record.json").write_text("[]", encoding="utf-8")
 
-    for action in (lambda: theme_health.set_aside(themes, []), lambda: theme_health.restore(themes)):
-        with pytest.raises(theme_health.ThemeHealthError) as error:
-            action()
-        assert error.value.code == "invalid_record"
+    assert theme_health.undo_state(themes) == {"available": True, "moved": 1, "disabled": 0, "damaged": True}
+
+    restored = theme_health.restore(themes)
+
+    assert restored["restored"] == ["Residue"]
     assert (themes / "Residue").is_dir()
-    assert theme_health.undo_state(themes)["error"] == "invalid_record"
+    assert (cleanup / "record.damaged.json").is_file()
 
 
 def test_restore_ignores_record_entries_that_escape_the_cleanup_folder(themes):
@@ -191,3 +195,53 @@ def test_set_aside_leaves_no_trace_when_there_is_nothing_to_do(themes):
 
     assert theme_health.set_aside(themes, []) == {"moved": [], "failed": []}
     assert not (themes.parent / theme_health.CLEANUP_DIRECTORY).exists()
+
+
+def test_symlinks_are_moved_as_links_and_restored_even_when_dangling(themes):
+    _theme(themes, "Old", files=("theme.css",))
+    (themes / "OldLink").symlink_to("Old")
+    (themes / "Alias").symlink_to("/nonexistent/theme")
+
+    moved = theme_health.set_aside(themes, [])["moved"]
+    restored = theme_health.restore(themes)
+
+    assert sorted(moved) == ["Old", "OldLink"]
+    assert sorted(restored["restored"]) == ["Old", "OldLink"]
+    assert restored["kept"] == []
+    assert (themes / "OldLink").is_symlink() and (themes / "OldLink" / "theme.css").is_file()
+
+
+def test_a_dangling_stored_link_is_not_overwritten_by_a_later_cleanup(themes):
+    cleanup = themes.parent / theme_health.CLEANUP_DIRECTORY
+    cleanup.mkdir()
+    (cleanup / "Old").symlink_to("/nonexistent")
+    (cleanup / "record.json").write_text(json.dumps({
+        "schema": 1, "moved": [{"folder": "Old", "stored": "Old"}], "disabled": [],
+    }), encoding="utf-8")
+    _theme(themes, "Old", files=("theme.css",))
+
+    theme_health.set_aside(themes, [])
+
+    assert (cleanup / "Old").is_symlink()
+    assert (cleanup / "Old.1" / "theme.css").is_file()
+
+
+def test_restore_finishes_a_move_back_interrupted_before_the_record_was_saved(themes):
+    _theme(themes, "Residue")
+    theme_health.set_aside(themes, [])
+    cleanup = themes.parent / theme_health.CLEANUP_DIRECTORY
+    (cleanup / "Residue").rename(themes / "Residue")
+
+    restored = theme_health.restore(themes)
+
+    assert restored == {"restored": [], "kept": [], "reenable": []}
+    assert not cleanup.exists()
+
+
+def test_hidden_folders_without_theme_files_are_left_alone(themes):
+    (themes / ".git" / "objects").mkdir(parents=True)
+    _theme(themes, ".hidden-css", files=("theme.css",))
+
+    kinds = {item["folder"]: item["kind"] for item in theme_health.scan(themes)}
+
+    assert kinds == {".hidden-css": "legacy"}

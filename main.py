@@ -1448,12 +1448,18 @@ class Plugin:
             ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
             **self._installed_theme_inventory(),
-            "health": {
+            "health": self._theme_health_summary(),
+        }
+
+    def _theme_health_summary(self) -> dict:
+        try:
+            return {
                 "folders": theme_health.summary(theme_health.scan(self._themes_root())),
                 "cleanup": theme_health.undo_state(self._themes_root()),
                 "panel": theme_health.internal_panel_mode(),
-            },
-        }
+            }
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
@@ -1928,7 +1934,18 @@ class Plugin:
         except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
             decky.logger.warning("Theme cleanup undo refused (%s)", error.code)
             return {"ok": False, "code": error.code}
+        if result["kept"]:
+            decky.logger.warning("Theme cleanup undo kept %d folders set aside", len(result["kept"]))
         return {"ok": True, **result}
+
+    async def acknowledge_theme_cleanup_undo(self) -> dict:
+        self._init()
+        try:
+            await self._offload_theme_call(lambda: theme_health.forget_reenabled(self._themes_root()))
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup undo acknowledgement refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        return {"ok": True}
 
     async def get_device(self) -> dict:
         self._init()

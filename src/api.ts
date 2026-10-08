@@ -45,6 +45,7 @@ export const listThemeExtensions = callable<[], unknown>("list_theme_extensions"
 export const getThemeHealth = callable<[], unknown>("get_theme_health");
 export const setAsideThemeLeftovers = callable<[disabled: string[]], unknown>("set_aside_theme_leftovers");
 export const restoreThemeCleanup = callable<[], unknown>("restore_theme_cleanup");
+export const acknowledgeThemeCleanupUndo = callable<[], unknown>("acknowledge_theme_cleanup_undo");
 export const getThemePatchLabels = callable<[
   catalogId: string,
   cssLoaderName: string,

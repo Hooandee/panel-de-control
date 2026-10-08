@@ -2,14 +2,19 @@ import { findQamNavigationDocument } from "../system/uiActivity";
 
 const CHECK_DELAY_MS = 500;
 const FIND_RETRY_MS = [1_000, 5_000, 15_000] as const;
+const FIND_SLOW_RETRY_MS = 60_000;
 
 // A filter on the root gives Steam's fixed Quick Access layers a new containing block and they
-// render off-screen: the whole menu goes black, Panel included.
+// render off-screen: the whole menu goes black, Panel included. Only blamed on a theme when a
+// CSS Loader style carries a filter.
 export function qamCovered(document: Document): boolean {
   const view = document.defaultView;
   if (!view) return false;
-  return [document.documentElement, document.body].some(
+  const filtered = [document.documentElement, document.body].some(
     (element) => element !== null && !["", "none"].includes(view.getComputedStyle(element).filter),
+  );
+  return filtered && [...document.querySelectorAll("style.css-loader-style")].some(
+    (style) => /\bfilter\s*:/.test(style.textContent ?? ""),
   );
 }
 
@@ -33,8 +38,7 @@ export function watchQamCover(
     const document = findDocument();
     const Observer = document?.defaultView?.MutationObserver;
     if (!document?.head || !Observer) {
-      const delay = FIND_RETRY_MS[attempt++];
-      if (delay !== undefined) timer = setTimeout(attach, delay);
+      timer = setTimeout(attach, FIND_RETRY_MS[attempt++] ?? FIND_SLOW_RETRY_MS);
       return;
     }
     check(document);

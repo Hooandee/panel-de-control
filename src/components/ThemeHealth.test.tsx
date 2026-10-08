@@ -45,9 +45,9 @@ function health(overrides: Partial<ThemeHealthView> = {}): ThemeHealthView {
     plan: { disable: [], setAside: 0, ghostStyles: false },
     needsCleanup: false,
     undo: { available: false, moved: 0, disabled: 0 },
-    recheck: vi.fn(async () => {}),
-    cleanUp: vi.fn(async () => true),
-    undoCleanup: vi.fn(async () => true),
+    recheck: vi.fn(async () => null),
+    cleanUp: vi.fn(async () => "done" as const),
+    undoCleanup: vi.fn(async () => "done" as const),
     ...overrides,
   };
 }
@@ -90,6 +90,28 @@ describe("ThemeHealth", () => {
 
     await waitFor(() => expect(screen.getByText("themes.health.result.cleaned")).toBeTruthy());
     expect(mocks.health.cleanUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when the cleanup could only partly finish", async () => {
+    mocks.health = health({
+      findings: [{ id: "set_aside", severity: "problem", folders: [{ folder: "Stuck", kind: "legacy" }] }],
+      plan: { disable: [], setAside: 1, ghostStyles: false },
+      needsCleanup: true,
+      cleanUp: vi.fn(async () => "partial" as const),
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean.ok" }));
+
+    await waitFor(() => expect(screen.getByText("themes.health.result.cleanedPartial")).toBeTruthy());
+  });
+
+  it("does not raise the warning shield for display settings alone", () => {
+    mocks.health = health({ findings: [{ id: "steam_beta", severity: "setting" }] });
+    render(<ThemeHealthCard controller={mocks.controller as unknown as ThemesController} />);
+
+    expect(screen.getByText("themes.health.summary.settings {\"count\":0}")).toBeTruthy();
   });
 
   it("offers undo with what it will bring back, and opens a theme report", () => {

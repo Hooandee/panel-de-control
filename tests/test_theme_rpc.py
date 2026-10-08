@@ -732,6 +732,23 @@ def test_theme_health_rpcs_set_aside_and_restore_leftovers(theme_rpc, monkeypatc
     restored = asyncio.run(plugin.restore_theme_cleanup())
     assert restored == {"ok": True, "restored": ["Residue"], "kept": [], "reenable": ["Other"]}
     assert (root / "Residue").is_dir()
+    assert asyncio.run(plugin.acknowledge_theme_cleanup_undo()) == {"ok": True}
+    assert plugin._theme_report_diagnostics()["health"]["cleanup"]["available"] is False
+
+
+def test_report_keeps_other_theme_diagnostics_when_the_health_scan_fails(theme_rpc, monkeypatch):
+    main, plugin, _ = theme_rpc
+    plugin._themes_root().mkdir(parents=True)
+
+    def broken(_root):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(main.theme_health, "scan", broken)
+
+    diagnostics = plugin._theme_report_diagnostics()
+
+    assert diagnostics["health"] == {"unavailable": "PermissionError"}
+    assert diagnostics["installed"] == []
 
 
 def test_theme_cleanup_rpc_answers_refusals_without_raising(theme_rpc):
