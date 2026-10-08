@@ -819,7 +819,11 @@ describe("ThemesClient cleanup with several Hooandee themes", () => {
     const order: string[] = [];
     const both: CssLoaderReadySnapshot = {
       status: "ready",
-      themes: [INSTALLED_THEME, { ...INSTALLED_THEME, id: "Second Theme", name: "Second Theme", displayName: "Second Theme" }],
+      themes: [
+        INSTALLED_THEME,
+        { ...INSTALLED_THEME, id: "Second Theme", name: "Second Theme", displayName: "Second Theme" },
+        { ...INSTALLED_THEME, id: "Local Keyboard", name: "Local Keyboard", displayName: "Local Keyboard" },
+      ],
     };
     const deps = dependencies({
       publication: { check: vi.fn(async () => ({ status: "published" as const, checkedAt: 10, themes: [RELEASE, second] })) },
@@ -833,8 +837,9 @@ describe("ThemesClient cleanup with several Hooandee themes", () => {
     await client.refresh();
     await client.refreshPublication();
 
-    await expect(client.cleanUp([], undefined, "Example Theme")).resolves.toBe(true);
+    await expect(client.cleanUp(["Local Keyboard"], undefined, "Example Theme")).resolves.toBe(true);
 
     expect(order).toEqual(["deactivate:second-theme", "set-aside", "css-loader"]);
+    expect(deps.adapter.disableAllExcept).toHaveBeenCalledWith(both, new Set(["Local Keyboard", "Example Theme", "Second Theme"]));
   });
 });

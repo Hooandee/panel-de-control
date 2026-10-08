@@ -572,7 +572,7 @@ export class ThemesClient {
       return current;
     }
     const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
-    if (keepActive !== undefined) await this.deactivateOursExcept(current, kept, keepActive);
+    if (keepActive !== undefined) await this.deactivateOursExcept(current, keepActive);
     const before = await adapter.requireReady();
     await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
     const after = await withoutThemeNames(adapter.disableAllExcept(before, kept));
@@ -597,19 +597,13 @@ export class ThemesClient {
     return after;
   });
 
-  private async deactivateOursExcept(
-    snapshot: CssLoaderSnapshot,
-    kept: Set<string>,
-    keepActive: string,
-  ): Promise<void> {
+  private async deactivateOursExcept(snapshot: CssLoaderSnapshot, keepActive: string): Promise<void> {
     const catalog = this.currentPublicationThemes();
     for (const theme of snapshot.themes) {
-      if (!theme.enabled || !kept.has(theme.name) || theme.name === keepActive) continue;
+      if (!theme.enabled || theme.name === keepActive) continue;
       const release = catalog.find((entry) => entry.cssLoaderName === theme.name);
       if (release) {
         await this.restoreSections(await this.dependencies.activator.deactivate(release.catalogId, catalog), theme.name);
-      } else {
-        kept.delete(theme.name);
       }
     }
   }

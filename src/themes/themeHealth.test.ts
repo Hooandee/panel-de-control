@@ -144,6 +144,20 @@ describe("diagnoseThemeHealth", () => {
   });
 });
 
+describe("several Hooandee themes", () => {
+  it("leaves local keyboard or sound themes next to an interface theme alone", () => {
+    const keep = new Set(["Eclipse", "Hooandee Lobo Blanco"]);
+
+    expect(diagnoseThemeHealth(
+      ready(theme("Eclipse", true), theme("Hooandee Lobo Blanco", true)),
+      backend(),
+      NO_STYLES,
+      keep,
+      new Set(["Eclipse"]),
+    )).toEqual([]);
+  });
+});
+
 describe("parseThemeHealth", () => {
   it("drops malformed folders and unknown kinds", () => {
     expect(parseThemeHealth({

@@ -95,8 +95,10 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
     [backend, controller.cards],
   );
   const findings = useMemo(
-    () => backend && display && keep ? diagnoseThemeHealth(controller.snapshot, backend, display, keep) : [],
-    [backend, display, keep, controller.snapshot],
+    () => backend && display && keep
+      ? diagnoseThemeHealth(controller.snapshot, backend, display, keep, new Set(controller.cards.map((card) => card.release.cssLoaderName)))
+      : [],
+    [backend, display, keep, controller.snapshot, controller.cards],
   );
   const plan = useMemo(
     () => keep ? cleanupPlan(controller.snapshot, findings, keep) : null,

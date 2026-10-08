@@ -224,6 +224,9 @@ export function diagnoseThemeHealth(
   backend: ThemeHealthBackend,
   display: SteamDisplayState,
   keep: ReadonlySet<string>,
+  // Published Hooandee themes restyle the whole interface; local ones such as keyboard themes can
+  // sit next to them, so only these count as "several active".
+  interfaceThemes: ReadonlySet<string> = keep,
 ): ThemeHealthFinding[] {
   const findings: ThemeHealthFinding[] = [];
   if (snapshot.status !== "ready") findings.push({ id: "css_loader", severity: "problem", status: snapshot.status });
@@ -250,7 +253,7 @@ export function diagnoseThemeHealth(
     .map(({ folder, kind }) => ({ folder, kind }));
   if (setAside.length) findings.push({ id: "set_aside", severity: "problem", folders: setAside });
 
-  const ours = enabled.filter((theme) => keep.has(theme.name));
+  const ours = enabled.filter((theme) => interfaceThemes.has(theme.name));
   if (ours.length > 1) {
     const themes = ours.map((theme) => ({ name: theme.name, label: theme.displayName || theme.name }));
     findings.push({ id: "several_hooandee", severity: "problem", names: themes.map((theme) => theme.label), themes });
