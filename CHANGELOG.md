@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.67.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.66.0...panel-de-control-v0.67.0) (2026-10-09)
+
+
+### Español
+
+* **Ajustes:** Mejoras para la depuración y el desarrollo.
+
+### English
+
+* **Settings:** Improvements for debugging and development.
+
+### Italiano
+
+* **Impostazioni:** Miglioramenti per il debug e lo sviluppo.
+
+### Deutsch
+
+* **Einstellungen:** Verbesserungen für Fehlersuche und Entwicklung.
+
+### Português (Brasil)
+
+* **Configurações:** Melhorias para depuração e desenvolvimento.
+
 ## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
 
 
