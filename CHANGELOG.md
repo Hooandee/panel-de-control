@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.67.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.0...panel-de-control-v0.67.1) (2026-10-09)
+
+
+### Español
+
+* **General:** Arreglos de cosas menores.
+
+### English
+
+* **General:** Minor fixes.
+
+### Italiano
+
+* **Generale:** Piccole correzioni.
+
+### Deutsch
+
+* **Allgemein:** Kleinere Korrekturen.
+
+### Português (Brasil)
+
+* **Geral:** Pequenas correções.
+
 ## [0.67.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.66.0...panel-de-control-v0.67.0) (2026-10-09)
 
 
