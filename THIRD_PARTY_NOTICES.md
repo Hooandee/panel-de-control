@@ -58,6 +58,14 @@ text ships alongside the binary as `bin/ryzenadj-LICENSE.txt`. RyzenAdj's
 corresponding source is available at its upstream repository at the pinned tag. Dev
 and prerelease builds omit the binary; the fallback simply reports as unsupported.
 
+Release and prerelease builds also include a static
+[Dropbear SSH](https://matt.ucc.asn.au/dropbear/dropbear.html) server at
+`bin/dropbear-x86_64` and `bin/dropbear-aarch64`, built from the pinned upstream release by
+`scripts/build-dropbear.sh`. It backs the hidden developer options only where the system has no
+usable OpenSSH, and runs as a standalone process. Dropbear is licensed under the **MIT** license
+(with some files under their own permissive terms); its license text ships as
+`bin/dropbear-LICENSE`.
+
 ### Windows Xbox Game Bar package
 
 The experimental Windows package redistributes these runtime dependencies:
