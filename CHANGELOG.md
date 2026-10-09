@@ -7,23 +7,23 @@
 
 ### Español
 
-* **Ajustes:** Opciones de desarrollador ocultas: toca siete veces la línea de versión en Ajustes para que aparezcan. Traen acceso remoto por SSH solo con clave: emparejas un ordenador aceptando su huella en la consola, y con contraseña no se puede entrar nunca. Si el sistema tiene su propio SSH se usa ese, sin tocar su configuración.
+* **Ajustes:** Mejoras para la depuración y el desarrollo.
 
 ### English
 
-* **Settings:** Hidden developer options: tap the version line in Settings seven times to reveal them. They include key-only remote access over SSH: you pair a computer by accepting its fingerprint on the device, and passwords never work. If the system has its own SSH, that one is used without touching its configuration.
+* **Settings:** Improvements for debugging and development.
 
 ### Italiano
 
-* **Impostazioni:** Opzioni sviluppatore nascoste: tocca sette volte la riga della versione in Impostazioni per farle apparire. Includono l'accesso remoto via SSH solo con chiave: abbini un computer accettando la sua impronta sulla console e con la password non si entra mai. Se il sistema ha già il suo SSH viene usato quello, senza toccarne la configurazione.
+* **Impostazioni:** Miglioramenti per il debug e lo sviluppo.
 
 ### Deutsch
 
-* **Einstellungen:** Versteckte Entwickleroptionen: Tippe in den Einstellungen siebenmal auf die Versionszeile, damit sie erscheinen. Sie bieten SSH-Fernzugriff nur per Schlüssel: Du koppelst einen Computer, indem du seinen Fingerabdruck auf dem Gerät bestätigst, und mit einem Passwort kommt niemand rein. Hat das System ein eigenes SSH, wird dieses genutzt, ohne seine Konfiguration anzufassen.
+* **Einstellungen:** Verbesserungen für Fehlersuche und Entwicklung.
 
 ### Português (Brasil)
 
-* **Configurações:** Opções de desenvolvedor ocultas: toque sete vezes na linha da versão em Configurações para que apareçam. Elas trazem acesso remoto por SSH só com chave: você pareia um computador aceitando a impressão digital dele no console, e com senha nunca dá para entrar. Se o sistema tiver o próprio SSH, é ele que é usado, sem mexer na configuração.
+* **Configurações:** Melhorias para depuração e desenvolvimento.
 
 ## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
 
