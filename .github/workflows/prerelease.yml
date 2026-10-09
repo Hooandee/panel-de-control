@@ -30,8 +30,9 @@ jobs:
         run: |
           set -euo pipefail
           for arch in x86_64 aarch64; do bash scripts/build-dropbear.sh "$arch" bin; done
-          file bin/dropbear-x86_64 | grep -q 'x86-64.*statically linked'
-          file bin/dropbear-aarch64 | grep -q 'ARM aarch64.*statically linked'
+          file bin/dropbear-x86_64 bin/dropbear-aarch64
+          file bin/dropbear-x86_64 | grep -q 'x86-64.*static'
+          file bin/dropbear-aarch64 | grep -q 'ARM aarch64.*static'
           bin/dropbear-x86_64 dropbearkey -t ed25519 -f "$RUNNER_TEMP/smoke_key" >/dev/null
 
       - name: Build and package prerelease
