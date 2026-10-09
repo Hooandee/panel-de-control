@@ -1152,3 +1152,31 @@ export const saveAudioProfile = callable<[name: string], AudioState>("save_audio
 export const applyAudioProfile =
   callable<[name: string, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("apply_audio_profile");
 export const deleteAudioProfile = callable<[name: string], AudioState>("delete_audio_profile");
+
+export interface RemoteAccessKey {
+  fingerprint: string;
+  comment: string;
+}
+export interface RemoteAccessState {
+  supported: boolean;
+  enabled: boolean;
+  running: boolean;
+  port: number;
+  user: string | null;
+  addresses: string[];
+  keys: RemoteAccessKey[];
+  pairing: {
+    port: number;
+    expires_in: number;
+    pending: { fingerprint: string; comment: string; peer: string } | null;
+  } | null;
+  error: string | null;
+}
+export const getDeveloperOptions = callable<[], boolean>("get_developer_options");
+export const setDeveloperOptions = callable<[enabled: boolean], boolean>("set_developer_options");
+export const getRemoteAccessState = callable<[], RemoteAccessState>("get_remote_access_state");
+export const setRemoteAccessEnabled = callable<[enabled: boolean], RemoteAccessState>("set_remote_access_enabled");
+export const openRemoteAccessPairing = callable<[], RemoteAccessState>("open_remote_access_pairing");
+export const closeRemoteAccessPairing = callable<[], RemoteAccessState>("close_remote_access_pairing");
+export const answerRemoteAccessPairing = callable<[accept: boolean], RemoteAccessState>("answer_remote_access_pairing");
+export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_remote_access_keys");

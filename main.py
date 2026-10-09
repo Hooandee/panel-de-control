@@ -145,6 +145,7 @@ from report import client as report_client
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
+from remote_access import RemoteAccess
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
@@ -337,6 +338,12 @@ async def _emit_to_frontend(event: str, *args) -> None:
     await emit(event, *args)
 
 
+def _remote_access_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "remote_access", event, **fields)
+
+
 def _plugin_dir() -> str:
     return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 
@@ -356,6 +363,8 @@ DEFAULTS = {
     "tdp_unit": "W",
     "kiosk_enabled": False,
     "kiosk_brightness": None,
+    "developer_options": False,
+    "remote_access_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -483,6 +492,12 @@ class Plugin:
             brightness=self._settings.get("kiosk_brightness"),
         )
         self._kiosk_bridge = SteamBridge(_emit_to_frontend)
+        self._remote_access = RemoteAccess(
+            _plugin_dir(),
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "remote-access"),
+            _remote_access_journal,
+            login_user=getattr(decky, "DECKY_USER", None),
+        )
         self._kiosk_fps_at = None
         self._os_id = osinfo.read_os_id()
         self._os_name = osinfo.read_os_name()
@@ -1228,6 +1243,58 @@ class Plugin:
         self._settings["kiosk_enabled"] = bool(enabled)
         self._save()
         return await self._kiosk.set_enabled(bool(enabled))
+
+    def _developer_options_on(self) -> bool:
+        return bool(self._settings.get("developer_options"))
+
+    async def get_developer_options(self) -> bool:
+        self._init()
+        return self._developer_options_on()
+
+    async def set_developer_options(self, enabled: bool) -> bool:
+        self._init()
+        self._settings["developer_options"] = bool(enabled)
+        if not enabled:
+            self._settings["remote_access_enabled"] = False
+            await self._remote_access.set_enabled(False)
+        self._save()
+        return self._developer_options_on()
+
+    async def get_remote_access_state(self) -> dict:
+        self._init()
+        return self._remote_access.state()
+
+    async def set_remote_access_enabled(self, enabled: bool) -> dict:
+        self._init()
+        enabled = bool(enabled) and self._developer_options_on()
+        self._settings["remote_access_enabled"] = enabled
+        self._save()
+        return await self._remote_access.set_enabled(enabled)
+
+    async def open_remote_access_pairing(self) -> dict:
+        self._init()
+        return await self._remote_access.open_pairing()
+
+    async def close_remote_access_pairing(self) -> dict:
+        self._init()
+        return await self._remote_access.close_pairing()
+
+    async def answer_remote_access_pairing(self, accept: bool) -> dict:
+        self._init()
+        return await self._remote_access.answer_pairing(bool(accept))
+
+    async def forget_remote_access_keys(self) -> dict:
+        self._init()
+        return self._remote_access.forget_keys()
+
+    async def _stop_remote_access(self) -> None:
+        remote = getattr(self, "_remote_access", None)
+        if remote is None:
+            return
+        try:
+            await asyncio.wait_for(remote.shutdown(), _KIOSK_STOP_TIMEOUT_S)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Remote access shutdown incomplete: %s", error)
 
     async def _stop_kiosk(self) -> None:
         task = getattr(self, "_kiosk_task", None)
@@ -12545,6 +12612,8 @@ class Plugin:
             self._start_audio_loop()
             self._start_support_watch()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
+            if self._developer_options_on() and self._settings.get("remote_access_enabled"):
+                await self._remote_access.set_enabled(True)
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -12554,6 +12623,7 @@ class Plugin:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
         await self._stop_kiosk()
+        await self._stop_remote_access()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
@@ -12747,6 +12817,8 @@ class Plugin:
             "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
             "kiosk_enabled": self._settings.get("kiosk_enabled"),
             "kiosk_brightness": self._settings.get("kiosk_brightness"),
+            "developer_options": self._developer_options_on(),
+            "remote_access": self._remote_access.diagnostics(),
         }
 
     async def _support_call(self, name: str):
