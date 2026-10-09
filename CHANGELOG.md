@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.67.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.66.0...panel-de-control-v0.67.0) (2026-10-09)
+
+
+### Features
+
+* **settings:** hidden developer options with key-only SSH access ([#901](https://github.com/Hooandee/panel-de-control/issues/901)) ([fc663cc](https://github.com/Hooandee/panel-de-control/commit/fc663cc9c715214e00f5fda7b90bd4aa5241e3a6))
+
 ## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
 
 
