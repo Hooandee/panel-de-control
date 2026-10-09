@@ -5,6 +5,7 @@
 #
 # Usage: build-dropbear.sh <x86_64|aarch64> [outdir]
 set -euo pipefail
+trap 'echo "build-dropbear: failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 DROPBEAR_VERSION="${DROPBEAR_VERSION:-2026.94}"
 DROPBEAR_SHA256="${DROPBEAR_SHA256:-e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81}"
