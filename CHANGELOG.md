@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.67.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.0...panel-de-control-v0.67.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **release:** build the bundled SSH server into the plugin ([#903](https://github.com/Hooandee/panel-de-control/issues/903)) ([7efa272](https://github.com/Hooandee/panel-de-control/commit/7efa272b1d776b657a3787427e9ed241ebd3b1b5))
+
 ## [0.67.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.66.0...panel-de-control-v0.67.0) (2026-10-09)
 
 
