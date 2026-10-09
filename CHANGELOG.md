@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
+
+
+### Español
+
+* **Actualizaciones:** Cuando sale una versión nueva ya no te la pierdes: aparece un aviso abajo en el menú rápido con la versión que tienes y la nueva. «Actualizar» abre las novedades para instalarla y «Más tarde» lo esconde hasta que reinicies Steam.
+* **Pantalla:** Al probar un color, el resto del panel ya no se queda en blanco mientras decides si guardar o deshacer.
+
+### English
+
+* **Updates:** You won't miss a new version anymore: a notice shows up at the bottom of the quick access menu with the version you have and the new one. "Update" opens the release notes so you can install it, and "Later" hides it until you restart Steam.
+* **Display:** While trying a color, the rest of the panel no longer goes blank as you decide whether to save or undo.
+
+### Italiano
+
+* **Aggiornamenti:** Quando esce una nuova versione non te la perdi più: in fondo al menu di accesso rapido compare un avviso con la versione che hai e quella nuova. «Aggiorna» apre le novità per installarla e «Più tardi» lo nasconde finché non riavvii Steam.
+* **Schermo:** Mentre provi un colore, il resto del pannello non diventa più bianco mentre decidi se salvare o annullare.
+
+### Deutsch
+
+* **Updates:** Eine neue Version verpasst du nicht mehr: Unten im Schnellzugriffsmenü erscheint ein Hinweis mit deiner Version und der neuen. „Aktualisieren“ öffnet die Neuerungen zum Installieren, und „Später“ blendet ihn aus, bis du Steam neu startest.
+* **Bildschirm:** Wenn du eine Farbe ausprobierst, bleibt der Rest des Panels nicht mehr leer, während du entscheidest, ob du speicherst oder rückgängig machst.
+
+### Português (Brasil)
+
+* **Atualizações:** Você não perde mais uma versão nova: aparece um aviso embaixo no menu de acesso rápido com a versão que você tem e a nova. "Atualizar" abre as novidades para instalar e "Mais tarde" esconde o aviso até você reiniciar o Steam.
+* **Tela:** Ao testar uma cor, o resto do painel não fica mais em branco enquanto você decide se salva ou desfaz.
+
 ## [0.65.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.64.0...panel-de-control-v0.65.0) (2026-10-08)
 
 
