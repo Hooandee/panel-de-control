@@ -148,6 +148,8 @@ class RemoteAccess:
         self._pair_deadline = 0.0
         self._pair_timer: asyncio.Task | None = None
         self._pending: tuple[PublicKey, str, asyncio.Future] | None = None
+        self._openssh_failed = False
+        self._running_kind: str | None = None
 
     @property
     def _authorized_keys(self) -> Path:
@@ -180,9 +182,12 @@ class RemoteAccess:
             await asyncio.sleep(0.1)
 
     def server(self) -> SshServer | None:
-        sshd = system_sshd()
+        sshd = None if self._openssh_failed else system_sshd()
         if sshd is not None:
             return SshServer("openssh", sshd)
+        return self._bundled_dropbear()
+
+    def _bundled_dropbear(self) -> SshServer | None:
         arch = binary_arch()
         bundled = self._plugin_dir / "bin" / f"dropbear-{arch}" if arch else None
         return SshServer("dropbear", bundled) if bundled is not None and bundled.is_file() else None
@@ -233,6 +238,7 @@ class RemoteAccess:
         self._enabled = enabled
         if enabled:
             self._error = None
+            self._openssh_failed = False
             if self._supervisor is None or self._supervisor.done():
                 self._supervisor = asyncio.create_task(self._supervise())
         else:
@@ -279,7 +285,14 @@ class RemoteAccess:
                 self._journal("ERROR", "start_failed", error=str(error)[:200])
             if not self._enabled:
                 return
-            failures = 0 if time.monotonic() - started > 60 else failures + 1
+            lasted = time.monotonic() - started > 60
+            if not lasted and self._running_kind == "openssh" and self._bundled_dropbear() is not None:
+                # Sandboxes such as proot report root without being able to switch accounts,
+                # so OpenSSH dies at once there; the bundled dropbear takes over.
+                self._openssh_failed = True
+                self._journal("WARNING", "openssh_unusable", stderr=list(self._stderr_tail)[-3:])
+                continue
+            failures = 0 if lasted else failures + 1
             await asyncio.sleep(_RESTART_DELAYS_S[min(failures, len(_RESTART_DELAYS_S) - 1)])
 
     def _prepare_state_dir(self) -> None:
@@ -293,6 +306,7 @@ class RemoteAccess:
         if server is None:
             self._error = "unsupported"
             raise RuntimeError("no system sshd and no bundled dropbear for this architecture")
+        self._running_kind = server.kind
         if server.kind == "dropbear" and not os.access(server.binary, os.X_OK):
             os.chmod(server.binary, 0o755)
         self._prepare_state_dir()

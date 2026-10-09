@@ -191,3 +191,26 @@ def test_stale_server_from_a_killed_panel_is_stopped_but_strangers_are_not(tmp_p
 def test_suggests_the_console_user_when_running_as_root(tmp_path):
     service = RemoteAccess(str(tmp_path / "plugin"), str(tmp_path / "state"), lambda *a, **k: None, login_user="deck")
     assert service.state()["user"] == "deck"
+
+
+def test_openssh_that_dies_at_once_hands_over_to_the_bundled_dropbear(tmp_path, monkeypatch):
+    arch = binary_arch()
+    if arch is None:
+        pytest.skip("no bundled architecture for this host")
+    service, events = _service(tmp_path)
+    (tmp_path / "plugin" / "bin" / f"dropbear-{arch}").write_text("")
+    monkeypatch.setattr(remote_access, "system_sshd", lambda: Path("/usr/bin/sshd"))
+    used = []
+
+    async def run_once():
+        server = service.server()
+        service._running_kind = server.kind
+        used.append(server.kind)
+        if server.kind == "dropbear":
+            service._enabled = False
+
+    monkeypatch.setattr(service, "_run_once", run_once)
+    service._enabled = True
+    asyncio.run(service._supervise())
+    assert used == ["openssh", "dropbear"]
+    assert any(event == "openssh_unusable" for _, event, _ in events)
