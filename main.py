@@ -34,6 +34,7 @@ import journal
 import journal_context
 import self_updater
 import theme_activation
+import theme_health
 import theme_packages
 import theme_remote
 import theme_transport
@@ -204,7 +205,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "themes": (
         ("_theme_report_diagnostics", (
             "installed", "other_active_themes", "activation_phase", "activation_quarantined",
-            "recent_failures",
+            "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
     ),
@@ -260,6 +261,7 @@ _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
     "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
+    "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
@@ -1446,7 +1448,18 @@ class Plugin:
             ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
             **self._installed_theme_inventory(),
+            "health": self._theme_health_summary(),
         }
+
+    def _theme_health_summary(self) -> dict:
+        try:
+            return {
+                "folders": theme_health.summary(theme_health.scan(self._themes_root())),
+                "cleanup": theme_health.undo_state(self._themes_root()),
+                "panel": theme_health.internal_panel_mode(),
+            }
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
@@ -1886,6 +1899,54 @@ class Plugin:
             )
             raise RuntimeError("extension_unavailable") from None
 
+    async def get_theme_health(self) -> dict:
+        self._init()
+        root = self._themes_root()
+
+        def read() -> dict:
+            return {
+                "folders": theme_health.scan(root),
+                "panel": theme_health.internal_panel_mode(),
+                "undo": theme_health.undo_state(root),
+            }
+
+        return await self._offload_theme_call(read)
+
+    async def set_aside_theme_leftovers(self, disabled: list) -> dict:
+        self._init()
+        try:
+            result = await self._offload_theme_call(
+                lambda: theme_health.set_aside(self._themes_root(), disabled)
+            )
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        if result["failed"]:
+            decky.logger.warning("Theme cleanup could not move %d folders", len(result["failed"]))
+        return {"ok": True, **result}
+
+    async def restore_theme_cleanup(self) -> dict:
+        self._init()
+        try:
+            result = await self._offload_theme_call(
+                lambda: theme_health.restore(self._themes_root())
+            )
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup undo refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        if result["kept"]:
+            decky.logger.warning("Theme cleanup undo kept %d folders set aside", len(result["kept"]))
+        return {"ok": True, **result}
+
+    async def acknowledge_theme_cleanup_undo(self) -> dict:
+        self._init()
+        try:
+            await self._offload_theme_call(lambda: theme_health.forget_reenabled(self._themes_root()))
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup undo acknowledgement refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        return {"ok": True}
+
     async def get_device(self) -> dict:
         self._init()
         d = asdict(self._device)
@@ -2241,7 +2302,9 @@ class Plugin:
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
-            "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
+            "themes": self._with_theme_display(
+                await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
+            ),
             "ui_diagnostics": self._ui_diagnostics_snapshot(),
             "kiosk": self._kiosk_report_state(),
         }
@@ -2454,6 +2517,23 @@ class Plugin:
                 }
         return {"backend": backend, "frontend": frontend}
 
+    @staticmethod
+    def _with_theme_display(themes, context):
+        display = context.get("theme_display") if isinstance(context, dict) else None
+        if not isinstance(themes, dict) or not isinstance(display, dict):
+            return themes
+        sanitized = {}
+        for key, value in display.items():
+            if not isinstance(key, str) or len(key) > 32:
+                continue
+            if isinstance(value, bool) or value is None:
+                sanitized[key] = value
+            elif isinstance(value, (int, float)) and math.isfinite(value):
+                sanitized[key] = round(float(value), 3)
+            if len(sanitized) >= 16:
+                break
+        return {**themes, "display": sanitized}
+
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
         frontend snapshot. Never raises."""
@@ -2467,6 +2547,7 @@ class Plugin:
             n_custom = 0
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
+        frontend.pop("theme_display", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
@@ -12909,6 +12990,6 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report"}),
+    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

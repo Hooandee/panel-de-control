@@ -5,6 +5,7 @@ import { getUpdaterStrings } from "./strings";
 describe("German updater copy", () => {
   it("returns natural German copy for every updater surface", () => {
     expect(getUpdaterStrings("de")).toEqual({
+      floating: { title: "Neue Version verfügbar", update: "Aktualisieren", later: "Später" },
       panel: {
         version: "Version",
         latest: "(aktuell)",

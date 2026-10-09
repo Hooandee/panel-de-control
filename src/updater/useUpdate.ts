@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { toaster } from "@decky/api";
 import {
   checkUpdate,
@@ -15,9 +15,26 @@ import { getUpdaterStrings } from "./strings";
 // survive component remounts and are shared no matter where useUpdate is called.
 let sessionChecked = false;
 let sessionToasted = false;
-let sessionInfo: UpdateInfo | null = null;
 
 export type UpdateStatus = "idle" | "checking" | "installing" | "done" | "error";
+
+let session: { info: UpdateInfo | null; status: UpdateStatus } = { info: null, status: "idle" };
+const listeners = new Set<() => void>();
+const getSnapshot = () => session;
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+function publish(update: Partial<typeof session>): void {
+  session = { ...session, ...update };
+  listeners.forEach((listener) => listener());
+}
+
+function checkStatus(status: UpdateStatus): UpdateStatus {
+  return session.status === "installing" || session.status === "done" ? session.status : status;
+}
 
 export interface UseUpdate {
   info: UpdateInfo | null;
@@ -29,17 +46,14 @@ export interface UseUpdate {
 }
 
 export function useUpdate(lang: Lang): UseUpdate {
-  const [info, setInfo] = useState<UpdateInfo | null>(sessionInfo);
-  const [status, setStatus] = useState<UpdateStatus>("idle");
+  const { info, status } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   const runCheck = useCallback(
     async (force: boolean): Promise<UpdateInfo | null> => {
-      setStatus("checking");
+      publish({ status: checkStatus("checking") });
       try {
         const res = await checkUpdate(force);
-        sessionInfo = res;
-        setInfo(res);
-        setStatus(res.error ? "error" : "idle");
+        publish({ info: res, status: checkStatus(res.error ? "error" : "idle") });
         if (res.has_update && !sessionToasted) {
           sessionToasted = true;
           toaster.toast({
@@ -49,7 +63,7 @@ export function useUpdate(lang: Lang): UseUpdate {
         }
         return res;
       } catch {
-        setStatus("error");
+        publish({ status: checkStatus("error") });
         return null;
       }
     },
@@ -63,13 +77,13 @@ export function useUpdate(lang: Lang): UseUpdate {
   }, [runCheck]);
 
   const install = useCallback(async (): Promise<InstallResult | null> => {
-    setStatus("installing");
+    publish({ status: "installing" });
     try {
       const res = await installUpdate();
-      setStatus(res.ok ? "done" : "error");
+      publish({ status: res.ok ? "done" : "error" });
       return res;
     } catch {
-      setStatus("error");
+      publish({ status: "error" });
       return null;
     }
   }, []);

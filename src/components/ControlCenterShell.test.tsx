@@ -196,6 +196,19 @@ describe("ControlCenterShell", () => {
     });
   });
 
+  it.each(["home", "tabs", "detail"] as const)("shows the update tray at the end of %s content", (mode) => {
+    setShellMode(mode);
+    const { container } = renderShell({
+      hasUpdate: true,
+      updateInfo: { current: "1", latest: "2", has_update: true, notes: "", download_url: "", error: "" },
+      updateStatus: "idle",
+    });
+    const surface = screen.getByTestId("shell-surface");
+    expect(surface.lastElementChild).toBe(screen.getByRole("status"));
+    expect(screen.getByText("v1 → v2")).toBeTruthy();
+    if (mode !== "detail") expect(alertDotWithin(container)).toBeTruthy();
+  });
+
   it("mounts no section and no TabBar on Home", () => {
     const { container } = renderShell();
 
@@ -928,5 +941,17 @@ describe("ControlCenterShell", () => {
     expect(screen.queryByText("Aprendizaje en pausa")).toBeNull();
     expect(container.querySelectorAll(".pdc-root")).toHaveLength(1);
     expect(getQamDocument()).toBe(container.ownerDocument);
+  });
+
+  it("preserves the settings alert dot after dismissing the floating update", () => {
+    setShellMode("tabs");
+    const { container } = renderShell({
+      hasUpdate: true,
+      updateInfo: { current: "1", latest: "3", has_update: true, notes: "", download_url: "", error: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector('[data-update-tray="card"]')).toBeNull();
+    expect(alertDotWithin(container)).toBeTruthy();
   });
 });

@@ -2,6 +2,90 @@
 
 ## Unreleased
 
+## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
+
+
+### Español
+
+* **Actualizaciones:** Cuando sale una versión nueva ya no te la pierdes: aparece un aviso abajo en el menú rápido con la versión que tienes y la nueva. «Actualizar» abre las novedades para instalarla y «Más tarde» lo esconde hasta que reinicies Steam.
+* **Pantalla:** Al probar un color, el resto del panel ya no se queda en blanco mientras decides si guardar o deshacer.
+
+### English
+
+* **Updates:** You won't miss a new version anymore: a notice shows up at the bottom of the quick access menu with the version you have and the new one. "Update" opens the release notes so you can install it, and "Later" hides it until you restart Steam.
+* **Display:** While trying a color, the rest of the panel no longer goes blank as you decide whether to save or undo.
+
+### Italiano
+
+* **Aggiornamenti:** Quando esce una nuova versione non te la perdi più: in fondo al menu di accesso rapido compare un avviso con la versione che hai e quella nuova. «Aggiorna» apre le novità per installarla e «Più tardi» lo nasconde finché non riavvii Steam.
+* **Schermo:** Mentre provi un colore, il resto del pannello non diventa più bianco mentre decidi se salvare o annullare.
+
+### Deutsch
+
+* **Updates:** Eine neue Version verpasst du nicht mehr: Unten im Schnellzugriffsmenü erscheint ein Hinweis mit deiner Version und der neuen. „Aktualisieren“ öffnet die Neuerungen zum Installieren, und „Später“ blendet ihn aus, bis du Steam neu startest.
+* **Bildschirm:** Wenn du eine Farbe ausprobierst, bleibt der Rest des Panels nicht mehr leer, während du entscheidest, ob du speicherst oder rückgängig machst.
+
+### Português (Brasil)
+
+* **Atualizações:** Você não perde mais uma versão nova: aparece um aviso embaixo no menu de acesso rápido com a versão que você tem e a nova. "Atualizar" abre as novidades para instalar e "Mais tarde" esconde o aviso até você reiniciar o Steam.
+* **Tela:** Ao testar uma cor, o resto do painel não fica mais em branco enquanto você decide se salva ou desfaz.
+
+## [0.65.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.64.0...panel-de-control-v0.65.0) (2026-10-08)
+
+
+### Español
+
+* **Temas:** Si un tema se ve raro o algo no encaja, ahora tienes «¿Problemas con un tema?» al final de Temas. Revisa lo que suele romperlos: otros temas o perfiles de CSS Loader activos a la vez, restos que CSS Loader sigue cargando aunque no salgan en su lista, estilos que se quedan pegados en Steam, varios temas Hooandee encendidos a la vez y ajustes de pantalla fuera de lo normal, como la escala, la resolución o Steam beta. Con «Solucionar problemas» se queda activo solo el tema Hooandee que elijas, los restos se apartan sin borrar nada y todo se puede deshacer desde ahí.
+* **Temas:** Si otro tema deja el menú rápido en negro y no puedes llegar a Panel, ahora sale un aviso que abre esa misma ayuda.
+* **Temas:** La ficha de cada tema ocupa menos: el botón para activarlo, desactivarlo o instalarlo está arriba a la derecha y la descripción va debajo a lo ancho.
+
+### English
+
+* **Themes:** If a theme looks off or something doesn't fit, you now have "Trouble with a theme?" at the bottom of Themes. It checks what usually breaks them: other CSS Loader themes or profiles active at the same time, leftovers CSS Loader still loads even though they're not in its list, styles that get stuck in Steam, several Hooandee themes on at once and display settings that aren't the default, like scale, resolution or Steam beta. "Fix problems" keeps only the Hooandee theme you pick, sets the leftovers aside without deleting anything, and it can all be undone from there.
+* **Themes:** If another theme turns the quick access menu black and you can't reach Panel, a notification now shows up that opens that same check.
+* **Themes:** Each theme's page takes less space: the button to turn it on, turn it off or install it sits at the top right and the description runs full width underneath.
+
+### Italiano
+
+* **Temi:** Se un tema si vede strano o qualcosa non torna, ora hai «Problemi con un tema?» in fondo a Temi. Controlla quello che di solito li rompe: altri temi o profili di CSS Loader attivi insieme, residui che CSS Loader continua a caricare anche se non compaiono nella sua lista, stili che restano appiccicati in Steam, più temi Hooandee accesi insieme e impostazioni dello schermo fuori dal normale, come la scala, la risoluzione o Steam beta. Con «Risolvi i problemi» resta attivo solo il tema Hooandee che scegli, i residui vengono messi da parte senza cancellare nulla e si può annullare tutto da lì.
+* **Temi:** Se un altro tema rende nero il menu di accesso rapido e non riesci ad arrivare a Panel, ora compare un avviso che apre questo stesso controllo.
+* **Temi:** La scheda di ogni tema occupa meno spazio: il pulsante per attivarlo, disattivarlo o installarlo è in alto a destra e la descrizione va sotto, a tutta larghezza.
+
+### Deutsch
+
+* **Themes:** Wenn ein Theme seltsam aussieht oder etwas nicht passt, findest du jetzt ganz unten unter Themes „Probleme mit einem Theme?“. Es prüft, was sie meistens kaputt macht: andere Themes oder Profile von CSS Loader, die gleichzeitig aktiv sind, Reste, die CSS Loader weiter lädt, obwohl sie nicht in seiner Liste stehen, Stile, die in Steam hängen bleiben, mehrere Hooandee-Themes gleichzeitig und Anzeigeeinstellungen abseits vom Standard wie Skalierung, Auflösung oder die Steam-Beta. Mit „Probleme beheben“ bleibt nur das Hooandee-Theme aktiv, das du auswählst, Reste werden beiseitegelegt, ohne etwas zu löschen, und alles lässt sich dort wieder rückgängig machen.
+* **Themes:** Wenn ein anderes Theme das Schnellzugriffsmenü schwarz macht und du Panel nicht mehr erreichst, erscheint jetzt eine Benachrichtigung, die genau diese Prüfung öffnet.
+* **Themes:** Die Seite jedes Themes braucht weniger Platz: Der Knopf zum Aktivieren, Deaktivieren oder Installieren sitzt oben rechts, und die Beschreibung läuft darunter über die ganze Breite.
+
+### Português (Brasil)
+
+* **Temas:** Se um tema estiver estranho ou algo não encaixar, agora tem "Problemas com um tema?" no final de Temas. Ele verifica o que costuma quebrá-los: outros temas ou perfis do CSS Loader ativos ao mesmo tempo, restos que o CSS Loader continua carregando mesmo sem aparecer na lista dele, estilos que ficam presos no Steam, vários temas Hooandee ligados ao mesmo tempo e configurações de tela fora do normal, como a escala, a resolução ou o Steam beta. Com "Resolver problemas" fica ativo só o tema Hooandee que você escolher, os restos são separados sem apagar nada e dá para desfazer tudo por ali.
+* **Temas:** Se outro tema deixar o menu de acesso rápido preto e você não conseguir chegar ao Panel, agora aparece um aviso que abre essa mesma verificação.
+* **Temas:** A página de cada tema ocupa menos espaço: o botão para ativar, desativar ou instalar fica no canto superior direito e a descrição vai embaixo, na largura toda.
+
+## [0.64.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.63.0...panel-de-control-v0.64.0) (2026-10-08)
+
+
+### Español
+
+* **Temas:** Los ajustes de un tema pueden tener ahora un apartado «Extra» al final, con opciones que se salen de su diseño original. Eclipse lo estrena: ahí puedes quitar la oscuridad del fondo de Inicio y ver la imagen de la ficha del juego entera, sin el eclipse.
+
+### English
+
+* **Themes:** A theme's settings can now have an "Extra" section at the end, with options that step outside its original design. Eclipse is the first to use it: there you can drop the Home background darkness and see the game page image in full, without the eclipse.
+
+### Italiano
+
+* **Temi:** Le impostazioni di un tema ora possono avere una sezione «Extra» in fondo, con opzioni che escono dal suo design originale. Eclipse è il primo a usarla: lì puoi togliere l'oscuramento dello sfondo della Home e vedere l'immagine della scheda del gioco per intero, senza l'eclissi.
+
+### Deutsch
+
+* **Themes:** Die Einstellungen eines Themes können jetzt am Ende einen Bereich „Extra“ haben, mit Optionen, die vom ursprünglichen Design abweichen. Eclipse nutzt ihn als Erstes: Dort kannst du die Abdunklung des Startseiten-Hintergrunds abschalten und das Bild der Spielseite vollständig sehen, ohne Verfinsterung.
+
+### Português (Brasil)
+
+* **Temas:** Os ajustes de um tema agora podem ter uma seção "Extra" no final, com opções que fogem do design original. O Eclipse é o primeiro a usar: lá dá para tirar o escurecimento do fundo do Início e ver a imagem da página do jogo inteira, sem o eclipse.
+
 ## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
 
 

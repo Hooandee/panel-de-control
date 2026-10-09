@@ -8,6 +8,7 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
+import { createThemeCleanupHost } from "./themeCleanupHost";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
@@ -47,6 +48,19 @@ export interface ThemesAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
   setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot>;
+  disableAllExcept?(before: CssLoaderReadySnapshot, keep: ReadonlySet<string>): Promise<CssLoaderReadySnapshot>;
+  enableAgain?(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+    names: readonly string[],
+  ): Promise<CssLoaderReadySnapshot>;
+}
+
+export interface ThemeCleanupHost {
+  setAside(disabled: readonly string[]): Promise<void>;
+  // Moves folders back and returns the themes to enable again; they stay recorded until acknowledged.
+  restore(): Promise<readonly string[]>;
+  acknowledgeRestore(): Promise<void>;
 }
 
 export interface ThemesInstaller {
@@ -92,6 +106,7 @@ export interface ThemesDependencies {
   publication?: ThemePublicationClient;
   reportFailure?: (failure: ThemeFailureReport) => void;
   sectionHandoffs?: SectionHandoffStore;
+  cleanup?: ThemeCleanupHost;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
@@ -107,7 +122,9 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string };
+  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "cleaning" }
+  | { kind: "restoring" };
 
 export interface ThemesClientSnapshot {
   loading: boolean;
@@ -165,6 +182,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
       read: () => sectionHandoffStore?.read() ?? {},
       write: (handoffs) => sectionHandoffStore?.write(handoffs),
     },
+    cleanup: createThemeCleanupHost(),
   };
   return productionDependencies;
 }
@@ -176,6 +194,18 @@ function errorMessage(error: unknown): string {
 function errorCode(error: unknown): string {
   const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
   return typeof code === "string" && code.length > 0 ? code : "unknown";
+}
+
+// Failure messages reach the logs in reports; other themes and profiles can carry personal names.
+async function withoutThemeNames<T>(operation: Promise<T>): Promise<T> {
+  try {
+    return await operation;
+  } catch (error) {
+    throw new CssLoaderOperationError(
+      error instanceof CssLoaderOperationError ? error.code : "transport",
+      "CSS Loader could not finish the theme cleanup",
+    );
+  }
 }
 
 function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
@@ -521,6 +551,65 @@ export class ThemesClient {
       },
     );
   };
+
+  // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
+  // set aside and the styles it left behind removed from the Steam windows the caller can reach.
+  // `keepActive` names the one Hooandee theme to leave on when several are; the others go off
+  // through the same path as their own Deactivate button, before CSS Loader reloads.
+  cleanUp = (
+    keep: readonly string[],
+    removeLeftoverStyles?: () => void,
+    keepActive?: string,
+  ): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.disableAllExcept || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.setAside([]);
+      removeLeftoverStyles?.();
+      return current;
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    if (keepActive !== undefined) await this.deactivateOursExcept(current, keepActive);
+    const before = await adapter.requireReady();
+    await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
+    const after = await withoutThemeNames(adapter.disableAllExcept(before, kept));
+    if (!after.themes.some((theme) => theme.enabled)) removeLeftoverStyles?.();
+    return after;
+  });
+
+  undoCleanup = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "restoring" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.enableAgain || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.restore();
+      return current;
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    const before = await adapter.requireReady();
+    const after = await withoutThemeNames(adapter.enableAgain(before, kept, await cleanup.restore()));
+    await cleanup.acknowledgeRestore();
+    return after;
+  });
+
+  private async deactivateOursExcept(snapshot: CssLoaderSnapshot, keepActive: string): Promise<void> {
+    if (!snapshot.themes.some((theme) => theme.name === keepActive && theme.enabled)) {
+      throw new CssLoaderOperationError("verification_failed", "The theme chosen to stay active is no longer active");
+    }
+    const catalog = this.currentPublicationThemes();
+    for (const theme of snapshot.themes) {
+      if (!theme.enabled || theme.name === keepActive) continue;
+      const release = catalog.find((entry) => entry.cssLoaderName === theme.name);
+      if (release) {
+        await this.restoreSections(await this.dependencies.activator.deactivate(release.catalogId, catalog), theme.name);
+      }
+    }
+  }
 
   private hooandeeThemeNames(): ReadonlySet<string> {
     return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));

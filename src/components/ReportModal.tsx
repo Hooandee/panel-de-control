@@ -25,6 +25,8 @@ import { FocusRoot } from "./FocusRoot";
 import { launchReportContext } from "../launch/reportContext";
 import { quickAccessTabDiagnostics } from "../deckyInternal";
 import { getQamDocument } from "../qamDocument";
+import { displayReport } from "../themes/themeHealth";
+import { readSteamDisplay } from "../themes/useThemeHealth";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -134,12 +136,17 @@ const SelectionChip: FC<{
   </Focusable>
 );
 
-const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
+interface ReportModalProps {
+  closeModal?: () => void;
+  initialCategories?: ReportCategory[];
+}
+
+const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }) => {
   const { t } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [kind, setKind] = useState<ReportKind | null>(null);
   const [choosingKind, setChoosingKind] = useState(true);
-  const [selected, setSelected] = useState<ReportCategory[]>([]);
+  const [selected, setSelected] = useState<ReportCategory[]>(initialCategories);
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("form");
   const [result, setResult] = useState<ReportResult | null>(null);
@@ -158,6 +165,9 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       : {};
     const steamDisplay =
       typeof SteamClient === "undefined" ? undefined : SteamClient?.System?.Display;
+    const themeDisplay = selected.includes("themes")
+      ? await readSteamDisplay().then(displayReport).catch(() => undefined)
+      : undefined;
     const context = buildReportContext(
       selected,
       steamDisplay,
@@ -165,6 +175,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       quickAccessTabDiagnostics(window, getQamDocument()),
       kind,
       selected.includes("hud") ? steamOverlay.diagnostics() : undefined,
+      themeDisplay,
     );
     submitReport(selected, text, context)
       .then((r) => {
@@ -410,14 +421,14 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
   );
 };
 
-const ReportModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
+const ReportModal: FC<ReportModalProps> = ({ closeModal, initialCategories }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
     <FocusRoot>
-      <ReportBody closeModal={closeModal} />
+      <ReportBody closeModal={closeModal} initialCategories={initialCategories} />
     </FocusRoot>
   </ModalRoot>
 );
 
-export function openReportModal(): void {
-  showModal(<ReportModal />, window);
+export function openReportModal(initialCategories?: ReportCategory[]): void {
+  showModal(<ReportModal initialCategories={initialCategories} />, window);
 }

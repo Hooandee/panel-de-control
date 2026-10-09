@@ -675,3 +675,187 @@ describe("ThemesClient", () => {
     });
   });
 });
+
+describe("ThemesClient cleanup", () => {
+  const OTHER: CssLoaderTheme = { ...INSTALLED_THEME, id: "Other", name: "Other", displayName: "Other" };
+
+  it("records what it turns off before touching CSS Loader, keeping catalog themes", async () => {
+    const order: string[] = [];
+    const before: CssLoaderReadySnapshot = { status: "ready", themes: [INSTALLED_THEME, OTHER] };
+    const after: CssLoaderReadySnapshot = { status: "ready", themes: [INSTALLED_THEME, { ...OTHER, enabled: false }] };
+    const disableAllExcept = vi.fn(async () => { order.push("css-loader"); return after; });
+    const setAside = vi.fn(async () => { order.push("set-aside"); });
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.requireReady = vi.fn(async () => before);
+    deps.adapter.inspect = vi.fn(async () => before);
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.cleanUp(["Local Hooandee"])).resolves.toBe(true);
+
+    expect(order).toEqual(["set-aside", "css-loader"]);
+    expect(setAside).toHaveBeenCalledWith(["Other"]);
+    expect(disableAllExcept).toHaveBeenCalledWith(before, new Set(["Local Hooandee", "Example Theme"]));
+    expect(client.getSnapshot()).toMatchObject({ snapshot: after, operation: null, error: null });
+  });
+
+  it("does not touch CSS Loader when the backend refuses to record the cleanup", async () => {
+    const disableAllExcept = vi.fn(async () => READY);
+    const failure = Object.assign(new Error("refused"), { code: "invalid_record" });
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => { throw failure; }), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+
+    expect(disableAllExcept).not.toHaveBeenCalled();
+    expect(client.getSnapshot().errorCode).toBe("invalid_record");
+  });
+
+  it("brings back the recorded themes on undo and only then forgets them", async () => {
+    const enableAgain = vi.fn(async () => READY);
+    const acknowledgeRestore = vi.fn(async () => {});
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]), acknowledgeRestore } });
+    deps.adapter.enableAgain = enableAgain;
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(true);
+
+    expect(enableAgain).toHaveBeenCalledWith(READY, new Set(), ["Other"]);
+    expect(acknowledgeRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the themes to enable again when CSS Loader cannot confirm them", async () => {
+    const acknowledgeRestore = vi.fn(async () => {});
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => ["Other"]), acknowledgeRestore } });
+    deps.adapter.enableAgain = vi.fn(async () => {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not enable a restored theme");
+    });
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(false);
+
+    expect(acknowledgeRestore).not.toHaveBeenCalled();
+  });
+
+  it("brings folders back without CSS Loader and leaves the themes for later", async () => {
+    const restore = vi.fn(async () => ["Other"]);
+    const acknowledgeRestore = vi.fn(async () => {});
+    const enableAgain = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore, acknowledgeRestore } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "missing" as const, themes: [] }));
+    deps.adapter.enableAgain = enableAgain;
+    const client = new ThemesClient(deps);
+
+    await expect(client.undoCleanup([])).resolves.toBe(true);
+
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(enableAgain).not.toHaveBeenCalled();
+    expect(acknowledgeRestore).not.toHaveBeenCalled();
+  });
+
+  it("removes leftover styles once no theme is left enabled", async () => {
+    const removeLeftoverStyles = vi.fn();
+    const before: CssLoaderReadySnapshot = { status: "ready", themes: [OTHER] };
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.requireReady = vi.fn(async () => before);
+    deps.adapter.disableAllExcept = vi.fn(async () => ({ status: "ready" as const, themes: [{ ...OTHER, enabled: false }] }));
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], removeLeftoverStyles)).resolves.toBe(true);
+
+    expect(removeLeftoverStyles).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed without a cleanup backend", async () => {
+    const client = new ThemesClient(dependencies());
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+    expect(client.getSnapshot().errorCode).toBe("transport");
+  });
+});
+
+describe("ThemesClient cleanup privacy", () => {
+  it("reports cleanup failures without CSS Loader's theme names", async () => {
+    const reportFailure = vi.fn();
+    const deps = dependencies({ reportFailure, cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.disableAllExcept = vi.fn(async () => {
+      throw new CssLoaderOperationError("mutation_failed", "Did not find theme Someone Private.profile");
+    });
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([])).resolves.toBe(false);
+
+    expect(reportFailure).toHaveBeenCalledWith({
+      operation: "cleaning",
+      code: "mutation_failed",
+      message: "CSS Loader could not finish the theme cleanup",
+    });
+  });
+});
+
+describe("ThemesClient cleanup without CSS Loader", () => {
+  it("sets folders aside and removes leftover styles without calling CSS Loader", async () => {
+    const setAside = vi.fn(async () => {});
+    const removeLeftoverStyles = vi.fn();
+    const disableAllExcept = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside, restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "disabled" as const, themes: [] }));
+    deps.adapter.disableAllExcept = disableAllExcept;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], removeLeftoverStyles)).resolves.toBe(true);
+
+    expect(setAside).toHaveBeenCalledWith([]);
+    expect(removeLeftoverStyles).toHaveBeenCalledTimes(1);
+    expect(disableAllExcept).not.toHaveBeenCalled();
+  });
+});
+
+describe("ThemesClient cleanup with several Hooandee themes", () => {
+  it("turns the other Hooandee themes off through the activator before reloading CSS Loader", async () => {
+    const second: PublishedThemeRelease = { ...RELEASE, catalogId: "second-theme", cssLoaderName: "Second Theme" };
+    const order: string[] = [];
+    const both: CssLoaderReadySnapshot = {
+      status: "ready",
+      themes: [
+        INSTALLED_THEME,
+        { ...INSTALLED_THEME, id: "Second Theme", name: "Second Theme", displayName: "Second Theme" },
+        { ...INSTALLED_THEME, id: "Local Keyboard", name: "Local Keyboard", displayName: "Local Keyboard" },
+      ],
+    };
+    const deps = dependencies({
+      publication: { check: vi.fn(async () => ({ status: "published" as const, checkedAt: 10, themes: [RELEASE, second] })) },
+      cleanup: { setAside: vi.fn(async () => { order.push("set-aside"); }), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) },
+    });
+    deps.adapter.inspect = vi.fn(async () => both);
+    deps.adapter.requireReady = vi.fn(async () => both);
+    deps.activator.deactivate = vi.fn(async (themeId: string) => { order.push(`deactivate:${themeId}`); return READY; });
+    deps.adapter.disableAllExcept = vi.fn(async () => { order.push("css-loader"); return READY; });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+    await client.refreshPublication();
+
+    await expect(client.cleanUp(["Local Keyboard"], undefined, "Example Theme")).resolves.toBe(true);
+
+    expect(order).toEqual(["deactivate:second-theme", "set-aside", "css-loader"]);
+    expect(deps.adapter.disableAllExcept).toHaveBeenCalledWith(both, new Set(["Local Keyboard", "Example Theme", "Second Theme"]));
+  });
+});
+
+describe("ThemesClient cleanup with a stale choice", () => {
+  it("turns nothing off when the chosen theme was switched off meanwhile", async () => {
+    const deactivate = vi.fn(async () => READY);
+    const deps = dependencies({ cleanup: { setAside: vi.fn(async () => {}), restore: vi.fn(async () => []), acknowledgeRestore: vi.fn(async () => {}) } });
+    deps.adapter.inspect = vi.fn(async () => ({ status: "ready" as const, themes: [{ ...INSTALLED_THEME, enabled: false }] }));
+    deps.adapter.disableAllExcept = vi.fn(async () => READY);
+    deps.activator.deactivate = deactivate;
+    const client = new ThemesClient(deps);
+
+    await expect(client.cleanUp([], undefined, "Example Theme")).resolves.toBe(false);
+
+    expect(deactivate).not.toHaveBeenCalled();
+    expect(deps.adapter.disableAllExcept).not.toHaveBeenCalled();
+  });
+});

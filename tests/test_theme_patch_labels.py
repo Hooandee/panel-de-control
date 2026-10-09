@@ -75,3 +75,19 @@ def test_malformed_entries_and_unknown_languages_are_dropped_without_blocking_th
         "Good": {"name": {"en": "Good"}, "values": {"A": {"de": "a"}}},
     }
     assert theme_packages.list_theme_extensions(*paths(tmp_path))[0]["catalogId"] == THEME_ID
+
+
+def test_serves_the_extra_group_and_drops_groups_it_does_not_know(tmp_path):
+    themes = install(tmp_path, {
+        "Oscuridad del fondo": {"name": {"en": "Background darkness"}, "group": "extra"},
+        "Only group": {"group": "extra"},
+        "Future group": {"name": {"en": "Future"}, "group": "experimental"},
+        "Not text": {"name": {"en": "Not text"}, "group": 3},
+    })
+
+    assert theme_packages.theme_patch_labels(themes, THEME_ID, THEME_NAME) == {
+        "Oscuridad del fondo": {"name": {"en": "Background darkness"}, "group": "extra"},
+        "Only group": {"group": "extra"},
+        "Future group": {"name": {"en": "Future"}},
+        "Not text": {"name": {"en": "Not text"}},
+    }

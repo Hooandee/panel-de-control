@@ -1,0 +1,166 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { ThemeHealthView } from "../themes/useThemeHealth";
+
+const mocks = vi.hoisted(() => ({
+  health: null as ThemeHealthView | null,
+  modal: null as ReactElement | null,
+  report: vi.fn(),
+  controller: {
+    snapshot: { status: "ready", themes: [] },
+    operation: null,
+    errorCode: null,
+    refresh: vi.fn(async () => {}),
+  },
+}));
+
+vi.mock("@decky/ui", () => ({
+  ButtonItem: ({ children, onClick, disabled, description }: { children?: ReactNode; onClick?: () => void; disabled?: boolean; description?: ReactNode }) => (
+    <div><button onClick={onClick} disabled={disabled}>{children}</button>{description ? <span>{description}</span> : null}</div>
+  ),
+  DialogButton: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
+  Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  getFocusNavController: () => null,
+  ModalRoot: ({ children, onCancel }: { children?: ReactNode; onCancel?: () => void }) => (
+    <div><button onClick={onCancel}>modal-back</button>{children}</div>
+  ),
+  showModal: (element: ReactElement) => { mocks.modal = element; },
+}));
+vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
+vi.mock("./ReportModal", () => ({ openReportModal: mocks.report }));
+vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
+vi.mock("../themes/useThemeHealth", () => ({ useThemeHealth: () => mocks.health }));
+vi.mock("../i18n", () => ({
+  useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => params ? `${key} ${JSON.stringify(params)}` : key }),
+}));
+
+import { openThemeHealthModal, ThemeHealthCard } from "./ThemeHealth";
+import type { ThemesController } from "../themes/useThemes";
+
+function health(overrides: Partial<ThemeHealthView> = {}): ThemeHealthView {
+  return {
+    checking: false,
+    unavailable: false,
+    findings: [],
+    plan: { disable: [], chooseOne: [], setAside: 0, ghostStyles: false },
+    needsCleanup: false,
+    undo: { available: false, moved: 0, disabled: 0 },
+    recheck: vi.fn(async () => null),
+    cleanUp: vi.fn(async () => "done" as const),
+    undoCleanup: vi.fn(async () => "done" as const),
+    ...overrides,
+  };
+}
+
+function openModal() {
+  openThemeHealthModal();
+  render(mocks.modal as ReactElement);
+}
+
+describe("ThemeHealth", () => {
+  afterEach(() => { cleanup(); mocks.modal = null; vi.clearAllMocks(); });
+
+  it("summarises a clean machine on the Themes card", () => {
+    mocks.health = health();
+    render(<ThemeHealthCard controller={mocks.controller as unknown as ThemesController} />);
+
+    expect(screen.getByText("themes.health.summary.clean {\"count\":0}")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.health.title" })).toBeTruthy();
+  });
+
+  it("asks before cleaning and reports the result", async () => {
+    mocks.health = health({
+      findings: [
+        { id: "other_active", severity: "problem", names: ["Other"] },
+        { id: "steam_scale", severity: "setting", scale: 1.25, autoScale: 1 },
+      ],
+      plan: { disable: ["Other"], chooseOne: [], setAside: 2, ghostStyles: false },
+      needsCleanup: true,
+    });
+    openModal();
+
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByText("themes.health.steam_scale.detail {\"scale\":\"125 %\",\"auto\":\"100 %\"}")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    expect(mocks.health.cleanUp).not.toHaveBeenCalled();
+    expect(screen.getByText('themes.health.confirm.themesOne themes.health.confirm.foldersMany {"count":2} themes.health.confirm.nothingDeleted')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean.ok" }));
+
+    await waitFor(() => expect(screen.getByText("themes.health.result.cleaned")).toBeTruthy());
+    expect(mocks.health.cleanUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks which Hooandee theme stays active before cleaning", async () => {
+    const themes = [{ name: "Hooandee Eclipse", label: "Eclipse" }, { name: "Hooandee Gallery", label: "Gallery" }];
+    mocks.health = health({
+      findings: [{ id: "several_hooandee", severity: "problem", names: ["Eclipse", "Gallery"], themes }],
+      plan: { disable: [], chooseOne: themes, setAside: 0, ghostStyles: false },
+      needsCleanup: true,
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    const clean = screen.getByRole("button", { name: "themes.health.clean.ok" }) as HTMLButtonElement;
+    expect(clean.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gallery" }));
+    expect(screen.getByText("themes.health.confirm.themesOne themes.health.confirm.nothingDeleted")).toBeTruthy();
+    expect(clean.disabled).toBe(false);
+    fireEvent.click(clean);
+
+    await waitFor(() => expect(mocks.health?.cleanUp).toHaveBeenCalledWith("Hooandee Gallery"));
+  });
+
+  it("goes back from the confirmation to the list with B instead of closing", () => {
+    mocks.health = health({
+      findings: [{ id: "other_active", severity: "problem", names: ["Other"] }],
+      plan: { disable: ["Other"], chooseOne: [], setAside: 0, ghostStyles: false },
+      needsCleanup: true,
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    expect(screen.getByRole("button", { name: "themes.health.clean.ok" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "modal-back" }));
+
+    expect(screen.queryByRole("button", { name: "themes.health.clean.ok" })).toBeNull();
+    expect(screen.getByRole("button", { name: "themes.health.clean" })).toBeTruthy();
+  });
+
+  it("says when the cleanup could only partly finish", async () => {
+    mocks.health = health({
+      findings: [{ id: "set_aside", severity: "problem", folders: [{ folder: "Stuck", kind: "legacy" }] }],
+      plan: { disable: [], chooseOne: [], setAside: 1, ghostStyles: false },
+      needsCleanup: true,
+      cleanUp: vi.fn(async () => "partial" as const),
+    });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.clean.ok" }));
+
+    await waitFor(() => expect(screen.getByText("themes.health.result.cleanedPartial")).toBeTruthy());
+  });
+
+  it("does not raise the warning shield for display settings alone", () => {
+    mocks.health = health({ findings: [{ id: "steam_beta", severity: "setting" }] });
+    render(<ThemeHealthCard controller={mocks.controller as unknown as ThemesController} />);
+
+    expect(screen.getByText("themes.health.summary.settings {\"count\":0}")).toBeTruthy();
+  });
+
+  it("offers undo with what it will bring back, and opens a theme report", () => {
+    mocks.health = health({ undo: { available: true, moved: 2, disabled: 1 } });
+    openModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.undo" }));
+    expect(mocks.health.undoCleanup).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.health.report" }));
+    expect(mocks.report).toHaveBeenCalledWith(["themes"]);
+  });
+});

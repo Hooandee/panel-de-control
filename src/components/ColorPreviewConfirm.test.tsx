@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@decky/ui", () => ({
@@ -25,7 +25,7 @@ import { ColorPreviewConfirm } from "./ColorPreviewConfirm";
 describe("ColorPreviewConfirm", () => {
   afterEach(cleanup);
 
-  it("keeps save and discard visible in a bottom viewport tray", async () => {
+  it("keeps save and discard in a tray stuck to the bottom of the QAM scroll", async () => {
     const onSave = vi.fn();
     const onDiscard = vi.fn();
     render(
@@ -38,8 +38,8 @@ describe("ColorPreviewConfirm", () => {
     );
 
     const tray = screen.getByRole("status");
-    expect(tray.style.position).toBe("fixed");
-    expect(tray.style.bottom).not.toBe("");
+    expect(tray.style.position).toBe("sticky");
+    expect(tray.style.bottom).toBe("16px");
     expect(screen.getByText("Se desharán en 12s")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -48,46 +48,6 @@ describe("ColorPreviewConfirm", () => {
     expect(onSave).toHaveBeenCalledOnce();
     expect(onDiscard).toHaveBeenCalledOnce();
   });
-
-  it.each(["quickaccess_content_5260355", "quickaccess_content_999"])(
-    "keeps the tray inside %s",
-    async (contentId) => {
-      vi.spyOn(window, "innerHeight", "get").mockReturnValue(498);
-
-      render(
-        <div
-          id={contentId}
-          style={{ overflowY: "auto" }}
-          ref={(host) => {
-            if (!host) return;
-            host.getBoundingClientRect = () => ({
-              left: 48,
-              top: 48,
-              right: 348,
-              bottom: 498,
-              width: 300,
-              height: 450,
-            } as DOMRect);
-          }}
-        >
-          <ColorPreviewConfirm
-            seconds={12}
-            saving={false}
-            onSave={vi.fn()}
-            onDiscard={vi.fn()}
-          />
-        </div>,
-      );
-
-      const tray = screen.getByRole("status");
-      await waitFor(() => {
-        expect(tray.style.left).toBe("64px");
-        expect(tray.style.width).toBe("268px");
-        expect(tray.style.bottom).toBe("16px");
-        expect(tray.style.boxSizing).toBe("border-box");
-      });
-    },
-  );
 
   it("prevents duplicate actions while the save is pending", () => {
     render(
