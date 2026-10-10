@@ -175,6 +175,7 @@ class LenovoConservationMode(ChargeLimitBackend):
         # The bounded walk alone took 16 s on a ROG Ally, so it only runs when the
         # Lenovo ACPI device that owns conservation_mode exists at all.
         patterns = [
+            "sys/bus/platform/drivers/ideapad_acpi/VPC2004:*/conservation_mode",
             "sys/bus/acpi/devices/VPC2004:*/conservation_mode",
             "sys/bus/platform/devices/VPC2004:*/conservation_mode",
         ]
