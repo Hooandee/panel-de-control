@@ -1,4 +1,4 @@
-import { DialogButton, showModal } from "@decky/ui";
+import { DialogButton, Focusable, showModal } from "@decky/ui";
 import { useUpdate } from "./useUpdate";
 import { UpdateModal } from "./UpdateModal";
 import type { Lang } from "../i18n";
@@ -8,7 +8,7 @@ const MUTED = "rgba(255,255,255,0.55)";
 
 // Inline: a single unified version line + one button. The changelog and the
 // install action live in a modal (opened when an update is available).
-export function UpdatePanel({ lang, version }: { lang: Lang; version?: string }) {
+export function UpdatePanel({ lang, version, onVersionActivate }: { lang: Lang; version?: string; onVersionActivate?: () => void }) {
   const t = getUpdaterStrings(lang).panel;
   const { info, status, check } = useUpdate(lang);
 
@@ -31,10 +31,15 @@ export function UpdatePanel({ lang, version }: { lang: Lang; version?: string })
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+      <Focusable
+        onActivate={onVersionActivate}
+        onClick={onVersionActivate}
+        noFocusRing={!onVersionActivate}
+        style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}
+      >
         {t.version} {current || "…"}
         {suffix}
-      </div>
+      </Focusable>
       {status === "error" && !hasUpdate && <div style={{ fontSize: 11, color: MUTED }}>{t.error}</div>}
       <DialogButton
         disabled={busy}
