@@ -2783,3 +2783,33 @@ def test_legion_go_s_firmware_cap_hold_stays_off_when_the_setting_is_off(
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
 
     assert sidecar.calls == []
+
+
+def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 33, "pl2": 33, "pl3": 35},
+    )
+    monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-a")
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=False))
+    assert plugin._settings["low_battery_hold_latched_boot"] == "boot-a"
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+    monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-b")
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
+    assert plugin._tdp_backend.set_levels_calls == 1

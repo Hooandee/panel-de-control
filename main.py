@@ -348,6 +348,14 @@ def _plugin_dir() -> str:
     return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 
 
+def _current_boot_id():
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as source:
+            return source.read().strip() or None
+    except OSError:
+        return None
+
+
 def _user_home() -> str:
     return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
 
@@ -418,6 +426,7 @@ DEFAULTS = {
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
     "charge_limit_chosen": False,
+    "low_battery_hold_latched_boot": None,
     "charge_limit_full_once_until": None,
     "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
@@ -6678,7 +6687,7 @@ class Plugin:
             and (ac or (battery.get("percent") or 0) > LOW_BATTERY_PERCENT)
             and self._primary_tdp_firmware_capped(ac)
         )
-        return decide_hold(
+        decision = decide_hold(
             strategy=strategy,
             enabled=enabled,
             battery=battery,
@@ -6689,6 +6698,15 @@ class Plugin:
             auto_tdp=self._auto_control_active(),
             firmware_capped=firmware_capped,
         )
+        if decision.active and not firmware_capped:
+            self._remember_low_battery_latch()
+        return decision
+
+    def _remember_low_battery_latch(self):
+        boot = _current_boot_id()
+        if boot and self._settings.get("low_battery_hold_latched_boot") != boot:
+            self._settings["low_battery_hold_latched_boot"] = boot
+            self._save()
 
     def _primary_tdp_firmware_capped(self, on_ac):
         cap = getattr(
@@ -6701,6 +6719,10 @@ class Plugin:
         requested = self._effective_levels(self._current_appid, on_ac)[0]
         if int(requested.get("pl1", 0)) <= cap["pl1"]:
             return False
+        boot = _current_boot_id()
+        # The firmware keeps its low-battery cap until the next boot, even on the charger.
+        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
+            return True
         try:
             rails = self._tdp_backend.observe().surfaces.get(self._tdp_backend.name, {})
         except Exception:  # noqa: BLE001
