@@ -425,7 +425,7 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
-    "charge_limit_chosen": False,
+    "charge_limit_chosen": None,
     "low_battery_hold_latched_boot": None,
     "charge_limit_full_once_until": None,
     "charge_limit_full_once_restore_pending": False,
@@ -7655,11 +7655,12 @@ class Plugin:
 
     def _follow_system_charge_limit(self):
         backend = self._charge_limit
-        if self._settings.get("charge_limit_chosen"):
-            return
-        if self._settings.get("charge_limit_enabled"):
-            self._settings["charge_limit_chosen"] = True
+        chosen = self._settings.get("charge_limit_chosen")
+        if chosen is None:
+            chosen = bool(self._settings.get("charge_limit_enabled"))
+            self._settings["charge_limit_chosen"] = chosen
             self._save()
+        if chosen:
             return
         if not (backend.supported and backend.adjustable):
             return

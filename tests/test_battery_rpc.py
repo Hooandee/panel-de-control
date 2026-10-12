@@ -1904,3 +1904,15 @@ def test_a_choice_made_in_panel_is_not_replaced_by_the_system(tmp_path, monkeypa
 
     assert plugin._settings["charge_limit_chosen"] is True
     assert plugin._settings["charge_limit_enabled"] is False
+
+
+def test_a_limit_adopted_from_the_system_keeps_following_it(tmp_path, monkeypatch):
+    plugin, system = _plugin_with_system_limit(tmp_path, monkeypatch, 85)
+    assert plugin._settings["charge_limit_enabled"] is True
+    system.value = 100
+
+    plugin._follow_system_charge_limit()
+
+    assert plugin._settings["charge_limit_chosen"] is False
+    assert plugin._settings["charge_limit_enabled"] is False
+    assert plugin._charge_limit_operation_for(system)[0] == "disable"
