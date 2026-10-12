@@ -6698,7 +6698,7 @@ class Plugin:
             auto_tdp=self._auto_control_active(),
             firmware_capped=firmware_capped,
         )
-        if decision.active and not firmware_capped:
+        if decision.active:
             self._remember_low_battery_latch()
         return decision
 
@@ -6723,11 +6723,10 @@ class Plugin:
         # The firmware keeps its low-battery cap until the next boot, even on the charger.
         if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
             return True
-        try:
-            rails = self._tdp_backend.observe().surfaces.get(self._tdp_backend.name, {})
-        except Exception:  # noqa: BLE001
-            return False
-        return all(
+        observation = getattr(self, "_tdp_observation", None)
+        surfaces = getattr(observation, "surfaces", None) or {}
+        rails = surfaces.get(self._tdp_backend.name, {})
+        return bool(rails) and all(
             (reading := rails.get(rail)) is not None
             and reading.max_w is not None
             and int(reading.max_w) <= int(watts)

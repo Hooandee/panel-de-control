@@ -2736,6 +2736,7 @@ def _legion_go_s_capped_on_charger(plugin, monkeypatch, live_max):
         )
 
     monkeypatch.setattr(backend, "observe", observe)
+    plugin._tdp_observation = observe()
     plugin._settings["low_battery_tdp_hold"] = True
     plugin._tdp_profiles.set_levels("global", 25, 30, 35)
     backend.set_levels_calls = 0
