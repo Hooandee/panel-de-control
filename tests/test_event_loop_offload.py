@@ -1021,3 +1021,55 @@ def test_tdp_guard_observes_and_writes_off_the_loop_thread(tmp_path, monkeypatch
     assert write_threads
     assert loop_tid not in observe_threads
     assert loop_tid not in write_threads
+
+
+def test_support_sample_and_auto_tick_read_sysfs_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    main = sys.modules["main"]
+    threads = {"ready": [], "observe": [], "battery": [], "ac": []}
+
+    class _RecordingBackend(_SlowBackend):
+        supports_levels = False
+        blocking = False
+
+        def ready(self):
+            threads["ready"].append(threading.get_ident())
+            return False
+
+        def observe(self):
+            from tdp.types import RailReading, TdpObservation
+
+            threads["observe"].append(threading.get_ident())
+            return TdpObservation(
+                readable=True,
+                surfaces={self.name: {"pl1": RailReading(15, 5, 40)}},
+            )
+
+    class _RecordingBattery:
+        def read(self):
+            threads["battery"].append(threading.get_ident())
+            return {"percent": 50}
+
+    def recording_on_ac(root="/"):
+        threads["ac"].append(threading.get_ident())
+        return True
+
+    p._tdp_backend = _RecordingBackend()
+    p._battery = _RecordingBattery()
+    monkeypatch.setattr(main, "read_on_ac", recording_on_ac)
+    monkeypatch.setattr(p._tdp_profiles, "auto_tdp", lambda appid: True)
+    monkeypatch.setattr(p, "_module_enabled", lambda name: True)
+    monkeypatch.setattr(p, "_firmware_mode", lambda: main._CUSTOM_MODE)
+    p._current_appid = "7"
+
+    async def drive():
+        loop_tid = threading.get_ident()
+        await p._support_sample()
+        await p.get_battery_state()
+        await p._auto_tick()
+        return loop_tid
+
+    loop_tid = asyncio.run(drive())
+    for name, seen in threads.items():
+        assert seen, f"{name} never read"
+        assert loop_tid not in seen, f"{name} read on the event loop"

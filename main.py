@@ -5007,7 +5007,7 @@ class Plugin:
             return await inactive("disabled")
         if self._firmware_mode() != _CUSTOM_MODE:
             return await inactive("firmware_mode")
-        if not self._auto_tdp_supported():
+        if not await asyncio.to_thread(self._auto_tdp_supported):
             return await inactive("tdp_unsupported")
         if not self._tdp_control_on():
             return await inactive("control_disabled")
@@ -5176,11 +5176,11 @@ class Plugin:
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
-        auto = (
+        auto = bool(
             self._tdp_profiles.auto_tdp(self._current_appid)
-            and self._auto_tdp_supported()
+            and await asyncio.to_thread(self._auto_tdp_supported)
         )
-        ac = read_on_ac()
+        ac = await asyncio.to_thread(read_on_ac)
         setpoint = (
             self._auto_setpoint
             if self._auto_runtime_active()
@@ -5191,11 +5191,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = (
-                await asyncio.to_thread(self._observe_tdp_sync)
-                if self._power_uses_levels()
-                else self._observe_tdp_sync()
-            )
+            observation = await asyncio.to_thread(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)
@@ -8177,9 +8173,9 @@ class Plugin:
 
     async def get_battery_state(self) -> dict:
         self._init()
-        battery = self._battery.read()
+        battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
-        battery["ac_online"] = read_on_ac()
+        battery["ac_online"] = await asyncio.to_thread(read_on_ac)
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
 
     def _build_cpu_frequency_control(self):
@@ -12706,7 +12702,7 @@ class Plugin:
             None,
         )
         try:
-            battery = self._battery.read().get("percent")
+            battery = (await asyncio.to_thread(self._battery.read)).get("percent")
         except Exception:  # noqa: BLE001
             battery = None
         watts = power.get("watts")
