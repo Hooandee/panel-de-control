@@ -1086,7 +1086,7 @@ export const de: Record<string, string> = {
   "tdp.auto.ui_floor": "TDP für ein flüssiges Menü erhöht · wird im Spiel neu eingestellt",
   "tdp.lowBatteryHold.title": "TDP bei niedrigem Akkustand halten",
   "tdp.lowBatteryHold.experimental": "Experimentell",
-  "tdp.lowBatteryHold.hint": "Behält den gewählten Wert bei 20 % Akkustand oder weniger bei.",
+  "tdp.lowBatteryHold.hint": "Behält den gewählten Wert bei 20 % Akkustand oder weniger bei und, solange das System ihn weiter begrenzt, auch am Ladegerät.",
   "tdp.ceiling.battery": "Maximum im Akkubetrieb: {max} W. Schließe das Netzteil an, um den Wert weiter zu erhöhen.",
   "tdp.ceiling.charger": "Gerätemaximum: {max} W.",
   "tdp.extra.label": "Extra",

@@ -6670,6 +6670,12 @@ class Plugin:
         )
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         battery = self._battery.read() if enabled and strategy and not ac else {}
+        firmware_capped = bool(
+            enabled
+            and strategy
+            and (ac or (battery.get("percent") or 0) > LOW_BATTERY_PERCENT)
+            and self._primary_tdp_firmware_capped(ac)
+        )
         return decide_hold(
             strategy=strategy,
             enabled=enabled,
@@ -6679,6 +6685,29 @@ class Plugin:
             write_authorized=self._tdp_write_authorized(),
             custom_mode=self._firmware_mode() == _CUSTOM_MODE,
             auto_tdp=self._auto_control_active(),
+            firmware_capped=firmware_capped,
+        )
+
+    def _primary_tdp_firmware_capped(self, on_ac):
+        cap = getattr(
+            getattr(self, "_low_battery_hold_backend", None),
+            "unverified_hold_restore",
+            None,
+        )
+        if not cap:
+            return False
+        requested = self._effective_levels(self._current_appid, on_ac)[0]
+        if int(requested.get("pl1", 0)) <= cap["pl1"]:
+            return False
+        try:
+            rails = self._tdp_backend.observe().surfaces.get(self._tdp_backend.name, {})
+        except Exception:  # noqa: BLE001
+            return False
+        return all(
+            (reading := rails.get(rail)) is not None
+            and reading.max_w is not None
+            and int(reading.max_w) <= int(watts)
+            for rail, watts in cap.items()
         )
 
     def _remember_low_battery_primary_result(self, hold, result):
@@ -6774,7 +6803,7 @@ class Plugin:
         self._low_battery_hold_last_write_at = now
         sidecar_limits = getattr(sidecar, "low_battery_level_limits", None)
         limits = self._limits()
-        active_max = self._active_max(limits, False)
+        active_max = self._active_max(limits, bool(command.on_ac))
         bounds = (
             sidecar_limits(active_max)
             if callable(sidecar_limits)
