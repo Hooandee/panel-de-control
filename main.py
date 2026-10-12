@@ -417,6 +417,7 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    "charge_limit_chosen": False,
     "charge_limit_full_once_until": None,
     "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
@@ -767,6 +768,7 @@ class Plugin:
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
+        self._follow_system_charge_limit()
         self._charge_limit_last_apply = None
         self._charge_limit_failures = 0
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
@@ -7630,6 +7632,34 @@ class Plugin:
         self._save()
         decky.logger.info("Full charge once finished: %s", reason)
 
+    def _follow_system_charge_limit(self):
+        backend = self._charge_limit
+        if self._settings.get("charge_limit_chosen"):
+            return
+        if self._settings.get("charge_limit_enabled"):
+            self._settings["charge_limit_chosen"] = True
+            self._save()
+            return
+        if not (backend.supported and backend.adjustable):
+            return
+        try:
+            current = backend.get()
+            low, high = backend.range()
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(current, int):
+            return
+        enabled = low <= current < high
+        percent = current if enabled else self._settings.get("charge_limit_percent", 80)
+        if (
+            self._settings.get("charge_limit_enabled") == enabled
+            and self._settings.get("charge_limit_percent") == percent
+        ):
+            return
+        self._settings["charge_limit_enabled"] = enabled
+        self._settings["charge_limit_percent"] = percent
+        self._save()
+
     def _charge_limit_requested_percent(self) -> int:
         if self._charge_limit_full_once_lifting():
             _, maximum = self._charge_limit.range()
@@ -10241,6 +10271,7 @@ class Plugin:
         percent = max(lo, min(hi, int(percent)))
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
+        self._settings["charge_limit_chosen"] = True
         self._save()
         if not self._module_enabled("chargeLimit"):
             self._publish_charge_limit_handoff(generation)

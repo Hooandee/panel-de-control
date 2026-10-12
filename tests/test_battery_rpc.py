@@ -6,6 +6,7 @@ _init never touches live hardware), then injects a fake charge-limit backend.
 import asyncio
 import concurrent.futures
 import importlib
+import json
 import sys
 import threading
 import time
@@ -1851,3 +1852,55 @@ def test_new_schedule_cancels_previous_reconcile_task(tmp_path, monkeypatch):
         second.cancel()
 
     asyncio.run(scenario())
+
+
+def _plugin_with_system_limit(tmp_path, monkeypatch, value, settings=None):
+    if settings:
+        (tmp_path / "state.json").write_text(json.dumps(settings))
+    plugin = _make_plugin(tmp_path, monkeypatch)
+    system = _FakeChargeLimit()
+    system.value = value
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: system)
+    plugin._init()
+    return plugin, system
+
+
+def test_panel_follows_the_system_charge_limit_until_the_user_chooses(
+    tmp_path, monkeypatch,
+):
+    plugin, system = _plugin_with_system_limit(tmp_path, monkeypatch, 85)
+
+    assert plugin._settings["charge_limit_enabled"] is True
+    assert plugin._settings["charge_limit_percent"] == 85
+    assert plugin._charge_limit_operation_for(system)[:2] == ("set", 85)
+
+
+def test_panel_keeps_no_limit_when_the_system_has_none(tmp_path, monkeypatch):
+    plugin, system = _plugin_with_system_limit(tmp_path, monkeypatch, 100)
+
+    assert plugin._settings["charge_limit_enabled"] is False
+    assert plugin._charge_limit_operation_for(system)[0] == "disable"
+
+
+def test_a_limit_already_set_in_panel_wins_over_the_system(tmp_path, monkeypatch):
+    plugin, system = _plugin_with_system_limit(
+        tmp_path,
+        monkeypatch,
+        85,
+        {"charge_limit_enabled": True, "charge_limit_percent": 70},
+    )
+
+    assert plugin._settings["charge_limit_percent"] == 70
+    assert plugin._settings["charge_limit_chosen"] is True
+    assert plugin._charge_limit_operation_for(system)[:2] == ("set", 70)
+
+
+def test_a_choice_made_in_panel_is_not_replaced_by_the_system(tmp_path, monkeypatch):
+    plugin, system = _plugin_with_system_limit(tmp_path, monkeypatch, 100)
+    asyncio.run(plugin.set_charge_limit(False, 80))
+    system.value = 85
+
+    plugin._follow_system_charge_limit()
+
+    assert plugin._settings["charge_limit_chosen"] is True
+    assert plugin._settings["charge_limit_enabled"] is False
