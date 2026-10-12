@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import json
 import sys
+import time
 import types
 from dataclasses import replace
 
@@ -2661,3 +2662,53 @@ def test_profile_change_outside_a_game_still_restores_the_rails(plugin):
     profiles.value = "low-power"
     run(plugin, now, 10.0, step=0.5)
     assert len(backend.writes) == 2
+
+
+def test_legion_firmware_cap_rejection_applies_live_max_and_holds(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    backend = plugin._tdp_backend
+    backend.probe_live_max_on_ac = True
+    backend.live_max = 15
+    backend._levels = {"pl1": 22, "pl2": 18, "pl3": 37}
+    plugin._tdp_profiles.set_levels("global", 25, 25, 25)
+    original_set_levels = backend.set_levels
+    writes = []
+
+    def reject_above_live_max(pl1, pl2, pl3, ac):
+        writes.append((pl1, pl2, pl3))
+        if pl1 > backend.live_max:
+            return TdpResult(
+                pl1,
+                backend._levels["pl1"],
+                False,
+                "write not confirmed: fake/pl1!EINVAL; rollback confirmed",
+                "live_max_rejected",
+            )
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    monkeypatch.setattr(backend, "set_levels", reject_above_live_max)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert writes == [(25, 25, 25), (15, 25, 25)]
+    assert backend._levels["pl1"] == 15
+    assert (plugin._tdp_status, plugin._tdp_reason) == (
+        "constrained",
+        "power_source_limit",
+    )
+
+    for now in (10.0, 10.75, 12.0, 40.0):
+        plugin._tdp_guard_tick(now=now)
+    assert len(writes) == 2
+
+    backend.live_max = 33
+    start = time.monotonic()
+    for offset in (100.0, 100.75, 102.0, 130.0):
+        plugin._tdp_guard_tick(now=start + offset)
+    assert writes[-1] == (25, 25, 25)
+    assert backend._levels["pl1"] == 25

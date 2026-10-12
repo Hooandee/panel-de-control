@@ -6231,11 +6231,26 @@ class Plugin:
         detail = result.detail or ""
         return bool(
             not result.ok
-            and getattr(result, "failure_kind", None) == "target_not_applied"
+            and getattr(result, "failure_kind", None)
+            in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
             and "; rollback confirmed" in detail
         )
+
+    def _apply_within_rejected_live_max(self, command, probe_live_max, result):
+        if not (
+            probe_live_max
+            and getattr(result, "failure_kind", None) == "live_max_rejected"
+            and self._tdp_live_max_probe_failed_safely(result)
+        ):
+            return
+        bounded = build_targets(
+            command.requested,
+            command.safe_bounds,
+            self._observe_tdp_sync(),
+        )
+        self._apply_tdp_targets(bounded.target, command.on_ac, command.auto_tdp)
 
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
@@ -6473,6 +6488,7 @@ class Plugin:
             command.on_ac,
             command.auto_tdp,
         )
+        self._apply_within_rejected_live_max(command, probe_live_max, result)
         after = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -7099,6 +7115,9 @@ class Plugin:
                     targets.target,
                     command.on_ac,
                     command.auto_tdp,
+                )
+                self._apply_within_rejected_live_max(
+                    command, probe_live_max, result,
                 )
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
