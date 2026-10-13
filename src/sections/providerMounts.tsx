@@ -1,7 +1,7 @@
 import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
 import { PanelSectionRow } from "@decky/ui";
 
-import { setSeenTdpConflictTakeover } from "../api";
+import { dismissChargerNotice, setSeenTdpConflictTakeover } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useColor } from "../display/useColor";
@@ -17,6 +17,7 @@ import { PotenciaProvider } from "../tdp/potenciaContext";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
+import { ChargerUnstableCard } from "../components/ChargerUnstableCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { ColorPreviewConfirm } from "../components/ColorPreviewConfirm";
 import { ProfileSelector } from "../components/ProfileSelector";
@@ -88,6 +89,10 @@ export const PotenciaProviderMount: FC<{
     () => setModuleDisabled("power", true).then(() => refresh()),
     [refresh],
   );
+  const onDismissCharger = useCallback(
+    () => dismissChargerNotice().then(() => refresh()).catch(() => {}),
+    [refresh],
+  );
 
   const shownTakeover = useRef(false);
   const conflictRef = useRef(conflict);
@@ -114,6 +119,14 @@ export const PotenciaProviderMount: FC<{
             onDisableSdtdp={() => void conflict.disableSdtdp()}
             onTakeHhd={() => void conflict.takeHhd()}
             onDisablePdcTdp={() => void onDisablePdcTdp()}
+          />
+        </PanelSectionRow>
+      )}
+      {tdp?.charger_unstable?.visible && (
+        <PanelSectionRow>
+          <ChargerUnstableCard
+            transitions={tdp.charger_unstable.transitions}
+            onDismiss={() => void onDismissCharger()}
           />
         </PanelSectionRow>
       )}

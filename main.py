@@ -161,6 +161,8 @@ _REPORT_SERVICE_URL = os.environ.get(
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
+_CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
+_CHARGER_NOTICE_TTL_S = 24 * 3600
 # Stable fields only: live readings would make every refresh look like a change.
 # tests/test_journal_sections.py requires an entry for every section.
 _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
@@ -168,7 +170,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_tdp_state", (
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
-            "global_auto_config", "low_battery_hold.enabled",
+            "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
         )),
     ),
     "system": (
@@ -414,6 +416,7 @@ DEFAULTS = {
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
+    "charger_notice_dismissed_at": None,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
@@ -3514,6 +3517,30 @@ class Plugin:
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def dismiss_charger_notice(self) -> bool:
+        self._init()
+        self._settings["charger_notice_dismissed_at"] = time.time()
+        self._save()
+        return True
+
+    def _charger_unstable_state(self, now: float | None = None) -> dict | None:
+        lifecycle = getattr(self, "_lifecycle", None)
+        episode = lifecycle.diagnostics().get("ac_unstable") if lifecycle is not None else None
+        if not episode:
+            return None
+        now = time.time() if now is None else now
+        dismissed_at = self._settings.get("charger_notice_dismissed_at")
+        snoozed = (
+            isinstance(dismissed_at, (int, float))
+            and now - dismissed_at < _CHARGER_NOTICE_SNOOZE_S
+        )
+        return {
+            "visible": not snoozed and now - episode["last_at"] < _CHARGER_NOTICE_TTL_S,
+            "started_at": episode["started_at"],
+            "last_at": episode["last_at"],
+            "transitions": episode["transitions"],
+        }
 
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
@@ -11040,6 +11067,7 @@ class Plugin:
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "charger_unstable": self._charger_unstable_state(),
         }
 
     def _tdp_ownership_state(self, observation):

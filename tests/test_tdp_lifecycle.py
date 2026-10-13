@@ -99,6 +99,10 @@ def test_awake_wakeup_events_leave_bounded_diagnostics():
         "resume_count": 0,
         "ignored_wakeup_changes": 8,
         "ac_transition_count": 0,
+        "ac_deferred_reapplies": 0,
+        "ac_waiting_stable": False,
+        "ac_unstable": None,
+        "ac_unstable_episodes": 0,
         "apply_failures": 0,
         "last_apply_failure": None,
         "poll_failures": 0,
@@ -388,3 +392,190 @@ def test_check_survives_apply_exception():
         "error": "RuntimeError",
         "failure_count": 1,
     }
+
+
+def _flapping_manager(events, ac, emitted=None):
+    return LifecycleManager(
+        apply_cb=lambda on_ac: events.append(("apply", on_ac)),
+        reassert_cb=lambda on_ac: events.append(("reassert", on_ac)),
+        read_wakeup=lambda: 0,
+        read_ac=lambda: ac["v"],
+        event_cb=None if emitted is None else emitted.append,
+    )
+
+
+def test_plug_and_unplug_within_a_minute_still_reapply_immediately():
+    events = []
+    ac = {"v": False}
+    lm = _flapping_manager(events, ac)
+    lm.check(now=0.0)
+    ac["v"] = True
+    lm.check(now=1.0)
+    ac["v"] = False
+    lm.check(now=10.0)
+    assert [e for e in events if e[0] == "apply"] == [("apply", True), ("apply", False)]
+
+
+def test_flapping_charger_waits_for_stable_power_before_reapplying():
+    events = []
+    emitted = []
+    ac = {"v": True}
+    lm = _flapping_manager(events, ac, emitted)
+    lm.check(now=0.0)
+    for i, t in enumerate((1.0, 3.0)):
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    events.clear()
+    ac["v"] = not ac["v"]
+    lm.check(now=5.0)
+    assert events == []
+    for t in (6.0, 8.0, 9.9):
+        lm.check(now=t)
+    assert events == []
+    lm.check(now=10.0)
+    assert events == [("apply", False)]
+    lm.check(now=12.0)
+    lm.check(now=14.0)
+    assert events == [("apply", False), ("reassert", False), ("reassert", False)]
+    deferred = [e for e in emitted if e["event"] == "ac_changed" and e.get("deferred")]
+    assert len(deferred) == 1
+    assert any(e["event"] == "ac_stable" for e in emitted)
+    assert lm.diagnostics()["ac_deferred_reapplies"] == 1
+
+
+def test_each_flap_pushes_the_stable_deadline():
+    events = []
+    ac = {"v": True}
+    lm = _flapping_manager(events, ac)
+    lm.check(now=0.0)
+    t = 0.0
+    for _ in range(12):
+        t += 3.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    applies_while_flapping = [e for e in events if e[0] == "apply"]
+    assert len(applies_while_flapping) == 2
+    events.clear()
+    lm.check(now=t + 4.9)
+    assert events == []
+    lm.check(now=t + 5.0)
+    assert events == [("apply", ac["v"])]
+
+
+def test_unstable_charger_episode_is_reported_once():
+    emitted = []
+    ac = {"v": True}
+    lm = _flapping_manager([], ac, emitted)
+    lm.check(now=1000.0)
+    t = 1000.0
+    for _ in range(6):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    unstable = [e for e in emitted if e["event"] == "ac_unstable"]
+    assert len(unstable) == 1
+    assert unstable[0]["transitions"] == 6
+    episode = lm.diagnostics()["ac_unstable"]
+    assert episode["started_at"] == 1120.0
+    assert episode["last_at"] == 1120.0
+    assert episode["transitions"] == 6
+    for _ in range(4):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    assert len([e for e in emitted if e["event"] == "ac_unstable"]) == 1
+    episode = lm.diagnostics()["ac_unstable"]
+    assert episode["started_at"] == 1120.0
+    assert episode["last_at"] == t
+    assert episode["transitions"] == 10
+
+
+def test_unstable_episode_restarts_after_a_quiet_period():
+    emitted = []
+    ac = {"v": True}
+    lm = _flapping_manager([], ac, emitted)
+    lm.check(now=0.0)
+    t = 0.0
+    for _ in range(6):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    t += 3600.0
+    for _ in range(6):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    unstable = [e for e in emitted if e["event"] == "ac_unstable"]
+    assert len(unstable) == 2
+    assert lm.diagnostics()["ac_unstable"]["started_at"] == t
+    assert lm.diagnostics()["ac_unstable_episodes"] == 2
+
+
+def test_a_few_plug_cycles_are_not_an_unstable_charger():
+    ac = {"v": True}
+    lm = _flapping_manager([], ac)
+    lm.check(now=0.0)
+    for t in (60.0, 120.0, 400.0, 460.0, 800.0):
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    assert lm.diagnostics()["ac_unstable"] is None
+
+
+def test_flapping_keeps_resume_retries_and_holds_the_resume_reapply():
+    events = []
+    ac = {"v": True}
+    wakeup = {"v": 0}
+    suspended = {"v": 0.0}
+    lm = LifecycleManager(
+        apply_cb=lambda on_ac: events.append(("apply", on_ac)),
+        reassert_cb=lambda on_ac: events.append(("reassert", on_ac)),
+        wakeup_delay=4.0,
+        read_wakeup=lambda: wakeup["v"],
+        read_suspend=lambda: suspended["v"],
+        read_ac=lambda: ac["v"],
+    )
+    lm.check(now=0.0)
+    wakeup["v"] = 1
+    suspended["v"] = 30.0
+    lm.check(now=100.0)
+    for t in (100.5, 101.0, 101.5):
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    events.clear()
+    for t in (102.0, 104.0, 106.0):
+        lm.check(now=t)
+    assert [e for e in events if e[0] == "apply"] == []
+    assert ("reassert", ac["v"]) in events
+    lm.check(now=106.5)
+    assert [e for e in events if e[0] == "apply"] == [("apply", ac["v"])]
+    assert lm.diagnostics()["pending_full_reapplies"] == 0
+
+
+def test_wall_clock_stamps_the_episode_while_monotonic_drives_timing():
+    ac = {"v": True}
+    lm = _flapping_manager([], ac)
+    lm.check(now=0.0, wall=5_000.0)
+    t = 0.0
+    for _ in range(6):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t, wall=5_000.0 + t)
+    episode = lm.diagnostics()["ac_unstable"]
+    assert episode["started_at"] == 5_120.0
+    assert episode["last_at"] == 5_120.0
+
+
+def test_a_normal_plug_after_a_quiet_spell_keeps_the_last_episode():
+    ac = {"v": True}
+    lm = _flapping_manager([], ac)
+    lm.check(now=0.0)
+    t = 0.0
+    for _ in range(6):
+        t += 20.0
+        ac["v"] = not ac["v"]
+        lm.check(now=t)
+    ac["v"] = not ac["v"]
+    lm.check(now=t + 3600.0)
+    episode = lm.diagnostics()["ac_unstable"]
+    assert episode["last_at"] == t
+    assert episode["transitions"] == 6
