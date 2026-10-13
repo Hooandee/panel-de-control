@@ -3162,3 +3162,132 @@ def test_volume_writes_that_change_nothing_stay_out_of_the_diary(tmp_path):
     finally:
         journal.active = None
     assert [fields["by"] for _args, fields in written] == ["ensure_sink", "ensure_sink"]
+
+
+def test_a_default_readback_that_times_out_after_a_restart_is_retried(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    stalled = {"reads": 3}
+    run = eq._runner
+
+    def stalling(argv, timeout=8):
+        if argv == ["pactl", "get-default-sink"] and stalled["reads"]:
+            stalled["reads"] -= 1
+            run(["pactl", "set-default-sink", "X EQ"], timeout)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = stalling
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert eq._default_failure is None
+
+
+def test_a_default_that_never_reads_back_still_fails_within_the_budget(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    run = eq._runner
+
+    def silent(argv, timeout=8):
+        now["value"] += 0.5
+        if argv == ["pactl", "get-default-sink"]:
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = silent
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert eq._default_failure == {"reason": "default_readback_missing", "current": None}
+    assert now["value"] <= 21.0
+
+
+def test_slow_process_spawns_do_not_eat_the_default_confirmation_budget(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+    run = eq._runner
+    reads = {"n": 0}
+
+    def emulated(argv, timeout=8):
+        now["value"] += 1.1
+        if argv == ["pactl", "get-default-sink"]:
+            reads["n"] += 1
+            if reads["n"] <= 2:
+                return "alsa_speaker"
+        return run(argv, timeout)
+
+    eq._runner = emulated
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert now["value"] < 20.0
+
+
+def test_a_stalled_pulse_on_a_native_host_fails_as_fast_as_before(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = False
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+
+    def stalled(argv, timeout=8):
+        now["value"] += 1.0
+        fake.calls.append(argv)
+        return ""
+
+    eq._runner = stalled
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert eq._default_failure == {"reason": "default_readback_missing", "current": None}
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
+    assert now["value"] <= 2.5
+
+
+def test_timeouts_never_count_as_spawn_cost_even_when_emulated(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+
+    def stalled(argv, timeout=8):
+        now["value"] += 1.0
+        return ""
+
+    eq._runner = stalled
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert now["value"] <= 9.5
+
+
+def test_emulated_timeouts_after_answered_slow_calls_still_get_another_attempt(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    eq._spawn_cost = 1.1
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+    run = eq._runner
+    calls = {"n": 0}
+
+    def stalls_then_answers(argv, timeout=8):
+        calls["n"] += 1
+        now["value"] += 1.1
+        if argv == ["pactl", "get-default-sink"] and 2 <= calls["n"] <= 8:
+            run(["pactl", "set-default-sink", "X EQ"], timeout)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = stalls_then_answers
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert now["value"] < 20.0
