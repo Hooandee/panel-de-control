@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
+
+
+### Español
+
+* **Equipos:** La AYN Odin 3 con Armada ya se reconoce como tal, con su nombre, su chip Snapdragon 8 Elite y su pantalla OLED, en lugar de aparecer como un equipo ARM cualquiera.
+* **Ventiladores:** El ventilador de la Odin 3 ahora aparece y puedes ponerle una curva. Como no tiene sensor de velocidad, se muestra en porcentaje en vez de en RPM.
+* **Batería:** En consolas ARM como la Odin 3 o la Thor, Panel ya sabe cuándo están enchufadas. En la Odin 3 el límite de carga funciona de verdad, y al quitarlo vuelve a cargar enseguida.
+* **Mandos:** Las palas traseras M1 y M2 de la Odin 3 salen en Mandos y puedes asignarles otro botón. Si la emulación de mando que usas no se las pasa a los juegos, Panel te avisa.
+* **Potencia:** En consolas ARM con Armada, volver a poner el ventilador en Automático ya no te cambia el nivel de potencia que habías elegido.
+* **Sonido:** Con Armada, el ecualizador se activa a la primera y tarda bastante menos.
+
+### English
+
+* **Devices:** The AYN Odin 3 running Armada is now recognised by name, with its Snapdragon 8 Elite chip and OLED screen, instead of showing up as a generic ARM device.
+* **Fans:** The Odin 3 fan now shows up and takes a curve. It has no speed sensor, so it's shown as a percentage instead of RPM.
+* **Battery:** On ARM handhelds like the Odin 3 or the Thor, Panel now knows when the charger is plugged in. On the Odin 3 the charge limit really works, and turning it off starts charging again right away.
+* **Controllers:** The Odin 3 back buttons M1 and M2 show up in Controllers and can be assigned to another button. If your controller emulation doesn't pass them to games, Panel tells you.
+* **Power:** On ARM handhelds with Armada, setting the fan back to Automatic no longer changes the power level you picked.
+* **Sound:** With Armada, the equalizer turns on first time and takes a lot less time.
+
+### Italiano
+
+* **Dispositivi:** La AYN Odin 3 con Armada ora viene riconosciuta per nome, con il suo chip Snapdragon 8 Elite e lo schermo OLED, invece di comparire come un dispositivo ARM qualsiasi.
+* **Ventole:** La ventola della Odin 3 ora compare e accetta una curva. Non ha un sensore di velocità, quindi si vede in percentuale invece che in RPM.
+* **Batteria:** Sulle console ARM come la Odin 3 o la Thor, Panel ora sa quando il caricatore è collegato. Sulla Odin 3 il limite di carica funziona davvero, e togliendolo riprende subito a caricare.
+* **Controller:** I tasti posteriori M1 e M2 della Odin 3 compaiono in Controller e si possono assegnare a un altro tasto. Se l'emulazione del controller che usi non li passa ai giochi, Panel te lo dice.
+* **Potenza:** Sulle console ARM con Armada, rimettere la ventola in Automatico non cambia più il livello di potenza che avevi scelto.
+* **Audio:** Con Armada, l'equalizzatore si attiva al primo colpo e ci mette molto meno.
+
+### Deutsch
+
+* **Geräte:** Die AYN Odin 3 mit Armada wird jetzt mit Namen erkannt, samt Snapdragon 8 Elite und OLED-Bildschirm, statt als beliebiges ARM-Gerät aufzutauchen.
+* **Lüfter:** Der Lüfter der Odin 3 wird jetzt angezeigt und lässt sich mit einer Kurve steuern. Er hat keinen Drehzahlsensor, deshalb steht dort ein Prozentwert statt RPM.
+* **Akku:** Auf ARM-Handhelds wie der Odin 3 oder der Thor erkennt Panel jetzt, wann das Ladegerät steckt. Auf der Odin 3 funktioniert das Ladelimit wirklich, und wer es ausschaltet, lädt sofort weiter.
+* **Controller:** Die hinteren Tasten M1 und M2 der Odin 3 erscheinen unter Controller und lassen sich anders belegen. Wenn deine Controller-Emulation sie nicht an Spiele weitergibt, sagt Panel Bescheid.
+* **Leistung:** Auf ARM-Handhelds mit Armada ändert sich die gewählte Leistungsstufe nicht mehr, wenn du den Lüfter wieder auf Automatisch stellst.
+* **Ton:** Mit Armada schaltet sich der Equalizer beim ersten Versuch ein und braucht deutlich weniger Zeit.
+
+### Português (Brasil)
+
+* **Aparelhos:** O AYN Odin 3 com Armada agora é reconhecido pelo nome, com o chip Snapdragon 8 Elite e a tela OLED, em vez de aparecer como um aparelho ARM qualquer.
+* **Ventoinhas:** A ventoinha do Odin 3 agora aparece e aceita uma curva. Ela não tem sensor de velocidade, então aparece em porcentagem em vez de RPM.
+* **Bateria:** Em portáteis ARM como o Odin 3 ou o Thor, o Panel agora sabe quando o carregador está conectado. No Odin 3 o limite de carga funciona de verdade, e ao desligá-lo a carga volta na hora.
+* **Controle:** Os botões traseiros M1 e M2 do Odin 3 aparecem em Controle e podem virar outro botão. Se a emulação de controle que você usa não os passa para os jogos, o Panel avisa.
+* **Potência:** Em portáteis ARM com Armada, voltar a ventoinha para Automático não muda mais o nível de potência que você escolheu.
+* **Som:** Com Armada, o equalizador liga de primeira e demora bem menos.
+
 ## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
 
 
