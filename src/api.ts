@@ -419,6 +419,8 @@ export interface FanInfo {
   percent: number | null;
   max_rpm?: number | null;
   channel?: "system" | "gpu";
+  // No tachometer: only the commanded duty is known (device-tree pwm-fan).
+  duty_only?: boolean;
 }
 
 export interface TempInfo {
@@ -988,6 +990,8 @@ export interface ControllerConfig {
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
   extra_buttons?: boolean;
+  // A button left at its default is lost by the emulated gamepad (read live).
+  unmapped_dropped?: boolean;
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];

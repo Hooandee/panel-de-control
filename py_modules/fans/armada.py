@@ -105,6 +105,7 @@ class ArmadaFanBackend(GenericPwmFanBackend):
         self._control = control if control is not None else SystemdPowerdControl()
         self._clock = clock
         self._powerd_stopped = False
+        self._powerd_restarted = False
         self._verified_at = float("-inf")
 
     def _has_firmware_auto(self) -> bool:
@@ -125,7 +126,14 @@ class ArmadaFanBackend(GenericPwmFanBackend):
         if started:
             self._control.stop_guard()
             self._powerd_stopped = False
+            self._powerd_restarted = True
         return started
+
+    def consume_powerd_restart(self) -> bool:
+        """Whether armada-powerd was started since the last call. On start it applies its
+        own frequency profile, which overwrites Panel's performance level."""
+        restarted, self._powerd_restarted = self._powerd_restarted, False
+        return restarted
 
     def _before_drive(self) -> bool:
         if not self._powerd_stopped and not self._take():

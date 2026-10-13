@@ -2814,3 +2814,21 @@ def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
     plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
     assert len(sidecar.calls) == 2
     assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+    restarted = {"pending": True}
+
+    def consume():
+        pending, restarted["pending"] = restarted["pending"], False
+        return pending
+
+    plugin._fan_ctrl = types.SimpleNamespace(consume_powerd_restart=consume)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=13.0)
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_history[-1]["action"] == "powerd-restart-reassert"

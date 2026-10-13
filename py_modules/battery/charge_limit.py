@@ -6,6 +6,7 @@ from sysfs import read_int, read_str, write_str
 _SUPPLY = "sys/class/power_supply"
 _HWMON = "sys/class/hwmon"
 _THRESHOLD = "charge_control_end_threshold"
+_START_THRESHOLD = "charge_control_start_threshold"
 # The firmware accepts a wider range, but a floor of 20 keeps the UI sane (a
 # 5% cap would be a footgun) and a ceiling of 100 = "no limit".
 _MIN = 20
@@ -103,6 +104,7 @@ class QcomBattmgrChargeLimit(SysfsChargeLimit):
     # The driver clamps the end threshold to 55-100.
     _MIN_END = 55
     _IGNORED_WRITES_TO_GIVE_UP = 2
+    _NO_CAP_START = 95
 
     def __init__(self, root="/"):
         super().__init__(root)
@@ -116,7 +118,10 @@ class QcomBattmgrChargeLimit(SysfsChargeLimit):
         return (self._MIN_END, _MAX)
 
     def set(self, percent):
-        return self._write(_clamp(int(percent), self._MIN_END, _MAX))
+        value = _clamp(int(percent), self._MIN_END, _MAX)
+        if not self._write(value):
+            return False
+        return value < _MAX or self._lift_resume_threshold()
 
     def _write(self, value):
         before = self.get()
@@ -130,9 +135,18 @@ class QcomBattmgrChargeLimit(SysfsChargeLimit):
         return False
 
     def disable(self):
-        if self.get() in (0, _MAX):
+        # The driver keeps the resume threshold when the end threshold moves, so a
+        # lifted cap would otherwise wait for the battery to drain below the old start.
+        if self.get() not in (0, _MAX) and not self._write(_MAX):
+            return False
+        return self._lift_resume_threshold()
+
+    def _lift_resume_threshold(self):
+        start_path = os.path.join(os.path.dirname(self._path), _START_THRESHOLD)
+        start = read_int(start_path)
+        if start is None or start == 0 or start >= self._NO_CAP_START:
             return True
-        return self._write(_MAX)
+        return write_str(start_path, self._NO_CAP_START) and read_int(start_path) == self._NO_CAP_START
 
 
 class SteamDeckChargeLimit(_FileChargeLimit):

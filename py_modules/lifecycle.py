@@ -4,20 +4,32 @@ import os
 import time
 from collections import deque
 
+_CHARGER_TYPES = ("Mains", "USB")
+
 
 def read_on_ac(root="/"):
-    """True if any power supply of type 'Mains' is online. Never raises."""
+    """True if a Mains supply is online. Machines without any Mains supply (Qualcomm
+    pmic-glink ARM handhelds) report the charger as an online USB supply instead.
+    Never raises."""
+    has_mains = False
+    port_online = False
     for d in glob.glob(os.path.join(root, "sys/class/power_supply", "*")):
         try:
             with open(os.path.join(d, "type")) as f:
-                if f.read().strip() != "Mains":
-                    continue
+                kind = f.read().strip()
+            if kind not in _CHARGER_TYPES:
+                continue
             with open(os.path.join(d, "online")) as f:
-                if f.read().strip() == "1":
-                    return True
+                online = f.read().strip() == "1"
         except OSError:
             continue
-    return False
+        if kind == "Mains":
+            has_mains = True
+            if online:
+                return True
+        elif online:
+            port_online = True
+    return port_online and not has_mains
 
 
 def _read_wakeup_count(root="/"):

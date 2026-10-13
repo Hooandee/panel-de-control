@@ -786,6 +786,7 @@ export const ptBR: Record<string, string> = {
   "mandos.remap.uncalibrated": "O controle deste modelo ainda não pode ser remapeado aqui. Os layouts de controle por jogo são feitos no Steam Input.",
   "mandos.remap.nobuttons": "Nenhum botão remapeável detectado no momento. Se você acabou de reiniciar, espere alguns segundos.",
   "mandos.remap.noextra": "Este modelo não tem botões extras para remapear. Layouts por jogo são definidos no Steam Input.",
+  "mandos.remap.dropped": "Com a emulação de controle atual, botões sem atribuição não chegam aos jogos. Atribua um botão aqui ou use a emulação Steam Deck.",
   "mandos.modules.title": "Módulos Mágicos",
   "mandos.modules.left": "Módulo esquerdo",
   "mandos.modules.right": "Módulo direito",

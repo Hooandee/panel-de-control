@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 from sysfs import read_int, read_str, write_str
 from tdp.backend import TDPBackend
@@ -10,6 +11,9 @@ _DEVFREQ = "sys/class/devfreq"
 _COOLING = "sys/class/thermal"
 _LEVELS = 10
 _FLOOR = 0.4
+# SCMI cpufreq (SM8750) publishes a new scaling_max_freq a few hundred ms after the write.
+_SETTLE_S = 0.6
+_SETTLE_STEP_S = 0.05
 
 
 def _values(path, name):
@@ -92,9 +96,11 @@ class ArmPerformanceLevels(TDPBackend):
     auto_tdp_safe = True
     guard_interval_s = 3.0
 
-    def __init__(self, root="/", on_release=None):
+    def __init__(self, root="/", on_release=None, sleep=time.sleep, clock=time.monotonic):
         self._root = root
         self._on_release = on_release
+        self._sleep = sleep
+        self._clock = clock
         self._domains = []
         for path in sorted(glob.glob(os.path.join(root, _CPUFREQ, "policy[0-9]*")),
                            key=lambda p: int(os.path.basename(p)[6:])):
@@ -142,6 +148,14 @@ class ArmPerformanceLevels(TDPBackend):
             for domain, ceiling in zip(self._domains, self.ceilings(level))
         )
 
+    def _settled(self, level):
+        deadline = self._clock() + _SETTLE_S
+        while not self._holds(level, _cooling_states(self._root)):
+            if self._clock() >= deadline:
+                return False
+            self._sleep(_SETTLE_STEP_S)
+        return True
+
     def read_applied(self):
         # Read each node once and match levels in memory: this runs on every power poll.
         cooling_states = _cooling_states(self._root)
@@ -164,7 +178,7 @@ class ArmPerformanceLevels(TDPBackend):
             if not domain.write(ceiling):
                 return TdpResult(level, self.read_applied(), False, "write failed",
                                  failure_kind="write")
-        if not self._holds(level, _cooling_states(self._root)):
+        if not self._settled(level):
             return TdpResult(level, self.read_applied(), False, "readback mismatch",
                              failure_kind="readback")
         return TdpResult(level, level, True, "")

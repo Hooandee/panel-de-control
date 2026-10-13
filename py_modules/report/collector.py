@@ -889,7 +889,37 @@ def _snap_arm(root: str) -> dict:
         "x86_emulated": bool(re.search(r"GenuineIntel|AuthenticAMD", cpuinfo or "")),
         "devfreq": devfreq,
         "backlight": backlight,
+        "power_supplies": _snap_arm_supplies(root),
+        "pwm_fans": _snap_arm_pwm_fans(root),
     }
+
+
+_ARM_SUPPLY_FIELDS = ("type", "online", "status", "capacity",
+                      "charge_control_start_threshold", "charge_control_end_threshold")
+
+
+def _snap_arm_supplies(root: str) -> dict:
+    out: dict = {}
+    for supply in sorted(_glob(root, "sys/class/power_supply/*"))[:_SNAP_MAX_CHIPS]:
+        out[os.path.basename(supply)] = {
+            field: value
+            for field in _ARM_SUPPLY_FIELDS
+            if (value := read_str(os.path.join(supply, field))) is not None
+        }
+    return out
+
+
+def _snap_arm_pwm_fans(root: str) -> list[dict]:
+    fans = []
+    for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*")):
+        if read_str(os.path.join(chip, "name")) != "pwmfan":
+            continue
+        fans.append({
+            "hwmon": os.path.basename(chip),
+            **{node: read_str(os.path.join(chip, node))
+               for node in ("pwm1", "pwm1_enable", "fan1_input")},
+        })
+    return fans
 
 
 def _snap_desktop(root: str) -> dict:
