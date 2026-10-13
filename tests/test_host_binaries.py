@@ -53,3 +53,10 @@ def test_detection_needs_an_arm_kernel_and_an_x86_interpreter(monkeypatch):
     monkeypatch.setattr(device_tree.platform, "machine", lambda: "x86_64")
     assert device_tree.runs_emulated() is False
     device_tree.runs_emulated.cache_clear()
+
+
+def test_shells_and_interpreters_stay_emulated_so_their_children_resolve_alike(tmp_path, monkeypatch):
+    host = _host(tmp_path, "sh", "bash", "python3", "env")
+    monkeypatch.setattr(device_tree, "runs_emulated", lambda: True)
+    for name in ("sh", "bash", "python3", "env"):
+        assert device_tree.host_binary(f"/usr/bin/{name}", host_root=host) == f"/usr/bin/{name}"
