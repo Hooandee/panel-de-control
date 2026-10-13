@@ -12,9 +12,15 @@ interface NavigationButtons {
   cancel: number;
 }
 
+interface NavigationContext {
+  m_rgGamepadNavigationTrees?: unknown;
+}
+
 interface NavigationController {
   GetActiveNavTree?(): NavigationTree | null;
   FocusElement?(element: HTMLElement): unknown;
+  m_ActiveContext?: NavigationContext | null;
+  m_LastActiveContext?: NavigationContext | null;
 }
 
 interface NavigationNode {
@@ -75,11 +81,19 @@ function findNavigationNode(tree: NavigationTree, element: HTMLElement): Navigat
   return null;
 }
 
+// With a game in front, closing a modal can leave Steam with no active context until
+// the next button press; focus taken in the last context is where that press resumes.
+function inactiveContextTrees(controller: NavigationController | null | undefined): NavigationTree | null {
+  const context = controller?.m_ActiveContext ?? controller?.m_LastActiveContext;
+  const trees = context?.m_rgGamepadNavigationTrees;
+  return Array.isArray(trees) ? { m_rgChildNavTrees: trees } : null;
+}
+
 function focusThroughNavigationNode(
   controller: NavigationController | null | undefined,
   element: HTMLElement,
 ): boolean {
-  const tree = controller?.GetActiveNavTree?.();
+  const tree = controller?.GetActiveNavTree?.() ?? inactiveContextTrees(controller);
   if (!tree) return false;
   const node = findNavigationNode(tree, element);
   if (typeof node?.BTakeFocus !== "function") return false;

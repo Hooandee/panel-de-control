@@ -48,6 +48,21 @@ describe("createThemeNavigationAccess.focus", () => {
     expect(target.BTakeFocus).toHaveBeenCalledOnce();
   });
 
+  it("searches the last active context when Steam has no active navigation tree", () => {
+    const element = document.createElement("div");
+    const target = node(element);
+    const controller = {
+      GetActiveNavTree: () => null,
+      m_ActiveContext: null,
+      m_LastActiveContext: { m_rgGamepadNavigationTrees: [{ m_Root: node(document.body) }, { m_Root: node(null, [target]) }] },
+    };
+
+    const access = createThemeNavigationAccess({ getController: () => controller });
+
+    expect(access.focus(element)).toBe(true);
+    expect(target.BTakeFocus).toHaveBeenCalledOnce();
+  });
+
   it("reports failure honestly when no node owns the element or it refuses focus", () => {
     const missing = document.createElement("div");
     const refusing = document.createElement("div");
