@@ -6963,6 +6963,13 @@ class Plugin:
             watch = self._tdp_profile_watch = PlatformProfileWatch()
         return watch
 
+    def _consume_powerd_restart(self) -> bool:
+        consume = getattr(getattr(self, "_fan_ctrl", None), "consume_powerd_restart", None)
+        try:
+            return bool(consume()) if callable(consume) else False
+        except Exception:  # noqa: BLE001
+            return False
+
     def _profile_reassert_eligible(self, command, hold, status):
         backend = self._tdp_backend
         return bool(
@@ -7144,6 +7151,9 @@ class Plugin:
             return
         if self._auto_ui_blocks_tdp_write(command.reason):
             return
+        if outcome.action != "apply" and self._consume_powerd_restart():
+            action = "powerd-restart-reassert"
+            outcome = replace(outcome, action="apply")
         correction = None
         if (
             outcome.action != "apply"

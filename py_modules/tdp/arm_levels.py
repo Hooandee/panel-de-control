@@ -4,7 +4,7 @@ import time
 
 from sysfs import read_int, read_str, write_str
 from tdp.backend import TDPBackend
-from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+from tdp.types import TdpLimits, TdpResult
 
 _CPUFREQ = "sys/devices/system/cpu/cpufreq"
 _DEVFREQ = "sys/class/devfreq"
@@ -169,29 +169,6 @@ class ArmPerformanceLevels(TDPBackend):
             ):
                 return level
         return None
-
-    def observe(self):
-        applied = self.read_applied()
-        if applied is None:
-            applied = self._effective_level()
-        surfaces = {} if applied is None else {self.name: {"pl1": RailReading(applied)}}
-        return TdpObservation(readable=self.readback, surfaces=surfaces)
-
-    def _effective_level(self):
-        # Another writer (armada-powerd restarting with its own profile) leaves ceilings
-        # that match no level. Report the level they amount to so the guard sees drift
-        # and reasserts, instead of an unreadable state it would only wait on.
-        boost_on = _boost_on(self._root)
-        tables = [self.ceilings(level, boost_on) for level in range(1, _LEVELS + 1)]
-        effective = []
-        for index, domain in enumerate(self._domains):
-            observed = read_int(domain.max_node)
-            if observed is None:
-                return None
-            fits = [level for level, ceilings in enumerate(tables, start=1)
-                    if ceilings[index] <= observed]
-            effective.append(max(fits, default=1))
-        return min(effective) if effective else None
 
     def set_tdp(self, watts, ac):
         level = max(1, min(_LEVELS, int(watts)))

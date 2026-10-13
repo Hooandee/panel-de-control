@@ -196,17 +196,3 @@ def test_a_ceiling_that_never_lands_still_reports_the_mismatch(tmp_path):
     result = backend.set_tdp(4, False)
     assert result.ok is False
     assert result.detail == "readback mismatch"
-
-
-def test_a_daemon_profile_matching_no_level_is_observed_as_drift(tmp_path):
-    root = _thor(tmp_path, armada_balanced=False)
-    backend = ArmPerformanceLevels(root=root)
-    assert backend.set_tdp(6, False).ok is True
-    six = backend.ceilings(6)
-    _write(root, "sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq", six[0])
-    _write(root, "sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq", backend.ceilings(3)[1])
-    _write(root, "sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq", 3187200)
-    _write(root, "sys/class/devfreq/3d00000.gpu/max_freq", 680000000)
-    assert backend.read_applied() is None
-    reading = backend.observe().surfaces["arm-frequency-levels"]["pl1"].applied_w
-    assert reading == 3

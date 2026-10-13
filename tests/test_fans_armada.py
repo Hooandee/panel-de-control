@@ -218,3 +218,13 @@ def test_pwm_fan_without_a_tachometer_is_driven_and_handed_back(tmp_path):
     assert backend.set_auto()["ok"] is True
     assert _read(root, f"{fan}/pwm1_enable") == "3"
     assert control.calls == ["guard+", "stop", "start", "guard-"]
+
+
+def test_handing_back_to_powerd_is_reported_once(tmp_path):
+    root, _ = _thor(tmp_path)
+    backend = ArmadaFanBackend(temp_fn=lambda: 60.0, root=root, control=FakeControl())
+    assert backend.consume_powerd_restart() is False
+    backend.apply_curve_all(CURVE)
+    backend.set_auto()
+    assert backend.consume_powerd_restart() is True
+    assert backend.consume_powerd_restart() is False
