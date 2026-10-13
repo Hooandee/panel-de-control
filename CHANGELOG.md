@@ -7,11 +7,11 @@
 
 ### Español
 
-* **Mando:** Ya se llega con el mando a todos los botones de Panel, como «Aplicar» en Pantalla, y las filas y listas se recorren con izquierda y derecha.
-* **Mando:** Al cerrar una ventana, la selección vuelve al botón que la abrió, también con un juego abierto.
-* **Mando:** Al borrar, cancelar o limpiar algo, la selección ya no desaparece. Las confirmaciones de borrar o instalar empiezan en Cancelar.
-* **Pantalla:** En la vista previa de color, X guarda los cambios e Y los deshace.
-* **Potencia:** Los avisos de TDP solo aparecen cuando el equipo limita o no acepta el valor, y lo dicen con palabras claras.
+* **Mando:** Ahora puedes llegar con el mando a todos los botones de Panel, como «Aplicar» en Pantalla, y moverte con izquierda y derecha por filas y listas.
+* **Mando:** Al cerrar una ventana, vuelves al botón desde el que la abriste, también con un juego abierto.
+* **Mando:** Ya no pierdes la selección al borrar, cancelar o limpiar algo, y las confirmaciones para borrar o instalar empiezan en «Cancelar».
+* **Pantalla:** En la vista previa del color, pulsa X para guardar los cambios o Y para deshacerlos.
+* **Potencia:** Los avisos de TDP solo aparecen cuando el equipo limita o rechaza el valor que eliges, y ahora se entienden a la primera.
 
 ### English
 
