@@ -8,7 +8,9 @@ import type { ProtonCleanerController } from "./useProtonCleaner";
 
 vi.mock("@decky/ui", () => ({
   PanelSectionRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  Focusable: ({ children, onActivate: _activate, onCancel: _cancel, onOKActionDescription: _legend, "flow-children": _flow, ...props }: { children?: ReactNode; [key: string]: unknown }) => <div {...props}>{children}</div>,
+  Focusable: ({ children, onActivate: _activate, onCancel: _cancel, onOKActionDescription: _legend, "flow-children": _flow, childFocusDisabled, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
+    <div data-child-focus-disabled={childFocusDisabled === undefined ? undefined : String(childFocusDisabled)} {...props}>{children}</div>
+  ),
   TextField: ({ label, value, onChange }: { label: string; value: string; onChange: (event: unknown) => void }) => <label>{label}<input value={value} onChange={onChange} /></label>,
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "es", t: (key: string, values?: Record<string, unknown>) => `${key}${values ? ` ${Object.values(values).join(" ")}` : ""}` }) }));
@@ -117,4 +119,17 @@ it("keeps showing what was measured when some capture sources failed", () => {
   render(<CleanupHubView games={games()} media={m} proton={proton()} onRefresh={vi.fn()} refreshing={false} />);
 
   expect(screen.queryByText("cleaner.sizeUnknown")).toBeNull();
+});
+
+it("takes the hidden tabs out of gamepad navigation so focus cannot walk into them", () => {
+  render(<CleanupHubView games={games()} media={media()} proton={proton()} onRefresh={vi.fn()} refreshing={false} />);
+
+  const [gamesPanel, mediaPanel, protonPanel] = screen.getAllByRole("tabpanel", { hidden: true });
+  expect(gamesPanel.getAttribute("data-child-focus-disabled")).toBe("false");
+  expect(mediaPanel.getAttribute("data-child-focus-disabled")).toBe("true");
+  expect(protonPanel.getAttribute("data-child-focus-disabled")).toBe("true");
+
+  fireEvent.click(screen.getByRole("tab", { name: "cleaner.tab.media" }));
+  expect(gamesPanel.getAttribute("data-child-focus-disabled")).toBe("true");
+  expect(mediaPanel.getAttribute("data-child-focus-disabled")).toBe("false");
 });

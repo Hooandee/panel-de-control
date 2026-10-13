@@ -1,11 +1,13 @@
 import { type FC, useRef, useSyncExternalStore } from "react";
-import { Focusable, showModal } from "@decky/ui";
+import { Focusable } from "@decky/ui";
 import { LuDownload } from "react-icons/lu";
 
 import type { UpdateInfo } from "../api";
 import type { Lang } from "../i18n";
 import { useFloatingTrayClaimed } from "../components/useFloatingTrayClaim";
 import { stickyTrayStyle, useStickyTray } from "../components/useStickyTray";
+import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
+import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
 import { getUpdaterStrings } from "./strings";
 import { UpdateModal } from "./UpdateModal";
@@ -46,6 +48,10 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
     }
   };
   const update = () => { showModal(<UpdateModal lang={lang} latest={info.latest} notes={info.notes} />); };
+  const later = () => {
+    refocusWhenRemoved(cardRef.current);
+    dismiss(info.latest);
+  };
   const actionStyle = {
     display: "flex",
     alignItems: "center",
@@ -98,8 +104,8 @@ const VisibleUpdateTray: FC<{ lang: Lang; info: UpdateInfo }> = ({ lang, info })
             color: theme.color.textPrimary,
             boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
           }}
-          onActivate={() => run(() => dismiss(info.latest))}
-          onClick={() => run(() => dismiss(info.latest))}
+          onActivate={() => run(later)}
+          onClick={() => run(later)}
         >
           {t.later}
         </Focusable>

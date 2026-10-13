@@ -260,7 +260,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, maxWidth: 340 }}>
           {t(copyKey("report.code.hint"))}
         </div>
-        <Focusable style={{ display: "flex", gap: theme.space.sm }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
           <DialogButton onClick={copy}>
             {copied ? t("report.copied") : t("report.copy")}
           </DialogButton>
@@ -281,7 +281,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
             {t("report.error.saved", { path: result.saved_path })}
           </div>
         )}
-        <Focusable style={{ display: "flex", gap: theme.space.sm }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
           <DialogButton onClick={submit}>{t("report.retry")}</DialogButton>
           <DialogButton onClick={() => closeModal?.()}>{t("report.close")}</DialogButton>
         </Focusable>

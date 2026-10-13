@@ -81,7 +81,7 @@ const ColorBlock: FC = () => {
             color: theme.color.textPrimary, fontSize: theme.font.body,
             cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
           }}
-          onActivate={active ? color.onReset : undefined} onClick={active ? color.onReset : undefined}
+          onActivate={() => { if (active) color.onReset(); }} onClick={() => { if (active) color.onReset(); }}
         >
           {t("display.reset")}
         </Focusable>

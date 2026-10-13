@@ -1,5 +1,6 @@
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { ModalRoot, Focusable } from "@decky/ui";
+import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { showModal } from "../navigation/showModal";
 import { LuTrash2, LuGamepad2 } from "react-icons/lu";
 
@@ -30,6 +31,15 @@ function resolveName(appid: string): { name: string; installed: boolean } {
 const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = ({ row, onReset }) => {
   const { t } = useI18n();
   const [confirm, setConfirm] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
+  const press = () => {
+    if (!confirm) {
+      setConfirm(true);
+      return;
+    }
+    refocusWhenRemoved(card.current);
+    onReset(row.appid);
+  };
   // Auto-revert the armed "tap again" state so it doesn't stay stuck (e.g. if the user
   // changes their mind, or a reset RPC failed).
   useEffect(() => {
@@ -44,7 +54,7 @@ const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = (
   );
 
   return (
-    <div style={{ ...theme.card, padding: theme.space.md, marginBottom: theme.space.sm, overflow: "hidden" }}>
+    <div ref={card} style={{ ...theme.card, padding: theme.space.md, marginBottom: theme.space.sm, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, marginBottom: theme.space.xs }}>
         <LuGamepad2 size={16} color={theme.color.accent} style={{ flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -72,8 +82,8 @@ const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = (
           boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
           color: confirm ? "#ffffff" : theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
         }}
-        onActivate={() => (confirm ? onReset(row.appid) : setConfirm(true))}
-        onClick={() => (confirm ? onReset(row.appid) : setConfirm(true))}
+        onActivate={press}
+        onClick={press}
       >
         <LuTrash2 size={14} /> {confirm ? t("gameProfiles.resetConfirm") : t("gameProfiles.reset")}
       </Focusable>

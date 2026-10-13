@@ -1,6 +1,6 @@
 import { PanelSectionRow, Focusable } from "@decky/ui";
 import { useState } from "react";
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { LuAtom, LuGamepad2, LuImages, LuRefreshCw } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -14,6 +14,14 @@ import type { MediaCleanerController } from "./useMediaCleaner";
 import type { ProtonCleanerController } from "./useProtonCleaner";
 
 type CleanupTab = "games" | "media" | "proton";
+
+// Inactive tabs stay mounted to keep their state; Steam would still walk into them
+// unless their children are taken out of gamepad navigation.
+const CleanupPanel: FC<{ hidden: boolean; children: ReactNode }> = ({ hidden, children }) => (
+  <Focusable role="tabpanel" aria-hidden={hidden} {...({ childFocusDisabled: hidden } as object)} style={{ display: hidden ? "none" : "block" }}>
+    {children}
+  </Focusable>
+);
 
 export const CleanupHubView: FC<{
   games: CleanerController;
@@ -47,9 +55,9 @@ export const CleanupHubView: FC<{
           </CleanerButton>)}
         </Focusable>
       </div>
-      <div role="tabpanel" aria-hidden={tab !== "games"} style={{ display: tab === "games" ? "block" : "none" }}><SteamCleanerView controller={games} embedded /></div>
-      <div role="tabpanel" aria-hidden={tab !== "media"} style={{ display: tab === "media" ? "block" : "none" }}><MediaCleanerView controller={media} /></div>
-      <div role="tabpanel" aria-hidden={tab !== "proton"} style={{ display: tab === "proton" ? "block" : "none" }}><ProtonCleanerView controller={proton} /></div>
+      <CleanupPanel hidden={tab !== "games"}><SteamCleanerView controller={games} embedded /></CleanupPanel>
+      <CleanupPanel hidden={tab !== "media"}><MediaCleanerView controller={media} /></CleanupPanel>
+      <CleanupPanel hidden={tab !== "proton"}><ProtonCleanerView controller={proton} /></CleanupPanel>
     </div>
   </PanelSectionRow>;
 };

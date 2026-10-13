@@ -4,6 +4,7 @@ import { LuArrowDownUp, LuCheck, LuChevronDown, LuChevronRight, LuCircleAlert, L
 import { GameCover } from "../components/GameCover";
 import { CleanerActionTray } from "./CleanerActionTray";
 import { useI18n } from "../i18n";
+import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { onPrefsHealed, readFlag, writeFlag } from "../system/pdcStorage";
 import { theme } from "../theme";
 import { cleanerReasonKey } from "./errors";
@@ -23,17 +24,20 @@ function libraryLabel(entry: Pick<CleanerEntry, "library_label" | "library_inter
 
 const CleanerAction: FC<{
   label: string; children: ReactNode; onActivate: () => void; disabled?: boolean;
-  checked?: boolean | "mixed"; primary?: boolean; danger?: boolean; style?: CSSProperties;
-}> = ({ label, children, onActivate, disabled, checked, primary, danger, style }) => {
+  checked?: boolean | "mixed"; primary?: boolean; danger?: boolean; style?: CSSProperties; preferredFocus?: boolean;
+}> = ({ label, children, onActivate, disabled, checked, primary, danger, style, preferredFocus }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useRefocusWhenRemoved(ref);
   const activate = () => { if (!disabled) onActivate(); };
   return (
     <Focusable
+      ref={ref}
+      data-preferred-focus={preferredFocus || undefined}
       role={checked === undefined ? "button" : "checkbox"}
       aria-label={label}
       title={label}
       aria-checked={checked}
       aria-disabled={!!disabled}
-      tabIndex={disabled ? -1 : 0}
       onActivate={activate}
       onClick={activate}
       onOKActionDescription={label}
@@ -251,7 +255,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
               <div style={{ fontSize: theme.font.body, fontWeight: 600 }}>{t("cleaner.confirm.title")}</div>
               <Notice warning>{t("cleaner.confirm.prefixWarning")}</Notice>
               <CleanerAction label={t("cleaner.confirm.delete")} danger disabled={busy} onActivate={() => void controller.execute(true)}><LuTrash2 size={16} /><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.confirm.delete")}</span><span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{formatBytes(plan.estimated_bytes, lang)}</span></CleanerAction>
-              <CleanerAction label={t("cleaner.cancel")} disabled={busy} onActivate={controller.dismissPlan}>{t("cleaner.cancel")}</CleanerAction>
+              <CleanerAction label={t("cleaner.cancel")} disabled={busy} preferredFocus onActivate={controller.dismissPlan}>{t("cleaner.cancel")}</CleanerAction>
             </Focusable> : <CleanerAction label={t("cleaner.cleanSelection")} primary disabled={busy} onActivate={() => void controller.prepare(chosen.map((entry) => entry.id))}><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.cleanSelection")}</span><span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{formatBytes(chosenBytes, lang)}</span></CleanerAction>}
           </CleanerActionTray>}
         </>}

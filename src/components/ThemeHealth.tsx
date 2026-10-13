@@ -1,4 +1,4 @@
-import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, showModal } from "@decky/ui";
+import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot } from "@decky/ui";
 import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { LuCheck, LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck, LuSparkles, LuUndo2 } from "react-icons/lu";
 
@@ -10,6 +10,7 @@ import { useThemeHealth, type ThemeHealthOutcome, type ThemeHealthView } from ".
 import { useThemes, type ThemesController } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
 import { openReportModal } from "./ReportModal";
+import { showModal } from "../navigation/showModal";
 
 const NAME_PREVIEW = 4;
 
