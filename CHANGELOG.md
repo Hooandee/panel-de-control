@@ -5,10 +5,45 @@
 ## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
 
 
-### Bug Fixes
+### Español
 
-* make every panel control reachable with the gamepad ([#929](https://github.com/Hooandee/panel-de-control/issues/929)) ([424270e](https://github.com/Hooandee/panel-de-control/commit/424270e0c7607c88a5ec55642872cbc7261dd8f4))
-* only show TDP notices the user can act on ([#930](https://github.com/Hooandee/panel-de-control/issues/930)) ([a78922d](https://github.com/Hooandee/panel-de-control/commit/a78922d23f38fd9133f7c91a75570c43a7bfbda3))
+* **Mando:** Ya se llega con el mando a todos los botones de Panel, como «Aplicar» en Pantalla, y las filas y listas se recorren con izquierda y derecha.
+* **Mando:** Al cerrar una ventana, la selección vuelve al botón que la abrió, también con un juego abierto.
+* **Mando:** Al borrar, cancelar o limpiar algo, la selección ya no desaparece. Las confirmaciones de borrar o instalar empiezan en Cancelar.
+* **Pantalla:** En la vista previa de color, X guarda los cambios e Y los deshace.
+* **Potencia:** Los avisos de TDP solo aparecen cuando el equipo limita o no acepta el valor, y lo dicen con palabras claras.
+
+### English
+
+* **Gamepad:** Every button in Panel can now be reached with the gamepad, like Apply in Display, and rows and lists move with left and right.
+* **Gamepad:** Closing a window puts the selection back on the button that opened it, also with a game running.
+* **Gamepad:** Deleting, cancelling or cleaning something no longer loses the selection. Delete and install confirmations start on Cancel.
+* **Display:** In the color preview, X saves the changes and Y undoes them.
+* **Power:** TDP notices only show up when the device limits or refuses the value, and they say so in plain words.
+
+### Italiano
+
+* **Controller:** Ora tutti i pulsanti di Panel si raggiungono con il controller, come «Applica» in Schermo, e righe ed elenchi si percorrono con sinistra e destra.
+* **Controller:** Chiudendo una finestra, la selezione torna sul pulsante che l'ha aperta, anche con un gioco aperto.
+* **Controller:** Eliminando, annullando o pulendo qualcosa, la selezione non sparisce più. Le conferme di eliminazione o installazione partono da Annulla.
+* **Schermo:** Nell'anteprima del colore, X salva le modifiche e Y le annulla.
+* **Potenza:** Gli avvisi sul TDP compaiono solo quando il dispositivo limita o non accetta il valore, e lo spiegano in modo chiaro.
+
+### Deutsch
+
+* **Controller:** Alle Schaltflächen in Panel sind jetzt mit dem Controller erreichbar, etwa „Anwenden“ unter Bildschirm, und Zeilen und Listen lassen sich mit links und rechts durchgehen.
+* **Controller:** Beim Schließen eines Fensters springt die Auswahl zurück auf die Schaltfläche, die es geöffnet hat, auch während ein Spiel läuft.
+* **Controller:** Beim Löschen, Abbrechen oder Aufräumen geht die Auswahl nicht mehr verloren. Bestätigungen zum Löschen oder Installieren starten auf Abbrechen.
+* **Bildschirm:** In der Farbvorschau speichert X die Änderungen und Y macht sie rückgängig.
+* **Leistung:** TDP-Hinweise erscheinen nur noch, wenn das Gerät den Wert begrenzt oder nicht annimmt, und sagen das klar.
+
+### Português (Brasil)
+
+* **Controle:** Agora dá para chegar com o controle a todos os botões do Panel, como «Aplicar» em Tela, e as linhas e listas se percorrem com esquerda e direita.
+* **Controle:** Ao fechar uma janela, a seleção volta para o botão que a abriu, também com um jogo aberto.
+* **Controle:** Ao apagar, cancelar ou limpar algo, a seleção não some mais. As confirmações de apagar ou instalar começam em Cancelar.
+* **Tela:** Na prévia de cor, X salva as alterações e Y desfaz.
+* **Potência:** Os avisos de TDP só aparecem quando o aparelho limita ou não aceita o valor, e explicam isso com palavras claras.
 
 ## [0.68.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.0...panel-de-control-v0.68.1) (2026-10-13)
 
