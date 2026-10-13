@@ -1368,3 +1368,53 @@ def test_turning_panel_tdp_off_forgets_the_takeover(Plugin, fake_hhd):
     asyncio.run(rebooted._resume_hhd_takeover())
 
     assert fake_hhd.value is True
+
+
+def _flap_charger(p, start, changes, step=20.0):
+    ac = {"v": True}
+    p._lifecycle._read_ac = lambda: ac["v"]
+    p._lifecycle._read_wakeup = lambda: 0
+    p._lifecycle._apply = lambda _on_ac: None
+    p._lifecycle._reassert = lambda _on_ac: None
+    p._lifecycle.check(now=start)
+    t = start
+    for _ in range(changes):
+        t += step
+        ac["v"] = not ac["v"]
+        p._lifecycle.check(now=t)
+    return t
+
+
+def test_stable_charger_shows_no_notice(Plugin):
+    p = Plugin()
+    p._init()
+    assert p._charger_unstable_state(now=100.0) is None
+
+
+def test_unstable_charger_notice_shows_and_dismiss_snoozes_it(Plugin, monkeypatch):
+    p = Plugin()
+    p._init()
+    last = _flap_charger(p, 1_000.0, 6)
+    state = p._charger_unstable_state(now=last + 1)
+    assert state == {
+        "visible": True,
+        "started_at": last,
+        "last_at": last,
+        "transitions": 6,
+    }
+    monkeypatch.setattr(sys.modules[type(p).__module__].time, "time", lambda: last + 2)
+    assert asyncio.run(p.dismiss_charger_notice()) is True
+    assert p._charger_unstable_state(now=last + 3)["visible"] is False
+    p2 = Plugin()
+    p2._init()
+    assert p2._settings["charger_notice_dismissed_at"] == last + 2
+    week = 7 * 24 * 3600
+    later = _flap_charger(p, last + week, 6)
+    assert p._charger_unstable_state(now=later + 1)["visible"] is True
+
+
+def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
+    p = Plugin()
+    p._init()
+    last = _flap_charger(p, 1_000.0, 6)
+    assert p._charger_unstable_state(now=last + 24 * 3600)["visible"] is False
