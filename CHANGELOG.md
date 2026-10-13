@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.68.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.1...panel-de-control-v0.68.0) (2026-10-13)
+
+
+### Features
+
+* keep the Go S TDP under its firmware cap and fix freezes, cleanup and charge limit ([#922](https://github.com/Hooandee/panel-de-control/issues/922)) ([97eff2a](https://github.com/Hooandee/panel-de-control/commit/97eff2a624a9a7a5d1011cb94535341659ff1258))
+
 ## [0.67.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.0...panel-de-control-v0.67.1) (2026-10-09)
 
 
