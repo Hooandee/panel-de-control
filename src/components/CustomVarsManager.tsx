@@ -1,5 +1,7 @@
 import { FC, useMemo, useState } from "react";
-import { ModalRoot, showModal, TextField, Focusable } from "@decky/ui";
+import { ModalRoot, TextField, Focusable } from "@decky/ui";
+import { RemovableRow } from "../navigation/RemovableRow";
+import { showModal } from "../navigation/showModal";
 import { LuPlus, LuPencil, LuTrash2, LuCheck, LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -94,7 +96,7 @@ const ManagerBody: FC = () => {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           {activeVars.map((v) => (
-            <div key={v.id} style={{ ...theme.card, display: "flex", alignItems: "center", gap: theme.space.md, padding: `${theme.space.sm}px ${theme.space.md}px` }}>
+            <RemovableRow key={v.id} style={{ ...theme.card, display: "flex", alignItems: "center", gap: theme.space.md, padding: `${theme.space.sm}px ${theme.space.md}px` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>
                 <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summaryOf(v)}</div>
@@ -105,7 +107,7 @@ const ManagerBody: FC = () => {
               <Focusable onActivate={() => onDelete(v.id)} onClick={() => onDelete(v.id)} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
                 <LuTrash2 size={16} color={theme.color.danger} />
               </Focusable>
-            </div>
+            </RemovableRow>
           ))}
         </div>
       )}
@@ -113,10 +115,10 @@ const ManagerBody: FC = () => {
       <div style={{ ...theme.card, display: "flex", flexDirection: "column", gap: theme.space.sm, padding: theme.space.md }}>
         <div style={{ ...theme.sectionLabel }}>{isEdit ? t("customVars.editing") : t("customVars.new")}</div>
         <Field label={t("customVars.name")} value={draft.name} placeholder={t("customVars.name.ph")} onChange={(name) => patch({ name })} />
-        <div style={segmentGroupStyle}>
+        <Focusable flow-children="row" style={segmentGroupStyle}>
           <KindChip active={draft.kind === "env"} label={t("customVars.kind.env")} onSelect={() => patch({ kind: "env" })} />
           <KindChip active={draft.kind === "arg"} label={t("customVars.kind.arg")} onSelect={() => patch({ kind: "arg" })} />
-        </div>
+        </Focusable>
         {draft.kind === "env" ? (
           <>
             <Field label={t("customVars.env.name")} value={draft.envName ?? ""} placeholder="DXVK_FRAME_RATE" onChange={(envName) => patch({ envName })} />

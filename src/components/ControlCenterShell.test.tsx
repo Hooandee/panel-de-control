@@ -28,6 +28,10 @@ type FocusableProps = HTMLAttributes<HTMLDivElement> & {
 
 const boundaries = vi.hoisted(() => ({ nextId: 0 }));
 const focusNavigation = vi.hoisted(() => ({ focus: vi.fn(), available: true }));
+Object.defineProperty(globalThis, "FocusNavController", {
+  configurable: true,
+  get: () => focusNavigation.available ? { FocusElement: focusNavigation.focus } : undefined,
+});
 const controller = vi.hoisted(() => ({
   callback: null as ControllerInputCallback | null,
   register: vi.fn(),
@@ -35,7 +39,6 @@ const controller = vi.hoisted(() => ({
 }));
 
 vi.mock("@decky/ui", () => ({
-  getFocusNavController: () => focusNavigation.available ? { FocusElement: focusNavigation.focus } : undefined,
   NavEntryPositionPreferences: { PREFERRED_CHILD: 4 },
   Focusable: forwardRef<HTMLDivElement, FocusableProps>(function Focusable(
     {

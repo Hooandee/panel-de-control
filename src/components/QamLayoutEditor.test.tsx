@@ -143,6 +143,15 @@ describe("QamLayoutEditor", () => {
     }));
   });
 
+  it("groups each entry's actions in a row the gamepad crosses with left and right", () => {
+    render(<QamLayoutEditor catalog={catalog} />);
+
+    const row = screen.getByLabelText("Subir Ayuda").closest("[flow-children]");
+    expect(row?.getAttribute("flow-children")).toBe("row");
+    expect(row?.contains(screen.getByLabelText("Bajar Ayuda"))).toBe(true);
+    expect(row?.contains(screen.getByLabelText("Ocultar Ayuda"))).toBe(true);
+  });
+
   it("keeps Decky protected and exposes reset", () => {
     render(<QamLayoutEditor catalog={catalog} />);
 

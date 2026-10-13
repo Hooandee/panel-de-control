@@ -1,5 +1,5 @@
 import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
-import { PanelSectionRow } from "@decky/ui";
+import { Focusable, PanelSectionRow } from "@decky/ui";
 
 import { dismissChargerNotice, setSeenTdpConflictTakeover } from "../api";
 import { useI18n } from "../i18n";
@@ -33,6 +33,7 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
   const hdr = useHdr(color.scope, color.game?.appid ?? null);
   const night = useNight();
   const active = !!state && !isNativeColor(state);
+  const pending = revertIn !== null && !saving;
   return (
     <PantallaProvider value={{ color, hdr, night }}>
       {state?.perf_cost && active && (
@@ -46,7 +47,14 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
           </div>
         </PanelSectionRow>
       )}
-      {children}
+      <Focusable
+        onSecondaryButton={pending ? () => void confirmCalibration() : undefined}
+        onSecondaryActionDescription={pending ? t("display.confirm.save") : undefined}
+        onOptionsButton={pending ? () => void discardCalibration() : undefined}
+        onOptionsActionDescription={pending ? t("display.confirm.discard") : undefined}
+      >
+        {children}
+      </Focusable>
       {revertIn !== null && (
         <ColorPreviewConfirm
           seconds={revertIn}

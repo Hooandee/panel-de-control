@@ -119,7 +119,7 @@ export const DesktopPowerCard: FC = () => {
           <span style={{ fontSize: theme.font.body, fontWeight: 650, color: theme.color.textPrimary }}>{t("desktop.power.title")}</span>
         </div>
 
-        <Focusable style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+        <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
           {MODES.map((mode) => {
             const active = power?.mode === mode;
             const label = t(`desktop.mode.${mode}`);

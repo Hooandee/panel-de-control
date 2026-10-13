@@ -81,7 +81,10 @@ const AutoTdpBlock: FC = () => {
 };
 
 const SteamPerformanceBlock: FC = () => {
-  const { scope, game } = usePotencia();
+  const { scope, game, tdpSettled } = usePotencia();
+  // Rendering ahead of the TDP blocks above it would make this card the only
+  // focusable node when Steam assigns entry focus, leaving focus off-screen.
+  if (!tdpSettled) return null;
   return (
     <SteamPerformanceCard
       profileScope={scope}

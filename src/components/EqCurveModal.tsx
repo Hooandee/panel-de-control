@@ -1,5 +1,6 @@
 import { FC } from "react";
-import { Focusable, ModalRoot, showModal } from "@decky/ui";
+import { Focusable, ModalRoot } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 
 import { useI18n } from "../i18n";
 import { useEq } from "../audio/useEq";

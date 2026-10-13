@@ -48,6 +48,51 @@ describe("createThemeNavigationAccess.focus", () => {
     expect(target.BTakeFocus).toHaveBeenCalledOnce();
   });
 
+  it("searches the last active context when Steam has no active navigation tree", () => {
+    const element = document.createElement("div");
+    const target = node(element);
+    const controller = {
+      GetActiveNavTree: () => null,
+      m_ActiveContext: null,
+      m_LastActiveContext: { m_rgGamepadNavigationTrees: [{ m_Root: node(document.body) }, { m_Root: node(null, [target]) }] },
+    };
+
+    const access = createThemeNavigationAccess({ getController: () => controller, allowInactiveContext: true });
+
+    expect(access.focus(element)).toBe(true);
+    expect(target.BTakeFocus).toHaveBeenCalledOnce();
+  });
+
+  it("prefers a still active context that has no focused tree", () => {
+    const element = document.createElement("div");
+    const target = node(element);
+    const stale = node(element);
+    const controller = {
+      GetActiveNavTree: () => null,
+      m_ActiveContext: { m_rgGamepadNavigationTrees: [{ m_Root: node(null, [target]) }] },
+      m_LastActiveContext: { m_rgGamepadNavigationTrees: [{ m_Root: node(null, [stale]) }] },
+    };
+
+    createThemeNavigationAccess({ getController: () => controller, allowInactiveContext: true }).focus(element);
+
+    expect(target.BTakeFocus).toHaveBeenCalledOnce();
+    expect(stale.BTakeFocus).not.toHaveBeenCalled();
+  });
+
+  it("leaves inactive contexts alone for theme extensions", () => {
+    const element = document.createElement("div");
+    const target = node(element);
+    const controller = {
+      GetActiveNavTree: () => null,
+      m_ActiveContext: null,
+      m_LastActiveContext: { m_rgGamepadNavigationTrees: [{ m_Root: node(null, [target]) }] },
+    };
+
+    createThemeNavigationAccess({ getController: () => controller }).focus(element);
+
+    expect(target.BTakeFocus).not.toHaveBeenCalled();
+  });
+
   it("reports failure honestly when no node owns the element or it refuses focus", () => {
     const missing = document.createElement("div");
     const refusing = document.createElement("div");

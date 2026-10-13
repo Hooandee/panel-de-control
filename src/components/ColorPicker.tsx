@@ -1,5 +1,6 @@
 import { FC, useState } from "react";
-import { ModalRoot, SliderField, TextField, showModal } from "@decky/ui";
+import { ModalRoot, SliderField, TextField } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";

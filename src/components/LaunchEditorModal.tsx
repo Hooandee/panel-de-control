@@ -1,5 +1,6 @@
 import { FC, ReactNode, useEffect, useMemo, useState } from "react";
-import { ModalRoot, showModal, Focusable } from "@decky/ui";
+import { ModalRoot, Focusable } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { toaster } from "@decky/api";
 import {
   LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar, LuSparkles,

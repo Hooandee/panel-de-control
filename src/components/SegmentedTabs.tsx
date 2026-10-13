@@ -12,7 +12,7 @@ export function SegmentedTabs<T extends string>({ label, tabs, value, onChange }
     <Focusable
       role="tablist"
       aria-label={label}
-      flow-children="horizontal"
+      flow-children="row"
       style={{
         display: "grid",
         gridTemplateColumns: `repeat(${tabs.length}, 1fr)`,

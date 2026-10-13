@@ -12,7 +12,7 @@ interface Props {
 
 /** Selectable icon grid shared by the view editor and the power-preset manager. */
 export const IconPickerGrid: FC<Props> = ({ keys, value, renderIcon, onPick }) => (
-  <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+  <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
     {keys.map((key) => {
       const on = value === key;
       return (
@@ -33,5 +33,5 @@ export const IconPickerGrid: FC<Props> = ({ keys, value, renderIcon, onPick }) =
         </Focusable>
       );
     })}
-  </div>
+  </Focusable>
 );

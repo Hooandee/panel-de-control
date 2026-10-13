@@ -1,12 +1,7 @@
 import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  ModalRoot,
-  showModal,
-  Focusable,
-  DialogButton,
-  TextField,
-  getFocusNavController,
-} from "@decky/ui";
+import { ModalRoot, Focusable, DialogButton, TextField } from "@decky/ui";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
+import { showModal } from "../navigation/showModal";
 import { LuBug, LuLightbulb } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -29,6 +24,8 @@ import { displayReport } from "../themes/themeHealth";
 import { readSteamDisplay } from "../themes/useThemeHealth";
 
 type Phase = "form" | "sending" | "done" | "error";
+
+const gamepadNavigation = createThemeNavigationAccess();
 
 const ReportKindCard: FC<{
   label: string;
@@ -228,15 +225,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
     const target = rootRef.current?.querySelector<HTMLElement>(
       '[role="radio"][aria-checked="true"]',
     );
-    if (!target) return;
-    try {
-      const controller = getFocusNavController();
-      if (typeof controller?.FocusElement === "function") {
-        controller.FocusElement(target);
-        return;
-      }
-    } catch {}
-    target.focus({ preventScroll: true });
+    if (target) gamepadNavigation.focus(target);
   }, [choosingKind, kind]);
 
   if (phase === "sending") {
@@ -266,7 +255,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, maxWidth: 340 }}>
           {t(copyKey("report.code.hint"))}
         </div>
-        <Focusable style={{ display: "flex", gap: theme.space.sm }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
           <DialogButton onClick={copy}>
             {copied ? t("report.copied") : t("report.copy")}
           </DialogButton>
@@ -287,7 +276,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
             {t("report.error.saved", { path: result.saved_path })}
           </div>
         )}
-        <Focusable style={{ display: "flex", gap: theme.space.sm }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
           <DialogButton onClick={submit}>{t("report.retry")}</DialogButton>
           <DialogButton onClick={() => closeModal?.()}>{t("report.close")}</DialogButton>
         </Focusable>
@@ -367,9 +356,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         <div style={theme.sectionLabel}>{t(copyKey("report.section.what"))}</div>
-        {/* Each chip is its own Focusable, so the gamepad reaches them without a
-            wrapping Focusable; a plain flex row keeps them wrapping. */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+        <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
           {REPORT_CATEGORIES.map((id) => (
             <SelectionChip
               key={id}
@@ -378,7 +365,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
               onClick={() => setSelected((s) => toggleCategory(s, id))}
             />
           ))}
-        </div>
+        </Focusable>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>

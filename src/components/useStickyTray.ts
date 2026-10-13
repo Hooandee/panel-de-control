@@ -31,9 +31,17 @@ export function useStickyTray(trayRef: RefObject<HTMLElement | null>): void {
       container.style.scrollPaddingBottom = `${tray.getBoundingClientRect().height + STICKY_TRAY_INSET * 2}px`;
     };
     const view = tray.ownerDocument.defaultView;
+    // Steam only scrolls when focus moves, so a tray appearing under the focused control would hide it.
+    const revealFocus = () => {
+      const focused = container.querySelector<HTMLElement>(".gpfocus");
+      if (!focused || tray.contains(focused) || tray.getClientRects().length === 0) return;
+      const covered = focused.getBoundingClientRect().bottom - tray.getBoundingClientRect().top + STICKY_TRAY_INSET;
+      if (covered > STICKY_TRAY_INSET) container.scrollTop += covered;
+    };
     const resize = view && typeof view.ResizeObserver === "function" ? new view.ResizeObserver(reserve) : null;
     resize?.observe(tray);
     reserve();
+    revealFocus();
     return () => {
       resize?.disconnect();
       container.style.scrollPaddingBottom = previous;

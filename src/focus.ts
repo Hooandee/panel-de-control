@@ -23,6 +23,10 @@ export function buildFocusCss(): string {
   position: relative;
   z-index: 1;
 }
+/* Steam scrolls a newly focused control just into view; the margin keeps it off the edge. */
+.${PDC_ROOT} .Focusable {
+  scroll-margin-block: 120px;
+}
 .${PDC_ROOT} .pdc-hud-slider {
   margin-inline: 0 !important;
   padding-block: 6px !important;

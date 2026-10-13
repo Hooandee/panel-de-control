@@ -1,4 +1,5 @@
-import { DialogButton, Focusable, showModal } from "@decky/ui";
+import { DialogButton, Focusable } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { useUpdate } from "./useUpdate";
 import { UpdateModal } from "./UpdateModal";
 import type { Lang } from "../i18n";
