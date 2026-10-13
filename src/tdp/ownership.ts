@@ -85,3 +85,36 @@ export function ownershipView(ownership: TdpOwnership, physicalMin?: number): Ow
     boostFloor,
   };
 }
+
+export interface OwnershipMessage {
+  key: string;
+  vars: Record<string, number>;
+  warn: boolean;
+}
+
+// Only what the user needs to know: the device refused or capped the value, or ignores the
+// limit. States that work, settle or are corrected automatically stay in the logs.
+export function ownershipMessage(
+  ownership: TdpOwnership,
+  physicalMin?: number,
+  onAc?: boolean,
+): OwnershipMessage | null {
+  const view = ownershipView(ownership, physicalMin);
+  if (view.show && view.kind === "rejected" && view.target !== null) {
+    return view.applied !== null
+      ? { key: "tdp.ownership.rejected", vars: { target: view.target, applied: view.applied }, warn: true }
+      : { key: "tdp.ownership.rejectedNoValue", vars: { target: view.target }, warn: true };
+  }
+  if (ownership.overshoot?.state === "unresolved") {
+    return { key: "tdp.ownership.overshootUnresolved", vars: { target: ownership.overshoot.target_w }, warn: true };
+  }
+  if (view.show && view.kind === "constrained" && view.applied !== null) {
+    const charger = ownership.reason === "power_source_limit" && onAc;
+    return {
+      key: charger ? "tdp.ownership.powerLimited" : "tdp.ownership.constrained",
+      vars: { applied: view.applied },
+      warn: false,
+    };
+  }
+  return null;
+}
