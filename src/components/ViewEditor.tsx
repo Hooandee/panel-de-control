@@ -1,5 +1,6 @@
 import { FC, Fragment, useState } from "react";
 import { ModalRoot, Focusable, TextField, ButtonItem } from "@decky/ui";
+import { RemovableRow } from "../navigation/RemovableRow";
 import { showModal } from "../navigation/showModal";
 import { LuChevronUp, LuChevronDown, LuPlus, LuX, LuCheck } from "react-icons/lu";
 
@@ -73,13 +74,13 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
           <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.views.empty")}</span>
         ) : (
           blocks.map((id, i) => (
-            <Focusable flow-children="row" key={id} style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+            <RemovableRow key={id} style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={{ display: "flex", color: theme.color.textMuted }}>{META.get(id)?.icon}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label(id)}</span>
               <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveBlock(id, -1)}><LuChevronUp size={18} /></IconAction>
               <IconAction label={t("customize.moveDown")} color={i === blocks.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === blocks.length - 1} onTap={() => moveBlock(id, 1)}><LuChevronDown size={18} /></IconAction>
               <IconAction label={t("customize.hide")} color={theme.color.danger} onTap={() => removeBlock(id)}><LuX size={18} /></IconAction>
-            </Focusable>
+            </RemovableRow>
           ))
         )}
       </div>

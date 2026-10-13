@@ -28,10 +28,10 @@ vi.mock("@decky/ui", () => ({
   DialogButton: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
-  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   Navigation: { Navigate: mocks.navigate },
   showModal: mocks.showModal,
 }));
+vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus: mocks.focusElement }) }));
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string) => key }) }));
 vi.mock("./ThemePatchControl", () => ({

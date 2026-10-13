@@ -1,4 +1,5 @@
-import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot } from "@decky/ui";
+import { ButtonItem, DialogButton, Focusable, ModalRoot } from "@decky/ui";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { LuCheck, LuFolderX, LuMonitor, LuRefreshCw, LuSend, LuShieldAlert, LuShieldCheck, LuSparkles, LuUndo2 } from "react-icons/lu";
 
@@ -11,6 +12,8 @@ import { useThemes, type ThemesController } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
 import { openReportModal } from "./ReportModal";
 import { showModal } from "../navigation/showModal";
+
+const gamepadNavigation = createThemeNavigationAccess();
 
 const NAME_PREVIEW = 4;
 
@@ -114,9 +117,7 @@ function useInitialFocus(target: RefObject<HTMLDivElement | null>, key: unknown)
   useEffect(() => {
     const element = target.current;
     if (!element) return;
-    const controller = getFocusNavController();
-    if (controller?.FocusElement) controller.FocusElement(element);
-    else element.focus();
+    gamepadNavigation.focus(element);
   }, [target, key]);
 }
 

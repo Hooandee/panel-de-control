@@ -1,5 +1,6 @@
 import { FC, useMemo, useState } from "react";
 import { ModalRoot, TextField, Focusable } from "@decky/ui";
+import { RemovableRow } from "../navigation/RemovableRow";
 import { showModal } from "../navigation/showModal";
 import { LuPlus, LuPencil, LuTrash2, LuCheck, LuTriangleAlert } from "react-icons/lu";
 
@@ -95,7 +96,7 @@ const ManagerBody: FC = () => {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           {activeVars.map((v) => (
-            <Focusable flow-children="row" key={v.id} style={{ ...theme.card, display: "flex", alignItems: "center", gap: theme.space.md, padding: `${theme.space.sm}px ${theme.space.md}px` }}>
+            <RemovableRow key={v.id} style={{ ...theme.card, display: "flex", alignItems: "center", gap: theme.space.md, padding: `${theme.space.sm}px ${theme.space.md}px` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>
                 <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summaryOf(v)}</div>
@@ -106,7 +107,7 @@ const ManagerBody: FC = () => {
               <Focusable onActivate={() => onDelete(v.id)} onClick={() => onDelete(v.id)} style={{ padding: 6, cursor: "pointer", flexShrink: 0 }}>
                 <LuTrash2 size={16} color={theme.color.danger} />
               </Focusable>
-            </Focusable>
+            </RemovableRow>
           ))}
         </div>
       )}

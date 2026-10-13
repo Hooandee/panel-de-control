@@ -23,7 +23,6 @@ vi.mock("@decky/ui", () => ({
   ),
   DialogButton: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  getFocusNavController: () => null,
   ModalRoot: ({ children, onCancel }: { children?: ReactNode; onCancel?: () => void }) => (
     <div><button onClick={onCancel}>modal-back</button>{children}</div>
   ),

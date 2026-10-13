@@ -1,5 +1,6 @@
 import { FC, ReactNode, useEffect, useState } from "react";
 import { PanelSectionRow, ToggleField, TextField, Spinner, Focusable } from "@decky/ui";
+import { RemovableRow } from "../navigation/RemovableRow";
 import { showModal } from "../navigation/showModal";
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
@@ -664,7 +665,7 @@ export const HudSection: FC = () => {
                     : {}),
                 }}
               >
-                <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
+                <RemovableRow style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
                   {editable ? (
                     <QamAction
                       onPress={() => setSelected(isSel ? null : key)}
@@ -694,7 +695,7 @@ export const HudSection: FC = () => {
                   <RowAction label={t("hud.move.up")} disabled={i === 0} onPress={() => patchItems(moveRow(m.items, i, -1))}><LuChevronUp size={14} /></RowAction>
                   <RowAction label={t("hud.move.down")} disabled={i === rows.length - 1} onPress={() => patchItems(moveRow(m.items, i, 1))}><LuChevronDown size={14} /></RowAction>
                   <RowAction label={t("hud.remove")} onPress={() => { patchItems(removeRow(m.items, i)); if (isSel) setSelected(null); }}><LuX size={13} /></RowAction>
-                </Focusable>
+                </RemovableRow>
                 {editable && isSel && (
                   <div style={{ padding: theme.space.sm, borderRadius: theme.radius.sm, ...(isBlock ? {} : { boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }) }}>
                     {renderEditor(r)}

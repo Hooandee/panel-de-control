@@ -1,5 +1,6 @@
 import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ModalRoot, Focusable, DialogButton, TextField, getFocusNavController } from "@decky/ui";
+import { ModalRoot, Focusable, DialogButton, TextField } from "@decky/ui";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { showModal } from "../navigation/showModal";
 import { LuBug, LuLightbulb } from "react-icons/lu";
 
@@ -23,6 +24,8 @@ import { displayReport } from "../themes/themeHealth";
 import { readSteamDisplay } from "../themes/useThemeHealth";
 
 type Phase = "form" | "sending" | "done" | "error";
+
+const gamepadNavigation = createThemeNavigationAccess();
 
 const ReportKindCard: FC<{
   label: string;
@@ -222,15 +225,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
     const target = rootRef.current?.querySelector<HTMLElement>(
       '[role="radio"][aria-checked="true"]',
     );
-    if (!target) return;
-    try {
-      const controller = getFocusNavController();
-      if (typeof controller?.FocusElement === "function") {
-        controller.FocusElement(target);
-        return;
-      }
-    } catch {}
-    target.focus({ preventScroll: true });
+    if (target) gamepadNavigation.focus(target);
   }, [choosingKind, kind]);
 
   if (phase === "sending") {
