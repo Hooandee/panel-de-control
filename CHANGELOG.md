@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
+
+
+### Features
+
+* **arm:** support the AYN Odin 3 on Armada ([#937](https://github.com/Hooandee/panel-de-control/issues/937)) ([b0b7d61](https://github.com/Hooandee/panel-de-control/commit/b0b7d6123a6a626ae38da903243b5b25d7fcbf16))
+
 ## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
 
 
