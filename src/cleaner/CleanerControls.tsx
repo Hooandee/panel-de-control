@@ -1,8 +1,9 @@
 import { Focusable } from "@decky/ui";
-import type { CSSProperties, FC, ReactNode } from "react";
+import { type CSSProperties, type FC, type ReactNode, useRef } from "react";
 import { LuCircleAlert, LuCircleCheck, LuX } from "react-icons/lu";
 import { theme } from "../theme";
 import { useI18n } from "../i18n";
+import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 
 export const cleanerColumn: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
 export const cleanerCaption: CSSProperties = { fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 };
@@ -19,14 +20,16 @@ export const CleanerButton: FC<{
   style?: CSSProperties;
   role?: string;
 }> = ({ label, children, onActivate, disabled, checked, selected, primary, danger, style, role }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useRefocusWhenRemoved(ref);
   const activate = () => { if (!disabled) onActivate(); };
   return <Focusable
+    ref={ref}
     role={role ?? (checked === undefined ? "button" : "checkbox")}
     aria-label={label}
     aria-checked={checked}
     aria-selected={selected}
     aria-disabled={!!disabled}
-    tabIndex={disabled ? -1 : 0}
     onActivate={activate}
     onClick={activate}
     onOKActionDescription={label}

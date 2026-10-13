@@ -65,7 +65,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
         navEntryPreferPosition={NavEntryPositionPreferences.PREFERRED_CHILD}
         style={gridStyle}
       >
-        {sections.map((section) => {
+        {sections.map((section, index) => {
           const label = section.label || t(section.labelKey);
           const description = t(section.descriptionKey);
           const openSection = idempotentAction(`section:${section.id}`, () => onOpenSection(section.id));
@@ -80,7 +80,7 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
               data-testid="dashboard-card"
               data-section-id={section.id}
               data-pdc-focus-radius
-              preferredFocus={section.id === activeId}
+              preferredFocus={activeId ? section.id === activeId : index === 0}
               aria-label={`${label}. ${description}`}
               onActivate={openSection}
               onClick={openSection}

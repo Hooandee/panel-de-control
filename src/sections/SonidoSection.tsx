@@ -1,4 +1,4 @@
-import { CSSProperties, FC, ReactNode } from "react";
+import { CSSProperties, FC, ReactNode, useRef } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
   LuArrowLeftRight, LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause,
@@ -8,6 +8,7 @@ import {
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
+import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import {
   audioOperationalView,
   balanceLabel,
@@ -47,6 +48,11 @@ export const SonidoSection: FC = () => {
     state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onBalance, onGuard,
     onReset, onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   } = useEq();
+  const profileChips = useRef(new Map<string, HTMLElement>());
+  const deleteProfile = (name: string) => {
+    refocusWhenRemoved(profileChips.current.get(name) ?? null);
+    onDeleteProfile(name);
+  };
 
   if (!state) return null;
 
@@ -173,7 +179,7 @@ export const SonidoSection: FC = () => {
                 : undefined
             }
           >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {state.test_samples.map((s) => {
                 const on = state.test_playing && state.test_sample === s;
                 return (
@@ -188,11 +194,11 @@ export const SonidoSection: FC = () => {
                   </Focusable>
                 );
               })}
-            </div>
+            </Focusable>
           </Collapsible>
 
           {/* Curated presets — the device-tuned one is the hero (first). */}
-          <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
+          <Focusable flow-children="grid" style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
             {state.presets.map((p) => {
               const on = state.preset === p.id;
               return (
@@ -228,14 +234,18 @@ export const SonidoSection: FC = () => {
             <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.profile.mine")}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {state.profiles.map((pr) => {
                 const active =
                   pr.bass === state.bass &&
                   pr.gains.length === state.gains.length &&
                   pr.gains.every((g, i) => g === state.gains[i]);
                 return (
-                <span key={pr.name} style={{ ...chip(active), display: "inline-flex", alignItems: "center", gap: 6, paddingRight: 6 }}>
+                <span
+                  key={pr.name}
+                  ref={(node) => { if (node) profileChips.current.set(pr.name, node); else profileChips.current.delete(pr.name); }}
+                  style={{ ...chip(active), display: "inline-flex", alignItems: "center", gap: 6, paddingRight: 6 }}
+                >
                   <Focusable
                     style={{ cursor: "pointer" }}
                     onActivate={() => onApplyProfile(pr.name)}
@@ -245,8 +255,8 @@ export const SonidoSection: FC = () => {
                   </Focusable>
                   <Focusable
                     style={{ display: "flex", cursor: "pointer", color: theme.color.textMuted }}
-                    onActivate={() => onDeleteProfile(pr.name)}
-                    onClick={() => onDeleteProfile(pr.name)}
+                    onActivate={() => deleteProfile(pr.name)}
+                    onClick={() => deleteProfile(pr.name)}
                     title={t("audio.profile.delete")}
                   >
                     <LuX size={12} />
@@ -262,7 +272,7 @@ export const SonidoSection: FC = () => {
                 <LuPlus size={12} />
                 {t("audio.profile.saveCurrent")}
               </Focusable>
-            </div>
+            </Focusable>
           </div>
 
           <div>
@@ -323,6 +333,7 @@ export const SonidoSection: FC = () => {
                 onActivate={() => openEqCurveModal(refresh)}
                 onClick={() => openEqCurveModal(refresh)}
                 title={t("audio.fullscreen")}
+                aria-label={t("audio.fullscreen")}
               >
                 <LuMaximize2 size={16} />
               </Focusable>

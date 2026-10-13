@@ -1,5 +1,5 @@
 import { FC, ReactNode } from "react";
-import { DialogButton, ModalRoot } from "@decky/ui";
+import { DialogButton, ModalRoot, Focusable } from "@decky/ui";
 
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
@@ -23,14 +23,14 @@ export const ConfirmDialog: FC<Props> = ({ title, desc, confirmLabel, cancelLabe
         {title}
       </div>
       <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.4 }}>{desc}</div>
-      <div style={{ display: "flex", gap: theme.space.sm }}>
+      <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
         <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => { closeModal?.(); onConfirm(); }}>
           {confirmLabel}
         </DialogButton>
         <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => closeModal?.()}>
           {cancelLabel}
         </DialogButton>
-      </div>
+      </Focusable>
     </FocusRoot>
   </ModalRoot>
 );

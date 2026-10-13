@@ -1,4 +1,4 @@
-import { ButtonItem } from "@decky/ui";
+import { ButtonItem, Focusable } from "@decky/ui";
 import { type FC, type ReactNode, useSyncExternalStore } from "react";
 import {
   LuChevronDown,
@@ -132,7 +132,7 @@ export const QamLayoutEditor: FC<{ catalog: QamViewDescriptor[] }> = ({ catalog 
     active: boolean,
     index: number,
   ) => (
-    <div key={token} style={{ ...rowStyle, opacity: active ? 1 : 0.55 }}>
+    <Focusable key={token} flow-children="row" style={{ ...rowStyle, opacity: active ? 1 : 0.55 }}>
       <span style={rowIconStyle}>{icon}</span>
       <span style={rowLabelStyle}>{label}</span>
       <IconAction
@@ -168,7 +168,7 @@ export const QamLayoutEditor: FC<{ catalog: QamViewDescriptor[] }> = ({ catalog 
           {active ? <LuPinOff size={18} /> : <LuPin size={18} />}
         </IconAction>
       )}
-    </div>
+    </Focusable>
   );
 
   let runtimeStatus: ReactNode;

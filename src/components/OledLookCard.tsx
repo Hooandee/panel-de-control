@@ -43,7 +43,7 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
             </div>
           </div>
         </div>
-        <Focusable style={{ display: "flex", gap: 6, marginTop: 10 }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: 6, marginTop: 10 }}>
           <Focusable
             style={{
               flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
@@ -57,20 +57,19 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
             <LuSparkles size={15} />
             {t("display.oled.apply")}
           </Focusable>
-          {active && (
-            <Focusable
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                padding: "9px 14px", borderRadius: theme.radius.sm,
-                background: "rgba(255,255,255,0.06)", color: theme.color.textPrimary,
-                fontSize: theme.font.body, cursor: "pointer",
-              }}
-              onActivate={onReset}
-              onClick={onReset}
-            >
-              {t("display.native")}
-            </Focusable>
-          )}
+          <Focusable
+            aria-disabled={!active}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "9px 14px", borderRadius: theme.radius.sm,
+              background: "rgba(255,255,255,0.06)", color: theme.color.textPrimary,
+              fontSize: theme.font.body, cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
+            }}
+            onActivate={() => { if (active) onReset(); }}
+            onClick={() => { if (active) onReset(); }}
+          >
+            {t("display.native")}
+          </Focusable>
         </Focusable>
       </div>
     </PanelSectionRow>

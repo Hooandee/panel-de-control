@@ -1,4 +1,5 @@
-import { ErrorBoundary, Focusable, getFocusNavController, PanelSection, PanelSectionRow } from "@decky/ui";
+import { ErrorBoundary, Focusable, NavEntryPositionPreferences, PanelSection, PanelSectionRow } from "@decky/ui";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 
 import { ReportingBoundary } from "./ReportingBoundary";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -34,6 +35,7 @@ export interface ControlCenterShellProps {
   updateStatus?: UpdateStatus;
   initialMode?: ShellMode;
   onSelectSection: (id: string) => void;
+  onViewChange?: (mode: ShellMode, activeId: string | null) => void;
 }
 
 function resetNearestVerticalScroller(element: HTMLElement | null): void {
@@ -54,6 +56,8 @@ function resetNearestVerticalScroller(element: HTMLElement | null): void {
   }
 }
 
+const gamepadNavigation = createThemeNavigationAccess();
+
 function focusShellDestination(surface: HTMLElement, mode: ShellMode, activeId: string | null): void {
   const controls = 'button,input,select,textarea,[role="button"],[tabindex="0"]';
   const eligible = (element: HTMLElement) => element.getClientRects().length > 0
@@ -65,17 +69,7 @@ function focusShellDestination(surface: HTMLElement, mode: ShellMode, activeId: 
   const target = mode === "home"
     ? cards.find((card) => card.dataset.sectionId === activeId) ?? cards[0]
     : firstControl(body) ?? firstControl(surface);
-  if (!target) return;
-  try {
-    const controller = getFocusNavController();
-    if (typeof controller?.FocusElement === "function") {
-      controller.FocusElement(target);
-      return;
-    }
-  } catch {
-    // Steam's focus controller can disappear while the QAM is reconciling.
-  }
-  target.focus({ preventScroll: true });
+  if (target) gamepadNavigation.focus(target);
 }
 
 export function ControlCenterShell({
@@ -90,6 +84,7 @@ export function ControlCenterShell({
   updateInfo = null,
   updateStatus = "idle",
   initialMode,
+  onViewChange,
   onSelectSection,
 }: ControlCenterShellProps) {
   const { t, lang } = useI18n();
@@ -97,6 +92,7 @@ export function ControlCenterShell({
   const pendingFocus = useRef<{ mode: ShellMode; previousFocus: Element | null } | null>(null);
   const storedMode = useShellMode();
   const [entryMode, setEntryMode] = useState<ShellMode | undefined>(initialMode);
+  const [dashboardOrigin, setDashboardOrigin] = useState<string | null>(null);
   const ids = sections.map((section) => section.id);
   const resolved = resolveShellState(entryMode ?? storedMode, activeId, ids, showHome);
   const active = resolved.activeId
@@ -117,6 +113,10 @@ export function ControlCenterShell({
       onSelectSection(resolved.activeId);
     }
   }, [activeId, onSelectSection, resolved.activeId, resolved.mode, storedMode]);
+
+  useEffect(() => {
+    onViewChange?.(resolved.mode, resolved.activeId);
+  }, [onViewChange, resolved.mode, resolved.activeId]);
 
   const sectionViewKey = resolved.mode === "home"
     ? null
@@ -141,7 +141,7 @@ export function ControlCenterShell({
       if (!request || doc.visibilityState === "hidden") return;
       const currentFocus = doc.querySelector(".gpfocus");
       if (currentFocus && currentFocus !== request.previousFocus && !surface.contains(currentFocus)) return;
-      focusShellDestination(surface, resolved.mode, resolved.activeId);
+      focusShellDestination(surface, resolved.mode, dashboardOrigin);
     });
     return () => {
       cancelled = true;
@@ -159,8 +159,14 @@ export function ControlCenterShell({
     pendingFocus.current = { mode, previousFocus: shellSurface.current?.ownerDocument.querySelector(".gpfocus") ?? null };
     setShellMode(mode);
   };
-  const goHome = () => navigate("home");
-  const leaveDetail = () => navigate(showHome ? "home" : "tabs");
+  const goHome = () => {
+    setDashboardOrigin(resolved.activeId);
+    navigate("home");
+  };
+  const leaveDetail = () => {
+    setDashboardOrigin(resolved.activeId);
+    navigate(showHome ? "home" : "tabs");
+  };
   const openDetail = (id: string) => {
     onSelectSection(id);
     navigate("detail");
@@ -225,7 +231,7 @@ export function ControlCenterShell({
                 <div data-testid="dashboard">
                   <Dashboard
                     sections={sections}
-                    activeId={resolved.activeId}
+                    activeId={dashboardOrigin}
                     settingsBadge={<AlertDot show={hasUpdate} />}
                     onOpenSection={openDetail}
                   />
@@ -236,9 +242,13 @@ export function ControlCenterShell({
           {resolved.mode !== "home" && active && Active ? (
             <ErrorBoundary key={active.id}>
               <ReportingBoundary where={`section:${active.id}`}>
-                <div data-testid="section-body" style={{ paddingBottom: theme.space.lg }}>
+                <Focusable
+                  data-testid="section-body"
+                  navEntryPreferPosition={NavEntryPositionPreferences.FIRST}
+                  style={{ paddingBottom: theme.space.lg }}
+                >
                   <Active />
-                </div>
+                </Focusable>
               </ReportingBoundary>
             </ErrorBoundary>
           ) : null}

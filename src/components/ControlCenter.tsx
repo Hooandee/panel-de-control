@@ -1,5 +1,6 @@
 import { PanelSection, PanelSectionRow } from "@decky/ui";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ShellMode } from "../sections/shellMode";
 
 import { useI18n } from "../i18n";
 import { ControlCenterShell } from "./ControlCenterShell";
@@ -25,6 +26,14 @@ import { acquireUiActivity } from "../system/uiActivity";
 import { useDesktopState } from "../desktop/useDesktop";
 import type { QamViewTarget } from "../qam/viewCatalog";
 import { useDeviceState } from "../system/useDevice";
+
+// Steam unmounts the panel whenever the QAM closes, including under every modal it
+// opens. The pinned home view resumes where it was for the rest of the session.
+let pinnedHomeView: { mode: ShellMode; activeId: string | null } | null = null;
+
+function rememberPinnedHomeView(mode: ShellMode, activeId: string | null): void {
+  pinnedHomeView = { mode, activeId };
+}
 
 export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
   const { t, lang } = useI18n();
@@ -72,6 +81,8 @@ export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
   }, [layout, allSections, targetSectionId]);
   const [activeId, setActiveIdState] = useState<string>(() => {
     if (targetSectionId) return targetSectionId;
+    const resumed = target?.kind === "home" ? pinnedHomeView?.activeId : null;
+    if (resumed && visibleTabIds.includes(resumed)) return resumed;
     const saved = readActiveTab();
     return (saved && visibleTabIds.includes(saved) ? saved : visibleTabIds[0]) ?? SECTIONS[0].id;
   });
@@ -132,8 +143,9 @@ export const ControlCenter: FC<{ target?: QamViewTarget }> = ({ target }) => {
       hasUpdate={hasUpdate}
       updateInfo={target ? null : updateInfo}
       updateStatus={updateStatus}
-      initialMode={target?.kind === "home" ? "home" : resolvedTargetId ? "detail" : undefined}
+      initialMode={target?.kind === "home" ? pinnedHomeView?.mode ?? "home" : resolvedTargetId ? "detail" : undefined}
       onSelectSection={setActiveId}
+      onViewChange={target?.kind === "home" ? rememberPinnedHomeView : undefined}
     />
   );
 };

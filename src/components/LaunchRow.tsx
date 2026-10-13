@@ -10,7 +10,7 @@ import { LaunchTools, Pill, isPillAvailable, pillLabel, pillDesc, pillHelp, sele
 import { GpuGen } from "../launch/proton";
 
 /** A round on/off switch matching the section's visual language. */
-const RowSwitch: FC<{ active: boolean; disabled?: boolean; onToggle: () => void }> = ({ active, disabled, onToggle }) => {
+const RowSwitch: FC<{ label: string; active: boolean; disabled?: boolean; onToggle: () => void }> = ({ label, active, disabled, onToggle }) => {
   const track = disabled ? "rgba(255,255,255,0.12)" : active ? theme.color.accent : "rgba(255,255,255,0.14)";
   const knob = active && !disabled ? theme.color.onAccent : "rgba(255,255,255,0.55)";
   const body = (
@@ -20,7 +20,7 @@ const RowSwitch: FC<{ active: boolean; disabled?: boolean; onToggle: () => void 
   );
   if (disabled) return body;
   return (
-    <Focusable style={{ cursor: "pointer" }} onActivate={onToggle} onClick={onToggle}>
+    <Focusable role="switch" aria-checked={active} aria-label={label} style={{ cursor: "pointer" }} onActivate={onToggle} onClick={onToggle}>
       {body}
     </Focusable>
   );
@@ -59,7 +59,7 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
 
   return (
     <div style={{ ...theme.card, padding: "10px 11px", marginBottom: theme.space.sm, opacity: available ? 1 : 0.55 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+      <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
         <Focusable
           style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           onActivate={() => setExpanded((e) => !e)}
@@ -74,8 +74,8 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
           </div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginLeft: 20 }}>{pillDesc(pill, t)}</div>
         </Focusable>
-        {isToggle && <RowSwitch active={!!sel} disabled={!available} onToggle={() => ed.set(pill.id, !sel)} />}
-      </div>
+        {isToggle && <RowSwitch label={pillLabel(pill, t)} active={!!sel} disabled={!available} onToggle={() => ed.set(pill.id, !sel)} />}
+      </Focusable>
 
       {expanded && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textPrimary, lineHeight: 1.5, marginLeft: 20, marginTop: theme.space.xs, opacity: 0.85 }}>

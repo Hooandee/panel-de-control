@@ -2,11 +2,11 @@ import {
   DialogButton,
   Focusable,
   GamepadButton,
-  getFocusNavController,
   ModalRoot,
   type GamepadEvent,
 } from "@decky/ui";
 import { FocusRoot } from "../components/FocusRoot";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { type ReactNode, useRef, useState } from "react";
 import type { InstallResult } from "../api";
 import { useUpdate } from "./useUpdate";
@@ -15,6 +15,7 @@ import { getUpdaterStrings } from "./strings";
 import { releaseNotesForLanguage } from "./releaseNotes";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
+const gamepadNavigation = createThemeNavigationAccess();
 
 // Inline markdown: [text](url) -> text, **bold**, `code`.
 function renderInline(text: string): ReactNode[] {
@@ -117,7 +118,7 @@ export function UpdateModal({
       : viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1;
     if (!direction) return;
     if (direction > 0 && atEdge) {
-      getFocusNavController()?.FocusElement(actionRef.current);
+      if (actionRef.current) gamepadNavigation.focus(actionRef.current);
       return;
     }
     if (atEdge) return;

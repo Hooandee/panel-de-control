@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { theme } from "../theme";
@@ -21,17 +21,17 @@ vi.mock("@decky/ui", () => ({
       <button aria-label="modal-escape" onClick={onEscKeypress}>escape</button>
     </div>
   ),
-  Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Focusable: ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => <div style={style}>{children}</div>,
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button onClick={onClick} disabled={disabled}>{children}</button>
   ),
   DialogButton: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
-  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   Navigation: { Navigate: mocks.navigate },
   showModal: mocks.showModal,
 }));
+vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus: mocks.focusElement }) }));
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string) => key }) }));
 vi.mock("./ThemePatchControl", () => ({

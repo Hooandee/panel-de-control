@@ -1,4 +1,7 @@
-import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, Navigation, showModal } from "@decky/ui";
+import { ButtonItem, DialogButton, Focusable, ModalRoot, Navigation } from "@decky/ui";
+import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
+import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 
@@ -24,6 +27,8 @@ interface ThemeOffer {
 }
 
 type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" };
+
+const gamepadNavigation = createThemeNavigationAccess();
 
 const THEME_CONTROL_RESET = `
 [data-pdc-theme-settings] { color: ${theme.color.textPrimary} !important; }
@@ -218,8 +223,8 @@ function ThemeConfirmation({
           </span>
         ) : null}
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
-        <DialogButton style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
+      <Focusable flow-children="row" style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
+        <DialogButton data-preferred-focus style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
           {t("themes.install.confirm.cancel")}
         </DialogButton>
         <DialogButton style={destructive ? DESTRUCTIVE_CONFIRM_STYLE : PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>
@@ -228,7 +233,7 @@ function ThemeConfirmation({
             <span>{t(confirmKey)}</span>
           </span>
         </DialogButton>
-      </div>
+      </Focusable>
     </div>
   );
 }
@@ -242,18 +247,19 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const patchLabels = useThemePatchLabels(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const previousInstalledRef = useRef<boolean | undefined>(undefined);
+  const switchConfirmation = (next: PendingThemeConfirmation | null) => {
+    refocusWhenRemoved(bodyRef.current?.querySelector<HTMLElement>(".gpfocus") ?? null);
+    setPendingConfirmation(next);
+  };
 
   useEffect(() => {
     const installed = card?.installed;
     if (previousInstalledRef.current === true && installed === false) {
       const installAction = installOfferRef.current?.querySelector<HTMLElement>("button,[role='button'],[tabindex]");
       const target = installAction ?? headingRef.current;
-      if (target) {
-        const focusController = getFocusNavController();
-        if (focusController?.FocusElement) focusController.FocusElement(target);
-        else target.focus();
-      }
+      if (target) gamepadNavigation.focus(target);
     }
     previousInstalledRef.current = installed;
   }, [card?.installed]);
@@ -306,12 +312,12 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     ? pendingConfirmation
     : null;
   const activeConfirmation = activeOfferConfirmation ?? activeUninstallConfirmation;
-  const cancelOrClose = activeConfirmation ? () => setPendingConfirmation(null) : closeModal;
+  const cancelOrClose = activeConfirmation ? () => switchConfirmation(null) : closeModal;
 
   return (
     <ModalRoot bAllowFullSize={fullSizeLayout} onCancel={cancelOrClose} onEscKeypress={cancelOrClose}>
       <FocusRoot style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
-        <Focusable style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
+        <Focusable ref={bodyRef} style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
           <div data-testid="theme-settings-content" data-pdc-theme-settings="true" style={{ maxWidth: fullSizeLayout ? 760 : 620, margin: "0 auto", padding: fullSizeLayout ? "8px 8px 54px" : "4px 8px 18px", color: theme.color.textPrimary }}>
             <style>{THEME_CONTROL_RESET}</style>
             <header data-pdc-theme-cover-header={cover ? "true" : undefined} style={{
@@ -382,7 +388,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   </div>
                 ) : offer && !activeOfferConfirmation ? (
                   <div ref={installOfferRef} data-pdc-theme-action="true" style={HEADER_ACTION_STYLE}>
-                    <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => setPendingConfirmation(offer)}>
+                    <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => switchConfirmation(offer)}>
                       <LuDownload size={14} aria-hidden /> {t(installing ? "themes.action.installing" : "themes.action.install")}
                     </ButtonItem>
                   </div>
@@ -458,9 +464,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                 confirmation={activeOfferConfirmation}
                 displayName={displayName}
                 actionsBlocked={actionsBlocked}
-                onCancel={() => setPendingConfirmation(null)}
+                onCancel={() => switchConfirmation(null)}
                 onConfirm={() => {
-                  setPendingConfirmation(null);
+                  switchConfirmation(null);
                   void controller.install(card.id, { version: activeOfferConfirmation.version });
                 }}
               />
@@ -478,7 +484,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               >
                 <div id="theme-update-ready-label" style={{ fontWeight: 750 }}>{t("themes.update.ready")}</div>
                 <div style={{ marginTop: theme.space.md }}>
-                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => setPendingConfirmation(offer)}>
+                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => switchConfirmation(offer)}>
                     {t(installing ? "themes.action.updating" : "themes.action.update")}
                   </ButtonItem>
                 </div>
@@ -519,9 +525,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                     confirmation={activeUninstallConfirmation}
                     displayName={displayName}
                     actionsBlocked={actionsBlocked}
-                    onCancel={() => setPendingConfirmation(null)}
+                    onCancel={() => switchConfirmation(null)}
                     onConfirm={() => {
-                      setPendingConfirmation(null);
+                      switchConfirmation(null);
                       void controller.uninstall(card.id);
                     }}
                   />
@@ -529,7 +535,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   <DialogButton
                     style={DELETE_ACTION_STYLE}
                     disabled={actionsBlocked}
-                    onClick={() => setPendingConfirmation({ kind: "uninstall" })}
+                    onClick={() => switchConfirmation({ kind: "uninstall" })}
                   >
                     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
                       <LuTrash2 size={15} aria-hidden />
