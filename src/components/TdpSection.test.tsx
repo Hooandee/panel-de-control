@@ -541,7 +541,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
 describe("TdpSection ownership row", () => {
   afterEach(cleanup);
 
-  it("shows the overshoot notice while the rails read in sync", () => {
+  it("stays quiet about an overshoot Panel already corrected", () => {
     renderTdpSection({
       ...deckState,
       ownership: {
@@ -550,10 +550,22 @@ describe("TdpSection ownership row", () => {
       },
     } as unknown as TdpState);
 
+    expect(screen.queryByTestId("ownership-status")).toBeNull();
+  });
+
+  it("shows the row when the device keeps ignoring the limit", () => {
+    renderTdpSection({
+      ...deckState,
+      ownership: {
+        ...deckState.ownership,
+        overshoot: { state: "unresolved", target_w: 20, peak_w: 43, age_s: 30 },
+      },
+    } as unknown as TdpState);
+
     expect(screen.getByTestId("ownership-status")).toBeTruthy();
   });
 
-  it("shows the row while boost rails are held above the request", () => {
+  it("hides the row while boost rails are held above the request", () => {
     renderTdpSection({
       ...deckState,
       ownership: {
@@ -567,7 +579,7 @@ describe("TdpSection ownership row", () => {
       },
     } as unknown as TdpState);
 
-    expect(screen.getByTestId("ownership-status")).toBeTruthy();
+    expect(screen.queryByTestId("ownership-status")).toBeNull();
   });
 
   it("keeps the row hidden for in-sync rails without a notice", () => {
