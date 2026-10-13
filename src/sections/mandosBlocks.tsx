@@ -104,6 +104,11 @@ const RemapBlock: FC = () => {
               />
             </RemapRow>
           ))}
+          {config.unmapped_dropped && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.remap.dropped")}
+            </div>
+          )}
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
             {t("mandos.remap.note")}
           </div>

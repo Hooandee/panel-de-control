@@ -990,6 +990,8 @@ export interface ControllerConfig {
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
   extra_buttons?: boolean;
+  // A button left at its default is lost by the emulated gamepad (read live).
+  unmapped_dropped?: boolean;
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];

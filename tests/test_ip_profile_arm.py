@@ -18,3 +18,9 @@ def test_odin3_back_paddles_are_m1_and_m2():
     assert ip_profile.has_extra_buttons("ayn_odin3") is True
     caps = ["Gamepad:Button:LeftPaddle1", "Gamepad:Button:RightPaddle1", "Gamepad:Button:South"]
     assert ip_profile.buttons_for("ayn_odin3", caps) == [("LeftPaddle1", "M1"), ("RightPaddle1", "M2")]
+
+
+def test_odin3_paddles_are_offered_although_capabilities_omit_them():
+    live = ["Gamepad:Button:QuickAccess", "NotImplemented", "Gamepad:Button:South"]
+    assert ip_profile.buttons_for("ayn_odin3", live) == [("LeftPaddle1", "M1"), ("RightPaddle1", "M2")]
+    assert ip_profile.buttons_for("legion_go_s", live) == []
