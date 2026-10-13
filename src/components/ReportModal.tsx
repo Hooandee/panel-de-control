@@ -356,8 +356,6 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         <div style={theme.sectionLabel}>{t(copyKey("report.section.what"))}</div>
-        {/* Each chip is its own Focusable, so the gamepad reaches them without a
-            wrapping Focusable; a plain flex row keeps them wrapping. */}
         <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
           {REPORT_CATEGORIES.map((id) => (
             <SelectionChip
