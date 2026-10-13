@@ -61,7 +61,8 @@ save a global profile or a per-game one.
   the firmware decides whether to accept it, and the dial shows what really applies. Presets and
   Auto-TDP never leave the safe range.
 - **Low-battery TDP (experimental).** Keeps the value you selected when the battery reaches 20% or
-  less. Off by default.
+  less. On the Legion Go S it also keeps it on the charger while the firmware keeps limiting it,
+  until the next reboot. Off by default.
 - **GPU clock.** Set the minimum and maximum graphics clock.
 
 ### System (Sistema)

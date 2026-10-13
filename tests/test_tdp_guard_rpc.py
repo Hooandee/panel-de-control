@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import json
 import sys
+import time
 import types
 from dataclasses import replace
 
@@ -2661,3 +2662,155 @@ def test_profile_change_outside_a_game_still_restores_the_rails(plugin):
     profiles.value = "low-power"
     run(plugin, now, 10.0, step=0.5)
     assert len(backend.writes) == 2
+
+
+def test_legion_firmware_cap_rejection_applies_live_max_and_holds(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    backend = plugin._tdp_backend
+    backend.probe_live_max_on_ac = True
+    backend.live_max = 15
+    backend._levels = {"pl1": 22, "pl2": 18, "pl3": 37}
+    plugin._tdp_profiles.set_levels("global", 25, 25, 25)
+    original_set_levels = backend.set_levels
+    writes = []
+
+    def reject_above_live_max(pl1, pl2, pl3, ac):
+        writes.append((pl1, pl2, pl3))
+        if pl1 > backend.live_max:
+            return TdpResult(
+                pl1,
+                backend._levels["pl1"],
+                False,
+                "write not confirmed: fake/pl1!EINVAL; rollback confirmed",
+                "live_max_rejected",
+            )
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    monkeypatch.setattr(backend, "set_levels", reject_above_live_max)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert writes == [(25, 25, 25), (15, 25, 25)]
+    assert backend._levels["pl1"] == 15
+    assert (plugin._tdp_status, plugin._tdp_reason) == (
+        "constrained",
+        "power_source_limit",
+    )
+
+    for now in (10.0, 10.75, 12.0, 40.0):
+        plugin._tdp_guard_tick(now=now)
+    assert len(writes) == 2
+
+    backend.live_max = 33
+    start = time.monotonic()
+    for offset in (100.0, 100.75, 102.0, 130.0):
+        plugin._tdp_guard_tick(now=start + offset)
+    assert writes[-1] == (25, 25, 25)
+    assert backend._levels["pl1"] == 25
+
+
+def _legion_go_s_capped_on_charger(plugin, monkeypatch, live_max):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.unverified_hold_restore = {"pl1": 15, "pl2": 15, "pl3": 20}
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    backend = plugin._tdp_backend
+
+    def observe():
+        levels = backend._levels
+        return TdpObservation(
+            readable=True,
+            surfaces={
+                backend.name: {
+                    rail: RailReading(levels[rail], 5, live_max[rail])
+                    for rail in ("pl1", "pl2", "pl3")
+                },
+            },
+        )
+
+    monkeypatch.setattr(backend, "observe", observe)
+    plugin._tdp_observation = observe()
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 25, 30, 35)
+    backend.set_levels_calls = 0
+    return sidecar
+
+
+def test_legion_go_s_hold_covers_the_firmware_cap_on_the_charger(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert result.ok is True
+    assert sidecar.calls == [{"pl1": 25, "pl2": 30, "pl3": 35}]
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_charger_without_firmware_cap_uses_the_primary_route(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 40, "pl2": 43, "pl3": 53},
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert sidecar.calls == []
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_firmware_cap_hold_stays_off_when_the_setting_is_off(
+    plugin,
+    monkeypatch,
+):
+    sidecar = _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 15, "pl2": 15, "pl3": 20},
+    )
+    plugin._settings["low_battery_tdp_hold"] = False
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert sidecar.calls == []
+
+
+def test_legion_go_s_hold_latched_on_battery_stays_on_the_charger_until_reboot(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = _legion_go_s_capped_on_charger(
+        plugin, monkeypatch, {"pl1": 33, "pl2": 33, "pl3": 35},
+    )
+    monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-a")
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=False))
+    assert plugin._settings["low_battery_hold_latched_boot"] == "boot-a"
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+    monkeypatch.setattr(main_module, "_current_boot_id", lambda: "boot-b")
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual", on_ac=True))
+    assert len(sidecar.calls) == 2
+    assert plugin._tdp_backend.set_levels_calls == 1

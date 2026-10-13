@@ -1116,7 +1116,7 @@ export const ptBR: Record<string, string> = {
   "tdp.auto.ui_floor": "TDP aumentado para manter o menu fluido · é reajustado no jogo",
   "tdp.lowBatteryHold.title": "Manter o TDP com a bateria baixa",
   "tdp.lowBatteryHold.experimental": "Experimental",
-  "tdp.lowBatteryHold.hint": "Mantém o valor selecionado em 20% de bateria ou menos.",
+  "tdp.lowBatteryHold.hint": "Mantém o valor selecionado em 20% de bateria ou menos e, se o sistema continuar limitando, também no carregador.",
   "tdp.ceiling.battery": "Máx. na bateria: {max} W. Conecte o carregador para usar um valor maior.",
   "tdp.ceiling.charger": "Máx. do dispositivo: {max} W.",
   "tdp.extra.label": "Extra",

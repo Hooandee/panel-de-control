@@ -32,6 +32,7 @@ def decide_hold(
     write_authorized,
     custom_mode,
     auto_tdp,
+    firmware_capped=False,
 ):
     available = strategy in _REASSERT_BY_STRATEGY
     percent = battery.get("percent") if isinstance(battery, dict) else None
@@ -47,6 +48,8 @@ def decide_hold(
         reason = "unsupported"
     elif not enabled:
         reason = "disabled"
+    elif firmware_capped:
+        pass
     elif on_ac:
         reason = "on_ac"
     elif not present:
@@ -57,14 +60,15 @@ def decide_hold(
         reason = "battery_unreadable"
     elif percent > LOW_BATTERY_PERCENT:
         reason = "battery_above_threshold"
-    elif not control_enabled:
-        reason = "control_disabled"
-    elif not write_authorized:
-        reason = "external_owner"
-    elif not custom_mode:
-        reason = "firmware_mode"
-    elif auto_tdp:
-        reason = "auto_tdp"
+    if reason == "active":
+        if not control_enabled:
+            reason = "control_disabled"
+        elif not write_authorized:
+            reason = "external_owner"
+        elif not custom_mode:
+            reason = "firmware_mode"
+        elif auto_tdp:
+            reason = "auto_tdp"
 
     active = reason == "active"
     return HoldDecision(

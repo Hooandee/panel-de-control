@@ -471,6 +471,11 @@ def frontend_crash_diagnostics(
 # Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land
 # in dmesg/journal, NOT the plugin's own log. Captured via an injected runner so
 # this stays testable without spawning processes.
+_SLEEP_KERNEL_GREP = (
+    "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
+    "ACPI: PM:|amd_pmc|Last suspend"
+)
+
 _KERNEL_CMDS = {
     "dmesg": ["/usr/bin/dmesg", "--ctime", "--level=err,warn"],
     "journal": ["/usr/bin/journalctl", "-b", "-u", "plugin_loader", "-n", "400", "--no-pager"],
@@ -497,6 +502,26 @@ _KERNEL_CMDS = {
         "--grep", "(?i)power key|reboot|power-?off|shutdown|suspend|hibernat|(entering|returned from) sleep|lid (opened|closed)",
         "-n", "60", "--no-pager",
     ],
+    # Why a suspend ends early or never starts: the kernel wake reason, logind's view
+    # of each cycle and who holds a sleep or power-key inhibitor.
+    "sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "120", "--no-pager",
+    ],
+    "sleep_logind": [
+        "/usr/bin/journalctl", "-b",
+        "-t", "systemd-logind", "-t", "systemd-sleep",
+        "--grep", "(?i)power key|suspend|sleep|inhibit|lid (opened|closed)",
+        "-n", "120", "--no-pager",
+    ],
+    "previous_boot_sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-1", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
+    "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
 }
 
 

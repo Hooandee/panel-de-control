@@ -87,7 +87,12 @@ def process_activity(home, proc_root="/proc", data_roots=()):
                 paths.update(os.path.realpath(path) for path, _ in caches)
                 if not caches:
                     incomplete("unidentified", process)
-            elif not process_appids and not prefix and command.startswith(("wine", "pressure-vessel")):
+            elif (
+                not process_appids
+                and not prefix
+                and command.startswith(("wine", "pressure-vessel"))
+                and not command.startswith("wine_")
+            ):
                 incomplete("unidentified", process)
             if data_roots:
                 links = [process / "cwd"]
