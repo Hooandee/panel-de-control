@@ -225,6 +225,7 @@ class PipeWireEq:
     def __init__(self, runner=None, name="Panel de Control"):
         self._runner = runner or self._run
         self._emulated = _runs_emulated()
+        self._spawn_cost = 0.0
         self._session = _find_session()
         self._orig_default = None
         self._active_downstream = None
@@ -270,6 +271,7 @@ class PipeWireEq:
         cmd, env, identity = self._session_cmd(argv)
         if cmd is None:
             return ""
+        started = time.monotonic()
         try:
             out = subprocess.run(
                 cmd,
@@ -280,6 +282,8 @@ class PipeWireEq:
                 text=True,
                 **identity,
             )
+            if getattr(out, "returncode", None) == 0:
+                self._spawn_cost = time.monotonic() - started
             return out.stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return ""
@@ -821,11 +825,12 @@ class PipeWireEq:
         observed = None
         started = self._monotonic()
         spawn_overhead = 0.0
+        spawn_cost = self._spawn_cost
 
         def within_deadline():
             # Under FEX every pactl spawn from the emulated plugin costs about a second;
             # the budget is for waiting on PipeWire, so that overhead is not charged to it.
-            # Only answered calls count: a timeout is a stall, never spawn cost.
+            # A timeout is charged beyond the spawn cost measured on answered calls.
             elapsed = self._monotonic() - started
             return (
                 elapsed - spawn_overhead < _DEFAULT_CONFIRM_TIMEOUT_S
@@ -833,11 +838,14 @@ class PipeWireEq:
             )
 
         def run(argv):
-            nonlocal spawn_overhead
+            nonlocal spawn_overhead, spawn_cost
             before = self._monotonic()
             result = self._runner(argv, timeout=1)
-            if self._emulated and result:
-                spawn_overhead += max(0.0, self._monotonic() - before - _EXPECTED_SPAWN_S)
+            if self._emulated:
+                took = self._monotonic() - before
+                if result:
+                    spawn_cost = max(spawn_cost, took)
+                spawn_overhead += max(0.0, min(took, spawn_cost) - _EXPECTED_SPAWN_S)
             return result
 
         def stable(delays):

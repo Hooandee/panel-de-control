@@ -3266,3 +3266,28 @@ def test_timeouts_never_count_as_spawn_cost_even_when_emulated(tmp_path):
 
     assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
     assert now["value"] <= 9.5
+
+
+def test_emulated_timeouts_after_answered_slow_calls_still_get_another_attempt(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    eq._spawn_cost = 1.1
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+    run = eq._runner
+    calls = {"n": 0}
+
+    def stalls_then_answers(argv, timeout=8):
+        calls["n"] += 1
+        now["value"] += 1.1
+        if argv == ["pactl", "get-default-sink"] and 2 <= calls["n"] <= 8:
+            run(["pactl", "set-default-sink", "X EQ"], timeout)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = stalls_then_answers
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert now["value"] < 20.0
