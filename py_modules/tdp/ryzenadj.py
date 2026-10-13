@@ -230,6 +230,10 @@ class RyzenadjBackend(TDPBackend):
         return snapshot is not None or not self._require_readback
 
     @property
+    def unverified_hold_restore(self):
+        return dict(self._unverified_hold_restore or {})
+
+    @property
     def probe_pending(self) -> bool:
         return self._readback_state == "pending"
 

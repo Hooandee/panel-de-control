@@ -161,6 +161,8 @@ _REPORT_SERVICE_URL = os.environ.get(
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
+_CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
+_CHARGER_NOTICE_TTL_S = 24 * 3600
 # Stable fields only: live readings would make every refresh look like a change.
 # tests/test_journal_sections.py requires an entry for every section.
 _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
@@ -168,7 +170,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_tdp_state", (
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
-            "global_auto_config", "low_battery_hold.enabled",
+            "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
         )),
     ),
     "system": (
@@ -348,6 +350,14 @@ def _plugin_dir() -> str:
     return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 
 
+def _current_boot_id():
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as source:
+            return source.read().strip() or None
+    except OSError:
+        return None
+
+
 def _user_home() -> str:
     return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
 
@@ -406,6 +416,7 @@ DEFAULTS = {
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
+    "charger_notice_dismissed_at": None,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
@@ -417,6 +428,8 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    "charge_limit_chosen": None,
+    "low_battery_hold_latched_boot": None,
     "charge_limit_full_once_until": None,
     "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
@@ -767,6 +780,7 @@ class Plugin:
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
+        self._follow_system_charge_limit()
         self._charge_limit_last_apply = None
         self._charge_limit_failures = 0
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
@@ -3504,6 +3518,30 @@ class Plugin:
         self._save()
         return bool(seen)
 
+    async def dismiss_charger_notice(self) -> bool:
+        self._init()
+        self._settings["charger_notice_dismissed_at"] = time.time()
+        self._save()
+        return True
+
+    def _charger_unstable_state(self, now: float | None = None) -> dict | None:
+        lifecycle = getattr(self, "_lifecycle", None)
+        episode = lifecycle.diagnostics().get("ac_unstable") if lifecycle is not None else None
+        if not episode:
+            return None
+        now = time.time() if now is None else now
+        dismissed_at = self._settings.get("charger_notice_dismissed_at")
+        snoozed = (
+            isinstance(dismissed_at, (int, float))
+            and now - dismissed_at < _CHARGER_NOTICE_SNOOZE_S
+        )
+        return {
+            "visible": not snoozed and now - episode["last_at"] < _CHARGER_NOTICE_TTL_S,
+            "started_at": episode["started_at"],
+            "last_at": episode["last_at"],
+            "transitions": episode["transitions"],
+        }
+
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
         """hwmon fan/temp reading, with EC-readable RPM merged in for devices that
@@ -5007,7 +5045,7 @@ class Plugin:
             return await inactive("disabled")
         if self._firmware_mode() != _CUSTOM_MODE:
             return await inactive("firmware_mode")
-        if not self._auto_tdp_supported():
+        if not await asyncio.to_thread(self._auto_tdp_supported):
             return await inactive("tdp_unsupported")
         if not self._tdp_control_on():
             return await inactive("control_disabled")
@@ -5176,11 +5214,11 @@ class Plugin:
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
-        auto = (
+        auto = bool(
             self._tdp_profiles.auto_tdp(self._current_appid)
-            and self._auto_tdp_supported()
+            and await asyncio.to_thread(self._auto_tdp_supported)
         )
-        ac = read_on_ac()
+        ac = await asyncio.to_thread(read_on_ac)
         setpoint = (
             self._auto_setpoint
             if self._auto_runtime_active()
@@ -5191,11 +5229,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = (
-                await asyncio.to_thread(self._observe_tdp_sync)
-                if self._power_uses_levels()
-                else self._observe_tdp_sync()
-            )
+            observation = await asyncio.to_thread(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)
@@ -6235,11 +6269,26 @@ class Plugin:
         detail = result.detail or ""
         return bool(
             not result.ok
-            and getattr(result, "failure_kind", None) == "target_not_applied"
+            and getattr(result, "failure_kind", None)
+            in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
             and "; rollback confirmed" in detail
         )
+
+    def _apply_within_rejected_live_max(self, command, probe_live_max, result):
+        if not (
+            probe_live_max
+            and getattr(result, "failure_kind", None) == "live_max_rejected"
+            and self._tdp_live_max_probe_failed_safely(result)
+        ):
+            return
+        bounded = build_targets(
+            command.requested,
+            command.safe_bounds,
+            self._observe_tdp_sync(),
+        )
+        self._apply_tdp_targets(bounded.target, command.on_ac, command.auto_tdp)
 
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
@@ -6477,6 +6526,7 @@ class Plugin:
             command.on_ac,
             command.auto_tdp,
         )
+        self._apply_within_rejected_live_max(command, probe_live_max, result)
         after = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -6658,7 +6708,13 @@ class Plugin:
         )
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         battery = self._battery.read() if enabled and strategy and not ac else {}
-        return decide_hold(
+        firmware_capped = bool(
+            enabled
+            and strategy
+            and (ac or (battery.get("percent") or 0) > LOW_BATTERY_PERCENT)
+            and self._primary_tdp_firmware_capped(ac)
+        )
+        decision = decide_hold(
             strategy=strategy,
             enabled=enabled,
             battery=battery,
@@ -6667,6 +6723,41 @@ class Plugin:
             write_authorized=self._tdp_write_authorized(),
             custom_mode=self._firmware_mode() == _CUSTOM_MODE,
             auto_tdp=self._auto_control_active(),
+            firmware_capped=firmware_capped,
+        )
+        if decision.active:
+            self._remember_low_battery_latch()
+        return decision
+
+    def _remember_low_battery_latch(self):
+        boot = _current_boot_id()
+        if boot and self._settings.get("low_battery_hold_latched_boot") != boot:
+            self._settings["low_battery_hold_latched_boot"] = boot
+            self._save()
+
+    def _primary_tdp_firmware_capped(self, on_ac):
+        cap = getattr(
+            getattr(self, "_low_battery_hold_backend", None),
+            "unverified_hold_restore",
+            None,
+        )
+        if not cap:
+            return False
+        requested = self._effective_levels(self._current_appid, on_ac)[0]
+        if int(requested.get("pl1", 0)) <= cap["pl1"]:
+            return False
+        boot = _current_boot_id()
+        # The firmware keeps its low-battery cap until the next boot, even on the charger.
+        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
+            return True
+        observation = getattr(self, "_tdp_observation", None)
+        surfaces = getattr(observation, "surfaces", None) or {}
+        rails = surfaces.get(self._tdp_backend.name, {})
+        return bool(rails) and all(
+            (reading := rails.get(rail)) is not None
+            and reading.max_w is not None
+            and int(reading.max_w) <= int(watts)
+            for rail, watts in cap.items()
         )
 
     def _remember_low_battery_primary_result(self, hold, result):
@@ -6762,7 +6853,7 @@ class Plugin:
         self._low_battery_hold_last_write_at = now
         sidecar_limits = getattr(sidecar, "low_battery_level_limits", None)
         limits = self._limits()
-        active_max = self._active_max(limits, False)
+        active_max = self._active_max(limits, bool(command.on_ac))
         bounds = (
             sidecar_limits(active_max)
             if callable(sidecar_limits)
@@ -7103,6 +7194,9 @@ class Plugin:
                     targets.target,
                     command.on_ac,
                     command.auto_tdp,
+                )
+                self._apply_within_rejected_live_max(
+                    command, probe_live_max, result,
                 )
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
@@ -7585,6 +7679,35 @@ class Plugin:
         self._clear_charge_limit_full_once()
         self._save()
         decky.logger.info("Full charge once finished: %s", reason)
+
+    def _follow_system_charge_limit(self):
+        backend = self._charge_limit
+        chosen = self._settings.get("charge_limit_chosen")
+        if chosen is None:
+            chosen = bool(self._settings.get("charge_limit_enabled"))
+            self._settings["charge_limit_chosen"] = chosen
+            self._save()
+        if chosen:
+            return
+        if not (backend.supported and backend.adjustable):
+            return
+        try:
+            current = backend.get()
+            low, high = backend.range()
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(current, int):
+            return
+        enabled = low <= current < high
+        percent = current if enabled else self._settings.get("charge_limit_percent", 80)
+        if (
+            self._settings.get("charge_limit_enabled") == enabled
+            and self._settings.get("charge_limit_percent") == percent
+        ):
+            return
+        self._settings["charge_limit_enabled"] = enabled
+        self._settings["charge_limit_percent"] = percent
+        self._save()
 
     def _charge_limit_requested_percent(self) -> int:
         if self._charge_limit_full_once_lifting():
@@ -8177,9 +8300,9 @@ class Plugin:
 
     async def get_battery_state(self) -> dict:
         self._init()
-        battery = self._battery.read()
+        battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
-        battery["ac_online"] = read_on_ac()
+        battery["ac_online"] = await asyncio.to_thread(read_on_ac)
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
 
     def _build_cpu_frequency_control(self):
@@ -10197,6 +10320,7 @@ class Plugin:
         percent = max(lo, min(hi, int(percent)))
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
+        self._settings["charge_limit_chosen"] = True
         self._save()
         if not self._module_enabled("chargeLimit"):
             self._publish_charge_limit_handoff(generation)
@@ -10943,6 +11067,7 @@ class Plugin:
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "charger_unstable": self._charger_unstable_state(),
         }
 
     def _tdp_ownership_state(self, observation):
@@ -12706,7 +12831,7 @@ class Plugin:
             None,
         )
         try:
-            battery = self._battery.read().get("percent")
+            battery = (await asyncio.to_thread(self._battery.read)).get("percent")
         except Exception:  # noqa: BLE001
             battery = None
         watts = power.get("watts")

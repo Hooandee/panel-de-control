@@ -148,3 +148,55 @@ def test_legion_go_s_uses_the_faster_exact_route():
 
     assert decision.active is True
     assert decision.reassert_s == 2.0
+
+
+def test_firmware_cap_keeps_the_hold_on_the_charger_and_above_the_threshold():
+    charging = decide_hold(
+        strategy="legion-go-s-83n6",
+        enabled=True,
+        battery={},
+        on_ac=True,
+        control_enabled=True,
+        write_authorized=True,
+        custom_mode=True,
+        auto_tdp=False,
+        firmware_capped=True,
+    )
+    recharged = decide_hold(
+        strategy="legion-go-s-83n6",
+        enabled=True,
+        battery=_battery(60),
+        on_ac=False,
+        control_enabled=True,
+        write_authorized=True,
+        custom_mode=True,
+        auto_tdp=False,
+        firmware_capped=True,
+    )
+    disabled = decide_hold(
+        strategy="legion-go-s-83n6",
+        enabled=False,
+        battery={},
+        on_ac=True,
+        control_enabled=True,
+        write_authorized=True,
+        custom_mode=True,
+        auto_tdp=False,
+        firmware_capped=True,
+    )
+    auto = decide_hold(
+        strategy="legion-go-s-83n6",
+        enabled=True,
+        battery={},
+        on_ac=True,
+        control_enabled=True,
+        write_authorized=True,
+        custom_mode=True,
+        auto_tdp=True,
+        firmware_capped=True,
+    )
+
+    assert (charging.active, charging.reason) == (True, "active")
+    assert (recharged.active, recharged.reason) == (True, "active")
+    assert (disabled.active, disabled.reason) == (False, "disabled")
+    assert (auto.active, auto.reason) == (False, "auto_tdp")

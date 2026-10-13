@@ -2,6 +2,7 @@ import asyncio
 import glob
 import os
 import time
+from collections import deque
 
 
 def read_on_ac(root="/"):
@@ -48,6 +49,15 @@ class LifecycleManager:
     # Resume has the same problem: the firmware reverts ppt to its default on wake and can
     # do so after the base delay, so a lone re-apply is lost. Re-assert across a window.
     _RESUME_SETTLE_RETRIES = (2.0, 5.0, 9.0)
+    # A failing charger or cable can drop AC every few seconds; re-applying on each drop
+    # lands mid-renegotiation. From the third change in a minute, wait for power to hold
+    # steady before re-applying once.
+    _AC_FLAP_WINDOW_S = 60.0
+    _AC_FLAP_MIN_CHANGES = 3
+    _AC_STABLE_S = 5.0
+    _AC_UNSTABLE_WINDOW_S = 300.0
+    _AC_UNSTABLE_MIN_CHANGES = 6
+    _AC_UNSTABLE_QUIET_S = 600.0
     _MIN_SUSPEND_S = 0.5
     _SUSPEND_EVIDENCE_MAX_AGE_S = 10.0
 
@@ -73,6 +83,12 @@ class LifecycleManager:
         self._resume_count = 0
         self._ignored_wakeup_changes = 0
         self._ac_transition_count = 0
+        self._ac_changes = deque()
+        self._ac_stable_at = None
+        self._ac_deferred_reapplies = 0
+        self._ac_unstable = None
+        self._ac_unstable_last_change = None
+        self._ac_unstable_episodes = 0
         self._apply_failures = 0
         self._last_apply_failure = None
         self._poll_failures = 0
@@ -80,6 +96,7 @@ class LifecycleManager:
         self._last_event = None
         self._pending = []        # times for the full re-apply (base resume delay)
         self._pending_light = []  # times for the TDP-only settle-retries
+        self._pending_ac_light = []  # AC settle-retries, dropped when a burst defers them
         self._task = None
 
     def _emit(self, event, **details):
@@ -102,6 +119,12 @@ class LifecycleManager:
             "resume_count": self._resume_count,
             "ignored_wakeup_changes": self._ignored_wakeup_changes,
             "ac_transition_count": self._ac_transition_count,
+            "ac_deferred_reapplies": self._ac_deferred_reapplies,
+            "ac_waiting_stable": self._ac_stable_at is not None,
+            "ac_unstable": (
+                dict(self._ac_unstable) if self._ac_unstable is not None else None
+            ),
+            "ac_unstable_episodes": self._ac_unstable_episodes,
             "apply_failures": self._apply_failures,
             "last_apply_failure": (
                 dict(self._last_apply_failure)
@@ -115,7 +138,7 @@ class LifecycleManager:
                 else None
             ),
             "pending_full_reapplies": len(self._pending),
-            "pending_tdp_reasserts": len(self._pending_light),
+            "pending_tdp_reasserts": len(self._pending_light) + len(self._pending_ac_light),
             "last_event": (
                 dict(self._last_event)
                 if self._last_event is not None
@@ -162,7 +185,33 @@ class LifecycleManager:
         self._safe(cb, ac, operation)
         return [t for t in pending if now < t]
 
-    def check(self, now):
+    def _record_ac_change(self, now, wall):
+        """Track AC changes; return True when this one is part of a flapping burst."""
+        self._ac_changes.append(now)
+        while self._ac_changes and now - self._ac_changes[0] > self._AC_UNSTABLE_WINDOW_S:
+            self._ac_changes.popleft()
+        episode = self._ac_unstable
+        ongoing = (
+            episode is not None
+            and now - self._ac_unstable_last_change <= self._AC_UNSTABLE_QUIET_S
+        )
+        if ongoing:
+            self._ac_unstable_last_change = now
+            episode["last_at"] = wall
+            episode["transitions"] += 1
+        elif len(self._ac_changes) >= self._AC_UNSTABLE_MIN_CHANGES:
+            self._ac_unstable_last_change = now
+            self._ac_unstable = {
+                "started_at": wall,
+                "last_at": wall,
+                "transitions": len(self._ac_changes),
+            }
+            self._ac_unstable_episodes += 1
+            self._emit("ac_unstable", transitions=len(self._ac_changes))
+        recent = sum(1 for t in self._ac_changes if now - t <= self._AC_FLAP_WINDOW_S)
+        return recent >= self._AC_FLAP_MIN_CHANGES or self._ac_stable_at is not None
+
+    def check(self, now, wall=None):
         wakeup_ok, wc = self._read_input("read_wakeup", self._read_wakeup)
         ac_ok, ac = self._read_input("read_ac", self._read_ac)
         suspend_ok, suspend_time = self._read_input(
@@ -240,25 +289,47 @@ class LifecycleManager:
         if ac != self._last_ac:
             self._last_ac = ac
             self._ac_transition_count += 1
-            self._safe(self._apply, ac, "ac-full-reapply")
-            self._pending_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+            flapping = self._record_ac_change(now, now if wall is None else wall)
+            if flapping:
+                self._ac_stable_at = now + self._AC_STABLE_S
+                self._pending_ac_light = []
+                self._emit("ac_changed", on_ac=bool(ac), deferred=True)
+            else:
+                self._safe(self._apply, ac, "ac-full-reapply")
+                self._pending_ac_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+                self._emit(
+                    "ac_changed",
+                    on_ac=bool(ac),
+                    tdp_settle_retries=len(self._AC_SETTLE_RETRIES),
+                )
+        elif self._ac_stable_at is not None and now >= self._ac_stable_at:
+            self._ac_stable_at = None
+            self._ac_deferred_reapplies += 1
+            self._safe(self._apply, ac, "ac-stable-reapply")
+            self._pending = [t for t in self._pending if now < t]
+            self._pending_ac_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
             self._emit(
-                "ac_changed",
+                "ac_stable",
                 on_ac=bool(ac),
-                tdp_settle_retries=len(self._AC_SETTLE_RETRIES),
+                deferred_reapplies=self._ac_deferred_reapplies,
             )
         # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
-        self._pending = self._fire_due(
-            self._pending, self._apply, now, "resume-full-reapply", ac
-        )
+        if self._ac_stable_at is None:
+            self._pending = self._fire_due(
+                self._pending, self._apply, now, "resume-full-reapply", ac
+            )
         self._pending_light = self._fire_due(
             self._pending_light, self._reassert, now, "tdp-settle-reassert", ac
+        )
+        self._pending_ac_light = self._fire_due(
+            self._pending_ac_light, self._reassert, now, "tdp-settle-reassert", ac
         )
 
     async def run(self):
         while True:
             try:
-                self.check(time.time())
+                # Monotonic, so a clock jump after wake cannot stall a deferred re-apply.
+                self.check(time.monotonic(), time.time())
             except Exception as exc:  # noqa: BLE001 - the poller must never die
                 self._record_poll_failure("check", exc)
             await asyncio.sleep(self._interval)

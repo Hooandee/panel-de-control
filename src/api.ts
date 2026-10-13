@@ -370,6 +370,15 @@ export interface TdpState {
   // One-time full-screen notices already shown (durable across reboot).
   seen_autotdp_notice: boolean;
   seen_tdp_conflict_takeover: boolean;
+  // AC kept dropping and coming back; null while power has been steady.
+  charger_unstable: ChargerUnstable | null;
+}
+
+export interface ChargerUnstable {
+  visible: boolean;
+  started_at: number;
+  last_at: number;
+  transitions: number;
 }
 
 export interface TdpPresets {
@@ -515,6 +524,7 @@ export const setSeenAutotdpNotice =
   callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
 export const setSeenTdpConflictTakeover =
   callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
+export const dismissChargerNotice = callable<[], boolean>("dismiss_charger_notice");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS

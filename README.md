@@ -61,7 +61,8 @@ a pantalla completa, además de guardar un perfil global o uno propio por juego.
   pide el valor, pero es el firmware el que decide si lo acepta, y el dial enseña lo que se aplica
   de verdad. Los presets y el Auto-TDP no salen nunca del rango seguro.
 - **TDP con batería baja (experimental).** Mantiene el valor que hayas elegido cuando la batería
-  llega al 20 % o menos. Viene desactivado.
+  llega al 20 % o menos. En la Legion Go S también lo mantiene con el cargador mientras el firmware
+  siga limitando, hasta el siguiente reinicio. Viene desactivado.
 - **Frecuencia de GPU.** Fija el reloj mínimo y máximo de la gráfica.
 
 ### Sistema
