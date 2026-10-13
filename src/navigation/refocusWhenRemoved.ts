@@ -2,7 +2,7 @@ import { type RefObject, useLayoutEffect } from "react";
 
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 
-const gamepadNavigation = createThemeNavigationAccess();
+const gamepadNavigation = createThemeNavigationAccess({ allowInactiveContext: true });
 const visible = (element: HTMLElement) => element.isConnected && element.getClientRects().length > 0;
 const focusFirst = (candidates: HTMLElement[]) => candidates.some((element) => visible(element) && gamepadNavigation.focus(element));
 const WATCH_RETRY_MS = 50;
@@ -46,10 +46,8 @@ export function refocusWhenRemoved(block: HTMLElement | null): void {
       ? Array.from(scope.querySelectorAll<HTMLElement>(".Focusable")).filter((element) => !known.has(element) && visible(element))
       : [];
     const preferred = fresh(root).filter((element) => element.hasAttribute(PREFERRED_FOCUS));
-    if (preferred.length) {
-      if (!preferred.some((element) => element.classList.contains("gpfocus"))) focusFirst(preferred);
-      return;
-    }
+    if (preferred.some((element) => element.classList.contains("gpfocus"))) return;
+    if (preferred.length && focusFirst(preferred)) return;
     const place = places.find((element) => element.isConnected);
     const replacements = fresh(place);
     if (replacements.length) {

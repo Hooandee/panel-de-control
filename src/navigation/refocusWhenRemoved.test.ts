@@ -191,4 +191,20 @@ describe("refocusWhenRemoved", () => {
     expect(focus).toHaveBeenNthCalledWith(1, near);
     expect(focus).toHaveBeenNthCalledWith(2, far);
   });
+
+  it("falls back to the replacement when the preferred control refuses focus", async () => {
+    const root = panel();
+    const tray = element(root, "Bandeja");
+    const button = element(tray, "Limpiar", true);
+
+    refocusWhenRemoved(button);
+    remove(button);
+    const cancel = element(tray, "Cancelar");
+    cancel.setAttribute(PREFERRED_FOCUS, "true");
+    focus.mockImplementationOnce(() => false);
+    await settle();
+
+    expect(focus).toHaveBeenNthCalledWith(1, cancel);
+    expect(focus).toHaveBeenCalledTimes(2);
+  });
 });

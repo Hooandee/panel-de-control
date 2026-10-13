@@ -102,7 +102,8 @@ export function useTdp(): TdpControl {
     getTdpState().then((next) => {
       if (epoch !== followEpoch.current) return;
       setTdp(reconcileAutoState(next, confirmed));
-    }).catch(() => {}).finally(() => setTdpSettled(true));
+      setTdpSettled(true);
+    }).catch(() => setTdpSettled(true));
   }, [reconcileAutoState]);
 
   const refreshPresets = useCallback(() => {

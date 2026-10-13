@@ -41,6 +41,9 @@ interface NavigationTree {
 interface ThemeNavigationAccessDependencies {
   getController?(): NavigationController | null | undefined;
   buttons?: Readonly<NavigationButtons>;
+  // Panel only: also place focus in the last active context (see inactiveContextTrees).
+  // Theme extensions keep the active-tree-only behaviour.
+  allowInactiveContext?: boolean;
 }
 
 const DEFAULT_BUTTONS: Readonly<NavigationButtons> = Object.freeze({
@@ -92,8 +95,9 @@ function inactiveContextTrees(controller: NavigationController | null | undefine
 function focusThroughNavigationNode(
   controller: NavigationController | null | undefined,
   element: HTMLElement,
+  allowInactiveContext: boolean,
 ): boolean {
-  const tree = controller?.GetActiveNavTree?.() ?? inactiveContextTrees(controller);
+  const tree = controller?.GetActiveNavTree?.() ?? (allowInactiveContext ? inactiveContextTrees(controller) : null);
   if (!tree) return false;
   const node = findNavigationNode(tree, element);
   if (typeof node?.BTakeFocus !== "function") return false;
@@ -111,6 +115,7 @@ function consumeInput(event: unknown): void {
 export function createThemeNavigationAccess({
   getController = getSteamNavigationController,
   buttons = DEFAULT_BUTTONS,
+  allowInactiveContext = false,
 }: ThemeNavigationAccessDependencies = {}): Readonly<ThemeExtensionNavigationAccess> {
   return Object.freeze({
     focus(element: HTMLElement): boolean {
@@ -120,7 +125,7 @@ export function createThemeNavigationAccess({
         if (typeof controller?.FocusElement === "function") {
           controller.FocusElement(element);
           hostFocused = true;
-        } else if (focusThroughNavigationNode(controller, element)) {
+        } else if (focusThroughNavigationNode(controller, element, allowInactiveContext)) {
           return true;
         }
       } catch {

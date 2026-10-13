@@ -3,7 +3,7 @@ import { showModal as showDeckyModal } from "@decky/ui";
 import { getQamDocument } from "../qamDocument";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 
-const gamepadNavigation = createThemeNavigationAccess();
+const gamepadNavigation = createThemeNavigationAccess({ allowInactiveContext: true });
 const RETURN_RETRY_MS = 50;
 const RETURN_WINDOW_MS = 2000;
 
@@ -43,17 +43,22 @@ function returnFocus(doc: Document, opener: HTMLElement, label: string): void {
 // Decky's own defaults when a caller passes no props.
 const DECKY_MODAL_DEFAULTS = { strTitle: "Decky Dialog", bHideMainWindowForPopouts: false };
 
+const openModals = new Set<symbol>();
+
 // Steam drops gamepad focus to the QAM tab strip when a modal closes; hand it back
-// to the panel control that opened it. Steam unmounts the panel under a modal, so a
-// modal opened from another one finds no focused panel control and returns nothing.
+// to the panel control that opened it. A modal opened from another one has no panel
+// control to return to, even if a stale one under the first modal still looks focused.
 export const showModal: typeof showDeckyModal = (modal, parent, props) => {
-  const doc = getQamDocument();
+  const doc = openModals.size === 0 ? getQamDocument() : null;
   const opener = doc?.querySelector<HTMLElement>(".pdc-root .gpfocus") ?? null;
   const label = opener ? controlLabel(opener) : "";
+  const token = Symbol();
+  openModals.add(token);
   let closed = false;
   const onClose = () => {
     if (closed) return;
     closed = true;
+    openModals.delete(token);
     props?.fnOnClose?.();
     if (doc && opener) returnFocus(doc, opener, label);
   };
@@ -68,6 +73,7 @@ export const showModal: typeof showDeckyModal = (modal, parent, props) => {
     };
   } catch (error) {
     closed = true;
+    openModals.delete(token);
     throw error;
   }
 };
