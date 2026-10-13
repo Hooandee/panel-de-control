@@ -1,4 +1,4 @@
-import { TextField, Focusable } from "@decky/ui";
+import { TextField } from "@decky/ui";
 import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
 import { LuCheck, LuFilter, LuImage, LuSearch, LuSquare, LuSquareCheck, LuTrash2, LuVideo } from "react-icons/lu";
@@ -74,10 +74,10 @@ export const MediaCleanerView: FC<{ controller: MediaCleanerController }> = ({ c
       counts={t("cleaner.media.result", { deleted: controller.result.items.filter((item) => item.status === "deleted").length, errors: controller.result.items.filter((item) => item.status === "error").length })}
       onClose={controller.dismissResult}
     />}
-    <Focusable flow-children="row" style={{ display: "flex", gap: 8 }}>
+    <div style={{ display: "flex", gap: 8 }}>
       <div style={{ flex: 1 }}><CleanerButton label={t("cleaner.filterLabel")} onActivate={() => setFilter((value) => FILTERS[(FILTERS.indexOf(value) + 1) % FILTERS.length])} style={{ justifyContent: "flex-start" }}><LuFilter size={14} /><span>{t(`cleaner.media.filter.${filter}`)}</span><span style={{ ...cleanerCaption, marginLeft: "auto" }}>{shown.length}</span></CleanerButton></div>
       <div style={{ width: 42 }}><CleanerButton label={t("cleaner.searchMedia")} onActivate={() => { setSearchOpen((value) => !value); setQuery(""); }}><LuSearch size={15} /></CleanerButton></div>
-    </Focusable>
+    </div>
     {searchOpen && <TextField label={t("cleaner.searchMedia")} value={query} onChange={(event) => setQuery(event.target.value)} />}
     {recommended.length > 0 && <CleanerButton label={t(allRecommendedSelected ? "cleaner.deselectRecommended" : "cleaner.selectRecommended")} disabled={controller.busy} onActivate={() => setSelected((previous) => {
       const next = new Set(previous);

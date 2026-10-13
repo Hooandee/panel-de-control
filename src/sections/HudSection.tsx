@@ -1,5 +1,5 @@
 import { FC, ReactNode, useEffect, useState } from "react";
-import { PanelSectionRow, ToggleField, TextField, Spinner, Focusable, showModal } from "@decky/ui";
+import { PanelSectionRow, ToggleField, TextField, Spinner, showModal } from "@decky/ui";
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
   LuChevronUp, LuChevronDown, LuChevronRight, LuX, LuRotateCcw, LuRefreshCw,
@@ -337,7 +337,7 @@ export const HudSection: FC = () => {
     if (r.kind === "spacer") {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-          <Focusable flow-children="row" style={{ ...segmentGroupStyle }}>
+          <div style={{ ...segmentGroupStyle }}>
             {SPACER_SIZES.map((s) => (
               <QamAction
                 key={s}
@@ -348,7 +348,7 @@ export const HudSection: FC = () => {
                 {t(`hud.spacer.${s}`)}
               </QamAction>
             ))}
-          </Focusable>
+          </div>
           <Note>{t("hud.elem.spacer.hint")}</Note>
         </div>
       );
@@ -561,18 +561,18 @@ export const HudSection: FC = () => {
             >
               <SectionLabel>{t("hud.conflict.title")}</SectionLabel>
               <Note>{t("hud.conflict.body", { path: state.conflict.path })}</Note>
-              <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
                 <OutlineBtn onClick={() => resolveConflict("keep_external")}>
                   {t("hud.conflict.keepExternal")}
                 </OutlineBtn>
                 <OutlineBtn onClick={() => resolveConflict("use_pdc")}>
                   {t("hud.conflict.usePdc")}
                 </OutlineBtn>
-              </Focusable>
+              </div>
             </div>
           )}
           {saveStatus === "error" && <Note>{t("hud.save.error")}</Note>}
-          <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
             {Object.keys(presets).map((key) => {
               const active = activePreset === key;
               return (
@@ -597,7 +597,7 @@ export const HudSection: FC = () => {
                 </QamAction>
               );
             })}
-          </Focusable>
+          </div>
         </div>
 
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
@@ -663,7 +663,7 @@ export const HudSection: FC = () => {
                     : {}),
                 }}
               >
-                <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
+                <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
                   {editable ? (
                     <QamAction
                       onPress={() => setSelected(isSel ? null : key)}
@@ -693,7 +693,7 @@ export const HudSection: FC = () => {
                   <RowAction label={t("hud.move.up")} disabled={i === 0} onPress={() => patchItems(moveRow(m.items, i, -1))}><LuChevronUp size={14} /></RowAction>
                   <RowAction label={t("hud.move.down")} disabled={i === rows.length - 1} onPress={() => patchItems(moveRow(m.items, i, 1))}><LuChevronDown size={14} /></RowAction>
                   <RowAction label={t("hud.remove")} onPress={() => { patchItems(removeRow(m.items, i)); if (isSel) setSelected(null); }}><LuX size={13} /></RowAction>
-                </Focusable>
+                </div>
                 {editable && isSel && (
                   <div style={{ padding: theme.space.sm, borderRadius: theme.radius.sm, ...(isBlock ? {} : { boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }) }}>
                     {renderEditor(r)}
@@ -715,7 +715,7 @@ export const HudSection: FC = () => {
                 return (
                   <div key={g.key} style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
                     <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t(`hud.group.${g.key}`)}</span>
-                    <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs }}>
                       {entries.map((e) => (
                         <Pill
                           key={e.kind === "block" ? `b:${e.group}` : e.id}
@@ -723,7 +723,7 @@ export const HudSection: FC = () => {
                           onClick={() => add(e)}
                         />
                       ))}
-                    </Focusable>
+                    </div>
                   </div>
                 );
               })}
@@ -747,18 +747,18 @@ export const HudSection: FC = () => {
           <Note>{t("hud.style.scope")}</Note>
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.layout")}</span>
-            <Focusable flow-children="row" style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
+            <div style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
               {LAYOUTS.map((l) => (
                 <QamAction key={l} onPress={() => patch({ layout: l })} pressed={m.layout === l} style={{ ...segmentItemStyle(m.layout === l), flex: 1, padding: "5px 0" }}>
                   {t(`hud.layout.${l}`)}
                 </QamAction>
               ))}
-            </Focusable>
+            </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.position")}</span>
-            <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.xs, width: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.xs, width: "100%" }}>
               {POSITIONS.map(({ id, Icon }) => {
                 const active = m.position === id;
                 return (
@@ -779,23 +779,23 @@ export const HudSection: FC = () => {
                   </QamAction>
                 );
               })}
-            </Focusable>
+            </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.tempUnit")}</span>
-            <Focusable flow-children="row" style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
+            <div style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
               {TEMP_UNITS.map((u) => (
                 <QamAction key={u} onPress={() => patch({ tempUnit: u })} pressed={m.tempUnit === u} style={{ ...segmentItemStyle(m.tempUnit === u), flex: 1, padding: "5px 0" }}>
                   {t(`hud.tempUnit.${u}`)}
                 </QamAction>
               ))}
-            </Focusable>
+            </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.locale")}</span>
-            <Focusable flow-children="row" style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
+            <div style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
               {HUD_LOCALES.map((locale) => (
                 <QamAction
                   key={locale}
@@ -806,7 +806,7 @@ export const HudSection: FC = () => {
                   {t(`hud.locale.${locale}`)}
                 </QamAction>
               ))}
-            </Focusable>
+            </div>
             <Note>{t("hud.locale.hint")}</Note>
           </div>
 

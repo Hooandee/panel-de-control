@@ -173,7 +173,7 @@ export const SonidoSection: FC = () => {
                 : undefined
             }
           >
-            <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {state.test_samples.map((s) => {
                 const on = state.test_playing && state.test_sample === s;
                 return (
@@ -188,11 +188,11 @@ export const SonidoSection: FC = () => {
                   </Focusable>
                 );
               })}
-            </Focusable>
+            </div>
           </Collapsible>
 
           {/* Curated presets — the device-tuned one is the hero (first). */}
-          <Focusable flow-children="grid" style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
+          <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
             {state.presets.map((p) => {
               const on = state.preset === p.id;
               return (
@@ -323,7 +323,6 @@ export const SonidoSection: FC = () => {
                 onActivate={() => openEqCurveModal(refresh)}
                 onClick={() => openEqCurveModal(refresh)}
                 title={t("audio.fullscreen")}
-                aria-label={t("audio.fullscreen")}
               >
                 <LuMaximize2 size={16} />
               </Focusable>

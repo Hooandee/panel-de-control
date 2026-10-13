@@ -1,5 +1,5 @@
 import { FC } from "react";
-import { ToggleField, Focusable } from "@decky/ui";
+import { ToggleField } from "@decky/ui";
 import { LuBatteryFull, LuBatteryLow, LuHeartPulse, LuPlug, LuRefreshCw, LuZap } from "react-icons/lu";
 
 import { BatteryState } from "../api";
@@ -119,7 +119,7 @@ export const BatteryCard: FC<Props> = ({
         )}
 
         {!hideHealth && (b.cycle_count !== null || b.energy_full_mwh !== null) && (
-          <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
+          <div style={{ display: "flex", gap: theme.space.sm }}>
             {b.cycle_count !== null && (
               <Chip icon={<LuRefreshCw size={11} />} label={t("system.battery.cycles")} value={String(b.cycle_count)} grow={1} />
             )}
@@ -131,7 +131,7 @@ export const BatteryCard: FC<Props> = ({
                 value={formatCapacity(b.energy_full_mwh, b.energy_full_design_mwh)}
               />
             )}
-          </Focusable>
+          </div>
         )}
 
         {managed && !hideLimitControl && (

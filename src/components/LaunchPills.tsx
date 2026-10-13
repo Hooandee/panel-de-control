@@ -30,7 +30,7 @@ export const ValuePills: FC<{
 }> = ({ offLabel, options, current, onSelect }) => {
   const custom = current !== null && !options.some((o) => o.value === current) ? current : null;
   return (
-    <Focusable flow-children="grid" style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
       <Focusable style={chipStyle(current === null)} onActivate={() => onSelect(null)} onClick={() => onSelect(null)}>
         {offLabel}
       </Focusable>
@@ -52,6 +52,6 @@ export const ValuePills: FC<{
           {custom}
         </Focusable>
       )}
-    </Focusable>
+    </div>
   );
 };

@@ -118,7 +118,7 @@ const DesktopFanCurveModalBody: FC<ModalProps> = ({ channelKey, title, initialPo
       </div>
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         <FanCurveGraph points={points} liveTemp={null} editable onChange={setPoints} />
-        <Focusable flow-children="grid" style={{ ...segmentGroupStyle, flexWrap: "wrap" }}>
+        <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap" }}>
           {points.map(([temp, pwm], index) => {
             const active = index === selected;
             const choose = () => setSelected(index);

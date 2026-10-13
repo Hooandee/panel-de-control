@@ -1,12 +1,9 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode, CSSProperties } from "react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@decky/ui", () => ({
-  Focusable: ({ children, style, "flow-children": flow }: { children?: ReactNode; style?: CSSProperties; "flow-children"?: string }) => (
-    <div style={style} data-flow={flow}>{children}</div>
-  ),
   ToggleField: ({ label, description, checked, disabled, onChange }: {
     label: ReactNode;
     description?: ReactNode;
