@@ -32,7 +32,7 @@ function silent(props: Parameters<typeof TdpOwnershipStatus>[0]) {
 describe("TdpOwnershipStatus", () => {
   afterEach(cleanup);
 
-  it("blames the charger when it cannot supply the requested power", () => {
+  it("ties the limit to the power source on AC without blaming the charger", () => {
     render(<TdpOwnershipStatus ownership={ownership} onAc />);
 
     expect(screen.getByText("tdp.ownership.powerLimited 15")).toBeTruthy();
@@ -71,12 +71,35 @@ describe("TdpOwnershipStatus", () => {
     expect(screen.getByText("tdp.ownership.overshootUnresolved 20")).toBeTruthy();
   });
 
+  it("reports a persistent outside change in plain words", () => {
+    render(<TdpOwnershipStatus ownership={{ ...ownership, status: "drift", reason: "external_drift", conflict_persistent: true }} />);
+
+    expect(screen.getByText("tdp.ownership.conflict")).toBeTruthy();
+  });
+
+  it("still reports a refusal while something else keeps changing the limit", () => {
+    render(<TdpOwnershipStatus ownership={{ ...ownership, status: "rejected", reason: "write_failed", conflict_persistent: true, target: { pl1: 33 }, applied: { pl1: 20 } }} />);
+
+    expect(screen.getByText("tdp.ownership.rejected 33 20")).toBeTruthy();
+  });
+
+  it("reports a refusal even without a main target", () => {
+    render(<TdpOwnershipStatus ownership={{ ...ownership, status: "rejected", reason: "write_failed", target: { pl2: 20 }, applied: {} }} />);
+
+    expect(screen.getByText("tdp.ownership.rejectedUnknown")).toBeTruthy();
+  });
+
+  it("states the device minimum without calling it temporary", () => {
+    render(<TdpOwnershipStatus ownership={{ ...ownership, reason: "safe_min", requested: { pl1: 3 }, target: { pl1: 5 }, applied: { pl1: 5 } }} />);
+
+    expect(screen.getByText("tdp.ownership.minimum 5")).toBeTruthy();
+  });
+
   it("stays silent for states that work or fix themselves", () => {
     const base = { ...ownership, reason: "" };
     expect(silent({ ownership: { ...base, status: "in_sync" } })).toBe(true);
     expect(silent({ ownership: { ...base, status: "unverifiable", target: { pl1: 33 } } })).toBe(true);
     expect(silent({ ownership: { ...base, status: "settling" } })).toBe(true);
-    expect(silent({ ownership: { ...base, status: "drift", reason: "external_drift", conflict_persistent: true } })).toBe(true);
     for (const state of ["correcting", "restored"] as const) {
       expect(silent({ ownership: { ...base, status: "in_sync", overshoot: { state, target_w: 20, peak_w: 43, age_s: 1 } } })).toBe(true);
     }
