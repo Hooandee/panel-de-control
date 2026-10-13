@@ -63,6 +63,7 @@ const FanRpmBlock: FC = () => {
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
             <FanChip label={t("fans.fan", { n: 1 })} rpm={soloFan.rpm}
+                     dutyPercent={soloFan.duty_only ? soloFan.percent : undefined}
                      values={fanHistory[soloFan.label] ?? []} layout="ring" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <TempStat label={tempLabel(t, soloTemp.label)} celsius={soloTemp.celsius} variant="hero" />
@@ -96,6 +97,7 @@ const FanRpmBlock: FC = () => {
             ) : (
               <div key={fan.label} style={theme.tile}>
                 <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
+                         dutyPercent={fan.duty_only ? fan.percent : undefined}
                          values={fanHistory[fan.label] ?? []}
                          layout={visibleFans.length === 1 ? "wide" : "stack"} />
               </div>

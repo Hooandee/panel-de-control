@@ -285,3 +285,18 @@ def test_curate_maps_rockchip_style_zones():
         {"label": "CPU", "celsius": 47.0},
         {"label": "GPU", "celsius": 42.0},
     ]
+
+
+def test_tachless_pwm_fan_reports_its_duty_without_inventing_rpm(tmp_path):
+    root = str(tmp_path)
+    _mk_chip(root, 54, "pwmfan", {"pwm1": "128", "pwm1_enable": "1"})
+    state = FanReader(root=root).read()
+    assert state["supported"] is True
+    assert state["fans"] == [{"label": "Fan 1", "rpm": None, "percent": 50, "max_rpm": None,
+                              "duty_only": True}]
+
+
+def test_tachless_pwm_on_other_chips_is_not_a_fan(tmp_path):
+    root = str(tmp_path)
+    _mk_chip(root, 3, "nct6798", {"pwm1": "128", "pwm1_enable": "2"})
+    assert FanReader(root=root).read()["fans"] == []

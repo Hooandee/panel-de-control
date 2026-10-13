@@ -419,6 +419,8 @@ export interface FanInfo {
   percent: number | null;
   max_rpm?: number | null;
   channel?: "system" | "gpu";
+  // No tachometer: only the commanded duty is known (device-tree pwm-fan).
+  duty_only?: boolean;
 }
 
 export interface TempInfo {

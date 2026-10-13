@@ -54,6 +54,9 @@ DEVICE_BUTTONS = {
     "zotac_gaming_zone": [
         ("LeftPaddle1", "L"), ("RightPaddle1", "R"),
     ],
+    "ayn_odin3": [
+        ("LeftPaddle1", "M1"), ("RightPaddle1", "M2"),
+    ],
 }
 
 # Recognised models whose controller has no extra button beyond the standard
