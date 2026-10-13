@@ -5,9 +5,50 @@
 ## [0.68.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.1...panel-de-control-v0.68.0) (2026-10-13)
 
 
-### Features
+### Español
 
-* keep the Go S TDP under its firmware cap and fix freezes, cleanup and charge limit ([#922](https://github.com/Hooandee/panel-de-control/issues/922)) ([97eff2a](https://github.com/Hooandee/panel-de-control/commit/97eff2a624a9a7a5d1011cb94535341659ff1258))
+* **Legion Go S:** Panel ya no se queda congelado varios segundos mientras juegas.
+* **Legion Go S:** Con la batería baja, el firmware limita el TDP a 15 W hasta reiniciar. Panel ya no se atasca intentando subirlo: aplica lo máximo que se puede y te lo muestra como limitado.
+* **Legion Go S:** «Mantener TDP con batería baja» también mantiene tu valor con el cargador puesto, hasta el siguiente reinicio.
+* **Limpieza:** Vuelve a funcionar si tienes instalado el plugin Wine Cellar.
+* **Batería:** Si pusiste un límite de carga en SteamOS, Panel lo respeta mientras no elijas otro en Panel.
+* **Reportes:** Recogen más información para entender por qué la consola no entra en reposo o se despierta sola.
+
+### English
+
+* **Legion Go S:** Panel no longer freezes for a few seconds while you play.
+* **Legion Go S:** On low battery the firmware caps the TDP at 15 W until you reboot. Panel no longer gets stuck trying to raise it: it applies the highest value allowed and shows it as limited.
+* **Legion Go S:** "Keep TDP on low battery" also keeps your value with the charger plugged in, until the next reboot.
+* **Cleanup:** Works again if you have the Wine Cellar plugin installed.
+* **Battery:** If you set a charge limit in SteamOS, Panel keeps it until you choose another one in Panel.
+* **Reports:** They collect more information to understand why the handheld won't sleep or wakes up on its own.
+
+### Italiano
+
+* **Legion Go S:** Panel non si blocca più per qualche secondo mentre giochi.
+* **Legion Go S:** Con la batteria scarica il firmware limita il TDP a 15 W fino al riavvio. Panel non si blocca più cercando di alzarlo: applica il valore più alto consentito e te lo mostra come limitato.
+* **Legion Go S:** «Mantieni il TDP con batteria scarica» mantiene il tuo valore anche con il caricatore collegato, fino al riavvio successivo.
+* **Pulizia:** Funziona di nuovo se hai installato il plugin Wine Cellar.
+* **Batteria:** Se hai impostato un limite di carica in SteamOS, Panel lo rispetta finché non ne scegli un altro in Panel.
+* **Segnalazioni:** Raccolgono più informazioni per capire perché la console non va in sospensione o si risveglia da sola.
+
+### Deutsch
+
+* **Legion Go S:** Panel friert beim Spielen nicht mehr für ein paar Sekunden ein.
+* **Legion Go S:** Bei niedrigem Akkustand begrenzt die Firmware die TDP bis zum Neustart auf 15 W. Panel bleibt beim Versuch, sie anzuheben, nicht mehr hängen: Es setzt den höchsten erlaubten Wert und zeigt ihn als begrenzt an.
+* **Legion Go S:** „TDP bei niedrigem Akkustand halten“ behält deinen Wert auch am Ladegerät bei, bis zum nächsten Neustart.
+* **Bereinigung:** Funktioniert wieder, wenn das Plugin Wine Cellar installiert ist.
+* **Akku:** Wenn du in SteamOS ein Ladelimit gesetzt hast, behält Panel es bei, bis du in Panel ein anderes wählst.
+* **Berichte:** Sie sammeln mehr Informationen, um zu verstehen, warum das Gerät nicht in den Ruhezustand geht oder von selbst aufwacht.
+
+### Português (Brasil)
+
+* **Legion Go S:** O Panel não trava mais por alguns segundos enquanto você joga.
+* **Legion Go S:** Com a bateria baixa, o firmware limita o TDP a 15 W até reiniciar. O Panel não fica mais travado tentando aumentá-lo: aplica o valor mais alto permitido e mostra como limitado.
+* **Legion Go S:** «Manter o TDP com a bateria baixa» também mantém o seu valor com o carregador conectado, até a próxima reinicialização.
+* **Limpeza:** Volta a funcionar se você tiver o plugin Wine Cellar instalado.
+* **Bateria:** Se você definiu um limite de carga no SteamOS, o Panel o respeita até você escolher outro no Panel.
+* **Relatórios:** Coletam mais informações para entender por que o console não entra em suspensão ou acorda sozinho.
 
 ## [0.67.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.0...panel-de-control-v0.67.1) (2026-10-09)
 
