@@ -1315,3 +1315,32 @@ def test_kernel_logs_capture_suspend_cycles_wake_reason_and_inhibitors():
     assert "Stop lighting" in out["sleep_inhibitors"]
     assert out["pm_wakeup_irq"] == "9"
     assert out["sleep_logind"] is None
+
+
+def test_arm_snapshot_records_supplies_and_a_tachless_pwm_fan(tmp_path):
+    root = _arm_tree(tmp_path)
+    usb = tmp_path / "sys/class/power_supply/qcom-battmgr-usb"
+    usb.mkdir(parents=True)
+    (usb / "type").write_text("USB\n")
+    (usb / "online").write_text("1\n")
+    bat = tmp_path / "sys/class/power_supply/battery"
+    bat.mkdir(parents=True)
+    for name, value in (("type", "Battery"), ("status", "Charging"), ("capacity", "70"),
+                        ("charge_control_start_threshold", "95"),
+                        ("charge_control_end_threshold", "100"), ("model_name", "SECRET")):
+        (bat / name).write_text(value + "\n")
+    fan = tmp_path / "sys/class/hwmon/hwmon54"
+    fan.mkdir(parents=True)
+    (fan / "name").write_text("pwmfan\n")
+    (fan / "pwm1").write_text("51\n")
+    (fan / "pwm1_enable").write_text("3\n")
+
+    arm = sysfs_snapshot(root=root)["arm"]
+
+    assert arm["power_supplies"]["qcom-battmgr-usb"] == {"type": "USB", "online": "1"}
+    assert arm["power_supplies"]["battery"] == {
+        "type": "Battery", "status": "Charging", "capacity": "70",
+        "charge_control_start_threshold": "95", "charge_control_end_threshold": "100",
+    }
+    assert arm["pwm_fans"] == [{"hwmon": "hwmon54", "pwm1": "51", "pwm1_enable": "3",
+                                "fan1_input": None}]
