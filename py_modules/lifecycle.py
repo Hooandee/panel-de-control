@@ -4,13 +4,13 @@ import os
 import time
 from collections import deque
 
-_CHARGER_TYPES = ("Mains", "USB", "Wireless")
+_CHARGER_TYPES = ("Mains", "USB")
 
 
 def read_on_ac(root="/"):
     """True if a Mains supply is online. Machines without any Mains supply (Qualcomm
-    pmic-glink and other ARM handhelds) report the charger as an online USB or
-    Wireless supply instead. Never raises."""
+    pmic-glink ARM handhelds) report the charger as an online USB supply instead.
+    Never raises."""
     has_mains = False
     port_online = False
     for d in glob.glob(os.path.join(root, "sys/class/power_supply", "*")):

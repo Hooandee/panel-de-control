@@ -33,3 +33,10 @@ def test_mains_stays_authoritative_over_an_online_usb_port(tmp_path):
     _supply(root, "ACAD", "Mains", "0")
     _supply(root, "ucsi-source-psy-USBC000:001", "USB", "1")
     assert read_on_ac(root) is False
+
+
+def test_a_wireless_supply_alone_is_not_taken_as_a_charger(tmp_path):
+    root = str(tmp_path)
+    _supply(root, "battery", "Battery", None)
+    _supply(root, "qcom-battmgr-wls", "Wireless", "1")
+    assert read_on_ac(root) is False
