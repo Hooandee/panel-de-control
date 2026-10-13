@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* make every panel control reachable with the gamepad ([#929](https://github.com/Hooandee/panel-de-control/issues/929)) ([424270e](https://github.com/Hooandee/panel-de-control/commit/424270e0c7607c88a5ec55642872cbc7261dd8f4))
+* only show TDP notices the user can act on ([#930](https://github.com/Hooandee/panel-de-control/issues/930)) ([a78922d](https://github.com/Hooandee/panel-de-control/commit/a78922d23f38fd9133f7c91a75570c43a7bfbda3))
+
 ## [0.68.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.0...panel-de-control-v0.68.1) (2026-10-13)
 
 
