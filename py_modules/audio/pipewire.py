@@ -2,6 +2,7 @@
 import glob
 import json
 import os
+import platform
 import pwd
 import re
 import secrets
@@ -211,9 +212,19 @@ def _journal_sink_write(kind, sink, before, requested, readback, caller):
             by=caller,
         )
 
+def _runs_emulated() -> bool:
+    """x86 Python on an ARM kernel: Decky under FEX, where each spawn costs about a second."""
+    try:
+        from device_tree import is_arm
+        return is_arm() and platform.machine() in ("x86_64", "i686", "i386")
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class PipeWireEq:
     def __init__(self, runner=None, name="Panel de Control"):
         self._runner = runner or self._run
+        self._emulated = _runs_emulated()
         self._session = _find_session()
         self._orig_default = None
         self._active_downstream = None
@@ -814,6 +825,7 @@ class PipeWireEq:
         def within_deadline():
             # Under FEX every pactl spawn from the emulated plugin costs about a second;
             # the budget is for waiting on PipeWire, so that overhead is not charged to it.
+            # Only answered calls count: a timeout is a stall, never spawn cost.
             elapsed = self._monotonic() - started
             return (
                 elapsed - spawn_overhead < _DEFAULT_CONFIRM_TIMEOUT_S
@@ -824,7 +836,8 @@ class PipeWireEq:
             nonlocal spawn_overhead
             before = self._monotonic()
             result = self._runner(argv, timeout=1)
-            spawn_overhead += max(0.0, self._monotonic() - before - _EXPECTED_SPAWN_S)
+            if self._emulated and result:
+                spawn_overhead += max(0.0, self._monotonic() - before - _EXPECTED_SPAWN_S)
             return result
 
         def stable(delays):
@@ -846,7 +859,11 @@ class PipeWireEq:
         while True:
             if attempt < len(_DEFAULT_SET_DELAYS):
                 delay = _DEFAULT_SET_DELAYS[attempt]
-            elif not observed and attempt < len(_DEFAULT_SET_DELAYS) + _DEFAULT_UNREADABLE_RETRIES:
+            elif (
+                self._emulated
+                and not observed
+                and attempt < len(_DEFAULT_SET_DELAYS) + _DEFAULT_UNREADABLE_RETRIES
+            ):
                 # pipewire-pulse stalls past the per-call timeout right after the
                 # filter-chain restart; an empty readback is no verdict yet.
                 delay = _DEFAULT_UNREADABLE_RETRY_S
@@ -864,7 +881,9 @@ class PipeWireEq:
                 self._default_failure = None
                 return True
             if not observed:
-                continue
+                if self._emulated:
+                    continue
+                break
             if (
                 expected_downstream is not None
                 and observed not in (sink, expected_downstream)

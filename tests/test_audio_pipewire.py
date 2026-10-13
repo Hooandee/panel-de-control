@@ -670,7 +670,7 @@ def test_empty_default_readback_aborts_before_physical_volume_pin(tmp_path):
     eq._runner = lose_default_readback
 
     assert eq.ensure_sink([0] * 10) is False
-    assert 1 < fake.calls.count(["pactl", "set-default-sink", "X EQ"]) <= 16
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
     assert fake.volume_sets("alsa_speaker") == []
 
 
@@ -1434,11 +1434,11 @@ def test_default_probe_has_a_finite_end_to_end_budget(tmp_path):
     eq._runner = reject_default
 
     assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
-    assert eq._default_failure["reason"] in (
-        "default_confirmation_timeout", "default_sink_not_confirmed")
-    assert eq._default_failure["current"] == "alsa_speaker"
+    assert eq._default_failure == {
+        "reason": "default_confirmation_timeout",
+        "current": "alsa_speaker",
+    }
     assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) < 5
-    assert now["value"] <= 21.0
 
 
 def test_ensure_sink_journals_physical_output_before_configured_default_is_eq(tmp_path):
@@ -3167,6 +3167,7 @@ def test_volume_writes_that_change_nothing_stay_out_of_the_diary(tmp_path):
 def test_a_default_readback_that_times_out_after_a_restart_is_retried(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
     stalled = {"reads": 3}
     run = eq._runner
 
@@ -3186,6 +3187,7 @@ def test_a_default_readback_that_times_out_after_a_restart_is_retried(tmp_path):
 def test_a_default_that_never_reads_back_still_fails_within_the_budget(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
     now = {"value": 0.0}
     eq._monotonic = lambda: now["value"]
     run = eq._runner
@@ -3206,6 +3208,7 @@ def test_a_default_that_never_reads_back_still_fails_within_the_budget(tmp_path)
 def test_slow_process_spawns_do_not_eat_the_default_confirmation_budget(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
     now = {"value": 0.0}
     eq._monotonic = lambda: now["value"]
     eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
@@ -3224,3 +3227,42 @@ def test_slow_process_spawns_do_not_eat_the_default_confirmation_budget(tmp_path
 
     assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
     assert now["value"] < 20.0
+
+
+def test_a_stalled_pulse_on_a_native_host_fails_as_fast_as_before(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = False
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+
+    def stalled(argv, timeout=8):
+        now["value"] += 1.0
+        fake.calls.append(argv)
+        return ""
+
+    eq._runner = stalled
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert eq._default_failure == {"reason": "default_readback_missing", "current": None}
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
+    assert now["value"] <= 2.5
+
+
+def test_timeouts_never_count_as_spawn_cost_even_when_emulated(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._emulated = True
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+
+    def stalled(argv, timeout=8):
+        now["value"] += 1.0
+        return ""
+
+    eq._runner = stalled
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert now["value"] <= 9.5
