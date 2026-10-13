@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.68.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.0...panel-de-control-v0.68.1) (2026-10-13)
+
+
+### Español
+
+* **Cargador:** Si el cargador o el cable fallan y la corriente va y viene, Panel espera a que se estabilice antes de volver a aplicar tus ajustes, en vez de hacerlo en cada corte.
+* **Cargador:** Si la corriente se corta varias veces seguidas, Potencia muestra un aviso de fallo en el cargador para que revises el cargador, el cable o el puerto USB-C.
+
+### English
+
+* **Charger:** If the charger or cable fails and power keeps coming and going, Panel waits for it to settle before applying your settings again, instead of doing it on every drop.
+* **Charger:** If power drops several times in a row, Power shows a charger fault warning so you can check the charger, the cable or the USB-C port.
+
+### Italiano
+
+* **Caricatore:** Se il caricatore o il cavo hanno problemi e l'alimentazione va e viene, Panel aspetta che si stabilizzi prima di riapplicare le tue impostazioni, invece di farlo a ogni interruzione.
+* **Caricatore:** Se l'alimentazione salta più volte di seguito, Potenza mostra un avviso di problema al caricatore, così puoi controllare caricatore, cavo o porta USB-C.
+
+### Deutsch
+
+* **Ladegerät:** Wenn Ladegerät oder Kabel Probleme machen und der Strom kommt und geht, wartet Panel, bis er stabil ist, bevor deine Einstellungen erneut angewendet werden, statt bei jedem Aussetzer.
+* **Ladegerät:** Fällt der Strom mehrmals hintereinander aus, zeigt Leistung eine Warnung zu einem Ladegerätfehler an, damit du Ladegerät, Kabel oder USB-C-Anschluss prüfen kannst.
+
+### Português (Brasil)
+
+* **Carregador:** Se o carregador ou o cabo falham e a energia vai e volta, o Panel espera ela se estabilizar antes de aplicar seus ajustes de novo, em vez de fazer isso a cada queda.
+* **Carregador:** Se a energia cai várias vezes seguidas, Potência mostra um aviso de falha no carregador para você verificar o carregador, o cabo ou a porta USB-C.
+
 ## [0.68.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.1...panel-de-control-v0.68.0) (2026-10-13)
 
 
