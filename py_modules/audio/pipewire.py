@@ -28,6 +28,10 @@ _SERVICE = "filter-chain.service"
 _CONFIRM_DELAYS = (0, 0.05, 0.1, 0.2, 0.4)
 _DEFAULT_SET_DELAYS = (0, 0.1, 0.2)
 _DEFAULT_CONFIRM_TIMEOUT_S = 8.0
+_DEFAULT_CONFIRM_HARD_CAP_S = 20.0
+_EXPECTED_SPAWN_S = 0.1
+_DEFAULT_UNREADABLE_RETRY_S = 0.25
+_DEFAULT_UNREADABLE_RETRIES = 12
 _RETRY_MIN_S = 15.0
 _RETRY_MAX_S = 60.0
 _RETRY_MAX_ATTEMPTS = 3
@@ -804,10 +808,24 @@ class PipeWireEq:
 
     def _set_default_confirmed(self, sink, expected_downstream=None):
         observed = None
-        deadline = self._monotonic() + _DEFAULT_CONFIRM_TIMEOUT_S
+        started = self._monotonic()
+        spawn_overhead = 0.0
 
         def within_deadline():
-            return self._monotonic() < deadline
+            # Under FEX every pactl spawn from the emulated plugin costs about a second;
+            # the budget is for waiting on PipeWire, so that overhead is not charged to it.
+            elapsed = self._monotonic() - started
+            return (
+                elapsed - spawn_overhead < _DEFAULT_CONFIRM_TIMEOUT_S
+                and elapsed < _DEFAULT_CONFIRM_HARD_CAP_S
+            )
+
+        def run(argv):
+            nonlocal spawn_overhead
+            before = self._monotonic()
+            result = self._runner(argv, timeout=1)
+            spawn_overhead += max(0.0, self._monotonic() - before - _EXPECTED_SPAWN_S)
+            return result
 
         def stable(delays):
             nonlocal observed
@@ -818,35 +836,35 @@ class PipeWireEq:
                     self._sleep(delay)
                 if not within_deadline():
                     return False
-                observed = self._runner(
-                    ["pactl", "get-default-sink"],
-                    timeout=1,
-                )
+                observed = run(["pactl", "get-default-sink"])
                 if observed != sink:
                     return False
             return True
 
         self._default_failure = None
-        for delay in _DEFAULT_SET_DELAYS:
+        attempt = 0
+        while True:
+            if attempt < len(_DEFAULT_SET_DELAYS):
+                delay = _DEFAULT_SET_DELAYS[attempt]
+            elif not observed and attempt < len(_DEFAULT_SET_DELAYS) + _DEFAULT_UNREADABLE_RETRIES:
+                # pipewire-pulse stalls past the per-call timeout right after the
+                # filter-chain restart; an empty readback is no verdict yet.
+                delay = _DEFAULT_UNREADABLE_RETRY_S
+            else:
+                break
+            attempt += 1
             if not within_deadline():
                 break
             if delay:
                 self._sleep(delay)
             if not within_deadline():
                 break
-            self._runner(
-                ["pactl", "set-default-sink", sink],
-                timeout=1,
-            )
+            run(["pactl", "set-default-sink", sink])
             if stable(_CONFIRM_DELAYS):
                 self._default_failure = None
                 return True
             if not observed:
-                self._default_failure = {
-                    "reason": "default_readback_missing",
-                    "current": None,
-                }
-                return False
+                continue
             if (
                 expected_downstream is not None
                 and observed not in (sink, expected_downstream)
@@ -856,6 +874,12 @@ class PipeWireEq:
                     "current": observed,
                 }
                 return False
+        if not observed:
+            self._default_failure = {
+                "reason": "default_readback_missing",
+                "current": None,
+            }
+            return False
         if not within_deadline():
             self._default_failure = {
                 "reason": "default_confirmation_timeout",

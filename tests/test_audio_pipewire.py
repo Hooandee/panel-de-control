@@ -670,7 +670,7 @@ def test_empty_default_readback_aborts_before_physical_volume_pin(tmp_path):
     eq._runner = lose_default_readback
 
     assert eq.ensure_sink([0] * 10) is False
-    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
+    assert 1 < fake.calls.count(["pactl", "set-default-sink", "X EQ"]) <= 16
     assert fake.volume_sets("alsa_speaker") == []
 
 
@@ -1434,11 +1434,11 @@ def test_default_probe_has_a_finite_end_to_end_budget(tmp_path):
     eq._runner = reject_default
 
     assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
-    assert eq._default_failure == {
-        "reason": "default_confirmation_timeout",
-        "current": "alsa_speaker",
-    }
+    assert eq._default_failure["reason"] in (
+        "default_confirmation_timeout", "default_sink_not_confirmed")
+    assert eq._default_failure["current"] == "alsa_speaker"
     assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) < 5
+    assert now["value"] <= 21.0
 
 
 def test_ensure_sink_journals_physical_output_before_configured_default_is_eq(tmp_path):
@@ -3162,3 +3162,65 @@ def test_volume_writes_that_change_nothing_stay_out_of_the_diary(tmp_path):
     finally:
         journal.active = None
     assert [fields["by"] for _args, fields in written] == ["ensure_sink", "ensure_sink"]
+
+
+def test_a_default_readback_that_times_out_after_a_restart_is_retried(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    stalled = {"reads": 3}
+    run = eq._runner
+
+    def stalling(argv, timeout=8):
+        if argv == ["pactl", "get-default-sink"] and stalled["reads"]:
+            stalled["reads"] -= 1
+            run(["pactl", "set-default-sink", "X EQ"], timeout)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = stalling
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert eq._default_failure is None
+
+
+def test_a_default_that_never_reads_back_still_fails_within_the_budget(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    run = eq._runner
+
+    def silent(argv, timeout=8):
+        now["value"] += 0.5
+        if argv == ["pactl", "get-default-sink"]:
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = silent
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert eq._default_failure == {"reason": "default_readback_missing", "current": None}
+    assert now["value"] <= 21.0
+
+
+def test_slow_process_spawns_do_not_eat_the_default_confirmation_budget(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    now = {"value": 0.0}
+    eq._monotonic = lambda: now["value"]
+    eq._sleep = lambda delay: now.__setitem__("value", now["value"] + delay)
+    run = eq._runner
+    reads = {"n": 0}
+
+    def emulated(argv, timeout=8):
+        now["value"] += 1.1
+        if argv == ["pactl", "get-default-sink"]:
+            reads["n"] += 1
+            if reads["n"] <= 2:
+                return "alsa_speaker"
+        return run(argv, timeout)
+
+    eq._runner = emulated
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert now["value"] < 20.0
