@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.68.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.0...panel-de-control-v0.68.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* wait for a failing charger to settle and warn about it ([#927](https://github.com/Hooandee/panel-de-control/issues/927)) ([4116516](https://github.com/Hooandee/panel-de-control/commit/4116516036735d88c7477a433f577a57fd6bcbaf))
+
 ## [0.68.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.1...panel-de-control-v0.68.0) (2026-10-13)
 
 
