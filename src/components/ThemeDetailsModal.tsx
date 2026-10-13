@@ -224,7 +224,7 @@ function ThemeConfirmation({
         ) : null}
       </div>
       <Focusable flow-children="row" style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
-        <DialogButton style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
+        <DialogButton data-preferred-focus style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
           {t("themes.install.confirm.cancel")}
         </DialogButton>
         <DialogButton style={destructive ? DESTRUCTIVE_CONFIRM_STYLE : PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>

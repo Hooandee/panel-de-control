@@ -1,6 +1,6 @@
 import { PanelSectionRow, Focusable } from "@decky/ui";
 import { useState } from "react";
-import type { FC, ReactNode } from "react";
+import type { ComponentProps, FC, ReactNode } from "react";
 import { LuAtom, LuGamepad2, LuImages, LuRefreshCw } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -15,12 +15,14 @@ import type { ProtonCleanerController } from "./useProtonCleaner";
 
 type CleanupTab = "games" | "media" | "proton";
 
-// Inactive tabs stay mounted to keep their state; Steam would still walk into them
-// unless their children are taken out of gamepad navigation.
+// Steam's navigation tree reads childFocusDisabled (GetFocusable); Decky's typings omit it.
+const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
+
+// Inactive tabs stay mounted to keep their state; Steam would still walk into them.
 const CleanupPanel: FC<{ hidden: boolean; children: ReactNode }> = ({ hidden, children }) => (
-  <Focusable role="tabpanel" aria-hidden={hidden} {...({ childFocusDisabled: hidden } as object)} style={{ display: hidden ? "none" : "block" }}>
+  <NavigationGroup role="tabpanel" aria-hidden={hidden} childFocusDisabled={hidden} style={{ display: hidden ? "none" : "block" }}>
     {children}
-  </Focusable>
+  </NavigationGroup>
 );
 
 export const CleanupHubView: FC<{

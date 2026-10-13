@@ -33,6 +33,7 @@ function confirmedAutoDrafts(drafts: AutoDrafts): AutoDrafts {
 
 export interface TdpControl {
   tdp: TdpState | null;
+  tdpSettled: boolean;
   power: PowerDraw | null;
   scope: TdpScope;
   game: ReturnType<typeof useRunningGame>;
@@ -68,6 +69,7 @@ function levelsAtWatts(levels: TdpState["levels"], watts: number, mode: BoostMod
 export function useTdp(): TdpControl {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
+  const [tdpSettled, setTdpSettled] = useState(false);
   const [power, setPower] = useState<PowerDraw | null>(null);
   const [presets, setPresets] = useState<PowerPresetState | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,7 +102,7 @@ export function useTdp(): TdpControl {
     getTdpState().then((next) => {
       if (epoch !== followEpoch.current) return;
       setTdp(reconcileAutoState(next, confirmed));
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setTdpSettled(true));
   }, [reconcileAutoState]);
 
   const refreshPresets = useCallback(() => {
@@ -408,6 +410,7 @@ export function useTdp(): TdpControl {
 
   return {
     tdp,
+    tdpSettled,
     power,
     scope,
     game,

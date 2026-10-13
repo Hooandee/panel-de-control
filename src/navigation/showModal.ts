@@ -6,7 +6,6 @@ import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess"
 const gamepadNavigation = createThemeNavigationAccess();
 const RETURN_RETRY_MS = 50;
 const RETURN_WINDOW_MS = 2000;
-let openModals = 0;
 
 function controlLabel(element: Element): string {
   return (element.getAttribute("aria-label") || element.getAttribute("title") || element.textContent || "").trim();
@@ -41,24 +40,25 @@ function returnFocus(doc: Document, opener: HTMLElement, label: string): void {
   view.setTimeout(attempt, 0);
 }
 
+// Decky's own defaults when a caller passes no props.
+const DECKY_MODAL_DEFAULTS = { strTitle: "Decky Dialog", bHideMainWindowForPopouts: false };
+
 // Steam drops gamepad focus to the QAM tab strip when a modal closes; hand it back
-// to the panel control that opened it. Nested modals open from another document,
-// so only the outermost one has a panel control to return to.
+// to the panel control that opened it. Steam unmounts the panel under a modal, so a
+// modal opened from another one finds no focused panel control and returns nothing.
 export const showModal: typeof showDeckyModal = (modal, parent, props) => {
-  const doc = openModals === 0 ? getQamDocument() : null;
+  const doc = getQamDocument();
   const opener = doc?.querySelector<HTMLElement>(".pdc-root .gpfocus") ?? null;
   const label = opener ? controlLabel(opener) : "";
-  openModals += 1;
   let closed = false;
   const onClose = () => {
     if (closed) return;
     closed = true;
-    openModals -= 1;
     props?.fnOnClose?.();
     if (doc && opener) returnFocus(doc, opener, label);
   };
   try {
-    const result = showDeckyModal(modal, parent, { ...props, fnOnClose: onClose });
+    const result = showDeckyModal(modal, parent, { ...DECKY_MODAL_DEFAULTS, ...props, fnOnClose: onClose });
     return {
       ...result,
       Close: () => {
@@ -67,7 +67,7 @@ export const showModal: typeof showDeckyModal = (modal, parent, props) => {
       },
     };
   } catch (error) {
-    if (!closed) openModals -= 1;
+    closed = true;
     throw error;
   }
 };

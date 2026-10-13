@@ -159,4 +159,36 @@ describe("refocusWhenRemoved", () => {
 
     expect(focus).toHaveBeenCalledWith(cancel);
   });
+
+  it("finds a preferred replacement that appears elsewhere in the panel", async () => {
+    const root = panel();
+    const header = element(root, "Cabecera");
+    const install = element(header, "Instalar", true);
+    const confirmation = element(root, "Confirmación");
+
+    refocusWhenRemoved(install);
+    remove(install);
+    const cancel = element(confirmation, "Cancelar");
+    cancel.setAttribute(PREFERRED_FOCUS, "true");
+    await settle();
+
+    expect(focus).toHaveBeenCalledWith(cancel);
+  });
+
+  it("tries the next fallback when one refuses focus", async () => {
+    const root = panel();
+    const far = element(root, "Lejos");
+    const near = element(root, "Cerca");
+    const tray = document.createElement("div");
+    root.append(tray);
+    element(tray, "Más tarde", true);
+    focus.mockImplementationOnce(() => false);
+
+    refocusWhenRemoved(tray);
+    remove(tray);
+    await settle();
+
+    expect(focus).toHaveBeenNthCalledWith(1, near);
+    expect(focus).toHaveBeenNthCalledWith(2, far);
+  });
 });

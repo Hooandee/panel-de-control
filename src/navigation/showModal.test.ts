@@ -59,11 +59,14 @@ describe("showModal focus return", () => {
 
     showModal("outer", window);
     const outer = openedProps();
+    const panel = opener.parentElement!;
+    opener.remove();
     showModal("inner", window);
     openedProps().fnOnClose();
 
     return new Promise<void>((resolve) => setTimeout(() => {
       expect(focus).not.toHaveBeenCalled();
+      panel.append(opener);
       outer.fnOnClose();
       setTimeout(() => {
         expect(focus).toHaveBeenCalledWith(opener);
@@ -115,5 +118,14 @@ describe("showModal focus return", () => {
     openedProps().fnOnClose();
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Decky's default props when the caller passes none", () => {
+    setQamDocument(document);
+    decky.show.mockReturnValue({ Close: decky.close, Update: vi.fn() });
+
+    showModal("modal", window);
+
+    expect(decky.show.mock.calls[0][2]).toEqual(expect.objectContaining({ strTitle: "Decky Dialog", bHideMainWindowForPopouts: false }));
   });
 });
