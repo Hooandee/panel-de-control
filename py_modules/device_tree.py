@@ -1,4 +1,6 @@
+import functools
 import os
+import platform
 from dataclasses import dataclass
 
 # Decky runs under x86 emulation (FEX) on ARM handhelds, so platform.machine() and
@@ -79,3 +81,22 @@ def soc_name(tree: DeviceTree, root: str = "/") -> str | None:
     machine = _read_text(os.path.join(root, _SOC, "machine"))
     name = " ".join(part for part in (family, machine) if part)
     return name or None
+
+
+_HOST_ROOT = "/proc/self/root"
+
+
+@functools.lru_cache(maxsize=1)
+def runs_emulated() -> bool:
+    """x86 Python on an ARM kernel: the plugin runs under FEX."""
+    return is_arm() and platform.machine() in ("x86_64", "i686", "i386")
+
+
+def host_binary(path: str, host_root: str = _HOST_ROOT) -> str:
+    # FEX runs any program launched from the emulated plugin from its x86 rootfs copy, which
+    # costs about a second per spawn; the host's own binary through /proc/self/root runs
+    # natively. Programs only the emulator ships keep their path.
+    if not runs_emulated() or not os.path.isabs(path):
+        return path
+    native = os.path.join(host_root, path.lstrip("/"))
+    return native if os.access(native, os.X_OK) else path
