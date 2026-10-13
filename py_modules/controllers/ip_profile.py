@@ -122,7 +122,9 @@ def buttons_for(device_key, capabilities) -> list:
     surface a button the daemon actually reports (defensive — never invent one). An
     unknown device (not in the table) yields an empty list."""
     key = device_key or ""
-    have = _capability_names(capabilities) | CAPABILITY_MAPPED_BUTTONS.get(key, frozenset())
+    have = _capability_names(capabilities)
+    if have:
+        have |= CAPABILITY_MAPPED_BUTTONS.get(key, frozenset())
     variants = DEVICE_BUTTON_VARIANTS.get(key)
     entries = DEVICE_BUTTONS.get(key, [])
     if variants:

@@ -44,7 +44,8 @@ const DesktopFanTile: FC<{
   const label = t(`desktop.fan.channel.${channel}`);
   return (
     <div style={{ ...theme.tile, display: "flex", minWidth: 0, flexDirection: "column", alignItems: "center", gap: theme.space.xs }}>
-      <FanChip label={label} rpm={fan.rpm} values={values} maxRpm={fan.max_rpm} layout={layout} />
+      <FanChip label={label} rpm={fan.rpm} values={values} maxRpm={fan.max_rpm}
+               dutyPercent={fan.duty_only ? fan.percent : undefined} layout={layout} />
     </div>
   );
 };

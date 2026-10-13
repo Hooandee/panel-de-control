@@ -394,3 +394,16 @@ def test_qcom_disable_repairs_a_low_resume_threshold_left_at_full(tmp_path):
     start.write_text("55\n")
     assert charge_limit.QcomBattmgrChargeLimit(root).disable() is True
     assert start.read_text().strip() == "95"
+
+
+def test_qcom_full_charge_to_100_also_lifts_the_resume_threshold(tmp_path):
+    import battery.charge_limit as charge_limit
+
+    root, _ = _qcom_battery(tmp_path, value="80")
+    start = tmp_path / "sys/class/power_supply/battery/charge_control_start_threshold"
+    start.write_text("75\n")
+    backend = charge_limit.QcomBattmgrChargeLimit(root)
+    assert backend.set(100) is True
+    assert start.read_text().strip() == "95"
+    assert backend.set(80) is True
+    assert start.read_text().strip() == "95"

@@ -118,7 +118,10 @@ class QcomBattmgrChargeLimit(SysfsChargeLimit):
         return (self._MIN_END, _MAX)
 
     def set(self, percent):
-        return self._write(_clamp(int(percent), self._MIN_END, _MAX))
+        value = _clamp(int(percent), self._MIN_END, _MAX)
+        if not self._write(value):
+            return False
+        return value < _MAX or self._lift_resume_threshold()
 
     def _write(self, value):
         before = self.get()

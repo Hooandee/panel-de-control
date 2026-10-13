@@ -24,3 +24,7 @@ def test_odin3_paddles_are_offered_although_capabilities_omit_them():
     live = ["Gamepad:Button:QuickAccess", "NotImplemented", "Gamepad:Button:South"]
     assert ip_profile.buttons_for("ayn_odin3", live) == [("LeftPaddle1", "M1"), ("RightPaddle1", "M2")]
     assert ip_profile.buttons_for("legion_go_s", live) == []
+
+
+def test_odin3_paddles_are_not_invented_while_inputplumber_is_unreadable():
+    assert ip_profile.buttons_for("ayn_odin3", []) == []
