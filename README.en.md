@@ -3,6 +3,11 @@
 [Español](README.md) · **English**
 
 <p align="center">
+  <a href="https://github.com/Hooandee/panel-de-control/releases/latest"><img src="https://img.shields.io/github/v/release/Hooandee/panel-de-control?label=latest%20release&color=blue" alt="Latest release"></a>
+  <a href="https://github.com/Hooandee/panel-de-control/releases"><img src="https://img.shields.io/github/downloads/Hooandee/panel-de-control/total?label=downloads&color=brightgreen" alt="Downloads"></a>
+</p>
+
+<p align="center">
   <a href="https://ko-fi.com/hooandee"><img src="https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
   <a href="https://www.patreon.com/hooandee"><img src="https://img.shields.io/badge/Patreon-Support%20me-FF424D?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon"></a>
   <a href="https://www.youtube.com/channel/UCDsSJByXklp6xc_WwQJI7Lw/join"><img src="https://img.shields.io/badge/YouTube-Become%20a%20member-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube"></a>
@@ -10,378 +15,124 @@
   <a href="https://linktr.ee/hooandee"><img src="https://img.shields.io/badge/All%20my%20links-Linktree-43E660?style=for-the-badge&logo=linktree&logoColor=white" alt="Linktree"></a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/Hooandee/panel-de-control/actions/workflows/ci.yml"><img src="https://github.com/Hooandee/panel-de-control/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
-  <a href="https://github.com/Hooandee/panel-de-control/releases/latest"><img src="https://img.shields.io/github/v/release/Hooandee/panel-de-control?label=latest%20release&color=blue" alt="Latest release"></a>
-</p>
+<h3 align="center">The control center your handheld PC was missing.</h3>
 
-The control center your handheld gaming PC was missing. Tune power, fan curves, battery, display and
-controllers from a single panel inside Steam's quick access menu, without leaving your game and
-without memorizing sysfs paths.
+Panel de Control lives in Steam's quick access menu and runs everything from there: power, fans,
+battery, display, sound, HUD, launch options and themes that completely change how Steam looks. All
+without leaving your game or opening a terminal.
 
-It's a plugin for [Decky Loader](https://decky.xyz/), built for the Steam Deck, ROG Ally, Legion Go,
-MSI Claw and friends. One idea runs through the whole thing: every control should look good, always
-show your machine's real model at the top, and never lie to you about what the hardware is actually
-doing.
+I'm Hooandee, I make it, and I test every feature on my own machines. Panel doesn't make up data.
+If your device doesn't let it read or change something, it just doesn't show up, and the numbers you
+see are the real ones.
 
-The interface starts in Spanish and is also available in English, Italian, German, and Brazilian
-Portuguese. On first launch, it adopts one of those languages when Steam already uses it.
+It runs on [Decky Loader](https://decky.xyz/) and is available in English, Spanish, Italian,
+German and Brazilian Portuguese.
 
-## Video
+## 🎬 Video guides
 
-In this video I show and explain the plugin in depth:
+The videos are in Spanish, but YouTube's auto-translated subtitles work well.
 
-[![Panel de Control in action](https://img.youtube.com/vi/sDpXFTxG7NQ/maxresdefault.jpg)](https://youtu.be/sDpXFTxG7NQ)
-
-> [!WARNING]
-> This plugin runs with **root privileges** and changes low-level power, thermal, and firmware
-> settings on your device. It talks only to documented kernel interfaces and is designed to fail
-> safe, but you use it **at your own risk**. There is no warranty (see the [LICENSE](LICENSE)).
+| [![Panel de Control in depth](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![How to install themes](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel on ARM with Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) |
+|:---:|:---:|:---:|
+| **The plugin in depth** | **How to install themes** | **Panel on ARM with Armada** |
 
 ## What it does
 
-The panel is organized into tabs. Each one covers a part of the machine.
+⚡ **Power.** TDP across your device's real range, presets your way and a separate profile for
+each game. Auto-TDP raises or lowers the watts depending on what the game needs, so you get the
+FPS you want without wasting battery.
 
-### Power (Potencia)
+🌀 **Fans.** Live temperatures and RPM, and curves you draw with your finger. Over time it learns
+how hot each game runs and suggests a curve made for it.
 
-The heart of the plugin. A visual arc that fills with TDP across your machine's real range (no made
-up numbers, it reads them from firmware). You set the watts with a slider and get quick presets. You
-can create your own, with a name and icon, and reorder or hide them from a full-screen menu, plus
-save a global profile or a per-game one.
+🎨 **Display.** One-tap color modes (Native, Cinema, Vivid, Comfort) or fine tuning if you like to
+tinker, an OLED look for LCD screens, scheduled night mode and HDR where the panel supports it.
 
-- **Auto-TDP.** An automatic mode that watches GPU load and raises or lowers power on its own to give
-  you the frames you need while spending as little as possible. It learns from how you play and
-  self-corrects, no need to touch anything.
-- **Boost.** If your firmware allows it, you choose how the SPPT and FPPT rails behave: Stable
-  (what you set is what it draws, the default), Auto (a managed boost margin) or Custom (tune the
-  margins by hand).
-- **Extra range.** On the charger, the slider goes past the manufacturer's rated maximum up to 40 W
-  on AMD handhelds (120 W on Strix Halo, with its external cooling if it needs it), and down to 3 W,
-  like SimpleDeckyTDP. That part is marked in purple or light blue: Panel asks for the value, but
-  the firmware decides whether to accept it, and the dial shows what really applies. Presets and
-  Auto-TDP never leave the safe range.
-- **Low-battery TDP (experimental).** Keeps the value you selected when the battery reaches 20% or
-  less. On the Legion Go S it also keeps it on the charger while the firmware keeps limiting it,
-  until the next reboot. Off by default.
-- **GPU clock.** Set the minimum and maximum graphics clock.
+🎧 **Sound.** A real system-wide equalizer with presets, ten bands, separate curves for speakers
+and headphones, bass boost and volume leveling.
 
-### System (Sistema)
+🔋 **System.** Battery health and charge limit, CPU, GPU clock, exact brightness and volume, and a
+Download Mode that keeps your device grabbing games while using as little power as possible.
 
-Everything that isn't raw power but is day-to-day management.
+📊 **HUD.** Build your own MangoHud overlay and see how it looks right away. You choose which
+metrics show up, where and in what colors.
 
-- **Battery.** State, health, cycles and capacity, in a card that fills up and changes color. It
-  includes a charge limit (cap charging at a percentage to protect the battery), adapted to how each
-  vendor exposes it.
-- **CPU.** Toggles for multithreading (SMT) and turbo boost, with a cores-and-threads view and the
-  base-to-turbo frequency range.
-- **Brightness and volume.** Sliders that show the exact number, something Steam's native controls
-  hide.
-- **Download Mode.** A single button for leaving the machine downloading a game unattended: it drops
-  TDP to the minimum, turns off boost and dims the screen while you aren't touching it. Fully
-  reversible.
-- **RGB lighting.** If you have the sibling plugin [Colores](https://github.com/Hooandee/decky-colores)
-  installed, this card opens it; if not, it offers to install it.
+🚀 **Launch options.** Each game's launch options turned into toggles with a plain explanation.
+FSR4, HDR, scaling and more, but only what your Proton version supports.
 
-### Fans (Ventiladores)
+🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
+a moment.
 
-It starts as a live monitor (RPM and CPU/GPU temperatures with sparklines) and, on machines that
-allow it, turns into a temperature-to-speed curve editor you can drag with your finger, with presets
-(quiet, balanced, performance) and per-game curves.
+✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
+from Panel.
 
-It also learns. Over time it suggests a curve tuned to how each game behaves on your machine, and you
-can apply it with one tap. If your machine doesn't allow writing the curve, the editor hides itself
-and tells you exactly why, instead of pretending it works.
+🎮 **Controllers.** Button remapping that works with Handheld Daemon and InputPlumber. Still
+in beta.
 
-### Display (Pantalla)
+🧩 **Your way.** Reorder and hide tabs, build your own views and pick an accent color. Everything
+works with the controller, and updates show up on their own in the quick access menu.
 
-Panel color calibration through gamescope, turned into a small lab: one-tap looks (Native, Cinema,
-Vivid, Comfort) tuned per panel type, per-game saturation, and an advanced mode with temperature,
-contrast, gamma, hue, black level, vibrance and manual white balance (RGB). It adds a night mode that
-warms the screen, always or on a schedule you pick, plus a one-tap "OLED look" preset for panels that
-aren't OLED. A confirmation timer reverts changes only if something looks wrong, so you never get
-stuck with an unreadable screen. On HDR panels (Steam Deck OLED and Legion Go 2) there's also an HDR
-toggle.
+## 📱 ARM too
 
-### Sound (Sonido)
+Panel isn't just for PCs. With Armada it also runs on ARM consoles, recognizes the model and chip,
+and only shows what that hardware lets it control. The [video](https://youtu.be/1BHufGK6nbo) goes
+through the setup step by step.
 
-A system equalizer with curated presets and a per-machine correction curve as a starting point,
-three simple controls (bass, voice, treble) and a full 10-band advanced EQ with a fullscreen view.
-Independent curve for speaker and headphones, per game or global. Includes a bass enhancer, volume
-leveling, left/right balance, test samples to hear the effect, and a guard that caps how far you can
-boost bass and treble so the speakers aren't overdriven (can be turned off).
+And if you have an AYN Thor, Panel can use the bottom screen as a touch panel while you play on the
+top one.
 
-### Controllers (Mandos)
+## 🕹️ Devices
 
-Button remapping that cooperates with the daemon already controlling your gamepad (Handheld Daemon on
-Bazzite, InputPlumber on SteamOS) instead of fighting it. It shows a warning in Settings if it
-detects a configuration conflict. This part is still early.
+I test everything on the machines I have at home: **Steam Deck LCD and OLED, ROG Ally, ROG Ally X,
+ROG Xbox Ally X, Legion Go, Legion Go S, Legion Go 2 and MSI Claw 8 AI+**, and on ARM, **AYN Thor,
+AYN Odin 3, AYN Odin 2 Portal, Retroid Pocket 5, Retroid Pocket Nova and Anbernic RG Cube**.
 
-### HUD
+Many more have received support too: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8,
+OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs and the Steam Machine. If your
+device isn't on the list, Panel looks at what it can control on it and shows you that.
 
-A MangoHud performance-overlay editor built into the panel. It can select and reorder the complete
-available metric catalog, group GPU, CPU and battery the way MangoHud renders them, add text,
-dividers and spacing, apply presets, and tune position, typography, colours, opacity and spacing
-with an immediate preview. It can also show Panel de Control values —TDP, Auto‑TDP, fans, profile,
-battery or GPU clock— using real readings only; an unavailable source is shown as `-`.
+## 📦 Installation
 
-The configuration can be prepared with no game running: it remains explicitly pending until a
-compatible MangoHud instance is available. The panel distinguishes saved from applied, verifies
-the file written to disk and preserves any personal `presets.conf` so it can be restored when the
-HUD is disabled.
-
-### Parameters (Parámetros)
-
-Manage each game's launch options without wrestling Steam's syntax. The list shows your games with
-their cover art (Steam and non‑Steam, including any artwork you've set), sorted by recent play, with
-search and other sort orders. Each option is a row with a plain‑language explanation and a toggle: turn
-on Proton variables (FSR4, sync tweaks, HDR, upscaling…) and wrappers like MangoHud, and it only offers
-the ones your Proton build actually supports, checked against the game itself. It keeps whatever you
-already had (EmuDeck, launchers, your manual tweaks). You can define your own variables to reuse across
-games, hide the ones you don't use (tools like Proton versions hide themselves), and jump straight to
-the game you're playing. It also adds an entry to the game's library context menu.
-
-### Cleanup (Limpieza)
-
-See how much space your games' Shader Cache and prefixes use, then choose what to clean for each
-game or across several games at once. The list includes cover art, search and a cleanup button
-that stays within reach as you scroll. Prefixes are selected separately and require confirmation:
-they may contain saved games and settings that would be lost when deleted.
-
-Supports native Steam on Linux and its libraries. Data in use or that cannot be verified is kept.
-Steam may rebuild or download Shader Cache again, so the next launch may take longer. The result
-shows the approximate size of deleted data and can be dismissed.
-
-### Themes (Temas)
-
-Installs and updates the Hooandee themes through CSS Loader. If a theme looks off, "Trouble with a
-theme?" checks what usually breaks them: other themes or profiles active at the same time,
-leftovers CSS Loader still loads even though they are not in its list, styles that get stuck and
-display settings that are not the default (scale, resolution, Steam beta). "Fix problems" keeps only
-the Hooandee themes active, sets leftovers aside without deleting anything and can be undone. If a
-theme ends up covering the Quick Access menu, Panel shows a notification that opens this same check.
-
-### Settings (Ajustes)
-
-Language from a compact selector, the "learn from my usage" switch (telemetry is 100% local and
-can be turned off), and a button to erase what has been learned. Under "Customize interface" you can
-reorder and hide tabs and blocks, turn whole modules on or off (disabling stops that feature across
-the panel; hiding just stops showing it here), build your own tabs (custom views) from whichever
-blocks you want across categories and place them anywhere in the tab order, and pick the panel's
-accent color from a palette or leave it on "Default" so it follows the active theme.
-
-The whole panel is fully controller-navigable: whatever the cursor is on gets a clear accent outline,
-so you never need the touchscreen.
-
-## Per-device compatibility
-
-Panel de Control knows nine models and, for anything else, tries to work by probing the real
-capabilities of the hardware. This table is honest about what's **verified on each device** and what
-isn't yet: I'd rather show you "not tested" than a false "yes". Differences come from what each
-vendor lets you touch in firmware and from each distro's kernel.
-
-Legend: **✅** verified on that device · **⚠️** limited or default only · **❌** not available · **—**
-not tested on that device yet
-
-| Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Keep TDP on low battery (experimental) | — | — | ✅ [¹⁸](#notes) | — | — | — | ✅ [¹⁸](#notes) | — | — |
-| Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
-| Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notes) |
-| GPU clock | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) |
-| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ✅ | ✅ | ❌ [⁵](#notes) |
-| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | — | ⚠️ [⁷](#notes) | ✅ |
-| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notes) |
-| CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Sound equalizer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notes) |
-| Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
-| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — [¹⁰](#notes) | ✅ [⁹](#notes) |
-| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | — [¹⁰](#notes) | ⚠️ [⁹](#notes) |
-| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | — [¹⁰](#notes) | ❌ [⁹](#notes) |
-| Firmware modes (profiles) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [¹¹](#notes) | ❌ | ❌ | ❌ |
-| Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
-| "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
-| Controller remap (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
-| RGB lighting (via Colores) | ❌ [¹⁶](#notes) | ❌ [¹⁶](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-Any other handheld falls under an **experimental generic** profile: the plugin probes the real
-capabilities and shows what it can, honestly hiding the rest.
-
-The **OneXPlayer OneXFly Apex** (Ryzen AI Max+ 395) is now recognised by name and comes in as
-experimental. TDP goes up to 55 W on battery and 80 W on the charger, which is what OneXPlayer
-rates it at without accessories; with the external liquid cooler attached it can go to 120 W from
-Settings. Fans and the charge limit only light up if the device exposes the nodes. If you own one,
-reports from the Settings tab help a lot to dial it in.
-
-The **AOKZOE A1X** (Ryzen AI 9 HX 370) is also recognised by name and comes in as experimental. Its
-TDP runs through the same generic AMD path (ryzenadj), but with a 30 W ceiling instead of being
-capped at the generic profile's 15 W. As with the OneXFly we do not own one, so reports from the
-Settings tab are gold for confirming what actually responds.
-
-The **GPD Win Mini 2025** (Ryzen AI 9 HX 370/365) and the **MSI Claw A8** (Ryzen Z2 Extreme) are now
-recognised by name and come in as experimental too. They used to show up as generic with TDP stuck
-at 15 W; now they go up to a safe 35 W ceiling (the manufacturer-rated peak, well below the chip's
-theoretical cTDP) with three tuned presets. Both run through the same generic AMD path (ryzenadj),
-and we do not own either, so reports from the Settings tab help confirm it.
-
-The same batch recognises a few more, all experimental and each with a safe manufacturer-rated
-ceiling: the **OneXPlayer F1 Pro** (Ryzen AI 9 HX 370, up to 30 W), the **GPD Win 5** (Ryzen AI Max
-385 "Strix Halo", up to 55 W), the **GPD Win Max 2** (Ryzen 7 8840U, up to 35 W) and the **ROG Xbox
-Ally** with the Ryzen Z2 A (the white one), which also reported a bogus 100 W firmware ceiling and is
-now capped to the real 20 W ASUS rates it at. The **Legion Go 2** with the plain Ryzen Z2 (not
-Extreme) is now detected by name instead of as a generic device. For anything we do not own, reports
-from the Settings tab are what confirm how it really behaves.
-
-The **OneXPlayer X2 Mini Pro** (Ryzen AI Max+ 388, 6 to 55 W on battery and up to 80 W on the
-charger; with the external liquid cooler attached it can go to 120 W from Settings) and the
-**OneXPlayer 3** (Intel Arc G3 Extreme, up to 35 W, plus an experimental 45 W on the charger when
-unlocked by hand) are recognised too, both experimental.
-
-**ARM handhelds** are in too. The **AYN Thor** (Snapdragon 8 Gen 2) is recognised by name and comes
-in as experimental, and any other ARM machine shows up with its real name and chip instead of as a
-generic PC. On ARM, Decky runs emulated as if it were an Intel PC, so the identity is read straight
-from the system and the PC-only paths (watt-based TDP, ryzenadj, AMD and Intel GPU clocks) are never
-touched. Features arrive with their ARM equivalent; until then, anything that doesn't respond yet is
-hidden instead of pretending to work.
-
-On the **AYN Thor**, Panel can also take over the **bottom screen** in game mode: a touch deck with
-performance, FPS target, fan, brightness for both screens, volume, lights, Turbo, screenshot,
-keyboard and a shortcut to the quick access menu. It's drawn straight onto that screen, with no
-browser or second compositor in between, so the game on top doesn't lose frames. Turn it on in
-Settings; it's experimental.
-
-**Desktop PCs** (anything that isn't the Steam Machine) no longer show up as a generic device.
-They're recognised by having no battery and a non-portable chassis, and get desktop mode: CPU
-power on Intel and dedicated AMD graphics power, never past the limits their firmware sets, plus
-the motherboard fans on the curve. Many distros don't load the driver for those fans, so the Fans
-tab has a switch that loads it when the system ships it. The graphics fan always stays automatic:
-before this, on some desktops with a dedicated AMD card, the generic curve ended up driving it
-and could hold it too low. All of this is experimental and every motherboard is different, so
-reports from Settings are what tell what really responds.
-
-### Notes
-
-1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no
-   separate boost rails to tune.
-2. On the Steam Deck the GPU-load reading is instantaneous and very noisy; auto-TDP averages it
-   before deciding.
-3. Power profiling on Intel (RAPL / i915) isn't implemented yet, so GPU-based auto-TDP isn't
-   available on the Claw. The rest of the TDP control works.
-4. GPU-clock writing is implemented per device, but it hasn't been tested with a live change on any
-   machine yet.
-5. The cycle counter is only populated by Lenovo firmware; on ASUS, Steam Deck and MSI the node
-   reports a fake 0, so it's hidden instead of showing an invented zero.
-6. The original Legion Go (83E1) doesn't expose `conservation_mode`, so it offers no charge limit.
-7. On Legion the charge limit is a "conservation mode" toggle with a firmware-fixed percentage, not
-   an adjustable value.
-8. The Claw's Intel Core Ultra has no hyperthreading, so there's no multithreading to enable or
-   disable.
-9. On the MSI Claw the fan chip (`msi_wmi_platform`) exposes fan RPM (the monitor does show both fans;
-   at low temperatures they sit at 0 in silent mode), but its kernel can't write the curve. The curve
-   the firmware applies is read over the EC and shown read-only; editing is in progress (fan-speed
-   control will be enabled safely).
-10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and that
-    route has not yet been validated on the device.
-11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver, which ships
-    on some kernels and turns on by itself when present. Where it's absent (current SteamOS and some
-    kernels), the fan is governed by the **firmware modes** (Quiet/Balanced/Performance) from the Power
-    arc, which set power and fan together. The speed monitor always works: if the driver publishes no
-    hwmon node, RPM is read over the EC.
-12. The Legion Go S drives its fan over an unofficial embedded-controller (EC) path, so it's an
-    optional experimental control: you enable it by hand, with a safety speed cap. Left off, it stays
-    monitor-only.
-13. On Intel the color is only applied while the compositor is active, so that path is forced and the
-    small cost is disclosed.
-14. The "OLED look" preset is hidden on panels that are already OLED (Steam Deck OLED, Legion Go 2)
-    since it makes no sense there.
-15. Remapping cooperates with the system daemon (HHD on Bazzite, InputPlumber on SteamOS) and is
-    early. It doesn't appear on the Steam Deck; on the Legion Go S and ROG Xbox Ally X the app says
-    there's no remapping for that controller yet. On Legion some back buttons aren't detected well yet.
-16. The Steam Deck has no RGB lighting, so this card doesn't appear.
-17. The equalizer uses PipeWire's filter-chain (available on SteamOS and Bazzite). The bass enhancer
-    and volume leveling need the system's CAPS plugin; if it isn't installed the equalizer still
-    works, just without those two extras.
-18. Low-battery TDP persistence is experimental, off by default, and has been tested on ROG Ally and
-    Legion Go S. `—` means we have not tested it on that model yet, not that it is incompatible.
-
-> Cells marked **—** are the ones I haven't tested on that specific device. If you have the
-> hardware in front of you and see something works (or doesn't), tell me and I'll fix it: this table
-> should reflect reality, not what the code tries to do.
-
-## Installation
-
-Panel de Control is distributed outside the Decky store. Install [Decky Loader](https://decky.xyz/)
-first, then:
+With [Decky Loader](https://decky.xyz/) installed:
 
 1. Download `Panel de Control.zip` from the [latest release](https://github.com/Hooandee/panel-de-control/releases/latest).
-2. In Decky, use **Developer Mode → Install Plugin from ZIP** (or your preferred manual install
-   method).
+2. In Decky, go to **Developer Mode → Install Plugin from ZIP** and pick the file.
 
-Once installed, the plugin can update itself from within its settings. When a new version is out, a notice shows up at the bottom of the quick access menu with a button to update.
+That's it. From then on it updates itself, and when a new version is out you'll see a notice in the
+quick access menu.
 
-### Verifying a download (recommended)
+## 💬 Bugs and ideas
 
-Releases published once the repository is public are signed with build provenance. When the signature
-is available, you can confirm the zip really came from this repository's pipeline:
+If something isn't working or you're missing something, the quickest way to tell me is from Panel
+itself, in **Settings → Send a report**. You can send a problem or an idea, and Panel attaches only
+the technical info about your device that I need to understand it, nothing personal. You can also
+open an [issue](https://github.com/Hooandee/panel-de-control/issues) here on GitHub.
 
-```sh
-gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
-```
+If you have a device I don't, your reports are what help me polish it the most.
 
-## How it learns (and why it stays local)
+## 🔒 Privacy
 
-The point of Panel de Control isn't just having nice buttons, it's that it learns from how you play
-each game to suggest a better setup: which fan curve keeps you cool without noise, which power gives
-you stable frames without draining the battery. All that learning stays on your device, never leaves
-it, and you can turn it off or wipe it whenever you want from Settings.
+Panel learns from how you play to fine-tune its suggestions, but all of it stays on your device. You
+can turn it off or wipe it anytime from Settings.
 
-The principle running through the whole project: never fake it. If a reading isn't available it's
-hidden instead of showing a fake zero. If the hardware rejects a change, the interface reflects it. A
-number on screen is a real number.
+> [!WARNING]
+> Panel runs with root permissions and changes power, thermal and firmware settings. It's built to
+> fail safely, but you use it at your own risk and without warranty.
 
-## Acknowledgments
+## ❤️ Thanks
 
-This plugin stands on the work of many people in the handheld community. I reference kernel
-interfaces (which are facts, not code) freely, and when I adapt an idea or a bit of code I credit it
-here. The full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Panel de Control was born after using [SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)
+by Aarron Lee. It's what got me to build something bigger, and Panel has followed its own path ever
+since.
 
-- **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** (BSD-3, Aarron Lee). The primary
-  reference for the per-device TDP mechanism: the Lenovo and ASUS firmware-attributes paths, the
-  `platform_profile=custom` prestep, and ryzenadj usage.
-- **[Handheld Daemon (HHD)](https://github.com/hhd-dev/hhd)** (LGPL-2.1). Reference for the
-  per-device strategy, re-applying on resume and on AC/DC changes, and cooperating with the
-  controller daemon. I only looked at the approach, I didn't copy its code.
-- **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Invoked as an external process for
-  the generic AMD path when there's no better firmware route; not bundled inside the plugin.
-- **[PowerControl](https://github.com/mengmeet/PowerControl)**. Origin of the Lenovo
-  firmware-attributes path that SimpleDeckyTDP inherits.
-- **[Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic)** and **[PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools)**.
-  Reference for the fan monitor and curve control and for periodic re-apply.
-- **[Decky Loader](https://decky.xyz/)** and its plugin template. The base everything runs on.
-- **[decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb)** (GPL-3.0). I adapted its
-  technique for adding the Parameters entry to a game's library context menu. That adaptation is why
-  this plugin is GPL-3.0.
-- **The Linux kernel documentation** (firmware-attributes, powercap, asus-wmi, hwmon, power_supply).
-  The source of the sysfs paths I read and write.
-
-## Contributing
-
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Security
-
-Found a vulnerability? Please report it privately, see the [Security Policy](SECURITY.md). Do not
-open a public issue.
+Thanks as well to the handheld community for everything it shares, especially
+[Handheld Daemon](https://github.com/hhd-dev/hhd), [PowerControl](https://github.com/mengmeet/PowerControl),
+[Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic), [PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools),
+[RyzenAdj](https://github.com/FlyGoat/RyzenAdj), [decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb)
+and [Decky Loader](https://decky.xyz/), which is where all of this runs. License details are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 
-[GPL-3.0](LICENSE) © Hooandee. Free software for the community: anyone can use, study, and modify it,
-and anyone who distributes it (with or without changes) must do so under the GPL too, with the source
-available. Third-party attributions and license details (including decky-steamgriddb, whose context-menu
-technique this adapts, and ryzenadj, which is invoked as an external process and not bundled) are listed
-in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[GPL-3.0](LICENSE) © Hooandee. If you find a security issue, let me know privately through the
+[security policy](SECURITY.md).
