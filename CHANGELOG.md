@@ -5,9 +5,25 @@
 ## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
 
 
-### Bug Fixes
+### Español
 
-* **kiosk:** take the bottom screen from Armada's own gamescope ([#945](https://github.com/Hooandee/panel-de-control/issues/945)) ([962e0d7](https://github.com/Hooandee/panel-de-control/commit/962e0d7b0f175b45ffbb02aeec186abae41c737c))
+* **Pantalla inferior:** En consolas de doble pantalla con Armada, como la AYN Thor, mostrar Panel en la pantalla de abajo vuelve a funcionar. Las últimas versiones de Armada ocupaban esa pantalla por su cuenta y se quedaba en negro. Ahora Panel se la pide a Armada mientras la usas y se la devuelve en cuanto la apagas.
+
+### English
+
+* **Bottom screen:** On dual-screen handhelds with Armada, like the AYN Thor, showing Panel on the bottom screen works again. Recent Armada versions took over that screen on their own and it stayed black. Now Panel borrows it from Armada while you use it and gives it back as soon as you turn it off.
+
+### Italiano
+
+* **Schermo inferiore:** Sulle console a doppio schermo con Armada, come la AYN Thor, mostrare Panel sullo schermo in basso torna a funzionare. Le ultime versioni di Armada occupavano quello schermo per conto loro e restava nero. Ora Panel lo chiede ad Armada mentre lo usi e glielo restituisce appena lo spegni.
+
+### Deutsch
+
+* **Unterer Bildschirm:** Auf Handhelds mit zwei Bildschirmen und Armada, wie der AYN Thor, lässt sich Panel wieder auf dem unteren Bildschirm anzeigen. Neuere Armada-Versionen haben diesen Bildschirm selbst belegt, und er blieb schwarz. Jetzt leiht sich Panel ihn von Armada, solange du ihn nutzt, und gibt ihn zurück, sobald du ihn ausschaltest.
+
+### Português (Brasil)
+
+* **Tela inferior:** Em portáteis de duas telas com Armada, como o AYN Thor, mostrar o Panel na tela de baixo volta a funcionar. As versões mais recentes do Armada ocupavam essa tela por conta própria e ela ficava preta. Agora o Panel pega a tela emprestada do Armada enquanto você usa e devolve assim que você desliga.
 
 ## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
 
