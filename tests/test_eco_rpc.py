@@ -194,19 +194,24 @@ class _FakeScreen:
 
 
 class _FakeInput:
-    def __init__(self, source=None):
-        self.source = source
+    def __init__(self, sources=(), gamepad=True):
+        self.sources = list(sources)
+        self.gamepad_on_open = gamepad
+        self.gamepad = False
         self.opened = self.closed = 0
 
     def open(self):
         self.opened += 1
+        self.gamepad = self.gamepad_on_open
         return 1
 
     def close(self):
         self.closed += 1
 
     def wait(self, timeout):
-        return self.source
+        import time
+        time.sleep(timeout)
+        return self.sources.pop(0) if self.sources else None
 
 
 def _with_screen(p, screen, input_wake=None):
@@ -275,40 +280,62 @@ def test_leaving_download_mode_wakes_the_panel(tmp_path, monkeypatch):
     assert screen.calls == [True, False]
 
 
-def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen())
+def _fast_watch(monkeypatch):
     main = sys.modules["main"]
-    monkeypatch.setattr(main, "_SCREEN_LEASE_S", 0.05)
-    monkeypatch.setattr(main, "_SCREEN_INPUT_POLL_S", 0.02)
-
-    async def run():
-        await p.set_eco(True, 50)
-        await p.set_eco_screen(True)
-        await asyncio.wait_for(p._screen_watch_task, 2)
-
-    asyncio.run(run())
-    assert screen.calls == [True, False]
-
-
-def test_raw_input_lights_the_panel_and_tells_the_frontend(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    touch = _FakeInput(source="FTS3528:00 2808:1015")
-    screen = _with_screen(p, _FakeScreen(), touch)
-    main = sys.modules["main"]
+    monkeypatch.setattr(main, "_ECO_INPUT_POLL_S", 0.01)
+    monkeypatch.setattr(main, "_ECO_IDLE_S", 0.03)
     emitted = []
 
     async def emit(event, *args):
         emitted.append((event, *args))
 
     monkeypatch.setattr(main, "_emit_to_frontend", emit)
+    return main, emitted
+
+
+async def _until(predicate, timeout=2.0):
+    loop = asyncio.get_running_loop()
+    end = loop.time() + timeout
+    while not predicate():
+        assert loop.time() < end
+        await asyncio.sleep(0.01)
+
+
+def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    screen = _with_screen(p, _FakeScreen())
+    main, _ = _fast_watch(monkeypatch)
+    monkeypatch.setattr(main, "_SCREEN_LEASE_S", 0.05)
 
     async def run():
         await p.set_eco(True, 50)
         await p.set_eco_screen(True)
-        await asyncio.wait_for(p._screen_watch_task, 2)
+        await _until(lambda: screen.calls == [True, False])
+        await p.set_eco(False, 50)
+        await asyncio.wait_for(p._eco_watch_task, 2)
 
     asyncio.run(run())
     assert screen.calls == [True, False]
-    assert emitted == [("pdc_eco_screen", False)]
+
+
+def test_raw_input_reports_idle_and_activity_and_lights_the_panel(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    touch = _FakeInput()
+    screen = _with_screen(p, _FakeScreen(), touch)
+    _, emitted = _fast_watch(monkeypatch)
+
+    async def run():
+        await p.set_eco(True, 50)
+        await _until(lambda: ("pdc_eco_activity", False) in emitted)
+        assert (await p.get_eco_state())["fast_idle"] is True
+        await p.set_eco_screen(True)
+        touch.sources.append("FTS3528:00 2808:1015")
+        await _until(lambda: ("pdc_eco_activity", True) in emitted)
+        await p.set_eco(False, 50)
+        await asyncio.wait_for(p._eco_watch_task, 2)
+
+    asyncio.run(run())
+    assert screen.calls == [True, False]
+    assert emitted[:2] == [("pdc_eco_activity", False), ("pdc_eco_activity", True)]
     assert touch.opened == 1 and touch.closed == 1
+    assert p._eco_fast_idle is False

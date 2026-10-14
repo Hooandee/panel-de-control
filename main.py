@@ -162,8 +162,10 @@ _REPORT_SERVICE_URL = os.environ.get(
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SCREEN_LEASE_S = 15.0
-_SCREEN_INPUT_POLL_S = 0.5
-_ECO_SCREEN_EVENT = "pdc_eco_screen"
+_ECO_INPUT_POLL_S = 0.25
+# Quiet time after the last raw input before download mode starts its countdown.
+_ECO_IDLE_S = 1.5
+_ECO_ACTIVITY_EVENT = "pdc_eco_activity"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
 _CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
@@ -761,7 +763,8 @@ class Plugin:
         self._screen_sleep = ScreenSleep()
         self._input_wake = InputWake()
         self._screen_lease_at = 0.0
-        self._screen_watch_task = None
+        self._eco_watch_task = None
+        self._eco_fast_idle = False
         self._screen_reset_done = False
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
@@ -8546,6 +8549,8 @@ class Plugin:
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
             "screen_off": self._screen_sleep.probe_ok,
             "screen_asleep": self._screen_sleep.asleep,
+            # Raw input covers this device's controls, so idleness need not wait for Steam.
+            "fast_idle": self._eco_fast_idle,
         }
 
     async def get_eco_state(self) -> dict:
@@ -8553,6 +8558,8 @@ class Plugin:
         self._screen_lease_at = time.monotonic()
         if not self._screen_sleep.probe_ok:
             await asyncio.to_thread(self._probe_screen_sleep)
+        if self._settings.get("eco_enabled"):
+            self._start_eco_watch()
         return self._eco_state()
 
     def _probe_screen_sleep(self) -> None:
@@ -8588,7 +8595,7 @@ class Plugin:
         if asleep and not ok:
             await self._wake_screen("sleep_unconfirmed")
         elif ok and asleep:
-            self._start_screen_watch()
+            self._start_eco_watch()
         return {"ok": ok, "asleep": screen.asleep}
 
     async def _wake_screen(self, reason: str, source: str | None = None) -> None:
@@ -8597,31 +8604,48 @@ class Plugin:
             return
         ok = await asyncio.to_thread(screen.set, False)
         self._journal_screen("screen_wake", ok, reason=reason, **({"source": source} if source else {}))
+
+    async def _emit_eco_activity(self, active: bool) -> None:
         try:
-            await _emit_to_frontend(_ECO_SCREEN_EVENT, screen.asleep)
-        except Exception:  # noqa: BLE001 — the frontend also catches up on its eco poll
+            await _emit_to_frontend(_ECO_ACTIVITY_EVENT, active)
+        except Exception:  # noqa: BLE001 — the frontend still has Steam's activity signal
             pass
 
-    def _start_screen_watch(self) -> None:
-        task = self._screen_watch_task
+    def _start_eco_watch(self) -> None:
+        task = self._eco_watch_task
         if task is None or task.done():
-            self._screen_watch_task = asyncio.create_task(self._screen_watch())
+            self._eco_watch_task = asyncio.create_task(self._eco_watch())
 
-    async def _screen_watch(self) -> None:
-        """While the panel is off: light it on the first raw input (Steam's activity signal
-        is seconds late), and if Steam's UI stops renewing the lease (crash, plugin reload)
-        light it anyway so it never stays dark with nothing to wake it."""
+    async def _eco_watch(self) -> None:
+        """While download mode is on: report activity and idleness from raw input (Steam's
+        activity signal is seconds late) and light the panel on the first input. If Steam's
+        UI stops renewing the lease (crash, plugin reload) the panel is lit anyway so it
+        never stays dark with nothing to wake it."""
         watch = self._input_wake
         await asyncio.to_thread(watch.open)
+        self._eco_fast_idle = watch.gamepad
+        last_input = time.monotonic()
+        idle = False
         try:
-            while self._screen_sleep.asleep:
-                source = await asyncio.to_thread(watch.wait, _SCREEN_INPUT_POLL_S)
+            while self._settings.get("eco_enabled"):
+                source = await asyncio.to_thread(watch.wait, _ECO_INPUT_POLL_S)
+                now = time.monotonic()
                 if source is not None:
-                    await self._wake_screen("input", source=source)
-                elif time.monotonic() - self._screen_lease_at > _SCREEN_LEASE_S:
+                    last_input = now
+                    if self._screen_sleep.asleep:
+                        await self._wake_screen("input", source=source)
+                    if idle:
+                        idle = False
+                        await self._emit_eco_activity(True)
+                elif watch.gamepad and not idle and now - last_input >= _ECO_IDLE_S:
+                    idle = True
+                    await self._emit_eco_activity(False)
+                if self._screen_sleep.asleep and now - self._screen_lease_at > _SCREEN_LEASE_S:
                     await self._wake_screen("lease_expired")
         finally:
+            self._eco_fast_idle = False
             await asyncio.to_thread(watch.close)
+            await self._wake_screen("eco_watch_stopped")
 
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
@@ -8636,7 +8660,9 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
-        if not enabled:
+        if enabled:
+            self._start_eco_watch()
+        else:
             await self._wake_screen("eco_disabled")
         await self._drain_offloaded()
         return self._eco_state()

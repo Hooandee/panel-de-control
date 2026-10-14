@@ -5,13 +5,13 @@ const api = vi.hoisted(() => ({
   setEcoScreen: vi.fn(),
 }));
 const activity = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
-const backend = vi.hoisted(() => ({ emit: (_asleep: boolean) => {} }));
+const backend = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
 const brightness = vi.hoisted(() => ({ set: vi.fn() }));
 const blackout = vi.hoisted(() => ({ showBlackout: vi.fn(() => true), hideBlackout: vi.fn() }));
 const countdown = vi.hoisted(() => ({ cancel: vi.fn(), started: 0 }));
 
 vi.mock("@decky/api", () => ({
-  addEventListener: (_event: string, cb: (asleep: boolean) => void) => {
+  addEventListener: (_event: string, cb: (active: boolean) => void) => {
     backend.emit = cb;
   },
   removeEventListener: () => {},
@@ -104,7 +104,7 @@ describe("download mode screen", () => {
     await idle();
     await vi.advanceTimersByTimeAsync(3000);
     blackout.hideBlackout.mockClear();
-    backend.emit(false);
+    backend.emit(true);
     expect(blackout.hideBlackout).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(8000);
     expect(countdown.started).toBe(2);
@@ -114,10 +114,20 @@ describe("download mode screen", () => {
     enable(40, true);
     await idle();
     await vi.advanceTimersByTimeAsync(3000);
-    backend.emit(false);
+    backend.emit(true);
     await active();
     await vi.advanceTimersByTimeAsync(8000);
     expect(countdown.started).toBe(1);
+  });
+
+  it("backend idleness starts the countdown without waiting for Steam", async () => {
+    enable(40, true);
+    backend.emit(false);
+    expect(countdown.started).toBe(1);
+    backend.emit(true);
+    expect(countdown.cancel).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
   });
 
   it("falls back to black layer and minimum brightness when the panel is not confirmed off", async () => {

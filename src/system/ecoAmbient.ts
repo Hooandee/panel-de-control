@@ -16,10 +16,11 @@ type ScreenMode = "panel" | "blackout";
 const BLACKOUT_FLOOR_PCT = 0;
 const POLL_MS = 3000;
 const COUNTDOWN_S = 3;
-// The backend lights the panel on raw input before Steam reports activity; if Steam never
-// reports it (input Steam did not see), go dark again after this long.
+// Raw input from the backend: activity at once, idleness only where it covers the controls.
+// After a backend wake with no backend idleness to follow, Steam may never report the input
+// (it never saw it); go dark again after this long.
 const RELAPSE_MS = 8000;
-const SCREEN_EVENT = "pdc_eco_screen";
+const ACTIVITY_EVENT = "pdc_eco_activity";
 
 let enabled = false;
 let mode: ScreenMode = "blackout";
@@ -100,11 +101,20 @@ function drive(active: boolean): void {
   });
 }
 
-function onBackendWake(asleep: boolean): void {
-  if (!enabled || mode !== "panel" || asleep) return;
-  hideBlackout();
-  activeState = true;
+function onBackendActivity(active: boolean): void {
+  if (!enabled) return;
   clearRelapse();
+  if (!active) {
+    if (activeState) {
+      activeState = false;
+      drive(false);
+    }
+    return;
+  }
+  const wasDark = !activeState;
+  activeState = true;
+  drive(true);
+  if (!wasDark) return;
   relapseTimer = setTimeout(() => {
     relapseTimer = null;
     if (enabled && activeState) {
@@ -167,7 +177,7 @@ function teardown(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  removeEventListener(SCREEN_EVENT, onBackendWake);
+  removeEventListener(ACTIVITY_EVENT, onBackendActivity);
   cancelCountdown();
   clearRelapse();
   stopPoll();
@@ -190,7 +200,7 @@ function reconcile(on: boolean, wake: number, screenOff: boolean): void {
     activeState = true;
     unsubActivity = subscribeActive(onActivity);
     unsubBrightness = displayBrightness.subscribe(onBrightness);
-    addEventListener(SCREEN_EVENT, onBackendWake);
+    addEventListener(ACTIVITY_EVENT, onBackendActivity);
     startPoll();
   } else if (!on && enabled) {
     enabled = false;
