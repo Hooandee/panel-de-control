@@ -91,6 +91,8 @@ from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
 from display.hdr import HdrBackend
+from display.input_wake import InputWake
+from display.screen_sleep import ScreenSleep
 from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
@@ -159,6 +161,9 @@ _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
+_SCREEN_LEASE_S = 15.0
+_SCREEN_INPUT_POLL_S = 0.5
+_ECO_SCREEN_EVENT = "pdc_eco_screen"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
 _CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
@@ -176,7 +181,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "system": (
         ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
         ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
-        ("get_eco_state", ("enabled", "tdp_min_w")),
+        ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
     ),
     "display": (
@@ -753,6 +758,11 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._screen_sleep = ScreenSleep()
+        self._input_wake = InputWake()
+        self._screen_lease_at = 0.0
+        self._screen_watch_task = None
+        self._screen_reset_done = False
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
         self._hud = HudStore(
@@ -2596,7 +2606,8 @@ class Plugin:
                         "set_available": bool(brightness.get("set_available", False)),
                     },
                 }
-        return {"backend": backend, "frontend": frontend}
+        return {"backend": backend, "frontend": frontend,
+                "screen_off": self._screen_sleep.diagnostics()}
 
     @staticmethod
     def _with_theme_display(themes, context):
@@ -8518,6 +8529,12 @@ class Plugin:
             self._settings["eco_enabled"] = False
             self._save()
             self._reapply_all()
+        screen = getattr(self, "_screen_sleep", None)
+        if screen is not None and screen.asleep:
+            try:
+                asyncio.get_running_loop().create_task(self._wake_screen("eco_cleared"))
+            except RuntimeError:
+                screen.set(False)
 
     def _eco_state(self) -> dict:
         return {
@@ -8527,11 +8544,84 @@ class Plugin:
             "affects_boost": self._boost.supported,
             # The brightness % to wake back to (pre-eco snapshot).
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
+            "screen_off": self._screen_sleep.probe_ok,
+            "screen_asleep": self._screen_sleep.asleep,
         }
 
     async def get_eco_state(self) -> dict:
         self._init()
+        self._screen_lease_at = time.monotonic()
+        if not self._screen_sleep.probe_ok:
+            await asyncio.to_thread(self._probe_screen_sleep)
         return self._eco_state()
+
+    def _probe_screen_sleep(self) -> None:
+        screen = self._screen_sleep
+        if not screen.probe() or self._screen_reset_done:
+            return
+        self._screen_reset_done = True
+        decky.logger.info("eco screen-off: supported")
+        # A previous plugin process may have died with the panel asleep.
+        if not screen.asleep:
+            screen.set(False)
+
+    def _journal_screen(self, event: str, ok: bool, **fields) -> None:
+        diary = journal.active
+        if diary is not None:
+            diary.write("INFO" if ok else "WARNING", "display", event, ok=ok,
+                        detail=self._screen_sleep.detail, **fields)
+
+    async def set_eco_screen(self, asleep: bool) -> dict:
+        """Download mode's panel power. Sleeping is only honoured while download mode is on;
+        a sleep that cannot be confirmed is undone so the panel never stays dark unproven."""
+        self._init()
+        screen = self._screen_sleep
+        asleep = bool(asleep)
+        if asleep and not self._settings.get("eco_enabled"):
+            self._journal_screen("screen_sleep", False, reason="eco_disabled")
+            return {"ok": False, "asleep": screen.asleep, "reason": "eco_disabled"}
+        if asleep == screen.asleep:
+            return {"ok": True, "asleep": screen.asleep}
+        self._screen_lease_at = time.monotonic()
+        ok = await asyncio.to_thread(screen.set, asleep)
+        self._journal_screen("screen_sleep" if asleep else "screen_wake", ok)
+        if asleep and not ok:
+            await self._wake_screen("sleep_unconfirmed")
+        elif ok and asleep:
+            self._start_screen_watch()
+        return {"ok": ok, "asleep": screen.asleep}
+
+    async def _wake_screen(self, reason: str, source: str | None = None) -> None:
+        screen = getattr(self, "_screen_sleep", None)
+        if screen is None or not screen.asleep:
+            return
+        ok = await asyncio.to_thread(screen.set, False)
+        self._journal_screen("screen_wake", ok, reason=reason, **({"source": source} if source else {}))
+        try:
+            await _emit_to_frontend(_ECO_SCREEN_EVENT, screen.asleep)
+        except Exception:  # noqa: BLE001 — the frontend also catches up on its eco poll
+            pass
+
+    def _start_screen_watch(self) -> None:
+        task = self._screen_watch_task
+        if task is None or task.done():
+            self._screen_watch_task = asyncio.create_task(self._screen_watch())
+
+    async def _screen_watch(self) -> None:
+        """While the panel is off: light it on the first raw input (Steam's activity signal
+        is seconds late), and if Steam's UI stops renewing the lease (crash, plugin reload)
+        light it anyway so it never stays dark with nothing to wake it."""
+        watch = self._input_wake
+        await asyncio.to_thread(watch.open)
+        try:
+            while self._screen_sleep.asleep:
+                source = await asyncio.to_thread(watch.wait, _SCREEN_INPUT_POLL_S)
+                if source is not None:
+                    await self._wake_screen("input", source=source)
+                elif time.monotonic() - self._screen_lease_at > _SCREEN_LEASE_S:
+                    await self._wake_screen("lease_expired")
+        finally:
+            await asyncio.to_thread(watch.close)
 
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
@@ -8546,6 +8636,8 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
+        if not enabled:
+            await self._wake_screen("eco_disabled")
         await self._drain_offloaded()
         return self._eco_state()
 
@@ -12757,6 +12849,7 @@ class Plugin:
     async def _unload(self) -> None:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        await self._wake_screen("unload")
         await self._stop_kiosk()
         await self._stop_remote_access()
         try:
@@ -13195,7 +13288,9 @@ class Plugin:
 
 journal.trace_calls(
     Plugin,
-    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
+    untraced=frozenset({
+        "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+    }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},

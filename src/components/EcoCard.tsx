@@ -1,6 +1,6 @@
 import { FC, ReactNode } from "react";
 import { PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuLeaf, LuRocket, LuSun, LuZap } from "react-icons/lu";
+import { LuLeaf, LuMonitorOff, LuRocket, LuZap } from "react-icons/lu";
 
 import { EcoState } from "../api";
 import { useI18n } from "../i18n";
@@ -8,8 +8,8 @@ import { theme } from "../theme";
 
 interface Props {
   state: EcoState;
-  /** Whether this device exposes a brightness API — gates the brightness effect
-   *  so the card never claims a dim it can't perform. */
+  /** Whether this device exposes a brightness API — without it and without panel
+   *  power control the card never claims a dark screen it can't produce. */
   brightnessSupported: boolean;
   onToggle: (enabled: boolean) => void;
 }
@@ -20,8 +20,8 @@ const Effect: FC<{ icon: ReactNode; label: string; active: boolean }> = ({ icon,
   </div>
 );
 
-/** Download mode: one tap drops the device to low power (TDP min, boost off, ambient
- *  screen dim) while a game downloads unattended. Shows the effects it will apply. */
+/** Download mode: one tap drops the device to low power (TDP min, boost off, screen
+ *  off while idle) while a game downloads unattended. Shows the effects it will apply. */
 export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => {
   const { t } = useI18n();
   const on = state.enabled;
@@ -44,8 +44,8 @@ export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => 
               ? t("system.eco.effect.level", { level: state.tdp_min_w })
               : t("system.eco.effect.tdp", { watts: state.tdp_min_w })
           } active={on} />
-          {brightnessSupported && (
-            <Effect icon={<LuSun size={12} />} label={t("system.eco.effect.brightness")} active={on} />
+          {(state.screen_off || brightnessSupported) && (
+            <Effect icon={<LuMonitorOff size={12} />} label={t(state.screen_off ? "system.eco.effect.screen" : "system.eco.effect.blackout")} active={on} />
           )}
           {state.affects_boost && (
             <Effect icon={<LuRocket size={12} />} label={t("system.eco.effect.boost")} active={on} />

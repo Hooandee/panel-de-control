@@ -43,7 +43,8 @@ describe("isFloorEcho", () => {
 });
 
 describe("activityDebounceMs", () => {
-  it("wakes fast but debounces idle to swallow flapping", () => {
-    expect(activityDebounceMs(true)).toBeLessThan(activityDebounceMs(false));
+  it("starts the countdown on idle at once and debounces wake briefly", () => {
+    expect(activityDebounceMs(false)).toBe(0);
+    expect(activityDebounceMs(true)).toBeGreaterThan(0);
   });
 });

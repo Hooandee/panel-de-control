@@ -21,7 +21,7 @@ export function isFloorEcho(echo: number, floorPct: number, tol = 2): boolean {
   return Math.abs(echo - floorPct) <= tol;
 }
 
-// Wake fast, hold on idle so activity flapping doesn't flicker the screen.
+// Idle needs no hold: the countdown before going dark already absorbs activity flapping.
 export function activityDebounceMs(active: boolean): number {
-  return active ? 150 : 800;
+  return active ? 150 : 0;
 }
