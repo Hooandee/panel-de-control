@@ -164,7 +164,7 @@ _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SCREEN_LEASE_S = 15.0
 _ECO_INPUT_POLL_S = 0.25
 # Quiet time after the last raw input before download mode starts its countdown.
-_ECO_IDLE_S = 1.5
+_ECO_IDLE_S = 3.0
 _ECO_ACTIVITY_EVENT = "pdc_eco_activity"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
@@ -8632,9 +8632,10 @@ class Plugin:
                 now = time.monotonic()
                 if source is not None:
                     last_input = now
-                    if self._screen_sleep.asleep:
+                    woke = self._screen_sleep.asleep
+                    if woke:
                         await self._wake_screen("input", source=source)
-                    if idle:
+                    if idle or woke:
                         idle = False
                         await self._emit_eco_activity(True)
                 elif watch.gamepad and not idle and now - last_input >= _ECO_IDLE_S:

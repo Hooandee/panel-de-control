@@ -20,7 +20,7 @@ BTN_SOUTH = 0x130
 _EVENT = struct.Struct("llHHi")
 _ABSINFO = struct.Struct("6i")
 # Analog axes must travel this share of their range so stick drift never counts as input.
-_ABS_TRAVEL = 0.15
+_ABS_TRAVEL = 0.08
 # Steam's own virtual gamepad mirrors input only for games; it proves nothing about coverage.
 _STEAM_VIRTUAL_PAD = ("28de", "11ff")
 _DECK_HID_ID = "000028DE:00001205"

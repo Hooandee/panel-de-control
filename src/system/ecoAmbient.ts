@@ -35,11 +35,17 @@ let lastDriven: number | null = null; // last brightness we drove, to spot our o
 let lastDriveAt = 0;
 let epoch = 0;
 let countdown: Countdown | null = null;
+// The backend's raw input covers this device's controls: it alone decides idleness.
+let fastIdle = false;
 let relapseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function wakeFromLayer(): void {
+  onBackendActivity(true);
+}
 
 function driveBlackout(active: boolean): void {
   if (active) hideBlackout();
-  else showBlackout();
+  else showBlackout(wakeFromLayer);
   lastDriven = ecoBrightness(active, wakePct, BLACKOUT_FLOOR_PCT);
   lastDriveAt = Date.now();
   displayBrightness.set(fromPercent(lastDriven));
@@ -51,7 +57,7 @@ function goDark(): void {
     return;
   }
   // Catches the tap that wakes the panel so it never lands on a control underneath.
-  showBlackout();
+  showBlackout(wakeFromLayer);
   const e = epoch;
   setEcoScreen(true)
     .then((r) => {
@@ -111,10 +117,11 @@ function onBackendActivity(active: boolean): void {
     }
     return;
   }
-  const wasDark = !activeState;
+  if (mode === "panel") hideBlackout();
+  if (activeState) return;
   activeState = true;
   drive(true);
-  if (!wasDark) return;
+  if (fastIdle) return;
   relapseTimer = setTimeout(() => {
     relapseTimer = null;
     if (enabled && activeState) {
@@ -125,6 +132,9 @@ function onBackendActivity(active: boolean): void {
 }
 
 function onActivity(active: boolean): void {
+  // Steam reports idleness seconds late and misses input the backend sees; where the
+  // backend covers the controls only its idleness counts.
+  if (!active && fastIdle) return;
   clearRelapse();
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
@@ -151,7 +161,11 @@ function startPoll(): void {
     const e = epoch;
     getEcoState()
       .then((s) => {
-        if (e === epoch) reconcile(s.enabled, s.wake_brightness, s.screen_off);
+        if (e !== epoch) return;
+        fastIdle = s.fast_idle;
+        reconcile(s.enabled, s.wake_brightness, s.screen_off);
+        // A lit panel never keeps the catch layer, whatever event was missed.
+        if (enabled && mode === "panel" && !s.screen_asleep && activeState && !countdown) hideBlackout();
       })
       .catch(() => {});
   }, POLL_MS);
@@ -204,6 +218,7 @@ function reconcile(on: boolean, wake: number, screenOff: boolean): void {
     startPoll();
   } else if (!on && enabled) {
     enabled = false;
+    fastIdle = false;
     teardown();
     restoreScreen();
   }
@@ -219,7 +234,9 @@ export function startEcoAmbient(): () => void {
   const e = epoch;
   getEcoState()
     .then((s) => {
-      if (alive && e === epoch) reconcile(s.enabled, s.wake_brightness, s.screen_off);
+      if (!alive || e !== epoch) return;
+      fastIdle = s.fast_idle;
+      reconcile(s.enabled, s.wake_brightness, s.screen_off);
     })
     .catch(() => {});
   return () => {

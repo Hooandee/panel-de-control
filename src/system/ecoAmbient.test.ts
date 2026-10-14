@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
 const activity = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
 const backend = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
 const brightness = vi.hoisted(() => ({ set: vi.fn() }));
-const blackout = vi.hoisted(() => ({ showBlackout: vi.fn(() => true), hideBlackout: vi.fn() }));
+const blackout = vi.hoisted(() => ({ showBlackout: vi.fn((_onTap?: () => void) => true), hideBlackout: vi.fn() }));
 const countdown = vi.hoisted(() => ({ cancel: vi.fn(), started: 0 }));
 
 vi.mock("@decky/api", () => ({
@@ -43,8 +43,8 @@ vi.mock("./display", () => ({
 
 import { setEcoActiveHint, startEcoAmbient } from "./ecoAmbient";
 
-function enable(wake: number, screenOff: boolean) {
-  api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: wake, screen_off: screenOff });
+function enable(wake: number, screenOff: boolean, extra: Record<string, unknown> = {}) {
+  api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: wake, screen_off: screenOff, ...extra });
   setEcoActiveHint(true, wake, screenOff);
 }
 
@@ -128,6 +128,40 @@ describe("download mode screen", () => {
     expect(countdown.cancel).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(5000);
     expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
+  });
+
+  it("where raw input covers the controls, Steam's late idleness is ignored", async () => {
+    enable(40, true, { fast_idle: true, screen_asleep: false });
+    await vi.advanceTimersByTimeAsync(3000);
+    await idle();
+    expect(countdown.started).toBe(0);
+    backend.emit(false);
+    expect(countdown.started).toBe(1);
+  });
+
+  it("a lit panel never keeps the catch layer", async () => {
+    enable(40, true, { fast_idle: true, screen_asleep: false });
+    backend.emit(false);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(blackout.showBlackout).toHaveBeenCalled();
+    backend.emit(true);
+    blackout.hideBlackout.mockClear();
+    backend.emit(true);
+    expect(blackout.hideBlackout).toHaveBeenCalled();
+    blackout.hideBlackout.mockClear();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(blackout.hideBlackout).toHaveBeenCalled();
+  });
+
+  it("a tap on the black layer brings the screen back", async () => {
+    enable(40, true);
+    await idle();
+    await vi.advanceTimersByTimeAsync(3000);
+    const calls = blackout.showBlackout.mock.calls;
+    const onTap = calls[calls.length - 1][0] as () => void;
+    onTap();
+    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
+    expect(blackout.hideBlackout).toHaveBeenCalled();
   });
 
   it("falls back to black layer and minimum brightness when the panel is not confirmed off", async () => {
