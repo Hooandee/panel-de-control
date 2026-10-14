@@ -1,67 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({
+const h = vi.hoisted(() => ({
   getEcoState: vi.fn(),
   setEcoScreen: vi.fn(),
+  setBrightness: vi.fn(),
+  showBlackout: vi.fn((_onTap?: () => void) => true),
+  hideBlackout: vi.fn(),
+  cancel: vi.fn(),
+  started: 0,
+  steam: (_active: boolean) => {},
+  raw: () => {},
+  brightness: (_f: number) => {},
 }));
-const activity = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
-const backend = vi.hoisted(() => ({ emit: () => {} }));
-const brightness = vi.hoisted(() => ({ set: vi.fn(), subscribed: null as null | ((f: number) => void) }));
-const blackout = vi.hoisted(() => ({ showBlackout: vi.fn((_onTap?: () => void) => true), hideBlackout: vi.fn() }));
-const countdown = vi.hoisted(() => ({ cancel: vi.fn(), started: 0 }));
 
 vi.mock("@decky/api", () => ({
-  addEventListener: (_event: string, cb: () => void) => {
-    backend.emit = cb;
-  },
+  addEventListener: (_e: string, cb: () => void) => (h.raw = cb),
   removeEventListener: () => {},
 }));
-vi.mock("../api", () => api);
-vi.mock("../i18n", () => ({ translate: (key: string) => key }));
-vi.mock("./ecoBlackout", () => blackout);
+vi.mock("../api", () => ({ getEcoState: h.getEcoState, setEcoScreen: h.setEcoScreen }));
+vi.mock("../i18n", () => ({ translate: (k: string) => k }));
+vi.mock("./ecoBlackout", () => ({ showBlackout: h.showBlackout, hideBlackout: h.hideBlackout }));
 vi.mock("./ecoCountdown", () => ({
-  startCountdown: (seconds: number, _label: string, onDone: () => void) => {
-    countdown.started += 1;
-    const timer = setTimeout(onDone, seconds * 1000);
-    return {
-      cancel: () => {
-        countdown.cancel();
-        clearTimeout(timer);
-      },
+  startCountdown: (s: number, _l: string, done: () => void) => {
+    h.started += 1;
+    const t = setTimeout(done, s * 1000);
+    return () => {
+      h.cancel();
+      clearTimeout(t);
     };
   },
 }));
-vi.mock("./activity", () => ({
-  subscribeActive: (cb: (active: boolean) => void) => {
-    activity.emit = cb;
-    return () => {};
-  },
-}));
+vi.mock("./activity", () => ({ subscribeActive: (cb: (a: boolean) => void) => ((h.steam = cb), () => {}) }));
 vi.mock("./display", () => ({
-  displayBrightness: {
-    set: brightness.set,
-    subscribe: (cb: (f: number) => void) => {
-      brightness.subscribed = cb;
-      return () => {};
-    },
-  },
+  displayBrightness: { set: h.setBrightness, subscribe: (cb: (f: number) => void) => ((h.brightness = cb), () => {}) },
 }));
 
 import { setEcoActiveHint, startEcoAmbient } from "./ecoAmbient";
 
-function enable(wake: number, screenOff: boolean, extra: Record<string, unknown> = {}) {
-  api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: wake, screen_off: screenOff, ...extra });
-  setEcoActiveHint(true, wake, screenOff);
+const state = (extra: Record<string, unknown> = {}) => ({
+  enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: false, ...extra,
+});
+
+function enable(screenOff = true, extra: Record<string, unknown> = {}) {
+  h.getEcoState.mockResolvedValue(state({ screen_off: screenOff, ...extra }));
+  setEcoActiveHint(true, 40, screenOff);
 }
 
-async function idle() {
-  activity.emit(false);
-  await vi.advanceTimersByTimeAsync(800);
-}
-
-async function active() {
-  activity.emit(true);
-  await vi.advanceTimersByTimeAsync(150);
+const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+async function goIdle() {
+  h.steam(false);
+  await tick(3000);
 }
 
 describe("download mode screen", () => {
@@ -69,9 +57,9 @@ describe("download mode screen", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    countdown.started = 0;
-    api.getEcoState.mockResolvedValue({ enabled: false, wake_brightness: 40, screen_off: true });
-    api.setEcoScreen.mockResolvedValue({ ok: true, asleep: true });
+    h.started = 0;
+    h.getEcoState.mockResolvedValue(state({ enabled: false }));
+    h.setEcoScreen.mockResolvedValue({ ok: true, asleep: true });
     stop = startEcoAmbient();
   });
 
@@ -81,177 +69,119 @@ describe("download mode screen", () => {
     vi.useRealTimers();
   });
 
-  it("counts down on idle, then switches the panel off; activity lights it", async () => {
-    enable(40, true);
-    expect(api.setEcoScreen).not.toHaveBeenCalled();
-    await idle();
-    expect(countdown.started).toBe(1);
-    expect(api.setEcoScreen).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(true);
-    expect(blackout.showBlackout).toHaveBeenCalled();
-    await active();
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
-    expect(blackout.hideBlackout).toHaveBeenCalled();
-    expect(brightness.set).not.toHaveBeenCalled();
+  it("counts down on Steam idle, then sleeps the panel; Steam activity wakes it", async () => {
+    enable();
+    h.raw();
+    expect(h.started).toBe(0);
+    await goIdle();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(true);
+    expect(h.showBlackout).toHaveBeenCalled();
+    h.steam(true);
+    await tick(150);
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(false);
+    expect(h.hideBlackout).toHaveBeenCalled();
+    expect(h.setBrightness).not.toHaveBeenCalled();
   });
 
-  it("activity during the countdown keeps the panel on", async () => {
-    enable(40, true);
-    await idle();
-    await active();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(countdown.cancel).toHaveBeenCalled();
-    expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
+  it("any activity during the countdown keeps the screen on", async () => {
+    enable();
+    h.steam(false);
+    await tick(0);
+    h.raw();
+    await tick(5000);
+    expect(h.cancel).toHaveBeenCalled();
+    expect(h.setEcoScreen).not.toHaveBeenCalledWith(true);
   });
 
-  it("a backend wake lifts the catch layer and goes dark again if Steam never reports input", async () => {
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    blackout.hideBlackout.mockClear();
-    backend.emit();
-    expect(blackout.hideBlackout).toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(8000);
-    expect(countdown.started).toBe(2);
+  it("raw input wakes at once, and goes dark again if Steam never reports it", async () => {
+    enable();
+    await goIdle();
+    h.raw();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(false);
+    await tick(8000);
+    expect(h.started).toBe(2);
   });
 
-  it("a backend wake followed by Steam activity follows Steam's idle again", async () => {
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    backend.emit();
-    await active();
-    await vi.advanceTimersByTimeAsync(8000);
-    expect(countdown.started).toBe(1);
+  it("raw input Steam does not count keeps the screen on while it continues", async () => {
+    enable();
+    await goIdle();
+    h.raw();
+    for (let i = 0; i < 4; i++) {
+      await tick(5000);
+      h.raw();
+    }
+    expect(h.started).toBe(1);
   });
 
-  it("a lit panel never keeps the catch layer", async () => {
-    enable(40, true, { screen_asleep: false });
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(blackout.showBlackout).toHaveBeenCalled();
-    backend.emit();
-    blackout.hideBlackout.mockClear();
-    backend.emit();
-    expect(blackout.hideBlackout).toHaveBeenCalled();
-    blackout.hideBlackout.mockClear();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(blackout.hideBlackout).toHaveBeenCalled();
+  it("a tap on the black layer wakes the screen", async () => {
+    enable();
+    await goIdle();
+    h.showBlackout.mock.calls[h.showBlackout.mock.calls.length - 1][0]!();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(false);
   });
 
-  it("a tap on the black layer brings the screen back", async () => {
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    const calls = blackout.showBlackout.mock.calls;
-    const onTap = calls[calls.length - 1][0] as () => void;
-    onTap();
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
-    expect(blackout.hideBlackout).toHaveBeenCalled();
+  it("falls back to black layer at minimum brightness when the panel is not confirmed off", async () => {
+    h.setEcoScreen.mockResolvedValue({ ok: false, asleep: false });
+    enable();
+    await goIdle();
+    expect(h.setBrightness).toHaveBeenLastCalledWith(0);
+    h.steam(true);
+    await tick(150);
+    expect(h.setBrightness).toHaveBeenLastCalledWith(0.4);
   });
 
-  it("raw input cancels the countdown at once; only Steam starts it", async () => {
-    enable(40, true);
-    backend.emit();
-    expect(countdown.started).toBe(0);
-    await idle();
-    expect(countdown.started).toBe(1);
-    backend.emit();
-    expect(countdown.cancel).toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
+  it("uses the black layer where gamescope cannot switch the panel, keeping a low pick", async () => {
+    enable(false);
+    await tick(2500);
+    h.brightness(0.01);
+    await goIdle();
+    expect(h.setEcoScreen).not.toHaveBeenCalled();
+    expect(h.setBrightness).toHaveBeenLastCalledWith(0);
+    h.steam(true);
+    await tick(150);
+    expect(h.setBrightness).toHaveBeenLastCalledWith(0.01);
   });
 
-  it("falls back to black layer and minimum brightness when the panel is not confirmed off", async () => {
-    api.setEcoScreen.mockResolvedValue({ ok: false, asleep: false });
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(brightness.set).toHaveBeenLastCalledWith(0);
-    await active();
-    expect(brightness.set).toHaveBeenLastCalledWith(0.4);
+  it("switches to panel power once it becomes available", async () => {
+    enable(false);
+    h.getEcoState.mockResolvedValue(state());
+    await tick(3000);
+    await goIdle();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(true);
   });
 
-  it("uses the black layer directly where gamescope cannot switch the panel", async () => {
-    enable(55, false);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(api.setEcoScreen).not.toHaveBeenCalled();
-    expect(blackout.showBlackout).toHaveBeenCalled();
-    expect(brightness.set).toHaveBeenLastCalledWith(0);
+  it("a lit panel never keeps the catch layer or stays asleep, whatever was missed", async () => {
+    enable(true, { screen_asleep: true });
+    await tick(3000);
+    expect(h.hideBlackout).toHaveBeenCalled();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(false);
   });
 
-  it("leaves the screen lit when download mode ends while dark", async () => {
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    api.getEcoState.mockResolvedValue({ enabled: false, wake_brightness: 40, screen_off: true });
+  it("a session picked up after a reload starts lit", async () => {
+    stop();
+    h.getEcoState.mockResolvedValue(state({ screen_off: false }));
+    stop = startEcoAmbient();
+    await tick(0);
+    expect(h.setBrightness).toHaveBeenLastCalledWith(0.4);
+  });
+
+  it("leaving download mode while dark restores the screen", async () => {
+    enable();
+    await goIdle();
     setEcoActiveHint(false, 40, true);
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
-    expect(blackout.hideBlackout).toHaveBeenCalled();
-  });
-
-  it("picking up a dark session after a Steam UI reload lights the panel", async () => {
-    stop();
-    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: true });
-    stop = startEcoAmbient();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
-  });
-
-  it("picking up a blackout session restores brightness, also on the way out", async () => {
-    stop();
-    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 55, screen_off: false, screen_asleep: false });
-    stop = startEcoAmbient();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(brightness.set).toHaveBeenLastCalledWith(0.55);
-    api.getEcoState.mockResolvedValue({ enabled: false, wake_brightness: 55, screen_off: false, screen_asleep: false });
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(brightness.set).toHaveBeenLastCalledWith(0.55);
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(false);
+    expect(h.hideBlackout).toHaveBeenCalled();
   });
 
   it("a poll answered after unload does not revive the controller", async () => {
     let answer: (s: unknown) => void = () => {};
-    enable(40, true);
-    api.getEcoState.mockReturnValue(new Promise((r) => (answer = r)));
-    await vi.advanceTimersByTimeAsync(3000);
+    enable();
+    h.getEcoState.mockReturnValue(new Promise((r) => (answer = r)));
+    await tick(3000);
     stop();
-    answer({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: false });
-    await vi.advanceTimersByTimeAsync(0);
-    await idle();
-    expect(countdown.started).toBe(0);
     stop = () => {};
-  });
-
-  it("raw input Steam does not count keeps the screen on while it continues", async () => {
-    enable(40, true);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    backend.emit();
-    for (let i = 0; i < 4; i++) {
-      await vi.advanceTimersByTimeAsync(5000);
-      backend.emit();
-    }
-    expect(countdown.started).toBe(1);
-  });
-
-  it("a brightness the user picks near zero is kept while lit", async () => {
-    enable(40, false);
-    const onBrightness = brightness.subscribed!;
-    onBrightness(0.01);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    await active();
-    expect(brightness.set).toHaveBeenLastCalledWith(0.01);
-  });
-
-  it("switches from black screen to panel power once it becomes available", async () => {
-    enable(40, false, { screen_asleep: false });
-    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: false });
-    await vi.advanceTimersByTimeAsync(3000);
-    await idle();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(api.setEcoScreen).toHaveBeenLastCalledWith(true);
+    answer(state());
+    await goIdle();
+    expect(h.started).toBe(0);
   });
 });

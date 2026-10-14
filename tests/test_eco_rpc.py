@@ -177,26 +177,29 @@ def test_manual_cpu_change_exits_eco_and_schedules_normal_tdp(
 
 
 class _FakeScreen:
-    def __init__(self, confirm_sleep=True):
-        self.probe_ok = True
-        self.asleep = False
-        self.detail = "ok"
-        self.confirm_sleep = confirm_sleep
-        self.calls = []
+    """`fails` wakes fail before one succeeds; `confirm_sleep=False` leaves a sleep unproven."""
+
+    def __init__(self, confirm_sleep=True, fails=0, gate=None):
+        self.supported, self.asleep, self.detail, self.version = True, False, "ok", None
+        self.confirm_sleep, self.fails, self.gate, self.calls = confirm_sleep, fails, gate, []
 
     def probe(self):
         return True
 
     def set(self, asleep):
         self.calls.append(asleep)
+        if asleep and self.gate:
+            self.gate.wait(2)
+        if not asleep and self.fails:
+            self.fails -= 1
+            return False
         self.asleep = asleep
         return self.confirm_sleep or not asleep
 
 
 class _FakeInput:
-    def __init__(self, sources=()):
-        self.sources = list(sources)
-        self.opened = self.closed = 0
+    def __init__(self):
+        self.sources, self.opened, self.closed = [], 0, 0
 
     def open(self):
         self.opened += 1
@@ -211,202 +214,126 @@ class _FakeInput:
         return self.sources.pop(0) if self.sources else None
 
 
-def _with_screen(p, screen, input_wake=None):
+def _setup(tmp_path, monkeypatch, screen=None):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
     p._init()
-    p._screen_sleep = screen
-    p._input_wake = input_wake or _FakeInput()
-    p._screen_reset_done = True
-    return screen
-
-
-def test_eco_state_reports_screen_off_support(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    _with_screen(p, _FakeScreen())
-    st = asyncio.run(p.get_eco_state())
-    assert st["screen_off"] is True
-    assert st["screen_asleep"] is False
-
-
-def test_screen_sleep_refused_outside_download_mode(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen())
-    r = asyncio.run(p.set_eco_screen(True))
-    assert r == {"ok": False, "asleep": False, "reason": "eco_disabled"}
-    assert screen.calls == []
-
-
-def test_screen_sleep_and_wake_in_download_mode(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen())
-
-    async def run():
-        await p.set_eco(True, 50)
-        slept = await p.set_eco_screen(True)
-        woke = await p.set_eco_screen(False)
-        return slept, woke
-
-    slept, woke = asyncio.run(run())
-    assert slept == {"ok": True, "asleep": True}
-    assert woke == {"ok": True, "asleep": False}
-    assert screen.calls == [True, False]
-
-
-def test_unconfirmed_sleep_is_undone(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen(confirm_sleep=False))
-
-    async def run():
-        await p.set_eco(True, 50)
-        return await p.set_eco_screen(True)
-
-    r = asyncio.run(run())
-    assert r["ok"] is False and r["asleep"] is False
-    assert screen.calls == [True, False]
-
-
-def test_leaving_download_mode_wakes_the_panel(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen())
-
-    async def run():
-        await p.set_eco(True, 50)
-        await p.set_eco_screen(True)
-        await p.set_eco(False, 50)
-
-    asyncio.run(run())
-    assert screen.calls == [True, False]
-
-
-def _fast_watch(monkeypatch):
+    p._screen_sleep, p._input_wake = screen or _FakeScreen(), _FakeInput()
     main = sys.modules["main"]
-    monkeypatch.setattr(main, "_ECO_INPUT_POLL_S", 0.01)
+    for name, value in (("_ECO_INPUT_POLL_S", 0.01), ("_SCREEN_WAKE_RETRY_S", 0.01)):
+        monkeypatch.setattr(main, name, value)
     emitted = []
 
     async def emit(event, *args):
-        emitted.append((event, *args))
+        emitted.append(event)
 
     monkeypatch.setattr(main, "_emit_to_frontend", emit)
-    return main, emitted
+    return p, p._screen_sleep, emitted
 
 
 async def _until(predicate, timeout=2.0):
-    loop = asyncio.get_running_loop()
-    end = loop.time() + timeout
+    end = asyncio.get_running_loop().time() + timeout
     while not predicate():
-        assert loop.time() < end
+        assert asyncio.get_running_loop().time() < end
         await asyncio.sleep(0.01)
 
 
+async def _leave(p):
+    await p.set_eco(False, 50)
+    await asyncio.wait_for(p._eco_watch_task, 2)
+
+
+def test_screen_state_and_refusal_outside_download_mode(tmp_path, monkeypatch):
+    p, screen, _ = _setup(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_eco_state())
+    assert st["screen_off"] is True and st["screen_asleep"] is False
+    assert asyncio.run(p.set_eco_screen(True)) == {"ok": False, "asleep": False}
+    assert screen.calls == []
+
+
+def test_sleep_wake_and_leaving_download_mode(tmp_path, monkeypatch):
+    p, screen, _ = _setup(tmp_path, monkeypatch)
+
+    async def run():
+        await p.set_eco(True, 50)
+        assert await p.set_eco_screen(True) == {"ok": True, "asleep": True}
+        assert await p.set_eco_screen(False) == {"ok": True, "asleep": False}
+        await p.set_eco_screen(True)
+        await _leave(p)
+
+    asyncio.run(run())
+    assert screen.calls == [True, False, True, False] and not screen.asleep
+
+
+def test_unconfirmed_sleep_is_undone(tmp_path, monkeypatch):
+    p, screen, _ = _setup(tmp_path, monkeypatch, _FakeScreen(confirm_sleep=False))
+
+    async def run():
+        await p.set_eco(True, 50)
+        r = await p.set_eco_screen(True)
+        await _leave(p)
+        return r
+
+    assert asyncio.run(run()) == {"ok": False, "asleep": False}
+    assert screen.calls == [True, False]
+
+
+def test_raw_input_lights_the_panel_and_tells_the_frontend(tmp_path, monkeypatch):
+    p, screen, emitted = _setup(tmp_path, monkeypatch)
+
+    async def run():
+        await p.set_eco(True, 50)
+        await p.set_eco_screen(True)
+        p._input_wake.sources.append("FTS3528")
+        await _until(lambda: emitted)
+        await _leave(p)
+
+    asyncio.run(run())
+    assert screen.calls == [True, False] and emitted == ["pdc_eco_input"]
+    assert p._input_wake.closed >= 1
+
+
 def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    screen = _with_screen(p, _FakeScreen())
-    main, _ = _fast_watch(monkeypatch)
-    monkeypatch.setattr(main, "_SCREEN_LEASE_S", 0.05)
+    p, screen, emitted = _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys.modules["main"], "_SCREEN_LEASE_S", 0.05)
 
     async def run():
         await p.set_eco(True, 50)
         await p.set_eco_screen(True)
-        await _until(lambda: screen.calls == [True, False])
-        await p.set_eco(False, 50)
-        await asyncio.wait_for(p._eco_watch_task, 2)
+        await _until(lambda: not screen.asleep)
+        await _leave(p)
 
     asyncio.run(run())
-    assert screen.calls == [True, False]
+    assert screen.calls == [True, False] and emitted == []
 
 
-def test_raw_input_lights_the_panel_and_reports_activity(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    touch = _FakeInput()
-    screen = _with_screen(p, _FakeScreen(), touch)
-    _, emitted = _fast_watch(monkeypatch)
+def test_failed_wake_after_leaving_download_mode_is_retried(tmp_path, monkeypatch):
+    p, screen, _ = _setup(tmp_path, monkeypatch, _FakeScreen(fails=2))
 
     async def run():
         await p.set_eco(True, 50)
         await p.set_eco_screen(True)
-        touch.sources.append("FTS3528:00 2808:1015")
-        await _until(lambda: ("pdc_eco_input",) in emitted)
-        await p.set_eco(False, 50)
-        await asyncio.wait_for(p._eco_watch_task, 2)
+        await _leave(p)
 
     asyncio.run(run())
-    assert screen.calls == [True, False]
-    assert emitted == [("pdc_eco_input",)]
-    assert touch.opened == 1 and touch.closed == 1
-
-
-def test_idleness_is_never_reported_from_raw_input(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    _with_screen(p, _FakeScreen(), _FakeInput())
-    _, emitted = _fast_watch(monkeypatch)
-
-    async def run():
-        await p.set_eco(True, 50)
-        await asyncio.sleep(0.2)
-        await p.set_eco(False, 50)
-        await asyncio.wait_for(p._eco_watch_task, 2)
-
-    asyncio.run(run())
-    assert emitted == []
+    assert screen.calls == [True, False, False, False] and not screen.asleep
 
 
 def test_wake_arriving_while_a_sleep_is_in_flight_wins(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
     import threading
-    started, release = threading.Event(), threading.Event()
-
-    class _SlowScreen(_FakeScreen):
-        def set(self, asleep):
-            if asleep:
-                started.set()
-                release.wait(2)
-            return super().set(asleep)
-
-    screen = _with_screen(p, _SlowScreen())
-    _fast_watch(monkeypatch)
+    gate = threading.Event()
+    p, screen, _ = _setup(tmp_path, monkeypatch, _FakeScreen(gate=gate))
 
     async def run():
         await p.set_eco(True, 50)
         sleeping = asyncio.create_task(p.set_eco_screen(True))
-        await asyncio.to_thread(started.wait, 2)
+        await _until(lambda: screen.calls)
         waking = asyncio.create_task(p.set_eco_screen(False))
         await asyncio.sleep(0.05)
-        release.set()
+        gate.set()
         await sleeping
         woke = await waking
-        await p.set_eco(False, 50)
-        await asyncio.wait_for(p._eco_watch_task, 2)
+        await _leave(p)
         return woke
 
-    woke = asyncio.run(run())
-    assert woke == {"ok": True, "asleep": False}
+    assert asyncio.run(run()) == {"ok": True, "asleep": False}
     assert screen.calls == [True, False]
-    assert screen.asleep is False
-
-
-def test_failed_wake_after_leaving_download_mode_is_retried(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-
-    class _StubbornScreen(_FakeScreen):
-        failures = 2
-
-        def set(self, asleep):
-            self.calls.append(asleep)
-            if not asleep and self.failures:
-                self.failures -= 1
-                return False
-            self.asleep = asleep
-            return True
-
-    screen = _with_screen(p, _StubbornScreen())
-    main, _ = _fast_watch(monkeypatch)
-    monkeypatch.setattr(main, "_SCREEN_WAKE_RETRY_S", 0.01)
-
-    async def run():
-        await p.set_eco(True, 50)
-        await p.set_eco_screen(True)
-        await p.set_eco(False, 50)
-        await asyncio.wait_for(p._eco_watch_task, 2)
-
-    asyncio.run(run())
-    assert screen.asleep is False
-    assert screen.calls == [True, False, False, False]

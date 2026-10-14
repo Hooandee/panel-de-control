@@ -4,251 +4,183 @@ import { translate } from "../i18n";
 import { subscribeActive } from "./activity";
 import { displayBrightness } from "./display";
 import { hideBlackout, showBlackout } from "./ecoBlackout";
-import { Countdown, startCountdown } from "./ecoCountdown";
+import { startCountdown } from "./ecoCountdown";
 import { fromPercent, toPercent } from "./logic";
-import { activityDebounceMs, ecoBrightness, isDimEcho, isFloorEcho } from "./eco";
 
-// Download mode's screen. Runs at plugin scope so it works with the QAM closed.
-// "panel": gamescope switches the internal panel off. "blackout": black layer over
-// Steam's UI plus minimum brightness, for gamescope builds without that control.
-type ScreenMode = "panel" | "blackout";
-
-const BLACKOUT_FLOOR_PCT = 0;
+// Download mode's screen, at plugin scope so it works with the QAM closed. Panel mode:
+// gamescope switches the internal panel off. Otherwise a black layer at minimum brightness.
+// Idleness is Steam's call (it reads every control on every handheld); the backend reports
+// raw input at once so waking is instant.
 const POLL_MS = 3000;
 const COUNTDOWN_S = 3;
-// The backend reports raw input at once; idleness is Steam's call alone, since Steam reads
-// every control on every handheld. If Steam never reports an input the backend saw, go
-// dark again after this long.
+const WAKE_DEBOUNCE_MS = 150;
+// Raw input Steam never saw gets no idle signal after it: go dark again after this long.
 const RELAPSE_MS = 8000;
 const INPUT_EVENT = "pdc_eco_input";
 
 let enabled = false;
-let mode: ScreenMode = "blackout";
-let wakePct = 40;
 let alive = false;
-let activeState = true;
-let unsubActivity: (() => void) | null = null;
-let unsubBrightness: (() => void) | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let lastDriven: number | null = null; // last brightness we drove, to spot our own echoes
-let lastDriveAt = 0;
+let panel = false;
+let active = true;
+let wakePct = 40;
+let drivenAt = 0;
 let epoch = 0;
-let countdown: Countdown | null = null;
-let relapseTimer: ReturnType<typeof setTimeout> | null = null;
+let cancelCountdown: (() => void) | null = null;
+let relapse: ReturnType<typeof setTimeout> | undefined;
+let debounce: ReturnType<typeof setTimeout> | undefined;
+let poll: ReturnType<typeof setInterval> | undefined;
+let unsubscribe: (() => void)[] = [];
 
-function driveBlackout(active: boolean): void {
-  if (active) hideBlackout();
-  else showBlackout(onRawInput);
-  lastDriven = ecoBrightness(active, wakePct, BLACKOUT_FLOOR_PCT);
-  lastDriveAt = Date.now();
-  displayBrightness.set(fromPercent(lastDriven));
+function setBrightness(pct: number): void {
+  drivenAt = Date.now();
+  displayBrightness.set(fromPercent(pct));
 }
 
 function goDark(): void {
-  if (mode === "blackout") {
-    driveBlackout(false);
+  // The layer also catches the tap that wakes a sleeping panel, so it never presses anything.
+  showBlackout(onRawInput);
+  if (!panel) {
+    setBrightness(0);
     return;
   }
-  // Catches the tap that wakes the panel so it never lands on a control underneath.
-  showBlackout(onRawInput);
   const e = epoch;
   setEcoScreen(true)
     .then((r) => {
       if (r.ok || !enabled || e !== epoch) return;
-      if (activeState) {
+      if (active) {
         hideBlackout();
         return;
       }
-      // A panel that could not be confirmed off falls back to the black layer.
-      mode = "blackout";
-      driveBlackout(false);
+      panel = false; // not confirmed off: black layer instead
+      setBrightness(0);
     })
     .catch(() => {});
 }
 
 function goLight(): void {
-  if (mode === "blackout") {
-    driveBlackout(true);
-    return;
-  }
   hideBlackout();
-  setEcoScreen(false).catch(() => {});
+  if (panel) setEcoScreen(false).catch(() => {});
+  else setBrightness(wakePct);
 }
 
-function cancelCountdown(): void {
-  countdown?.cancel();
-  countdown = null;
+function stopCountdown(): void {
+  cancelCountdown?.();
+  cancelCountdown = null;
 }
 
-function clearRelapse(): void {
-  if (relapseTimer !== null) {
-    clearTimeout(relapseTimer);
-    relapseTimer = null;
-  }
-}
-
-function drive(active: boolean): void {
-  if (!enabled) return;
-  cancelCountdown();
-  if (active) {
+function setActive(next: boolean): void {
+  if (!enabled || next === active) return;
+  active = next;
+  stopCountdown();
+  if (next) {
     goLight();
     return;
   }
-  countdown = startCountdown(COUNTDOWN_S, translate("system.eco.countdown"), () => {
-    countdown = null;
-    if (enabled && !activeState) goDark();
+  cancelCountdown = startCountdown(COUNTDOWN_S, translate("system.eco.countdown"), () => {
+    cancelCountdown = null;
+    if (enabled && !active) goDark();
   });
 }
 
 function armRelapse(): void {
-  clearRelapse();
-  relapseTimer = setTimeout(() => {
-    relapseTimer = null;
-    if (enabled && activeState) {
-      activeState = false;
-      drive(false);
-    }
+  clearTimeout(relapse);
+  relapse = setTimeout(() => {
+    relapse = undefined;
+    setActive(false);
   }, RELAPSE_MS);
 }
 
 function onRawInput(): void {
   if (!enabled) return;
-  if (mode === "panel") hideBlackout();
-  if (activeState) {
+  if (panel) hideBlackout();
+  if (active) {
     // Input Steam does not count keeps the screen on while it continues.
-    if (relapseTimer !== null) armRelapse();
+    if (relapse !== undefined) armRelapse();
     return;
   }
-  activeState = true;
-  drive(true);
+  setActive(true);
   armRelapse();
 }
 
-function onActivity(active: boolean): void {
-  clearRelapse();
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-    if (active !== activeState) {
-      activeState = active;
-      drive(active);
-    }
-  }, activityDebounceMs(active));
+function onSteamActivity(next: boolean): void {
+  clearTimeout(relapse);
+  relapse = undefined;
+  clearTimeout(debounce);
+  debounce = setTimeout(() => setActive(next), next ? WAKE_DEBOUNCE_MS : 0);
 }
 
-// Adopt a user brightness change as the new wake level; skip our own echoes and the floor.
+// A brightness the user picks while lit is the level to wake back to.
 function onBrightness(fraction: number): void {
-  if (!enabled) return;
-  const echo = toPercent(fraction);
-  if (isDimEcho(echo, lastDriven, Date.now() - lastDriveAt)) return;
-  if (lastDriven === BLACKOUT_FLOOR_PCT && isFloorEcho(echo, BLACKOUT_FLOOR_PCT)) return;
-  wakePct = echo;
+  if (enabled && active && !panel && Date.now() - drivenAt > 2000) wakePct = toPercent(fraction);
 }
 
-function startPoll(): void {
-  if (pollTimer !== null) return;
-  pollTimer = setInterval(() => {
+function enable(wake: number, screenOff: boolean): void {
+  enabled = true;
+  active = true;
+  panel = screenOff;
+  wakePct = wake;
+  drivenAt = 0;
+  addEventListener(INPUT_EVENT, onRawInput);
+  unsubscribe = [
+    subscribeActive(onSteamActivity),
+    displayBrightness.subscribe(onBrightness),
+    () => removeEventListener(INPUT_EVENT, onRawInput),
+  ].filter((u): u is () => void => u !== null);
+  poll = setInterval(() => {
     const e = epoch;
     getEcoState()
-      .then((s) => {
-        if (alive && e === epoch) sync(s);
-      })
+      .then((s) => alive && e === epoch && sync(s))
       .catch(() => {});
   }, POLL_MS);
 }
 
-function stopPoll(): void {
-  if (pollTimer !== null) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-}
-
-function teardown(): void {
-  if (unsubActivity) {
-    unsubActivity();
-    unsubActivity = null;
-  }
-  if (unsubBrightness) {
-    unsubBrightness();
-    unsubBrightness = null;
-  }
-  if (debounceTimer !== null) {
-    clearTimeout(debounceTimer);
-    debounceTimer = null;
-  }
-  removeEventListener(INPUT_EVENT, onRawInput);
-  cancelCountdown();
-  clearRelapse();
-  stopPoll();
-}
-
-function restoreScreen(): void {
+function disable(): void {
+  enabled = false;
+  unsubscribe.forEach((u) => u());
+  unsubscribe = [];
+  clearInterval(poll);
+  clearTimeout(debounce);
+  clearTimeout(relapse);
+  relapse = undefined;
+  stopCountdown();
   hideBlackout();
-  if (mode === "panel") setEcoScreen(false).catch(() => {});
-  if (lastDriven !== null) displayBrightness.set(fromPercent(wakePct));
-  lastDriven = null;
+  if (panel) setEcoScreen(false).catch(() => {});
+  else setBrightness(wakePct);
 }
 
-function reconcile(on: boolean, wake: number, screenOff: boolean): void {
-  if (on && !enabled) {
-    wakePct = wake; // snapshot only on enable; while on, wakePct tracks the user
-    mode = screenOff ? "panel" : "blackout";
-    enabled = true;
-    // The screen goes dark on Steam's next idle signal, not instantly: an input made
-    // while the user is still active would otherwise produce no idle→active wake.
-    activeState = true;
-    unsubActivity = subscribeActive(onActivity);
-    unsubBrightness = displayBrightness.subscribe(onBrightness);
-    addEventListener(INPUT_EVENT, onRawInput);
-    startPoll();
-  } else if (!on && enabled) {
-    enabled = false;
-    teardown();
-    restoreScreen();
-  }
-}
-
-// Backend state wins over whatever this controller believes, whatever event was missed.
+// The backend wins over whatever this controller believes, whatever event was missed.
 function sync(s: EcoState): void {
-  const wasEnabled = enabled;
-  reconcile(s.enabled, s.wake_brightness, s.screen_off);
-  if (!enabled) return;
-  if (!wasEnabled) {
-    // Picked up a session already running (Steam UI or plugin reload): start from a lit screen.
-    if (s.screen_asleep) setEcoScreen(false).catch(() => {});
-    if (mode === "blackout") driveBlackout(true);
+  if (!s.enabled) {
+    if (enabled) disable();
     return;
   }
-  if (!activeState || countdown) return;
-  if (mode === "panel") {
+  if (!enabled) {
+    enable(s.wake_brightness, s.screen_off);
+    goLight(); // a running session picked up after a reload starts lit
+    return;
+  }
+  if (!active || cancelCountdown) return;
+  if (!panel && s.screen_off) panel = true; // panel power became available
+  if (panel) {
     hideBlackout();
     if (s.screen_asleep) setEcoScreen(false).catch(() => {});
-  } else if (s.screen_off) {
-    // Panel power became available (late gamescope probe, or a fallback after one failed sleep).
-    driveBlackout(true);
-    mode = "panel";
   }
 }
 
 export function setEcoActiveHint(on: boolean, wake: number, screenOff: boolean): void {
   epoch += 1;
-  reconcile(on, wake, screenOff);
+  if (on && !enabled) enable(wake, screenOff);
+  else if (!on && enabled) disable();
 }
 
 export function startEcoAmbient(): () => void {
   alive = true;
   const e = epoch;
   getEcoState()
-    .then((s) => {
-      if (alive && e === epoch) sync(s);
-    })
+    .then((s) => alive && e === epoch && sync(s))
     .catch(() => {});
   return () => {
     alive = false;
-    if (enabled) restoreScreen(); // don't leave the panel dark
-    enabled = false;
-    teardown();
+    if (enabled) disable();
   };
 }

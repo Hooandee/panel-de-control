@@ -767,7 +767,6 @@ class Plugin:
         self._screen_lock = asyncio.Lock()
         self._screen_want = False
         self._eco_watch_task = None
-        self._screen_reset_done = False
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
         self._hud = HudStore(
@@ -2611,8 +2610,10 @@ class Plugin:
                         "set_available": bool(brightness.get("set_available", False)),
                     },
                 }
+        screen = self._screen_sleep
         return {"backend": backend, "frontend": frontend,
-                "screen_off": self._screen_sleep.diagnostics()}
+                "screen_off": {"supported": screen.supported, "asleep": screen.asleep,
+                               "detail": screen.detail, "gamescope": screen.version}}
 
     @staticmethod
     def _with_theme_display(themes, context):
@@ -8543,118 +8544,83 @@ class Plugin:
             "affects_boost": self._boost.supported,
             # The brightness % to wake back to (pre-eco snapshot).
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
-            "screen_off": self._screen_sleep.probe_ok,
+            "screen_off": self._screen_sleep.supported,
             "screen_asleep": self._screen_sleep.asleep,
         }
 
     async def get_eco_state(self) -> dict:
         self._init()
         self._screen_lease_at = time.monotonic()
-        if not self._screen_sleep.probe_ok:
-            await asyncio.to_thread(self._probe_screen_sleep)
+        if not self._screen_sleep.supported:
+            await asyncio.to_thread(self._screen_sleep.probe)
         if self._settings.get("eco_enabled"):
             self._start_eco_watch()
         return self._eco_state()
 
-    def _probe_screen_sleep(self) -> None:
-        screen = self._screen_sleep
-        if not screen.probe() or self._screen_reset_done:
-            return
-        self._screen_reset_done = True
-        decky.logger.info("eco screen-off: supported")
-        # A previous plugin process may have died with the panel asleep.
-        if not screen.asleep:
-            screen.set(False)
-
-    def _journal_screen(self, event: str, ok: bool, **fields) -> None:
-        diary = journal.active
-        if diary is not None:
-            diary.write("INFO" if ok else "WARNING", "display", event, ok=ok,
-                        detail=self._screen_sleep.detail, **fields)
-
     async def set_eco_screen(self, asleep: bool) -> dict:
-        """Download mode's panel power. Sleeping is only honoured while download mode is on;
-        a sleep that cannot be confirmed is undone so the panel never stays dark unproven."""
+        """Download mode's panel power, only while download mode is on. A sleep that cannot be
+        confirmed is undone so the panel never stays dark unproven."""
         self._init()
-        screen = self._screen_sleep
-        asleep = bool(asleep)
         if asleep and not self._settings.get("eco_enabled"):
-            self._journal_screen("screen_sleep", False, reason="eco_disabled")
-            return {"ok": False, "asleep": screen.asleep, "reason": "eco_disabled"}
+            return {"ok": False, "asleep": self._screen_sleep.asleep}
         self._screen_lease_at = time.monotonic()
-        ok = await self._apply_screen(asleep)
+        ok = await self._apply_screen(bool(asleep), "frontend")
         if asleep and not ok:
-            await self._wake_screen("sleep_unconfirmed")
-        elif ok and asleep:
-            self._start_eco_watch()
-        return {"ok": ok, "asleep": screen.asleep}
+            await self._apply_screen(False, "sleep_unconfirmed")
+        return {"ok": ok, "asleep": self._screen_sleep.asleep}
 
-    async def _apply_screen(self, asleep: bool, **fields) -> bool:
-        """Serialises panel switches; whoever gets the lock applies the latest request, so a
-        wake that arrives while a sleep is still in flight is never lost."""
+    async def _apply_screen(self, asleep: bool, reason: str, source: str | None = None) -> bool:
+        """The latest request wins, so a wake arriving while a sleep is in flight is never lost."""
         self._screen_want = asleep
         async with self._screen_lock:
-            want = self._screen_want
-            screen = self._screen_sleep
+            want, screen = self._screen_want, self._screen_sleep
             ok = True
             if want != screen.asleep:
                 ok = await asyncio.to_thread(screen.set, want)
-                self._journal_screen("screen_sleep" if want else "screen_wake", ok, **fields)
+                diary = journal.active
+                if diary is not None:
+                    diary.write("INFO" if ok else "WARNING", "display",
+                                "screen_sleep" if want else "screen_wake", ok=ok, reason=reason,
+                                detail=screen.detail, **({"source": source} if source else {}))
             return ok and want == asleep
 
-    async def _wake_screen(self, reason: str, source: str | None = None) -> None:
-        screen = getattr(self, "_screen_sleep", None)
-        if screen is None or not (screen.asleep or self._screen_want):
-            return
-        await self._apply_screen(False, reason=reason, **({"source": source} if source else {}))
-
-    async def _emit_eco_input(self) -> None:
-        try:
-            await _emit_to_frontend(_ECO_INPUT_EVENT)
-        except Exception:  # noqa: BLE001 — the frontend still has Steam's activity signal
-            pass
-
     def _start_eco_watch(self) -> None:
-        task = self._eco_watch_task
-        if task is None or task.done():
+        if self._eco_watch_task is None or self._eco_watch_task.done():
             self._eco_watch_task = asyncio.create_task(self._eco_watch())
 
     async def _eco_watch(self) -> None:
-        """While download mode is on: light the panel on the first raw input and report it
-        to the frontend at once (Steam's activity signal is seconds late). Idleness stays
-        Steam's call: it reads every control on every handheld, the raw watch may not. If
-        Steam's UI stops renewing the lease (crash, plugin reload) the panel is lit anyway
-        so it never stays dark with nothing to wake it."""
-        watch = self._input_wake
+        """Lights the panel on the first raw input and tells the frontend at once; idleness is
+        Steam's call (it reads every control, this watch may not). Also the panel's way back
+        when download mode ends or Steam's UI stops renewing the lease, retrying failed wakes."""
+        watch, screen = self._input_wake, self._screen_sleep
         opened_at = reported_at = float("-inf")
         try:
-            while self._settings.get("eco_enabled"):
+            while True:
+                eco = bool(self._settings.get("eco_enabled"))
+                if screen.asleep and (not eco or time.monotonic() - self._screen_lease_at > _SCREEN_LEASE_S):
+                    if not await self._apply_screen(False, "lease_expired" if eco else "eco_disabled"):
+                        await asyncio.sleep(_SCREEN_WAKE_RETRY_S)
+                    continue
+                if not eco:
+                    return
                 if time.monotonic() - opened_at >= _ECO_RESCAN_S:
                     # Controllers come and go (Bluetooth, docks, Steam recreating nodes).
                     await asyncio.to_thread(watch.open)
                     opened_at = time.monotonic()
                 source = await asyncio.to_thread(watch.wait, _ECO_INPUT_POLL_S)
-                now = time.monotonic()
-                if source is not None:
-                    woke = self._screen_sleep.asleep
-                    if woke:
-                        await self._wake_screen("input", source=source)
-                    if woke or now - reported_at >= _ECO_INPUT_REPORT_S:
-                        reported_at = now
-                        await self._emit_eco_input()
-                if self._screen_sleep.asleep and now - self._screen_lease_at > _SCREEN_LEASE_S:
-                    await self._wake_screen("lease_expired")
+                if source is None:
+                    continue
+                woke = screen.asleep
+                if woke:
+                    await self._apply_screen(False, "input", source)
+                if woke or time.monotonic() - reported_at >= _ECO_INPUT_REPORT_S:
+                    reported_at = time.monotonic()
+                    try:
+                        await _emit_to_frontend(_ECO_INPUT_EVENT)
+                    except Exception:  # noqa: BLE001 - the frontend still has Steam's signal
+                        pass
         finally:
             await asyncio.to_thread(watch.close)
-            await self._wake_screen("eco_watch_stopped")
-            # Nothing else retries a failed wake once download mode is off.
-            while (self._screen_sleep.asleep and not self._settings.get("eco_enabled")
-                   and not getattr(self, "_shutting_down", False)):
-                await asyncio.sleep(_SCREEN_WAKE_RETRY_S)
-                await self._wake_screen("retry")
-            if self._settings.get("eco_enabled") and not getattr(self, "_shutting_down", False):
-                # Re-enabled while this watch was winding down.
-                asyncio.get_running_loop().call_soon(self._start_eco_watch)
 
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
@@ -8672,7 +8638,7 @@ class Plugin:
         if enabled:
             self._start_eco_watch()
         else:
-            await self._wake_screen("eco_disabled")
+            await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
         return self._eco_state()
 
@@ -12884,10 +12850,10 @@ class Plugin:
     async def _unload(self) -> None:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
-        watch = getattr(self, "_eco_watch_task", None)
-        if watch is not None:
-            watch.cancel()
-        await self._wake_screen("unload")
+        if getattr(self, "_screen_sleep", None) is not None:
+            if self._eco_watch_task is not None:
+                self._eco_watch_task.cancel()
+            await self._apply_screen(False, "unload")
         await self._stop_kiosk()
         await self._stop_remote_access()
         try:
