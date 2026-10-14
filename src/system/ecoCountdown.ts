@@ -1,4 +1,4 @@
-import { findSP } from "@decky/ui";
+import { findSP, quickAccessMenuClasses } from "@decky/ui";
 import { getQamDocument } from "../qamDocument";
 
 const ID = "pdc-eco-countdown";
@@ -16,14 +16,17 @@ function visibleDocument(): Document | null {
   return findSP()?.document ?? null;
 }
 
-// The QAM window extends past the right edge of the screen; centre on its visible panel.
+// The QAM window's size and offset differ per handheld (on some it runs past the screen
+// edge); centre on its visible content: right of the tab strip, left of the screen edge.
 function placement(doc: Document): string {
   if (doc !== getQamDocument()) return "left:50%;bottom:88px";
   const view = doc.defaultView;
-  if (!view) return "left:50%;bottom:24px";
-  const right = Math.min(view.innerWidth, view.screen.width - view.screenX);
-  const panelLeft = doc.querySelector(".Panel")?.getBoundingClientRect().left ?? 0;
-  return `left:${Math.round((panelLeft + right) / 2)}px;bottom:24px`;
+  const menu = doc.querySelector(`.${quickAccessMenuClasses.Menu}`)?.getBoundingClientRect();
+  if (!view || !menu || menu.width === 0) return "left:50%;bottom:24px";
+  const tabs = doc.querySelector(`.${quickAccessMenuClasses.Tabs}`)?.getBoundingClientRect();
+  const left = Math.max(menu.left, tabs?.right ?? menu.left);
+  const right = Math.min(menu.right, view.screen.width - view.screenX);
+  return `left:${Math.round((left + right) / 2)}px;bottom:24px`;
 }
 
 // Small pill over Steam's UI counting down to the screen going dark; `onDone` runs when it
