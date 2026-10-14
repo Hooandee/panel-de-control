@@ -9,6 +9,8 @@ from kiosk.displays import SYSTEM_PYTHON, SecondaryDisplay
 from user_session import spawn_args
 
 UNIT = "pdc-kiosk"
+# Armada 20261010+ keeps its own gamescope on the bottom panel, holding the lease the kiosk needs.
+ARMADA_BOTTOM_UNIT = "armada-bottom-gamescope.service"
 URL_ENV = "PDC_KIOSK_URL"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 NATIVE = os.path.join(_HERE, "native", "app.py")
@@ -59,14 +61,30 @@ class KioskLauncher:
     def last_words(self) -> str:
         if self._started_at is None:
             return ""
-        # The unit's own output only, not the service manager's lines about it.
-        code, out = self._systemd(["journalctl", "--user", f"_SYSTEMD_USER_UNIT={UNIT}.service",
-                                   f"--since=@{self._started_at}", "--lines=2", "--output=cat", "--no-pager"])
-        return out[-300:] if code == 0 else ""
+        since = f"--since=@{self._started_at}"
+        # A process killed by a signal prints nothing; then only the service manager's line says why.
+        for selector in (f"_SYSTEMD_USER_UNIT={UNIT}.service", f"--unit={UNIT}.service"):
+            code, out = self._systemd(["journalctl", "--user", selector, since, "--lines=2", "--output=cat", "--no-pager"])
+            if code == 0 and out:
+                return out[-300:]
+        return ""
 
     def is_active(self) -> bool:
         code, out = self._systemd(["systemctl", "--user", "is-active", UNIT])
         return code == 0 and out == "active"
+
+    def yield_armada_bottom(self) -> bool:
+        _, out = self._systemd(["systemctl", "--user", "is-active", ARMADA_BOTTOM_UNIT])
+        # "activating": its Restart=always loop while the kiosk holds the lease.
+        if out not in ("active", "activating"):
+            return False
+        # Blocking stop: the lease is free only once that gamescope has exited.
+        code, _ = self._systemd(["systemctl", "--user", "stop", ARMADA_BOTTOM_UNIT])
+        return code == 0
+
+    def restore_armada_bottom(self) -> bool:
+        code, _ = self._systemd(["systemctl", "--user", "start", "--no-block", ARMADA_BOTTOM_UNIT])
+        return code == 0
 
     def stop(self) -> tuple[bool, str]:
         # --no-block: Decky SIGKILLs a plugin that takes 5 s to unload, and a killed plugin

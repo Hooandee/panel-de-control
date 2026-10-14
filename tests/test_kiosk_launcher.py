@@ -3,7 +3,7 @@ import sys
 
 from kiosk import displays
 from kiosk.displays import Detection, SecondaryDisplay, detect, parse_device_env
-from kiosk.launcher import KioskLauncher, UNIT, launch_argv
+from kiosk.launcher import ARMADA_BOTTOM_UNIT, KioskLauncher, UNIT, launch_argv
 from user_session import UserSession
 
 THOR_ENV = """ARMADA_DEVICE_ID=ayn-thor
@@ -138,3 +138,38 @@ def test_stop_does_not_wait_for_the_bottom_screen_to_exit():
     ok, _ = launcher.stop()
     assert ok
     assert [cmd[-3:] for cmd, _env, _identity in calls] == [["stop", "--no-block", UNIT]]
+
+
+def test_last_words_fall_back_to_the_service_manager_when_the_app_said_nothing():
+    launcher, calls = _launcher([
+        (0, ""), (0, ""), (0, ""),
+        (0, "pdc-kiosk.service: Main process exited, code=killed, status=9/KILL"),
+    ])
+    launcher.start("http://127.0.0.1:1/?k=t")
+    assert launcher.last_words().endswith("status=9/KILL")
+    cmd = calls[-1][0]
+    assert "--unit=pdc-kiosk.service" in cmd
+    assert any(part.startswith("--since=@") for part in cmd)
+
+
+def test_armada_bottom_gamescope_is_stopped_only_while_it_runs():
+    launcher, calls = _launcher([(0, "active"), (0, "")])
+    assert launcher.yield_armada_bottom()
+    assert [cmd[-2:] for cmd, _env, _identity in calls] == [
+        ["is-active", ARMADA_BOTTOM_UNIT], ["stop", ARMADA_BOTTOM_UNIT],
+    ]
+    launcher, calls = _launcher([(3, "inactive")])
+    assert not launcher.yield_armada_bottom()
+    assert len(calls) == 1
+
+
+def test_armada_bottom_gamescope_is_given_back_without_waiting():
+    launcher, calls = _launcher([(0, "")])
+    assert launcher.restore_armada_bottom()
+    assert [cmd[-3:] for cmd, _env, _identity in calls] == [["start", "--no-block", ARMADA_BOTTOM_UNIT]]
+
+
+def test_an_armada_bottom_gamescope_in_its_restart_loop_is_stopped_too():
+    launcher, calls = _launcher([(3, "activating"), (0, "")])
+    assert launcher.yield_armada_bottom()
+    assert calls[-1][0][-2:] == ["stop", ARMADA_BOTTOM_UNIT]
