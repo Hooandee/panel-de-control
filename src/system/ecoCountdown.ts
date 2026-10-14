@@ -42,19 +42,19 @@ export function startCountdown(
     pill.id = ID;
     pill.style.cssText = [
       "position:fixed", placement(doc), "z-index:2147483646",
-      "display:flex", "align-items:center", "gap:10px", "padding:7px 16px 7px 8px",
+      "display:flex", "align-items:center", "gap:10px", "padding:7px 8px 7px 16px",
       "border-radius:999px", "background:rgba(14,20,27,0.92)",
       "box-shadow:0 8px 28px rgba(0,0,0,0.45),inset 0 0 0 1px rgba(255,255,255,0.08)",
       "color:#dfe3ea", "font:500 14px 'Motiva Sans',Arial,sans-serif", "letter-spacing:0.01em",
       "pointer-events:none", "transform:translate(-50%,0)",
     ].join(";");
     pill.innerHTML =
-      `<svg width="26" height="26" viewBox="0 0 26 26" style="display:block">` +
+      `<span></span><svg width="26" height="26" viewBox="0 0 26 26" style="display:block">` +
       `<circle cx="13" cy="13" r="${RING_R}" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="2.5"/>` +
       `<circle cx="13" cy="13" r="${RING_R}" fill="none" stroke="#59bf40" stroke-width="2.5" stroke-linecap="round"` +
       ` stroke-dasharray="${RING_LEN}" stroke-dashoffset="0" transform="rotate(-90 13 13)"/>` +
       `<text x="13" y="17.5" text-anchor="middle" fill="#ffffff" style="font:600 12px 'Motiva Sans',Arial,sans-serif">${seconds}</text>` +
-      `</svg><span></span>`;
+      `</svg>`;
     pill.querySelector("span")!.textContent = label;
     digit = pill.querySelector("text");
     doc.body.appendChild(pill);

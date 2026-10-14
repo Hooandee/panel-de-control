@@ -194,9 +194,8 @@ class _FakeScreen:
 
 
 class _FakeInput:
-    def __init__(self, sources=(), controls_seen=True):
+    def __init__(self, sources=()):
         self.sources = list(sources)
-        self.controls_seen = controls_seen
         self.opened = self.closed = 0
 
     def open(self):
@@ -281,7 +280,6 @@ def test_leaving_download_mode_wakes_the_panel(tmp_path, monkeypatch):
 def _fast_watch(monkeypatch):
     main = sys.modules["main"]
     monkeypatch.setattr(main, "_ECO_INPUT_POLL_S", 0.01)
-    monkeypatch.setattr(main, "_ECO_IDLE_S", 0.03)
     emitted = []
 
     async def emit(event, *args):
@@ -316,7 +314,7 @@ def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
     assert screen.calls == [True, False]
 
 
-def test_raw_input_reports_idle_and_activity_and_lights_the_panel(tmp_path, monkeypatch):
+def test_raw_input_lights_the_panel_and_reports_activity(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
     touch = _FakeInput()
     screen = _with_screen(p, _FakeScreen(), touch)
@@ -324,35 +322,28 @@ def test_raw_input_reports_idle_and_activity_and_lights_the_panel(tmp_path, monk
 
     async def run():
         await p.set_eco(True, 50)
-        await _until(lambda: ("pdc_eco_activity", False) in emitted)
         await p.set_eco_screen(True)
         touch.sources.append("FTS3528:00 2808:1015")
         await _until(lambda: ("pdc_eco_activity", True) in emitted)
-        assert (await p.get_eco_state())["fast_idle"] is True
         await p.set_eco(False, 50)
         await asyncio.wait_for(p._eco_watch_task, 2)
 
     asyncio.run(run())
     assert screen.calls == [True, False]
-    assert emitted[:2] == [("pdc_eco_activity", False), ("pdc_eco_activity", True)]
+    assert emitted == [("pdc_eco_activity", True)]
     assert touch.opened == 1 and touch.closed == 1
-    assert p._eco_fast_idle is False
 
 
-def test_unproven_controls_leave_idleness_to_steam(tmp_path, monkeypatch):
+def test_idleness_is_never_reported_from_raw_input(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    silent = _FakeInput(controls_seen=False)
-    _with_screen(p, _FakeScreen(), silent)
+    _with_screen(p, _FakeScreen(), _FakeInput())
     _, emitted = _fast_watch(monkeypatch)
 
     async def run():
         await p.set_eco(True, 50)
         await asyncio.sleep(0.2)
-        state = await p.get_eco_state()
         await p.set_eco(False, 50)
         await asyncio.wait_for(p._eco_watch_task, 2)
-        return state
 
-    state = asyncio.run(run())
+    asyncio.run(run())
     assert emitted == []
-    assert state["fast_idle"] is False

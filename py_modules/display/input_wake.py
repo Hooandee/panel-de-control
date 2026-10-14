@@ -1,9 +1,10 @@
 """Raw input watch for download mode: lights the panel the moment the user touches the
-device and measures idleness without waiting for Steam's activity signal (seconds late).
+device, without waiting for Steam's activity signal (seconds late).
 
-The kernel exposes touch, keys and most handheld gamepads as evdev. The Steam Deck's
-controls are only read by Steam over hidraw, so its controller reports are parsed too;
-hidraw is not exclusive, Steam keeps receiving every report.
+The kernel exposes touch, keys and most handheld gamepads as evdev. Controllers speaking
+Valve's protocol (Steam Deck, Legion Go S) are read by Steam over hidraw while their evdev
+node stays silent, so their state reports are parsed too; hidraw is not exclusive, Steam
+keeps receiving every report.
 """
 
 import fcntl
@@ -15,15 +16,11 @@ import time
 EV_KEY = 0x01
 EV_ABS = 0x03
 EV_SW = 0x05
-BTN_JOYSTICK = 0x120
-BTN_SOUTH = 0x130
 _EVENT = struct.Struct("llHHi")
 _ABSINFO = struct.Struct("6i")
 # Analog axes must travel this share of their range so stick drift never counts as input.
 _ABS_TRAVEL = 0.08
-# Steam's own virtual gamepad mirrors input only for games; it proves nothing about coverage.
-_STEAM_VIRTUAL_PAD = ("28de", "11ff")
-_DECK_HID_ID = "000028DE:00001205"
+_VALVE_HID = "HID_ID=0003:000028DE:"
 _DECK_STATE = 0x09
 _DECK_STICK_TRAVEL = int(32767 * _ABS_TRAVEL)
 # The Deck controller streams ~250 reports/s even at rest; drain in batches instead of
@@ -81,16 +78,11 @@ class InputWake:
         self._fds = {}
         self._hidraw = {}
         self._abs = {}
-        self._pads = set()
-        # Only input actually read from a controller proves the watch sees the controls:
-        # on some handhelds Steam reads the pad over hidraw and its evdev node stays silent.
-        self.controls_seen = False
 
     def _open_evdev(self, name):
         base = os.path.join(self._sys, name, "device")
         try:
             ev = _bits(_read(os.path.join(base, "capabilities/ev")))
-            keys = _bits(_read(os.path.join(base, "capabilities/key")) or "0")
         except ValueError:
             return
         if not ev & (1 << EV_KEY) or ev & (1 << EV_SW):
@@ -100,12 +92,9 @@ class InputWake:
         except OSError:
             return
         self._fds[fd] = _read(os.path.join(base, "name")) or name
-        vid_pid = (_read(os.path.join(base, "id/vendor")), _read(os.path.join(base, "id/product")))
-        if keys & ((1 << BTN_SOUTH) | (1 << BTN_JOYSTICK)) and vid_pid != _STEAM_VIRTUAL_PAD:
-            self._pads.add(fd)
 
     def _open_hidraw(self, name):
-        if f"HID_ID=0003:{_DECK_HID_ID}" not in _read(os.path.join(self._sys_hidraw, name, "device/uevent")):
+        if _VALVE_HID not in _read(os.path.join(self._sys_hidraw, name, "device/uevent")):
             return
         try:
             fd = os.open(os.path.join(self._dev_root, name), os.O_RDONLY | os.O_NONBLOCK)
@@ -136,8 +125,6 @@ class InputWake:
         self._fds = {}
         self._hidraw = {}
         self._abs = {}
-        self._pads = set()
-        self.controls_seen = False
 
     def _axis(self, fd, code):
         key = (fd, code)
@@ -191,11 +178,9 @@ class InputWake:
                 return None
             for fd in ready:
                 if fd in self._fds and self._evdev_input(fd):
-                    self.controls_seen = self.controls_seen or fd in self._pads
                     return self._fds[fd]
                 if fd in self._hidraw and self._hidraw_input(fd):
-                    self.controls_seen = True
-                    return "Steam Deck controller"
+                    return "Valve controller"
             if self._clock() >= deadline:
                 return None
             if any(fd in self._hidraw for fd in ready):

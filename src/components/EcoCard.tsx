@@ -8,47 +8,56 @@ import { theme } from "../theme";
 
 interface Props {
   state: EcoState;
-  /** Whether this device exposes a brightness API — without it and without panel
-   *  power control the card never claims a dark screen it can't produce. */
-  brightnessSupported: boolean;
   onToggle: (enabled: boolean) => void;
 }
 
-const Effect: FC<{ icon: ReactNode; label: string; active: boolean }> = ({ icon, label, active }) => (
-  <div style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: active ? theme.color.ok : theme.color.textMuted }}>
-    {icon} {label}
+const Effect: FC<{ icon: ReactNode; label: string; value: string; active: boolean }> = ({ icon, label, value, active }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
+      {icon} {label}
+    </span>
+    <span style={{ color: active ? theme.color.ok : theme.color.textMuted, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+      {value}
+    </span>
   </div>
 );
 
 /** Download mode: one tap drops the device to low power (TDP min, boost off, screen
- *  off while idle) while a game downloads unattended. Shows the effects it will apply. */
-export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => {
+ *  off while idle) while a game downloads unattended. Lists the effects it applies. */
+export const EcoCard: FC<Props> = ({ state, onToggle }) => {
   const { t } = useI18n();
   const on = state.enabled;
+  const level = state.tdp_unit === "level";
 
   return (
     <PanelSectionRow>
       <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", boxShadow: on ? `inset 0 0 0 1px ${theme.color.ok}` : theme.card.boxShadow }}>
-        <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-          <LuLeaf size={16} color={theme.color.ok} /> {t("system.eco.title")}
-        </div>
         <ToggleField
-          label={t("system.eco.desc")}
+          label={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
+              <LuLeaf size={16} color={theme.color.ok} /> {t("system.eco.title")}
+            </span>
+          }
+          description={t("system.eco.desc")}
           checked={on}
           onChange={onToggle}
           bottomSeparator="none"
         />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.md, marginTop: theme.space.xs }}>
-          <Effect icon={<LuZap size={12} />} label={
-            state.tdp_unit === "level"
-              ? t("system.eco.effect.level", { level: state.tdp_min_w })
-              : t("system.eco.effect.tdp", { watts: state.tdp_min_w })
-          } active={on} />
-          {(state.screen_off || brightnessSupported) && (
-            <Effect icon={<LuMonitorOff size={12} />} label={t(state.screen_off ? "system.eco.effect.screen" : "system.eco.effect.blackout")} active={on} />
-          )}
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, marginTop: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}` }}>
+          <Effect
+            icon={<LuZap size={12} />}
+            label={t(level ? "system.eco.row.level" : "system.eco.row.tdp")}
+            value={level ? t("system.eco.value.level", { level: state.tdp_min_w }) : `${state.tdp_min_w} W`}
+            active={on}
+          />
+          <Effect
+            icon={<LuMonitorOff size={12} />}
+            label={t("system.eco.row.screen")}
+            value={t(state.screen_off ? "system.eco.value.screenOff" : "system.eco.value.screenBlack")}
+            active={on}
+          />
           {state.affects_boost && (
-            <Effect icon={<LuRocket size={12} />} label={t("system.eco.effect.boost")} active={on} />
+            <Effect icon={<LuRocket size={12} />} label={t("system.eco.row.turbo")} value={t("system.eco.value.turboOff")} active={on} />
           )}
         </div>
       </div>

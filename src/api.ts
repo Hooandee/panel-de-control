@@ -810,8 +810,6 @@ export interface EcoState {
   // gamescope can switch the internal panel off (otherwise: black layer + minimum brightness).
   screen_off: boolean;
   screen_asleep: boolean;
-  // Raw input covers this device's controls; idleness does not wait for Steam.
-  fast_idle: boolean;
 }
 
 export interface EcoScreenResult {

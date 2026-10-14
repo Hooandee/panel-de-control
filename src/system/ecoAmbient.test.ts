@@ -120,28 +120,9 @@ describe("download mode screen", () => {
     expect(countdown.started).toBe(1);
   });
 
-  it("backend idleness starts the countdown without waiting for Steam", async () => {
-    enable(40, true);
-    backend.emit(false);
-    expect(countdown.started).toBe(1);
-    backend.emit(true);
-    expect(countdown.cancel).toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
-  });
-
-  it("where raw input covers the controls, Steam's late idleness is ignored", async () => {
-    enable(40, true, { fast_idle: true, screen_asleep: false });
-    await vi.advanceTimersByTimeAsync(3000);
-    await idle();
-    expect(countdown.started).toBe(0);
-    backend.emit(false);
-    expect(countdown.started).toBe(1);
-  });
-
   it("a lit panel never keeps the catch layer", async () => {
-    enable(40, true, { fast_idle: true, screen_asleep: false });
-    backend.emit(false);
+    enable(40, true, { screen_asleep: false });
+    await idle();
     await vi.advanceTimersByTimeAsync(3000);
     expect(blackout.showBlackout).toHaveBeenCalled();
     backend.emit(true);
@@ -162,6 +143,18 @@ describe("download mode screen", () => {
     onTap();
     expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
     expect(blackout.hideBlackout).toHaveBeenCalled();
+  });
+
+  it("raw input cancels the countdown at once; only Steam starts it", async () => {
+    enable(40, true);
+    backend.emit(false);
+    expect(countdown.started).toBe(0);
+    await idle();
+    expect(countdown.started).toBe(1);
+    backend.emit(true);
+    expect(countdown.cancel).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);
   });
 
   it("falls back to black layer and minimum brightness when the panel is not confirmed off", async () => {

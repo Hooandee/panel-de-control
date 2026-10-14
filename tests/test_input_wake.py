@@ -6,17 +6,13 @@ _EVENT = struct.Struct("llHHi")
 ABS_X, BTN_SOUTH, BTN_TOUCH = 0x00, 0x130, 0x14A
 
 
-def _device(tmp_path, name, label, ev_bits, events=(), keys=0, vid_pid=("045e", "028e")):
+def _device(tmp_path, name, label, ev_bits, events=()):
     dev = tmp_path / "dev"
     sysfs = tmp_path / "sys" / name / "device" / "capabilities"
     dev.mkdir(exist_ok=True)
     sysfs.mkdir(parents=True)
     (sysfs / "ev").write_text(f"{ev_bits:x}\n")
-    (sysfs / "key").write_text(f"{keys:x}\n")
     (sysfs.parent / "name").write_text(label + "\n")
-    (sysfs.parent / "id").mkdir()
-    (sysfs.parent / "id" / "vendor").write_text(vid_pid[0] + "\n")
-    (sysfs.parent / "id" / "product").write_text(vid_pid[1] + "\n")
     (dev / name).write_bytes(b"".join(_EVENT.pack(0, 0, *e) for e in events))
 
 
@@ -85,36 +81,19 @@ def test_close_releases_devices(tmp_path):
     assert watch.wait(0) is None
 
 
-def test_only_input_read_from_a_real_controller_proves_coverage(tmp_path):
-    _device(tmp_path, "event2", "Legion Go S", 0x20000B, keys=1 << BTN_SOUTH, vid_pid=("1a86", "e310"))
-    _device(tmp_path, "event10", "Microsoft X-Box 360 pad 0", 0x20000B, [(EV_KEY, BTN_SOUTH, 1)],
-            keys=1 << BTN_SOUTH, vid_pid=("28de", "11ff"))
-    watch = _watch(tmp_path)
-    watch.open()
-    assert watch.wait(0) == "Microsoft X-Box 360 pad 0"
-    assert watch.controls_seen is False
-
-
-def test_silent_controller_does_not_prove_coverage_but_a_press_does(tmp_path):
-    _device(tmp_path, "event2", "Legion Go S", 0x20000B, keys=1 << BTN_SOUTH, vid_pid=("1a86", "e310"))
-    watch = _watch(tmp_path)
-    watch.open()
-    assert watch.wait(0) is None
-    assert watch.controls_seen is False
-    (tmp_path / "dev" / "event2").write_bytes(_EVENT.pack(0, 0, EV_KEY, BTN_SOUTH, 1))
-    watch.open()
-    assert watch.wait(0) == "Legion Go S"
-    assert watch.controls_seen is True
-
-
 def test_deck_controller_button_press_is_input(tmp_path):
     _hidraw(tmp_path, "hidraw2", "000028DE:00001205",
             [_deck_report(imu=900), _deck_report(buttons=1 << 7, imu=-300)])
     watch = _watch(tmp_path)
     assert watch.open() == 1
-    assert watch.controls_seen is False
-    assert watch.wait(0) == "Steam Deck controller"
-    assert watch.controls_seen is True
+    assert watch.wait(0) == "Valve controller"
+
+
+def test_legion_go_s_valve_protocol_controller_is_read(tmp_path):
+    _hidraw(tmp_path, "hidraw7", "000028DE:000012FF", [_deck_report(sticks=(0, 12000, 0, 0))])
+    watch = _watch(tmp_path)
+    assert watch.open() == 1
+    assert watch.wait(0) == "Valve controller"
 
 
 def test_deck_controller_at_rest_is_not_input(tmp_path):

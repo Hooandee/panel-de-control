@@ -16,9 +16,9 @@ type ScreenMode = "panel" | "blackout";
 const BLACKOUT_FLOOR_PCT = 0;
 const POLL_MS = 3000;
 const COUNTDOWN_S = 3;
-// Raw input from the backend: activity at once, idleness only where it covers the controls.
-// After a backend wake with no backend idleness to follow, Steam may never report the input
-// (it never saw it); go dark again after this long.
+// The backend reports raw input at once; idleness is Steam's call alone, since Steam reads
+// every control on every handheld. If Steam never reports an input the backend saw, go
+// dark again after this long.
 const RELAPSE_MS = 8000;
 const ACTIVITY_EVENT = "pdc_eco_activity";
 
@@ -35,8 +35,6 @@ let lastDriven: number | null = null; // last brightness we drove, to spot our o
 let lastDriveAt = 0;
 let epoch = 0;
 let countdown: Countdown | null = null;
-// The backend's raw input covers this device's controls: it alone decides idleness.
-let fastIdle = false;
 let relapseTimer: ReturnType<typeof setTimeout> | null = null;
 
 function wakeFromLayer(): void {
@@ -108,20 +106,12 @@ function drive(active: boolean): void {
 }
 
 function onBackendActivity(active: boolean): void {
-  if (!enabled) return;
-  clearRelapse();
-  if (!active) {
-    if (activeState) {
-      activeState = false;
-      drive(false);
-    }
-    return;
-  }
+  if (!enabled || !active) return;
   if (mode === "panel") hideBlackout();
   if (activeState) return;
+  clearRelapse();
   activeState = true;
   drive(true);
-  if (fastIdle) return;
   relapseTimer = setTimeout(() => {
     relapseTimer = null;
     if (enabled && activeState) {
@@ -132,9 +122,6 @@ function onBackendActivity(active: boolean): void {
 }
 
 function onActivity(active: boolean): void {
-  // Steam reports idleness seconds late and misses input the backend sees; where the
-  // backend covers the controls only its idleness counts.
-  if (!active && fastIdle) return;
   clearRelapse();
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
@@ -162,7 +149,6 @@ function startPoll(): void {
     getEcoState()
       .then((s) => {
         if (e !== epoch) return;
-        fastIdle = s.fast_idle;
         reconcile(s.enabled, s.wake_brightness, s.screen_off);
         // A lit panel never keeps the catch layer, whatever event was missed.
         if (enabled && mode === "panel" && !s.screen_asleep && activeState && !countdown) hideBlackout();
@@ -218,7 +204,6 @@ function reconcile(on: boolean, wake: number, screenOff: boolean): void {
     startPoll();
   } else if (!on && enabled) {
     enabled = false;
-    fastIdle = false;
     teardown();
     restoreScreen();
   }
@@ -235,7 +220,6 @@ export function startEcoAmbient(): () => void {
   getEcoState()
     .then((s) => {
       if (!alive || e !== epoch) return;
-      fastIdle = s.fast_idle;
       reconcile(s.enabled, s.wake_brightness, s.screen_off);
     })
     .catch(() => {});

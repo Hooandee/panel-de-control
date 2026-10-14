@@ -163,8 +163,7 @@ _REPORT_SERVICE_URL = os.environ.get(
 _SUPPORT_SAMPLE_INTERVAL_S = 30
 _SCREEN_LEASE_S = 15.0
 _ECO_INPUT_POLL_S = 0.25
-# Quiet time after the last raw input before download mode starts its countdown.
-_ECO_IDLE_S = 3.0
+_ECO_ACTIVITY_REPORT_S = 1.0
 _ECO_ACTIVITY_EVENT = "pdc_eco_activity"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
@@ -764,7 +763,6 @@ class Plugin:
         self._input_wake = InputWake()
         self._screen_lease_at = 0.0
         self._eco_watch_task = None
-        self._eco_fast_idle = False
         self._screen_reset_done = False
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
@@ -8549,8 +8547,6 @@ class Plugin:
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
             "screen_off": self._screen_sleep.probe_ok,
             "screen_asleep": self._screen_sleep.asleep,
-            # Raw input covers this device's controls, so idleness need not wait for Steam.
-            "fast_idle": self._eco_fast_idle,
         }
 
     async def get_eco_state(self) -> dict:
@@ -8617,34 +8613,28 @@ class Plugin:
             self._eco_watch_task = asyncio.create_task(self._eco_watch())
 
     async def _eco_watch(self) -> None:
-        """While download mode is on: report activity and idleness from raw input (Steam's
-        activity signal is seconds late) and light the panel on the first input. If Steam's
-        UI stops renewing the lease (crash, plugin reload) the panel is lit anyway so it
-        never stays dark with nothing to wake it."""
+        """While download mode is on: light the panel on the first raw input and report it
+        to the frontend at once (Steam's activity signal is seconds late). Idleness stays
+        Steam's call: it reads every control on every handheld, the raw watch may not. If
+        Steam's UI stops renewing the lease (crash, plugin reload) the panel is lit anyway
+        so it never stays dark with nothing to wake it."""
         watch = self._input_wake
         await asyncio.to_thread(watch.open)
-        last_input = time.monotonic()
-        idle = False
+        reported_at = float("-inf")
         try:
             while self._settings.get("eco_enabled"):
                 source = await asyncio.to_thread(watch.wait, _ECO_INPUT_POLL_S)
                 now = time.monotonic()
                 if source is not None:
-                    last_input = now
-                    self._eco_fast_idle = watch.controls_seen
                     woke = self._screen_sleep.asleep
                     if woke:
                         await self._wake_screen("input", source=source)
-                    if idle or woke:
-                        idle = False
+                    if woke or now - reported_at >= _ECO_ACTIVITY_REPORT_S:
+                        reported_at = now
                         await self._emit_eco_activity(True)
-                elif watch.controls_seen and not idle and now - last_input >= _ECO_IDLE_S:
-                    idle = True
-                    await self._emit_eco_activity(False)
                 if self._screen_sleep.asleep and now - self._screen_lease_at > _SCREEN_LEASE_S:
                     await self._wake_screen("lease_expired")
         finally:
-            self._eco_fast_idle = False
             await asyncio.to_thread(watch.close)
             await self._wake_screen("eco_watch_stopped")
 
