@@ -9,9 +9,8 @@ function steamDocuments(): Document[] {
   return docs.filter((doc, i): doc is Document => !!doc?.body && docs.indexOf(doc) === i);
 }
 
-// Full black layer over Steam's UI for panels gamescope cannot switch off. It also
-// swallows the tap that wakes the screen so it never lands on a control underneath.
-// `onTap` lets a touch on the layer itself always bring the screen back.
+// Black layer over Steam's UI: the fallback for panels gamescope cannot switch off, and the
+// catch for the tap that wakes a sleeping panel, so it never lands on a control underneath.
 export function showBlackout(onTap?: () => void, docs: Document[] = steamDocuments()): boolean {
   for (const doc of docs) {
     if (doc.getElementById(ID)) continue;

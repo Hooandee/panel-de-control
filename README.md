@@ -51,7 +51,8 @@ permite.
 separadas para altavoz y auriculares, realce de graves y nivelado de volumen.
 
 🔋 **Sistema.** Salud de la batería y límite de carga, CPU, frecuencia de la GPU, brillo y volumen
-exactos, y un Modo Descarga para dejar el equipo bajando juegos gastando lo mínimo.
+exactos, y un Modo Descarga para dejar el equipo bajando juegos gastando lo mínimo, con la
+pantalla apagada hasta que lo tocas.
 
 📊 **HUD.** Monta tu propio overlay de MangoHud y ve cómo queda al momento. Eliges qué métricas
 salen, dónde y con qué colores.

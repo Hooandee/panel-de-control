@@ -324,13 +324,13 @@ def test_raw_input_lights_the_panel_and_reports_activity(tmp_path, monkeypatch):
         await p.set_eco(True, 50)
         await p.set_eco_screen(True)
         touch.sources.append("FTS3528:00 2808:1015")
-        await _until(lambda: ("pdc_eco_activity", True) in emitted)
+        await _until(lambda: ("pdc_eco_input",) in emitted)
         await p.set_eco(False, 50)
         await asyncio.wait_for(p._eco_watch_task, 2)
 
     asyncio.run(run())
     assert screen.calls == [True, False]
-    assert emitted == [("pdc_eco_activity", True)]
+    assert emitted == [("pdc_eco_input",)]
     assert touch.opened == 1 and touch.closed == 1
 
 
@@ -347,3 +347,37 @@ def test_idleness_is_never_reported_from_raw_input(tmp_path, monkeypatch):
 
     asyncio.run(run())
     assert emitted == []
+
+
+def test_wake_arriving_while_a_sleep_is_in_flight_wins(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    import threading
+    started, release = threading.Event(), threading.Event()
+
+    class _SlowScreen(_FakeScreen):
+        def set(self, asleep):
+            if asleep:
+                started.set()
+                release.wait(2)
+            return super().set(asleep)
+
+    screen = _with_screen(p, _SlowScreen())
+    _fast_watch(monkeypatch)
+
+    async def run():
+        await p.set_eco(True, 50)
+        sleeping = asyncio.create_task(p.set_eco_screen(True))
+        await asyncio.to_thread(started.wait, 2)
+        waking = asyncio.create_task(p.set_eco_screen(False))
+        await asyncio.sleep(0.05)
+        release.set()
+        await sleeping
+        woke = await waking
+        await p.set_eco(False, 50)
+        await asyncio.wait_for(p._eco_watch_task, 2)
+        return woke
+
+    woke = asyncio.run(run())
+    assert woke == {"ok": True, "asleep": False}
+    assert screen.calls == [True, False]
+    assert screen.asleep is False

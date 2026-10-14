@@ -52,7 +52,8 @@ tinker, an OLED look for LCD screens, scheduled night mode and HDR where the pan
 and headphones, bass boost and volume leveling.
 
 🔋 **System.** Battery health and charge limit, CPU, GPU clock, exact brightness and volume, and a
-Download Mode that keeps your device grabbing games while using as little power as possible.
+Download Mode that keeps your device grabbing games while using as little power as possible, with
+the screen off until you touch it.
 
 📊 **HUD.** Build your own MangoHud overlay and see how it looks right away. You choose which
 metrics show up, where and in what colors.

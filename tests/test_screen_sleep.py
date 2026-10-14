@@ -141,3 +141,14 @@ def test_diagnostics_report_gamescope_version_and_connectors(tmp_path):
     assert diag["supported"] is True
     assert diag["gamescope_version"] == "gamescopectl version 3.16.23.4 (gcc 15.1.1)"
     assert list(diag["connectors"].values()) == ["On"]
+
+
+def test_failed_sleep_command_still_counts_as_asleep_so_wake_resets_it(tmp_path):
+    gs = FakeGamescope(tmp_path, rc=1)
+    screen = gs.screen()
+    screen.probe()
+    assert not screen.set(True)
+    assert screen.asleep
+    gs.rc = 0
+    assert screen.set(False)
+    assert gs.calls[-1][0] == ["gamescopectl", CONVAR, "0"]

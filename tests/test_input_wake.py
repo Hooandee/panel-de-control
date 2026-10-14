@@ -111,3 +111,26 @@ def test_deck_report_rules():
     held = 1 << 7
     assert deck_report_input(_deck_report(buttons=held), held) == (False, held)
     assert deck_report_input(b"\x01\x00\x01" + bytes(61), 0) == (False, 0)
+
+
+def test_unplugged_device_is_dropped_instead_of_spinning(tmp_path, monkeypatch):
+    _device(tmp_path, "event7", "touch", 0x1B)
+    watch = _watch(tmp_path)
+    assert watch.open() == 1
+    import display.input_wake as iw
+
+    def gone(fd, n):
+        raise OSError(19, "No such device")
+
+    monkeypatch.setattr(iw.os, "read", gone)
+    assert watch.wait(0) is None
+    assert watch._fds == {}
+
+
+def test_waiting_with_no_devices_sleeps_instead_of_returning_at_once(tmp_path):
+    slept = []
+    watch = InputWake(str(tmp_path / "none"), str(tmp_path / "none"), str(tmp_path / "none"),
+                      str(tmp_path / "none"), sleep=slept.append)
+    assert watch.open() == 0
+    assert watch.wait(0.25) is None
+    assert slept and slept[0] > 0

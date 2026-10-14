@@ -815,7 +815,6 @@ export interface EcoState {
 export interface EcoScreenResult {
   ok: boolean;
   asleep: boolean;
-  reason?: string;
 }
 
 export const getEcoState = callable<[], EcoState>("get_eco_state");

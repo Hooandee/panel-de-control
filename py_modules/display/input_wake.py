@@ -11,6 +11,7 @@ import fcntl
 import os
 import select
 import struct
+import threading
 import time
 
 EV_KEY = 0x01
@@ -78,6 +79,8 @@ class InputWake:
         self._fds = {}
         self._hidraw = {}
         self._abs = {}
+        # `close` from the event loop must not pull fds out from under a running `wait`.
+        self._lock = threading.Lock()
 
     def _open_evdev(self, name):
         base = os.path.join(self._sys, name, "device")
@@ -103,8 +106,11 @@ class InputWake:
         self._hidraw[fd] = None
 
     def open(self):
-        """Open every watchable device; returns how many."""
-        self.close()
+        with self._lock:
+            self._close()
+            return self._open()
+
+    def _open(self):
         for directory, opener in ((self._dev, self._open_evdev), (self._sys_hidraw, self._open_hidraw)):
             try:
                 names = sorted(os.listdir(directory))
@@ -117,6 +123,18 @@ class InputWake:
         return len(self._fds) + len(self._hidraw)
 
     def close(self):
+        with self._lock:
+            self._close()
+
+    def _drop(self, fd):
+        self._fds.pop(fd, None)
+        self._hidraw.pop(fd, None)
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+    def _close(self):
         for fd in [*self._fds, *self._hidraw]:
             try:
                 os.close(fd)
@@ -140,7 +158,11 @@ class InputWake:
     def _evdev_input(self, fd):
         try:
             data = os.read(fd, _EVENT.size * 64)
+        except BlockingIOError:
+            return False
         except OSError:
+            # Unplugged: a removed node stays readable forever and would spin the loop.
+            self._drop(fd)
             return False
         for offset in range(0, len(data) - _EVENT.size + 1, _EVENT.size):
             _, _, kind, code, value = _EVENT.unpack_from(data, offset)
@@ -157,7 +179,10 @@ class InputWake:
         while True:
             try:
                 report = os.read(fd, 64)
+            except BlockingIOError:
+                return found
             except OSError:
+                self._drop(fd)
                 return found
             if not report:
                 return found
@@ -165,16 +190,21 @@ class InputWake:
             found = found or pressed
 
     def wait(self, timeout):
-        """Return the label of the first deliberate input within `timeout`, else None."""
-        fds = [*self._fds, *self._hidraw]
-        if not fds:
-            return None
+        with self._lock:
+            return self._wait(timeout)
+
+    def _wait(self, timeout):
         deadline = self._clock() + timeout
         while True:
+            fds = [*self._fds, *self._hidraw]
             remaining = deadline - self._clock()
+            if not fds:
+                self._sleep(max(0.0, remaining))
+                return None
             try:
                 ready, _, _ = select.select(fds, [], [], max(0.0, remaining))
             except (OSError, ValueError):
+                self._sleep(max(0.0, remaining))
                 return None
             for fd in ready:
                 if fd in self._fds and self._evdev_input(fd):

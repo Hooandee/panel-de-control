@@ -20,7 +20,7 @@ const COUNTDOWN_S = 3;
 // every control on every handheld. If Steam never reports an input the backend saw, go
 // dark again after this long.
 const RELAPSE_MS = 8000;
-const ACTIVITY_EVENT = "pdc_eco_activity";
+const INPUT_EVENT = "pdc_eco_input";
 
 let enabled = false;
 let mode: ScreenMode = "blackout";
@@ -37,13 +37,9 @@ let epoch = 0;
 let countdown: Countdown | null = null;
 let relapseTimer: ReturnType<typeof setTimeout> | null = null;
 
-function wakeFromLayer(): void {
-  onBackendActivity(true);
-}
-
 function driveBlackout(active: boolean): void {
   if (active) hideBlackout();
-  else showBlackout(wakeFromLayer);
+  else showBlackout(onRawInput);
   lastDriven = ecoBrightness(active, wakePct, BLACKOUT_FLOOR_PCT);
   lastDriveAt = Date.now();
   displayBrightness.set(fromPercent(lastDriven));
@@ -55,7 +51,7 @@ function goDark(): void {
     return;
   }
   // Catches the tap that wakes the panel so it never lands on a control underneath.
-  showBlackout(wakeFromLayer);
+  showBlackout(onRawInput);
   const e = epoch;
   setEcoScreen(true)
     .then((r) => {
@@ -105,8 +101,8 @@ function drive(active: boolean): void {
   });
 }
 
-function onBackendActivity(active: boolean): void {
-  if (!enabled || !active) return;
+function onRawInput(): void {
+  if (!enabled) return;
   if (mode === "panel") hideBlackout();
   if (activeState) return;
   clearRelapse();
@@ -177,7 +173,7 @@ function teardown(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  removeEventListener(ACTIVITY_EVENT, onBackendActivity);
+  removeEventListener(INPUT_EVENT, onRawInput);
   cancelCountdown();
   clearRelapse();
   stopPoll();
@@ -200,7 +196,7 @@ function reconcile(on: boolean, wake: number, screenOff: boolean): void {
     activeState = true;
     unsubActivity = subscribeActive(onActivity);
     unsubBrightness = displayBrightness.subscribe(onBrightness);
-    addEventListener(ACTIVITY_EVENT, onBackendActivity);
+    addEventListener(INPUT_EVENT, onRawInput);
     startPoll();
   } else if (!on && enabled) {
     enabled = false;

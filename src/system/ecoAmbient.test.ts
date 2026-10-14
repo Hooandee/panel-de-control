@@ -5,13 +5,13 @@ const api = vi.hoisted(() => ({
   setEcoScreen: vi.fn(),
 }));
 const activity = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
-const backend = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
+const backend = vi.hoisted(() => ({ emit: () => {} }));
 const brightness = vi.hoisted(() => ({ set: vi.fn() }));
 const blackout = vi.hoisted(() => ({ showBlackout: vi.fn((_onTap?: () => void) => true), hideBlackout: vi.fn() }));
 const countdown = vi.hoisted(() => ({ cancel: vi.fn(), started: 0 }));
 
 vi.mock("@decky/api", () => ({
-  addEventListener: (_event: string, cb: (active: boolean) => void) => {
+  addEventListener: (_event: string, cb: () => void) => {
     backend.emit = cb;
   },
   removeEventListener: () => {},
@@ -104,7 +104,7 @@ describe("download mode screen", () => {
     await idle();
     await vi.advanceTimersByTimeAsync(3000);
     blackout.hideBlackout.mockClear();
-    backend.emit(true);
+    backend.emit();
     expect(blackout.hideBlackout).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(8000);
     expect(countdown.started).toBe(2);
@@ -114,7 +114,7 @@ describe("download mode screen", () => {
     enable(40, true);
     await idle();
     await vi.advanceTimersByTimeAsync(3000);
-    backend.emit(true);
+    backend.emit();
     await active();
     await vi.advanceTimersByTimeAsync(8000);
     expect(countdown.started).toBe(1);
@@ -125,9 +125,9 @@ describe("download mode screen", () => {
     await idle();
     await vi.advanceTimersByTimeAsync(3000);
     expect(blackout.showBlackout).toHaveBeenCalled();
-    backend.emit(true);
+    backend.emit();
     blackout.hideBlackout.mockClear();
-    backend.emit(true);
+    backend.emit();
     expect(blackout.hideBlackout).toHaveBeenCalled();
     blackout.hideBlackout.mockClear();
     await vi.advanceTimersByTimeAsync(3000);
@@ -147,11 +147,11 @@ describe("download mode screen", () => {
 
   it("raw input cancels the countdown at once; only Steam starts it", async () => {
     enable(40, true);
-    backend.emit(false);
+    backend.emit();
     expect(countdown.started).toBe(0);
     await idle();
     expect(countdown.started).toBe(1);
-    backend.emit(true);
+    backend.emit();
     expect(countdown.cancel).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(5000);
     expect(api.setEcoScreen).not.toHaveBeenCalledWith(true);

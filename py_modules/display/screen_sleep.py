@@ -123,6 +123,10 @@ class ScreenSleep:
             if not self._lit:
                 self.detail = "no lit internal connector"
                 return False
+        if asleep:
+            # A failed or timed-out command may still have reached gamescope: from here on
+            # every wake path must send the reset.
+            self.asleep = True
         rc, _ = self._run(["gamescopectl", CONVAR, "1" if asleep else "0"], env)
         if rc != 0:
             self.detail = f"gamescopectl rc={rc}"
