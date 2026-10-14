@@ -807,10 +807,19 @@ export interface EcoState {
   affects_boost: boolean;
   // Brightness % to wake back to (the pre-eco snapshot).
   wake_brightness: number;
+  // gamescope can switch the internal panel off (otherwise: black layer + minimum brightness).
+  screen_off: boolean;
+  screen_asleep: boolean;
+}
+
+export interface EcoScreenResult {
+  ok: boolean;
+  asleep: boolean;
 }
 
 export const getEcoState = callable<[], EcoState>("get_eco_state");
 export const setEco = callable<[enabled: boolean, current_brightness: number], EcoState>("set_eco");
+export const setEcoScreen = callable<[asleep: boolean], EcoScreenResult>("set_eco_screen");
 
 // ── Self-updater — append to src/api.ts (it already imports { callable } from "@decky/api") ──
 

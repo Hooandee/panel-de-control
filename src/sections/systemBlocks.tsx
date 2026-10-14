@@ -29,7 +29,6 @@ const EcoBlock: FC = () => {
   return (
     <EcoCard
       state={eco.state}
-      brightnessSupported={brightness.supported}
       onToggle={(en) => eco.toggle(en, brightness.percent)}
     />
   );
