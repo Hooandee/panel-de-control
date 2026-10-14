@@ -50,6 +50,7 @@ class KioskController:
         self._retry_delay = RETRY_MIN_S
         self._last_error: str | None = None
         self._screen_off = False
+        self._armada_bottom_yielded = False
         self._lock = asyncio.Lock()
 
     def state(self) -> dict:
@@ -64,6 +65,7 @@ class KioskController:
             "last_error": self._last_error,
             "screen_off": self._screen_off,
             "brightness": self._brightness,
+            "armada_bottom_yielded": self._armada_bottom_yielded,
         }
 
     def rpc_calls(self) -> dict[str, list[float]]:
@@ -120,6 +122,9 @@ class KioskController:
         self._running = await asyncio.to_thread(self._launcher.is_active)
         if was_running and not self._running:
             self._journal("WARNING", "exited", detail=await asyncio.to_thread(self._launcher.last_words))
+        if await asyncio.to_thread(self._launcher.yield_armada_bottom):
+            self._armada_bottom_yielded = True
+            self._journal("INFO", "armada_bottom_stopped")
         if self._running:
             self._retry_delay = RETRY_MIN_S
             return
@@ -175,6 +180,10 @@ class KioskController:
             launcher, self._launcher = self._launcher, None
             ok, detail = await asyncio.to_thread(launcher.stop)
             self._journal("INFO" if ok else "WARNING", "stopped", ok=ok, detail=detail or None)
+            if self._armada_bottom_yielded:
+                self._armada_bottom_yielded = False
+                restored = await asyncio.to_thread(launcher.restore_armada_bottom)
+                self._journal("INFO" if restored else "WARNING", "armada_bottom_restored", ok=restored)
         self._running = False
         await self._server.stop()
 

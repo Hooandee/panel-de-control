@@ -34,6 +34,7 @@ def test_kiosk_state_is_reported_without_side_effects(plugin):  # noqa: F811
         "last_error": None,
         "screen_off": False,
         "brightness": None,
+        "armada_bottom_yielded": False,
     }
 
 
