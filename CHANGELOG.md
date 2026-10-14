@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
+
+
+### Features
+
+* **eco:** switch the screen off in download mode ([#942](https://github.com/Hooandee/panel-de-control/issues/942)) ([be44611](https://github.com/Hooandee/panel-de-control/commit/be4461102a642eb4cd4dbedea7af03036f5c8b25))
+
 ## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
 
 
