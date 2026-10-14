@@ -381,3 +381,32 @@ def test_wake_arriving_while_a_sleep_is_in_flight_wins(tmp_path, monkeypatch):
     assert woke == {"ok": True, "asleep": False}
     assert screen.calls == [True, False]
     assert screen.asleep is False
+
+
+def test_failed_wake_after_leaving_download_mode_is_retried(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+
+    class _StubbornScreen(_FakeScreen):
+        failures = 2
+
+        def set(self, asleep):
+            self.calls.append(asleep)
+            if not asleep and self.failures:
+                self.failures -= 1
+                return False
+            self.asleep = asleep
+            return True
+
+    screen = _with_screen(p, _StubbornScreen())
+    main, _ = _fast_watch(monkeypatch)
+    monkeypatch.setattr(main, "_SCREEN_WAKE_RETRY_S", 0.01)
+
+    async def run():
+        await p.set_eco(True, 50)
+        await p.set_eco_screen(True)
+        await p.set_eco(False, 50)
+        await asyncio.wait_for(p._eco_watch_task, 2)
+
+    asyncio.run(run())
+    assert screen.asleep is False
+    assert screen.calls == [True, False, False, False]

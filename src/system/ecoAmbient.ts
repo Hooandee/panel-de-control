@@ -1,5 +1,5 @@
 import { addEventListener, removeEventListener } from "@decky/api";
-import { getEcoState, setEcoScreen } from "../api";
+import { EcoState, getEcoState, setEcoScreen } from "../api";
 import { translate } from "../i18n";
 import { subscribeActive } from "./activity";
 import { displayBrightness } from "./display";
@@ -101,13 +101,8 @@ function drive(active: boolean): void {
   });
 }
 
-function onRawInput(): void {
-  if (!enabled) return;
-  if (mode === "panel") hideBlackout();
-  if (activeState) return;
+function armRelapse(): void {
   clearRelapse();
-  activeState = true;
-  drive(true);
   relapseTimer = setTimeout(() => {
     relapseTimer = null;
     if (enabled && activeState) {
@@ -115,6 +110,19 @@ function onRawInput(): void {
       drive(false);
     }
   }, RELAPSE_MS);
+}
+
+function onRawInput(): void {
+  if (!enabled) return;
+  if (mode === "panel") hideBlackout();
+  if (activeState) {
+    // Input Steam does not count keeps the screen on while it continues.
+    if (relapseTimer !== null) armRelapse();
+    return;
+  }
+  activeState = true;
+  drive(true);
+  armRelapse();
 }
 
 function onActivity(active: boolean): void {
@@ -134,7 +142,7 @@ function onBrightness(fraction: number): void {
   if (!enabled) return;
   const echo = toPercent(fraction);
   if (isDimEcho(echo, lastDriven, Date.now() - lastDriveAt)) return;
-  if (isFloorEcho(echo, BLACKOUT_FLOOR_PCT)) return;
+  if (lastDriven === BLACKOUT_FLOOR_PCT && isFloorEcho(echo, BLACKOUT_FLOOR_PCT)) return;
   wakePct = echo;
 }
 
@@ -144,10 +152,7 @@ function startPoll(): void {
     const e = epoch;
     getEcoState()
       .then((s) => {
-        if (e !== epoch) return;
-        reconcile(s.enabled, s.wake_brightness, s.screen_off);
-        // A lit panel never keeps the catch layer, whatever event was missed.
-        if (enabled && mode === "panel" && !s.screen_asleep && activeState && !countdown) hideBlackout();
+        if (alive && e === epoch) sync(s);
       })
       .catch(() => {});
   }, POLL_MS);
@@ -205,6 +210,28 @@ function reconcile(on: boolean, wake: number, screenOff: boolean): void {
   }
 }
 
+// Backend state wins over whatever this controller believes, whatever event was missed.
+function sync(s: EcoState): void {
+  const wasEnabled = enabled;
+  reconcile(s.enabled, s.wake_brightness, s.screen_off);
+  if (!enabled) return;
+  if (!wasEnabled) {
+    // Picked up a session already running (Steam UI or plugin reload): start from a lit screen.
+    if (s.screen_asleep) setEcoScreen(false).catch(() => {});
+    if (mode === "blackout") driveBlackout(true);
+    return;
+  }
+  if (!activeState || countdown) return;
+  if (mode === "panel") {
+    hideBlackout();
+    if (s.screen_asleep) setEcoScreen(false).catch(() => {});
+  } else if (s.screen_off) {
+    // Panel power became available (late gamescope probe, or a fallback after one failed sleep).
+    driveBlackout(true);
+    mode = "panel";
+  }
+}
+
 export function setEcoActiveHint(on: boolean, wake: number, screenOff: boolean): void {
   epoch += 1;
   reconcile(on, wake, screenOff);
@@ -215,8 +242,7 @@ export function startEcoAmbient(): () => void {
   const e = epoch;
   getEcoState()
     .then((s) => {
-      if (!alive || e !== epoch) return;
-      reconcile(s.enabled, s.wake_brightness, s.screen_off);
+      if (alive && e === epoch) sync(s);
     })
     .catch(() => {});
   return () => {

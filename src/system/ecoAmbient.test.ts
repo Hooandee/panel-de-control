@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({
 }));
 const activity = vi.hoisted(() => ({ emit: (_active: boolean) => {} }));
 const backend = vi.hoisted(() => ({ emit: () => {} }));
-const brightness = vi.hoisted(() => ({ set: vi.fn() }));
+const brightness = vi.hoisted(() => ({ set: vi.fn(), subscribed: null as null | ((f: number) => void) }));
 const blackout = vi.hoisted(() => ({ showBlackout: vi.fn((_onTap?: () => void) => true), hideBlackout: vi.fn() }));
 const countdown = vi.hoisted(() => ({ cancel: vi.fn(), started: 0 }));
 
@@ -38,7 +38,13 @@ vi.mock("./activity", () => ({
   },
 }));
 vi.mock("./display", () => ({
-  displayBrightness: { set: brightness.set, subscribe: () => () => {} },
+  displayBrightness: {
+    set: brightness.set,
+    subscribe: (cb: (f: number) => void) => {
+      brightness.subscribed = cb;
+      return () => {};
+    },
+  },
 }));
 
 import { setEcoActiveHint, startEcoAmbient } from "./ecoAmbient";
@@ -184,5 +190,68 @@ describe("download mode screen", () => {
     setEcoActiveHint(false, 40, true);
     expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
     expect(blackout.hideBlackout).toHaveBeenCalled();
+  });
+
+  it("picking up a dark session after a Steam UI reload lights the panel", async () => {
+    stop();
+    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: true });
+    stop = startEcoAmbient();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.setEcoScreen).toHaveBeenLastCalledWith(false);
+  });
+
+  it("picking up a blackout session restores brightness, also on the way out", async () => {
+    stop();
+    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 55, screen_off: false, screen_asleep: false });
+    stop = startEcoAmbient();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(brightness.set).toHaveBeenLastCalledWith(0.55);
+    api.getEcoState.mockResolvedValue({ enabled: false, wake_brightness: 55, screen_off: false, screen_asleep: false });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(brightness.set).toHaveBeenLastCalledWith(0.55);
+  });
+
+  it("a poll answered after unload does not revive the controller", async () => {
+    let answer: (s: unknown) => void = () => {};
+    enable(40, true);
+    api.getEcoState.mockReturnValue(new Promise((r) => (answer = r)));
+    await vi.advanceTimersByTimeAsync(3000);
+    stop();
+    answer({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: false });
+    await vi.advanceTimersByTimeAsync(0);
+    await idle();
+    expect(countdown.started).toBe(0);
+    stop = () => {};
+  });
+
+  it("raw input Steam does not count keeps the screen on while it continues", async () => {
+    enable(40, true);
+    await idle();
+    await vi.advanceTimersByTimeAsync(3000);
+    backend.emit();
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(5000);
+      backend.emit();
+    }
+    expect(countdown.started).toBe(1);
+  });
+
+  it("a brightness the user picks near zero is kept while lit", async () => {
+    enable(40, false);
+    const onBrightness = brightness.subscribed!;
+    onBrightness(0.01);
+    await idle();
+    await vi.advanceTimersByTimeAsync(3000);
+    await active();
+    expect(brightness.set).toHaveBeenLastCalledWith(0.01);
+  });
+
+  it("switches from black screen to panel power once it becomes available", async () => {
+    enable(40, false, { screen_asleep: false });
+    api.getEcoState.mockResolvedValue({ enabled: true, wake_brightness: 40, screen_off: true, screen_asleep: false });
+    await vi.advanceTimersByTimeAsync(3000);
+    await idle();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.setEcoScreen).toHaveBeenLastCalledWith(true);
   });
 });

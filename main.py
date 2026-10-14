@@ -165,6 +165,7 @@ _SCREEN_LEASE_S = 15.0
 _ECO_INPUT_POLL_S = 0.25
 _ECO_INPUT_REPORT_S = 1.0
 _ECO_RESCAN_S = 5.0
+_SCREEN_WAKE_RETRY_S = 2.0
 _ECO_INPUT_EVENT = "pdc_eco_input"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
@@ -8646,6 +8647,11 @@ class Plugin:
         finally:
             await asyncio.to_thread(watch.close)
             await self._wake_screen("eco_watch_stopped")
+            # Nothing else retries a failed wake once download mode is off.
+            while (self._screen_sleep.asleep and not self._settings.get("eco_enabled")
+                   and not getattr(self, "_shutting_down", False)):
+                await asyncio.sleep(_SCREEN_WAKE_RETRY_S)
+                await self._wake_screen("retry")
             if self._settings.get("eco_enabled") and not getattr(self, "_shutting_down", False):
                 # Re-enabled while this watch was winding down.
                 asyncio.get_running_loop().call_soon(self._start_eco_watch)
