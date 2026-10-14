@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **kiosk:** take the bottom screen from Armada's own gamescope ([#945](https://github.com/Hooandee/panel-de-control/issues/945)) ([962e0d7](https://github.com/Hooandee/panel-de-control/commit/962e0d7b0f175b45ffbb02aeec186abae41c737c))
+
 ## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
 
 
