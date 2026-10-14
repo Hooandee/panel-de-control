@@ -81,7 +81,10 @@ class InputWake:
         self._fds = {}
         self._hidraw = {}
         self._abs = {}
-        self.gamepad = False
+        self._pads = set()
+        # Only input actually read from a controller proves the watch sees the controls:
+        # on some handhelds Steam reads the pad over hidraw and its evdev node stays silent.
+        self.controls_seen = False
 
     def _open_evdev(self, name):
         base = os.path.join(self._sys, name, "device")
@@ -99,7 +102,7 @@ class InputWake:
         self._fds[fd] = _read(os.path.join(base, "name")) or name
         vid_pid = (_read(os.path.join(base, "id/vendor")), _read(os.path.join(base, "id/product")))
         if keys & ((1 << BTN_SOUTH) | (1 << BTN_JOYSTICK)) and vid_pid != _STEAM_VIRTUAL_PAD:
-            self.gamepad = True
+            self._pads.add(fd)
 
     def _open_hidraw(self, name):
         if f"HID_ID=0003:{_DECK_HID_ID}" not in _read(os.path.join(self._sys_hidraw, name, "device/uevent")):
@@ -109,7 +112,6 @@ class InputWake:
         except OSError:
             return
         self._hidraw[fd] = None
-        self.gamepad = True
 
     def open(self):
         """Open every watchable device; returns how many."""
@@ -134,7 +136,8 @@ class InputWake:
         self._fds = {}
         self._hidraw = {}
         self._abs = {}
-        self.gamepad = False
+        self._pads = set()
+        self.controls_seen = False
 
     def _axis(self, fd, code):
         key = (fd, code)
@@ -188,8 +191,10 @@ class InputWake:
                 return None
             for fd in ready:
                 if fd in self._fds and self._evdev_input(fd):
+                    self.controls_seen = self.controls_seen or fd in self._pads
                     return self._fds[fd]
                 if fd in self._hidraw and self._hidraw_input(fd):
+                    self.controls_seen = True
                     return "Steam Deck controller"
             if self._clock() >= deadline:
                 return None

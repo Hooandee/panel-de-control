@@ -8623,7 +8623,6 @@ class Plugin:
         never stays dark with nothing to wake it."""
         watch = self._input_wake
         await asyncio.to_thread(watch.open)
-        self._eco_fast_idle = watch.gamepad
         last_input = time.monotonic()
         idle = False
         try:
@@ -8632,13 +8631,14 @@ class Plugin:
                 now = time.monotonic()
                 if source is not None:
                     last_input = now
+                    self._eco_fast_idle = watch.controls_seen
                     woke = self._screen_sleep.asleep
                     if woke:
                         await self._wake_screen("input", source=source)
                     if idle or woke:
                         idle = False
                         await self._emit_eco_activity(True)
-                elif watch.gamepad and not idle and now - last_input >= _ECO_IDLE_S:
+                elif watch.controls_seen and not idle and now - last_input >= _ECO_IDLE_S:
                     idle = True
                     await self._emit_eco_activity(False)
                 if self._screen_sleep.asleep and now - self._screen_lease_at > _SCREEN_LEASE_S:

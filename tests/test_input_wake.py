@@ -85,15 +85,26 @@ def test_close_releases_devices(tmp_path):
     assert watch.wait(0) is None
 
 
-def test_physical_gamepad_gives_coverage_but_steam_virtual_pad_does_not(tmp_path):
-    _device(tmp_path, "event10", "Microsoft X-Box 360 pad 0", 0x20000B,
+def test_only_input_read_from_a_real_controller_proves_coverage(tmp_path):
+    _device(tmp_path, "event2", "Legion Go S", 0x20000B, keys=1 << BTN_SOUTH, vid_pid=("1a86", "e310"))
+    _device(tmp_path, "event10", "Microsoft X-Box 360 pad 0", 0x20000B, [(EV_KEY, BTN_SOUTH, 1)],
             keys=1 << BTN_SOUTH, vid_pid=("28de", "11ff"))
     watch = _watch(tmp_path)
     watch.open()
-    assert watch.gamepad is False
+    assert watch.wait(0) == "Microsoft X-Box 360 pad 0"
+    assert watch.controls_seen is False
+
+
+def test_silent_controller_does_not_prove_coverage_but_a_press_does(tmp_path):
     _device(tmp_path, "event2", "Legion Go S", 0x20000B, keys=1 << BTN_SOUTH, vid_pid=("1a86", "e310"))
+    watch = _watch(tmp_path)
     watch.open()
-    assert watch.gamepad is True
+    assert watch.wait(0) is None
+    assert watch.controls_seen is False
+    (tmp_path / "dev" / "event2").write_bytes(_EVENT.pack(0, 0, EV_KEY, BTN_SOUTH, 1))
+    watch.open()
+    assert watch.wait(0) == "Legion Go S"
+    assert watch.controls_seen is True
 
 
 def test_deck_controller_button_press_is_input(tmp_path):
@@ -101,8 +112,9 @@ def test_deck_controller_button_press_is_input(tmp_path):
             [_deck_report(imu=900), _deck_report(buttons=1 << 7, imu=-300)])
     watch = _watch(tmp_path)
     assert watch.open() == 1
-    assert watch.gamepad is True
+    assert watch.controls_seen is False
     assert watch.wait(0) == "Steam Deck controller"
+    assert watch.controls_seen is True
 
 
 def test_deck_controller_at_rest_is_not_input(tmp_path):

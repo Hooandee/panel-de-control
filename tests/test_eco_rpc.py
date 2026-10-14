@@ -194,15 +194,13 @@ class _FakeScreen:
 
 
 class _FakeInput:
-    def __init__(self, sources=(), gamepad=True):
+    def __init__(self, sources=(), controls_seen=True):
         self.sources = list(sources)
-        self.gamepad_on_open = gamepad
-        self.gamepad = False
+        self.controls_seen = controls_seen
         self.opened = self.closed = 0
 
     def open(self):
         self.opened += 1
-        self.gamepad = self.gamepad_on_open
         return 1
 
     def close(self):
@@ -327,10 +325,10 @@ def test_raw_input_reports_idle_and_activity_and_lights_the_panel(tmp_path, monk
     async def run():
         await p.set_eco(True, 50)
         await _until(lambda: ("pdc_eco_activity", False) in emitted)
-        assert (await p.get_eco_state())["fast_idle"] is True
         await p.set_eco_screen(True)
         touch.sources.append("FTS3528:00 2808:1015")
         await _until(lambda: ("pdc_eco_activity", True) in emitted)
+        assert (await p.get_eco_state())["fast_idle"] is True
         await p.set_eco(False, 50)
         await asyncio.wait_for(p._eco_watch_task, 2)
 
@@ -339,3 +337,22 @@ def test_raw_input_reports_idle_and_activity_and_lights_the_panel(tmp_path, monk
     assert emitted[:2] == [("pdc_eco_activity", False), ("pdc_eco_activity", True)]
     assert touch.opened == 1 and touch.closed == 1
     assert p._eco_fast_idle is False
+
+
+def test_unproven_controls_leave_idleness_to_steam(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    silent = _FakeInput(controls_seen=False)
+    _with_screen(p, _FakeScreen(), silent)
+    _, emitted = _fast_watch(monkeypatch)
+
+    async def run():
+        await p.set_eco(True, 50)
+        await asyncio.sleep(0.2)
+        state = await p.get_eco_state()
+        await p.set_eco(False, 50)
+        await asyncio.wait_for(p._eco_watch_task, 2)
+        return state
+
+    state = asyncio.run(run())
+    assert emitted == []
+    assert state["fast_idle"] is False
