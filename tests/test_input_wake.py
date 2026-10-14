@@ -73,6 +73,7 @@ def test_valve_controllers_wake_on_press_and_push_not_at_rest(tmp_path):
     assert valve_report_input(_report(sticks=(0, 12000, 0, 0)), 0)[0]
     assert valve_report_input(_report(triggers=(0, 20000)), 0)[0]
     assert valve_report_input(_report(buttons=1), 1) == (False, 1)
+    assert valve_report_input(_report(buttons=1 << 13), None) == (False, 1 << 13)
 
 
 def test_unplugged_device_is_dropped_and_an_empty_watch_sleeps(tmp_path, monkeypatch):

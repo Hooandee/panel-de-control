@@ -4,7 +4,7 @@ const h = vi.hoisted(() => ({
   getEcoState: vi.fn(),
   setEcoScreen: vi.fn(),
   setBrightness: vi.fn(),
-  showBlackout: vi.fn((_onTap?: () => void) => true),
+  showBlackout: vi.fn((_onTap: () => void) => {}),
   hideBlackout: vi.fn(),
   cancel: vi.fn(),
   started: 0,

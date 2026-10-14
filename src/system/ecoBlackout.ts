@@ -11,18 +11,17 @@ function steamDocuments(): Document[] {
 
 // Black layer over Steam's UI: the fallback for panels gamescope cannot switch off, and the
 // catch for the tap that wakes a sleeping panel, so it never lands on a control underneath.
-export function showBlackout(onTap?: () => void, docs: Document[] = steamDocuments()): boolean {
-  for (const doc of docs) {
+export function showBlackout(onTap: () => void): void {
+  for (const doc of steamDocuments()) {
     if (doc.getElementById(ID)) continue;
     const layer = doc.createElement("div");
     layer.id = ID;
     layer.style.cssText = "position:fixed;inset:0;background:#000;z-index:2147483647;cursor:none";
-    if (onTap) layer.addEventListener("pointerdown", onTap);
+    layer.addEventListener("pointerdown", onTap);
     doc.body.appendChild(layer);
   }
-  return docs.length > 0;
 }
 
-export function hideBlackout(docs: Document[] = steamDocuments()): void {
-  for (const doc of docs) doc.getElementById(ID)?.remove();
+export function hideBlackout(): void {
+  for (const doc of steamDocuments()) doc.getElementById(ID)?.remove();
 }

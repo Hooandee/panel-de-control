@@ -34,10 +34,14 @@ def _read(path):
 
 
 def valve_report_input(report, previous):
-    """(is_input, buttons): a newly pressed button or a pushed stick/trigger; never the IMU."""
+    """(is_input, buttons): a newly pressed button or a pushed stick/trigger; never the IMU.
+    The first report after opening is only the baseline, so a held button or a resting thumb on
+    a capacitive stick never counts on every rescan."""
     if len(report) < 56 or report[2] != _VALVE_STATE:
         return False, previous
     buttons = int.from_bytes(report[8:16], "little")
+    if previous is None:
+        return False, buttons
     limit = 32767 * _TRAVEL
     pushed = any(abs(v) > limit for v in struct.unpack_from("<4h", report, 48)) or any(
         v > limit for v in struct.unpack_from("<2H", report, 44))
