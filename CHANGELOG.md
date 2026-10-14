@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
+
+
+### Español
+
+* **Modo Descarga:** La pantalla ahora se apaga de verdad en vez de quedarse con poco brillo. Si dejas la consola quieta, una cuenta atrás de 3 segundos te avisa antes, y vuelve al momento en cuanto tocas la pantalla, mueves un joystick o pulsas un botón.
+* **Modo Descarga:** La tarjeta está más ordenada y se ve de un vistazo qué cambia: TDP, pantalla y turbo.
+
+### English
+
+* **Download mode:** The screen now really turns off instead of staying dimmed. If you leave the device alone, a 3 second countdown warns you first, and it comes back right away when you touch the screen, move a stick or press a button.
+* **Download mode:** The card is tidier and shows at a glance what changes: TDP, screen and turbo.
+
+### Italiano
+
+* **Modalità download:** Ora lo schermo si spegne davvero invece di restare con poca luminosità. Se lasci la console ferma, un conto alla rovescia di 3 secondi ti avvisa prima, e si riaccende subito appena tocchi lo schermo, muovi una levetta o premi un tasto.
+* **Modalità download:** La scheda è più ordinata e mostra a colpo d'occhio cosa cambia: TDP, schermo e turbo.
+
+### Deutsch
+
+* **Downloadmodus:** Der Bildschirm geht jetzt wirklich aus, statt nur abgedunkelt zu bleiben. Wenn du das Gerät liegen lässt, warnt dich vorher ein 3-Sekunden-Countdown, und er ist sofort wieder da, sobald du den Bildschirm berührst, einen Stick bewegst oder eine Taste drückst.
+* **Downloadmodus:** Die Karte ist aufgeräumter und zeigt auf einen Blick, was sich ändert: TDP, Bildschirm und Turbo.
+
+### Português (Brasil)
+
+* **Modo de download:** Agora a tela desliga de verdade em vez de ficar só com pouco brilho. Se você deixar o aparelho parado, uma contagem de 3 segundos avisa antes, e ela volta na hora quando você toca na tela, mexe um analógico ou aperta um botão.
+* **Modo de download:** O card ficou mais organizado e mostra de relance o que muda: TDP, tela e turbo.
+
 ## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
 
 
