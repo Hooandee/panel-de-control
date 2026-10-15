@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
+
+
+### Features
+
+* **arm:** one power dial for CPU and GPU ([#950](https://github.com/Hooandee/panel-de-control/issues/950)) ([463b563](https://github.com/Hooandee/panel-de-control/commit/463b563a6117fe9da607f3186a94620a4591ade1))
+
 ## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
 
 
