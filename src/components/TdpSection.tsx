@@ -4,14 +4,14 @@ import { FC, useCallback, useMemo } from "react";
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
 import { extraZone, manualCeiling } from "../tdp/extraZone";
-import { PresetItem } from "../tdp/powerPresets";
+import { BUILTIN_IDS, PresetItem, resolveItems } from "../tdp/powerPresets";
 import { resolveLivePresets } from "../tdp/livePresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { PowerArc } from "./PowerArc";
-import { isLevelUnit, levelFrequencySummary } from "../tdp/unit";
+import { cpuFrequencyLabel, gpuFrequencyLabel, isLevelUnit, levelFrequencySummary } from "../tdp/unit";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
@@ -26,6 +26,7 @@ export interface TdpSectionProps {
   scope: TdpScope;
   power: PowerDraw | null;
   onWatts: (watts: number) => void;
+  onGpuLevel?: (level: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
   // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
@@ -45,7 +46,7 @@ export interface TdpSectionProps {
 
 const STEAM_DECK_NOMINAL_MAX_W = 15;
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -129,9 +130,62 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? STEAM_DECK_NOMINAL_MAX_W : null;
 
   const levelUnit = isLevelUnit(tdp.unit);
-  const levelSummary = levelUnit
-    ? levelFrequencySummary(tdp.level_frequencies?.[String(Math.round(Math.min(shownWatts, activeMax)))])
+  const gpuLevel = scope === "global" ? tdp.global_gpu_level : tdp.gpu_level;
+  const frequencies = tdp.level_frequencies ?? {};
+  const hasGpuSteps = Object.values(frequencies).some((entry) => entry?.gpu_mhz != null);
+  const splitGpu = levelUnit && typeof gpuLevel === "number" && hasGpuSteps;
+  const freqAt = (level: number) => frequencies[String(Math.round(Math.min(level, activeMax)))];
+  const levelSummary = levelUnit && !splitGpu
+    ? levelFrequencySummary(freqAt(shownWatts))
     : null;
+  const cpuSummary = splitGpu ? cpuFrequencyLabel(freqAt(shownWatts)) : null;
+  const shownGpu = splitGpu && typeof gpuLevel === "number" ? Math.min(gpuLevel, sliderMax) : null;
+  const gpuSummary = shownGpu === null ? null : gpuFrequencyLabel(freqAt(shownGpu));
+  const gpuPresets = shownGpu === null ? null : resolveItems(
+    { order: [...BUILTIN_IDS], hidden: [], custom: {} },
+    tdp.presets,
+    tdp.on_ac,
+    shownGpu,
+    sliderMax,
+    { mode: "estable", off2: 0, off3: 0 },
+    (level) => t("tdp.level.value", { level }),
+  );
+  const freqLine = (text: string | null) => (text ? (
+    <PanelSectionRow>
+      <div style={{
+        textAlign: "center",
+        color: theme.color.textMuted,
+        fontSize: theme.font.caption,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        {text}
+      </div>
+    </PanelSectionRow>
+  ) : null);
+  const splitHeading = (title: string, hint: string) => (
+    <PanelSectionRow>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontWeight: 700, color: theme.color.textPrimary }}>{title}</div>
+        <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>{hint}</div>
+      </div>
+    </PanelSectionRow>
+  );
+
+  const gpuArc = shownGpu === null ? null : (
+    <>
+      {splitHeading(t("tdp.split.gpu"), t("tdp.split.gpu.hint"))}
+      <PanelSectionRow>
+        <PowerArc
+          watts={shownGpu}
+          limits={visualLimits}
+          onAc={tdp.on_ac}
+          unit={tdp.unit}
+          safeMin={tdp.limits.min}
+          safeMax={activeMax}
+        />
+      </PanelSectionRow>
+    </>
+  );
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -140,6 +194,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
         <PanelSectionRow>
           <TdpMonitorNotice onReactivate={onReactivate} />
         </PanelSectionRow>
+        {splitGpu && splitHeading(t("tdp.split.cpu"), t("tdp.split.cpu.hint"))}
         <PanelSectionRow>
           <PowerArc
             watts={arcTarget}
@@ -157,12 +212,16 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
             unit={tdp.unit}
           />
         </PanelSectionRow>
+        {freqLine(cpuSummary)}
+        {gpuArc}
+        {freqLine(gpuSummary)}
       </>
     );
   }
 
   return (
     <>
+      {splitGpu && splitHeading(t("tdp.split.cpu"), t("tdp.split.cpu.hint"))}
       <PanelSectionRow>
         <PowerArc
           watts={arcTarget}
@@ -204,18 +263,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               onChange={onWatts}
             />
           </PanelSectionRow>
-          {levelSummary && (
-            <PanelSectionRow>
-              <div style={{
-                textAlign: "center",
-                color: theme.color.textMuted,
-                fontSize: theme.font.caption,
-                fontVariantNumeric: "tabular-nums",
-              }}>
-                {levelSummary}
-              </div>
-            </PanelSectionRow>
-          )}
+          {freqLine(levelSummary ?? cpuSummary)}
           {!inFwMode && tdp.low_battery_hold?.available && (
             <PanelSectionRow>
               <ToggleField
@@ -338,6 +386,55 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           {!inFwMode && tdp.learned.enough && (
             <PanelSectionRow>
               <TdpSuggestionCard learned={tdp.learned} onApply={onApplySuggestion} />
+            </PanelSectionRow>
+          )}
+        </>
+      )}
+      {shownGpu !== null && (
+        <>
+          {gpuArc}
+          <PanelSectionRow>
+            <SliderField
+              value={shownGpu}
+              min={requestMin}
+              max={sliderMax}
+              step={1}
+              showValue
+              onChange={onGpuLevel ?? (() => {})}
+            />
+          </PanelSectionRow>
+          {freqLine(gpuSummary)}
+          {gpuPresets && (
+            <PanelSectionRow>
+              <div data-testid="gpu-presets">
+                <Presets
+                  resolved={gpuPresets}
+                  manageLabel={t("tdp.presets.manage")}
+                  hiddenLabel={t("tdp.presets.hidden")}
+                  onPick={(item) => onGpuLevel?.(item.watts)}
+                  onEdit={() => {}}
+                  showManage={false}
+                />
+              </div>
+            </PanelSectionRow>
+          )}
+          {Math.round(shownGpu) !== resetTarget && (
+            <PanelSectionRow>
+              <Focusable
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  padding: "4px 0",
+                  marginTop: 4,
+                  color: theme.color.textMuted,
+                  fontSize: theme.font.caption,
+                  cursor: "pointer",
+                }}
+                onActivate={() => onGpuLevel?.(resetTarget)}
+                onClick={() => onGpuLevel?.(resetTarget)}
+              >
+                {t("tdp.reset.gpu.level", { w: resetTarget })}
+              </Focusable>
             </PanelSectionRow>
           )}
         </>

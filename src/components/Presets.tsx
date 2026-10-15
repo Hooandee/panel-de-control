@@ -14,6 +14,7 @@ interface PresetsProps {
   hiddenLabel: string; // "Modos ocultos"
   onPick: (item: PresetItem) => void;
   onEdit: () => void; // open the manager modal
+  showManage?: boolean;
 }
 
 // A boost dot only for presets that actually add headroom (auto/custom), not flat.
@@ -23,7 +24,7 @@ const BoostDot: FC<{ active: boolean }> = ({ active }) => (
   <span style={{ width: 4, height: 4, borderRadius: 2, background: active ? theme.color.accent : theme.color.textMuted }} />
 );
 
-export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLabel, onPick, onEdit }) => {
+export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLabel, onPick, onEdit, showManage = true }) => {
   const { t } = useI18n();
   const title = (it: PresetItem) => presetTitle(it, t);
   const sub = presetSub;
@@ -60,7 +61,7 @@ export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLa
           ))}
         </Focusable>
       )}
-      <Focusable
+      {showManage && <Focusable
         aria-label={manageLabel}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
@@ -73,7 +74,7 @@ export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLa
         onClick={onEdit}
       >
         <LuPlus size={14} /> {manageLabel}
-      </Focusable>
+      </Focusable>}
     </div>
   );
 });

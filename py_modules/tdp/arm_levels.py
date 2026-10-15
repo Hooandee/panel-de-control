@@ -88,8 +88,11 @@ class _Domain:
 
 
 class ArmPerformanceLevels(TDPBackend):
-    """Performance levels for ARM SoCs: each level caps every cpufreq cluster and the
-    devfreq GPU at the same share of its own maximum, snapped to real table steps."""
+    """Performance levels for ARM SoCs.
+
+    A level caps each cpufreq cluster, and the devfreq GPU, at that share of its own
+    maximum, snapped to real table steps. The GPU level can be set apart from the CPU
+    level; until it is, the GPU follows the CPU level."""
 
     name = "arm-frequency-levels"
     unit = "level"
@@ -101,6 +104,7 @@ class ArmPerformanceLevels(TDPBackend):
         self._on_release = on_release
         self._sleep = sleep
         self._clock = clock
+        self._gpu_level = None
         self._domains = []
         for path in sorted(glob.glob(os.path.join(root, _CPUFREQ, "policy[0-9]*")),
                            key=lambda p: int(os.path.basename(p)[6:])):
@@ -123,10 +127,30 @@ class ArmPerformanceLevels(TDPBackend):
     def get_limits(self):
         return TdpLimits(min_w=1, default_w=6, max_w=_LEVELS, max_ac_w=_LEVELS)
 
+    def set_split_gpu_level(self, level):
+        """None keeps the GPU tied to the CPU level. An int caps the GPU on its own."""
+        if level is None:
+            self._gpu_level = None
+            return
+        self._gpu_level = max(1, min(_LEVELS, int(level)))
+
     def ceilings(self, level, boost_on=None):
         if boost_on is None:
             boost_on = _boost_on(self._root)
         return [domain.ceiling(level, boost_on) for domain in self._domains]
+
+    def _domain_ceilings(self, cpu_level, gpu_level, boost_on=None):
+        if boost_on is None:
+            boost_on = _boost_on(self._root)
+        return [
+            domain.ceiling(cpu_level if domain.cpu else gpu_level, boost_on)
+            for domain in self._domains
+        ]
+
+    def _matched_domains(self):
+        if self._gpu_level is None:
+            return self._domains
+        return [domain for domain in self._domains if domain.cpu]
 
     def level_table(self):
         table = {}
@@ -142,15 +166,17 @@ class ArmPerformanceLevels(TDPBackend):
             }
         return table
 
-    def _holds(self, level, cooling_states):
+    def _holds(self, cpu_level, gpu_level, cooling_states):
         return all(
             domain.holds(ceiling, cooling_states)
-            for domain, ceiling in zip(self._domains, self.ceilings(level))
+            for domain, ceiling in zip(
+                self._domains, self._domain_ceilings(cpu_level, gpu_level)
+            )
         )
 
-    def _settled(self, level):
+    def _settled(self, cpu_level, gpu_level):
         deadline = self._clock() + _SETTLE_S
-        while not self._holds(level, _cooling_states(self._root)):
+        while not self._holds(cpu_level, gpu_level, _cooling_states(self._root)):
             if self._clock() >= deadline:
                 return False
             self._sleep(_SETTLE_STEP_S)
@@ -158,30 +184,32 @@ class ArmPerformanceLevels(TDPBackend):
 
     def read_applied(self):
         # Read each node once and match levels in memory: this runs on every power poll.
+        # With a split GPU level, the CPU level is what TDP readback reports.
         cooling_states = _cooling_states(self._root)
         boost_on = _boost_on(self._root)
-        observed = [read_int(domain.max_node) for domain in self._domains]
+        domains = self._matched_domains()
+        observed = [read_int(domain.max_node) for domain in domains]
         for level in range(_LEVELS, 0, -1):
-            ceilings = self.ceilings(level, boost_on)
             if all(
-                domain.holds(ceiling, cooling_states, seen)
-                for domain, ceiling, seen in zip(self._domains, ceilings, observed)
+                domain.holds(domain.ceiling(level, boost_on), cooling_states, seen)
+                for domain, seen in zip(domains, observed)
             ):
                 return level
         return None
 
     def set_tdp(self, watts, ac):
-        level = max(1, min(_LEVELS, int(watts)))
+        cpu_level = max(1, min(_LEVELS, int(watts)))
+        gpu_level = cpu_level if self._gpu_level is None else self._gpu_level
         if not self.supported:
-            return TdpResult(level, None, False, "arm levels unsupported")
-        for domain, ceiling in zip(self._domains, self.ceilings(level)):
+            return TdpResult(cpu_level, None, False, "arm levels unsupported")
+        for domain, ceiling in zip(self._domains, self._domain_ceilings(cpu_level, gpu_level)):
             if not domain.write(ceiling):
-                return TdpResult(level, self.read_applied(), False, "write failed",
+                return TdpResult(cpu_level, self.read_applied(), False, "write failed",
                                  failure_kind="write")
-        if not self._settled(level):
-            return TdpResult(level, self.read_applied(), False, "readback mismatch",
+        if not self._settled(cpu_level, gpu_level):
+            return TdpResult(cpu_level, self.read_applied(), False, "readback mismatch",
                              failure_kind="readback")
-        return TdpResult(level, level, True, "")
+        return TdpResult(cpu_level, cpu_level, True, "")
 
     def release(self):
         ok = all(domain.write(domain.table()[-1]) for domain in self._domains)

@@ -340,6 +340,9 @@ export interface TdpState {
   follows_global: boolean;
   watts: number;
   global_watts: number;
+  // ARM: GPU performance level, independent of the CPU level (`watts`).
+  gpu_level?: number | null;
+  global_gpu_level?: number | null;
   applied_w: number | null;
   primary_rail?: "pl1" | "pl2" | "pl3";
   ppt?: SteamDeckPptState | null;
@@ -443,6 +446,7 @@ export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
   "set_low_battery_tdp_hold",
 );
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
+export const setGpuPerformanceLevel = callable<[level: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_gpu_performance_level");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_levels");
@@ -1078,6 +1082,7 @@ export interface GameProfileRow {
   tdp?: {
     unit?: PowerUnit;
     pl1: number;
+    gpu_level?: number | null;
     auto: boolean;
     target_fps: number;
     initial_tdp: number;

@@ -614,6 +614,7 @@ class Plugin:
                 self._settings.get("desktop_power_handoff")),
         )
         self._reset_power_values_on_unit_change()
+        self._backfill_arm_gpu_levels()
         self._low_battery_hold_backend = (
             tdp_factory.select_low_battery_hold_backend(self._device)
         )
@@ -2866,6 +2867,8 @@ class Plugin:
                 "max_tdp": tp["auto_max_tdp"],
                 "follows_global": self._tdp_profiles.is_following_global(appid),
             }
+            if tp.get("gpu_level") is not None:
+                row["tdp"]["gpu_level"] = int(tp["gpu_level"])
         if self._gpu_profiles.differs_from_global(appid):
             gp = self._gpu_profiles.game_profile(appid)
             row["gpu"] = {
@@ -6048,6 +6051,38 @@ class Plugin:
     def _power_uses_levels(self) -> bool:
         return getattr(getattr(self, "_tdp_backend", None), "unit", None) == "level"
 
+    def _backfill_arm_gpu_levels(self) -> None:
+        """ARM used to move CPU and GPU together. Snapshot the GPU level once so later
+        CPU changes leave it where the user left it."""
+        if not self._power_uses_levels():
+            return
+        try:
+            if self._tdp_profiles.backfill_gpu_levels():
+                decky.logger.info("GPU performance level split from the CPU level")
+        except Exception as exc:  # noqa: BLE001
+            decky.logger.warning("GPU level backfill failed: %s", type(exc).__name__)
+
+    def _sync_split_gpu_level(self) -> None:
+        setter = getattr(self._tdp_backend, "set_split_gpu_level", None)
+        if not callable(setter):
+            return
+        if not self._power_uses_levels():
+            setter(None)
+            return
+        if self._settings.get("eco_enabled"):
+            setter(self._tdp_backend.get_limits().min_w)
+            return
+        setter(self._tdp_profiles.gpu_level(self._current_appid))
+
+    def _reported_gpu_level(self, appid):
+        if not self._power_uses_levels():
+            return None
+        raw = self._tdp_profiles.gpu_level(appid)
+        if raw is None:
+            return None
+        active = self._active_max(self._limits(), read_on_ac())
+        return self._clamp_tdp_request(raw, active)
+
     def _frequency_managed_by_power(self) -> bool:
         """On ARM the performance level owns the same cpufreq/devfreq ceilings that the
         CPU window and GPU clock controls write, so only one of them may drive them."""
@@ -6255,6 +6290,7 @@ class Plugin:
         return observation
 
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
+        self._sync_split_gpu_level()
         self._tdp_backend_used = True
         apply_targets = getattr(
             self._tdp_backend,
@@ -11111,6 +11147,8 @@ class Plugin:
                 geff["watts"],
                 active,
             ),
+            "gpu_level": self._reported_gpu_level(self._current_appid),
+            "global_gpu_level": self._reported_gpu_level(None),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
@@ -11672,6 +11710,7 @@ class Plugin:
         self._desktop_power.replace_cpu_backend(replacement)
         self._tdp_backend = replacement
         self._reset_power_values_on_unit_change()
+        self._backfill_arm_gpu_levels()
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(replacement, "readback", True)),
         )
@@ -12001,6 +12040,37 @@ class Plugin:
         clamped = self._clamp_tdp_request(watts, active)
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._apply_tdp_now("manual-watts")
+        return self._apply_result(res)
+
+    async def set_gpu_performance_level(
+        self, level: int, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        """ARM only: cap the GPU on its own 1–10 scale without moving the CPU level."""
+        self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
+        if not self._power_uses_levels():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "not-level-unit"}
+        if not self._tdp_control_on():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._clear_eco()
+        self._exit_firmware_mode()
+        limits = self._limits()
+        active = self._active_max(limits, read_on_ac())
+        clamped = self._clamp_tdp_request(level, active)
+        self._tdp_profiles.set_gpu_level(resolved, clamped, appid=appid)
+        res = await self._apply_tdp_now("manual-gpu-level")
         return self._apply_result(res)
 
     async def set_tdp_follow_global(

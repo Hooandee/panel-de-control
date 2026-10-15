@@ -186,6 +186,24 @@ def test_a_ceiling_published_late_is_waited_for_not_reported_as_a_mismatch(tmp_p
     assert _read(root, node) == want
 
 
+def test_a_split_gpu_level_stays_high_when_the_cpu_level_drops(tmp_path):
+    root = _thor(tmp_path)
+    backend = ArmPerformanceLevels(root=root)
+    backend.set_split_gpu_level(10)
+    assert backend.set_tdp(1, ac=False).ok is True
+    assert _caps(root) == (787200, 1056000, 1248000, 680000000)
+    assert backend.read_applied() == 1
+
+
+def test_a_split_gpu_level_can_drop_without_the_cpu(tmp_path):
+    root = _thor(tmp_path)
+    backend = ArmPerformanceLevels(root=root)
+    backend.set_split_gpu_level(1)
+    assert backend.set_tdp(10, ac=False).ok is True
+    assert _caps(root) == (2016000, 2803200, 3187200, 220000000)
+    assert backend.read_applied() == 10
+
+
 def test_a_ceiling_that_never_lands_still_reports_the_mismatch(tmp_path):
     root = _thor(tmp_path, armada_balanced=False)
     ticks = iter(range(100))

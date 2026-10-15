@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isLevelUnit, levelFrequencySummary } from "./unit";
+import { cpuFrequencyLabel, gpuFrequencyLabel, isLevelUnit, levelFrequencySummary } from "./unit";
 
 describe("power unit helpers", () => {
   it("recognises the ARM level unit only", () => {
@@ -14,5 +14,12 @@ describe("power unit helpers", () => {
       .toBe("CPU 1.5 · 2.1 · 2.2 GHz  ·  GPU 475 MHz");
     expect(levelFrequencySummary({ cpu_khz: [2016000], gpu_mhz: null })).toBe("CPU 2.0 GHz");
     expect(levelFrequencySummary(null)).toBeNull();
+  });
+
+  it("labels CPU and GPU ceilings on their own", () => {
+    const entry = { cpu_khz: [1_248_000, 1_056_000], gpu_mhz: 680 };
+    expect(cpuFrequencyLabel(entry)).toBe("1.2 · 1.1 GHz");
+    expect(gpuFrequencyLabel(entry)).toBe("680 MHz");
+    expect(gpuFrequencyLabel({ cpu_khz: [2_016_000], gpu_mhz: null })).toBeNull();
   });
 });

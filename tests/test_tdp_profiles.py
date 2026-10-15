@@ -492,6 +492,29 @@ def test_sanitize_is_noop_and_no_write_when_all_valid(tmp_path):
     assert s.effective("42")["pl1"] == 25
 
 
+def test_gpu_level_is_independent_of_the_cpu_level(tmp_path):
+    s = _store(tmp_path, default=6)
+    assert s.gpu_level(None) is None
+    assert s.backfill_gpu_levels() is True
+    assert s.gpu_level(None) == 6
+    s.set_pl1("global", 3)
+    assert s.gpu_level(None) == 6
+    s.set_gpu_level("global", 10)
+    assert s.effective(None)["pl1"] == 3
+    assert s.gpu_level(None) == 10
+    reloaded = ProfileStore(str(tmp_path / "tdp_profiles.json"), default_watts=6)
+    assert reloaded.gpu_level(None) == 10
+    assert reloaded.effective(None)["pl1"] == 3
+
+
+def test_a_new_game_cpu_profile_keeps_the_global_gpu_level(tmp_path):
+    s = _store(tmp_path, default=6)
+    s.set_gpu_level("global", 10)
+    s.set_pl1("game", 2, appid="42")
+    assert s.effective("42")["pl1"] == 2
+    assert s.gpu_level("42") == 10
+
+
 def test_sanitize_raises_below_minimum(tmp_path):
     # Corrupt low values (0) are floored to the device minimum too.
     path = str(tmp_path / "tdp_profiles.json")

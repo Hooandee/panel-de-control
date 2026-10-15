@@ -14,3 +14,13 @@ export function levelFrequencySummary(entry: LevelFrequencies | null | undefined
   const cpu = `CPU ${entry.cpu_khz.map(ghz).join(" · ")} GHz`;
   return entry.gpu_mhz === null ? cpu : `${cpu}  ·  GPU ${entry.gpu_mhz} MHz`;
 }
+
+export function cpuFrequencyLabel(entry: LevelFrequencies | null | undefined): string | null {
+  if (!entry || entry.cpu_khz.length === 0) return null;
+  return `${entry.cpu_khz.map(ghz).join(" · ")} GHz`;
+}
+
+export function gpuFrequencyLabel(entry: LevelFrequencies | null | undefined): string | null {
+  if (!entry || entry.gpu_mhz === null) return null;
+  return `${entry.gpu_mhz} MHz`;
+}

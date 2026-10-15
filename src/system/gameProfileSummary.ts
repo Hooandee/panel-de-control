@@ -13,7 +13,9 @@ export function sectionLine(section: SectionId, row: GameProfileRow, t: T): Sect
   if (section === "tdp" && row.tdp) {
     if (!row.tdp.auto) {
       const text = row.tdp.unit === "level"
-        ? t("tdp.level.value", { level: row.tdp.pl1 })
+        ? (row.tdp.gpu_level != null
+          ? t("tdp.split.summary", { cpu: row.tdp.pl1, gpu: row.tdp.gpu_level })
+          : t("tdp.level.value", { level: row.tdp.pl1 }))
         : `${row.tdp.pl1} W`;
       return { label: t("gameProfiles.sec.tdp"), text, dim: row.tdp.follows_global };
     }

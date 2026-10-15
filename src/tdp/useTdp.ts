@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
+  getTdpState, setTdpWatts, setGpuPerformanceLevel, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
   getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice,
   setLowBatteryTdpHold, getPowerPresets, applyPowerPreset, setAutoTdpConfig,
   TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState, AutoTdpConfig,
@@ -40,6 +40,7 @@ export interface TdpControl {
   refresh: () => void;
   onScope: (s: TdpScope) => void;
   onWatts: (w: number) => void;
+  onGpuLevel: (level: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
   onAutoTdpToggle: (enabled: boolean) => void;
@@ -73,6 +74,7 @@ export function useTdp(): TdpControl {
   const [power, setPower] = useState<PowerDraw | null>(null);
   const [presets, setPresets] = useState<PowerPresetState | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitTimerGpu = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDrafts = useRef<AutoDrafts>({});
   const followEpoch = useRef(0);
@@ -230,6 +232,23 @@ export function useTdp(): TdpControl {
       if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
       commitTimerWatts.current = setTimeout(() => {
         setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {});
+      }, 200);
+    },
+    [resolveTarget, refresh],
+  );
+
+  const onGpuLevel = useCallback(
+    (level: number) => {
+      const { target, sc, context } = resolveTarget();
+      setTdp((cur) => {
+        if (!cur) return cur;
+        return sc === "global"
+          ? { ...cur, global_gpu_level: level }
+          : { ...cur, gpu_level: level };
+      });
+      if (commitTimerGpu.current) clearTimeout(commitTimerGpu.current);
+      commitTimerGpu.current = setTimeout(() => {
+        setGpuPerformanceLevel(level, sc, target, context).then(() => refresh()).catch(() => {});
       }, 200);
     },
     [resolveTarget, refresh],
@@ -418,6 +437,7 @@ export function useTdp(): TdpControl {
     refresh,
     onScope,
     onWatts,
+    onGpuLevel,
     onSetLevels,
     onSetMode,
     onAutoTdpToggle,
