@@ -89,3 +89,9 @@ def test_arm_levels_show_as_levels_in_the_hud():
     band = {"tdp_unit": "level", "_locale": "en", "learn": {"enough": True, "floor": 3, "ceil": 7}}
     assert pdc_metrics.tdp_learn(band) == "Lv 3-7"
     assert pdc_metrics.tdp({"applied": 15, "_locale": "es"}) == "15W"
+
+
+def test_tdp_shows_a_split_gpu_level_next_to_the_cpu_level():
+    snap = {"applied": 3, "tdp_unit": "level", "gpu_level": 10, "_locale": "es"}
+    assert pdc.tdp(snap) == "Nv 3 · GPU 10"
+    assert pdc.tdp({**snap, "gpu_level": None}) == "Nv 3"

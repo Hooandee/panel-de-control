@@ -5,6 +5,7 @@ import {
   getTdpState,
   setAutoTdp,
   setAutoTdpConfig,
+  setGpuLevel,
   setSeenAutotdpNotice,
   setTdpWatts,
   type PowerDraw,
@@ -16,7 +17,7 @@ import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { getDisabled } from "../customize/modules";
 import { translate } from "../i18n";
-import { resolveAutoView } from "../tdp/autoView";
+import { autoGpuLevel, resolveAutoView } from "../tdp/autoView";
 import { monitorOnly } from "../tdp/conflict";
 import { resolveLivePresets } from "../tdp/livePresets";
 import { presetTitle, type PresetItem } from "../tdp/powerPresets";
@@ -36,7 +37,11 @@ export interface DeckPerfView {
   target: number | null;
   maxFps: number | null;
   frequencies: TdpState["level_frequencies"] | null;
-  presets: { id: string; title: string; icon: string; active: boolean }[];
+  // ARM: the GPU can take its own level; gpuLevel null = linked to the CPU level.
+  split: boolean;
+  gpuLevel: number | null;
+  gpuShown: number | null;
+  presets: { id: string; title: string; icon: string; active: boolean; level: number }[];
 }
 
 export interface DeckPerfDeps {
@@ -50,6 +55,7 @@ export interface DeckPerfDeps {
   call: {
     applyPreset: typeof applyPowerPreset;
     setWatts: typeof setTdpWatts;
+    setGpu: typeof setGpuLevel;
     setAuto: typeof setAutoTdp;
     setAutoConfig: typeof setAutoTdpConfig;
     seenNotice: typeof setSeenAutotdpNotice;
@@ -81,6 +87,14 @@ export function createDeckPerf(deps: DeckPerfDeps) {
     const autoOn = autoReady && Boolean(autoView.config.enabled);
     const value = Math.round(scope === "global" ? tdp.global_watts : tdp.watts);
     const max = tdp.on_ac ? Math.max(tdp.limits.max, tdp.limits.max_ac) : tdp.limits.max;
+    const shown = autoOn && power?.auto?.setpoint != null ? Math.round(power.auto.setpoint) : value;
+    const split = tdp.unit === "level" && Boolean(tdp.gpu_level_supported);
+    const stored = split ? (scope === "global" ? tdp.global_gpu_level : tdp.gpu_level) ?? null : null;
+    const gpuShown = !split ? null : stored === null
+      ? shown
+      : autoOn
+        ? autoGpuLevel(stored, value, shown, autoView.config, tdp.auto_limits ?? tdp.limits, tdp.on_ac)
+        : Math.max(tdp.limits.min, Math.min(max, stored));
     return {
       tdp,
       items,
@@ -92,7 +106,7 @@ export function createDeckPerf(deps: DeckPerfDeps) {
         unit: tdp.unit ?? null,
         levels: tdp.unit === "level",
         value,
-        shown: autoOn && power?.auto?.setpoint != null ? Math.round(power.auto.setpoint) : value,
+        shown,
         min: tdp.limits.min,
         max: Math.max(tdp.limits.min + 1, max),
         autoReady,
@@ -100,11 +114,15 @@ export function createDeckPerf(deps: DeckPerfDeps) {
         target: autoOn ? autoView.config.target_fps ?? null : null,
         maxFps: tdp.auto_target_max_fps ?? null,
         frequencies: tdp.level_frequencies ?? null,
+        split,
+        gpuLevel: stored,
+        gpuShown,
         presets: items.map((item) => ({
           id: item.id,
           title: presetTitle(item, deps.t),
           icon: item.icon,
           active: item.active && !autoOn,
+          level: item.watts,
         })),
       },
     };
@@ -138,6 +156,19 @@ export function createDeckPerf(deps: DeckPerfDeps) {
       await deps.call.setWatts(Math.max(s.view.min, Math.min(s.view.max, value)), s.scope, s.target, s.context);
       return (await snapshot()).view;
     },
+    "perf.gpu": async ([level]: unknown[]) => {
+      const s = await snapshot();
+      if (!s.view.ready || !s.view.split) throw new Error("unsupported");
+      if (level == null) {
+        await deps.call.setGpu(null, s.scope, s.target, s.context);
+        return (await snapshot()).view;
+      }
+      const value = Math.round(Number(level));
+      // Under Auto only unlinking is allowed; the level itself follows Auto.
+      if ((s.view.autoOn && s.view.gpuLevel !== null) || !Number.isFinite(value)) throw new Error("unsupported");
+      await deps.call.setGpu(Math.max(s.view.min, Math.min(s.view.max, value)), s.scope, s.target, s.context);
+      return (await snapshot()).view;
+    },
     "perf.target": async ([fps]: unknown[]) => {
       const s = await snapshot();
       if (!s.view.autoReady) throw new Error("unsupported");
@@ -167,6 +198,7 @@ export function steamDeckPerf() {
     call: {
       applyPreset: applyPowerPreset,
       setWatts: setTdpWatts,
+      setGpu: setGpuLevel,
       setAuto: setAutoTdp,
       setAutoConfig: setAutoTdpConfig,
       seenNotice: setSeenAutotdpNotice,

@@ -78,6 +78,9 @@ Panel no es solo para PC. Con Armada también funciona en consolas ARM, reconoce
 y solo te enseña lo que ese hardware permite tocar. En el [vídeo](https://youtu.be/1BHufGK6nbo)
 explico cómo montarlo paso a paso.
 
+El dial de Potencia mueve la CPU y la GPU juntas o por separado: si un juego tira de gráfica, puedes
+bajar la CPU y dejar la GPU arriba.
+
 Y si tienes una AYN Thor, Panel puede usar la pantalla de abajo como panel táctil mientras juegas en
 la de arriba.
 

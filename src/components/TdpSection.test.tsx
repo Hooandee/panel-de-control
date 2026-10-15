@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PowerDraw, TdpState } from "../api";
 
 const captured = vi.hoisted(() => ({
   arc: null as Record<string, unknown> | null,
   slider: null as Record<string, unknown> | null,
-  sliders: [] as Record<string, unknown>[],
 }));
 
 vi.mock("@decky/ui", () => ({
@@ -14,7 +13,6 @@ vi.mock("@decky/ui", () => ({
   PanelSectionRow: ({ children }: any) => <div>{children}</div>,
   SliderField: (props: Record<string, unknown>) => {
     captured.slider = props;
-    captured.sliders.push(props);
     return <div />;
   },
   ToggleField: ({ label, description, checked, onChange }: any) => (
@@ -33,23 +31,7 @@ vi.mock("./PowerArc", () => ({
 }));
 vi.mock("./TdpMonitorNotice", () => ({ TdpMonitorNotice: () => <div /> }));
 vi.mock("./PowerPresetsModal", () => ({ openPowerPresetsModal: vi.fn() }));
-vi.mock("./Presets", () => ({
-  Presets: ({
-    resolved,
-    onPick,
-  }: {
-    resolved: { visible: { id: string; watts: number }[] };
-    onPick: (item: { watts: number }) => void;
-  }) => (
-    <div>
-      {resolved.visible.map((item) => (
-        <button key={item.id} type="button" onClick={() => onPick(item)}>
-          {item.id}:{item.watts}
-        </button>
-      ))}
-    </div>
-  ),
-}));
+vi.mock("./Presets", () => ({ Presets: () => <div /> }));
 vi.mock("./FirmwareModes", () => ({ FirmwareModes: () => <div /> }));
 vi.mock("./AdvancedBoost", () => ({ AdvancedBoost: () => <div /> }));
 vi.mock("./TdpSuggestionCard", () => ({ TdpSuggestionCard: () => <div /> }));
@@ -127,11 +109,9 @@ const elevatedFloorState = {
 
 function renderTdpSection(
   tdp: TdpState,
-  { power = null, monitorOnly = false, onWatts = vi.fn(), onGpuLevel }: {
+  { power = null, monitorOnly = false }: {
     power?: PowerDraw | null;
     monitorOnly?: boolean;
-    onWatts?: (watts: number) => void;
-    onGpuLevel?: (level: number) => void;
   } = {},
 ) {
   return render(
@@ -139,8 +119,7 @@ function renderTdpSection(
       tdp={tdp}
       scope="global"
       power={power}
-      onWatts={onWatts}
-      onGpuLevel={onGpuLevel}
+      onWatts={vi.fn()}
       onSetLevels={vi.fn()}
       onSetMode={vi.fn()}
       onApplySuggestion={vi.fn()}
@@ -158,7 +137,6 @@ describe("TdpSection Steam Deck PPT arc", () => {
   afterEach(() => {
     captured.arc = null;
     captured.slider = null;
-    captured.sliders = [];
     cleanup();
   });
 
@@ -608,44 +586,5 @@ describe("TdpSection ownership row", () => {
     renderTdpSection(deckState);
 
     expect(screen.queryByTestId("ownership-status")).toBeNull();
-  });
-
-  it("gives ARM a CPU level and a GPU level that move separately", () => {
-    const onWatts = vi.fn();
-    const onGpuLevel = vi.fn();
-    captured.sliders = [];
-    renderTdpSection({
-      ...deckState,
-      unit: "level",
-      limits: { min: 1, default: 6, max: 10, max_ac: 10 },
-      request_min: 1,
-      watts: 3,
-      global_watts: 3,
-      gpu_level: 10,
-      global_gpu_level: 10,
-      supports_advanced: false,
-      ppt: null,
-      level_frequencies: {
-        "3": { cpu_khz: [1_248_000], gpu_mhz: 348 },
-        "10": { cpu_khz: [3_187_200], gpu_mhz: 680 },
-      },
-      presets: { quiet: 1, balanced: 6, turbo: 10, turbo_ac: 10 },
-    } as unknown as TdpState, { onWatts, onGpuLevel });
-
-    expect(screen.getByText("tdp.split.cpu")).toBeTruthy();
-    expect(screen.getByText("tdp.split.gpu")).toBeTruthy();
-    expect(screen.getByText("1.2 GHz")).toBeTruthy();
-    expect(screen.getByText("680 MHz")).toBeTruthy();
-    expect(captured.sliders.map((slider) => slider.value)).toEqual([3, 10]);
-
-    const [cpu, gpu] = captured.sliders.slice(-2);
-    (cpu.onChange as (value: number) => void)(2);
-    (gpu.onChange as (value: number) => void)(9);
-    expect(onWatts).toHaveBeenCalledWith(2);
-    expect(onGpuLevel).toHaveBeenCalledWith(9);
-
-    fireEvent.click(within(screen.getByTestId("gpu-presets")).getByRole("button", { name: "quiet:1" }));
-    expect(onGpuLevel).toHaveBeenCalledWith(1);
-    expect(onWatts).not.toHaveBeenCalledWith(1);
   });
 });

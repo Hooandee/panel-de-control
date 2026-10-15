@@ -22,6 +22,9 @@ export function sectionLine(section: SectionId, row: GameProfileRow, t: T): Sect
     const details = [
       t("gameProfiles.auto"),
       `${row.tdp.target_fps} FPS`,
+      ...(row.tdp.unit === "level" && row.tdp.gpu_level != null
+        ? [t("tdp.split.summary", { cpu: row.tdp.pl1, gpu: row.tdp.gpu_level })]
+        : []),
       `${t("tdp.auto.initial.label")} ${row.tdp.initial_tdp} W`,
     ];
     if (row.tdp.min_tdp != null && row.tdp.max_tdp != null) {
