@@ -5,9 +5,35 @@
 ## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
 
 
-### Features
+### Español
 
-* **arm:** one power dial for CPU and GPU ([#950](https://github.com/Hooandee/panel-de-control/issues/950)) ([463b563](https://github.com/Hooandee/panel-de-control/commit/463b563a6117fe9da607f3186a94620a4591ade1))
+* **Potencia en ARM:** El dial ahora tiene pestañas de CPU y GPU y un candado. Con el candado puesto todo va como antes y las dos suben y bajan juntas. Si lo quitas, puedes bajar la CPU para gastar menos y dejar la GPU arriba en los juegos que tiran de gráfica, o al revés. El dial enseña las dos a la vez, Auto respeta la distancia que dejes entre ellas y el HUD muestra el nivel de la GPU cuando va por su cuenta.
+* **Sistema en ARM:** La tarjeta de la GPU ya no dice «Automático» cuando Potencia la está limitando. Ahora enseña la frecuencia máxima real y el nivel que la marca.
+* **Pantalla inferior:** En la AYN Thor, el panel de rendimiento de la pantalla de abajo también deja elegir CPU o GPU y unirlas o separarlas.
+
+### English
+
+* **Power on ARM:** The dial now has CPU and GPU tabs and a lock. With the lock on everything works as before and both go up and down together. Turn it off and you can lower the CPU to save power while keeping the GPU high in games that lean on graphics, or the other way round. The dial shows both at once, Auto keeps the gap you set between them and the HUD shows the GPU level when it runs on its own.
+* **System on ARM:** The GPU card no longer says "Automatic" while Power is capping it. It now shows the real maximum frequency and the level setting it.
+* **Bottom screen:** On the AYN Thor, the performance panel on the bottom screen also lets you pick CPU or GPU and link or split them.
+
+### Italiano
+
+* **Potenza su ARM:** Il selettore ora ha le schede CPU e GPU e un lucchetto. Con il lucchetto chiuso tutto funziona come prima e le due salgono e scendono insieme. Se lo apri, puoi abbassare la CPU per consumare meno e lasciare la GPU alta nei giochi che chiedono grafica, o il contrario. Il selettore mostra entrambe, Auto rispetta la distanza che lasci tra loro e l'HUD mostra il livello della GPU quando va per conto suo.
+* **Sistema su ARM:** La scheda della GPU non dice più «Automatico» mentre Potenza la limita. Ora mostra la frequenza massima reale e il livello che la imposta.
+* **Schermo inferiore:** Sulla AYN Thor, il pannello delle prestazioni sullo schermo in basso permette anche di scegliere CPU o GPU e di unirle o separarle.
+
+### Deutsch
+
+* **Leistung auf ARM:** Der Regler hat jetzt Tabs für CPU und GPU und ein Schloss. Mit geschlossenem Schloss bleibt alles wie bisher und beide gehen gemeinsam hoch und runter. Öffnest du es, kannst du die CPU senken, um Strom zu sparen, und die GPU in grafiklastigen Spielen oben lassen, oder umgekehrt. Der Regler zeigt beide gleichzeitig, Auto hält den Abstand, den du zwischen ihnen lässt, und das HUD zeigt die GPU-Stufe, wenn sie eigenständig läuft.
+* **System auf ARM:** Die GPU-Karte zeigt nicht mehr „Automatisch“, während Leistung sie begrenzt. Jetzt siehst du die echte Höchstfrequenz und die Stufe, die sie festlegt.
+* **Unterer Bildschirm:** Auf der AYN Thor kannst du im Leistungsfenster des unteren Bildschirms jetzt auch CPU oder GPU wählen und sie koppeln oder trennen.
+
+### Português (Brasil)
+
+* **Potência no ARM:** O seletor agora tem abas de CPU e GPU e um cadeado. Com o cadeado fechado tudo funciona como antes e as duas sobem e descem juntas. Abrindo, você pode baixar a CPU para gastar menos e deixar a GPU alta nos jogos que puxam gráfico, ou o contrário. O seletor mostra as duas ao mesmo tempo, o Auto respeita a distância que você deixar entre elas e o HUD mostra o nível da GPU quando ela vai por conta própria.
+* **Sistema no ARM:** O card da GPU não diz mais "Automático" enquanto a Potência limita ela. Agora mostra a frequência máxima real e o nível que define ela.
+* **Tela inferior:** No AYN Thor, o painel de desempenho da tela de baixo também deixa escolher CPU ou GPU e unir ou separar as duas.
 
 ## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
 
