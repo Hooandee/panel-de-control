@@ -30,6 +30,7 @@ const TdpCoreBlock: FC = () => {
       scope={c.scope}
       power={power}
       onWatts={c.onWatts}
+      onGpuLevel={c.onGpuLevel}
       onSetLevels={c.onSetLevels}
       onSetMode={c.onSetMode}
       onApplySuggestion={c.onApplySuggestion}

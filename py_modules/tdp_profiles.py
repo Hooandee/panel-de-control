@@ -44,6 +44,11 @@ def _auto_initial_tdp(value, fallback):
     return parsed if parsed > 0 else int(fallback)
 
 
+def _gpu_level(value):
+    parsed = _int0(value)
+    return parsed if parsed > 0 else None
+
+
 def _auto_range(minimum, maximum):
     minimum = _int0(minimum)
     maximum = _int0(maximum)
@@ -100,6 +105,9 @@ class ProfileStore(ScopedProfileStore):
             base["auto_min_tdp"], base["auto_max_tdp"] = _auto_range(
                 raw.get("auto_min_tdp"), raw.get("auto_max_tdp")
             )
+            gpu_level = _gpu_level(raw.get("gpu_level"))
+            if gpu_level is not None:
+                base["gpu_level"] = gpu_level
             g = raw.get("gpu")
             if isinstance(g, dict):
                 base["gpu"] = {"manual": bool(g.get("manual")),
@@ -164,7 +172,7 @@ class ProfileStore(ScopedProfileStore):
             if capped_initial != prof.get("auto_initial_tdp"):
                 prof["auto_initial_tdp"] = capped_initial
                 changed = True
-            for key in ("auto_min_tdp", "auto_max_tdp"):
+            for key in ("auto_min_tdp", "auto_max_tdp", "gpu_level"):
                 value = prof.get(key)
                 if value is not None:
                     capped = max(min_w, min(value, max_w))
@@ -223,6 +231,25 @@ class ProfileStore(ScopedProfileStore):
         )
         self._save()
 
+    def gpu_level(self, appid):
+        """ARM GPU level set apart from the CPU level; None while the two are linked."""
+        return _gpu_level(self._effective_prof(appid).get("gpu_level"))
+
+    def set_gpu_level(self, scope, level, appid=None):
+        prof = self._target(scope, appid)
+        if level is None:
+            prof.pop("gpu_level", None)
+        else:
+            prof["gpu_level"] = int(level)
+        self._save()
+
+    def _fresh_game(self, pl1):
+        prof = self._profile_dict(pl1)
+        gpu_level = _gpu_level(self._data["global"].get("gpu_level"))
+        if gpu_level is not None:
+            prof["gpu_level"] = gpu_level
+        return prof
+
     def gpu_clock(self, appid):
         g = self._effective_prof(appid).get("gpu")
         return dict(g) if g else {"manual": False, "min": None, "max": None}
@@ -265,7 +292,7 @@ class ProfileStore(ScopedProfileStore):
         rather than copying global — the caller controls the mode separately.
         """
         if scope == "game" and appid is not None and str(appid) not in self._data["games"]:
-            self._data["games"][str(appid)] = self._profile_dict(pl1)
+            self._data["games"][str(appid)] = self._fresh_game(pl1)
         else:
             self._target(scope, appid)["pl1"] = int(pl1)
         self._save()
@@ -312,7 +339,7 @@ class ProfileStore(ScopedProfileStore):
         so a malformed payload can't raise. Mirrors set_pl1's fresh-estable seed for a game
         with no profile yet."""
         if scope == "game" and appid is not None and str(appid) not in self._data["games"]:
-            prof = self._data["games"][str(appid)] = self._profile_dict(int(pl1))
+            prof = self._data["games"][str(appid)] = self._fresh_game(int(pl1))
         else:
             prof = self._target(scope, appid)
             prof["pl1"] = int(pl1)

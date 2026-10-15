@@ -79,6 +79,9 @@ Panel isn't just for PCs. With Armada it also runs on ARM consoles, recognizes t
 and only shows what that hardware lets it control. The [video](https://youtu.be/1BHufGK6nbo) goes
 through the setup step by step.
 
+The Power dial moves the CPU and GPU together or apart: if a game leans on graphics, you can lower
+the CPU and keep the GPU high.
+
 And if you have an AYN Thor, Panel can use the bottom screen as a touch panel while you play on the
 top one.
 

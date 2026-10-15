@@ -14,6 +14,8 @@ const SW = 14;
 const START = 135;
 const SWEEP = 270;
 const MIN_AUTO_GAUGE_FRACTION = 0.055;
+const GHOST_R = 60;
+const GHOST_SW = 5;
 
 function autoArcColor(progress: number): string {
   const hue = Math.round(210 + progress * 60);
@@ -55,6 +57,10 @@ interface PowerArcProps {
   safeMax?: number | null;
   // Charger ceiling of the manual extra range; widens the arc past safeMax.
   manualMax?: number | null;
+  // Names what the dial drives when one dial serves two parts (ARM CPU or GPU).
+  heroLabel?: string | null;
+  // The other part's level, drawn as a thin inner ring.
+  ghost?: { value: number; label: string } | null;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -74,6 +80,8 @@ export const PowerArc: FC<PowerArcProps> = ({
   safeMin = null,
   safeMax = null,
   manualMax = null,
+  heroLabel = null,
+  ghost = null,
 }) => {
   const { t } = useI18n();
   const levels = isLevelUnit(unit);
@@ -162,6 +170,9 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [fx1, fy1] = fastDeg === null ? [0, 0] : polarAt(fastDeg, R - SW / 2 - 1);
   const [fx2, fy2] = fastDeg === null ? [0, 0] : polarAt(fastDeg, R + SW / 2 + 1);
   const [flx, fly] = fastDeg === null ? [0, 0] : polarAt(fastDeg, R - SW / 2 - 12);
+  const ghostFraction = ghost === null ? null : fraction(ghost.value, limits.min, safeScaleMax);
+  const ghostColor = ghostFraction === null ? null : arcColor(ghostFraction);
+  const [gx, gy] = ghostFraction === null ? [0, 0] : polarAt(START + ghostFraction * SWEEP, GHOST_R);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "2px auto 0" }}>
@@ -288,10 +299,33 @@ export const PowerArc: FC<PowerArcProps> = ({
         {!targetLabelAtMinimum && (
           <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}{suffix}</text>
         )}
+        {ghostFraction !== null && ghostColor !== null && (
+          <g data-testid="power-arc-ghost">
+            <path d={arcPath(START, end, GHOST_R)} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={GHOST_SW} strokeLinecap="round" />
+            {ghostFraction > 0 && (
+              <path
+                d={arcPath(START, end, GHOST_R)}
+                fill="none"
+                stroke={ghostColor}
+                strokeOpacity={0.55}
+                strokeWidth={GHOST_SW}
+                strokeLinecap="round"
+                pathLength={1000}
+                strokeDasharray={`${1000 * ghostFraction} 1000`}
+                style={{ transition: "stroke-dasharray 240ms ease, stroke 240ms ease" }}
+              />
+            )}
+            <circle cx={gx} cy={gy} r={4.2} fill={theme.color.surfaceRaised} stroke={ghostColor} strokeWidth={2} />
+          </g>
+        )}
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}{suffix}{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={extra === null ? color : extraColor} /></div>}
+        {heroLabel ? (
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: auto ? theme.color.accent : color }}>
+            {heroLabel}
+          </div>
+        ) : !auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={extra === null ? color : extraColor} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
           <span style={{ fontSize: 16, color: theme.color.textMuted }}>{levels ? `/${limits.max}` : " W"}</span>
@@ -343,6 +377,11 @@ export const PowerArc: FC<PowerArcProps> = ({
         ) : (
           <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: extra === null ? color : extraColor, marginTop: overclocked ? 3 : undefined }}>
             {extra === null ? t(`tdp.zone.${zone.key}`) : t("tdp.extra.label")}
+          </div>
+        )}
+        {ghost !== null && ghostColor !== null && (
+          <div style={{ fontSize: 10, color: theme.color.textMuted, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
+            {ghost.label} <b style={{ color: ghostColor }}>{Math.round(ghost.value)}</b>
           </div>
         )}
       </div>

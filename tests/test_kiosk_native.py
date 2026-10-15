@@ -268,3 +268,9 @@ def test_an_unavailable_bottom_screen_says_why(monkeypatch, capsys):
     monkeypatch.delenv("PDC_KIOSK_URL", raising=False)
     assert app.main(["app.py", "/assets"]) == app.UNAVAILABLE
     assert "PDC_KIOSK_URL" in capsys.readouterr().err
+
+
+def test_split_caption_names_cpu_and_gpu_at_their_own_levels():
+    freqs = {"3": {"cpu_khz": [1017600, 1593600], "gpu_mhz": 348}, "10": {"cpu_khz": [2016000, 3187200], "gpu_mhz": 680}}
+    assert choices.level_caption(freqs, 3, decimal_comma=True, gpu_level=10) == "CPU 1,6 GHz · GPU 680 MHz"
+    assert choices.level_caption(freqs, 3, decimal_comma=False, gpu_level=7) == ""
