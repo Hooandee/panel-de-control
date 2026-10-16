@@ -2,6 +2,138 @@
 
 ## Unreleased
 
+## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
+
+
+### Español
+
+* **Potencia en ARM:** El dial ahora tiene pestañas de CPU y GPU y un candado. Con el candado puesto todo va como antes y las dos suben y bajan juntas. Si lo quitas, puedes bajar la CPU para gastar menos y dejar la GPU arriba en los juegos que tiran de gráfica, o al revés. El dial enseña las dos a la vez, Auto respeta la distancia que dejes entre ellas y el HUD muestra el nivel de la GPU cuando va por su cuenta.
+* **Sistema en ARM:** La tarjeta de la GPU ya no dice «Automático» cuando Potencia la está limitando. Ahora enseña la frecuencia máxima real y el nivel que la marca.
+* **Pantalla inferior:** En la AYN Thor, el panel de rendimiento de la pantalla de abajo también deja elegir CPU o GPU y unirlas o separarlas.
+
+### English
+
+* **Power on ARM:** The dial now has CPU and GPU tabs and a lock. With the lock on everything works as before and both go up and down together. Turn it off and you can lower the CPU to save power while keeping the GPU high in games that lean on graphics, or the other way round. The dial shows both at once, Auto keeps the gap you set between them and the HUD shows the GPU level when it runs on its own.
+* **System on ARM:** The GPU card no longer says "Automatic" while Power is capping it. It now shows the real maximum frequency and the level setting it.
+* **Bottom screen:** On the AYN Thor, the performance panel on the bottom screen also lets you pick CPU or GPU and link or split them.
+
+### Italiano
+
+* **Potenza su ARM:** Il selettore ora ha le schede CPU e GPU e un lucchetto. Con il lucchetto chiuso tutto funziona come prima e le due salgono e scendono insieme. Se lo apri, puoi abbassare la CPU per consumare meno e lasciare la GPU alta nei giochi che chiedono grafica, o il contrario. Il selettore mostra entrambe, Auto rispetta la distanza che lasci tra loro e l'HUD mostra il livello della GPU quando va per conto suo.
+* **Sistema su ARM:** La scheda della GPU non dice più «Automatico» mentre Potenza la limita. Ora mostra la frequenza massima reale e il livello che la imposta.
+* **Schermo inferiore:** Sulla AYN Thor, il pannello delle prestazioni sullo schermo in basso permette anche di scegliere CPU o GPU e di unirle o separarle.
+
+### Deutsch
+
+* **Leistung auf ARM:** Der Regler hat jetzt Tabs für CPU und GPU und ein Schloss. Mit geschlossenem Schloss bleibt alles wie bisher und beide gehen gemeinsam hoch und runter. Öffnest du es, kannst du die CPU senken, um Strom zu sparen, und die GPU in grafiklastigen Spielen oben lassen, oder umgekehrt. Der Regler zeigt beide gleichzeitig, Auto hält den Abstand, den du zwischen ihnen lässt, und das HUD zeigt die GPU-Stufe, wenn sie eigenständig läuft.
+* **System auf ARM:** Die GPU-Karte zeigt nicht mehr „Automatisch“, während Leistung sie begrenzt. Jetzt siehst du die echte Höchstfrequenz und die Stufe, die sie festlegt.
+* **Unterer Bildschirm:** Auf der AYN Thor kannst du im Leistungsfenster des unteren Bildschirms jetzt auch CPU oder GPU wählen und sie koppeln oder trennen.
+
+### Português (Brasil)
+
+* **Potência no ARM:** O seletor agora tem abas de CPU e GPU e um cadeado. Com o cadeado fechado tudo funciona como antes e as duas sobem e descem juntas. Abrindo, você pode baixar a CPU para gastar menos e deixar a GPU alta nos jogos que puxam gráfico, ou o contrário. O seletor mostra as duas ao mesmo tempo, o Auto respeita a distância que você deixar entre elas e o HUD mostra o nível da GPU quando ela vai por conta própria.
+* **Sistema no ARM:** O card da GPU não diz mais "Automático" enquanto a Potência limita ela. Agora mostra a frequência máxima real e o nível que define ela.
+* **Tela inferior:** No AYN Thor, o painel de desempenho da tela de baixo também deixa escolher CPU ou GPU e unir ou separar as duas.
+
+## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
+
+
+### Español
+
+* **Pantalla inferior:** En consolas de doble pantalla con Armada, como la AYN Thor, mostrar Panel en la pantalla de abajo vuelve a funcionar. Las últimas versiones de Armada ocupaban esa pantalla por su cuenta y se quedaba en negro. Ahora Panel se la pide a Armada mientras la usas y se la devuelve en cuanto la apagas.
+
+### English
+
+* **Bottom screen:** On dual-screen handhelds with Armada, like the AYN Thor, showing Panel on the bottom screen works again. Recent Armada versions took over that screen on their own and it stayed black. Now Panel borrows it from Armada while you use it and gives it back as soon as you turn it off.
+
+### Italiano
+
+* **Schermo inferiore:** Sulle console a doppio schermo con Armada, come la AYN Thor, mostrare Panel sullo schermo in basso torna a funzionare. Le ultime versioni di Armada occupavano quello schermo per conto loro e restava nero. Ora Panel lo chiede ad Armada mentre lo usi e glielo restituisce appena lo spegni.
+
+### Deutsch
+
+* **Unterer Bildschirm:** Auf Handhelds mit zwei Bildschirmen und Armada, wie der AYN Thor, lässt sich Panel wieder auf dem unteren Bildschirm anzeigen. Neuere Armada-Versionen haben diesen Bildschirm selbst belegt, und er blieb schwarz. Jetzt leiht sich Panel ihn von Armada, solange du ihn nutzt, und gibt ihn zurück, sobald du ihn ausschaltest.
+
+### Português (Brasil)
+
+* **Tela inferior:** Em portáteis de duas telas com Armada, como o AYN Thor, mostrar o Panel na tela de baixo volta a funcionar. As versões mais recentes do Armada ocupavam essa tela por conta própria e ela ficava preta. Agora o Panel pega a tela emprestada do Armada enquanto você usa e devolve assim que você desliga.
+
+## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
+
+
+### Español
+
+* **Modo Descarga:** La pantalla ahora se apaga de verdad en vez de quedarse con poco brillo. Si dejas la consola quieta, una cuenta atrás de 3 segundos te avisa antes, y vuelve al momento en cuanto tocas la pantalla, mueves un joystick o pulsas un botón.
+* **Modo Descarga:** La tarjeta está más ordenada y se ve de un vistazo qué cambia: TDP, pantalla y turbo.
+
+### English
+
+* **Download mode:** The screen now really turns off instead of staying dimmed. If you leave the device alone, a 3 second countdown warns you first, and it comes back right away when you touch the screen, move a stick or press a button.
+* **Download mode:** The card is tidier and shows at a glance what changes: TDP, screen and turbo.
+
+### Italiano
+
+* **Modalità download:** Ora lo schermo si spegne davvero invece di restare con poca luminosità. Se lasci la console ferma, un conto alla rovescia di 3 secondi ti avvisa prima, e si riaccende subito appena tocchi lo schermo, muovi una levetta o premi un tasto.
+* **Modalità download:** La scheda è più ordinata e mostra a colpo d'occhio cosa cambia: TDP, schermo e turbo.
+
+### Deutsch
+
+* **Downloadmodus:** Der Bildschirm geht jetzt wirklich aus, statt nur abgedunkelt zu bleiben. Wenn du das Gerät liegen lässt, warnt dich vorher ein 3-Sekunden-Countdown, und er ist sofort wieder da, sobald du den Bildschirm berührst, einen Stick bewegst oder eine Taste drückst.
+* **Downloadmodus:** Die Karte ist aufgeräumter und zeigt auf einen Blick, was sich ändert: TDP, Bildschirm und Turbo.
+
+### Português (Brasil)
+
+* **Modo de download:** Agora a tela desliga de verdade em vez de ficar só com pouco brilho. Se você deixar o aparelho parado, uma contagem de 3 segundos avisa antes, e ela volta na hora quando você toca na tela, mexe um analógico ou aperta um botão.
+* **Modo de download:** O card ficou mais organizado e mostra de relance o que muda: TDP, tela e turbo.
+
+## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
+
+
+### Español
+
+* **Equipos:** La AYN Odin 3 con Armada ya se reconoce como tal, con su nombre, su chip Snapdragon 8 Elite y su pantalla OLED, en lugar de aparecer como un equipo ARM cualquiera.
+* **Ventiladores:** El ventilador de la Odin 3 ahora aparece y puedes ponerle una curva. Como no tiene sensor de velocidad, se muestra en porcentaje en vez de en RPM.
+* **Batería:** En consolas ARM como la Odin 3 o la Thor, Panel ya sabe cuándo están enchufadas. En la Odin 3 el límite de carga funciona de verdad, y al quitarlo vuelve a cargar enseguida.
+* **Mandos:** Las palas traseras M1 y M2 de la Odin 3 salen en Mandos y puedes asignarles otro botón. Si la emulación de mando que usas no se las pasa a los juegos, Panel te avisa.
+* **Potencia:** En consolas ARM con Armada, volver a poner el ventilador en Automático ya no te cambia el nivel de potencia que habías elegido.
+* **Sonido:** Con Armada, el ecualizador se activa a la primera y tarda bastante menos.
+
+### English
+
+* **Devices:** The AYN Odin 3 running Armada is now recognised by name, with its Snapdragon 8 Elite chip and OLED screen, instead of showing up as a generic ARM device.
+* **Fans:** The Odin 3 fan now shows up and takes a curve. It has no speed sensor, so it's shown as a percentage instead of RPM.
+* **Battery:** On ARM handhelds like the Odin 3 or the Thor, Panel now knows when the charger is plugged in. On the Odin 3 the charge limit really works, and turning it off starts charging again right away.
+* **Controllers:** The Odin 3 back buttons M1 and M2 show up in Controllers and can be assigned to another button. If your controller emulation doesn't pass them to games, Panel tells you.
+* **Power:** On ARM handhelds with Armada, setting the fan back to Automatic no longer changes the power level you picked.
+* **Sound:** With Armada, the equalizer turns on first time and takes a lot less time.
+
+### Italiano
+
+* **Dispositivi:** La AYN Odin 3 con Armada ora viene riconosciuta per nome, con il suo chip Snapdragon 8 Elite e lo schermo OLED, invece di comparire come un dispositivo ARM qualsiasi.
+* **Ventole:** La ventola della Odin 3 ora compare e accetta una curva. Non ha un sensore di velocità, quindi si vede in percentuale invece che in RPM.
+* **Batteria:** Sulle console ARM come la Odin 3 o la Thor, Panel ora sa quando il caricatore è collegato. Sulla Odin 3 il limite di carica funziona davvero, e togliendolo riprende subito a caricare.
+* **Controller:** I tasti posteriori M1 e M2 della Odin 3 compaiono in Controller e si possono assegnare a un altro tasto. Se l'emulazione del controller che usi non li passa ai giochi, Panel te lo dice.
+* **Potenza:** Sulle console ARM con Armada, rimettere la ventola in Automatico non cambia più il livello di potenza che avevi scelto.
+* **Audio:** Con Armada, l'equalizzatore si attiva al primo colpo e ci mette molto meno.
+
+### Deutsch
+
+* **Geräte:** Die AYN Odin 3 mit Armada wird jetzt mit Namen erkannt, samt Snapdragon 8 Elite und OLED-Bildschirm, statt als beliebiges ARM-Gerät aufzutauchen.
+* **Lüfter:** Der Lüfter der Odin 3 wird jetzt angezeigt und lässt sich mit einer Kurve steuern. Er hat keinen Drehzahlsensor, deshalb steht dort ein Prozentwert statt RPM.
+* **Akku:** Auf ARM-Handhelds wie der Odin 3 oder der Thor erkennt Panel jetzt, wann das Ladegerät steckt. Auf der Odin 3 funktioniert das Ladelimit wirklich, und wer es ausschaltet, lädt sofort weiter.
+* **Controller:** Die hinteren Tasten M1 und M2 der Odin 3 erscheinen unter Controller und lassen sich anders belegen. Wenn deine Controller-Emulation sie nicht an Spiele weitergibt, sagt Panel Bescheid.
+* **Leistung:** Auf ARM-Handhelds mit Armada ändert sich die gewählte Leistungsstufe nicht mehr, wenn du den Lüfter wieder auf Automatisch stellst.
+* **Ton:** Mit Armada schaltet sich der Equalizer beim ersten Versuch ein und braucht deutlich weniger Zeit.
+
+### Português (Brasil)
+
+* **Aparelhos:** O AYN Odin 3 com Armada agora é reconhecido pelo nome, com o chip Snapdragon 8 Elite e a tela OLED, em vez de aparecer como um aparelho ARM qualquer.
+* **Ventoinhas:** A ventoinha do Odin 3 agora aparece e aceita uma curva. Ela não tem sensor de velocidade, então aparece em porcentagem em vez de RPM.
+* **Bateria:** Em portáteis ARM como o Odin 3 ou o Thor, o Panel agora sabe quando o carregador está conectado. No Odin 3 o limite de carga funciona de verdade, e ao desligá-lo a carga volta na hora.
+* **Controle:** Os botões traseiros M1 e M2 do Odin 3 aparecem em Controle e podem virar outro botão. Se a emulação de controle que você usa não os passa para os jogos, o Panel avisa.
+* **Potência:** Em portáteis ARM com Armada, voltar a ventoinha para Automático não muda mais o nível de potência que você escolheu.
+* **Som:** Com Armada, o equalizador liga de primeira e demora bem menos.
+
 ## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
 
 

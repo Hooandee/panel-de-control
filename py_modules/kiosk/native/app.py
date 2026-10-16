@@ -32,6 +32,7 @@ FRAME_GAP_S = 1 / 30
 PRESS_RELEASE_S = 0.12
 PICK_CLOSE_S = 0.38
 DIALOG_IDLE_S = 20.0
+_UNCHANGED = object()
 DIALOG_OF_TILE = {"perf": "perf", "fps": "fps", "fan": "fan", "hz": "hz", "rgb": "lights"}
 SNAPSHOT_NAME = "pdc-kiosk-native.png"
 FULL = "full"
@@ -561,8 +562,12 @@ class App:
         if kind == "steps":
             current = next((section.value for section in model.sections if isinstance(section, self.dialog.Steps)), None)
             if value != current:
-                self._perf_optimistic(level=value)
-                self.worker.act("perf", "kiosk_steam", "perf.level", [value])
+                if self.deck.editing_gpu():
+                    self._perf_optimistic(gpu=value)
+                    self.worker.act("perf", "kiosk_steam", "perf.gpu", [value])
+                else:
+                    self._perf_optimistic(level=value)
+                    self.worker.act("perf", "kiosk_steam", "perf.level", [value])
         elif kind == "bar":
             change = self._lights_bar_change(key, value)
             if change is not None:
@@ -612,6 +617,16 @@ class App:
         if kind == "color":
             self._lights_write({"color": list(key), "mode": "solid"})
             return
+        if kind == "chip" and isinstance(key, tuple) and key[0] == "perf_target":
+            self.deck.perf_target = key[1]
+            self.dirty = True
+            return
+        if kind == "chip" and isinstance(key, tuple) and key[0] == "perf_link":
+            perf = self.deck.state.perf or {}
+            level = None if key[1] else perf.get("value")
+            self._perf_optimistic(gpu=level)
+            self.worker.act("perf", "kiosk_steam", "perf.gpu", [level])
+            return
         if kind == "chip":
             effect = self._lights_state().get("effect") or {}
             self._lights_write({"mode": "effect", "effect": {"id": key, "speed": effect.get("speed", 50),
@@ -629,6 +644,12 @@ class App:
             self._lights_write({"mode": value})
             return
         if action == "preset":
+            if self.deck.editing_gpu():
+                level = next((p.get("level") for p in (s.perf or {}).get("presets") or [] if p["id"] == value), None)
+                if level is not None:
+                    self._perf_optimistic(gpu=level)
+                    self.worker.act("perf", "kiosk_steam", "perf.gpu", [level])
+                return
             self._perf_optimistic(preset=value)
             self.worker.act("perf", "kiosk_steam", "perf.preset", [value])
             return
@@ -648,8 +669,14 @@ class App:
         self.dirty = True
         self.close_at = time.monotonic() + PICK_CLOSE_S
 
-    def _perf_optimistic(self, level: int | None = None, preset: str | None = None) -> None:
+    def _perf_optimistic(self, level: int | None = None, preset: str | None = None,
+                         gpu: int | None | object = _UNCHANGED) -> None:
         perf = dict(self.deck.state.perf or {})
+        if gpu is not _UNCHANGED:
+            perf["gpuLevel"] = gpu
+            perf["gpuShown"] = perf.get("shown") if gpu is None else gpu
+        elif perf.get("split") and perf.get("gpuLevel") is None and level is not None:
+            perf["gpuShown"] = level
         if level is not None:
             perf["shown"] = perf["value"] = level
             perf["presets"] = [{**p, "active": False} for p in perf.get("presets") or []]

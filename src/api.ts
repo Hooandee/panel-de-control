@@ -340,6 +340,10 @@ export interface TdpState {
   follows_global: boolean;
   watts: number;
   global_watts: number;
+  // ARM: the GPU can take its own level; null while it follows the CPU level (`watts`).
+  gpu_level_supported?: boolean;
+  gpu_level?: number | null;
+  global_gpu_level?: number | null;
   applied_w: number | null;
   primary_rail?: "pl1" | "pl2" | "pl3";
   ppt?: SteamDeckPptState | null;
@@ -419,6 +423,8 @@ export interface FanInfo {
   percent: number | null;
   max_rpm?: number | null;
   channel?: "system" | "gpu";
+  // No tachometer: only the commanded duty is known (device-tree pwm-fan).
+  duty_only?: boolean;
 }
 
 export interface TempInfo {
@@ -441,6 +447,7 @@ export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
   "set_low_battery_tdp_hold",
 );
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
+export const setGpuLevel = callable<[level: number | null, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_gpu_level");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_levels");
@@ -805,10 +812,19 @@ export interface EcoState {
   affects_boost: boolean;
   // Brightness % to wake back to (the pre-eco snapshot).
   wake_brightness: number;
+  // gamescope can switch the internal panel off (otherwise: black layer + minimum brightness).
+  screen_off: boolean;
+  screen_asleep: boolean;
+}
+
+export interface EcoScreenResult {
+  ok: boolean;
+  asleep: boolean;
 }
 
 export const getEcoState = callable<[], EcoState>("get_eco_state");
 export const setEco = callable<[enabled: boolean, current_brightness: number], EcoState>("set_eco");
+export const setEcoScreen = callable<[asleep: boolean], EcoScreenResult>("set_eco_screen");
 
 // ── Self-updater — append to src/api.ts (it already imports { callable } from "@decky/api") ──
 
@@ -877,6 +893,9 @@ export interface ColorState extends ColorPreset {
 export interface GpuClockState {
   supported: boolean;
   managed_by_power?: boolean;
+  // ARM: the Power level capping the GPU while Power owns its clock.
+  power_level?: number | null;
+  power_level_split?: boolean;
   manual: boolean;
   range_min: number | null;
   range_max: number | null;
@@ -988,6 +1007,8 @@ export interface ControllerConfig {
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
   extra_buttons?: boolean;
+  // A button left at its default is lost by the emulated gamepad (read live).
+  unmapped_dropped?: boolean;
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];
@@ -1065,6 +1086,7 @@ export interface GameProfileRow {
   tdp?: {
     unit?: PowerUnit;
     pl1: number;
+    gpu_level?: number | null;
     auto: boolean;
     target_fps: number;
     initial_tdp: number;

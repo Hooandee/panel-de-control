@@ -217,3 +217,33 @@ def test_hhd_build_payload_paths():
         "controllers": {"rog_ally": {"controller_mode": {"uinput": {"paddles_as": "steam_input"}}}}
     }
     assert hhd_config.build_payload("rog_ally", "uinput", "bogus", "x") == {}
+
+
+class OdinDbus(FakeDbus):
+    def __init__(self, target):
+        super().__init__(caps=["Gamepad:Button:South", "Gamepad:Button:QuickAccess", "NotImplemented"])
+        self._target = target
+
+    def target_capabilities(self):
+        return self._target
+
+
+def test_ip_odin3_flags_paddles_the_emulated_pad_drops(tmp_path):
+    series = OdinDbus(["Gamepad:Button:South", "Gamepad:Button:East"])
+    cfg = inputplumber.get_config(_store(tmp_path), series, "ayn_odin3")
+    assert [b["label"] for b in cfg["buttons"]] == ["M1", "M2"]
+    assert cfg["unmapped_dropped"] is True
+
+
+def test_ip_odin3_paddles_are_fine_when_remapped_or_carried(tmp_path):
+    elite = OdinDbus(["Gamepad:Button:LeftPaddle1", "Gamepad:Button:RightPaddle1"])
+    assert inputplumber.get_config(_store(tmp_path), elite, "ayn_odin3")["unmapped_dropped"] is False
+    store = _store(tmp_path, {"global": {"LeftPaddle1": [{"gamepad": "South"}],
+                                         "RightPaddle1": [{"gamepad": "East"}]}})
+    series = OdinDbus(["Gamepad:Button:South"])
+    assert inputplumber.get_config(store, series, "ayn_odin3")["unmapped_dropped"] is False
+
+
+def test_ip_other_models_never_read_the_target(tmp_path):
+    cfg = inputplumber.get_config(_store(tmp_path), OdinDbus([]), "legion_go_s")
+    assert "unmapped_dropped" not in cfg

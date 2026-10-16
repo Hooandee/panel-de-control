@@ -5,6 +5,7 @@ import pwd
 from typing import Callable, NamedTuple
 
 from controllers.detect import clean_env, resolve_bin
+from device_tree import host_binary
 
 
 class UserSession(NamedTuple):
@@ -49,4 +50,4 @@ def spawn_args(
             env["HOME"] = home
         if shell:
             env["SHELL"] = shell
-    return [resolve(argv[0]), *argv[1:]], env, identity
+    return [host_binary(resolve(argv[0])), *argv[1:]], env, identity

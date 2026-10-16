@@ -91,6 +91,8 @@ from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
 from display.hdr import HdrBackend
+from display.input_wake import InputWake
+from display.screen_sleep import ScreenSleep
 from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
@@ -159,6 +161,12 @@ _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
+_SCREEN_LEASE_S = 15.0
+_ECO_INPUT_POLL_S = 0.25
+_ECO_INPUT_REPORT_S = 1.0
+_ECO_RESCAN_S = 5.0
+_SCREEN_WAKE_RETRY_S = 2.0
+_ECO_INPUT_EVENT = "pdc_eco_input"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
 _CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
@@ -171,12 +179,13 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
+            "gpu_level", "global_gpu_level",
         )),
     ),
     "system": (
         ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
         ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
-        ("get_eco_state", ("enabled", "tdp_min_w")),
+        ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
     ),
     "display": (
@@ -288,6 +297,7 @@ class _TdpCommand:
     on_ac: bool
     auto_tdp: bool
     ppt_probe_pending: bool
+    gpu_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -753,6 +763,12 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._screen_sleep = ScreenSleep()
+        self._input_wake = InputWake()
+        self._screen_lease_at = 0.0
+        self._screen_lock = asyncio.Lock()
+        self._screen_want = False
+        self._eco_watch_task = None
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
         self._hud = HudStore(
@@ -2596,7 +2612,10 @@ class Plugin:
                         "set_available": bool(brightness.get("set_available", False)),
                     },
                 }
-        return {"backend": backend, "frontend": frontend}
+        screen = self._screen_sleep
+        return {"backend": backend, "frontend": frontend,
+                "screen_off": {"supported": screen.supported, "asleep": screen.asleep,
+                               "detail": screen.detail, "gamescope": screen.version}}
 
     @staticmethod
     def _with_theme_display(themes, context):
@@ -2849,6 +2868,8 @@ class Plugin:
                 "max_tdp": tp["auto_max_tdp"],
                 "follows_global": self._tdp_profiles.is_following_global(appid),
             }
+            if tp.get("gpu_level") is not None:
+                row["tdp"]["gpu_level"] = int(tp["gpu_level"])
         if self._gpu_profiles.differs_from_global(appid):
             gp = self._gpu_profiles.game_profile(appid)
             row["gpu"] = {
@@ -6031,6 +6052,62 @@ class Plugin:
     def _power_uses_levels(self) -> bool:
         return getattr(getattr(self, "_tdp_backend", None), "unit", None) == "level"
 
+    def _gpu_level_available(self) -> bool:
+        return self._power_uses_levels() and bool(
+            getattr(self._tdp_backend, "gpu_level_supported", False)
+        )
+
+    def _split_gpu_target(self, auto_level, limits, active, on_ac=False):
+        """GPU level for the next write, or None to keep the GPU on the CPU level.
+
+        Eco wants both at the floor, so it never splits. Under Auto the GPU keeps the
+        distance the player set from the CPU level, inside the player's Auto range."""
+        if not self._gpu_level_available() or self._settings.get("eco_enabled"):
+            return None
+        stored = self._tdp_profiles.gpu_level(self._current_appid)
+        if stored is None:
+            return None
+        if auto_level is not None:
+            cpu_level = self._tdp_profiles.effective(self._current_appid)["pl1"]
+            low, high = self._auto_effective_range(
+                self._current_appid, on_ac, self._tdp_observation,
+            )
+            return max(int(low), min(int(auto_level) + stored - int(cpu_level), int(high)))
+        return max(int(limits.min_w), min(int(stored), int(active)))
+
+    def _reported_gpu_level(self, appid):
+        if not self._gpu_level_available():
+            return None
+        return self._tdp_profiles.gpu_level(appid)
+
+    def _power_gpu_level(self):
+        if getattr(self._tdp_backend, "split_gpu_level", None) is not None:
+            applied = getattr(self._tdp_backend, "applied_split_gpu_level", None)
+            return None if applied is None else int(applied)
+        observation = getattr(self, "_tdp_observation", None)
+        surface = observation.surfaces.get(self._tdp_backend.name) if observation else None
+        reading = (surface or {}).get("pl1")
+        return None if reading is None else reading.applied_w
+
+    _GPU_SPLIT_REASSERT_S = 10.0
+
+    def _gpu_split_reassert_due(self, now) -> bool:
+        """A foreign write to the split GPU cap leaves the CPU level readable but the readback
+        unknown, which reconcile would hold forever; reassert it, at most every 10 s."""
+        drifted = getattr(self._tdp_backend, "split_gpu_drifted", None)
+        if not callable(drifted):
+            return False
+        last = getattr(self, "_gpu_split_reassert_at", None)
+        if last is not None and now - last < self._GPU_SPLIT_REASSERT_S:
+            return False
+        try:
+            if not drifted():
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        self._gpu_split_reassert_at = now
+        return True
+
     def _frequency_managed_by_power(self) -> bool:
         """On ARM the performance level owns the same cpufreq/devfreq ceilings that the
         CPU window and GPU clock controls write, so only one of them may drive them."""
@@ -6130,6 +6207,7 @@ class Plugin:
                 "mode": "estable",
             }
         auto_active = requested_auto_watts is not None
+        gpu_level = self._split_gpu_target(requested_auto_watts, limits, active, ac)
         if self._settings.get("eco_enabled"):
             minimum = limits.min_w
             logical_requested = {
@@ -6197,6 +6275,7 @@ class Plugin:
             on_ac=ac,
             auto_tdp=auto_active,
             ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
+            gpu_level=gpu_level,
         )
 
     def _tdp_menu_rail_floors(self) -> dict:
@@ -6492,6 +6571,16 @@ class Plugin:
             if sidecar is None
             else None
         )
+        if command.generation != self._tdp_generation:
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "stale-generation",
+            )
+        split_gpu = getattr(self._tdp_backend, "set_split_gpu_level", None)
+        if callable(split_gpu):
+            split_gpu(command.gpu_level)
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -6963,6 +7052,13 @@ class Plugin:
             watch = self._tdp_profile_watch = PlatformProfileWatch()
         return watch
 
+    def _consume_powerd_restart(self) -> bool:
+        consume = getattr(getattr(self, "_fan_ctrl", None), "consume_powerd_restart", None)
+        try:
+            return bool(consume()) if callable(consume) else False
+        except Exception:  # noqa: BLE001
+            return False
+
     def _profile_reassert_eligible(self, command, hold, status):
         backend = self._tdp_backend
         return bool(
@@ -7144,6 +7240,12 @@ class Plugin:
             return
         if self._auto_ui_blocks_tdp_write(command.reason):
             return
+        if outcome.action != "apply" and self._consume_powerd_restart():
+            action = "powerd-restart-reassert"
+            outcome = replace(outcome, action="apply")
+        if outcome.action != "apply" and self._gpu_split_reassert_due(now):
+            action = "gpu-split-reassert"
+            outcome = replace(outcome, action="apply")
         correction = None
         if (
             outcome.action != "apply"
@@ -7384,6 +7486,8 @@ class Plugin:
                 }
             ),
         }
+        if self._gpu_level_available():
+            fingerprint["gpu_level"] = self._tdp_backend.split_gpu_level
         if self._tdp_history:
             previous_full = self._tdp_history[-1]
             previous = {
@@ -8517,11 +8621,83 @@ class Plugin:
             "affects_boost": self._boost.supported,
             # The brightness % to wake back to (pre-eco snapshot).
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
+            "screen_off": self._screen_sleep.supported,
+            "screen_asleep": self._screen_sleep.asleep,
         }
 
     async def get_eco_state(self) -> dict:
         self._init()
+        self._screen_lease_at = time.monotonic()
+        if not self._screen_sleep.supported:
+            await asyncio.to_thread(self._screen_sleep.probe)
+        if self._settings.get("eco_enabled"):
+            self._start_eco_watch()
         return self._eco_state()
+
+    async def set_eco_screen(self, asleep: bool) -> dict:
+        """Download mode's panel power, only while download mode is on. A sleep that cannot be
+        confirmed is undone so the panel never stays dark unproven."""
+        self._init()
+        if asleep and not self._settings.get("eco_enabled"):
+            return {"ok": False, "asleep": self._screen_sleep.asleep}
+        self._screen_lease_at = time.monotonic()
+        ok = await self._apply_screen(bool(asleep), "frontend")
+        if asleep and not ok:
+            await self._apply_screen(False, "sleep_unconfirmed")
+        return {"ok": ok, "asleep": self._screen_sleep.asleep}
+
+    async def _apply_screen(self, asleep: bool, reason: str, source: str | None = None) -> bool:
+        """The latest request wins, so a wake arriving while a sleep is in flight is never lost."""
+        self._screen_want = asleep
+        async with self._screen_lock:
+            want, screen = self._screen_want, self._screen_sleep
+            ok = True
+            if want != screen.asleep:
+                ok = await asyncio.to_thread(screen.set, want)
+                diary = journal.active
+                if diary is not None:
+                    diary.write("INFO" if ok else "WARNING", "display",
+                                "screen_sleep" if want else "screen_wake", ok=ok, reason=reason,
+                                detail=screen.detail, **({"source": source} if source else {}))
+            return ok and want == asleep
+
+    def _start_eco_watch(self) -> None:
+        if self._eco_watch_task is None or self._eco_watch_task.done():
+            self._eco_watch_task = asyncio.create_task(self._eco_watch())
+
+    async def _eco_watch(self) -> None:
+        """Lights the panel on the first raw input and tells the frontend at once; idleness is
+        Steam's call (it reads every control, this watch may not). Also the panel's way back
+        when download mode ends or Steam's UI stops renewing the lease, retrying failed wakes."""
+        watch, screen = self._input_wake, self._screen_sleep
+        opened_at = reported_at = float("-inf")
+        try:
+            while True:
+                eco = bool(self._settings.get("eco_enabled"))
+                if screen.asleep and (not eco or time.monotonic() - self._screen_lease_at > _SCREEN_LEASE_S):
+                    if not await self._apply_screen(False, "lease_expired" if eco else "eco_disabled"):
+                        await asyncio.sleep(_SCREEN_WAKE_RETRY_S)
+                    continue
+                if not eco:
+                    return
+                if time.monotonic() - opened_at >= _ECO_RESCAN_S:
+                    # Controllers come and go (Bluetooth, docks, Steam recreating nodes).
+                    await asyncio.to_thread(watch.open)
+                    opened_at = time.monotonic()
+                source = await asyncio.to_thread(watch.wait, _ECO_INPUT_POLL_S)
+                if source is None:
+                    continue
+                woke = screen.asleep
+                if woke:
+                    await self._apply_screen(False, "input", source)
+                if woke or time.monotonic() - reported_at >= _ECO_INPUT_REPORT_S:
+                    reported_at = time.monotonic()
+                    try:
+                        await _emit_to_frontend(_ECO_INPUT_EVENT)
+                    except Exception:  # noqa: BLE001 - the frontend still has Steam's signal
+                        pass
+        finally:
+            await asyncio.to_thread(watch.close)
 
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
@@ -8536,6 +8712,10 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
+        if enabled:
+            self._start_eco_watch()
+        else:
+            await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
         return self._eco_state()
 
@@ -8941,6 +9121,8 @@ class Plugin:
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
                 snap["tdp_unit"] = getattr(self._tdp_backend, "unit", "W")
+                if self._gpu_level_available():
+                    snap["gpu_level"] = self._tdp_backend.applied_split_gpu_level
             if "pdc_auto_tdp" in active_ids:
                 snap["auto_tdp"] = (
                     self._auto_tdp_supported()
@@ -9860,9 +10042,14 @@ class Plugin:
         requested = getattr(self, "_gpu_requested", None)
         last = getattr(self, "_gpu_last_result", None)
         applied_min, applied_max = cur if cur else (None, None)
+        managed = self._frequency_managed_by_power()
         return {
             "supported": self._gpu_clock.supported,
-            "managed_by_power": self._frequency_managed_by_power(),
+            "managed_by_power": managed,
+            "power_level": self._power_gpu_level() if managed else None,
+            "power_level_split": bool(
+                managed and getattr(self._tdp_backend, "applied_split_gpu_level", None) is not None
+            ),
             "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
@@ -11008,6 +11195,9 @@ class Plugin:
                 geff["watts"],
                 active,
             ),
+            "gpu_level_supported": self._gpu_level_available(),
+            "gpu_level": self._reported_gpu_level(self._current_appid),
+            "global_gpu_level": self._reported_gpu_level(None),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
@@ -11900,6 +12090,43 @@ class Plugin:
         res = await self._apply_tdp_now("manual-watts")
         return self._apply_result(res)
 
+    async def set_gpu_level(
+        self, level, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        """ARM: cap the GPU on its own level, or link it back to the CPU level (None)."""
+        self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
+        if not self._gpu_level_available():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "gpu-level-unsupported"}
+        if not self._tdp_control_on():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._clear_eco()
+        self._exit_firmware_mode()
+        clamped = None
+        if level is not None:
+            active = self._active_max(self._limits(), read_on_ac())
+            clamped = self._clamp_tdp_request(level, active)
+        self._tdp_profiles.set_gpu_level(resolved, clamped, appid=appid)
+        decky.logger.info(
+            "GPU level %s for %s", "linked" if clamped is None else clamped, resolved,
+        )
+        res = await self._apply_tdp_now(
+            "manual-gpu-link" if clamped is None else "manual-gpu-level"
+        )
+        return self._apply_result(res)
+
     async def set_tdp_follow_global(
         self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
     ) -> dict:
@@ -12747,6 +12974,10 @@ class Plugin:
     async def _unload(self) -> None:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        if getattr(self, "_screen_sleep", None) is not None:
+            if self._eco_watch_task is not None:
+                self._eco_watch_task.cancel()
+            await self._apply_screen(False, "unload")
         await self._stop_kiosk()
         await self._stop_remote_access()
         try:
@@ -13185,7 +13416,9 @@ class Plugin:
 
 journal.trace_calls(
     Plugin,
-    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
+    untraced=frozenset({
+        "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+    }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},

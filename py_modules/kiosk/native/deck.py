@@ -71,6 +71,7 @@ class Deck:
         self.dialog_drag: tuple[str, object, object] | None = None
         self.installing = False
         self.bri_target = "top"
+        self.perf_target = "cpu"
 
     def t(self, key: str, **params) -> str:
         table = self.strings.get(self.state.lang) or self.strings.get("en") or {}
@@ -270,6 +271,10 @@ class Deck:
     def _target(self) -> int | None:
         return (self.state.perf or {}).get("target")
 
+    def editing_gpu(self) -> bool:
+        perf = self.state.perf or {}
+        return bool(perf.get("split")) and self.perf_target == "gpu" and perf.get("gpuLevel") is not None
+
     def perf_name(self) -> str:
         perf = self.state.perf or {}
         if not perf.get("ready"):
@@ -315,6 +320,9 @@ class Deck:
         level.draw_baseline(ctx, x, y + 64 * 0.85 * 0.82)
         suffix = Text(ctx, f"/ {high}" if perf.get("levels") and high else "W", 14)
         suffix.draw_baseline(ctx, x + level.width + 6, y + 64 * 0.85 * 0.82, white(0.6))
+        if perf.get("split") and perf.get("gpuLevel") is not None and perf.get("gpuShown") is not None:
+            gpu = Text(ctx, f"GPU {perf['gpuShown']}", 14, 600)
+            gpu.draw_baseline(ctx, x + level.width + 6 + suffix.width + 10, y + 64 * 0.85 * 0.82, white(0.85))
         title = Text(ctx, self.perf_name(), 16, 600, max_width=r.w - 32)
         title.draw(ctx, x, y + 64 * 0.85 + 4, white(1 if perf.get("ready") else DISABLED_ALPHA))
 
@@ -430,16 +438,34 @@ class Deck:
         if name == "perf" and s.perf:
             perf = s.perf
             auto = bool(perf.get("autoOn"))
-            shown = perf.get("shown")
-            caption = level_caption(perf.get("frequencies"), shown, self._comma()) if perf.get("levels") else ""
+            cpu_shown = perf.get("shown")
+            gpu_shown = perf.get("gpuShown")
+            linked = perf.get("gpuLevel") is None
+            gpu = self.editing_gpu()
+            shown = gpu_shown if gpu else cpu_shown
+            caption = level_caption(perf.get("frequencies"), cpu_shown, self._comma(),
+                                    None if linked else gpu_shown) if perf.get("levels") else ""
             detail = self.t("kiosk.perf.autoNote") if auto else (caption or (None if perf.get("levels") else f"{perf.get('value')} W"))
             orbs = tuple(
-                Orb(("preset", p["id"]), p["title"], icon=f"preset.{p.get('icon')}", on=bool(p.get("active")), disabled=auto)
+                Orb(("preset", p["id"]), p["title"], icon=f"preset.{p.get('icon')}",
+                    on=(p.get("level") == perf.get("gpuLevel") and not auto) if gpu else bool(p.get("active")),
+                    disabled=auto)
                 for p in perf.get("presets") or []
             )
             low, high = perf.get("min", 0), perf.get("max", 1)
-            sections = ((Orbs(orbs),) if orbs else ()) + (Steps(shown if shown is not None else low, low, high, auto),)
-            return DialogModel(self.perf_name(), detail, bubble_text="—" if shown is None else str(shown), sections=sections)
+            chips = ()
+            if perf.get("split"):
+                chips = (Chips((
+                    (("perf_target", "cpu"), f"CPU {'—' if cpu_shown is None else cpu_shown}", self.perf_target == "cpu"),
+                    (("perf_target", "gpu"), f"GPU {'—' if gpu_shown is None else gpu_shown}", self.perf_target == "gpu"),
+                    (("perf_link", not linked), self.t("kiosk.perf.linked" if linked else "kiosk.perf.split"), linked),
+                )),)
+            sections = chips + ((Orbs(orbs),) if orbs else ()) + (Steps(shown if shown is not None else low, low, high, auto),)
+            title = self.perf_name()
+            if gpu and not auto:
+                active = next((p for p in perf.get("presets") or [] if p.get("level") == perf.get("gpuLevel")), None)
+                title = f"GPU · {active['title'] if active else self.t('kiosk.perf.custom')}"
+            return DialogModel(title, detail, bubble_text="—" if shown is None else str(shown), sections=sections)
         if name == "fps" and s.perf:
             auto = bool(s.perf.get("autoOn"))
             target = self._target()

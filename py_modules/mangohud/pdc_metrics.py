@@ -70,6 +70,9 @@ def _watts(value, snap=None):
 
 def tdp(snap):
     watts = _watts(snap.get("applied"), snap) or DASH
+    gpu = snap.get("gpu_level")
+    if snap.get("tdp_unit") == "level" and isinstance(gpu, int):
+        watts = f"{watts} · GPU {gpu}"
     return f"{_text(snap, 'auto')} {watts}" if snap.get("auto") else watts
 
 

@@ -25,17 +25,30 @@ class FakeServer:
 
 
 class FakeLauncher:
-    def __init__(self, display, active=False, start_ok=True):
+    def __init__(self, display, active=False, start_ok=True, armada_bottom=False):
         self.display = display
         self.active = active
         self.start_ok = start_ok
+        self.armada_bottom = armada_bottom
         self.started_with = []
         self.stops = 0
+        self.events = []
+
+    def yield_armada_bottom(self):
+        self.events.append("yield")
+        running, self.armada_bottom = self.armada_bottom, False
+        return running
+
+    def restore_armada_bottom(self):
+        self.events.append("restore")
+        self.armada_bottom = True
+        return True
 
     def is_active(self):
         return self.active
 
     def start(self, url):
+        self.events.append("start")
         self.started_with.append(url)
         if self.start_ok:
             self.active = True
@@ -231,3 +244,49 @@ def test_a_unit_left_by_a_previous_panel_is_restarted_with_this_panels_address()
     assert ("INFO", "stale_unit_restarted", {}) in journal
     asyncio.run(controller.tick())
     assert launcher.stops == 1 and len(launcher.started_with) == 1
+
+
+def test_armada_bottom_gamescope_steps_aside_while_the_kiosk_is_on():
+    controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok")], launcher_kwargs={"armada_bottom": True})
+    asyncio.run(controller.tick())
+    launcher = launchers[0]
+    assert launcher.events[:2] == ["yield", "start"]
+    assert ("INFO", "armada_bottom_stopped", {}) in journal
+    assert controller.state()["armada_bottom_yielded"] is True
+    asyncio.run(controller.set_enabled(False))
+    assert launcher.events[-1] == "restore"
+    assert ("INFO", "armada_bottom_restored", {"ok": True}) in journal
+    assert controller.state()["armada_bottom_yielded"] is False
+
+
+def test_armada_bottom_gamescope_is_not_started_if_the_kiosk_never_stopped_it():
+    controller, launchers, journal, _ = _controller([Detection(DISPLAY, "ok")])
+    asyncio.run(controller.tick())
+    asyncio.run(controller.shutdown())
+    assert "restore" not in launchers[0].events
+    assert not any(event.startswith("armada_bottom") for _level, event, _fields in journal)
+
+
+def test_a_relaunch_takes_the_panel_back_if_armada_restarted_its_bottom_gamescope():
+    controller, launchers, journal, clock = _controller([Detection(DISPLAY, "ok")], launcher_kwargs={"armada_bottom": True})
+    asyncio.run(controller.tick())
+    launcher = launchers[0]
+    launcher.active = False
+    launcher.armada_bottom = True
+    clock[0] = 10.0
+    asyncio.run(controller.tick())
+    assert launcher.events.count("yield") == 2
+    asyncio.run(controller.shutdown())
+    assert launcher.events.count("restore") == 1
+
+
+def test_a_running_kiosk_stops_an_armada_bottom_gamescope_that_came_back():
+    controller, launchers, journal, clock = _controller([Detection(DISPLAY, "ok")])
+    asyncio.run(controller.tick())
+    launcher = launchers[0]
+    launcher.armada_bottom = True
+    clock[0] = 10.0
+    asyncio.run(controller.tick())
+    assert launcher.started_with == ["http://127.0.0.1:4000/?k=t"]
+    assert launcher.armada_bottom is False
+    assert controller.state()["armada_bottom_yielded"] is True

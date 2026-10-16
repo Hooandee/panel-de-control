@@ -54,6 +54,16 @@ DEVICE_BUTTONS = {
     "zotac_gaming_zone": [
         ("LeftPaddle1", "L"), ("RightPaddle1", "R"),
     ],
+    "ayn_odin3": [
+        ("LeftPaddle1", "M1"), ("RightPaddle1", "M2"),
+    ],
+}
+
+# Buttons produced by a source device's capability map. InputPlumber computes the composite's
+# Capabilities from raw evdev codes without that map, so these never appear there even though
+# they reach profiles (AYN Odin 3: gpio-keys-paddles BTN_Z/BTN_C -> LeftPaddle1/RightPaddle1).
+CAPABILITY_MAPPED_BUTTONS = {
+    "ayn_odin3": frozenset({"LeftPaddle1", "RightPaddle1"}),
 }
 
 # Recognised models whose controller has no extra button beyond the standard
@@ -113,6 +123,8 @@ def buttons_for(device_key, capabilities) -> list:
     unknown device (not in the table) yields an empty list."""
     key = device_key or ""
     have = _capability_names(capabilities)
+    if have:
+        have |= CAPABILITY_MAPPED_BUTTONS.get(key, frozenset())
     variants = DEVICE_BUTTON_VARIANTS.get(key)
     entries = DEVICE_BUTTONS.get(key, [])
     if variants:

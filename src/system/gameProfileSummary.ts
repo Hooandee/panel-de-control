@@ -13,13 +13,18 @@ export function sectionLine(section: SectionId, row: GameProfileRow, t: T): Sect
   if (section === "tdp" && row.tdp) {
     if (!row.tdp.auto) {
       const text = row.tdp.unit === "level"
-        ? t("tdp.level.value", { level: row.tdp.pl1 })
+        ? (row.tdp.gpu_level != null
+          ? t("tdp.split.summary", { cpu: row.tdp.pl1, gpu: row.tdp.gpu_level })
+          : t("tdp.level.value", { level: row.tdp.pl1 }))
         : `${row.tdp.pl1} W`;
       return { label: t("gameProfiles.sec.tdp"), text, dim: row.tdp.follows_global };
     }
     const details = [
       t("gameProfiles.auto"),
       `${row.tdp.target_fps} FPS`,
+      ...(row.tdp.unit === "level" && row.tdp.gpu_level != null
+        ? [t("tdp.split.summary", { cpu: row.tdp.pl1, gpu: row.tdp.gpu_level })]
+        : []),
       `${t("tdp.auto.initial.label")} ${row.tdp.initial_tdp} W`,
     ];
     if (row.tdp.min_tdp != null && row.tdp.max_tdp != null) {

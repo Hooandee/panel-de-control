@@ -159,3 +159,40 @@ def test_levels_are_safe_for_auto(tmp_path):
     assert backend.auto_tdp_supported is True
     assert backend.auto_tdp_safe is True
     assert backend.readback is True
+
+
+def test_a_ceiling_published_late_is_waited_for_not_reported_as_a_mismatch(tmp_path):
+    root = _thor(tmp_path, armada_balanced=False)
+    node = "sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq"
+    backend = ArmPerformanceLevels(root=root, sleep=lambda _s: None)
+    want = backend.ceilings(4)[0]
+    real_write = backend._domains[0].write
+    pending = []
+
+    def late_write(ceiling):
+        ok = real_write(ceiling)
+        _write(root, node, 2016000)
+        pending.append(ceiling)
+        return ok
+
+    def settle(_s):
+        if pending:
+            _write(root, node, pending.pop())
+
+    backend._domains[0].write = late_write
+    backend._sleep = settle
+    result = backend.set_tdp(4, False)
+    assert result.ok is True
+    assert _read(root, node) == want
+
+
+def test_a_ceiling_that_never_lands_still_reports_the_mismatch(tmp_path):
+    root = _thor(tmp_path, armada_balanced=False)
+    ticks = iter(range(100))
+    backend = ArmPerformanceLevels(root=root, sleep=lambda _s: None, clock=lambda: next(ticks) * 0.1)
+    real_write = backend._domains[0].write
+    backend._domains[0].write = lambda c: real_write(c) and (_write(
+        root, "sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq", 2016000) or True)
+    result = backend.set_tdp(4, False)
+    assert result.ok is False
+    assert result.detail == "readback mismatch"

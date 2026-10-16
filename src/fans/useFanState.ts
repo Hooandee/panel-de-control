@@ -27,7 +27,8 @@ class FanStateStore {
         const fanHistory: Record<string, number[]> = {};
         for (const f of s.fans) {
           const prevBuf = prev.fanHistory[f.label] ?? [];
-          fanHistory[f.label] = f.rpm == null ? prevBuf : pushSample(prevBuf, f.rpm, MAX_SAMPLES);
+          const sample = f.duty_only ? f.percent : f.rpm;
+          fanHistory[f.label] = sample == null ? prevBuf : pushSample(prevBuf, sample, MAX_SAMPLES);
         }
         this.monitor = { state: s, fanHistory };
         this.listeners.forEach((l) => l());
