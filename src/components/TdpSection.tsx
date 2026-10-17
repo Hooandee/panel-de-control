@@ -1,5 +1,5 @@
 import { PanelSectionRow, SliderField, Focusable, ToggleField } from "@decky/ui";
-import { FC, useCallback, useMemo } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
@@ -12,6 +12,8 @@ import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { PowerArc } from "./PowerArc";
 import { isLevelUnit, levelFrequencySummary } from "../tdp/unit";
+import { PowerTarget, PowerTargetTabs } from "./PowerTargetTabs";
+import { autoGpuLevel } from "../tdp/autoView";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
@@ -26,6 +28,7 @@ export interface TdpSectionProps {
   scope: TdpScope;
   power: PowerDraw | null;
   onWatts: (watts: number) => void;
+  onGpuLevel?: (level: number | null) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
   // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
@@ -45,8 +48,11 @@ export interface TdpSectionProps {
 
 const STEAM_DECK_NOMINAL_MAX_W = 15;
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
+  const [target, setTarget] = useState<PowerTarget>("cpu");
+  const targetContext = `${scope}:${tdp?.appid ?? ""}`;
+  useEffect(() => setTarget("cpu"), [targetContext]);
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
   // Falls back to a builtins-only library if the custom library hasn't loaded.
@@ -55,6 +61,13 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     [tdp, presets, scope, t],
   );
 
+  const storedGpu = tdp ? (scope === "global" ? tdp.global_gpu_level : tdp.gpu_level) ?? null : null;
+  const gpuResolved = useMemo(() => {
+    if (!tdp || storedGpu === null) return null;
+    const asGpu = { ...tdp, watts: storedGpu, global_watts: storedGpu };
+    return resolveLivePresets(asGpu, presets, scope, t);
+  }, [tdp, storedGpu, presets, scope, t]);
+
   // Stable identity so the memoized chip row doesn't re-render on every tick. Edit range is
   // the charger ceiling so a charger-made preset isn't clipped when edited on battery.
   const onEditPresets = useCallback(() => {
@@ -62,7 +75,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     openPowerPresetsModal({
       builtinWatts: tdp.presets,
       onAc: tdp.on_ac,
-      currentWatts: scope === "global" ? tdp.global_watts : tdp.watts,
+      currentWatts: target === "gpu" && storedGpu !== null
+        ? storedGpu
+        : (scope === "global" ? tdp.global_watts : tdp.watts),
       min: tdp.request_min ?? tdp.limits.min,
       max: tdp.limits.max_ac,
       supportsAdvanced: tdp.supports_advanced,
@@ -73,7 +88,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
       onClose: refreshPresets,
       formatValue: isLevelUnit(tdp.unit) ? (level) => t("tdp.level.value", { level }) : undefined,
     });
-  }, [tdp, scope, refreshPresets, t]);
+  }, [tdp, scope, refreshPresets, t, target, storedGpu]);
 
   if (!tdp) return <Loading />;
 
@@ -99,7 +114,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   // Reference watts clamped to the active ceiling; the reset link shows only when
   // the current value differs from it.
   const resetTarget = resetWatts(tdp.limits.default, tdp.limits.min, activeMax);
-  const showReset = Math.round(view.watts) !== resetTarget;
   // Firmware modes replace the watt presets. In a named mode the firmware owns
   // power+fan, so the arc/slider show its applied watts; the slider drops to custom.
   const fwModes = tdp.firmware_modes ?? [];
@@ -129,9 +143,46 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? STEAM_DECK_NOMINAL_MAX_W : null;
 
   const levelUnit = isLevelUnit(tdp.unit);
-  const levelSummary = levelUnit
-    ? levelFrequencySummary(tdp.level_frequencies?.[String(Math.round(Math.min(shownWatts, activeMax)))])
+  const split = levelUnit && Boolean(tdp.gpu_level_supported) && !inFwMode;
+  const linked = storedGpu === null;
+  const editingGpu = split && target === "gpu" && !linked;
+  const autoSetpoint = isAutoOn ? (power?.setpoint ?? null) : null;
+  const cpuShown = isAutoOn && autoSetpoint !== null ? autoSetpoint : shownWatts;
+  const autoConfig = scope === "global" ? tdp.global_auto_config : tdp.auto_config;
+  const gpuShown = linked
+    ? cpuShown
+    : isAutoOn && autoConfig
+      ? autoGpuLevel(storedGpu, view.watts, cpuShown, autoConfig, tdp.auto_limits ?? tdp.limits, tdp.on_ac)
+      : Math.max(tdp.limits.min, Math.min(activeMax, storedGpu));
+  const frequenciesAt = (level: number) => tdp.level_frequencies?.[String(Math.round(Math.min(level, activeMax)))];
+  const levelSummary = !levelUnit
+    ? null
+    : split && !linked
+      ? levelFrequencySummary(frequenciesAt(cpuShown), frequenciesAt(gpuShown), target === "gpu")
+      : levelFrequencySummary(frequenciesAt(shownWatts));
+  const ghost = split && !linked
+    ? (target === "gpu"
+      ? { value: cpuShown, label: t("tdp.target.cpu") }
+      : { value: gpuShown, label: t("tdp.target.gpu") })
     : null;
+  const heroLabel = split ? t(target === "gpu" ? "tdp.target.gpu" : "tdp.target.cpu") : null;
+  const dialValue = editingGpu ? gpuShown : shownWatts;
+  // On the GPU tab the way back to default is linking the GPU to the CPU level again.
+  const showReset = editingGpu || Math.round(view.watts) !== resetTarget;
+  const onDial = editingGpu ? (level: number) => onGpuLevel?.(level) : onWatts;
+  const onLinked = (next: boolean) => onGpuLevel?.(next ? null : Math.round(view.watts));
+  const targetTabs = split ? (
+    <PanelSectionRow>
+      <PowerTargetTabs
+        target={target}
+        cpuLevel={Math.round(cpuShown)}
+        gpuLevel={Math.round(gpuShown)}
+        linked={linked}
+        onTarget={setTarget}
+        onLinked={onLinked}
+      />
+    </PanelSectionRow>
+  ) : null;
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -161,23 +212,27 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     );
   }
 
+
   return (
     <>
+      {targetTabs}
       <PanelSectionRow>
         <PowerArc
-          watts={arcTarget}
+          watts={editingGpu ? gpuShown : arcTarget}
           limits={visualLimits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
           auto={isAutoOn}
-          setpoint={power?.setpoint ?? null}
-          appliedWatts={arcApplied}
+          setpoint={isAutoOn && editingGpu ? gpuShown : (power?.setpoint ?? null)}
+          appliedWatts={editingGpu ? null : arcApplied}
           visualMax={pptVisualMax}
           baseMarkerWatts={basePpt}
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
           overclocked={tdp.overclock?.detected ?? false}
           unit={tdp.unit}
+          heroLabel={heroLabel}
+          ghost={ghost}
           safeMin={deckPptActive ? null : tdp.limits.min}
           safeMax={deckPptActive ? null : activeMax}
           manualMax={deckPptActive ? null : (tdp.manual_max_ac ?? null)}
@@ -196,12 +251,12 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
         <>
           <PanelSectionRow>
             <SliderField
-              value={Math.min(shownWatts, sliderMax)}
+              value={Math.min(dialValue, sliderMax)}
               min={requestMin}
               max={sliderMax}
               step={1}
               showValue
-              onChange={onWatts}
+              onChange={onDial}
             />
           </PanelSectionRow>
           {levelSummary && (
@@ -284,7 +339,17 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
             </>
           ) : (
             <>
-              {resolved && (
+              {editingGpu && gpuResolved ? (
+                <PanelSectionRow>
+                  <Presets
+                    resolved={gpuResolved}
+                    manageLabel={t("tdp.presets.manage")}
+                    hiddenLabel={t("tdp.presets.hidden")}
+                    onPick={(item) => onGpuLevel?.(item.watts)}
+                    onEdit={onEditPresets}
+                  />
+                </PanelSectionRow>
+              ) : resolved && (
                 <PanelSectionRow>
                   <Presets
                     resolved={resolved}
@@ -307,12 +372,14 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                       fontSize: theme.font.caption,
                       cursor: "pointer",
                     }}
-                    onActivate={() => onWatts(resetTarget)}
-                    onClick={() => onWatts(resetTarget)}
+                    onActivate={() => (editingGpu ? onGpuLevel?.(null) : onWatts(resetTarget))}
+                    onClick={() => (editingGpu ? onGpuLevel?.(null) : onWatts(resetTarget))}
                   >
-                    {levelUnit
-                      ? t("tdp.reset.default.level", { w: resetTarget })
-                      : t("tdp.reset.default", { w: resetTarget })}
+                    {editingGpu
+                      ? t("tdp.target.link")
+                      : levelUnit
+                        ? t("tdp.reset.default.level", { w: resetTarget })
+                        : t("tdp.reset.default", { w: resetTarget })}
                   </Focusable>
                 </PanelSectionRow>
               )}

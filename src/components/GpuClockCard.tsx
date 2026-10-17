@@ -25,8 +25,9 @@ export const GpuClockCard: FC = () => {
   const loIndex = levels ? nearestLevelIndex(levels, lo) : 0;
   const hiIndex = levels ? nearestLevelIndex(levels, hi) : 0;
   const shown = gpuClockPresentation(state);
+  const powerCap = state.managed_by_power ? state.applied_max : null;
   const summary = state.managed_by_power
-    ? t("gpu.clock.auto")
+    ? (powerCap !== null ? t("gpu.clock.capped", { mhz: powerCap }) : t("gpu.clock.auto"))
     : state.manual
     ? `${shown.minimum}–${shown.maximum} MHz`
     : t("gpu.clock.auto");
@@ -49,8 +50,41 @@ export const GpuClockCard: FC = () => {
         />
       )}
       {state.managed_by_power ? (
-        <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>
-          {t("power.managedFrequency")}
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          {powerCap !== null && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <span>{t("gpu.clock.max")}</span>
+              <span style={{ color: theme.color.textPrimary, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                {powerCap} MHz
+              </span>
+            </div>
+          )}
+          {levels && powerCap !== null && (
+            <div aria-hidden style={{ display: "flex", gap: 3 }}>
+              {levels.map((mhz) => (
+                <div
+                  key={mhz}
+                  style={{
+                    flex: "1 1 0",
+                    height: 5,
+                    borderRadius: 3,
+                    background: mhz <= powerCap ? theme.color.accent : "rgba(255,255,255,0.08)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+          {typeof state.power_level === "number" && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <span>{t("gpu.clock.powerLevel")}</span>
+              <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>
+                {t(state.power_level_split ? "gpu.clock.powerLevel.own" : "gpu.clock.powerLevel.linked", { level: state.power_level })}
+              </span>
+            </div>
+          )}
+          <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption }}>
+            {t(typeof state.power_level === "number" ? "gpu.clock.managed" : "power.managedFrequency")}
+          </div>
         </div>
       ) : (
         <ToggleField
