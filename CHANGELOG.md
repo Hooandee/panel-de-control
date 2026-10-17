@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.72.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.71.0...panel-de-control-v0.72.0) (2026-10-17)
+
+
+### Features
+
+* **arm:** enable HDR on the AYN Odin 3 device profile ([#947](https://github.com/Hooandee/panel-de-control/issues/947)) ([e234aeb](https://github.com/Hooandee/panel-de-control/commit/e234aebaec486bbfd1ec38bf4be41b9dc4f5fc84))
+
 ## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
 
 
