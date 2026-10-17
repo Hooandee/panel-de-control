@@ -5,9 +5,25 @@
 ## [0.72.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.71.0...panel-de-control-v0.72.0) (2026-10-17)
 
 
-### Features
+### Español
 
-* **arm:** enable HDR on the AYN Odin 3 device profile ([#947](https://github.com/Hooandee/panel-de-control/issues/947)) ([e234aeb](https://github.com/Hooandee/panel-de-control/commit/e234aebaec486bbfd1ec38bf4be41b9dc4f5fc84))
+* **HDR en la AYN Odin 3:** La pantalla OLED de la Odin 3 soporta HDR, pero Panel no mostraba su bloque. Ahora aparece en Pantalla y puedes activarlo para jugar en HDR en los juegos compatibles.
+
+### English
+
+* **HDR on the AYN Odin 3:** The Odin 3's OLED screen supports HDR, but Panel kept its block hidden. It now shows up under Display and you can turn it on to play in HDR in supported games.
+
+### Italiano
+
+* **HDR sulla AYN Odin 3:** Lo schermo OLED della Odin 3 supporta l'HDR, ma Panel nascondeva il suo blocco. Ora compare in Schermo e puoi attivarlo per giocare in HDR nei giochi compatibili.
+
+### Deutsch
+
+* **HDR auf der AYN Odin 3:** Der OLED-Bildschirm der Odin 3 unterstützt HDR, aber Panel hat den Block dafür versteckt. Jetzt erscheint er unter Bildschirm und du kannst ihn einschalten, um unterstützte Spiele in HDR zu spielen.
+
+### Português (Brasil)
+
+* **HDR no AYN Odin 3:** A tela OLED do Odin 3 suporta HDR, mas o Panel escondia o bloco dele. Agora ele aparece em Tela e você pode ativar para jogar em HDR nos jogos compatíveis.
 
 ## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
 
