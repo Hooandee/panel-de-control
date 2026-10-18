@@ -5,9 +5,12 @@ export const THEME_COLOR_TOKENS = {
   surface: "--pdc-theme-surface",
   surfaceRaised: "--pdc-theme-surface-raised",
   hairline: "--pdc-theme-hairline",
+  outline: "--pdc-theme-outline",
   textPrimary: "--pdc-theme-text",
   textMuted: "--pdc-theme-text-muted",
   onAccent: "--pdc-theme-on-accent",
+  selectedFill: "--pdc-theme-selected-fill",
+  selectedText: "--pdc-theme-selected-text",
 } as const;
 
 export const THEME_RADIUS_TOKENS = {
@@ -20,6 +23,10 @@ export const THEME_SIZE_TOKENS = {
   stroke: "--pdc-theme-stroke",
 } as const;
 
+export const THEME_LABEL_TRANSFORM = "--pdc-theme-label-transform";
+const LABEL_TRANSFORMS = ["none", "uppercase", "capitalize", "lowercase"] as const;
+export type ThemeLabelTransform = (typeof LABEL_TRANSFORMS)[number];
+
 export type ThemeColorToken = keyof typeof THEME_COLOR_TOKENS;
 export type ThemeRadiusToken = keyof typeof THEME_RADIUS_TOKENS;
 export type ThemeSizeToken = keyof typeof THEME_SIZE_TOKENS;
@@ -27,6 +34,7 @@ export interface ThemeTokens {
   color: Partial<Record<ThemeColorToken, string>>;
   radius: Partial<Record<ThemeRadiusToken, number>>;
   size?: Partial<Record<ThemeSizeToken, number>>;
+  labelTransform?: ThemeLabelTransform;
 }
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -56,6 +64,8 @@ export function readThemeTokens(doc: Document): ThemeTokens {
     const radius = parseThemeRadius(style.getPropertyValue(property));
     if (radius !== null) tokens.radius[name] = radius;
   }
+  const transform = style.getPropertyValue(THEME_LABEL_TRANSFORM).trim() as ThemeLabelTransform;
+  if (LABEL_TRANSFORMS.includes(transform)) tokens.labelTransform = transform;
   for (const [name, property] of Object.entries(THEME_SIZE_TOKENS) as [ThemeSizeToken, string][]) {
     const size = parseThemeRadius(style.getPropertyValue(property));
     if (size !== null) tokens.size![name] = size;
@@ -84,6 +94,10 @@ export function themeRadiusOverride(name: ThemeRadiusToken): number | undefined 
 
 export function themeSizeOverride(name: ThemeSizeToken): number | undefined {
   return current.size?.[name];
+}
+
+export function themeLabelTransform(): ThemeLabelTransform | undefined {
+  return current.labelTransform;
 }
 
 export function getThemeTokensVersion(): number {

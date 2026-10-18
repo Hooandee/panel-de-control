@@ -1,5 +1,5 @@
 import { currentAccentHex, currentAccentRgb, getAccentId } from "./system/accentColor";
-import { getThemeTokensVersion, themeColorOverride, themeRadiusOverride, themeSizeOverride } from "./system/themeTokens";
+import { getThemeTokensVersion, themeColorOverride, themeLabelTransform, themeRadiusOverride, themeSizeOverride } from "./system/themeTokens";
 
 // PdC UI design tokens - the shared visual language for every Panel de Control screen.
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
@@ -13,6 +13,10 @@ const color = {
   },
   get hairline(): string {
     return themeColorOverride("hairline") ?? "rgba(255,255,255,0.06)";
+  },
+  // The edge of a card, tile or idle chip; dividers and gauge tracks keep `hairline`.
+  get outline(): string {
+    return themeColorOverride("outline") ?? color.hairline;
   },
   get textPrimary(): string {
     return themeColorOverride("textPrimary") ?? "rgba(255,255,255,0.92)";
@@ -46,6 +50,13 @@ const color = {
   extra: "#b98cff",
   extraLow: "#8fd8ff",
   brightness: "#f5c542",
+  // The chosen option of a segmented group: its fill and its label.
+  get selectedFill(): string {
+    return themeColorOverride("selectedFill") ?? currentAccentHex();
+  },
+  get selectedText(): string {
+    return themeColorOverride("selectedText") ?? themeColorOverride("textPrimary") ?? "rgba(255,255,255,0.92)";
+  },
 } as const;
 
 const radius = {
@@ -85,7 +96,7 @@ export const theme = {
       return color.surfaceRaised;
     },
     get boxShadow(): string {
-      return `inset 0 0 0 1px ${color.hairline}`;
+      return `inset 0 0 0 1px ${color.outline}`;
     },
   },
   // Equal-width tile inside a card (fan chip, temp stat) — hairline-outlined,
@@ -98,7 +109,7 @@ export const theme = {
       return radius.sm;
     },
     get boxShadow(): string {
-      return `inset 0 0 0 1px ${color.hairline}`;
+      return `inset 0 0 0 1px ${color.outline}`;
     },
   },
   // Muted uppercase caption used as a section heading inside the full-screen
@@ -108,8 +119,12 @@ export const theme = {
     get color(): string {
       return color.textMuted;
     },
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    get textTransform(): string {
+      return themeLabelTransform() ?? "uppercase";
+    },
+    get letterSpacing(): number {
+      return (themeLabelTransform() ?? "uppercase") === "uppercase" ? 0.5 : 0;
+    },
   },
 } as const;
 

@@ -36,5 +36,10 @@ describe("theme tokens", () => {
     applyThemeTokens({ color: { surfaceRaised: "#2b2b2d" }, radius: { md: 12 } });
     expect(theme.card).toMatchObject({ background: "#2b2b2d", borderRadius: 12 });
     expect({ ...style }).toEqual({ background: "#2b2b2d", borderRadius: 12 });
+    applyThemeTokens({ color: { outline: "transparent", selectedFill: "#3a3a3c" }, radius: {}, labelTransform: "none" });
+    expect(theme.card.boxShadow).toBe("inset 0 0 0 1px transparent");
+    expect(theme.color.hairline).toBe("rgba(255,255,255,0.06)");
+    expect(theme.color.selectedFill).toBe("#3a3a3c");
+    expect(theme.sectionLabel).toMatchObject({ textTransform: "none", letterSpacing: 0 });
   });
 });
