@@ -19,6 +19,7 @@ export const DeviceHeader: FC<{
   return (
     <div
       data-testid="device-pill"
+      data-pdc-part="device-pill"
       style={{
         display: "inline-flex",
         alignItems: "center",

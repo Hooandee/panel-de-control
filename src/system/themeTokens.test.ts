@@ -24,7 +24,8 @@ describe("theme tokens", () => {
     root.style.setProperty("--pdc-theme-surface-raised", "#2b2b2d");
     root.style.setProperty("--pdc-theme-text", "nonsense");
     root.style.setProperty("--pdc-theme-radius-md", "12px");
-    expect(readThemeTokens(document)).toEqual({ color: { surfaceRaised: "#2b2b2d" }, radius: { md: 12 } });
+    root.style.setProperty("--pdc-theme-stroke", "2.5px");
+    expect(readThemeTokens(document)).toEqual({ color: { surfaceRaised: "#2b2b2d" }, radius: { md: 12 }, size: { stroke: 2.5 } });
   });
 
   it("keeps Panel's own look without a theme and follows one when present", () => {

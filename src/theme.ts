@@ -1,5 +1,5 @@
 import { currentAccentHex, currentAccentRgb, getAccentId } from "./system/accentColor";
-import { getThemeTokensVersion, themeColorOverride, themeRadiusOverride } from "./system/themeTokens";
+import { getThemeTokensVersion, themeColorOverride, themeRadiusOverride, themeSizeOverride } from "./system/themeTokens";
 
 // PdC UI design tokens - the shared visual language for every Panel de Control screen.
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
@@ -72,6 +72,10 @@ export const theme = {
   radius,
   space,
   font,
+  // Outline width of a selected chip or control.
+  get stroke(): number {
+    return themeSizeOverride("stroke") ?? 1.5;
+  },
   // Signature raised-surface style (bg + radius + hairline). Add padding per use.
   card: {
     get borderRadius(): number {

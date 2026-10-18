@@ -16,11 +16,17 @@ export const THEME_RADIUS_TOKENS = {
   lg: "--pdc-theme-radius-lg",
 } as const;
 
+export const THEME_SIZE_TOKENS = {
+  stroke: "--pdc-theme-stroke",
+} as const;
+
 export type ThemeColorToken = keyof typeof THEME_COLOR_TOKENS;
 export type ThemeRadiusToken = keyof typeof THEME_RADIUS_TOKENS;
+export type ThemeSizeToken = keyof typeof THEME_SIZE_TOKENS;
 export interface ThemeTokens {
   color: Partial<Record<ThemeColorToken, string>>;
   radius: Partial<Record<ThemeRadiusToken, number>>;
+  size?: Partial<Record<ThemeSizeToken, number>>;
 }
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -37,7 +43,7 @@ export function parseThemeRadius(value: string | null | undefined): number | nul
 }
 
 export function readThemeTokens(doc: Document): ThemeTokens {
-  const tokens: ThemeTokens = { color: {}, radius: {} };
+  const tokens: ThemeTokens = { color: {}, radius: {}, size: {} };
   const root = doc.documentElement;
   const view = doc.defaultView;
   if (!root || !view) return tokens;
@@ -49,6 +55,10 @@ export function readThemeTokens(doc: Document): ThemeTokens {
   for (const [name, property] of Object.entries(THEME_RADIUS_TOKENS) as [ThemeRadiusToken, string][]) {
     const radius = parseThemeRadius(style.getPropertyValue(property));
     if (radius !== null) tokens.radius[name] = radius;
+  }
+  for (const [name, property] of Object.entries(THEME_SIZE_TOKENS) as [ThemeSizeToken, string][]) {
+    const size = parseThemeRadius(style.getPropertyValue(property));
+    if (size !== null) tokens.size![name] = size;
   }
   return tokens;
 }
@@ -70,6 +80,10 @@ export function themeColorOverride(name: ThemeColorToken): string | undefined {
 
 export function themeRadiusOverride(name: ThemeRadiusToken): number | undefined {
   return current.radius[name];
+}
+
+export function themeSizeOverride(name: ThemeSizeToken): number | undefined {
+  return current.size?.[name];
 }
 
 export function getThemeTokensVersion(): number {
