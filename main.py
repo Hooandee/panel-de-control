@@ -1775,6 +1775,40 @@ class Plugin:
             decky.logger.error("Remote theme prepare failed: %s", type(error).__name__)
             return {"ok": False, "code": "install_failed", "theme_id": theme_id}
 
+    async def check_theme_early(self, force: bool = False) -> dict:
+        self._init()
+        if not isinstance(force, bool):
+            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": False}
+        try:
+            return await self._offload_theme_call(lambda: self._remote_themes().check_early(force))
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Early theme discovery failed: %s", type(error).__name__)
+            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
+
+    async def prepare_early_theme_install(self, archive_path: str) -> dict:
+        """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
+        self._init()
+        if not isinstance(archive_path, str) or not archive_path or len(archive_path) > 4096:
+            return {"ok": False, "code": "invalid_archive"}
+
+        def prepare() -> dict:
+            return self._remote_themes().prepare_early_install(
+                archive_path,
+                self._themes_root(),
+                self._theme_receipts_path(),
+            )
+
+        try:
+            result = await self._offload_theme_call(prepare)
+            decky.logger.info("Early theme prepared (%s %s)", result.get("catalogId"), result.get("version"))
+            return result
+        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Early theme install rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Early theme install failed: %s", type(error).__name__)
+            return {"ok": False, "code": "install_failed"}
+
     async def commit_theme_install(self, transaction: str) -> dict:
         self._init()
         try:

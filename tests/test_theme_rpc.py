@@ -771,3 +771,29 @@ def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
     assert themes == {"installed": [], "display": {
         "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
     }}
+
+
+def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rpc):
+    main, plugin, _ = theme_rpc
+    calls = []
+
+    def prepare(path, root, receipts):
+        calls.append((path, pathlib.Path(root).name, pathlib.Path(receipts).name))
+        if path == "/bad.zip":
+            raise main.theme_remote.ThemeRemoteError("unknown_archive", "x")
+        if path == "/boom.zip":
+            raise RuntimeError("secret detail")
+        return {"ok": True, "code": "prepared", "catalogId": "example-theme", "version": "0.3.0"}
+
+    plugin._theme_remote_service = types.SimpleNamespace(
+        check_early=lambda force: {"status": "published", "themes": [], "force": force},
+        prepare_early_install=prepare,
+    )
+
+    assert asyncio.run(plugin.check_theme_early(True)) == {"status": "published", "themes": [], "force": True}
+    assert asyncio.run(plugin.check_theme_early("yes"))["code"] == "invalid_descriptor"
+    assert asyncio.run(plugin.prepare_early_theme_install("/picked.zip"))["code"] == "prepared"
+    assert asyncio.run(plugin.prepare_early_theme_install("/bad.zip")) == {"ok": False, "code": "unknown_archive"}
+    assert asyncio.run(plugin.prepare_early_theme_install("/boom.zip")) == {"ok": False, "code": "install_failed"}
+    assert asyncio.run(plugin.prepare_early_theme_install(7)) == {"ok": False, "code": "invalid_archive"}
+    assert [call[0] for call in calls] == ["/picked.zip", "/bad.zip", "/boom.zip"]

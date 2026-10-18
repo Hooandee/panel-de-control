@@ -43,6 +43,12 @@ _RELEASE_REQUIRED_FIELDS = frozenset(
     }
 )
 _RELEASE_OPTIONAL_FIELDS = frozenset({"exclusiveGroup", "notes"})
+_EARLY_REQUIRED_FIELDS = frozenset(
+    {"schemaVersion", "catalogId", "cssLoaderName", "displayName", "description", "author", "tags", "minimumVersions", "early"}
+)
+# Early builds are not on Pages: only their size and digest are published, so a zip handed to Panel is
+# accepted only when it is byte for byte one Hooandee published.
+_MAX_EARLY_ARTIFACTS = 8
 
 
 class ThemeContractError(Exception):
@@ -78,6 +84,33 @@ class ThemeCatalogRelease:
 
 
 ThemeRelease = ThemeCatalogRelease
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeEarlyArtifact:
+    version: str
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeEarlyRelease:
+    catalog_id: str
+    css_loader_name: str
+    version: str
+    display_name: Mapping[str, str]
+    description: Mapping[str, str]
+    author: str
+    tags: tuple[str, ...]
+    minimum_versions: ThemeMinimumVersions
+    notes: Mapping[str, str]
+    artifacts: tuple[ThemeEarlyArtifact, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeEarlyCatalog:
+    schema_version: int
+    themes: tuple[ThemeEarlyRelease, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +316,30 @@ def _parse_minimum_versions(value: object) -> ThemeMinimumVersions:
     return ThemeMinimumVersions(panel=panel_version)
 
 
+def _css_loader_name(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or len(value) > _MAX_CSS_LOADER_NAME_LENGTH
+        or "/" in value
+        or "\\" in value
+    ):
+        _fail("Release CSS Loader name is invalid")
+    return value
+
+
+def _author(value: object) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > _MAX_AUTHOR_LENGTH:
+        _fail("Release author is invalid")
+    return value
+
+
+def _tags(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or len(value) > _MAX_TAGS:
+        _fail("Release tags are invalid")
+    return tuple(_safe_id(tag, "Release tag") for tag in value)
+
+
 def _parse_release_value(value: object, pages_base_url: str) -> ThemeCatalogRelease:
     release = _object(value, "Release metadata")
     _exact_fields(
@@ -295,15 +352,7 @@ def _parse_release_value(value: object, pages_base_url: str) -> ThemeCatalogRele
     if schema_version != 1 or isinstance(schema_version, bool):
         _fail("Release schema is unsupported")
     catalog_id = _safe_id(release["catalogId"], "Release catalog id")
-    css_loader_name = release["cssLoaderName"]
-    if (
-        not isinstance(css_loader_name, str)
-        or not css_loader_name.strip()
-        or len(css_loader_name) > _MAX_CSS_LOADER_NAME_LENGTH
-        or "/" in css_loader_name
-        or "\\" in css_loader_name
-    ):
-        _fail("Release CSS Loader name is invalid")
+    css_loader_name = _css_loader_name(release["cssLoaderName"])
     version = _stable_version(release["version"], "Published version")
     display_name = _localized(
         release["displayName"],
@@ -315,17 +364,8 @@ def _parse_release_value(value: object, pages_base_url: str) -> ThemeCatalogRele
         "Release description",
         _MAX_DESCRIPTION_LENGTH,
     )
-    author = release["author"]
-    if (
-        not isinstance(author, str)
-        or not author.strip()
-        or len(author) > _MAX_AUTHOR_LENGTH
-    ):
-        _fail("Release author is invalid")
-    raw_tags = release["tags"]
-    if not isinstance(raw_tags, list) or len(raw_tags) > _MAX_TAGS:
-        _fail("Release tags are invalid")
-    tags = tuple(_safe_id(tag, "Release tag") for tag in raw_tags)
+    author = _author(release["author"])
+    tags = _tags(release["tags"])
     exclusive_group = (
         _safe_id(release["exclusiveGroup"], "Release exclusive group")
         if "exclusiveGroup" in release
@@ -385,3 +425,62 @@ def parse_theme_catalog(payload: bytes, pages_base_url: str) -> ThemeCatalog:
     if len(catalog_ids) != len(themes):
         _fail("Theme catalog ids must be unique")
     return ThemeCatalog(schema_version=1, themes=themes)
+
+
+def _parse_early_artifacts(value: object) -> tuple[str, tuple[ThemeEarlyArtifact, ...]]:
+    early = _object(value, "Early release")
+    _exact_fields(early, required=frozenset({"version", "artifacts"}), label="Early release")
+    version = _stable_version(early["version"], "Early version")
+    raw = early["artifacts"]
+    if not isinstance(raw, list) or not raw or len(raw) > _MAX_EARLY_ARTIFACTS:
+        _fail("Early artifacts are invalid")
+    artifacts: list[ThemeEarlyArtifact] = []
+    for item in raw:
+        artifact = _object(item, "Early artifact")
+        _exact_fields(artifact, required=frozenset({"version", "size", "sha256"}), label="Early artifact")
+        size = artifact["size"]
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > _MAX_ARTIFACT_BYTES:
+            _fail("Early artifact size is invalid")
+        digest = artifact["sha256"]
+        if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+            _fail("Early artifact digest is invalid")
+        artifacts.append(ThemeEarlyArtifact(_stable_version(artifact["version"], "Early artifact version"), size, digest))
+    if len({a.version for a in artifacts}) != len(artifacts) or len({a.sha256 for a in artifacts}) != len(artifacts):
+        _fail("Early artifacts must be unique")
+    if version not in {a.version for a in artifacts}:
+        _fail("Early version has no artifact")
+    return version, tuple(artifacts)
+
+
+def _parse_early_value(value: object) -> ThemeEarlyRelease:
+    release = _object(value, "Early theme")
+    _exact_fields(release, required=_EARLY_REQUIRED_FIELDS, optional=frozenset({"notes"}), label="Early theme")
+    if release["schemaVersion"] != 1 or isinstance(release["schemaVersion"], bool):
+        _fail("Early theme schema is unsupported")
+    version, artifacts = _parse_early_artifacts(release["early"])
+    return ThemeEarlyRelease(
+        catalog_id=_safe_id(release["catalogId"], "Early catalog id"),
+        css_loader_name=_css_loader_name(release["cssLoaderName"]),
+        version=version,
+        display_name=_localized(release["displayName"], "Early display name", _MAX_DISPLAY_NAME_LENGTH),
+        description=_localized(release["description"], "Early description", _MAX_DESCRIPTION_LENGTH),
+        author=_author(release["author"]),
+        tags=_tags(release["tags"]),
+        minimum_versions=_parse_minimum_versions(release["minimumVersions"]),
+        notes=MappingProxyType({}) if "notes" not in release else _localized(release["notes"], "Early notes", _MAX_NOTE_LENGTH),
+        artifacts=artifacts,
+    )
+
+
+def parse_theme_early_catalog(payload: bytes) -> ThemeEarlyCatalog:
+    raw = _object(_decode_json(payload, "Early theme catalog"), "Early theme catalog")
+    _exact_fields(raw, required=frozenset({"schemaVersion", "themes"}), label="Early theme catalog")
+    if raw["schemaVersion"] != 1 or isinstance(raw["schemaVersion"], bool):
+        _fail("Early theme catalog schema is unsupported")
+    themes_value = raw["themes"]
+    if not isinstance(themes_value, list) or len(themes_value) > _MAX_CATALOG_ENTRIES:
+        _fail("Early theme catalog entries are invalid")
+    themes = tuple(_parse_early_value(theme) for theme in themes_value)
+    if len({theme.catalog_id for theme in themes}) != len(themes):
+        _fail("Early theme catalog ids must be unique")
+    return ThemeEarlyCatalog(schema_version=1, themes=themes)
