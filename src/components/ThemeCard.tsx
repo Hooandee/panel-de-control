@@ -3,7 +3,7 @@ import { type CSSProperties, useRef, useState } from "react";
 import { LuDownload, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { localizePublishedText } from "../themes/remotePublication";
 import type { ThemeCardModel } from "../themes/state";
 import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
@@ -15,14 +15,14 @@ interface Props {
   onOpen(): void;
 }
 
-const PREVIEW_STYLE: CSSProperties = {
+const PREVIEW_STYLE: CSSProperties = themed(() => ({
   height: 96,
   position: "relative",
   overflow: "hidden",
   borderRadius: theme.radius.sm,
   background: `linear-gradient(145deg, ${theme.color.surfaceRaised}, ${theme.color.surface})`,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
 const PREVIEW_LAYERS = [
   { left: "9%", top: 12, width: "19%", height: 52 },

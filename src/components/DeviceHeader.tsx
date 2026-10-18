@@ -19,6 +19,7 @@ export const DeviceHeader: FC<{
   return (
     <div
       data-testid="device-pill"
+      data-pdc-part="device-pill"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -30,7 +31,7 @@ export const DeviceHeader: FC<{
         padding: "3px 8px",
         borderRadius: 999,
         background: "rgba(255,255,255,0.04)",
-        boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+        boxShadow: `inset 0 0 0 1px ${theme.color.outline}`,
         boxSizing: "border-box",
       }}
     >

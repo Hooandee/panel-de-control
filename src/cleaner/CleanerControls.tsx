@@ -1,12 +1,12 @@
 import { Focusable } from "@decky/ui";
 import { type CSSProperties, type FC, type ReactNode, useRef } from "react";
 import { LuCircleAlert, LuCircleCheck, LuX } from "react-icons/lu";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { useI18n } from "../i18n";
 import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 
 export const cleanerColumn: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
-export const cleanerCaption: CSSProperties = { fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 };
+export const cleanerCaption: CSSProperties = themed(() => ({ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 }));
 
 export const CleanerButton: FC<{
   label: string;

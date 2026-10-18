@@ -10,7 +10,7 @@ import {
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { useHud, useHudValues } from "../mangohud/useHud";
 import { HudPreview } from "../components/HudPreview";
 import { HudDisclosure } from "../components/HudDisclosure";
@@ -30,7 +30,7 @@ import {
   toggleMetricItem, matchingPresetKey,
 } from "../mangohud/model";
 
-const card = { ...theme.card, minWidth: 0, padding: theme.space.md, overflow: "hidden" } as const;
+const card = themed(() => ({ ...theme.card, minWidth: 0, padding: theme.space.md, overflow: "hidden" } as const));
 
 const POSITIONS: { id: HudPosition; Icon: typeof LuArrowUpLeft }[] = [
   { id: "top-left", Icon: LuArrowUpLeft }, { id: "top-right", Icon: LuArrowUpRight },
@@ -180,10 +180,10 @@ const Note: FC<{ children: ReactNode }> = ({ children }) => (
   <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{children}</span>
 );
 
-const controlLabel = {
+const controlLabel = themed(() => ({
   fontSize: theme.font.caption,
   color: theme.color.textMuted,
-} as const;
+} as const));
 
 const HudLivePreview: FC<{ model: HudModel }> = ({ model }) => {
   const values = useHudValues();
