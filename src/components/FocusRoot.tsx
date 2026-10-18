@@ -19,7 +19,7 @@ interface Props {
 // plugin's `document` global is neither.
 export const FocusRoot: FC<Props> = ({ children, style, publishDocument }) => {
   useAccent(); // recolour when the accent changes
-  useSyncExternalStore(subscribeThemeTokens, getThemeTokensVersion, getThemeTokensVersion);
+  const tokens = useSyncExternalStore(subscribeThemeTokens, getThemeTokensVersion, getThemeTokensVersion);
   const [panelDocument, setPanelDocument] = useState<Document | null>(null);
   const ref = useCallback(
     (el: HTMLDivElement | null) => {
@@ -33,6 +33,9 @@ export const FocusRoot: FC<Props> = ({ children, style, publishDocument }) => {
     [publishDocument],
   );
   useEffect(() => (panelDocument ? watchThemeAccent(panelDocument) : undefined), [panelDocument]);
+  useEffect(() => {
+    if (panelDocument) ensureFocusStyles(panelDocument);
+  }, [panelDocument, tokens]);
   const vars = { [`--pdc-accent-rgb`]: currentAccentRgb() } as CSSProperties;
   return (
     <div className={PDC_ROOT} ref={ref} style={{ ...vars, ...style }}>
