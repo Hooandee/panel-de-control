@@ -1,4 +1,5 @@
 import { applyThemeAccent } from "./accentColor";
+import { applyThemeTokens, readThemeTokens } from "./themeTokens";
 
 export const THEME_ACCENT_PROPERTY = "--pdc-theme-accent";
 
@@ -19,6 +20,7 @@ export function watchThemeAccent(doc: Document): () => void {
   const sync = () => {
     frame = 0;
     applyThemeAccent(readThemeAccent(doc));
+    applyThemeTokens(readThemeTokens(doc));
   };
   sync();
   const observer = new view.MutationObserver(() => {

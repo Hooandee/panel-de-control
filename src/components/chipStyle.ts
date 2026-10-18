@@ -5,7 +5,7 @@ import { theme } from "../theme";
 const chipVisual = (active: boolean): CSSProperties => ({
   borderRadius: theme.radius.sm,
   background: active ? `rgba(${theme.color.accentRgb},0.18)` : theme.color.surfaceRaised,
-  boxShadow: `inset 0 0 0 ${active ? 1.5 : 1}px ${active ? theme.color.accent : theme.color.hairline}`,
+  boxShadow: `inset 0 0 0 ${active ? theme.stroke : 1}px ${active ? theme.color.accent : theme.color.outline}`,
   color: active ? theme.color.accent : theme.color.textPrimary,
   fontSize: theme.font.caption,
   cursor: "pointer",

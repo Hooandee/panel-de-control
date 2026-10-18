@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 
 import type { CssLoaderPatch } from "../themes/cssLoaderTypes";
 import type { PatchLabels } from "../themes/themePatchLabels";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 
 interface Props {
   patch: CssLoaderPatch;
@@ -12,7 +12,7 @@ interface Props {
   onChange(value: string): void;
 }
 
-const patchSurfaceStyle: CSSProperties = {
+const patchSurfaceStyle: CSSProperties = themed(() => ({
   ...theme.card,
   color: theme.color.textPrimary,
   minWidth: 0,
@@ -22,7 +22,7 @@ const patchSurfaceStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-};
+}));
 
 const readOnlyStyle: CSSProperties = {
   minHeight: 34,

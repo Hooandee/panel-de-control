@@ -9,6 +9,7 @@ export interface ThemeInstallResult {
 
 export interface ThemeInstallHost {
   prepareRemote(themeId: string, expectedVersion: string): Promise<unknown>;
+  prepareEarly(archivePath: string): Promise<unknown>;
   commit(transaction: string): Promise<unknown>;
   discard(catalogId: string): Promise<unknown>;
   rollback(transaction: string): Promise<unknown>;
@@ -45,14 +46,22 @@ export class PanelThemeInstaller {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(catalogId)) {
       throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
     }
-    if (
-      source.kind !== "official-remote"
-      || source.channelId !== "panel-pages-v1"
-      || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(source.expectedVersion)
-    ) {
-      throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
+    let response: unknown;
+    if (source.kind === "early-archive") {
+      if (typeof source.archivePath !== "string" || !source.archivePath.startsWith("/")) {
+        throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
+      }
+      response = await this.host.prepareEarly(source.archivePath);
+    } else {
+      if (
+        source.kind !== "official-remote"
+        || source.channelId !== "panel-pages-v1"
+        || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(source.expectedVersion)
+      ) {
+        throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
+      }
+      response = await this.host.prepareRemote(source.catalogId, source.expectedVersion);
     }
-    const response = await this.host.prepareRemote(source.catalogId, source.expectedVersion);
     if (!isRecord(response) || typeof response.ok !== "boolean" || !nonEmptyString(response.code)) {
       throw new ThemeInstallError("malformed_response", "Panel returned an invalid theme install result");
     }

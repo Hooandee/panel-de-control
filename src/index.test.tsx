@@ -34,10 +34,13 @@ const persistentServices = vi.hoisted(() => {
   };
 });
 
-vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, toaster: { toast: vi.fn() } }));
+vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() } }));
 vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
 vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
+  checkThemeEarly: vi.fn(),
+  earlyThemeArchiveFolder: vi.fn(),
+  prepareEarlyThemeInstall: vi.fn(),
   getUiPrefs: prefs.get,
   setUiPrefs: prefs.set,
   acknowledgeThemeActivation: vi.fn(),
@@ -102,10 +105,11 @@ vi.mock("./themes/panelThemeInstallHost", () => ({
 vi.mock("./themes/panelThemeActivationJournal", () => ({
   configurePanelThemeActivationJournalHost: () => () => {},
 }));
-vi.mock("./themes/remotePublicationClient", () => ({ configureThemePublicationCheckHost: () => () => {} }));
+vi.mock("./themes/remotePublicationClient", () => ({ configureThemeEarlyCheckHost: () => () => {}, configureThemePublicationCheckHost: () => () => {} }));
 vi.mock("./themes/themeExtensionClient", () => ({ configureThemeExtensionRpcHost: () => () => {} }));
 vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
 vi.mock("./themes/themesClient", () => ({
+  configureEarlyArchivePicker: () => () => {},
   configureThemeFailureReporter: () => () => undefined,
   configureSectionHandoffStore: () => () => undefined,
   createProductionThemesDependencies: () => ({}),

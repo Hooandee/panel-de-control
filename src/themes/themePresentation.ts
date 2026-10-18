@@ -1,3 +1,4 @@
+import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
 import luminousAtlasCover from "../assets/luminous-atlas-cover.jpg";
@@ -15,6 +16,14 @@ interface ThemePresentation {
 }
 
 const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
+  "hooandee-duo": {
+    cssLoaderName: "Hooandee Duo",
+    cover: duoCover,
+    description: {
+      de: "Duo ist ein Theme, inspiriert von einer der beliebtesten Konsolen, mit direktem Zugriff auf deine Spiele, eigenen Sounds und einem richtig unterhaltsamen Erlebnis.",
+      "pt-BR": "Duo é um tema inspirado em um dos consoles mais queridos, com acesso direto aos seus jogos, sons próprios e uma experiência muito divertida.",
+    },
+  },
   "hooandee-gallery": {
     cssLoaderName: "Hooandee Gallery",
     cover: hooandeeCover,

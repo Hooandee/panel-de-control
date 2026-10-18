@@ -65,7 +65,7 @@ FSR4, HDR, scaling and more, but only what your Proton version supports.
 a moment.
 
 ✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
-from Panel.
+from Panel. Themes in early access show an Early label and install from their zip.
 
 🎮 **Controllers.** Button remapping that works with Handheld Daemon and InputPlumber. Still
 in beta.

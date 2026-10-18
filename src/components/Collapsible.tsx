@@ -50,6 +50,7 @@ export const Collapsible: FC<Props> = ({
       <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
         <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
           <Focusable
+            data-pdc-part="card-title"
             style={{ flex: 1, display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
             onActivate={toggle}
             onClick={toggle}

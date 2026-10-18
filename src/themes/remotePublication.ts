@@ -36,15 +36,24 @@ export type ThemePublicationErrorCode =
   | "descriptor_too_large"
   | "lifecycle_stopping";
 
+// A theme's early access build: not downloadable; installed from a zip the user picks, accepted only when
+// it is byte for byte one listed in the published early list.
+export interface PublishedEarlyTheme {
+  catalogId: string;
+  earlyVersion: string;
+  release: PublishedThemeRelease;
+}
+
 export type ThemePublicationState =
   | { status: "unchecked" }
   | { status: "checking" }
   | { status: "disabled" }
-  | { status: "published"; checkedAt: number; themes: readonly PublishedThemeRelease[] }
+  | { status: "published"; checkedAt: number; themes: readonly PublishedThemeRelease[]; early?: readonly PublishedEarlyTheme[] }
   | {
     status: "cached";
     checkedAt: number;
     themes: readonly PublishedThemeRelease[];
+    early?: readonly PublishedEarlyTheme[];
     code: ThemePublicationErrorCode;
     retryable: boolean;
   }
@@ -103,7 +112,7 @@ function publishedNotes(value: unknown): PublishedNotes {
   return localizedText(input, 1_000, "Published notes");
 }
 
-function publicationTheme(value: unknown): PublishedThemeRelease {
+export function publicationTheme(value: unknown): PublishedThemeRelease {
   const theme = record(value);
   const required = [
     "catalogId", "cssLoaderName", "publishedVersion", "displayName", "description",
@@ -228,4 +237,25 @@ export function localizePublishedText(
 ): string {
   return [text[locale], text.en, text.es, text.it]
     .find((value): value is string => typeof value === "string" && value.trim().length > 0) ?? "";
+}
+
+/** The early list never blocks the catalog: anything unreadable is simply no early builds. */
+export function parseEarlyPublication(value: unknown): readonly PublishedEarlyTheme[] {
+  try {
+    const publication = record(value);
+    if (publication.status !== "published") return [];
+    exact(publication, ["status", "themes"]);
+    if (!Array.isArray(publication.themes) || publication.themes.length > 32) return [];
+    const themes = publication.themes.map((entry) => {
+      const { earlyVersion, ...fields } = record(entry);
+      if (typeof earlyVersion !== "string" || !STABLE_VERSION.test(earlyVersion)) {
+        throw new Error("Early theme version is invalid");
+      }
+      const release = publicationTheme({ ...fields, publishedVersion: earlyVersion });
+      return { catalogId: release.catalogId, earlyVersion, release };
+    });
+    return new Set(themes.map((theme) => theme.catalogId)).size === themes.length ? themes : [];
+  } catch {
+    return [];
+  }
 }

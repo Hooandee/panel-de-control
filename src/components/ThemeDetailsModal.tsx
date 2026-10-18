@@ -3,10 +3,10 @@ import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
+import { LuDownload, LuFileArchive, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
 import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
@@ -14,6 +14,7 @@ import { labelsForPatch } from "../themes/themePatchLabels";
 import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
+import { EarlyBadge } from "./ThemeCard";
 import { ThemePatchControl } from "./ThemePatchControl";
 
 interface ThemeDetailsModalProps {
@@ -30,7 +31,7 @@ type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" };
 
 const gamepadNavigation = createThemeNavigationAccess();
 
-const THEME_CONTROL_RESET = `
+const THEME_CONTROL_RESET = () => `
 [data-pdc-theme-settings] { color: ${theme.color.textPrimary} !important; }
 [data-pdc-theme-settings] [data-pdc-theme-muted] { color: ${theme.color.textMuted} !important; }
 [data-pdc-theme-settings] [data-pdc-theme-cover-header] { color: rgba(255,255,255,0.99) !important; }
@@ -57,12 +58,12 @@ const THEME_CONTROL_RESET = `
 }
 `;
 
-const STATUS_SURFACE: CSSProperties = {
+const STATUS_SURFACE: CSSProperties = themed(() => ({
   borderRadius: theme.radius.md,
   minWidth: 0,
   padding: theme.space.md,
   marginBottom: theme.space.section,
-};
+}));
 
 const COVER_IMAGE_STYLE: CSSProperties = {
   position: "absolute",
@@ -81,15 +82,15 @@ const COVER_GRADIENT_STYLE: CSSProperties = {
   background: "linear-gradient(0deg, rgba(0,0,0,1) 0, rgba(0,0,0,0.96) 4px, rgba(0,0,0,0) 14px), linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.66) 54%, rgba(0,0,0,0.38) 100%), linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.58) 58%, rgba(0,0,0,0.12) 100%)",
 };
 
-const CONFIRMATION_SURFACE_STYLE: CSSProperties = {
+const CONFIRMATION_SURFACE_STYLE: CSSProperties = themed(() => ({
   ...theme.card,
   padding: theme.space.md,
   marginBottom: theme.space.section,
   background: `linear-gradient(135deg, rgba(${theme.color.accentRgb},0.15), rgba(${theme.color.accentRgb},0.035) 48%, ${theme.color.surfaceRaised})`,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.25), 0 14px 32px rgba(0,0,0,0.2)`,
-};
+}));
 
-const CONFIRMATION_ICON_STYLE: CSSProperties = {
+const CONFIRMATION_ICON_STYLE: CSSProperties = themed(() => ({
   width: 42,
   height: 42,
   borderRadius: theme.radius.sm,
@@ -99,9 +100,9 @@ const CONFIRMATION_ICON_STYLE: CSSProperties = {
   color: theme.color.accent,
   background: `rgba(${theme.color.accentRgb},0.16)`,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.22)`,
-};
+}));
 
-const VERSION_PILL_STYLE: CSSProperties = {
+const VERSION_PILL_STYLE: CSSProperties = themed(() => ({
   alignSelf: "start",
   padding: "4px 9px",
   borderRadius: 999,
@@ -110,37 +111,37 @@ const VERSION_PILL_STYLE: CSSProperties = {
   whiteSpace: "nowrap",
   background: "rgba(255,255,255,0.055)",
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
-const SECONDARY_CONFIRM_STYLE: CSSProperties = {
+const SECONDARY_CONFIRM_STYLE: CSSProperties = themed(() => ({
   minWidth: 120,
   borderRadius: theme.radius.sm,
   background: "rgba(255,255,255,0.028)",
   color: theme.color.textMuted,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
-const PRIMARY_CONFIRM_STYLE: CSSProperties = {
+const PRIMARY_CONFIRM_STYLE: CSSProperties = themed(() => ({
   minWidth: 142,
   borderRadius: theme.radius.sm,
   background: `linear-gradient(180deg, rgba(${theme.color.accentRgb},0.18), rgba(${theme.color.accentRgb},0.08))`,
   color: theme.color.textPrimary,
   fontWeight: 780,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.42), 0 7px 20px rgba(${theme.color.accentRgb},0.12)`,
-};
+}));
 
-const DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE: CSSProperties = {
+const DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE: CSSProperties = themed(() => ({
   ...CONFIRMATION_SURFACE_STYLE,
   background: theme.color.surfaceRaised,
   boxShadow: `inset 0 0 0 1px ${theme.color.warn}, 0 14px 32px rgba(0,0,0,0.2)`,
-};
+}));
 
-const DESTRUCTIVE_CONFIRM_STYLE: CSSProperties = {
+const DESTRUCTIVE_CONFIRM_STYLE: CSSProperties = themed(() => ({
   ...PRIMARY_CONFIRM_STYLE,
   background: theme.color.warn,
   color: theme.color.surface,
   boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
-};
+}));
 
 const HEADER_ACTION_STYLE: CSSProperties = {
   position: "relative",
@@ -149,14 +150,14 @@ const HEADER_ACTION_STYLE: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const DELETE_ACTION_STYLE: CSSProperties = {
+const DELETE_ACTION_STYLE: CSSProperties = themed(() => ({
   width: "100%",
   minWidth: 0,
   borderRadius: theme.radius.sm,
   background: theme.color.surfaceRaised,
   color: theme.color.textMuted,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
 function formatVersion(value: string): string {
   return value.toLowerCase().startsWith("v") ? value : `v${value}`;
@@ -319,7 +320,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
       <FocusRoot style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
         <Focusable ref={bodyRef} style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
           <div data-testid="theme-settings-content" data-pdc-theme-settings="true" style={{ maxWidth: fullSizeLayout ? 760 : 620, margin: "0 auto", padding: fullSizeLayout ? "8px 8px 54px" : "4px 8px 18px", color: theme.color.textPrimary }}>
-            <style>{THEME_CONTROL_RESET}</style>
+            <style>{THEME_CONTROL_RESET()}</style>
             <header data-pdc-theme-cover-header={cover ? "true" : undefined} style={{
               ...theme.card,
               position: "relative",
@@ -397,9 +398,28 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               <div data-pdc-theme-muted style={{ position: "relative", fontSize: 14, lineHeight: 1.45 }}>{description}</div>
               <div data-pdc-theme-muted style={{ position: "relative", display: "flex", flexWrap: "wrap", gap: 7, fontSize: theme.font.caption }}>
                 {card.installed && card.installedVersion ? <span>{t("themes.version.installed", { version: formatVersion(card.installedVersion) })}</span> : null}
-                <span>{t("themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
+                <span>{t(card.earlyOnly ? "themes.early.version" : "themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
               </div>
             </header>
+
+            {card.early && cssReady ? (
+              <section data-pdc-theme-early="true" data-pdc-theme-status-surface="true" style={STATUS_SURFACE}>
+                <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, fontWeight: 700 }}>
+                  <EarlyBadge /> {t("themes.early.title")}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
+                  {t("themes.early.version", { version: formatVersion(card.early.version) })}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.45 }}>
+                  {t(card.early.installable ? "themes.early.desc" : "themes.early.unavailable")}
+                </div>
+                <div style={{ marginTop: theme.space.sm }}>
+                  <ButtonItem layout="below" disabled={actionsBlocked || !card.early.installable} onClick={() => void controller.installEarly(card.id)}>
+                    <LuFileArchive size={14} aria-hidden /> {t(installing ? "themes.action.installing" : "themes.early.install")}
+                  </ButtonItem>
+                </div>
+              </section>
+            ) : null}
 
             {!fullSizeLayout ? <div aria-hidden style={{ height: 1, margin: `0 ${theme.space.xs}px ${theme.space.md}px`, background: theme.color.hairline }} /> : null}
 
@@ -437,7 +457,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
 
             {controller.error ? (
               <div data-pdc-theme-status-surface="true" role="alert" style={STATUS_SURFACE}>
-                <div data-pdc-theme-warning>{t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}</div>
+                <div data-pdc-theme-warning>{t(controller.recoveryBlocked
+                  ? "themes.recovery.blocked"
+                  : controller.errorCode === "unknown_archive" ? "themes.early.rejected" : "themes.operation.failed")}</div>
                 {controller.errorCode ? (
                   <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
                     {t("themes.operation.code", { code: controller.errorCode })}
