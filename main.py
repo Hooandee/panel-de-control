@@ -217,7 +217,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
-            "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
             "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
@@ -1537,7 +1537,10 @@ class Plugin:
 
     def _theme_report_diagnostics(self) -> dict:
         activation = self._theme_activation_recovery_path()
+        inventory = self._installed_theme_inventory()
         return {
+            # Up front so the diary's bounded section snapshot never cuts it off.
+            "early_themes": [theme["name"] for theme in inventory["installed"] if theme["early"]],
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
@@ -1546,7 +1549,7 @@ class Plugin:
                 for entry in self._theme_failures()
             ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
-            **self._installed_theme_inventory(),
+            **inventory,
             "health": self._theme_health_summary(),
         }
 

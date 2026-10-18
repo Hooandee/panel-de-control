@@ -77,6 +77,8 @@ _REMOTE_TARGET_NAMES = frozenset({
     "QuickAccess",
     "MainMenu",
     "notificationtoasts.*",
+    # Steam's controller configurator opens as its own window, matched by its createflags URL.
+    "~createflags=18&~",
 })
 _CSS_LOADER_STATE_FILES = {"config_ROOT.json", "config_USER.json"}
 _TRANSACTION_PREFIX = ".panel-theme-transaction-"

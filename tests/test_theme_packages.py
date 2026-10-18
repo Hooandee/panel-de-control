@@ -1467,6 +1467,27 @@ def test_install_archive_accepts_the_supported_dropdown_manifest_profile(
     }
 
 
+@pytest.mark.parametrize(("target", "accepted"), [("~createflags=18&~", True), ("~createflags=19&~", False)])
+def test_install_archive_accepts_only_the_controller_configurator_window_target(
+    tmp_path: Path, target: str, accepted: bool
+) -> None:
+    manifest = _remote_manifest(inject={"tokens.css": ["bigpicture"], "configurator.css": [target]})
+    archive, descriptor = _write_package(
+        tmp_path,
+        extra_entries={
+            f"{THEME_NAME}/theme.json": json.dumps(manifest).encode(),
+            f"{THEME_NAME}/configurator.css": b"body { color: red; }\n",
+        },
+    )
+
+    if accepted:
+        assert _prepare_theme_archive(archive, descriptor, tmp_path / "themes")["code"] == "prepared"
+        return
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _prepare_theme_archive(archive, descriptor, tmp_path / "themes")
+    assert error.value.code == "unsafe_archive"
+
+
 def test_install_archive_restores_previous_theme_when_atomic_swap_fails(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"

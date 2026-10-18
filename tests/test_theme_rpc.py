@@ -545,6 +545,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
     diagnostics = plugin._theme_report_diagnostics()
 
     assert diagnostics == {
+        "early_themes": [],
         "transactions": {
             "pending": [],
             "quarantined": 1,
@@ -840,6 +841,7 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
     assert early_flags() == [False]
     asyncio.run(plugin.commit_theme_install("early"))
     assert early_flags() == [True]
+    assert plugin._theme_report_diagnostics()["early_themes"] == ["Hooandee Duo"]
 
     restarted = main.Plugin()
     restarted._init = lambda: None
