@@ -1785,6 +1785,12 @@ class Plugin:
             decky.logger.error("Early theme discovery failed: %s", type(error).__name__)
             return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
 
+    async def early_theme_archive_folder(self) -> str:
+        """Where the zip picker opens: the user's Downloads folder, else their home."""
+        home = decky.DECKY_USER_HOME
+        downloads = os.path.join(home, "Downloads")
+        return downloads if os.path.isdir(downloads) else home
+
     async def prepare_early_theme_install(self, archive_path: str) -> dict:
         """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
         self._init()

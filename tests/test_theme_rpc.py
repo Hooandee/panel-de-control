@@ -797,3 +797,12 @@ def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rp
     assert asyncio.run(plugin.prepare_early_theme_install("/boom.zip")) == {"ok": False, "code": "install_failed"}
     assert asyncio.run(plugin.prepare_early_theme_install(7)) == {"ok": False, "code": "invalid_archive"}
     assert [call[0] for call in calls] == ["/picked.zip", "/bad.zip", "/boom.zip"]
+
+
+def test_early_archive_picker_opens_in_downloads_when_it_exists(theme_rpc):
+    _, plugin, fake = theme_rpc
+    home = pathlib.Path(fake.DECKY_USER_HOME)
+    home.mkdir(parents=True, exist_ok=True)
+    assert asyncio.run(plugin.early_theme_archive_folder()) == str(home)
+    (home / "Downloads").mkdir()
+    assert asyncio.run(plugin.early_theme_archive_folder()) == str(home / "Downloads")
