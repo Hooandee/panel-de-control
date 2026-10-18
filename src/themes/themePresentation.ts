@@ -1,3 +1,4 @@
+import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
 import luminousAtlasCover from "../assets/luminous-atlas-cover.jpg";
@@ -15,6 +16,14 @@ interface ThemePresentation {
 }
 
 const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
+  "hooandee-duo": {
+    cssLoaderName: "Hooandee Duo",
+    cover: duoCover,
+    description: {
+      de: "Steam als Hybridkonsole: ein Start mit quadratischen Covern und Icon-Dock, eigene Hinweise und Schnelleinstellungen, Sounds und ein animierter Fokusring.",
+      "pt-BR": "O Steam como um console híbrido: um Início com capas quadradas e um dock de ícones, avisos e ajustes rápidos próprios, sons e um anel de foco animado.",
+    },
+  },
   "hooandee-gallery": {
     cssLoaderName: "Hooandee Gallery",
     cover: hooandeeCover,
