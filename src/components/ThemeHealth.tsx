@@ -18,7 +18,7 @@ const gamepadNavigation = createThemeNavigationAccess();
 const NAME_PREVIEW = 4;
 
 // Third-party CSS Loader themes restyle Steam's dialogs too; the helper must stay legible under them.
-const HEALTH_RESET = `
+const HEALTH_RESET = () => `
 [data-pdc-theme-health] { color: ${theme.color.textPrimary} !important; }
 [data-pdc-theme-health] [data-pdc-muted] { color: ${theme.color.textMuted} !important; }
 [data-pdc-theme-health] [data-pdc-warn] { color: ${theme.color.warn} !important; }
@@ -173,7 +173,7 @@ function HealthBody({ controller, health, confirming, setConfirming, closeModal 
 
   return (
     <div data-pdc-theme-health style={{ display: "flex", flexDirection: "column", gap: theme.space.md, maxWidth: 640, margin: "0 auto", padding: "4px 8px 18px" }}>
-      <style>{HEALTH_RESET}</style>
+      <style>{HEALTH_RESET()}</style>
       <header style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
         <span aria-hidden style={{ color: issues ? theme.color.warn : theme.color.accent }}>
           {issues ? <LuShieldAlert size={26} /> : <LuShieldCheck size={26} />}

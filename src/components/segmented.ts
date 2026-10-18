@@ -1,17 +1,17 @@
 import { CSSProperties } from "react";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 
 // Shared "segmented pill group" visual language (pattern A): a raised rounded
 // group holding equal pills, the active one filled with the accent. Used by both
 // the TabBar (control-center navigator) and the TDP ProfileSelector so the look
 // is defined once and can't drift.
 
-export const segmentGroupStyle: CSSProperties = {
+export const segmentGroupStyle: CSSProperties = themed(() => ({
   display: "flex",
   gap: 4,
   padding: 4,
   ...theme.card,
-};
+}));
 
 export function segmentItemStyle(active: boolean): CSSProperties {
   return {
