@@ -110,7 +110,6 @@ export interface ThemesDependencies {
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
-  // Asks the user for an early access zip; null when they back out.
   pickEarlyArchive?: () => Promise<string | null>;
 }
 

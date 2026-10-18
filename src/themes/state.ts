@@ -12,7 +12,6 @@ export interface ThemeCardModel {
   versionRelation: "not-installed" | "current" | "update-available" | "local-newer" | "unknown";
   updateAvailable: boolean;
   cssLoaderTheme?: CssLoaderTheme;
-  // Its early access build, installed from a zip; an early-only theme has no regular install.
   early?: { version: string; installable: boolean };
   earlyOnly?: boolean;
 }

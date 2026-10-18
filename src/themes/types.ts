@@ -14,5 +14,4 @@ export type ThemeInstallRequest =
     catalogId: string;
     expectedVersion: string;
   }
-  // A zip the user picked; the backend installs it only if it is a published early build.
   | { kind: "early-archive"; catalogId: string; archivePath: string };

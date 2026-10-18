@@ -47,7 +47,7 @@ _EARLY_REQUIRED_FIELDS = frozenset(
     {"schemaVersion", "catalogId", "cssLoaderName", "displayName", "description", "author", "tags", "minimumVersions", "early"}
 )
 # Early builds are not on Pages: only their size and digest are published, so a zip handed to Panel is
-# accepted only when it is byte for byte one Hooandee published.
+# accepted only when it is byte for byte a published one.
 _MAX_EARLY_ARTIFACTS = 8
 
 

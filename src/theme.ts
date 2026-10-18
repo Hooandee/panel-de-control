@@ -3,27 +3,12 @@ import { getThemeTokensVersion, themeColorOverride, themeLabelTransform, themeRa
 
 // PdC UI design tokens - the shared visual language for every Panel de Control screen.
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
-// Surfaces, text and radii can be restyled by the active CSS Loader theme (./system/themeTokens).
 const color = {
-  get surface(): string {
-    return themeColorOverride("surface") ?? "#060608";
-  },
-  get surfaceRaised(): string {
-    return themeColorOverride("surfaceRaised") ?? "#0c0c10";
-  },
-  get hairline(): string {
-    return themeColorOverride("hairline") ?? "rgba(255,255,255,0.06)";
-  },
-  // The edge of a card, tile or idle chip; dividers and gauge tracks keep `hairline`.
-  get outline(): string {
-    return themeColorOverride("outline") ?? color.hairline;
-  },
-  get textPrimary(): string {
-    return themeColorOverride("textPrimary") ?? "rgba(255,255,255,0.92)";
-  },
-  get textMuted(): string {
-    return themeColorOverride("textMuted") ?? "rgba(255,255,255,0.45)";
-  },
+  surface: "#060608",
+  surfaceRaised: "#0c0c10",
+  hairline: "rgba(255,255,255,0.06)",
+  textPrimary: "rgba(255,255,255,0.92)",
+  textMuted: "rgba(255,255,255,0.45)",
   // Signature accent, user-selectable (a getter → the live hex). Also the colour of
   // every card/section TITLE icon; the exception is a "green" feature card
   // (eco/learning/adaptive), whose title icon uses `ok`.
@@ -36,9 +21,7 @@ const color = {
   },
   // Text/icon color on top of `accent` (e.g. the Apply button label) — a deep
   // navy so light-on-accent stays legible without a pure-black hard edge.
-  get onAccent(): string {
-    return themeColorOverride("onAccent") ?? "#06121f";
-  },
+  onAccent: "#06121f",
   warn: "#ffb454",
   ok: "#7ee0a0",
   // Hot/over-limit red (thermal scale "limit" zone) — beyond `warn`/`boost`.
@@ -50,24 +33,44 @@ const color = {
   extra: "#b98cff",
   extraLow: "#8fd8ff",
   brightness: "#f5c542",
-  // The chosen option of a segmented group: its fill and its label.
-  get selectedFill(): string {
-    return themeColorOverride("selectedFill") ?? currentAccentHex();
-  },
-  get selectedText(): string {
-    return themeColorOverride("selectedText") ?? themeColorOverride("textPrimary") ?? "rgba(255,255,255,0.92)";
-  },
 } as const;
 
-const radius = {
+const radius = { sm: 8, md: 14, lg: 20 } as const;
+
+// Surfaces, text, radii and selection can be restyled by the active CSS Loader theme
+// (./system/themeTokens); the values above stay Panel's own look.
+const themedColor = Object.create(color, {
+  surface: { enumerable: true, get: () => themeColorOverride("surface") ?? color.surface },
+  surfaceRaised: { enumerable: true, get: () => themeColorOverride("surfaceRaised") ?? color.surfaceRaised },
+  hairline: { enumerable: true, get: () => themeColorOverride("hairline") ?? color.hairline },
+  // The edge of a card, tile or idle chip; dividers and gauge tracks keep `hairline`.
+  outline: { enumerable: true, get: () => themeColorOverride("outline") ?? themedColor.hairline },
+  textPrimary: { enumerable: true, get: () => themeColorOverride("textPrimary") ?? color.textPrimary },
+  textMuted: { enumerable: true, get: () => themeColorOverride("textMuted") ?? color.textMuted },
+  onAccent: { enumerable: true, get: () => themeColorOverride("onAccent") ?? color.onAccent },
+  selectedFill: { enumerable: true, get: () => themeColorOverride("selectedFill") ?? color.accent },
+  selectedText: { enumerable: true, get: () => themeColorOverride("selectedText") ?? themedColor.textPrimary },
+}) as Omit<typeof color, "surface" | "surfaceRaised" | "hairline" | "textPrimary" | "textMuted" | "onAccent"> & {
+  readonly surface: string;
+  readonly surfaceRaised: string;
+  readonly hairline: string;
+  readonly outline: string;
+  readonly textPrimary: string;
+  readonly textMuted: string;
+  readonly onAccent: string;
+  readonly selectedFill: string;
+  readonly selectedText: string;
+};
+
+const themedRadius = {
   get sm(): number {
-    return themeRadiusOverride("sm") ?? 8;
+    return themeRadiusOverride("sm") ?? radius.sm;
   },
   get md(): number {
-    return themeRadiusOverride("md") ?? 14;
+    return themeRadiusOverride("md") ?? radius.md;
   },
   get lg(): number {
-    return themeRadiusOverride("lg") ?? 20;
+    return themeRadiusOverride("lg") ?? radius.lg;
   },
 };
 // `section` = the breathing gap BETWEEN stacked cards laid out in a flex column
@@ -79,24 +82,23 @@ const space = { xs: 4, sm: 8, md: 12, lg: 18, section: 14, card: 6 } as const;
 const font = { caption: 11, body: 13, value: 28 } as const;
 
 export const theme = {
-  color,
-  radius,
+  color: themedColor,
+  radius: themedRadius,
   space,
   font,
-  // Outline width of a selected chip or control.
   get stroke(): number {
     return themeSizeOverride("stroke") ?? 1.5;
   },
   // Signature raised-surface style (bg + radius + hairline). Add padding per use.
   card: {
     get borderRadius(): number {
-      return radius.md;
+      return themedRadius.md;
     },
     get background(): string {
-      return color.surfaceRaised;
+      return themedColor.surfaceRaised;
     },
     get boxShadow(): string {
-      return `inset 0 0 0 1px ${color.outline}`;
+      return `inset 0 0 0 1px ${themedColor.outline}`;
     },
   },
   // Equal-width tile inside a card (fan chip, temp stat) — hairline-outlined,
@@ -106,10 +108,10 @@ export const theme = {
     minWidth: 0,
     padding: space.sm,
     get borderRadius(): number {
-      return radius.sm;
+      return themedRadius.sm;
     },
     get boxShadow(): string {
-      return `inset 0 0 0 1px ${color.outline}`;
+      return `inset 0 0 0 1px ${themedColor.outline}`;
     },
   },
   // Muted uppercase caption used as a section heading inside the full-screen
@@ -117,7 +119,7 @@ export const theme = {
   sectionLabel: {
     fontSize: font.caption,
     get color(): string {
-      return color.textMuted;
+      return themedColor.textMuted;
     },
     get textTransform(): string {
       return themeLabelTransform() ?? "uppercase";

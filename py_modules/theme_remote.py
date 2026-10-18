@@ -180,20 +180,29 @@ def _compatibility(
     return "compatible"
 
 
-def _theme_dto(
-    release: ThemeCatalogRelease,
+def _presentation_dto(
+    release: ThemeCatalogRelease | ThemeEarlyRelease,
     runtime: ThemeRuntimeVersions,
 ) -> dict[str, object]:
-    result: dict[str, object] = {
+    return {
         "catalogId": release.catalog_id,
         "cssLoaderName": release.css_loader_name,
-        "publishedVersion": release.version,
         "displayName": dict(release.display_name),
         "description": dict(release.description),
         "author": release.author,
         "tags": list(release.tags),
         "notes": dict(release.notes),
         "compatibility": _compatibility(release, runtime),
+    }
+
+
+def _theme_dto(
+    release: ThemeCatalogRelease,
+    runtime: ThemeRuntimeVersions,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        **_presentation_dto(release, runtime),
+        "publishedVersion": release.version,
     }
     if release.exclusive_group is not None:
         result["exclusiveGroup"] = release.exclusive_group
@@ -201,17 +210,7 @@ def _theme_dto(
 
 
 def _early_dto(release: ThemeEarlyRelease, runtime: ThemeRuntimeVersions) -> dict[str, object]:
-    return {
-        "catalogId": release.catalog_id,
-        "cssLoaderName": release.css_loader_name,
-        "earlyVersion": release.version,
-        "displayName": dict(release.display_name),
-        "description": dict(release.description),
-        "author": release.author,
-        "tags": list(release.tags),
-        "notes": dict(release.notes),
-        "compatibility": _compatibility(release, runtime),
-    }
+    return {**_presentation_dto(release, runtime), "earlyVersion": release.version}
 
 
 def _copy_hashing(source: str, destination: Path) -> tuple[int, str]:
