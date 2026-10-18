@@ -5,9 +5,25 @@
 ## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
 
 
-### Features
+### Español
 
-* **themes:** early access themes and a theme token contract ([#963](https://github.com/Hooandee/panel-de-control/issues/963)) ([20bf6f4](https://github.com/Hooandee/panel-de-control/commit/20bf6f4b759af7c17da5fa0ce64802e6bb2559d8))
+* **Temas:** Todo listo por dentro para la llegada de Duo, el nuevo tema que está al caer.
+
+### English
+
+* **Themes:** Everything is ready under the hood for Duo, the new theme coming soon.
+
+### Italiano
+
+* **Temi:** Tutto pronto dietro le quinte per Duo, il nuovo tema in arrivo a breve.
+
+### Deutsch
+
+* **Themes:** Unter der Haube ist alles bereit für Duo, das neue Theme, das bald erscheint.
+
+### Português (Brasil)
+
+* **Temas:** Tudo pronto nos bastidores para a chegada do Duo, o novo tema que vem aí.
 
 ## [0.72.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.71.0...panel-de-control-v0.72.0) (2026-10-17)
 
