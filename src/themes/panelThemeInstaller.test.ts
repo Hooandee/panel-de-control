@@ -5,6 +5,7 @@ import { configurePanelThemeInstallHost, createPanelThemeInstaller } from "./pan
 
 function host(overrides: Record<string, unknown> = {}) {
   return {
+    prepareEarly: vi.fn(async () => ({ ok: false, code: "unknown_archive" })),
     prepareRemote: vi.fn(async () => ({
       ok: true, code: "prepared", theme_id: "example-theme",
       theme_name: "Example Theme", version: "1.2.3", transaction: "opaque-token",

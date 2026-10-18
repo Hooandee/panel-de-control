@@ -1,5 +1,5 @@
 import type { CssLoaderSnapshot, CssLoaderTheme } from "./cssLoaderTypes";
-import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
+import type { PublishedEarlyTheme, PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 
 export interface ThemeCardModel {
   id: string;
@@ -12,6 +12,9 @@ export interface ThemeCardModel {
   versionRelation: "not-installed" | "current" | "update-available" | "local-newer" | "unknown";
   updateAvailable: boolean;
   cssLoaderTheme?: CssLoaderTheme;
+  // Its early access build, installed from a zip; an early-only theme has no regular install.
+  early?: { version: string; installable: boolean };
+  earlyOnly?: boolean;
 }
 
 interface SemanticVersion {
@@ -70,6 +73,12 @@ function usableThemes(publication: ThemePublicationState): readonly PublishedThe
     : [];
 }
 
+function earlyThemes(publication: ThemePublicationState): readonly PublishedEarlyTheme[] {
+  return publication.status === "published" || publication.status === "cached"
+    ? publication.early ?? []
+    : [];
+}
+
 export function deriveThemeCards(
   publication: ThemePublicationState,
   snapshot: CssLoaderSnapshot,
@@ -77,9 +86,18 @@ export function deriveThemeCards(
   const installed = snapshot.status === "ready"
     ? new Map(snapshot.themes.map((theme) => [theme.name, theme]))
     : new Map<string, CssLoaderTheme>();
-  return usableThemes(publication).map((release) => {
+  const early = new Map(earlyThemes(publication).map((theme) => [theme.catalogId, theme]));
+  const stable = usableThemes(publication);
+  const stableIds = new Set(stable.map((release) => release.catalogId));
+  const earlyOnly = [...early.values()].filter((theme) => !stableIds.has(theme.catalogId)
+    && !stable.some((release) => release.cssLoaderName === theme.release.cssLoaderName));
+  return [
+    ...stable.map((release) => ({ release, earlyOnly: false })),
+    ...earlyOnly.map((theme) => ({ release: theme.release, earlyOnly: true })),
+  ].map(({ release, earlyOnly: onlyEarly }) => {
     const cssLoaderTheme = installed.get(release.cssLoaderName);
-    const installable = release.compatibility === "compatible";
+    const earlyTheme = early.get(release.catalogId);
+    const installable = !onlyEarly && release.compatibility === "compatible";
     const targetVersion = installable ? release.publishedVersion : undefined;
     const comparison = cssLoaderTheme && targetVersion
       ? compareVersions(cssLoaderTheme.version, targetVersion)
@@ -103,6 +121,8 @@ export function deriveThemeCards(
       updateAvailable: versionRelation === "update-available",
       ...(cssLoaderTheme ? { installedVersion: cssLoaderTheme.version, cssLoaderTheme } : {}),
       ...(targetVersion ? { targetVersion } : {}),
+      ...(earlyTheme ? { early: { version: earlyTheme.earlyVersion, installable: earlyTheme.release.compatibility === "compatible" } } : {}),
+      earlyOnly: onlyEarly,
     };
   });
 }

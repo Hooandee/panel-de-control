@@ -3,7 +3,7 @@ import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
+import { LuDownload, LuFileArchive, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -14,6 +14,7 @@ import { labelsForPatch } from "../themes/themePatchLabels";
 import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
+import { EarlyBadge } from "./ThemeCard";
 import { ThemePatchControl } from "./ThemePatchControl";
 
 interface ThemeDetailsModalProps {
@@ -397,9 +398,28 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               <div data-pdc-theme-muted style={{ position: "relative", fontSize: 14, lineHeight: 1.45 }}>{description}</div>
               <div data-pdc-theme-muted style={{ position: "relative", display: "flex", flexWrap: "wrap", gap: 7, fontSize: theme.font.caption }}>
                 {card.installed && card.installedVersion ? <span>{t("themes.version.installed", { version: formatVersion(card.installedVersion) })}</span> : null}
-                <span>{t("themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
+                <span>{t(card.earlyOnly ? "themes.early.version" : "themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
               </div>
             </header>
+
+            {card.early && cssReady ? (
+              <section data-pdc-theme-early="true" data-pdc-theme-status-surface="true" style={STATUS_SURFACE}>
+                <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, fontWeight: 700 }}>
+                  <EarlyBadge /> {t("themes.early.title")}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
+                  {t("themes.early.version", { version: formatVersion(card.early.version) })}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.45 }}>
+                  {t(card.early.installable ? "themes.early.desc" : "themes.early.unavailable")}
+                </div>
+                <div style={{ marginTop: theme.space.sm }}>
+                  <ButtonItem layout="below" disabled={actionsBlocked || !card.early.installable} onClick={() => void controller.installEarly(card.id)}>
+                    <LuFileArchive size={14} aria-hidden /> {t(installing ? "themes.action.installing" : "themes.early.install")}
+                  </ButtonItem>
+                </div>
+              </section>
+            ) : null}
 
             {!fullSizeLayout ? <div aria-hidden style={{ height: 1, margin: `0 ${theme.space.xs}px ${theme.space.md}px`, background: theme.color.hairline }} /> : null}
 
@@ -437,7 +457,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
 
             {controller.error ? (
               <div data-pdc-theme-status-surface="true" role="alert" style={STATUS_SURFACE}>
-                <div data-pdc-theme-warning>{t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}</div>
+                <div data-pdc-theme-warning>{t(controller.recoveryBlocked
+                  ? "themes.recovery.blocked"
+                  : controller.errorCode === "unknown_archive" ? "themes.early.rejected" : "themes.operation.failed")}</div>
                 {controller.errorCode ? (
                   <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
                     {t("themes.operation.code", { code: controller.errorCode })}

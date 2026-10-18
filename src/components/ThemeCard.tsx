@@ -66,6 +66,27 @@ function ThemePreview({ card }: { card: ThemeCardModel }) {
   );
 }
 
+export function EarlyBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      data-pdc-early-badge="true"
+      style={{
+        fontSize: 9,
+        lineHeight: 1.2,
+        padding: "2px 6px",
+        borderRadius: 999,
+        color: theme.color.accent,
+        boxShadow: `inset 0 0 0 1px ${theme.color.accent}`,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {t("themes.early.badge")}
+    </span>
+  );
+}
+
 function StatePill({ card, id }: { card: ThemeCardModel; id: string }) {
   const { t } = useI18n();
   const active = card.active;
@@ -92,7 +113,9 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;
-  const versionLabel = !card.installable
+  const versionLabel = card.earlyOnly
+    ? "themes.early.version"
+    : !card.installable
     ? "themes.remote.card.incompatible"
     : card.updateAvailable
       ? "themes.remote.card.update"
@@ -125,15 +148,16 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
         <ThemePreview card={card} />
         <div style={{ padding: `${theme.space.sm}px ${theme.space.xs}px ${theme.space.xs}px` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: theme.space.sm }}>
-            <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere" }}>
+            <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere", display: "inline-flex", alignItems: "center", gap: 6 }}>
               {name}
+              {card.early ? <EarlyBadge /> : null}
             </span>
             <StatePill card={card} id={statusId} />
           </div>
           <div id={descriptionId} style={{ marginTop: 5, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
             {description}
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable || card.earlyOnly ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
             <span>{t(versionLabel, { version: card.release.publishedVersion })}</span>
           </div>
         </div>

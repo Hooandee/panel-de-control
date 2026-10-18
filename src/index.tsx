@@ -1,5 +1,5 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
-import { definePlugin, toaster } from "@decky/api";
+import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
 import { LuSlidersVertical } from "react-icons/lu";
 
@@ -7,6 +7,8 @@ import {
   acknowledgeThemeActivation,
   acknowledgeThemeInstallRollback,
   beginThemeActivation,
+  checkThemeEarly,
+  earlyThemeArchiveFolder,
   checkThemeReleases,
   commitThemeInstall,
   discardThemeExtensionReceipt,
@@ -18,6 +20,7 @@ import {
   restoreThemeCleanup,
   acknowledgeThemeCleanupUndo,
   loadThemeExtension,
+  prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
   recordUiEvent,
@@ -52,11 +55,12 @@ import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeAct
 import { startThemesRuntime } from "./themes/runtime/start";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
+  configureEarlyArchivePicker,
   configureSectionHandoffStore,
   configureThemeFailureReporter,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
-import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
 import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
@@ -92,6 +96,7 @@ export default definePlugin(() => {
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
     prepareRemote: prepareRemoteThemeInstall,
+    prepareEarly: prepareEarlyThemeInstall,
     commit: commitThemeInstall,
     discard: discardThemeExtensionReceipt,
     rollback: rollbackThemeInstall,
@@ -105,6 +110,15 @@ export default definePlugin(() => {
     acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeEarlyHost = configureThemeEarlyCheckHost(checkThemeEarly);
+  const releaseEarlyArchivePicker = configureEarlyArchivePicker(async () => {
+    try {
+      const picked = await openFilePicker(0 /* FileSelectionType.FILE */, await earlyThemeArchiveFolder(), true, true, undefined, ["zip"]);
+      return picked.realpath || picked.path || null;
+    } catch {
+      return null;
+    }
+  });
   const releaseThemeHealthHost = configureThemeHealthHost({
     health: getThemeHealth,
     setAside: setAsideThemeLeftovers,
@@ -216,6 +230,8 @@ export default definePlugin(() => {
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
+      releaseThemeEarlyHost();
+      releaseEarlyArchivePicker();
       releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
