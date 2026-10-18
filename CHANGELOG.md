@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
+
+
+### Features
+
+* **themes:** early access themes and a theme token contract ([#963](https://github.com/Hooandee/panel-de-control/issues/963)) ([20bf6f4](https://github.com/Hooandee/panel-de-control/commit/20bf6f4b759af7c17da5fa0ce64802e6bb2559d8))
+
 ## [0.72.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.71.0...panel-de-control-v0.72.0) (2026-10-17)
 
 
