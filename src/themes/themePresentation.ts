@@ -20,8 +20,8 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
     cssLoaderName: "Hooandee Duo",
     cover: duoCover,
     description: {
-      de: "Steam als Hybridkonsole: ein Start mit quadratischen Covern und Icon-Dock, eigene Hinweise und Schnelleinstellungen, Sounds und ein animierter Fokusring.",
-      "pt-BR": "O Steam como um console híbrido: um Início com capas quadradas e um dock de ícones, avisos e ajustes rápidos próprios, sons e um anel de foco animado.",
+      de: "Duo ist ein Theme, inspiriert von einer der beliebtesten Konsolen, mit direktem Zugriff auf deine Spiele, eigenen Sounds und einem richtig unterhaltsamen Erlebnis.",
+      "pt-BR": "Duo é um tema inspirado em um dos consoles mais queridos, com acesso direto aos seus jogos, sons próprios e uma experiência muito divertida.",
     },
   },
   "hooandee-gallery": {
