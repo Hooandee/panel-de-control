@@ -39,6 +39,7 @@ import theme_packages
 import theme_remote
 import theme_transport
 from version import read_version
+from json_store import atomic_json_save
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
@@ -270,6 +271,7 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
+_THEME_EARLY_INSTALLS_FILE = "theme-early-installs.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
     "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
@@ -1563,6 +1565,7 @@ class Plugin:
         so they are only counted."""
         installed = []
         other_active = 0
+        early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
         except OSError:
@@ -1591,6 +1594,7 @@ class Plugin:
                 "version": str(manifest.get("version", ""))[:32],
                 "active": active,
                 "runtime": (folder / "panel-extension.js").is_file(),
+                "early": early_installs.get(str(manifest.get("name", ""))) == manifest.get("version"),
                 "sections": {
                     key: value
                     for key, value in config.items()
@@ -1598,6 +1602,39 @@ class Plugin:
                 },
             })
         return {"installed": installed, "other_active_themes": other_active}
+
+    def _theme_early_installs(self) -> dict[str, str]:
+        """Installed theme name to the early version it was installed as."""
+        try:
+            value = json.loads((Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EARLY_INSTALLS_FILE).read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        return {name: version for name, version in value.items() if isinstance(version, str)}
+
+    def _remember_prepared_theme(self, result: dict, *, early: bool) -> None:
+        if result.get("ok") and isinstance(result.get("transaction"), str):
+            if getattr(self, "_prepared_themes", None) is None:
+                self._prepared_themes: dict[str, tuple[str, str, bool]] = {}
+            self._prepared_themes[result["transaction"]] = (str(result.get("theme_name", "")), str(result.get("version", "")), early)
+
+    def _record_committed_theme(self, transaction: str) -> None:
+        theme = (getattr(self, "_prepared_themes", None) or {}).pop(transaction, None)
+        if theme is None:
+            return
+        name, version, early = theme
+        if journal.active is not None:
+            journal.active.write("INFO", "themes", "installed", theme=name, version=version, early=early)
+        installs = self._theme_early_installs()
+        if early:
+            installs[name] = version
+        elif installs.pop(name, None) is None:
+            return
+        try:
+            atomic_json_save(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, _THEME_EARLY_INSTALLS_FILE), installs)
+        except OSError as error:
+            journal.write_failed(_THEME_EARLY_INSTALLS_FILE, name, error)
 
     def _unreadable_theme_folders(self) -> int:
         unreadable = 0
@@ -1767,7 +1804,9 @@ class Plugin:
             )
 
         try:
-            return await self._offload_theme_call(prepare)
+            result = await self._offload_theme_call(prepare)
+            self._remember_prepared_theme(result, early=False)
+            return result
         except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
             decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
             return {"ok": False, "code": error.code, "theme_id": theme_id}
@@ -1807,6 +1846,7 @@ class Plugin:
         try:
             result = await self._offload_theme_call(prepare)
             decky.logger.info("Early theme prepared (%s %s)", result.get("catalogId"), result.get("version"))
+            self._remember_prepared_theme(result, early=True)
             return result
         except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
             decky.logger.warning("Early theme install rejected (%s)", error.code)
@@ -1818,11 +1858,14 @@ class Plugin:
     async def commit_theme_install(self, transaction: str) -> dict:
         self._init()
         try:
-            return await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
+            result = await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
                 transaction,
                 self._themes_root(),
                 receipts_path=self._theme_receipts_path(),
             ))
+            if result.get("ok"):
+                self._record_committed_theme(transaction)
+            return result
         except theme_packages.ThemePackageError as error:
             decky.logger.warning("Theme package commit rejected (%s): %s", error.code, error)
             return {"ok": False, "code": error.code}
