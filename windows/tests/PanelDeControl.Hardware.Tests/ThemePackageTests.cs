@@ -161,7 +161,7 @@ public sealed class ThemePackageTests : IDisposable
         var installer = new ThemePackageInstaller(root);
         var archive = Package("0.2.5");
         installer.Install(Release("0.2.5", archive), archive);
-        var service = new ThemeService(root, new NoChannel(), new NoSteam());
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
 
         var disabled = service.EngineInputs();
         service.SetEnabled(Name, true);
@@ -184,38 +184,55 @@ public sealed class ThemePackageTests : IDisposable
     }
 
     [Fact]
-    public async Task InstallsAnEarlyArchiveFoundInDownloadsOnlyWhenItsHashIsPublished()
+    public async Task InstallsAPickedEarlyArchiveOnlyWhenItsHashIsPublished()
     {
-        var downloads = Path.Combine(root, "downloads", "duo-early");
-        Directory.CreateDirectory(downloads);
+        var imports = Path.Combine(root, "imports");
+        Directory.CreateDirectory(imports);
         var archive = Package("0.2.5");
         var sha = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
-        File.WriteAllBytes(Path.Combine(downloads, "theme-early-0.2.5.zip"), archive);
-        File.WriteAllBytes(Path.Combine(downloads, "same-size-other.zip"), archive.Select(value => (byte)(value ^ 1)).ToArray());
+        var picked = Path.Combine(imports, "early-picked.zip");
+        File.WriteAllBytes(picked, archive);
         var library = Path.Combine(root, "library");
-        var channel = new EarlyChannel(EarlyList("0.2.5", archive.Length, sha));
-        var service = new ThemeService(library, channel, new NoSteam(), new EarlyArchiveFinder(() => new[] { Path.Combine(root, "downloads") }));
-        await service.RefreshCatalogAsync(force: true, default);
+        var service = new ThemeService(library, new EarlyChannel(EarlyList("0.2.5", archive.Length, sha)), new NoSteam(), imports);
 
-        var ready = Assert.Single(service.Catalog.EarlyArchives);
-        Assert.Equal("theme-early-0.2.5.zip", Path.GetFileName(ready.Path));
+        await service.InstallEarlyFileAsync("hooandee-eclipse", picked, default);
 
-        await service.InstallEarlyAsync("hooandee-eclipse", "0.2.5", default);
-
-        Assert.Equal("0.2.5", ThemeLibrary.Scan(library).Themes.Single().Manifest.Version);
+        var installed = ThemeLibrary.Scan(library).Themes.Single();
+        Assert.Equal("0.2.5", installed.Manifest.Version);
+        Assert.False(service.Settings().Single().Enabled);
+        Assert.False(File.Exists(picked));
         var entry = ThemesResponseBuilder.Build(service.Catalog, service.Library(), service.Settings(), ThemeEngineStatus.Initial).Themes.Single();
         Assert.Equal("0.2.5", entry.EarlyVersion);
-        Assert.False(entry.EarlyInstallable);
     }
 
     [Fact]
-    public async Task RefusesAnEarlyInstallWithoutThePublishedArchive()
+    public async Task RefusesAPickedArchiveThatIsNotAPublishedEarly()
     {
-        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", 10, new string('a', 64))), new NoSteam(), new EarlyArchiveFinder(() => new[] { root }));
+        var imports = Path.Combine(root, "imports");
+        Directory.CreateDirectory(imports);
+        var archive = Package("0.2.5");
+        var picked = Path.Combine(imports, "early-other.zip");
+        File.WriteAllBytes(picked, archive);
+        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", archive.Length, new string('a', 64))), new NoSteam(), imports);
 
-        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyAsync("hooandee-eclipse", "0.2.5", default));
+        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyFileAsync("hooandee-eclipse", picked, default));
 
-        Assert.Equal("early_archive_missing", error.Code);
+        Assert.Equal("early_archive_unpublished", error.Code);
+        Assert.False(Directory.Exists(Path.Combine(root, "library", Name)));
+    }
+
+    [Fact]
+    public async Task RefusesAnArchiveOutsideTheImportFolder()
+    {
+        var outside = Path.Combine(root, "elsewhere.zip");
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(outside, Package("0.2.5"));
+        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", 10, new string('a', 64))), new NoSteam(), Path.Combine(root, "imports"));
+
+        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyFileAsync("hooandee-eclipse", outside, default));
+
+        Assert.Equal("early_archive_outside_import", error.Code);
+        Assert.True(File.Exists(outside));
     }
 
     [Fact]

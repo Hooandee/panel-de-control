@@ -433,8 +433,10 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>o catálogo não está disponível ou mudou</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>o Steam demorou demais para responder</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>erro inesperado; ficou anotado no registro</value></data>
-  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Instalar a early {0}</value></data>
   <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
-  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. O zip aparece aqui ao ser salvo em Downloads.</value></data>
-  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>o zip publicado não está em Downloads</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Instalar de arquivo</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>o seletor de arquivos não abre dentro da Game Bar; pelo Panel de Control no Iniciar, sim</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>com outro tema ativo não há animações; é preciso desligar um</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>esse zip não é uma early publicada deste tema</value></data>
 </root>

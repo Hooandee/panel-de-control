@@ -477,8 +477,10 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>the catalog is unavailable or has changed</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam took too long to respond</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>unexpected error; it was written to the log</value></data>
-  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Install early {0}</value></data>
   <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
-  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. The zip shows up here once it is saved to Downloads.</value></data>
-  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>the published zip was not found in Downloads</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Install from file</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>the file picker does not open inside Game Bar; it does from Panel de Control in Start</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>with another theme on there are no animations; one needs to be turned off</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>that zip is not a published early of this theme</value></data>
 </root>

@@ -433,8 +433,10 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>der Katalog ist nicht verfügbar oder hat sich geändert</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam hat zu lange gebraucht</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>unerwarteter Fehler; er wurde protokolliert</value></data>
-  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Early {0} installieren</value></data>
   <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
-  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. Die ZIP-Datei erscheint hier, sobald sie unter Downloads liegt.</value></data>
-  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>die veröffentlichte ZIP-Datei liegt nicht unter Downloads</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Aus Datei installieren</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>die Dateiauswahl öffnet sich nicht in der Game Bar, aber in Panel de Control über Start</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>mit einem weiteren aktiven Design gibt es keine Animationen; eines muss aus</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>diese ZIP-Datei ist keine veröffentlichte Early dieses Designs</value></data>
 </root>

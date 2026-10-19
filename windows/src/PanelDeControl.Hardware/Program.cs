@@ -69,7 +69,7 @@ public static class Program
             using var themeChannel = new OfficialThemeCatalogSource();
             using var classTable = new ClassTableSource(ThemeLibrary.DefaultRoot);
             var steam = new SteamInstallation();
-            var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam);
+            var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam, PackageTempFolder.ResolveOrUnavailable());
             var themeEngine = new SteamThemeEngine(
                 steamDevTools,
                 steam,

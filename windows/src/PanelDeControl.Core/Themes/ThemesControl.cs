@@ -74,13 +74,15 @@ public enum ThemesResponseStatus
 public sealed class ThemesRequest
 {
     public const int MaximumFieldLength = 128;
+    public const int MaximumPathLength = 1024;
 
     private ThemesRequest()
     {
     }
 
-    private ThemesRequest(ThemesOperation operation, string? catalogId = null, string? version = null, string? name = null, bool? enabled = null, string? option = null, string? value = null)
+    private ThemesRequest(ThemesOperation operation, string? catalogId = null, string? version = null, string? name = null, bool? enabled = null, string? option = null, string? value = null, string? archivePath = null)
     {
+        ArchivePath = archivePath;
         Operation = operation;
         CatalogId = catalogId;
         Version = version;
@@ -111,6 +113,9 @@ public sealed class ThemesRequest
     [DataMember(Name = "value", Order = 7, EmitDefaultValue = false)]
     public string? Value { get; private set; }
 
+    [DataMember(Name = "archive_path", Order = 8, EmitDefaultValue = false)]
+    public string? ArchivePath { get; private set; }
+
     public static ThemesRequest Get() => new(ThemesOperation.Get);
 
     public static ThemesRequest RefreshCatalog() => new(ThemesOperation.RefreshCatalog);
@@ -121,7 +126,7 @@ public sealed class ThemesRequest
 
     public static ThemesRequest SetOption(string name, string option, string value) => new(ThemesOperation.SetOption, name: name, option: option, value: value);
 
-    public static ThemesRequest InstallEarly(string catalogId, string version) => new(ThemesOperation.InstallEarly, catalogId: catalogId, version: version);
+    public static ThemesRequest InstallEarly(string catalogId, string archivePath) => new(ThemesOperation.InstallEarly, catalogId: catalogId, archivePath: archivePath);
 
     public static ThemesRequest EnableSteamDebugging() => new(ThemesOperation.EnableSteamDebugging);
 
@@ -131,16 +136,19 @@ public sealed class ThemesRequest
     {
         bool Present(string? field) => !string.IsNullOrWhiteSpace(field) && field!.Length <= MaximumFieldLength;
         bool Absent(string? field) => field is null;
+        var pathValid = ArchivePath is null || (ArchivePath.Length is > 0 and <= MaximumPathLength && ArchivePath.EndsWith(".zip", System.StringComparison.OrdinalIgnoreCase));
+        var pathExpected = Operation == ThemesOperation.InstallEarly;
         var valid = Operation switch
         {
             ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam =>
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
-            ThemesOperation.Install or ThemesOperation.InstallEarly => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.InstallEarly => Present(CatalogId) && ArchivePath is not null && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.SetEnabled => Present(Name) && Enabled is not null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
             ThemesOperation.SetOption => Present(Name) && Present(Option) && Present(Value) && Absent(CatalogId) && Absent(Version) && Enabled is null,
             _ => false,
         };
-        if (!valid)
+        if (!valid || !pathValid || (ArchivePath is not null) != pathExpected)
         {
             throw new InvalidDataException("Themes request is invalid.");
         }
@@ -273,15 +281,6 @@ public sealed class ThemeEntry
     [DataMember(Name = "early_version", Order = 14, EmitDefaultValue = false)]
     public string? EarlyVersion { get; set; }
 
-    /// <summary>Newest published early archive found in Downloads, ready to install.</summary>
-    [DataMember(Name = "early_ready_version", Order = 15, EmitDefaultValue = false)]
-    public string? EarlyReadyVersion { get; set; }
-
-    [DataMember(Name = "early_ready_file", Order = 16, EmitDefaultValue = false)]
-    public string? EarlyReadyFile { get; set; }
-
-    public bool EarlyInstallable =>
-        EarlyReadyVersion is not null && (InstalledVersion is null || Broken is not null || CompareVersions(EarlyReadyVersion, InstalledVersion) > 0);
 
     public bool Installed => InstalledVersion is not null;
 

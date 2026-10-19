@@ -46,7 +46,7 @@ public sealed class ThemesController : IThemesController
                 case ThemesOperation.InstallEarly:
                     using (var timeout = Timeout(cancellationToken, LongOperationTimeout))
                     {
-                        await service.InstallEarlyAsync(request.CatalogId!, request.Version!, timeout.Token).ConfigureAwait(false);
+                        await service.InstallEarlyFileAsync(request.CatalogId!, request.ArchivePath!, timeout.Token).ConfigureAwait(false);
                     }
 
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);

@@ -22,10 +22,7 @@ public static class ThemesResponseBuilder
         {
             var release = catalog.Releases.FirstOrDefault(candidate => candidate.CssLoaderName == name);
             var early = catalog.Early.FirstOrDefault(candidate => candidate.CssLoaderName == name);
-            var ready = catalog.EarlyArchives
-                .Where(candidate => candidate.Release.CssLoaderName == name)
-                .OrderByDescending(candidate => candidate.Artifact.Version, Comparer<string>.Create(ThemeCatalog.CompareVersions))
-                .FirstOrDefault();
+
             var theme = library.Themes.FirstOrDefault(candidate => candidate.Name == name);
             var broken = library.Broken.FirstOrDefault(candidate => candidate.FolderName == name);
             var setting = settings.FirstOrDefault(candidate => candidate.Name == name);
@@ -41,8 +38,7 @@ public static class ThemesResponseBuilder
                     : theme is not null ? new[] { new LocalizedText("en", theme.Manifest.DisplayName) } : null,
                 Description = release is not null ? Texts(release.Description) : early is not null ? Texts(early.Description) : null,
                 EarlyVersion = early?.Version,
-                EarlyReadyVersion = ready?.Artifact.Version,
-                EarlyReadyFile = ready is null ? null : Path.GetFileName(ready.Path),
+
                 InstalledVersion = theme?.Manifest.Version,
                 PublishedVersion = release?.Version,
                 Enabled = enabled,

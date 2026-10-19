@@ -15,6 +15,7 @@ public sealed class ThemesContractTests
             ThemesRequest.SetEnabled("Hooandee Eclipse", true),
             ThemesRequest.SetOption("Hooandee Eclipse", "Acento", "Marte"),
             ThemesRequest.RestartSteam(),
+            ThemesRequest.InstallEarly("hooandee-duo", @"C:\\Users\\x\\AppData\\Local\\Packages\\p\\TempState\\early-1.zip"),
         };
 
         foreach (var request in requests)
@@ -25,6 +26,7 @@ public sealed class ThemesContractTests
             Assert.Equal(request.Name, decoded.Name);
             Assert.Equal(request.Enabled, decoded.Enabled);
             Assert.Equal(request.Value, decoded.Value);
+            Assert.Equal(request.ArchivePath, decoded.ArchivePath);
         }
     }
 
@@ -33,6 +35,9 @@ public sealed class ThemesContractTests
     [InlineData("{\"operation\":3,\"name\":\"X\"}")]
     [InlineData("{\"operation\":0,\"name\":\"X\"}")]
     [InlineData("{\"operation\":99}")]
+    [InlineData("{\"operation\":7,\"catalog_id\":\"x\"}")]
+    [InlineData("{\"operation\":7,\"catalog_id\":\"x\",\"archive_path\":\"C:/a.exe\"}")]
+    [InlineData("{\"operation\":2,\"catalog_id\":\"x\",\"version\":\"1.0.0\",\"archive_path\":\"C:/a.zip\"}")]
     public void MalformedRequestsAreRejected(string payload)
     {
         Assert.ThrowsAny<Exception>(() => ThemesWireCodec.DeserializeRequest(payload));

@@ -18,7 +18,7 @@ public sealed class ThemesClient
 
     public Task<ThemesResponse> InstallAsync(string catalogId, string version) => SendAsync(ThemesRequest.Install(catalogId, version));
 
-    public Task<ThemesResponse> InstallEarlyAsync(string catalogId, string version) => SendAsync(ThemesRequest.InstallEarly(catalogId, version));
+    public Task<ThemesResponse> InstallEarlyAsync(string catalogId, string archivePath) => SendAsync(ThemesRequest.InstallEarly(catalogId, archivePath));
 
     public Task<ThemesResponse> SetEnabledAsync(string name, bool enabled) => SendAsync(ThemesRequest.SetEnabled(name, enabled));
 

@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using PanelDeControl.Core.Themes;
 using Windows.ApplicationModel.Resources;
 using Windows.ApplicationModel.Resources.Core;
+using Windows.Storage;
+using Windows.Storage.Pickers;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
@@ -195,6 +197,11 @@ public sealed class ThemesView : UserControl
         card.Action.Margin = new Thickness(0, 12, 0, 0);
         card.Action.HorizontalAlignment = HorizontalAlignment.Left;
         card.Action.Click += (_, _) => _ = InstallAsync(card);
+        card.EarlyAction.Style = Resource<Style>("PdcChipButtonStyle");
+        card.EarlyAction.Padding = new Thickness(14, 9, 14, 9);
+        card.EarlyAction.Margin = new Thickness(0, 12, 0, 0);
+        card.EarlyAction.HorizontalAlignment = HorizontalAlignment.Left;
+        card.EarlyAction.Click += (_, _) => _ = InstallEarlyFromFileAsync(card);
         card.OptionsButton.Style = Resource<Style>("PdcSoftButtonStyle");
         card.OptionsButton.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
         card.OptionsButton.Foreground = Resource<Brush>("PdcTextPrimaryBrush");
@@ -241,7 +248,7 @@ public sealed class ThemesView : UserControl
         card.Root.Style = Resource<Style>("PdcCardStyle");
         card.Root.Child = new StackPanel
         {
-            Children = { header, card.Description, card.State, card.Action, card.OptionsButton, card.Options },
+            Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options },
         };
         return card;
     }
@@ -318,18 +325,13 @@ public sealed class ThemesView : UserControl
         card.Toggle.IsEnabled = !operationPending;
         AutomationProperties.SetName(card.Toggle, card.Title.Text);
 
-        var (state, brush) = StateText(theme);
+        var runtimeConflict = last?.Themes.Count(candidate => candidate.Enabled && candidate.RuntimeExpected) > 1;
+        var (state, brush) = StateText(theme, runtimeConflict);
         card.State.Text = state;
         card.State.Foreground = Resource<Brush>(brush);
 
         string? action = null;
-        card.InstallsEarly = false;
-        if (theme.EarlyInstallable)
-        {
-            action = string.Format(Localized("ThemesInstallEarlyAction"), theme.EarlyReadyVersion);
-            card.InstallsEarly = true;
-        }
-        else if (theme.Broken is not null || !theme.Installed)
+        if (theme.Broken is not null || !theme.Installed)
         {
             action = theme.PublishedVersion is null ? null : string.Format(Localized("ThemesInstallAction"), theme.PublishedVersion);
         }
@@ -341,6 +343,9 @@ public sealed class ThemesView : UserControl
         card.Action.Content = card.Installing ? Localized("ThemesInstalling") : action;
         card.Action.Visibility = action is null && !card.Installing ? Visibility.Collapsed : Visibility.Visible;
         card.Action.IsEnabled = !operationPending;
+        card.EarlyAction.Content = card.ImportingEarly ? Localized("ThemesInstalling") : Localized("ThemesInstallFromFile");
+        card.EarlyAction.Visibility = theme.EarlyVersion is null ? Visibility.Collapsed : Visibility.Visible;
+        card.EarlyAction.IsEnabled = !operationPending;
 
         var hasOptions = theme.Installed && theme.Broken is null && (theme.Options?.Any(option => option.Type != "none") ?? false);
         card.OptionsButton.Visibility = hasOptions ? Visibility.Visible : Visibility.Collapsed;
@@ -376,7 +381,7 @@ public sealed class ThemesView : UserControl
         }
     }
 
-    private (string Text, string Brush) StateText(ThemeEntry theme)
+    private (string Text, string Brush) StateText(ThemeEntry theme, bool runtimeConflict)
     {
         if (theme.Broken is not null)
         {
@@ -385,8 +390,8 @@ public sealed class ThemesView : UserControl
 
         if (!theme.Installed)
         {
-            return theme.EarlyVersion is not null && theme.PublishedVersion is null && theme.EarlyReadyVersion is null
-                ? (string.Format(Localized("ThemesEarlyWaitingForFile"), theme.EarlyVersion), "PdcTextMutedBrush")
+            return theme.EarlyVersion is not null
+                ? (string.Format(Localized("ThemesEarlyAvailable"), theme.EarlyVersion), "PdcTextMutedBrush")
                 : (Localized("ThemesStateNotInstalled"), "PdcTextMutedBrush");
         }
 
@@ -415,7 +420,9 @@ public sealed class ThemesView : UserControl
             return ($"{version} · {string.Format(Localized("ThemesStatePartial"), theme.PagesApplied, theme.PagesExpected)}", "PdcWarnBrush");
         }
 
-        return ($"{version} · {Localized("ThemesStateRuntimeMissing")}", "PdcWarnBrush");
+        return runtimeConflict
+            ? ($"{version} · {Localized("ThemesStateRuntimeConflict")}", "PdcWarnBrush")
+            : ($"{version} · {Localized("ThemesStateRuntimeMissing")}", "PdcWarnBrush");
     }
 
     private async void ConnectionAction_Click(object sender, RoutedEventArgs args)
@@ -436,9 +443,7 @@ public sealed class ThemesView : UserControl
 
     private async Task InstallAsync(ThemeCard card)
     {
-        var early = card.InstallsEarly;
-        var version = early ? card.Entry?.EarlyReadyVersion : card.Entry?.PublishedVersion;
-        if (applying || card.Entry?.CatalogId is not { } catalogId || version is null)
+        if (applying || card.Entry?.CatalogId is not { } catalogId || card.Entry.PublishedVersion is not { } version)
         {
             return;
         }
@@ -446,18 +451,68 @@ public sealed class ThemesView : UserControl
         card.Installing = true;
         try
         {
-            await RunAsync(async () =>
-            {
-                var response = early ? await client.InstallEarlyAsync(catalogId, version) : await client.InstallAsync(catalogId, version);
-                var installed = response.Themes.FirstOrDefault(theme => theme.Name == card.Name);
-                return response.Status == ThemesResponseStatus.Ok && installed is { Installed: true, Enabled: false } && card.Entry.InstalledVersion is null
-                    ? await client.SetEnabledAsync(card.Name, true)
-                    : response;
-            });
+            await RunAsync(() => client.InstallAsync(catalogId, version));
         }
         finally
         {
             card.Installing = false;
+            if (last is not null)
+            {
+                Apply(last, null);
+            }
+        }
+    }
+
+    // Same as Decky: the user picks the zip, and only an archive published in early.json installs.
+    private async Task InstallEarlyFromFileAsync(ThemeCard card)
+    {
+        if (applying || operationPending || card.Entry?.CatalogId is not { } catalogId)
+        {
+            return;
+        }
+
+        StorageFile? picked;
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.Downloads,
+                ViewMode = PickerViewMode.List,
+            };
+            picker.FileTypeFilter.Add(".zip");
+            picked = await picker.PickSingleFileAsync();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("themes.early_picker", exception);
+            if (last is not null)
+            {
+                Apply(last, Localized("ThemesPickerUnavailable"));
+            }
+
+            return;
+        }
+
+        if (picked is null)
+        {
+            return;
+        }
+
+        card.ImportingEarly = true;
+        try
+        {
+            await RunAsync(async () =>
+            {
+                var copy = await picked.CopyAsync(
+                    ApplicationData.Current.TemporaryFolder,
+                    $"early-{Guid.NewGuid():N}.zip",
+                    NameCollisionOption.ReplaceExisting);
+                return await client.InstallEarlyAsync(catalogId, copy.Path);
+            });
+        }
+        finally
+        {
+            card.ImportingEarly = false;
             if (last is not null)
             {
                 Apply(last, null);
@@ -512,7 +567,7 @@ public sealed class ThemesView : UserControl
         "artifact_hash_mismatch" or "artifact_size_mismatch" or "invalid_archive" or "unsafe_archive" or "invalid_package" or "identity_mismatch" =>
             Localized("ThemesErrorPackage"),
         "catalog_unavailable" or "publication_changed" => Localized("ThemesErrorCatalog"),
-        "early_archive_missing" => Localized("ThemesErrorEarlyMissing"),
+        "early_archive_unpublished" or "unknown_theme" => Localized("ThemesErrorEarlyUnpublished"),
         "themes_timeout" or "themes_response_unavailable" => Localized("ThemesErrorTimeout"),
         _ => Localized("ThemesErrorGeneric"),
     };
@@ -546,7 +601,9 @@ public sealed class ThemesView : UserControl
 
         public bool Installing { get; set; }
 
-        public bool InstallsEarly { get; set; }
+        public bool ImportingEarly { get; set; }
+
+        public Button EarlyAction { get; } = new();
 
         public Border Root { get; } = new();
 

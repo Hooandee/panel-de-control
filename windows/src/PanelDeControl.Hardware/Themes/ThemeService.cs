@@ -57,8 +57,6 @@ public sealed class OfficialThemeCatalogSource : IThemeCatalogSource, IDisposabl
 public sealed record ThemeCatalogState(IReadOnlyList<ThemeRelease> Releases, string? ErrorCode, DateTimeOffset? CheckedAt)
 {
     public IReadOnlyList<ThemeEarlyRelease> Early { get; init; } = Array.Empty<ThemeEarlyRelease>();
-
-    public IReadOnlyList<EarlyArchive> EarlyArchives { get; init; } = Array.Empty<EarlyArchive>();
 }
 
 /// <summary>
@@ -76,13 +74,15 @@ public sealed class ThemeService
     private readonly IThemeCatalogSource channel;
     private readonly ISteamInstallation steam;
     private readonly SemaphoreSlim operations = new(1, 1);
-    private readonly EarlyArchiveFinder earlyArchives;
+    private readonly string earlyImportRoot;
     private ThemeCatalogState catalog = new(Array.Empty<ThemeRelease>(), null, null);
     private int catalogRefreshing;
 
-    public ThemeService(string libraryRoot, IThemeCatalogSource channel, ISteamInstallation steam, EarlyArchiveFinder? earlyArchives = null)
+    /// <param name="earlyImportRoot">The only folder an early archive is read from: the package's
+    /// temporary folder, where the widget copies the zip chosen in its file picker.</param>
+    public ThemeService(string libraryRoot, IThemeCatalogSource channel, ISteamInstallation steam, string earlyImportRoot)
     {
-        this.earlyArchives = earlyArchives ?? new EarlyArchiveFinder();
+        this.earlyImportRoot = Path.GetFullPath(earlyImportRoot);
         this.libraryRoot = libraryRoot;
         this.channel = channel;
         this.steam = steam;
@@ -91,7 +91,7 @@ public sealed class ThemeService
         ThemePackageInstaller.RecoverInterruptedInstalls(libraryRoot);
     }
 
-    public ThemeCatalogState Catalog => catalog with { EarlyArchives = earlyArchives.Find(catalog.Early) };
+    public ThemeCatalogState Catalog => catalog;
 
     public ThemeLibrarySnapshot Library() => ThemeLibrary.Scan(libraryRoot);
 
@@ -145,13 +145,13 @@ public sealed class ThemeService
     }
 
     // The early list is separate from the strict catalog; losing it never hides published themes.
-    private async Task<IReadOnlyList<ThemeEarlyRelease>> FetchEarlyAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ThemeEarlyRelease>> FetchEarlyAsync(CancellationToken cancellationToken, bool strict = false)
     {
         try
         {
             return ThemeCatalog.ParseEarly(await channel.EarlyCatalogAsync(cancellationToken).ConfigureAwait(false));
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or FormatException or InvalidDataException)
+        catch (Exception exception) when (!strict && exception is HttpRequestException or TaskCanceledException or FormatException or InvalidDataException)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CompanionLog.Write("themes.early_catalog", exception);
@@ -159,26 +159,56 @@ public sealed class ThemeService
         }
     }
 
-    public async Task InstallEarlyAsync(string catalogId, string version, CancellationToken cancellationToken)
+    /// <summary>
+    /// Installs a zip chosen by the user, as Decky does: it is accepted only when its exact size and
+    /// SHA-256 are published in a freshly read <c>early.json</c> for that theme.
+    /// </summary>
+    public async Task InstallEarlyFileAsync(string catalogId, string archivePath, CancellationToken cancellationToken)
     {
+        var path = Path.GetFullPath(archivePath);
+        if (!path.StartsWith(earlyImportRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ThemeInstallException("early_archive_outside_import", "The archive is not in the import folder");
+        }
+
         await operations.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            catalog = catalog with { Early = await FetchEarlyAsync(cancellationToken).ConfigureAwait(false) };
-            var archive = earlyArchives.Find(catalog.Early)
-                .FirstOrDefault(candidate => candidate.Release.CatalogId == catalogId && candidate.Artifact.Version == version)
-                ?? throw new ThemeInstallException("early_archive_missing", "No published early archive was found in Downloads");
-            var bytes = EarlyArchiveFinder.ReadVerified(archive);
-            var installed = installer.Install(archive.Release.AsRelease(archive.Artifact), bytes);
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length > ThemeCatalog.MaximumArtifactBytes)
+            {
+                throw new ThemeInstallException("early_archive_unreadable", "The chosen archive cannot be read");
+            }
+
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+            catalog = catalog with { Early = await FetchEarlyAsync(cancellationToken, strict: true).ConfigureAwait(false) };
+            var release = catalog.Early.FirstOrDefault(candidate => candidate.CatalogId == catalogId)
+                ?? throw new ThemeInstallException("unknown_theme", "Theme has no published early");
+            var artifact = release.Artifacts.FirstOrDefault(candidate => candidate.Size == bytes.LongLength && candidate.Sha256 == sha)
+                ?? throw new ThemeInstallException("early_archive_unpublished", "The chosen archive is not a published early");
+            var installed = installer.Install(release.AsRelease(artifact), bytes);
             MirrorAssets(installed);
             settings.Update(themes => themes.Any(theme => theme.Name == installed.Name)
                 ? themes
                 : themes.Append(new ThemeSetting(installed.Name, false, new Dictionary<string, string>())).ToArray());
-            CompanionLog.Write("themes.install_early", $"{catalogId} {version} {Path.GetFileName(archive.Path)}");
+            CompanionLog.Write("themes.install_early", $"{catalogId} {artifact.Version}");
         }
         finally
         {
             operations.Release();
+            TryDeleteImport(path);
+        }
+    }
+
+    private static void TryDeleteImport(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
         }
     }
 
