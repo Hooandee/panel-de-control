@@ -27,7 +27,7 @@ import {
   type SectionHandoffs,
   type SectionPatchRef,
 } from "./sectionOwnership";
-import { deriveThemeCards, type ThemeCardModel } from "./state";
+import { deriveThemeCards, managedThemeReleases, type ThemeCardModel } from "./state";
 import type { ThemeInstallRequest } from "./types";
 
 export interface ThemesAdapter {
@@ -391,9 +391,8 @@ export class ThemesClient {
 
   deactivate = (themeId: string): Promise<boolean> => {
     const themes = this.currentPublicationThemes();
-    if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
-      return Promise.resolve(false);
-    }
+    if (this.current.snapshot.status !== "ready") return Promise.resolve(false);
+    if (!themes.some((theme) => theme.catalogId === themeId)) return this.rejectUnknownTheme("deactivating", themeId);
     const leaving = themes.find((theme) => theme.catalogId === themeId)!.cssLoaderName;
     return this.mutate(
       { kind: "deactivating", themeId },
@@ -570,7 +569,7 @@ export class ThemesClient {
 
   setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
     const entry = this.currentPublicationThemes().find((theme) => theme.catalogId === themeId);
-    if (!entry) return Promise.resolve(false);
+    if (!entry) return this.rejectUnknownTheme("saving", themeId);
     return this.mutate(
       { kind: "saving", themeId, patchName },
       async () => {
@@ -723,9 +722,7 @@ export class ThemesClient {
   }
 
   private currentPublicationThemes(): readonly PublishedThemeRelease[] {
-    return this.current.publication.status === "published" || this.current.publication.status === "cached"
-      ? this.current.publication.themes
-      : [];
+    return managedThemeReleases(this.current.publication);
   }
 
   private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
@@ -842,6 +839,11 @@ export class ThemesClient {
     }
     this.report(operation, error);
     return { error: errorMessage(error), errorCode: errorCode(error) };
+  }
+
+  private rejectUnknownTheme(operation: ThemesOperation["kind"], themeId: string): Promise<boolean> {
+    this.report(operation, new Error(`Theme ${themeId} is not in the catalog`), "unknown_theme");
+    return Promise.resolve(false);
   }
 
   private report(operation: ThemesOperation["kind"], error: unknown, code = errorCode(error)): void {
