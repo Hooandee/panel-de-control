@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
+
+
+### Features
+
+* **themes:** one-line theme descriptions and a cleaner Duo cover ([#968](https://github.com/Hooandee/panel-de-control/issues/968)) ([fec4494](https://github.com/Hooandee/panel-de-control/commit/fec4494cb3cade90c75be63b184b831e579b585d))
+
 ## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
 
 
