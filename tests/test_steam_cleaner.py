@@ -747,7 +747,8 @@ def test_interruption_retains_operation_id_without_duplicate_on_clean_restart(tm
     assert sum(item["event"] == "interrupted" for item in third.diagnostics()["events"]) == 1
 
 
-def test_library_labels_identify_actual_directory_without_paths(tmp_path):
+def test_library_labels_identify_actual_directory_without_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr("steam_cleaner.filesystem.mount_points", lambda: {"/"})
     home, steam = make_steam(tmp_path)
     second = tmp_path / "GamesCard"
     data(second)

@@ -6,6 +6,18 @@ import {
 
 let configuredHost: ThemeInstallHost | undefined;
 let configuredLease: symbol | null = null;
+const packageChangeListeners = new Set<() => void>();
+
+export function onThemePackagesChanged(listener: () => void): () => void {
+  packageChangeListeners.add(listener);
+  return () => {
+    packageChangeListeners.delete(listener);
+  };
+}
+
+function notifyPackagesChanged(): void {
+  for (const listener of packageChangeListeners) listener();
+}
 
 function requireConfiguredHost(): ThemeInstallHost {
   if (!configuredLease || !configuredHost) {
@@ -29,7 +41,13 @@ export function createPanelThemeInstaller(): PanelThemeInstaller {
   const call = (
     operation: "commit" | "discard" | "rollback" | "acknowledge",
     value: string,
-  ): Promise<unknown> => requireConfiguredHost()[operation](value);
+  ): Promise<unknown> => {
+    const result = requireConfiguredHost()[operation](value);
+    if (operation === "commit" || operation === "rollback") {
+      void result.then(notifyPackagesChanged, notifyPackagesChanged);
+    }
+    return result;
+  };
   return new PanelThemeInstaller({
     prepareRemote: (themeId, expectedVersion) => requireConfiguredHost().prepareRemote(
       themeId,
