@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { themeCoverFor, themeDescriptionFor } from "./themePresentation";
+import { SUPPORTED_LANGUAGES } from "../i18n/languages";
+import { themeCoverFor, themeDescriptionFor, themeTaglineFor } from "./themePresentation";
 import type { PublishedThemeRelease } from "./remotePublication";
 
 function release(catalogId: string, cssLoaderName: string): PublishedThemeRelease {
@@ -50,5 +51,29 @@ describe("themeDescriptionFor", () => {
     expect(themeDescriptionFor(eclipse, "it")).toBe("Descrizione pubblicata.");
     expect(themeDescriptionFor(release("someone-else", "Someone"), "de")).toBe("Published description.");
     expect(themeDescriptionFor(release("hooandee-eclipse", "Other Name"), "pt-BR")).toBe("Published description.");
+  });
+});
+
+describe("themeTaglineFor", () => {
+  const hooandee = [
+    ["hooandee-duo", "Hooandee Duo"],
+    ["hooandee-gallery", "Hooandee Gallery"],
+    ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
+    ["hooandee-eclipse", "Hooandee Eclipse"],
+  ] as const;
+
+  it("gives every Hooandee theme a short line in every language", () => {
+    for (const [catalogId, cssLoaderName] of hooandee) {
+      for (const lang of SUPPORTED_LANGUAGES) {
+        const line = themeTaglineFor(release(catalogId, cssLoaderName), lang);
+        expect(line).not.toMatch(/published|publicada|pubblicata/i);
+        expect(line.length).toBeLessThanOrEqual(48);
+      }
+    }
+  });
+
+  it("falls back to the published description for other themes", () => {
+    expect(themeTaglineFor(release("someone-else", "Someone"), "es")).toBe("Descripción publicada.");
+    expect(themeTaglineFor(release("hooandee-duo", "Other Name"), "en")).toBe("Published description.");
   });
 });
