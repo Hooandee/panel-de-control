@@ -60,6 +60,7 @@ public static class Program
                     _ => new SnapshotServiceWorker(server));
                 services.AddHostedService(
                     _ => new TdpServiceWorker(tdpServer));
+                services.AddHostedService(_ => new CompanionLaunchWorker());
             })
             .Build()
             .Run();

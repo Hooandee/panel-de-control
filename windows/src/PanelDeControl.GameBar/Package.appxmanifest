@@ -89,6 +89,14 @@
               Parameters="--gamebar" />
           </desktop:FullTrustProcess>
         </desktop:Extension>
+        <uap3:Extension
+          Category="windows.appExecutionAlias"
+          Executable="HardwareBroker\PanelDeControl.Hardware.exe"
+          EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="PanelDeControlCompanion.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
         <desktop:Extension
           Category="windows.startupTask"
           Executable="HardwareBroker\PanelDeControl.Hardware.exe"
