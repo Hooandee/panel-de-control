@@ -101,6 +101,7 @@ vi.mock("./themes/panelThemeInstallHost", () => ({
     configuredThemeInstallHost.current = host;
     return () => {};
   },
+  onThemePackagesChanged: () => () => {},
 }));
 vi.mock("./themes/panelThemeActivationJournal", () => ({
   configurePanelThemeActivationJournalHost: () => () => {},
