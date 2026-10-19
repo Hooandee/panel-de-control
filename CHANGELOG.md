@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.74.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.0...panel-de-control-v0.74.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **tdp:** keep Legion Go S 83N6 TDP available after a firmware profile rollback ([#973](https://github.com/Hooandee/panel-de-control/issues/973)) ([798ca61](https://github.com/Hooandee/panel-de-control/commit/798ca61b1a867bbfca9faee2bf5d52632bdf8782))
+
 ## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
 
 
