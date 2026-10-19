@@ -28,6 +28,7 @@ public sealed class GameBarFocusReturner
     private readonly SteamThemeEngine engine;
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
+    private ForegroundKind lastKind = ForegroundKind.Other;
 
     public GameBarFocusReturner(SteamThemeEngine engine)
     {
@@ -46,7 +47,14 @@ public sealed class GameBarFocusReturner
             }
 
             lastHandle = handle;
-            var restore = tracker.Observe(new ForegroundWindow(handle, Classify(handle)));
+            var kind = Classify(handle);
+            if (lastKind == ForegroundKind.GameBar && kind != ForegroundKind.GameBar)
+            {
+                CompanionLog.Write("themes.focus_gamebar_closed", kind.ToString());
+            }
+
+            lastKind = kind;
+            var restore = tracker.Observe(new ForegroundWindow(handle, kind));
             if (restore != IntPtr.Zero)
             {
                 await RestoreAsync(restore, cancellationToken).ConfigureAwait(false);

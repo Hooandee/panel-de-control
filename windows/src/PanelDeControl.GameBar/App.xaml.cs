@@ -30,6 +30,7 @@ sealed partial class App : Application
 
     protected override void OnActivated(IActivatedEventArgs args)
     {
+        StartCompanion();
         try
         {
             ActivateWidget(args);
@@ -66,6 +67,7 @@ sealed partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        StartCompanion();
         var frame = Window.Current.Content as Frame ?? new Frame();
         Window.Current.Content = frame;
         if (frame.Content is null)
@@ -74,6 +76,15 @@ sealed partial class App : Application
         }
 
         Window.Current.Activate();
+    }
+
+    // Game Bar loads the widget at sign-in even while hidden. The companion keeps Steam themed, so it
+    // starts as soon as the package runs, not when the widget is first opened; a second copy exits.
+    private static void StartCompanion()
+    {
+        _ = HardwareBrokerLauncher.EnsureStartedAsync().ContinueWith(
+            task => CrashLog.Write("companion-start", task.Exception),
+            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private void OnWidgetClosed(
