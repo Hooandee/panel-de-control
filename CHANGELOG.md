@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.74.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.0...panel-de-control-v0.74.1) (2026-10-19)
+
+
+### Español
+
+* **TDP en la Legion Go S:** En algunas Go S el control de TDP podía quedarse como no disponible durante horas tras arrancar en modo de bajo consumo. Ahora se recupera solo y el TDP vuelve a poder ajustarse.
+
+### English
+
+* **TDP on the Legion Go S:** On some Go S units, TDP control could stay unavailable for hours after starting in low power mode. It now recovers on its own and TDP can be adjusted again.
+
+### Italiano
+
+* **TDP sulla Legion Go S:** Su alcune Go S il controllo del TDP poteva restare non disponibile per ore dopo l'avvio in modalità a basso consumo. Ora si ripristina da solo e il TDP torna regolabile.
+
+### Deutsch
+
+* **TDP auf dem Legion Go S:** Auf einigen Go S konnte die TDP-Steuerung nach dem Start im Energiesparmodus stundenlang nicht verfügbar sein. Sie erholt sich jetzt von selbst und der TDP lässt sich wieder einstellen.
+
+### Português (Brasil)
+
+* **TDP no Legion Go S:** Em alguns Go S, o controle de TDP podia ficar indisponível por horas depois de iniciar no modo de baixo consumo. Agora ele se recupera sozinho e o TDP volta a poder ser ajustado.
+
 ## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
 
 
