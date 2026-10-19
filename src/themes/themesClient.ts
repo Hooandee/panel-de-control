@@ -372,7 +372,7 @@ export class ThemesClient {
   };
 
   activate = (themeId: string): Promise<boolean> => {
-    const themes = this.currentPublicationThemes();
+    const themes = this.managedThemes();
     const target = themes.find((theme) => theme.catalogId === themeId);
     if (this.current.snapshot.status !== "ready" || target?.compatibility !== "compatible") {
       return Promise.resolve(false);
@@ -390,7 +390,7 @@ export class ThemesClient {
   };
 
   deactivate = (themeId: string): Promise<boolean> => {
-    const themes = this.currentPublicationThemes();
+    const themes = this.managedThemes();
     if (this.current.snapshot.status !== "ready") return Promise.resolve(false);
     if (!themes.some((theme) => theme.catalogId === themeId)) return this.rejectUnknownTheme("deactivating", themeId);
     const leaving = themes.find((theme) => theme.catalogId === themeId)!.cssLoaderName;
@@ -568,7 +568,7 @@ export class ThemesClient {
   }
 
   setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
-    const entry = this.currentPublicationThemes().find((theme) => theme.catalogId === themeId);
+    const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
     if (!entry) return this.rejectUnknownTheme("saving", themeId);
     return this.mutate(
       { kind: "saving", themeId, patchName },
@@ -630,7 +630,7 @@ export class ThemesClient {
     if (!snapshot.themes.some((theme) => theme.name === keepActive && theme.enabled)) {
       throw new CssLoaderOperationError("verification_failed", "The theme chosen to stay active is no longer active");
     }
-    const catalog = this.currentPublicationThemes();
+    const catalog = this.managedThemes();
     for (const theme of snapshot.themes) {
       if (!theme.enabled || theme.name === keepActive) continue;
       const release = catalog.find((entry) => entry.cssLoaderName === theme.name);
@@ -641,7 +641,7 @@ export class ThemesClient {
   }
 
   private hooandeeThemeNames(): ReadonlySet<string> {
-    return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));
+    return new Set(this.managedThemes().map((theme) => theme.cssLoaderName));
   }
 
   private readHandoffs(): SectionHandoffs {
@@ -721,7 +721,7 @@ export class ThemesClient {
     return after;
   }
 
-  private currentPublicationThemes(): readonly PublishedThemeRelease[] {
+  private managedThemes(): readonly PublishedThemeRelease[] {
     return managedThemeReleases(this.current.publication);
   }
 

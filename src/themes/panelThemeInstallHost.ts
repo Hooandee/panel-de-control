@@ -16,7 +16,7 @@ export function onThemePackagesChanged(listener: () => void): () => void {
 }
 
 function notifyPackagesChanged(): void {
-  for (const listener of [...packageChangeListeners]) listener();
+  for (const listener of packageChangeListeners) listener();
 }
 
 function requireConfiguredHost(): ThemeInstallHost {

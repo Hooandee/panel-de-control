@@ -109,7 +109,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const activating = useRef(false);
   const busy = operation !== null;
   const name = localizePublishedText(card.release.displayName, lang);
-  const description = themeTaglineFor(card.release, lang);
+  const tagline = themeTaglineFor(card.release, lang);
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;
@@ -155,7 +155,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
             <StatePill card={card} id={statusId} />
           </div>
           <div id={descriptionId} style={{ marginTop: 5, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {description}
+            {tagline}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable || card.earlyOnly ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
             <span>{t(versionLabel, { version: card.release.publishedVersion })}</span>
