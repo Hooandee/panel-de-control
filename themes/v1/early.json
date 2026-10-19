@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "themes": [
+    {
+      "schemaVersion": 1,
+      "catalogId": "hooandee-duo",
+      "cssLoaderName": "Hooandee Duo",
+      "displayName": {
+        "es": "Duo",
+        "en": "Duo",
+        "it": "Duo"
+      },
+      "description": {
+        "es": "Duo es un tema inspirado en una de las consolas más queridas, con acceso directo a tus juegos, sonidos propios y una experiencia de lo más divertida.",
+        "en": "Duo is a theme inspired by one of the most beloved consoles, with quick access to your games, its own sounds and a really fun experience.",
+        "it": "Duo è un tema ispirato a una delle console più amate, con accesso diretto ai tuoi giochi, suoni propri e un'esperienza davvero divertente."
+      },
+      "author": "Hooandee",
+      "tags": [],
+      "minimumVersions": {
+        "panel": "0.73.0"
+      },
+      "early": {
+        "version": "0.1.0",
+        "artifacts": [
+          {
+            "version": "0.1.0",
+            "size": 238493,
+            "sha256": "b5ec2625622ccaa90be75f60e7d4526b24d307e5be1c92b110d69773ad2e2b71"
+          }
+        ]
+      }
+    }
+  ]
+}
