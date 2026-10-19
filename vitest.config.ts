@@ -6,5 +6,8 @@ export default defineConfig({
       "src/**/*.{test,spec}.?(c|m)[jt]s?(x)",
       "tests/**/*.{test,spec}.?(c|m)[jt]s?(x)",
     ],
+    environmentOptions: {
+      happyDOM: { settings: { enableIframePageLoading: true } },
+    },
   },
 });
