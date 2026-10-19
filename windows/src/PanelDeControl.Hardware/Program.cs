@@ -4,7 +4,7 @@ namespace PanelDeControl.Hardware;
 
 public static class Program
 {
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -18,6 +18,7 @@ public static class Program
             return 0;
         }
 
+        CompanionLog.Write("start", string.Join(' ', args));
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
@@ -81,33 +82,17 @@ public static class Program
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
-            var snapshotTask = ServeSnapshotsAsync(snapshotServer, brokerLifetime.Token);
-            var volumeTask = volumeServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var brightnessTask = brightnessServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var tdpTask = tdpServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var refreshTask = refreshServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var cpuTask = cpuServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var themeEngineTask = themeEngine.RunAsync(brokerLifetime.Token);
-            var themesTask = themesServer.RunUntilCancelledAsync(brokerLifetime.Token);
-            try
-            {
-                var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask, themeEngineTask, themesTask)
-                    .ConfigureAwait(false);
-                await completedTask.ConfigureAwait(false);
-            }
-            finally
-            {
-                brokerLifetime.Cancel();
-                await Task
-                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask, themeEngineTask, themesTask)
-                    .ConfigureAwait(false);
-            }
+            var token = brokerLifetime.Token;
+            await Task.WhenAll(
+                SuperviseAsync("snapshot", () => snapshotServer.RunAsync(token), token),
+                SuperviseAsync("volume", () => volumeServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("brightness", () => brightnessServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("tdp", () => tdpServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("refresh", () => refreshServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
+                SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token))
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception exception)
@@ -117,13 +102,36 @@ public static class Program
         }
     }
 
-    // The snapshot server stops when the widget goes idle; the companion itself stays up because
-    // it keeps Steam themed while Game Bar is closed.
-    private static async Task ServeSnapshotsAsync(SnapshotPipeServer server, CancellationToken cancellationToken)
+    // One broken pipe or idle snapshot server must not take the whole companion down: it also keeps
+    // Steam themed while Game Bar is closed, so every server restarts on its own.
+    private static async Task SuperviseAsync(string name, Func<Task> run, CancellationToken cancellationToken)
     {
+        var failures = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            await server.RunAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await run().ConfigureAwait(false);
+                failures = 0;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                CompanionLog.Write($"server.{name}", exception);
+                failures = Math.Min(failures + 1, 6);
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250 << failures), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
 }
