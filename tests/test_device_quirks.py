@@ -162,6 +162,24 @@ def test_legion_go_s_83l3_named_profile_recovery_requires_exact_identity(tmp_pat
         ) is expected
 
 
+def test_legion_go_s_83n6_named_profile_owns_rails_only_on_exact_dmi(tmp_path):
+    cases = (
+        ("LENOVO", "83N6", _profile("legion_go_s"), True),
+        ("OTHER", "83N6", _profile("legion_go_s"), False),
+        ("LENOVO", "83N6-X", _profile("legion_go_s"), False),
+        ("LENOVO", "83N6", _profile("legion_go_2"), False),
+        ("LENOVO", "83N6", GENERIC, False),
+    )
+
+    for vendor, product, device, expected in cases:
+        _write_dmi(str(tmp_path), vendor, product)
+        quirks = device_quirks.legion_go_s_83n6_firmware_attr_quirks(
+            device,
+            str(tmp_path),
+        )
+        assert quirks.get("named_profile_owns_rails", False) is expected
+
+
 def test_lenovo_legion_live_max_probe_requires_an_exact_supported_dmi(tmp_path):
     cases = (
         ("LENOVO", "83E1", _profile("legion_go"), True),
