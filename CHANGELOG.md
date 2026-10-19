@@ -5,9 +5,25 @@
 ## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
 
 
-### Features
+### Español
 
-* **themes:** one-line theme descriptions and a cleaner Duo cover ([#968](https://github.com/Hooandee/panel-de-control/issues/968)) ([fec4494](https://github.com/Hooandee/panel-de-control/commit/fec4494cb3cade90c75be63b184b831e579b585d))
+* **Temas:** La lista es más limpia, con una sola línea por tema y una portada nueva para Duo. Los ajustes de los temas en acceso anticipado ya se guardan.
+
+### English
+
+* **Themes:** The list is cleaner, with one line per theme and a new cover for Duo. Settings of early access themes now save.
+
+### Italiano
+
+* **Temi:** L'elenco è più pulito, con una sola riga per tema e una nuova copertina per Duo. Le impostazioni dei temi in accesso anticipato ora vengono salvate.
+
+### Deutsch
+
+* **Themes:** Die Liste ist aufgeräumter, mit einer Zeile pro Theme und einem neuen Cover für Duo. Einstellungen von Early-Access-Themes werden jetzt gespeichert.
+
+### Português (Brasil)
+
+* **Temas:** A lista ficou mais limpa, com uma linha por tema e uma capa nova para o Duo. Os ajustes dos temas em acesso antecipado agora são salvos.
 
 ## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
 
