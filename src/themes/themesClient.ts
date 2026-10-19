@@ -27,7 +27,7 @@ import {
   type SectionHandoffs,
   type SectionPatchRef,
 } from "./sectionOwnership";
-import { deriveThemeCards } from "./state";
+import { deriveThemeCards, type ThemeCardModel } from "./state";
 import type { ThemeInstallRequest } from "./types";
 
 export interface ThemesAdapter {
@@ -110,6 +110,7 @@ export interface ThemesDependencies {
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
+  pickEarlyArchive?: () => Promise<string | null>;
 }
 
 export interface ThemeInstallConfirmation {
@@ -150,6 +151,14 @@ const MAX_INSTALL_RECONCILE_FAILURES = 3;
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
 let sectionHandoffStore: SectionHandoffStore | undefined;
+let earlyArchivePicker: (() => Promise<string | null>) | undefined;
+
+export function configureEarlyArchivePicker(picker: () => Promise<string | null>): () => void {
+  earlyArchivePicker = picker;
+  return () => {
+    if (earlyArchivePicker === picker) earlyArchivePicker = undefined;
+  };
+}
 
 export function configureThemeFailureReporter(
   reporter: (failure: ThemeFailureReport) => unknown,
@@ -175,6 +184,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
     installer: createPanelThemeInstaller(),
     activator: new ThemeActivator(adapter, createPanelThemeActivationJournal()),
     publication: createRemotePublicationClient(),
+    pickEarlyArchive: () => earlyArchivePicker?.() ?? Promise.resolve(null),
     reportFailure: (failure) => {
       void Promise.resolve(failureReporter?.(failure)).catch(() => undefined);
     },
@@ -410,7 +420,27 @@ export class ThemesClient {
       catalogId: card.release.catalogId,
       expectedVersion: card.targetVersion,
     };
-    const expectedVersion = card.targetVersion;
+    return this.runInstall(themeId, card, source, card.targetVersion);
+  };
+
+  /** Installs an early access zip the user picks; the backend accepts only a published early build. */
+  installEarly = async (themeId: string): Promise<boolean> => {
+    const card = deriveThemeCards(this.current.publication, this.current.snapshot)
+      .find((candidate) => candidate.id === themeId);
+    if (this.current.snapshot.status !== "ready" || !card?.early?.installable || !this.dependencies.pickEarlyArchive) {
+      return false;
+    }
+    const archivePath = await this.dependencies.pickEarlyArchive();
+    if (!archivePath) return false;
+    return this.runInstall(themeId, card, { kind: "early-archive", catalogId: card.release.catalogId, archivePath }, null);
+  };
+
+  private runInstall(
+    themeId: string,
+    card: ThemeCardModel,
+    source: ThemeInstallRequest,
+    expectedVersion: string | null,
+  ): Promise<boolean> {
     return this.mutate(
       { kind: "installing", themeId },
       async () => {
@@ -421,7 +451,7 @@ export class ThemesClient {
           if (
             installed.themeId !== card.release.catalogId
             || installed.themeName !== card.release.cssLoaderName
-            || installed.version !== expectedVersion
+            || (expectedVersion !== null && installed.version !== expectedVersion)
           ) {
             throw new ThemeInstallError(
               "identity_mismatch",
@@ -430,7 +460,7 @@ export class ThemesClient {
           }
           const verified = await this.dependencies.adapter.reloadTheme(
             card.release.cssLoaderName,
-            expectedVersion,
+            installed.version,
             before,
           );
           await this.dependencies.installer.commit(installed.transaction);
@@ -460,7 +490,7 @@ export class ThemesClient {
         }
       },
     );
-  };
+  }
 
   uninstall = (themeId: string): Promise<boolean> => {
     const card = deriveThemeCards(this.current.publication, this.current.snapshot)

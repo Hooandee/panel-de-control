@@ -3,7 +3,7 @@ import { type CSSProperties, useRef, useState } from "react";
 import { LuDownload, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { localizePublishedText } from "../themes/remotePublication";
 import type { ThemeCardModel } from "../themes/state";
 import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
@@ -15,14 +15,14 @@ interface Props {
   onOpen(): void;
 }
 
-const PREVIEW_STYLE: CSSProperties = {
+const PREVIEW_STYLE: CSSProperties = themed(() => ({
   height: 96,
   position: "relative",
   overflow: "hidden",
   borderRadius: theme.radius.sm,
   background: `linear-gradient(145deg, ${theme.color.surfaceRaised}, ${theme.color.surface})`,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
 const PREVIEW_LAYERS = [
   { left: "9%", top: 12, width: "19%", height: 52 },
@@ -66,6 +66,27 @@ function ThemePreview({ card }: { card: ThemeCardModel }) {
   );
 }
 
+export function EarlyBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      data-pdc-early-badge="true"
+      style={{
+        fontSize: 9,
+        lineHeight: 1.2,
+        padding: "2px 6px",
+        borderRadius: 999,
+        color: theme.color.accent,
+        boxShadow: `inset 0 0 0 1px ${theme.color.accent}`,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {t("themes.early.badge")}
+    </span>
+  );
+}
+
 function StatePill({ card, id }: { card: ThemeCardModel; id: string }) {
   const { t } = useI18n();
   const active = card.active;
@@ -92,7 +113,9 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;
-  const versionLabel = !card.installable
+  const versionLabel = card.earlyOnly
+    ? "themes.early.version"
+    : !card.installable
     ? "themes.remote.card.incompatible"
     : card.updateAvailable
       ? "themes.remote.card.update"
@@ -125,15 +148,16 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
         <ThemePreview card={card} />
         <div style={{ padding: `${theme.space.sm}px ${theme.space.xs}px ${theme.space.xs}px` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: theme.space.sm }}>
-            <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere" }}>
+            <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere", display: "inline-flex", alignItems: "center", gap: 6 }}>
               {name}
+              {card.early ? <EarlyBadge /> : null}
             </span>
             <StatePill card={card} id={statusId} />
           </div>
           <div id={descriptionId} style={{ marginTop: 5, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
             {description}
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable || card.earlyOnly ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
             <span>{t(versionLabel, { version: card.release.publishedVersion })}</span>
           </div>
         </div>

@@ -71,6 +71,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
+    installEarly: vi.fn(async () => false),
     install: vi.fn(async () => true),
     uninstall: vi.fn(async () => true),
     activate: vi.fn(async () => true),
@@ -103,6 +104,25 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 
 describe("ThemeDetailsModal", () => {
   afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
+
+  it("offers an early access build only from a file, and names a rejected one", () => {
+    const base = controller();
+    const installEarly = vi.fn(async () => true);
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [] },
+      cards: [{ ...base.cards[0], installable: false, targetVersion: undefined, earlyOnly: true, early: { version: "0.3.0", installable: true } }],
+      installEarly,
+    });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(view.container.querySelector("[data-pdc-theme-early]")).not.toBeNull();
+    expect(screen.queryByText(/themes.action.install$/)).toBeNull();
+    fireEvent.click(screen.getByText(/themes.early.install/));
+    expect(installEarly).toHaveBeenCalledWith("example-theme");
+    cleanup();
+    mocks.controller = { ...mocks.controller!, error: "x", errorCode: "unknown_archive" };
+    render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(screen.getByText("themes.early.rejected")).toBeTruthy();
+  });
 
   it("keeps working when its card disappears while the catalog refreshes", () => {
     mocks.controller = installedController();

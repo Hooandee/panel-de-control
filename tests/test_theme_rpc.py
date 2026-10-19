@@ -545,6 +545,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
     diagnostics = plugin._theme_report_diagnostics()
 
     assert diagnostics == {
+        "early_themes": [],
         "transactions": {
             "pending": [],
             "quarantined": 1,
@@ -696,11 +697,11 @@ def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rp
 
     assert diagnostics["installed"] == [
         {
-            "name": "Hooandee Gallery", "version": "0.9.54", "active": True, "runtime": True,
+            "name": "Hooandee Gallery", "version": "0.9.54", "active": True, "runtime": True, "early": False,
             "sections": {"Estilizar Inicio": "No", "Estilizar Descargas": "Yes"},
         },
         {
-            "name": "Hooandee Luminous Atlas", "version": "1.1.1", "active": False, "runtime": True,
+            "name": "Hooandee Luminous Atlas", "version": "1.1.1", "active": False, "runtime": True, "early": False,
             "sections": {"Estilizar Inicio": "Yes"},
         },
     ]
@@ -771,3 +772,91 @@ def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
     assert themes == {"installed": [], "display": {
         "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
     }}
+
+
+def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rpc):
+    main, plugin, _ = theme_rpc
+    calls = []
+
+    def prepare(path, root, receipts):
+        calls.append((path, pathlib.Path(root).name, pathlib.Path(receipts).name))
+        if path == "/bad.zip":
+            raise main.theme_remote.ThemeRemoteError("unknown_archive", "x")
+        if path == "/boom.zip":
+            raise RuntimeError("secret detail")
+        return {"ok": True, "code": "prepared", "catalogId": "example-theme", "version": "0.3.0"}
+
+    plugin._theme_remote_service = types.SimpleNamespace(
+        check_early=lambda force: {"status": "published", "themes": [], "force": force},
+        prepare_early_install=prepare,
+    )
+
+    assert asyncio.run(plugin.check_theme_early(True)) == {"status": "published", "themes": [], "force": True}
+    assert asyncio.run(plugin.check_theme_early("yes"))["code"] == "invalid_descriptor"
+    assert asyncio.run(plugin.prepare_early_theme_install("/picked.zip"))["code"] == "prepared"
+    assert asyncio.run(plugin.prepare_early_theme_install("/bad.zip")) == {"ok": False, "code": "unknown_archive"}
+    assert asyncio.run(plugin.prepare_early_theme_install("/boom.zip")) == {"ok": False, "code": "install_failed"}
+    assert asyncio.run(plugin.prepare_early_theme_install(7)) == {"ok": False, "code": "invalid_archive"}
+    assert [call[0] for call in calls] == ["/picked.zip", "/bad.zip", "/boom.zip"]
+
+
+def test_early_archive_picker_opens_in_downloads_when_it_exists(theme_rpc):
+    _, plugin, fake = theme_rpc
+    home = pathlib.Path(fake.DECKY_USER_HOME)
+    home.mkdir(parents=True, exist_ok=True)
+    assert asyncio.run(plugin.early_theme_archive_folder()) == str(home)
+    (home / "Downloads").mkdir()
+    assert asyncio.run(plugin.early_theme_archive_folder()) == str(home / "Downloads")
+
+
+def test_report_tells_early_installs_apart_until_another_build_replaces_them(theme_rpc, monkeypatch):
+    main, plugin, _ = theme_rpc
+    folder = plugin._themes_root() / "Hooandee Duo"
+    folder.mkdir(parents=True)
+    (folder / "panel-theme.json").write_text("{}", encoding="utf-8")
+
+    def installed(version):
+        (folder / "theme.json").write_text(json.dumps({"name": "Hooandee Duo", "version": version}), encoding="utf-8")
+
+    def prepared(transaction, version):
+        return {"ok": True, "code": "prepared", "theme_id": "hooandee-duo", "theme_name": "Hooandee Duo",
+                "version": version, "transaction": transaction}
+
+    commits = {"early": {"ok": True, "code": "committed"}, "stable": {"ok": True, "code": "committed"},
+               "failed": {"ok": False, "code": "commit_failed"}}
+    monkeypatch.setattr(main.theme_packages, "commit_theme_install", lambda token, *a, **k: commits[token])
+    plugin._theme_remote_service = types.SimpleNamespace(
+        prepare_early_install=lambda path, root, receipts: {**prepared("early", "0.3.0"), "catalogId": "hooandee-duo"},
+        prepare_install=lambda theme_id, version, root, receipts: prepared("stable", version),
+    )
+
+    def early_flags(on=plugin):
+        return [theme["early"] for theme in on._theme_report_diagnostics()["installed"]]
+
+    installed("0.2.0")
+    assert early_flags() == [False]
+
+    asyncio.run(plugin.prepare_early_theme_install("/picked.zip"))
+    installed("0.3.0")
+    assert early_flags() == [False]
+    asyncio.run(plugin.commit_theme_install("early"))
+    assert early_flags() == [True]
+    assert plugin._theme_report_diagnostics()["early_themes"] == ["Hooandee Duo"]
+
+    restarted = main.Plugin()
+    restarted._init = lambda: None
+    assert early_flags(restarted) == [True]
+
+    installed("0.4.0")
+    assert early_flags() == [False]
+    installed("0.3.0")
+
+    plugin._theme_remote_service.prepare_install = lambda *a: prepared("failed", "0.3.0")
+    asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
+    asyncio.run(plugin.commit_theme_install("failed"))
+    assert early_flags() == [True]
+
+    plugin._theme_remote_service.prepare_install = lambda *a: prepared("stable", "0.3.0")
+    asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
+    asyncio.run(plugin.commit_theme_install("stable"))
+    assert early_flags() == [False]

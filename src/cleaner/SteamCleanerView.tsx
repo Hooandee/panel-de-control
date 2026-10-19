@@ -6,7 +6,7 @@ import { CleanerActionTray } from "./CleanerActionTray";
 import { useI18n } from "../i18n";
 import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { onPrefsHealed, readFlag, writeFlag } from "../system/pdcStorage";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { cleanerReasonKey } from "./errors";
 import { CleanerFilter, CleanerGame, CleanerSort, eligibleCaches, filterGames, formatBytes, groupEntries, toggleCaches, toggleEntry } from "./model";
 import { readCleanerMetadata, readInstalledCleanerMetadata } from "./steamMetadata";
@@ -14,7 +14,7 @@ import type { CleanerController } from "./useSteamCleaner";
 import type { CleanerEntry } from "./types";
 
 const column: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
-const caption: CSSProperties = { fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 };
+const caption: CSSProperties = themed(() => ({ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 }));
 const FILTERS: CleanerFilter[] = ["all", "cleanable", "not_installed", "selected"];
 const HELP_DISMISSED_KEY = "pdc:cleanerHelpDismissed";
 

@@ -4,7 +4,7 @@ import { theme } from "../theme";
 
 // Steam's default ring is too subtle on our custom-styled cards, so we draw an
 // explicit accent ring on gamepad focus (accent token → follows the accent).
-const FOCUS_RING = `inset 0 0 0 1px ${theme.color.accent}, 0 0 0 2px ${theme.color.accent}`;
+const focusRing = () => `inset 0 0 0 1px ${theme.color.accent}, 0 0 0 2px ${theme.color.accent}`;
 
 /** Card-styled Focusable with a clear focus ring. `emphasized` gives a resting
  *  accent-tinted outline (the "jugando ahora" card). */
@@ -30,7 +30,7 @@ export const FocusableCard: FC<{
         padding: `${theme.space.sm}px ${theme.space.md}px`,
         cursor: "pointer",
         transition: "box-shadow 120ms ease, transform 120ms ease",
-        boxShadow: focused ? FOCUS_RING : resting,
+        boxShadow: focused ? focusRing() : resting,
         transform: focused ? "scale(1.01)" : "scale(1)",
         ...style,
       }}

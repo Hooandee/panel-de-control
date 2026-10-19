@@ -1,4 +1,5 @@
-import { currentAccentHex, currentAccentRgb } from "./system/accentColor";
+import { currentAccentHex, currentAccentRgb, getAccentId } from "./system/accentColor";
+import { getThemeTokensVersion, themeColorOverride, themeLabelTransform, themeRadiusOverride, themeSizeOverride } from "./system/themeTokens";
 
 // PdC UI design tokens - the shared visual language for every Panel de Control screen.
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
@@ -35,6 +36,43 @@ const color = {
 } as const;
 
 const radius = { sm: 8, md: 14, lg: 20 } as const;
+
+// Surfaces, text, radii and selection can be restyled by the active CSS Loader theme
+// (./system/themeTokens); the values above stay Panel's own look.
+const themedColor = Object.create(color, {
+  surface: { enumerable: true, get: () => themeColorOverride("surface") ?? color.surface },
+  surfaceRaised: { enumerable: true, get: () => themeColorOverride("surfaceRaised") ?? color.surfaceRaised },
+  hairline: { enumerable: true, get: () => themeColorOverride("hairline") ?? color.hairline },
+  // The edge of a card, tile or idle chip; dividers and gauge tracks keep `hairline`.
+  outline: { enumerable: true, get: () => themeColorOverride("outline") ?? themedColor.hairline },
+  textPrimary: { enumerable: true, get: () => themeColorOverride("textPrimary") ?? color.textPrimary },
+  textMuted: { enumerable: true, get: () => themeColorOverride("textMuted") ?? color.textMuted },
+  onAccent: { enumerable: true, get: () => themeColorOverride("onAccent") ?? color.onAccent },
+  selectedFill: { enumerable: true, get: () => themeColorOverride("selectedFill") ?? color.accent },
+  selectedText: { enumerable: true, get: () => themeColorOverride("selectedText") ?? themedColor.textPrimary },
+}) as Omit<typeof color, "surface" | "surfaceRaised" | "hairline" | "textPrimary" | "textMuted" | "onAccent"> & {
+  readonly surface: string;
+  readonly surfaceRaised: string;
+  readonly hairline: string;
+  readonly outline: string;
+  readonly textPrimary: string;
+  readonly textMuted: string;
+  readonly onAccent: string;
+  readonly selectedFill: string;
+  readonly selectedText: string;
+};
+
+const themedRadius = {
+  get sm(): number {
+    return themeRadiusOverride("sm") ?? radius.sm;
+  },
+  get md(): number {
+    return themeRadiusOverride("md") ?? radius.md;
+  },
+  get lg(): number {
+    return themeRadiusOverride("lg") ?? radius.lg;
+  },
+};
 // `section` = the breathing gap BETWEEN stacked cards laid out in a flex column
 // (shell chrome, settings rows). A touch more than `md` so containers read as
 // separate, not glued. `card` = the bottom margin of a card that sits in its own
@@ -44,15 +82,24 @@ const space = { xs: 4, sm: 8, md: 12, lg: 18, section: 14, card: 6 } as const;
 const font = { caption: 11, body: 13, value: 28 } as const;
 
 export const theme = {
-  color,
-  radius,
+  color: themedColor,
+  radius: themedRadius,
   space,
   font,
+  get stroke(): number {
+    return themeSizeOverride("stroke") ?? 1.5;
+  },
   // Signature raised-surface style (bg + radius + hairline). Add padding per use.
   card: {
-    borderRadius: radius.md,
-    background: color.surfaceRaised,
-    boxShadow: `inset 0 0 0 1px ${color.hairline}`,
+    get borderRadius(): number {
+      return themedRadius.md;
+    },
+    get background(): string {
+      return themedColor.surfaceRaised;
+    },
+    get boxShadow(): string {
+      return `inset 0 0 0 1px ${themedColor.outline}`;
+    },
   },
   // Equal-width tile inside a card (fan chip, temp stat) — hairline-outlined,
   // shares one definition so side-by-side tiles can't drift apart.
@@ -60,15 +107,45 @@ export const theme = {
     flex: "1 1 0",
     minWidth: 0,
     padding: space.sm,
-    borderRadius: radius.sm,
-    boxShadow: `inset 0 0 0 1px ${color.hairline}`,
+    get borderRadius(): number {
+      return themedRadius.sm;
+    },
+    get boxShadow(): string {
+      return `inset 0 0 0 1px ${themedColor.outline}`;
+    },
   },
   // Muted uppercase caption used as a section heading inside the full-screen
   // modals (Customize, Glossary). Shared so the treatment stays consistent.
   sectionLabel: {
     fontSize: font.caption,
-    color: color.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    get color(): string {
+      return themedColor.textMuted;
+    },
+    get textTransform(): string {
+      return themeLabelTransform() ?? "uppercase";
+    },
+    get letterSpacing(): number {
+      return (themeLabelTransform() ?? "uppercase") === "uppercase" ? 0.5 : 0;
+    },
   },
 } as const;
+
+/** A module-level style object that follows the live accent and theme tokens: rebuilt when
+ *  either changes. Its keys are fixed by the first build; each one reads the live value. */
+export function themed<T extends object>(build: () => T): T {
+  let key = "";
+  let value = build();
+  const live = () => {
+    const next = `${getAccentId()}|${getThemeTokensVersion()}`;
+    if (next !== key) {
+      key = next;
+      value = build();
+    }
+    return value;
+  };
+  const object = {} as T;
+  for (const prop of Reflect.ownKeys(value)) {
+    Object.defineProperty(object, prop, { enumerable: true, get: () => Reflect.get(live(), prop) });
+  }
+  return object;
+}

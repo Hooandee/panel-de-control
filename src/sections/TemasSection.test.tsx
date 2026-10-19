@@ -46,6 +46,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     sectionHandoff: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}), refreshPublication: vi.fn(async () => {}),
+    installEarly: vi.fn(async () => false),
     install: vi.fn(async () => true), uninstall: vi.fn(async () => true), activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true), setPatch: vi.fn(async () => true),
     cleanUp: vi.fn(async () => true), undoCleanup: vi.fn(async () => true),

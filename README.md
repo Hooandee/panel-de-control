@@ -64,7 +64,8 @@ explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de 
 espacio en un momento.
 
 ✨ **Temas.** Cambia la cara de Steam por completo con temas que se instalan y se actualizan desde
-el propio Panel.
+el propio Panel. Los que están en acceso anticipado salen con la etiqueta Early y se instalan
+desde su zip.
 
 🎮 **Mandos.** Remapeo de botones que se entiende con Handheld Daemon e InputPlumber. Todavía en
 beta.

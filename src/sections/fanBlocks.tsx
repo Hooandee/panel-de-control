@@ -21,12 +21,12 @@ import { Point, percentToPwm } from "../fans/curve";
 import { registerBlock } from "../customize/blocks";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { DesktopFanCurves } from "../components/DesktopFanCurves";
 import { FanInfo } from "../api";
 import { desktopFanVisible } from "../fans/presentation";
 
-const card = { ...theme.card, padding: theme.space.md } as const;
+const card = themed(() => ({ ...theme.card, padding: theme.space.md } as const));
 
 const tempLabel = (t: (k: string) => string, sensor: string) =>
   sensor === "CPU" ? t("fans.temp.cpu")

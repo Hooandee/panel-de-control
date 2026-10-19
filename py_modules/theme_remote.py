@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
+import os
+import stat
 import math
 import re
 import tempfile
@@ -19,7 +22,10 @@ from theme_remote_contract import (
     ThemeCatalog,
     ThemeCatalogRelease,
     ThemeContractError,
+    ThemeEarlyCatalog,
+    ThemeEarlyRelease,
     parse_theme_catalog,
+    parse_theme_early_catalog,
 )
 from theme_transport import ThemeTransportError
 
@@ -35,6 +41,8 @@ _STABLE_SEMVER = re.compile(
 _CACHE_SECONDS = 15 * 60
 _MAX_CATALOG_BYTES = 64 * 1024
 _MAX_CACHE_FILE_BYTES = 128 * 1024
+_MAX_EARLY_ARCHIVE_BYTES = 64 * 1024 * 1024
+_COPY_CHUNK = 1024 * 1024
 _CACHE_FIELDS = frozenset({"schemaVersion", "checkedAt", "catalog"})
 
 
@@ -42,6 +50,7 @@ _CACHE_FIELDS = frozenset({"schemaVersion", "checkedAt", "catalog"})
 class OfficialThemeChannel:
     pages_base_url: str
     catalog_path: str
+    early_path: str = "themes/v1/early.json"
 
 
 @dataclass(frozen=True)
@@ -162,7 +171,7 @@ def _runtime_meets(value: str, minimum: str) -> bool:
 
 
 def _compatibility(
-    release: ThemeCatalogRelease,
+    release: ThemeCatalogRelease | ThemeEarlyRelease,
     runtime: ThemeRuntimeVersions,
 ) -> str:
     minimum = release.minimum_versions
@@ -171,14 +180,13 @@ def _compatibility(
     return "compatible"
 
 
-def _theme_dto(
-    release: ThemeCatalogRelease,
+def _presentation_dto(
+    release: ThemeCatalogRelease | ThemeEarlyRelease,
     runtime: ThemeRuntimeVersions,
 ) -> dict[str, object]:
-    result: dict[str, object] = {
+    return {
         "catalogId": release.catalog_id,
         "cssLoaderName": release.css_loader_name,
-        "publishedVersion": release.version,
         "displayName": dict(release.display_name),
         "description": dict(release.description),
         "author": release.author,
@@ -186,9 +194,47 @@ def _theme_dto(
         "notes": dict(release.notes),
         "compatibility": _compatibility(release, runtime),
     }
+
+
+def _theme_dto(
+    release: ThemeCatalogRelease,
+    runtime: ThemeRuntimeVersions,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        **_presentation_dto(release, runtime),
+        "publishedVersion": release.version,
+    }
     if release.exclusive_group is not None:
         result["exclusiveGroup"] = release.exclusive_group
     return result
+
+
+def _early_dto(release: ThemeEarlyRelease, runtime: ThemeRuntimeVersions) -> dict[str, object]:
+    return {**_presentation_dto(release, runtime), "earlyVersion": release.version}
+
+
+def _copy_hashing(source: str, destination: Path) -> tuple[int, str]:
+    """Copies a user-picked archive and hashes the copy itself, so what is installed is what was checked."""
+    if not isinstance(source, str) or not os.path.isabs(source):
+        raise ThemeRemoteError("invalid_archive", "Archive path is invalid")
+    try:
+        fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise ThemeRemoteError("invalid_archive", "Archive cannot be read") from error
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise ThemeRemoteError("invalid_archive", "Archive is not a regular file")
+    digest = hashlib.sha256()
+    size = 0
+    with os.fdopen(fd, "rb") as reader:
+        with open(destination, "wb") as writer:
+            while chunk := reader.read(_COPY_CHUNK):
+                size += len(chunk)
+                if size > _MAX_EARLY_ARCHIVE_BYTES:
+                    raise ThemeRemoteError("invalid_archive", "Archive is too large")
+                digest.update(chunk)
+                writer.write(chunk)
+    return size, digest.hexdigest()
 
 
 class ThemeRemoteService:
@@ -211,6 +257,7 @@ class ThemeRemoteService:
         self._cache_error_logger = cache_error_logger
         self._clock = clock
         self._memory: _CachedCatalog | None = None
+        self._early: tuple[ThemeEarlyCatalog, float] | None = None
         self._lock = threading.Lock()
         self._stopping = False
         self._active_preparations = 0
@@ -357,6 +404,89 @@ class ThemeRemoteService:
                 with self._lock:
                     self._active_preparations -= 1
 
+    def check_early(self, force: bool = False) -> dict[str, object]:
+        if self._channel is None:
+            return {"status": "disabled"}
+        with self._lock:
+            if self._stopping:
+                return self._lifecycle_failure()
+            now = float(self._clock())
+            early = self._early
+            if not force and early is not None and math.isfinite(now) and 0 <= now - early[1] < _CACHE_SECONDS:
+                return self._early_success(early[0])
+        try:
+            catalog = self._fetch_early()
+        except ThemeTransportError as error:
+            return self._transport_failure(error)
+        except ThemeContractError:
+            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
+        with self._lock:
+            if self._stopping:
+                return self._lifecycle_failure()
+            self._early = (catalog, float(self._clock()))
+        return self._early_success(catalog)
+
+    def prepare_early_install(
+        self,
+        archive_path: str,
+        themes_root: str | Path,
+        receipts_path: str | Path,
+    ) -> dict[str, object]:
+        with self._lock:
+            self._require_running()
+        root = Path(themes_root)
+        root.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".panel-theme-early-", dir=root.parent) as temporary:
+            archive = Path(temporary) / "theme.zip"
+            size, digest = _copy_hashing(archive_path, archive)
+            # A fresh read: an archive is only accepted against what is published now.
+            try:
+                catalog = self._fetch_early()
+            except ThemeTransportError as error:
+                raise ThemeRemoteError(error.code, "Early theme list is unavailable") from error
+            except ThemeContractError as error:
+                raise ThemeRemoteError("invalid_descriptor", "Early theme list is invalid") from error
+            match = next(
+                (
+                    (release, artifact)
+                    for release in catalog.themes
+                    for artifact in release.artifacts
+                    if artifact.sha256 == digest and artifact.size == size
+                ),
+                None,
+            )
+            if match is None:
+                raise ThemeRemoteError("unknown_archive", "Archive is not a published early build")
+            release, artifact = match
+            compatibility = _compatibility(release, self._runtime_versions())
+            if compatibility != "compatible":
+                raise ThemeRemoteError(compatibility.replace("-", "_"), "Early theme is incompatible with the running environment")
+            with self._lock:
+                self._require_running()
+                self._active_preparations += 1
+            descriptor = {
+                "schemaVersion": 1,
+                "id": release.catalog_id,
+                "cssLoaderName": release.css_loader_name,
+                "version": artifact.version,
+                "artifact": {"file": "theme.zip", "size": artifact.size, "sha256": artifact.sha256},
+            }
+            try:
+                result = theme_packages.prepare_theme_archive(archive, descriptor, root, receipts_path=receipts_path)
+            finally:
+                with self._lock:
+                    self._active_preparations -= 1
+            return {**result, "catalogId": release.catalog_id, "version": artifact.version}
+
+    def _fetch_early(self) -> ThemeEarlyCatalog:
+        if self._transport is None or self._channel is None:
+            raise ThemeRemoteError("channel_disabled", "Official theme updates are disabled")
+        return parse_theme_early_catalog(self._transport.fetch_metadata(self._channel.early_path))
+
+    def _early_success(self, catalog: ThemeEarlyCatalog) -> dict[str, object]:
+        runtime = self._runtime_versions()
+        return {"status": "published", "themes": [_early_dto(release, runtime) for release in catalog.themes]}
+
     def _fetch_catalog(self) -> tuple[bytes, ThemeCatalog]:
         if self._transport is None or self._channel is None:
             raise ThemeTransportError("channel_disabled", "Theme channel is disabled")
@@ -451,3 +581,4 @@ class ThemeRemoteService:
         with self._lock:
             self._stopping = True
             self._memory = None
+            self._early = None
