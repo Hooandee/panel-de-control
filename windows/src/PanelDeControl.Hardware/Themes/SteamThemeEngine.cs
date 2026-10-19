@@ -132,6 +132,32 @@ public sealed class SteamThemeEngine
         }
     }
 
+    /// <summary>Asks Steam to raise its Big Picture window, over a connection of its own.</summary>
+    public async Task<bool> BringBigPictureToFrontAsync(CancellationToken cancellationToken)
+    {
+        var targets = await devTools.ListTargetsAsync(cancellationToken).ConfigureAwait(false);
+        var bigPicture = targets?.FirstOrDefault(target =>
+            target.Type == "page" && ThemeTargetMatcher.IsBigPicture(new SteamTarget(target.Id, target.Title, target.Url, new HashSet<string>())));
+        if (bigPicture is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var session = await devTools.ConnectAsync(bigPicture, cancellationToken).ConfigureAwait(false);
+            var result = await session.EvaluateAsync(
+                """(() => { try { SteamClient.Window.BringToFront(); return true; } catch { return false; } })()""",
+                cancellationToken).ConfigureAwait(false);
+            return result.ValueKind == JsonValueKind.True;
+        }
+        catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return false;
+        }
+    }
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         try
