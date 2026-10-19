@@ -174,6 +174,51 @@ public sealed class ThemePackageTests : IDisposable
     }
 
     [Fact]
+    public void ParsesTheEarlyListAndRejectsAVersionWithoutArtifact()
+    {
+        var early = ThemeCatalog.ParseEarly(Encoding.UTF8.GetBytes(EarlyList("0.2.5", 10, new string('a', 64))));
+
+        Assert.Equal("0.2.5", Assert.Single(early).Version);
+        Assert.Throws<FormatException>(() => ThemeCatalog.ParseEarly(Encoding.UTF8.GetBytes(
+            EarlyList("0.2.5", 10, new string('a', 64)).Replace("\"version\":\"0.2.5\",\"artifacts\"", "\"version\":\"0.9.9\",\"artifacts\""))));
+    }
+
+    [Fact]
+    public async Task InstallsAnEarlyArchiveFoundInDownloadsOnlyWhenItsHashIsPublished()
+    {
+        var downloads = Path.Combine(root, "downloads", "duo-early");
+        Directory.CreateDirectory(downloads);
+        var archive = Package("0.2.5");
+        var sha = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+        File.WriteAllBytes(Path.Combine(downloads, "theme-early-0.2.5.zip"), archive);
+        File.WriteAllBytes(Path.Combine(downloads, "same-size-other.zip"), archive.Select(value => (byte)(value ^ 1)).ToArray());
+        var library = Path.Combine(root, "library");
+        var channel = new EarlyChannel(EarlyList("0.2.5", archive.Length, sha));
+        var service = new ThemeService(library, channel, new NoSteam(), new EarlyArchiveFinder(() => new[] { Path.Combine(root, "downloads") }));
+        await service.RefreshCatalogAsync(force: true, default);
+
+        var ready = Assert.Single(service.Catalog.EarlyArchives);
+        Assert.Equal("theme-early-0.2.5.zip", Path.GetFileName(ready.Path));
+
+        await service.InstallEarlyAsync("hooandee-eclipse", "0.2.5", default);
+
+        Assert.Equal("0.2.5", ThemeLibrary.Scan(library).Themes.Single().Manifest.Version);
+        var entry = ThemesResponseBuilder.Build(service.Catalog, service.Library(), service.Settings(), ThemeEngineStatus.Initial).Themes.Single();
+        Assert.Equal("0.2.5", entry.EarlyVersion);
+        Assert.False(entry.EarlyInstallable);
+    }
+
+    [Fact]
+    public async Task RefusesAnEarlyInstallWithoutThePublishedArchive()
+    {
+        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", 10, new string('a', 64))), new NoSteam(), new EarlyArchiveFinder(() => new[] { root }));
+
+        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyAsync("hooandee-eclipse", "0.2.5", default));
+
+        Assert.Equal("early_archive_missing", error.Code);
+    }
+
+    [Fact]
     public void SettingsRoundTripInOrder()
     {
         var store = new ThemeSettingsStore(root);
@@ -246,9 +291,34 @@ public sealed class ThemePackageTests : IDisposable
         return buffer.ToArray();
     }
 
+    private static string EarlyList(string version, long size, string sha) => $$"""
+        {"schemaVersion":1,"themes":[{
+          "schemaVersion":1,"catalogId":"hooandee-eclipse","cssLoaderName":"{{Name}}",
+          "displayName":{"es":"Eclipse","en":"Eclipse"},"description":{"es":"Espacio","en":"Space"},
+          "author":"Hooandee","tags":[],"minimumVersions":{"panel":"0.73.0"},
+          "early":{"version":"{{version}}","artifacts":[{"version":"{{version}}","size":{{size}},"sha256":"{{sha}}"}]}
+        }]}
+        """;
+
+    private sealed class EarlyChannel : IThemeCatalogSource
+    {
+        private readonly string early;
+
+        public EarlyChannel(string early) => this.early = early;
+
+        public Task<byte[]> CatalogAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Encoding.UTF8.GetBytes("""{"schemaVersion":1,"themes":[]}"""));
+
+        public Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken) => Task.FromResult(Encoding.UTF8.GetBytes(early));
+
+        public Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) => throw new HttpRequestException("no artifacts");
+    }
+
     private sealed class NoChannel : IThemeCatalogSource
     {
         public Task<byte[]> CatalogAsync(CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+
+        public Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken) => throw new HttpRequestException("offline");
 
         public Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) => throw new HttpRequestException("offline");
     }

@@ -14,12 +14,18 @@ public static class ThemesResponseBuilder
     {
         var entries = new List<ThemeEntry>();
         var names = catalog.Releases.Select(release => release.CssLoaderName)
+            .Concat(catalog.Early.Select(release => release.CssLoaderName))
             .Concat(library.Themes.Select(theme => theme.Name))
             .Concat(library.Broken.Select(broken => broken.FolderName))
             .Distinct(StringComparer.Ordinal);
         foreach (var name in names)
         {
             var release = catalog.Releases.FirstOrDefault(candidate => candidate.CssLoaderName == name);
+            var early = catalog.Early.FirstOrDefault(candidate => candidate.CssLoaderName == name);
+            var ready = catalog.EarlyArchives
+                .Where(candidate => candidate.Release.CssLoaderName == name)
+                .OrderByDescending(candidate => candidate.Artifact.Version, Comparer<string>.Create(ThemeCatalog.CompareVersions))
+                .FirstOrDefault();
             var theme = library.Themes.FirstOrDefault(candidate => candidate.Name == name);
             var broken = library.Broken.FirstOrDefault(candidate => candidate.FolderName == name);
             var setting = settings.FirstOrDefault(candidate => candidate.Name == name);
@@ -27,12 +33,16 @@ public static class ThemesResponseBuilder
             var application = enabled && engine.Themes.TryGetValue(name, out var applied) ? applied : null;
             entries.Add(new ThemeEntry
             {
-                CatalogId = theme?.Marker?.CatalogIdentity ?? release?.CatalogId,
+                CatalogId = theme?.Marker?.CatalogIdentity ?? release?.CatalogId ?? early?.CatalogId,
                 Name = name,
                 DisplayName = release is not null
                     ? Texts(release.DisplayName)
+                    : early is not null ? Texts(early.DisplayName)
                     : theme is not null ? new[] { new LocalizedText("en", theme.Manifest.DisplayName) } : null,
-                Description = release is not null ? Texts(release.Description) : null,
+                Description = release is not null ? Texts(release.Description) : early is not null ? Texts(early.Description) : null,
+                EarlyVersion = early?.Version,
+                EarlyReadyVersion = ready?.Artifact.Version,
+                EarlyReadyFile = ready is null ? null : Path.GetFileName(ready.Path),
                 InstalledVersion = theme?.Manifest.Version,
                 PublishedVersion = release?.Version,
                 Enabled = enabled,

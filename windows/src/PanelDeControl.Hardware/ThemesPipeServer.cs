@@ -43,6 +43,13 @@ public sealed class ThemesController : IThemesController
                     }
 
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
+                case ThemesOperation.InstallEarly:
+                    using (var timeout = Timeout(cancellationToken, LongOperationTimeout))
+                    {
+                        await service.InstallEarlyAsync(request.CatalogId!, request.Version!, timeout.Token).ConfigureAwait(false);
+                    }
+
+                    return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SetEnabled:
                     service.SetEnabled(request.Name!, request.Enabled!.Value);
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);

@@ -29,6 +29,9 @@ public enum ThemesOperation
 
     [EnumMember(Value = "restart_steam")]
     RestartSteam = 6,
+
+    [EnumMember(Value = "install_early")]
+    InstallEarly = 7,
 }
 
 /// <summary>Why themes can or cannot reach Steam, as the widget explains it.</summary>
@@ -118,6 +121,8 @@ public sealed class ThemesRequest
 
     public static ThemesRequest SetOption(string name, string option, string value) => new(ThemesOperation.SetOption, name: name, option: option, value: value);
 
+    public static ThemesRequest InstallEarly(string catalogId, string version) => new(ThemesOperation.InstallEarly, catalogId: catalogId, version: version);
+
     public static ThemesRequest EnableSteamDebugging() => new(ThemesOperation.EnableSteamDebugging);
 
     public static ThemesRequest RestartSteam() => new(ThemesOperation.RestartSteam);
@@ -130,7 +135,7 @@ public sealed class ThemesRequest
         {
             ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam =>
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
-            ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.Install or ThemesOperation.InstallEarly => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.SetEnabled => Present(Name) && Enabled is not null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
             ThemesOperation.SetOption => Present(Name) && Present(Option) && Present(Value) && Absent(CatalogId) && Absent(Version) && Enabled is null,
             _ => false,
@@ -263,6 +268,20 @@ public sealed class ThemeEntry
 
     [DataMember(Name = "options", Order = 13, EmitDefaultValue = false)]
     public ThemeOption[]? Options { get; set; }
+
+    /// <summary>Newest early version published in <c>early.json</c>, when the theme has one.</summary>
+    [DataMember(Name = "early_version", Order = 14, EmitDefaultValue = false)]
+    public string? EarlyVersion { get; set; }
+
+    /// <summary>Newest published early archive found in Downloads, ready to install.</summary>
+    [DataMember(Name = "early_ready_version", Order = 15, EmitDefaultValue = false)]
+    public string? EarlyReadyVersion { get; set; }
+
+    [DataMember(Name = "early_ready_file", Order = 16, EmitDefaultValue = false)]
+    public string? EarlyReadyFile { get; set; }
+
+    public bool EarlyInstallable =>
+        EarlyReadyVersion is not null && (InstalledVersion is null || Broken is not null || CompareVersions(EarlyReadyVersion, InstalledVersion) > 0);
 
     public bool Installed => InstalledVersion is not null;
 

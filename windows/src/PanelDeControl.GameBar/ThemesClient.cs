@@ -18,6 +18,8 @@ public sealed class ThemesClient
 
     public Task<ThemesResponse> InstallAsync(string catalogId, string version) => SendAsync(ThemesRequest.Install(catalogId, version));
 
+    public Task<ThemesResponse> InstallEarlyAsync(string catalogId, string version) => SendAsync(ThemesRequest.InstallEarly(catalogId, version));
+
     public Task<ThemesResponse> SetEnabledAsync(string name, bool enabled) => SendAsync(ThemesRequest.SetEnabled(name, enabled));
 
     public Task<ThemesResponse> SetOptionAsync(string name, string option, string value) => SendAsync(ThemesRequest.SetOption(name, option, value));
@@ -66,7 +68,7 @@ public sealed class ThemesClient
             requestWriteStarted = true;
             await writer.WriteLineAsync(ThemesWireCodec.SerializeRequest(request));
 
-            var timeout = request.Operation is ThemesOperation.Install or ThemesOperation.RestartSteam
+            var timeout = request.Operation is ThemesOperation.Install or ThemesOperation.InstallEarly or ThemesOperation.RestartSteam
                 ? LongResponseTimeout
                 : QuickResponseTimeout;
             var readTask = reader.ReadLineAsync();

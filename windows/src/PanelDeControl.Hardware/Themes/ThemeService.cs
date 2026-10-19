@@ -7,6 +7,8 @@ public interface IThemeCatalogSource
 {
     Task<byte[]> CatalogAsync(CancellationToken cancellationToken);
 
+    Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken);
+
     Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken);
 }
 
@@ -16,6 +18,9 @@ public sealed class OfficialThemeCatalogSource : IThemeCatalogSource, IDisposabl
 
     public async Task<byte[]> CatalogAsync(CancellationToken cancellationToken) =>
         await ReadBoundedAsync(ThemeCatalog.CatalogUrl, ThemeCatalog.MaximumMetadataBytes, cancellationToken).ConfigureAwait(false);
+
+    public async Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken) =>
+        await ReadBoundedAsync(ThemeCatalog.EarlyCatalogUrl, ThemeCatalog.MaximumMetadataBytes, cancellationToken).ConfigureAwait(false);
 
     public async Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) =>
         await ReadBoundedAsync(ThemeCatalog.ArtifactUrl(release.CatalogId, release.Version), release.Artifact.Size, cancellationToken).ConfigureAwait(false);
@@ -49,7 +54,12 @@ public sealed class OfficialThemeCatalogSource : IThemeCatalogSource, IDisposabl
     }
 }
 
-public sealed record ThemeCatalogState(IReadOnlyList<ThemeRelease> Releases, string? ErrorCode, DateTimeOffset? CheckedAt);
+public sealed record ThemeCatalogState(IReadOnlyList<ThemeRelease> Releases, string? ErrorCode, DateTimeOffset? CheckedAt)
+{
+    public IReadOnlyList<ThemeEarlyRelease> Early { get; init; } = Array.Empty<ThemeEarlyRelease>();
+
+    public IReadOnlyList<EarlyArchive> EarlyArchives { get; init; } = Array.Empty<EarlyArchive>();
+}
 
 /// <summary>
 /// Theme operations behind the widget: catalog, install, activation and options. Every change is
@@ -66,11 +76,13 @@ public sealed class ThemeService
     private readonly IThemeCatalogSource channel;
     private readonly ISteamInstallation steam;
     private readonly SemaphoreSlim operations = new(1, 1);
+    private readonly EarlyArchiveFinder earlyArchives;
     private ThemeCatalogState catalog = new(Array.Empty<ThemeRelease>(), null, null);
     private int catalogRefreshing;
 
-    public ThemeService(string libraryRoot, IThemeCatalogSource channel, ISteamInstallation steam)
+    public ThemeService(string libraryRoot, IThemeCatalogSource channel, ISteamInstallation steam, EarlyArchiveFinder? earlyArchives = null)
     {
+        this.earlyArchives = earlyArchives ?? new EarlyArchiveFinder();
         this.libraryRoot = libraryRoot;
         this.channel = channel;
         this.steam = steam;
@@ -79,7 +91,7 @@ public sealed class ThemeService
         ThemePackageInstaller.RecoverInterruptedInstalls(libraryRoot);
     }
 
-    public ThemeCatalogState Catalog => catalog;
+    public ThemeCatalogState Catalog => catalog with { EarlyArchives = earlyArchives.Find(catalog.Early) };
 
     public ThemeLibrarySnapshot Library() => ThemeLibrary.Scan(libraryRoot);
 
@@ -116,7 +128,7 @@ public sealed class ThemeService
         try
         {
             var releases = ThemeCatalog.Parse(await channel.CatalogAsync(cancellationToken).ConfigureAwait(false));
-            catalog = new ThemeCatalogState(releases, null, DateTimeOffset.UtcNow);
+            catalog = new ThemeCatalogState(releases, null, DateTimeOffset.UtcNow) { Early = await FetchEarlyAsync(cancellationToken).ConfigureAwait(false) };
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or FormatException or InvalidDataException)
         {
@@ -130,6 +142,44 @@ public sealed class ThemeService
         }
 
         return catalog;
+    }
+
+    // The early list is separate from the strict catalog; losing it never hides published themes.
+    private async Task<IReadOnlyList<ThemeEarlyRelease>> FetchEarlyAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return ThemeCatalog.ParseEarly(await channel.EarlyCatalogAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or FormatException or InvalidDataException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CompanionLog.Write("themes.early_catalog", exception);
+            return catalog.Early;
+        }
+    }
+
+    public async Task InstallEarlyAsync(string catalogId, string version, CancellationToken cancellationToken)
+    {
+        await operations.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            catalog = catalog with { Early = await FetchEarlyAsync(cancellationToken).ConfigureAwait(false) };
+            var archive = earlyArchives.Find(catalog.Early)
+                .FirstOrDefault(candidate => candidate.Release.CatalogId == catalogId && candidate.Artifact.Version == version)
+                ?? throw new ThemeInstallException("early_archive_missing", "No published early archive was found in Downloads");
+            var bytes = EarlyArchiveFinder.ReadVerified(archive);
+            var installed = installer.Install(archive.Release.AsRelease(archive.Artifact), bytes);
+            MirrorAssets(installed);
+            settings.Update(themes => themes.Any(theme => theme.Name == installed.Name)
+                ? themes
+                : themes.Append(new ThemeSetting(installed.Name, false, new Dictionary<string, string>())).ToArray());
+            CompanionLog.Write("themes.install_early", $"{catalogId} {version} {Path.GetFileName(archive.Path)}");
+        }
+        finally
+        {
+            operations.Release();
+        }
     }
 
     public async Task InstallAsync(string catalogId, string version, CancellationToken cancellationToken)

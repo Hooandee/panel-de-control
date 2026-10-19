@@ -477,4 +477,8 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>the catalog is unavailable or has changed</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam took too long to respond</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>unexpected error; it was written to the log</value></data>
+  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Install early {0}</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. The zip shows up here once it is saved to Downloads.</value></data>
+  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>the published zip was not found in Downloads</value></data>
 </root>

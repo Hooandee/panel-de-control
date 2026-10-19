@@ -433,4 +433,8 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>il catalogo non è disponibile o è cambiato</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam ha impiegato troppo a rispondere</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>errore imprevisto; è stato annotato nel registro</value></data>
+  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Installa la early {0}</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. Lo zip compare qui quando viene salvato in Download.</value></data>
+  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>lo zip pubblicato non è in Download</value></data>
 </root>

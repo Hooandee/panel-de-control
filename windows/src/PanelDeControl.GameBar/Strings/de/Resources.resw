@@ -433,4 +433,8 @@
   <data name="ThemesErrorCatalog" xml:space="preserve"><value>der Katalog ist nicht verfügbar oder hat sich geändert</value></data>
   <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam hat zu lange gebraucht</value></data>
   <data name="ThemesErrorGeneric" xml:space="preserve"><value>unerwarteter Fehler; er wurde protokolliert</value></data>
+  <data name="ThemesInstallEarlyAction" xml:space="preserve"><value>Early {0} installieren</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesEarlyWaitingForFile" xml:space="preserve"><value>Early {0}. Die ZIP-Datei erscheint hier, sobald sie unter Downloads liegt.</value></data>
+  <data name="ThemesErrorEarlyMissing" xml:space="preserve"><value>die veröffentlichte ZIP-Datei liegt nicht unter Downloads</value></data>
 </root>

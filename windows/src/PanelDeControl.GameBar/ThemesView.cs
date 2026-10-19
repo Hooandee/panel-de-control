@@ -91,7 +91,7 @@ public sealed class ThemesView : UserControl
         {
             last = response;
             ApplyConnection(response, operationError);
-            var installed = response.Themes.Where(theme => theme.Installed || theme.PublishedVersion is not null).ToArray();
+            var installed = response.Themes.Where(theme => theme.Installed || theme.PublishedVersion is not null || theme.EarlyVersion is not null).ToArray();
             var signature = string.Join("|", installed.Select(theme =>
                 $"{theme.Name}:{theme.InstalledVersion}:{theme.PublishedVersion}:{theme.Broken}:{string.Join(",", (theme.Options ?? new ThemeOption[0]).Select(option => option.Name + "=" + option.Values.Length))}"));
             if (signature != structure)
@@ -323,7 +323,13 @@ public sealed class ThemesView : UserControl
         card.State.Foreground = Resource<Brush>(brush);
 
         string? action = null;
-        if (theme.Broken is not null || !theme.Installed)
+        card.InstallsEarly = false;
+        if (theme.EarlyInstallable)
+        {
+            action = string.Format(Localized("ThemesInstallEarlyAction"), theme.EarlyReadyVersion);
+            card.InstallsEarly = true;
+        }
+        else if (theme.Broken is not null || !theme.Installed)
         {
             action = theme.PublishedVersion is null ? null : string.Format(Localized("ThemesInstallAction"), theme.PublishedVersion);
         }
@@ -379,10 +385,16 @@ public sealed class ThemesView : UserControl
 
         if (!theme.Installed)
         {
-            return (Localized("ThemesStateNotInstalled"), "PdcTextMutedBrush");
+            return theme.EarlyVersion is not null && theme.PublishedVersion is null && theme.EarlyReadyVersion is null
+                ? (string.Format(Localized("ThemesEarlyWaitingForFile"), theme.EarlyVersion), "PdcTextMutedBrush")
+                : (Localized("ThemesStateNotInstalled"), "PdcTextMutedBrush");
         }
 
         var version = string.Format(Localized("ThemesVersion"), theme.InstalledVersion);
+        if (theme.EarlyVersion is not null && theme.PublishedVersion is null)
+        {
+            version = $"{Localized("ThemesEarlyTag")} · {version}";
+        }
         if (!theme.Enabled)
         {
             return (version, "PdcTextMutedBrush");
@@ -424,7 +436,9 @@ public sealed class ThemesView : UserControl
 
     private async Task InstallAsync(ThemeCard card)
     {
-        if (applying || card.Entry?.CatalogId is not { } catalogId || card.Entry.PublishedVersion is not { } version)
+        var early = card.InstallsEarly;
+        var version = early ? card.Entry?.EarlyReadyVersion : card.Entry?.PublishedVersion;
+        if (applying || card.Entry?.CatalogId is not { } catalogId || version is null)
         {
             return;
         }
@@ -434,7 +448,7 @@ public sealed class ThemesView : UserControl
         {
             await RunAsync(async () =>
             {
-                var response = await client.InstallAsync(catalogId, version);
+                var response = early ? await client.InstallEarlyAsync(catalogId, version) : await client.InstallAsync(catalogId, version);
                 var installed = response.Themes.FirstOrDefault(theme => theme.Name == card.Name);
                 return response.Status == ThemesResponseStatus.Ok && installed is { Installed: true, Enabled: false } && card.Entry.InstalledVersion is null
                     ? await client.SetEnabledAsync(card.Name, true)
@@ -498,6 +512,7 @@ public sealed class ThemesView : UserControl
         "artifact_hash_mismatch" or "artifact_size_mismatch" or "invalid_archive" or "unsafe_archive" or "invalid_package" or "identity_mismatch" =>
             Localized("ThemesErrorPackage"),
         "catalog_unavailable" or "publication_changed" => Localized("ThemesErrorCatalog"),
+        "early_archive_missing" => Localized("ThemesErrorEarlyMissing"),
         "themes_timeout" or "themes_response_unavailable" => Localized("ThemesErrorTimeout"),
         _ => Localized("ThemesErrorGeneric"),
     };
@@ -530,6 +545,8 @@ public sealed class ThemesView : UserControl
         public ThemeEntry? Entry { get; set; }
 
         public bool Installing { get; set; }
+
+        public bool InstallsEarly { get; set; }
 
         public Border Root { get; } = new();
 
