@@ -639,7 +639,7 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn(r'@"LOCAL\PanelDeControl.Display"', brightness_server)
         self.assertIn("new BrightnessControlPipeServer(", program)
         self.assertIn("new WmiDisplayBrightnessProvider()", program)
-        self.assertIn("brightnessTask", program)
+        self.assertIn("SuperviseAsync(\"brightness\", () => brightnessServer.RunUntilCancelledAsync(token), token)", program)
         self.assertIn(r'@"\\.\root\wmi"', provider)
         self.assertIn("FROM WmiMonitorConnectionParams", provider)
         self.assertIn("FROM WmiMonitorBrightness ", provider)
