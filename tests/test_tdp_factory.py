@@ -1031,14 +1031,20 @@ def test_only_exact_legion_go_s_83n6_gets_the_unverified_low_battery_route(tmp_p
     assert generic is None
 
 
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
 @pytest.mark.parametrize("profile", ("low-power", "balanced", "performance"))
-def test_exact_legion_go_s_83l3_recovers_named_profile_without_restoring_rails(
+def test_exact_legion_go_s_recovers_named_profile_without_restoring_rails(
     tmp_path,
     monkeypatch,
     profile,
+    product_name,
 ):
     root = str(tmp_path)
-    backend, lock_path = _locked_legion_backend(root, current_profile=profile)
+    backend, lock_path = _locked_legion_backend(
+        root,
+        product_name=product_name,
+        current_profile=profile,
+    )
     original_write = backend._write
 
     def firmware_owns_rails(path, value):
@@ -1095,11 +1101,60 @@ def test_exact_legion_go_s_83l3_confirms_named_profile_rollback_with_live_rails(
     assert backend.ready() is True
 
 
+def test_exact_legion_go_s_83n6_low_power_boot_rollback_does_not_lock_tdp(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N6", "low-power", current=(21, 17, 36))
+    attrs = os.path.join(
+        root,
+        "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes",
+    )
+    for attr, mx in (("ppt_pl1_spl", 15), ("ppt_pl2_sppt", 15), ("ppt_pl3_fppt", 20)):
+        with open(os.path.join(attrs, attr, "max_value"), "w") as handle:
+            handle.write(str(mx))
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    profile_path = os.path.join(
+        root,
+        "sys/class/platform-profile/platform-profile-0/profile",
+    )
+    original_write = backend._write
+
+    def low_power_firmware(path, value):
+        profile = backend.read_profile()
+        if path.endswith("ppt_pl1_spl/current_value") and profile == "custom":
+            return original_write(path, 30)
+        if path.endswith("current_value") and profile != "custom":
+            return False
+        written = original_write(path, value)
+        if path == profile_path and value == "low-power":
+            _set_fw_current(root, "ppt_pl1_spl", 21)
+            _set_fw_current(root, "ppt_pl2_sppt", 17)
+            _set_fw_current(root, "ppt_pl3_fppt", 36)
+        return written
+
+    monkeypatch.setattr(backend, "_write", low_power_firmware)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+
+    result = backend.set_levels(5, 15, 20, ac=False)
+
+    assert result.ok is False
+    assert "rollback confirmed" in result.detail
+    assert backend.read_profile() == "low-power"
+    assert backend.safety_locked is False
+    assert backend.ready() is True
+
+
 @pytest.mark.parametrize(
     ("product_name", "profile"),
-    (("83L3", "custom"), ("83N6", "low-power")),
+    (("83L3", "custom"), ("83N6", "custom")),
 )
-def test_legion_go_s_keeps_strict_recovery_outside_83l3_named_profiles(
+def test_legion_go_s_keeps_strict_recovery_for_custom_profile(
     tmp_path,
     monkeypatch,
     product_name,
@@ -1160,15 +1215,18 @@ def test_exact_legion_go_s_83l3_without_platform_profile_recovers_strictly(tmp_p
         ("rail-unreadable", "pl2=unavailable"),
     ),
 )
-def test_exact_legion_go_s_83l3_named_recovery_fails_closed(
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
+def test_exact_legion_go_s_named_recovery_fails_closed(
     tmp_path,
     monkeypatch,
     failure,
     expected_detail,
+    product_name,
 ):
     root = str(tmp_path)
     backend, lock_path = _locked_legion_backend(
         root,
+        product_name=product_name,
         saved_profile="turbo" if failure == "unknown-profile" else None,
         snapshot=(
             {"firmware-attr:lenovo-wmi-other/pl1": 25}
