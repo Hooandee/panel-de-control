@@ -1,5 +1,6 @@
 import { FC, ReactNode } from "react";
-import { ModalRoot, showModal, Focusable, DialogButton } from "@decky/ui";
+import { ModalRoot, Focusable, DialogButton } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuGauge, LuShieldCheck, LuTarget, LuZap } from "react-icons/lu";
 
 import { useI18n } from "../i18n";

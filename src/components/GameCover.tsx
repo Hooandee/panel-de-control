@@ -2,7 +2,7 @@ import { FC, useState, useEffect } from "react";
 import { theme } from "../theme";
 
 // Accent-tinted gradient behind the portrait; also the fallback tile when no art.
-const GRADIENT = `linear-gradient(155deg, ${theme.color.accent}55, ${theme.color.surface} 88%)`;
+const gradient = () => `linear-gradient(155deg, ${theme.color.accent}55, ${theme.color.surface} 88%)`;
 
 function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -34,7 +34,7 @@ export const GameCover: FC<{ urls: string[]; name: string; width?: number }> = (
         flexShrink: 0,
         borderRadius: theme.radius.sm,
         overflow: "hidden",
-        background: GRADIENT,
+        background: gradient(),
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
         display: "flex",
         alignItems: "center",

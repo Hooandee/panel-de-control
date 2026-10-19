@@ -1,9 +1,10 @@
 import { FC, ReactNode, useRef } from "react";
-import { Focusable, PanelSectionRow, showModal } from "@decky/ui";
+import { Focusable, PanelSectionRow } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuLightbulb, LuStore } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { ColoresCardState } from "../system/colores";
 
@@ -14,14 +15,14 @@ interface Props {
   onOpenStore: () => void;
 }
 
-const actionFrameStyle = {
+const actionFrameStyle = themed(() => ({
   width: "100%",
   minWidth: 0,
   borderRadius: theme.radius.sm,
   boxSizing: "border-box",
-} as const;
+} as const));
 
-const actionSurfaceStyle = {
+const actionSurfaceStyle = themed(() => ({
   width: "100%",
   minWidth: 0,
   minHeight: 44,
@@ -37,7 +38,7 @@ const actionSurfaceStyle = {
   color: theme.color.textPrimary,
   fontSize: theme.font.body,
   fontWeight: 650,
-} as const;
+} as const));
 
 const RgbAction: FC<{ label: string; onTap?: () => void; children: ReactNode }> = ({ label, onTap, children }) => {
   const activating = useRef(false);

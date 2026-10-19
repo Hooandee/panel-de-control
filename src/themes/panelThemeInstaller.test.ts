@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { PanelThemeInstaller, ThemeInstallError } from "./panelThemeInstaller";
-import { configurePanelThemeInstallHost, createPanelThemeInstaller } from "./panelThemeInstallHost";
+import { configurePanelThemeInstallHost, createPanelThemeInstaller, onThemePackagesChanged } from "./panelThemeInstallHost";
 
 function host(overrides: Record<string, unknown> = {}) {
   return {
+    prepareEarly: vi.fn(async () => ({ ok: false, code: "unknown_archive" })),
     prepareRemote: vi.fn(async () => ({
       ok: true, code: "prepared", theme_id: "example-theme",
       theme_name: "Example Theme", version: "1.2.3", transaction: "opaque-token",
@@ -130,5 +131,24 @@ describe("Panel theme install host", () => {
     await expect(createPanelThemeInstaller().discardReceipt("example-theme")).rejects.toMatchObject({
       code: "backend_unavailable",
     });
+  });
+
+  it("announces package changes after commit and rollback, not after discard", async () => {
+    const release = configurePanelThemeInstallHost(host());
+    const changed = vi.fn();
+    const stop = onThemePackagesChanged(changed);
+    const installer = createPanelThemeInstaller();
+
+    await installer.discardReceipt("example-theme");
+    expect(changed).not.toHaveBeenCalled();
+    await installer.commit("opaque-token");
+    expect(changed).toHaveBeenCalledTimes(1);
+    await installer.rollback("opaque-token");
+    expect(changed).toHaveBeenCalledTimes(2);
+
+    stop();
+    await installer.commit("opaque-token");
+    expect(changed).toHaveBeenCalledTimes(2);
+    release();
   });
 });

@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from "react";
-import { ModalRoot, showModal, Focusable, ButtonItem, TextField } from "@decky/ui";
+import { ModalRoot, Focusable, ButtonItem, TextField } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuTrash2, LuPlus, LuCheck } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -62,7 +63,7 @@ const BoostEditor: FC<{
   return (
     <div style={{ marginTop: theme.space.xs }}>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.boost.title")}</span>
-      <div style={{ ...segmentGroupStyle, marginTop: theme.space.xs }}>
+      <Focusable flow-children="row" style={{ ...segmentGroupStyle, marginTop: theme.space.xs }}>
         {BOOST_MODES.map((m) => (
           <Focusable
             key={m}
@@ -73,7 +74,7 @@ const BoostEditor: FC<{
             {label(m)}
           </Focusable>
         ))}
-      </div>
+      </Focusable>
       {active === "custom" && (
         <>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
@@ -222,7 +223,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
       <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {items.map((it, i) => (
           <div key={it.id} style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-            <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+            <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={{ display: "flex", color: it.hidden ? theme.color.textMuted : theme.color.accent }}>{presetIconNode(it.icon, 16)}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, opacity: it.hidden ? 0.5 : 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {presetTitle(it, t)}
@@ -236,7 +237,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
                   <LuTrash2 size={18} />
                 </IconAction>
               )}
-            </div>
+            </Focusable>
             {it.editable && editing === it.id && (() => {
               const d = draft ?? entryOf(it);
               return (

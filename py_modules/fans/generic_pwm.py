@@ -73,7 +73,8 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
 
     def _find_chip(self):
         for d in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
-            if _read(os.path.join(d, "name")) in GPU_DRIVER_CHIPS:
+            chip = _read(os.path.join(d, "name"))
+            if chip in GPU_DRIVER_CHIPS:
                 continue
             fans = []
             for enable_path in sorted(glob.glob(os.path.join(d, "pwm[0-9]*_enable"))):
@@ -81,9 +82,12 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
                 if not m:
                     continue
                 idx = m.group(1)
+                if not os.path.exists(os.path.join(d, f"pwm{idx}")):
+                    continue
                 # Require a same-index tach so we only drive a pwm backed by a real fan.
-                if not all(os.path.exists(os.path.join(d, name))
-                           for name in (f"pwm{idx}", f"fan{idx}_input")):
+                # A device-tree pwm-fan is a fan by declaration and may be wired without one.
+                has_tach = os.path.exists(os.path.join(d, f"fan{idx}_input"))
+                if not has_tach and chip != PWM_FAN_CHIP:
                     continue
                 if self._spinning_only and not (_read_int(
                         os.path.join(d, f"fan{idx}_input")) or 0) > 0:

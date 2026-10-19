@@ -117,7 +117,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
             {isDeckPpt ? t("tdp.deckPpt.hint") : t(`tdp.boost.hint.${mode}`)}
           </div>
 
-          <div style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
+          <Focusable flow-children="row" style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
             {MODES.map((m) => (
               <Focusable
                 key={m}
@@ -138,7 +138,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
                 />
               </Focusable>
             ))}
-          </div>
+          </Focusable>
 
           {/* Resulting rails: the watts the firmware actually holds, for any mode. */}
           <div style={{

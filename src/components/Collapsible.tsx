@@ -48,8 +48,9 @@ export const Collapsible: FC<Props> = ({
   return (
     <PanelSectionRow>
       <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+        <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
           <Focusable
+            data-pdc-part="card-title"
             style={{ flex: 1, display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
             onActivate={toggle}
             onClick={toggle}
@@ -66,7 +67,7 @@ export const Collapsible: FC<Props> = ({
             <Chevron size={16} color={theme.color.textMuted} />
           </Focusable>
           {action}
-        </div>
+        </Focusable>
         {open && <div style={{ marginTop: theme.space.sm }}>{children}</div>}
       </div>
     </PanelSectionRow>

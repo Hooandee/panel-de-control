@@ -1,4 +1,5 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useRef, useState } from "react";
+import { toaster } from "@decky/api";
 import { ButtonItem, Focusable, Navigation, PanelSectionRow, ToggleField } from "@decky/ui";
 
 import { useI18n } from "../i18n";
@@ -7,7 +8,7 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getExperimentalTdpUnlock, setExperimentalTdpUnlock, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
+import { getDeveloperOptions, setDeveloperOptions, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getExperimentalTdpUnlock, setExperimentalTdpUnlock, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
@@ -18,6 +19,10 @@ import { QamShortcutSetting } from "../components/QamShortcutSetting";
 import { KioskSetting } from "../components/KioskSetting";
 import { ExperimentalTdpUnlock } from "../components/ExperimentalTdpUnlock";
 import { desktopUiActive } from "../desktop/presentation";
+import { DeveloperOptions } from "../components/DeveloperOptions";
+
+const DEV_UNLOCK_TAPS = 7;
+const DEV_UNLOCK_WINDOW_MS = 3000;
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
@@ -84,6 +89,27 @@ export const AjustesSection: FC = () => {
   const onToggleValueToast = (next: boolean) => {
     setValueToast(next);
     setValueToastEnabled(next);
+  };
+  const [developer, setDeveloper] = useState(false);
+  const devTaps = useRef({ count: 0, at: 0 });
+  useEffect(() => {
+    getDeveloperOptions().then(setDeveloper).catch(() => {});
+  }, []);
+  const onVersionTap = () => {
+    if (developer) return;
+    const now = Date.now();
+    const count = now - devTaps.current.at < DEV_UNLOCK_WINDOW_MS ? devTaps.current.count + 1 : 1;
+    devTaps.current = { count, at: now };
+    if (count >= DEV_UNLOCK_TAPS) {
+      setDeveloper(true);
+      toaster.toast({ title: "Panel de Control", body: t("settings.devUnlocked") });
+      setDeveloperOptions(true).then(setDeveloper).catch(() => setDeveloper(false));
+    }
+  };
+  const hideDeveloper = () => {
+    setDeveloper(false);
+    devTaps.current = { count: 0, at: 0 };
+    setDeveloperOptions(false).then(setDeveloper).catch(() => {});
   };
   const [version, setVersion] = useState("");
   useEffect(() => {
@@ -232,8 +258,10 @@ export const AjustesSection: FC = () => {
           {resetLabel}
         </ButtonItem>
 
+        {developer && <DeveloperOptions onHide={hideDeveloper} />}
+
         {/* In-plugin self-updater: version line + changelog + install/restart. */}
-        <UpdatePanel lang={lang} version={version} />
+        <UpdatePanel lang={lang} version={version} onVersionActivate={onVersionTap} />
 
         {/* Authorship: opens the author's channel in an external browser. */}
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>

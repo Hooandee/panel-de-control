@@ -330,3 +330,13 @@ def test_letting_go_without_a_firmware_automatic_leaves_the_fan_spinning(tmp_pat
     assert result["ok"] is True
     assert _r(chip, "pwm1_enable") == "1"
     assert _r(chip, "pwm1") == str(generic_pwm.FAILSAFE_DUTY)
+
+
+def test_tachless_pwm_on_other_chips_is_never_driven(tmp_path):
+    root = str(tmp_path)
+    d = os.path.join(root, "sys/class/hwmon/hwmon3")
+    os.makedirs(d)
+    for name, value in (("name", "nct6798"), ("pwm1", "100"), ("pwm1_enable", "2")):
+        with open(os.path.join(d, name), "w") as handle:
+            handle.write(value)
+    assert GenericPwmFanBackend(temp_fn=lambda: 50.0, root=root).supported is False

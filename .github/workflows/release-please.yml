@@ -71,7 +71,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         with:
           version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: 20
@@ -115,6 +115,22 @@ jobs:
           if echo "$out" | grep -qi 'error while loading shared libraries'; then
             echo "::error::bundled binary loader error"; exit 1
           fi
+
+      # Key-only SSH server for the hidden developer options, static for both
+      # architectures; the recipe lives in scripts/build-dropbear.sh.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          version: 0.17.0
+      - name: Build bundled SSH server
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          set -euo pipefail
+          for arch in x86_64 aarch64; do bash scripts/build-dropbear.sh "$arch" bin; done
+          file bin/dropbear-x86_64 bin/dropbear-aarch64
+          file bin/dropbear-x86_64 | grep -q 'x86-64.*static'
+          file bin/dropbear-aarch64 | grep -q 'ARM aarch64.*static'
+          bin/dropbear-x86_64 dropbearkey -t ed25519 -f "$RUNNER_TEMP/smoke_key" >/dev/null
 
       - name: Build and package
         if: ${{ steps.release.outputs.release_created }}

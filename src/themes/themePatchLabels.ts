@@ -2,9 +2,12 @@ import { SUPPORTED_LANGUAGES, type Lang } from "../i18n/languages";
 
 type LocalizedLabel = Partial<Record<Lang, string>>;
 
+export type ThemePatchLabelGroup = "extra";
+
 interface PatchLabelEntry {
   name: LocalizedLabel;
   values: Readonly<Record<string, LocalizedLabel>>;
+  group?: ThemePatchLabelGroup;
 }
 
 export type ThemePatchLabels = Readonly<Record<string, PatchLabelEntry>>;
@@ -41,13 +44,21 @@ export function parseThemePatchLabels(value: unknown): ThemePatchLabels {
     if (isRecord(entry.values)) {
       for (const [option, label] of Object.entries(entry.values)) values[option] = localized(label);
     }
-    labels[patch] = { name: localized(entry.name), values };
+    labels[patch] = { name: localized(entry.name), values, ...(entry.group === "extra" ? { group: entry.group } : {}) };
   }
   return labels;
 }
 
+function entryFor(labels: ThemePatchLabels, patch: string): PatchLabelEntry | undefined {
+  return Object.prototype.hasOwnProperty.call(labels, patch) ? labels[patch] : undefined;
+}
+
+export function patchLabelGroup(labels: ThemePatchLabels, patch: string): ThemePatchLabelGroup | undefined {
+  return entryFor(labels, patch)?.group;
+}
+
 export function labelsForPatch(labels: ThemePatchLabels, patch: string, lang: Lang): PatchLabels {
-  const entry = Object.prototype.hasOwnProperty.call(labels, patch) ? labels[patch] : undefined;
+  const entry = entryFor(labels, patch);
   return {
     name: entry?.name[lang] ?? patch,
     option: (value) => (entry && Object.prototype.hasOwnProperty.call(entry.values, value) ? entry.values[value][lang] : undefined) ?? value,

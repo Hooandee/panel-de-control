@@ -4,8 +4,9 @@ import { LuArrowDownUp, LuCheck, LuChevronDown, LuChevronRight, LuCircleAlert, L
 import { GameCover } from "../components/GameCover";
 import { CleanerActionTray } from "./CleanerActionTray";
 import { useI18n } from "../i18n";
+import { useRefocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { onPrefsHealed, readFlag, writeFlag } from "../system/pdcStorage";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { cleanerReasonKey } from "./errors";
 import { CleanerFilter, CleanerGame, CleanerSort, eligibleCaches, filterGames, formatBytes, groupEntries, toggleCaches, toggleEntry } from "./model";
 import { readCleanerMetadata, readInstalledCleanerMetadata } from "./steamMetadata";
@@ -13,7 +14,7 @@ import type { CleanerController } from "./useSteamCleaner";
 import type { CleanerEntry } from "./types";
 
 const column: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
-const caption: CSSProperties = { fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 };
+const caption: CSSProperties = themed(() => ({ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 }));
 const FILTERS: CleanerFilter[] = ["all", "cleanable", "not_installed", "selected"];
 const HELP_DISMISSED_KEY = "pdc:cleanerHelpDismissed";
 
@@ -23,17 +24,20 @@ function libraryLabel(entry: Pick<CleanerEntry, "library_label" | "library_inter
 
 const CleanerAction: FC<{
   label: string; children: ReactNode; onActivate: () => void; disabled?: boolean;
-  checked?: boolean | "mixed"; primary?: boolean; danger?: boolean; style?: CSSProperties;
-}> = ({ label, children, onActivate, disabled, checked, primary, danger, style }) => {
+  checked?: boolean | "mixed"; primary?: boolean; danger?: boolean; style?: CSSProperties; preferredFocus?: boolean;
+}> = ({ label, children, onActivate, disabled, checked, primary, danger, style, preferredFocus }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useRefocusWhenRemoved(ref);
   const activate = () => { if (!disabled) onActivate(); };
   return (
     <Focusable
+      ref={ref}
+      data-preferred-focus={preferredFocus || undefined}
       role={checked === undefined ? "button" : "checkbox"}
       aria-label={label}
       title={label}
       aria-checked={checked}
       aria-disabled={!!disabled}
-      tabIndex={disabled ? -1 : 0}
       onActivate={activate}
       onClick={activate}
       onOKActionDescription={label}
@@ -93,7 +97,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
   const installation = game.entries[0].installation;
   return (
     <div style={{ ...theme.card, ...column, gap: 0, padding: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <CleanerAction label={t(canSelectCaches ? "cleaner.selectGameCaches" : "cleaner.chooseGameData", { name })} checked={canSelectCaches ? allSelected ? true : partiallySelected ? "mixed" : false : undefined} disabled={disabled || selectable.length === 0} onActivate={canSelectCaches ? onCaches : () => setOpen(true)} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
             <GameCover urls={game.coverUrls} name={name} width={38} />
@@ -109,7 +113,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
         <div style={{ width: 36, flexShrink: 0 }}>
           <CleanerAction label={t("cleaner.gameDetails", { name })} onActivate={() => setOpen((value) => !value)} style={{ padding: 8, background: "transparent", boxShadow: "none" }}><Chevron size={18} /></CleanerAction>
         </div>
-      </div>
+      </Focusable>
       {selectedCount > 0 && <div style={{ ...caption, color: theme.color.accent, padding: "2px 8px 6px" }}>{selectedKinds.map((kind) => t(`cleaner.kind.${kind}`)).join(" · ")}</div>}
       {open && <div style={{ ...column, padding: "6px" }}>
         {(!game.name || game.entries.some((entry) => entry.requires_manual_selection)) && <div style={caption}>{t("cleaner.steamIdentifier", { id: game.entries[0].appid })}</div>}
@@ -224,11 +228,11 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
         </div>}
         {hasScanData && !scanId && !busy && <CleanerAction label={t("cleaner.scanAfterCleanup")} primary onActivate={() => void controller.scan()}><LuRefreshCw size={16} />{t("cleaner.scanAfterCleanup")}</CleanerAction>}
         {hasScanData && !calculatingGames && <>
-          <div style={{ display: "flex", gap: 8 }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}><CleanerAction label={t("cleaner.filterLabel")} onActivate={() => setFilter((value) => FILTERS[(FILTERS.indexOf(value) + 1) % FILTERS.length])} style={{ justifyContent: "flex-start", paddingInline: 9 }}><LuFilter size={14} style={{ flexShrink: 0 }} /><span>{t(`cleaner.filter.${filter}`)}</span><span style={{ ...caption, marginLeft: "auto" }}>{shown.length}</span></CleanerAction></div>
             <div style={{ width: 36, flexShrink: 0 }}><CleanerAction label={`${t("cleaner.sortLabel")}: ${t(`cleaner.sort.${sort}`)}`} onActivate={() => setSort((value) => value === "size" ? "name" : "size")} style={{ padding: 8 }}><LuArrowDownUp size={15} /></CleanerAction></div>
             <div style={{ width: 42, flexShrink: 0 }}><CleanerAction label={t("cleaner.search")} onActivate={() => { setSearchOpen((value) => !value); setQuery(""); }} style={{ padding: 10 }}><LuSearch size={16} color={searchOpen ? theme.color.accent : undefined} /></CleanerAction></div>
-          </div>
+          </Focusable>
           {searchOpen && <TextField label={t("cleaner.search")} value={query} onChange={(event) => setQuery(event.target.value)} />}
           {helpVisible && <div style={{ ...theme.card, ...column, gap: 6, padding: "9px 10px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -240,10 +244,10 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
             </div>
             <CleanerAction label={t("cleaner.help.dismiss")} onActivate={() => { writeFlag(HELP_DISMISSED_KEY, true); setHelpVisible(false); }} style={{ minHeight: 28, padding: "5px 8px", background: "transparent", boxShadow: "none", color: theme.color.accent }}>{t("cleaner.help.dismiss")}</CleanerAction>
           </div>}
-          <div style={{ display: "flex", gap: 8 }}>
+          <Focusable flow-children="row" style={{ display: "flex", gap: 8 }}>
             <CleanerAction label={t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")} disabled={selectionDisabled || shownCaches.length === 0} onActivate={() => setSelected((value) => toggleCaches(shownEntries, value))} style={{ padding: "5px 3px", minHeight: 30, background: "transparent", boxShadow: "none", justifyContent: "flex-start", color: theme.color.textMuted }}><LuCheck size={15} style={{ flexShrink: 0 }} /><span>{t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")}</span></CleanerAction>
             {selected.size > 0 && <div style={{ width: 32, flexShrink: 0 }}><CleanerAction label={t("cleaner.clearSelection")} disabled={selectionDisabled} onActivate={() => setSelected(new Set())} style={{ padding: 6, minHeight: 30, background: "transparent", boxShadow: "none" }}><LuX size={15} /></CleanerAction></div>}
-          </div>
+          </Focusable>
           {shown.map((game) => <GameRow key={game.id} game={game} selected={selected} disabled={selectionDisabled} onCaches={() => setSelected((value) => toggleCaches(game.entries, value))} onEntry={(entry) => setSelected((value) => toggleEntry(entry, value))} />)}
           {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? (state?.entries.length ? "cleaner.noCleanable" : "cleaner.empty") : filter === "cleanable" && !query ? "cleaner.noCleanable" : filter === "not_installed" && !query ? "cleaner.noRecommendations" : "cleaner.noMatch")}</div>}
           {(plan || chosen.length > 0) && <CleanerActionTray>
@@ -251,7 +255,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
               <div style={{ fontSize: theme.font.body, fontWeight: 600 }}>{t("cleaner.confirm.title")}</div>
               <Notice warning>{t("cleaner.confirm.prefixWarning")}</Notice>
               <CleanerAction label={t("cleaner.confirm.delete")} danger disabled={busy} onActivate={() => void controller.execute(true)}><LuTrash2 size={16} /><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.confirm.delete")}</span><span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{formatBytes(plan.estimated_bytes, lang)}</span></CleanerAction>
-              <CleanerAction label={t("cleaner.cancel")} disabled={busy} onActivate={controller.dismissPlan}>{t("cleaner.cancel")}</CleanerAction>
+              <CleanerAction label={t("cleaner.cancel")} disabled={busy} preferredFocus onActivate={controller.dismissPlan}>{t("cleaner.cancel")}</CleanerAction>
             </Focusable> : <CleanerAction label={t("cleaner.cleanSelection")} primary disabled={busy} onActivate={() => void controller.prepare(chosen.map((entry) => entry.id))}><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.cleanSelection")}</span><span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{formatBytes(chosenBytes, lang)}</span></CleanerAction>}
           </CleanerActionTray>}
         </>}

@@ -53,6 +53,28 @@ def test_sibling_on_the_same_soc_is_not_mistaken_for_the_thor(tmp_path):
     assert prof.arch == "arm"
 
 
+def test_ayn_odin3_is_recognised_by_device_tree(tmp_path):
+    root = _arm_root(
+        tmp_path,
+        compatible=("ayn,odin3", "qcom,cq8725s", "qcom,sm8750-mtp", "qcom,sm8750"),
+        model="AYN Odin 3",
+    )
+    prof = detect(root=root)
+    assert prof.key == "ayn_odin3"
+    assert prof.display_name == "AYN Odin 3"
+    assert prof.chip == "Snapdragon 8 Elite"
+    assert prof.vendor == "qualcomm"
+    assert prof.arch == "arm"
+    assert prof.panel == "oled"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+
+
+def test_other_sm8750_handheld_stays_generic(tmp_path):
+    root = _arm_root(tmp_path, compatible=("vendor,other", "qcom,sm8750"), model="Other")
+    assert detect(root=root).key == "generic_arm"
+
+
 def test_unknown_arm_soc_shows_kernel_soc_name_never_emulated_cpuinfo(tmp_path):
     root = _arm_root(
         tmp_path,

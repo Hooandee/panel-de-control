@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   modal: null as ReactNode | null,
   submitReport: vi.fn(async () => ({ ok: true, code: "PDC-TEST" })),
   steamDiagnostics: vi.fn(),
-  focusElement: vi.fn((element: HTMLElement | null) => element?.focus()),
   steamOverlay: {
     snapshot_status: "available",
     resolver: "global",
@@ -60,7 +59,6 @@ vi.mock("@decky/ui", () => ({
     children,
   ),
   ModalRoot: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   showModal: (node: ReactNode) => { mocks.modal = node; },
   TextField: ({ value, onChange }: { value: string; onChange: (event: unknown) => void }) => (
     <input value={value} onChange={onChange} />
@@ -95,7 +93,6 @@ describe("ReportModal request type", () => {
     cleanup();
     mocks.modal = null;
     mocks.submitReport.mockClear();
-    mocks.focusElement.mockClear();
     mocks.steamDiagnostics.mockReset();
   });
 

@@ -2,6 +2,456 @@
 
 ## Unreleased
 
+## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
+
+
+### Español
+
+* **Temas:** La lista es más limpia, con una sola línea por tema y una portada nueva para Duo. Los ajustes de los temas en acceso anticipado ya se guardan.
+
+### English
+
+* **Themes:** The list is cleaner, with one line per theme and a new cover for Duo. Settings of early access themes now save.
+
+### Italiano
+
+* **Temi:** L'elenco è più pulito, con una sola riga per tema e una nuova copertina per Duo. Le impostazioni dei temi in accesso anticipato ora vengono salvate.
+
+### Deutsch
+
+* **Themes:** Die Liste ist aufgeräumter, mit einer Zeile pro Theme und einem neuen Cover für Duo. Einstellungen von Early-Access-Themes werden jetzt gespeichert.
+
+### Português (Brasil)
+
+* **Temas:** A lista ficou mais limpa, com uma linha por tema e uma capa nova para o Duo. Os ajustes dos temas em acesso antecipado agora são salvos.
+
+## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
+
+
+### Español
+
+* **Temas:** Todo listo por dentro para la llegada de Duo, el nuevo tema que está al caer.
+
+### English
+
+* **Themes:** Everything is ready under the hood for Duo, the new theme coming soon.
+
+### Italiano
+
+* **Temi:** Tutto pronto dietro le quinte per Duo, il nuovo tema in arrivo a breve.
+
+### Deutsch
+
+* **Themes:** Unter der Haube ist alles bereit für Duo, das neue Theme, das bald erscheint.
+
+### Português (Brasil)
+
+* **Temas:** Tudo pronto nos bastidores para a chegada do Duo, o novo tema que vem aí.
+
+## [0.72.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.71.0...panel-de-control-v0.72.0) (2026-10-17)
+
+
+### Español
+
+* **HDR en la AYN Odin 3:** La pantalla OLED de la Odin 3 soporta HDR, pero Panel no mostraba su bloque. Ahora aparece en Pantalla y puedes activarlo para jugar en HDR en los juegos compatibles.
+
+### English
+
+* **HDR on the AYN Odin 3:** The Odin 3's OLED screen supports HDR, but Panel kept its block hidden. It now shows up under Display and you can turn it on to play in HDR in supported games.
+
+### Italiano
+
+* **HDR sulla AYN Odin 3:** Lo schermo OLED della Odin 3 supporta l'HDR, ma Panel nascondeva il suo blocco. Ora compare in Schermo e puoi attivarlo per giocare in HDR nei giochi compatibili.
+
+### Deutsch
+
+* **HDR auf der AYN Odin 3:** Der OLED-Bildschirm der Odin 3 unterstützt HDR, aber Panel hat den Block dafür versteckt. Jetzt erscheint er unter Bildschirm und du kannst ihn einschalten, um unterstützte Spiele in HDR zu spielen.
+
+### Português (Brasil)
+
+* **HDR no AYN Odin 3:** A tela OLED do Odin 3 suporta HDR, mas o Panel escondia o bloco dele. Agora ele aparece em Tela e você pode ativar para jogar em HDR nos jogos compatíveis.
+
+## [0.71.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.1...panel-de-control-v0.71.0) (2026-10-15)
+
+
+### Español
+
+* **Potencia en ARM:** El dial ahora tiene pestañas de CPU y GPU y un candado. Con el candado puesto todo va como antes y las dos suben y bajan juntas. Si lo quitas, puedes bajar la CPU para gastar menos y dejar la GPU arriba en los juegos que tiran de gráfica, o al revés. El dial enseña las dos a la vez, Auto respeta la distancia que dejes entre ellas y el HUD muestra el nivel de la GPU cuando va por su cuenta.
+* **Sistema en ARM:** La tarjeta de la GPU ya no dice «Automático» cuando Potencia la está limitando. Ahora enseña la frecuencia máxima real y el nivel que la marca.
+* **Pantalla inferior:** En la AYN Thor, el panel de rendimiento de la pantalla de abajo también deja elegir CPU o GPU y unirlas o separarlas.
+
+### English
+
+* **Power on ARM:** The dial now has CPU and GPU tabs and a lock. With the lock on everything works as before and both go up and down together. Turn it off and you can lower the CPU to save power while keeping the GPU high in games that lean on graphics, or the other way round. The dial shows both at once, Auto keeps the gap you set between them and the HUD shows the GPU level when it runs on its own.
+* **System on ARM:** The GPU card no longer says "Automatic" while Power is capping it. It now shows the real maximum frequency and the level setting it.
+* **Bottom screen:** On the AYN Thor, the performance panel on the bottom screen also lets you pick CPU or GPU and link or split them.
+
+### Italiano
+
+* **Potenza su ARM:** Il selettore ora ha le schede CPU e GPU e un lucchetto. Con il lucchetto chiuso tutto funziona come prima e le due salgono e scendono insieme. Se lo apri, puoi abbassare la CPU per consumare meno e lasciare la GPU alta nei giochi che chiedono grafica, o il contrario. Il selettore mostra entrambe, Auto rispetta la distanza che lasci tra loro e l'HUD mostra il livello della GPU quando va per conto suo.
+* **Sistema su ARM:** La scheda della GPU non dice più «Automatico» mentre Potenza la limita. Ora mostra la frequenza massima reale e il livello che la imposta.
+* **Schermo inferiore:** Sulla AYN Thor, il pannello delle prestazioni sullo schermo in basso permette anche di scegliere CPU o GPU e di unirle o separarle.
+
+### Deutsch
+
+* **Leistung auf ARM:** Der Regler hat jetzt Tabs für CPU und GPU und ein Schloss. Mit geschlossenem Schloss bleibt alles wie bisher und beide gehen gemeinsam hoch und runter. Öffnest du es, kannst du die CPU senken, um Strom zu sparen, und die GPU in grafiklastigen Spielen oben lassen, oder umgekehrt. Der Regler zeigt beide gleichzeitig, Auto hält den Abstand, den du zwischen ihnen lässt, und das HUD zeigt die GPU-Stufe, wenn sie eigenständig läuft.
+* **System auf ARM:** Die GPU-Karte zeigt nicht mehr „Automatisch“, während Leistung sie begrenzt. Jetzt siehst du die echte Höchstfrequenz und die Stufe, die sie festlegt.
+* **Unterer Bildschirm:** Auf der AYN Thor kannst du im Leistungsfenster des unteren Bildschirms jetzt auch CPU oder GPU wählen und sie koppeln oder trennen.
+
+### Português (Brasil)
+
+* **Potência no ARM:** O seletor agora tem abas de CPU e GPU e um cadeado. Com o cadeado fechado tudo funciona como antes e as duas sobem e descem juntas. Abrindo, você pode baixar a CPU para gastar menos e deixar a GPU alta nos jogos que puxam gráfico, ou o contrário. O seletor mostra as duas ao mesmo tempo, o Auto respeita a distância que você deixar entre elas e o HUD mostra o nível da GPU quando ela vai por conta própria.
+* **Sistema no ARM:** O card da GPU não diz mais "Automático" enquanto a Potência limita ela. Agora mostra a frequência máxima real e o nível que define ela.
+* **Tela inferior:** No AYN Thor, o painel de desempenho da tela de baixo também deixa escolher CPU ou GPU e unir ou separar as duas.
+
+## [0.70.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.70.0...panel-de-control-v0.70.1) (2026-10-14)
+
+
+### Español
+
+* **Pantalla inferior:** En consolas de doble pantalla con Armada, como la AYN Thor, mostrar Panel en la pantalla de abajo vuelve a funcionar. Las últimas versiones de Armada ocupaban esa pantalla por su cuenta y se quedaba en negro. Ahora Panel se la pide a Armada mientras la usas y se la devuelve en cuanto la apagas.
+
+### English
+
+* **Bottom screen:** On dual-screen handhelds with Armada, like the AYN Thor, showing Panel on the bottom screen works again. Recent Armada versions took over that screen on their own and it stayed black. Now Panel borrows it from Armada while you use it and gives it back as soon as you turn it off.
+
+### Italiano
+
+* **Schermo inferiore:** Sulle console a doppio schermo con Armada, come la AYN Thor, mostrare Panel sullo schermo in basso torna a funzionare. Le ultime versioni di Armada occupavano quello schermo per conto loro e restava nero. Ora Panel lo chiede ad Armada mentre lo usi e glielo restituisce appena lo spegni.
+
+### Deutsch
+
+* **Unterer Bildschirm:** Auf Handhelds mit zwei Bildschirmen und Armada, wie der AYN Thor, lässt sich Panel wieder auf dem unteren Bildschirm anzeigen. Neuere Armada-Versionen haben diesen Bildschirm selbst belegt, und er blieb schwarz. Jetzt leiht sich Panel ihn von Armada, solange du ihn nutzt, und gibt ihn zurück, sobald du ihn ausschaltest.
+
+### Português (Brasil)
+
+* **Tela inferior:** Em portáteis de duas telas com Armada, como o AYN Thor, mostrar o Panel na tela de baixo volta a funcionar. As versões mais recentes do Armada ocupavam essa tela por conta própria e ela ficava preta. Agora o Panel pega a tela emprestada do Armada enquanto você usa e devolve assim que você desliga.
+
+## [0.70.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.69.0...panel-de-control-v0.70.0) (2026-10-14)
+
+
+### Español
+
+* **Modo Descarga:** La pantalla ahora se apaga de verdad en vez de quedarse con poco brillo. Si dejas la consola quieta, una cuenta atrás de 3 segundos te avisa antes, y vuelve al momento en cuanto tocas la pantalla, mueves un joystick o pulsas un botón.
+* **Modo Descarga:** La tarjeta está más ordenada y se ve de un vistazo qué cambia: TDP, pantalla y turbo.
+
+### English
+
+* **Download mode:** The screen now really turns off instead of staying dimmed. If you leave the device alone, a 3 second countdown warns you first, and it comes back right away when you touch the screen, move a stick or press a button.
+* **Download mode:** The card is tidier and shows at a glance what changes: TDP, screen and turbo.
+
+### Italiano
+
+* **Modalità download:** Ora lo schermo si spegne davvero invece di restare con poca luminosità. Se lasci la console ferma, un conto alla rovescia di 3 secondi ti avvisa prima, e si riaccende subito appena tocchi lo schermo, muovi una levetta o premi un tasto.
+* **Modalità download:** La scheda è più ordinata e mostra a colpo d'occhio cosa cambia: TDP, schermo e turbo.
+
+### Deutsch
+
+* **Downloadmodus:** Der Bildschirm geht jetzt wirklich aus, statt nur abgedunkelt zu bleiben. Wenn du das Gerät liegen lässt, warnt dich vorher ein 3-Sekunden-Countdown, und er ist sofort wieder da, sobald du den Bildschirm berührst, einen Stick bewegst oder eine Taste drückst.
+* **Downloadmodus:** Die Karte ist aufgeräumter und zeigt auf einen Blick, was sich ändert: TDP, Bildschirm und Turbo.
+
+### Português (Brasil)
+
+* **Modo de download:** Agora a tela desliga de verdade em vez de ficar só com pouco brilho. Se você deixar o aparelho parado, uma contagem de 3 segundos avisa antes, e ela volta na hora quando você toca na tela, mexe um analógico ou aperta um botão.
+* **Modo de download:** O card ficou mais organizado e mostra de relance o que muda: TDP, tela e turbo.
+
+## [0.69.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.2...panel-de-control-v0.69.0) (2026-10-13)
+
+
+### Español
+
+* **Equipos:** La AYN Odin 3 con Armada ya se reconoce como tal, con su nombre, su chip Snapdragon 8 Elite y su pantalla OLED, en lugar de aparecer como un equipo ARM cualquiera.
+* **Ventiladores:** El ventilador de la Odin 3 ahora aparece y puedes ponerle una curva. Como no tiene sensor de velocidad, se muestra en porcentaje en vez de en RPM.
+* **Batería:** En consolas ARM como la Odin 3 o la Thor, Panel ya sabe cuándo están enchufadas. En la Odin 3 el límite de carga funciona de verdad, y al quitarlo vuelve a cargar enseguida.
+* **Mandos:** Las palas traseras M1 y M2 de la Odin 3 salen en Mandos y puedes asignarles otro botón. Si la emulación de mando que usas no se las pasa a los juegos, Panel te avisa.
+* **Potencia:** En consolas ARM con Armada, volver a poner el ventilador en Automático ya no te cambia el nivel de potencia que habías elegido.
+* **Sonido:** Con Armada, el ecualizador se activa a la primera y tarda bastante menos.
+
+### English
+
+* **Devices:** The AYN Odin 3 running Armada is now recognised by name, with its Snapdragon 8 Elite chip and OLED screen, instead of showing up as a generic ARM device.
+* **Fans:** The Odin 3 fan now shows up and takes a curve. It has no speed sensor, so it's shown as a percentage instead of RPM.
+* **Battery:** On ARM handhelds like the Odin 3 or the Thor, Panel now knows when the charger is plugged in. On the Odin 3 the charge limit really works, and turning it off starts charging again right away.
+* **Controllers:** The Odin 3 back buttons M1 and M2 show up in Controllers and can be assigned to another button. If your controller emulation doesn't pass them to games, Panel tells you.
+* **Power:** On ARM handhelds with Armada, setting the fan back to Automatic no longer changes the power level you picked.
+* **Sound:** With Armada, the equalizer turns on first time and takes a lot less time.
+
+### Italiano
+
+* **Dispositivi:** La AYN Odin 3 con Armada ora viene riconosciuta per nome, con il suo chip Snapdragon 8 Elite e lo schermo OLED, invece di comparire come un dispositivo ARM qualsiasi.
+* **Ventole:** La ventola della Odin 3 ora compare e accetta una curva. Non ha un sensore di velocità, quindi si vede in percentuale invece che in RPM.
+* **Batteria:** Sulle console ARM come la Odin 3 o la Thor, Panel ora sa quando il caricatore è collegato. Sulla Odin 3 il limite di carica funziona davvero, e togliendolo riprende subito a caricare.
+* **Controller:** I tasti posteriori M1 e M2 della Odin 3 compaiono in Controller e si possono assegnare a un altro tasto. Se l'emulazione del controller che usi non li passa ai giochi, Panel te lo dice.
+* **Potenza:** Sulle console ARM con Armada, rimettere la ventola in Automatico non cambia più il livello di potenza che avevi scelto.
+* **Audio:** Con Armada, l'equalizzatore si attiva al primo colpo e ci mette molto meno.
+
+### Deutsch
+
+* **Geräte:** Die AYN Odin 3 mit Armada wird jetzt mit Namen erkannt, samt Snapdragon 8 Elite und OLED-Bildschirm, statt als beliebiges ARM-Gerät aufzutauchen.
+* **Lüfter:** Der Lüfter der Odin 3 wird jetzt angezeigt und lässt sich mit einer Kurve steuern. Er hat keinen Drehzahlsensor, deshalb steht dort ein Prozentwert statt RPM.
+* **Akku:** Auf ARM-Handhelds wie der Odin 3 oder der Thor erkennt Panel jetzt, wann das Ladegerät steckt. Auf der Odin 3 funktioniert das Ladelimit wirklich, und wer es ausschaltet, lädt sofort weiter.
+* **Controller:** Die hinteren Tasten M1 und M2 der Odin 3 erscheinen unter Controller und lassen sich anders belegen. Wenn deine Controller-Emulation sie nicht an Spiele weitergibt, sagt Panel Bescheid.
+* **Leistung:** Auf ARM-Handhelds mit Armada ändert sich die gewählte Leistungsstufe nicht mehr, wenn du den Lüfter wieder auf Automatisch stellst.
+* **Ton:** Mit Armada schaltet sich der Equalizer beim ersten Versuch ein und braucht deutlich weniger Zeit.
+
+### Português (Brasil)
+
+* **Aparelhos:** O AYN Odin 3 com Armada agora é reconhecido pelo nome, com o chip Snapdragon 8 Elite e a tela OLED, em vez de aparecer como um aparelho ARM qualquer.
+* **Ventoinhas:** A ventoinha do Odin 3 agora aparece e aceita uma curva. Ela não tem sensor de velocidade, então aparece em porcentagem em vez de RPM.
+* **Bateria:** Em portáteis ARM como o Odin 3 ou o Thor, o Panel agora sabe quando o carregador está conectado. No Odin 3 o limite de carga funciona de verdade, e ao desligá-lo a carga volta na hora.
+* **Controle:** Os botões traseiros M1 e M2 do Odin 3 aparecem em Controle e podem virar outro botão. Se a emulação de controle que você usa não os passa para os jogos, o Panel avisa.
+* **Potência:** Em portáteis ARM com Armada, voltar a ventoinha para Automático não muda mais o nível de potência que você escolheu.
+* **Som:** Com Armada, o equalizador liga de primeira e demora bem menos.
+
+## [0.68.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.1...panel-de-control-v0.68.2) (2026-10-13)
+
+
+### Español
+
+* **Mando:** Ahora puedes llegar con el mando a todos los botones de Panel, como «Aplicar» en Pantalla, y moverte con izquierda y derecha por filas y listas.
+* **Mando:** Al cerrar una ventana, vuelves al botón desde el que la abriste, también con un juego abierto.
+* **Mando:** Ya no pierdes la selección al borrar, cancelar o limpiar algo, y las confirmaciones para borrar o instalar empiezan en «Cancelar».
+* **Pantalla:** En la vista previa del color, pulsa X para guardar los cambios o Y para deshacerlos.
+* **Potencia:** Los avisos de TDP solo aparecen cuando el equipo limita o rechaza el valor que eliges, y ahora se entienden a la primera.
+
+### English
+
+* **Gamepad:** Every button in Panel can now be reached with the gamepad, like Apply in Display, and rows and lists move with left and right.
+* **Gamepad:** Closing a window puts the selection back on the button that opened it, also with a game running.
+* **Gamepad:** Deleting, cancelling or cleaning something no longer loses the selection. Delete and install confirmations start on Cancel.
+* **Display:** In the color preview, X saves the changes and Y undoes them.
+* **Power:** TDP notices only show up when the device limits or refuses the value, and they say so in plain words.
+
+### Italiano
+
+* **Controller:** Ora tutti i pulsanti di Panel si raggiungono con il controller, come «Applica» in Schermo, e righe ed elenchi si percorrono con sinistra e destra.
+* **Controller:** Chiudendo una finestra, la selezione torna sul pulsante che l'ha aperta, anche con un gioco aperto.
+* **Controller:** Eliminando, annullando o pulendo qualcosa, la selezione non sparisce più. Le conferme di eliminazione o installazione partono da Annulla.
+* **Schermo:** Nell'anteprima del colore, X salva le modifiche e Y le annulla.
+* **Potenza:** Gli avvisi sul TDP compaiono solo quando il dispositivo limita o non accetta il valore, e lo spiegano in modo chiaro.
+
+### Deutsch
+
+* **Controller:** Alle Schaltflächen in Panel sind jetzt mit dem Controller erreichbar, etwa „Anwenden“ unter Bildschirm, und Zeilen und Listen lassen sich mit links und rechts durchgehen.
+* **Controller:** Beim Schließen eines Fensters springt die Auswahl zurück auf die Schaltfläche, die es geöffnet hat, auch während ein Spiel läuft.
+* **Controller:** Beim Löschen, Abbrechen oder Aufräumen geht die Auswahl nicht mehr verloren. Bestätigungen zum Löschen oder Installieren starten auf Abbrechen.
+* **Bildschirm:** In der Farbvorschau speichert X die Änderungen und Y macht sie rückgängig.
+* **Leistung:** TDP-Hinweise erscheinen nur noch, wenn das Gerät den Wert begrenzt oder nicht annimmt, und sagen das klar.
+
+### Português (Brasil)
+
+* **Controle:** Agora dá para chegar com o controle a todos os botões do Panel, como «Aplicar» em Tela, e as linhas e listas se percorrem com esquerda e direita.
+* **Controle:** Ao fechar uma janela, a seleção volta para o botão que a abriu, também com um jogo aberto.
+* **Controle:** Ao apagar, cancelar ou limpar algo, a seleção não some mais. As confirmações de apagar ou instalar começam em Cancelar.
+* **Tela:** Na prévia de cor, X salva as alterações e Y desfaz.
+* **Potência:** Os avisos de TDP só aparecem quando o aparelho limita ou não aceita o valor, e explicam isso com palavras claras.
+
+## [0.68.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.68.0...panel-de-control-v0.68.1) (2026-10-13)
+
+
+### Español
+
+* **Cargador:** Si el cargador o el cable fallan y la corriente va y viene, Panel espera a que se estabilice antes de volver a aplicar tus ajustes, en vez de hacerlo en cada corte.
+* **Cargador:** Si la corriente se corta varias veces seguidas, Potencia muestra un aviso de fallo en el cargador para que revises el cargador, el cable o el puerto USB-C.
+
+### English
+
+* **Charger:** If the charger or cable fails and power keeps coming and going, Panel waits for it to settle before applying your settings again, instead of doing it on every drop.
+* **Charger:** If power drops several times in a row, Power shows a charger fault warning so you can check the charger, the cable or the USB-C port.
+
+### Italiano
+
+* **Caricatore:** Se il caricatore o il cavo hanno problemi e l'alimentazione va e viene, Panel aspetta che si stabilizzi prima di riapplicare le tue impostazioni, invece di farlo a ogni interruzione.
+* **Caricatore:** Se l'alimentazione salta più volte di seguito, Potenza mostra un avviso di problema al caricatore, così puoi controllare caricatore, cavo o porta USB-C.
+
+### Deutsch
+
+* **Ladegerät:** Wenn Ladegerät oder Kabel Probleme machen und der Strom kommt und geht, wartet Panel, bis er stabil ist, bevor deine Einstellungen erneut angewendet werden, statt bei jedem Aussetzer.
+* **Ladegerät:** Fällt der Strom mehrmals hintereinander aus, zeigt Leistung eine Warnung zu einem Ladegerätfehler an, damit du Ladegerät, Kabel oder USB-C-Anschluss prüfen kannst.
+
+### Português (Brasil)
+
+* **Carregador:** Se o carregador ou o cabo falham e a energia vai e volta, o Panel espera ela se estabilizar antes de aplicar seus ajustes de novo, em vez de fazer isso a cada queda.
+* **Carregador:** Se a energia cai várias vezes seguidas, Potência mostra um aviso de falha no carregador para você verificar o carregador, o cabo ou a porta USB-C.
+
+## [0.68.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.1...panel-de-control-v0.68.0) (2026-10-13)
+
+
+### Español
+
+* **Legion Go S:** Panel ya no se queda congelado varios segundos mientras juegas.
+* **Legion Go S:** Con la batería baja, el firmware limita el TDP a 15 W hasta reiniciar. Panel ya no se atasca intentando subirlo: aplica lo máximo que se puede y te lo muestra como limitado.
+* **Legion Go S:** «Mantener TDP con batería baja» también mantiene tu valor con el cargador puesto, hasta el siguiente reinicio.
+* **Limpieza:** Vuelve a funcionar si tienes instalado el plugin Wine Cellar.
+* **Batería:** Si pusiste un límite de carga en SteamOS, Panel lo respeta mientras no elijas otro en Panel.
+* **Reportes:** Recogen más información para entender por qué la consola no entra en reposo o se despierta sola.
+
+### English
+
+* **Legion Go S:** Panel no longer freezes for a few seconds while you play.
+* **Legion Go S:** On low battery the firmware caps the TDP at 15 W until you reboot. Panel no longer gets stuck trying to raise it: it applies the highest value allowed and shows it as limited.
+* **Legion Go S:** "Keep TDP on low battery" also keeps your value with the charger plugged in, until the next reboot.
+* **Cleanup:** Works again if you have the Wine Cellar plugin installed.
+* **Battery:** If you set a charge limit in SteamOS, Panel keeps it until you choose another one in Panel.
+* **Reports:** They collect more information to understand why the handheld won't sleep or wakes up on its own.
+
+### Italiano
+
+* **Legion Go S:** Panel non si blocca più per qualche secondo mentre giochi.
+* **Legion Go S:** Con la batteria scarica il firmware limita il TDP a 15 W fino al riavvio. Panel non si blocca più cercando di alzarlo: applica il valore più alto consentito e te lo mostra come limitato.
+* **Legion Go S:** «Mantieni il TDP con batteria scarica» mantiene il tuo valore anche con il caricatore collegato, fino al riavvio successivo.
+* **Pulizia:** Funziona di nuovo se hai installato il plugin Wine Cellar.
+* **Batteria:** Se hai impostato un limite di carica in SteamOS, Panel lo rispetta finché non ne scegli un altro in Panel.
+* **Segnalazioni:** Raccolgono più informazioni per capire perché la console non va in sospensione o si risveglia da sola.
+
+### Deutsch
+
+* **Legion Go S:** Panel friert beim Spielen nicht mehr für ein paar Sekunden ein.
+* **Legion Go S:** Bei niedrigem Akkustand begrenzt die Firmware die TDP bis zum Neustart auf 15 W. Panel bleibt beim Versuch, sie anzuheben, nicht mehr hängen: Es setzt den höchsten erlaubten Wert und zeigt ihn als begrenzt an.
+* **Legion Go S:** „TDP bei niedrigem Akkustand halten“ behält deinen Wert auch am Ladegerät bei, bis zum nächsten Neustart.
+* **Bereinigung:** Funktioniert wieder, wenn das Plugin Wine Cellar installiert ist.
+* **Akku:** Wenn du in SteamOS ein Ladelimit gesetzt hast, behält Panel es bei, bis du in Panel ein anderes wählst.
+* **Berichte:** Sie sammeln mehr Informationen, um zu verstehen, warum das Gerät nicht in den Ruhezustand geht oder von selbst aufwacht.
+
+### Português (Brasil)
+
+* **Legion Go S:** O Panel não trava mais por alguns segundos enquanto você joga.
+* **Legion Go S:** Com a bateria baixa, o firmware limita o TDP a 15 W até reiniciar. O Panel não fica mais travado tentando aumentá-lo: aplica o valor mais alto permitido e mostra como limitado.
+* **Legion Go S:** «Manter o TDP com a bateria baixa» também mantém o seu valor com o carregador conectado, até a próxima reinicialização.
+* **Limpeza:** Volta a funcionar se você tiver o plugin Wine Cellar instalado.
+* **Bateria:** Se você definiu um limite de carga no SteamOS, o Panel o respeita até você escolher outro no Panel.
+* **Relatórios:** Coletam mais informações para entender por que o console não entra em suspensão ou acorda sozinho.
+
+## [0.67.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.67.0...panel-de-control-v0.67.1) (2026-10-09)
+
+
+### Español
+
+* **General:** Arreglos de cosas menores.
+
+### English
+
+* **General:** Minor fixes.
+
+### Italiano
+
+* **Generale:** Piccole correzioni.
+
+### Deutsch
+
+* **Allgemein:** Kleinere Korrekturen.
+
+### Português (Brasil)
+
+* **Geral:** Pequenas correções.
+
+## [0.67.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.66.0...panel-de-control-v0.67.0) (2026-10-09)
+
+
+### Español
+
+* **Ajustes:** Mejoras para la depuración y el desarrollo.
+
+### English
+
+* **Settings:** Improvements for debugging and development.
+
+### Italiano
+
+* **Impostazioni:** Miglioramenti per il debug e lo sviluppo.
+
+### Deutsch
+
+* **Einstellungen:** Verbesserungen für Fehlersuche und Entwicklung.
+
+### Português (Brasil)
+
+* **Configurações:** Melhorias para depuração e desenvolvimento.
+
+## [0.66.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.65.0...panel-de-control-v0.66.0) (2026-10-08)
+
+
+### Español
+
+* **Actualizaciones:** Cuando sale una versión nueva ya no te la pierdes: aparece un aviso abajo en el menú rápido con la versión que tienes y la nueva. «Actualizar» abre las novedades para instalarla y «Más tarde» lo esconde hasta que reinicies Steam.
+* **Pantalla:** Al probar un color, el resto del panel ya no se queda en blanco mientras decides si guardar o deshacer.
+
+### English
+
+* **Updates:** You won't miss a new version anymore: a notice shows up at the bottom of the quick access menu with the version you have and the new one. "Update" opens the release notes so you can install it, and "Later" hides it until you restart Steam.
+* **Display:** While trying a color, the rest of the panel no longer goes blank as you decide whether to save or undo.
+
+### Italiano
+
+* **Aggiornamenti:** Quando esce una nuova versione non te la perdi più: in fondo al menu di accesso rapido compare un avviso con la versione che hai e quella nuova. «Aggiorna» apre le novità per installarla e «Più tardi» lo nasconde finché non riavvii Steam.
+* **Schermo:** Mentre provi un colore, il resto del pannello non diventa più bianco mentre decidi se salvare o annullare.
+
+### Deutsch
+
+* **Updates:** Eine neue Version verpasst du nicht mehr: Unten im Schnellzugriffsmenü erscheint ein Hinweis mit deiner Version und der neuen. „Aktualisieren“ öffnet die Neuerungen zum Installieren, und „Später“ blendet ihn aus, bis du Steam neu startest.
+* **Bildschirm:** Wenn du eine Farbe ausprobierst, bleibt der Rest des Panels nicht mehr leer, während du entscheidest, ob du speicherst oder rückgängig machst.
+
+### Português (Brasil)
+
+* **Atualizações:** Você não perde mais uma versão nova: aparece um aviso embaixo no menu de acesso rápido com a versão que você tem e a nova. "Atualizar" abre as novidades para instalar e "Mais tarde" esconde o aviso até você reiniciar o Steam.
+* **Tela:** Ao testar uma cor, o resto do painel não fica mais em branco enquanto você decide se salva ou desfaz.
+
+## [0.65.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.64.0...panel-de-control-v0.65.0) (2026-10-08)
+
+
+### Español
+
+* **Temas:** Si un tema se ve raro o algo no encaja, ahora tienes «¿Problemas con un tema?» al final de Temas. Revisa lo que suele romperlos: otros temas o perfiles de CSS Loader activos a la vez, restos que CSS Loader sigue cargando aunque no salgan en su lista, estilos que se quedan pegados en Steam, varios temas Hooandee encendidos a la vez y ajustes de pantalla fuera de lo normal, como la escala, la resolución o Steam beta. Con «Solucionar problemas» se queda activo solo el tema Hooandee que elijas, los restos se apartan sin borrar nada y todo se puede deshacer desde ahí.
+* **Temas:** Si otro tema deja el menú rápido en negro y no puedes llegar a Panel, ahora sale un aviso que abre esa misma ayuda.
+* **Temas:** La ficha de cada tema ocupa menos: el botón para activarlo, desactivarlo o instalarlo está arriba a la derecha y la descripción va debajo a lo ancho.
+
+### English
+
+* **Themes:** If a theme looks off or something doesn't fit, you now have "Trouble with a theme?" at the bottom of Themes. It checks what usually breaks them: other CSS Loader themes or profiles active at the same time, leftovers CSS Loader still loads even though they're not in its list, styles that get stuck in Steam, several Hooandee themes on at once and display settings that aren't the default, like scale, resolution or Steam beta. "Fix problems" keeps only the Hooandee theme you pick, sets the leftovers aside without deleting anything, and it can all be undone from there.
+* **Themes:** If another theme turns the quick access menu black and you can't reach Panel, a notification now shows up that opens that same check.
+* **Themes:** Each theme's page takes less space: the button to turn it on, turn it off or install it sits at the top right and the description runs full width underneath.
+
+### Italiano
+
+* **Temi:** Se un tema si vede strano o qualcosa non torna, ora hai «Problemi con un tema?» in fondo a Temi. Controlla quello che di solito li rompe: altri temi o profili di CSS Loader attivi insieme, residui che CSS Loader continua a caricare anche se non compaiono nella sua lista, stili che restano appiccicati in Steam, più temi Hooandee accesi insieme e impostazioni dello schermo fuori dal normale, come la scala, la risoluzione o Steam beta. Con «Risolvi i problemi» resta attivo solo il tema Hooandee che scegli, i residui vengono messi da parte senza cancellare nulla e si può annullare tutto da lì.
+* **Temi:** Se un altro tema rende nero il menu di accesso rapido e non riesci ad arrivare a Panel, ora compare un avviso che apre questo stesso controllo.
+* **Temi:** La scheda di ogni tema occupa meno spazio: il pulsante per attivarlo, disattivarlo o installarlo è in alto a destra e la descrizione va sotto, a tutta larghezza.
+
+### Deutsch
+
+* **Themes:** Wenn ein Theme seltsam aussieht oder etwas nicht passt, findest du jetzt ganz unten unter Themes „Probleme mit einem Theme?“. Es prüft, was sie meistens kaputt macht: andere Themes oder Profile von CSS Loader, die gleichzeitig aktiv sind, Reste, die CSS Loader weiter lädt, obwohl sie nicht in seiner Liste stehen, Stile, die in Steam hängen bleiben, mehrere Hooandee-Themes gleichzeitig und Anzeigeeinstellungen abseits vom Standard wie Skalierung, Auflösung oder die Steam-Beta. Mit „Probleme beheben“ bleibt nur das Hooandee-Theme aktiv, das du auswählst, Reste werden beiseitegelegt, ohne etwas zu löschen, und alles lässt sich dort wieder rückgängig machen.
+* **Themes:** Wenn ein anderes Theme das Schnellzugriffsmenü schwarz macht und du Panel nicht mehr erreichst, erscheint jetzt eine Benachrichtigung, die genau diese Prüfung öffnet.
+* **Themes:** Die Seite jedes Themes braucht weniger Platz: Der Knopf zum Aktivieren, Deaktivieren oder Installieren sitzt oben rechts, und die Beschreibung läuft darunter über die ganze Breite.
+
+### Português (Brasil)
+
+* **Temas:** Se um tema estiver estranho ou algo não encaixar, agora tem "Problemas com um tema?" no final de Temas. Ele verifica o que costuma quebrá-los: outros temas ou perfis do CSS Loader ativos ao mesmo tempo, restos que o CSS Loader continua carregando mesmo sem aparecer na lista dele, estilos que ficam presos no Steam, vários temas Hooandee ligados ao mesmo tempo e configurações de tela fora do normal, como a escala, a resolução ou o Steam beta. Com "Resolver problemas" fica ativo só o tema Hooandee que você escolher, os restos são separados sem apagar nada e dá para desfazer tudo por ali.
+* **Temas:** Se outro tema deixar o menu de acesso rápido preto e você não conseguir chegar ao Panel, agora aparece um aviso que abre essa mesma verificação.
+* **Temas:** A página de cada tema ocupa menos espaço: o botão para ativar, desativar ou instalar fica no canto superior direito e a descrição vai embaixo, na largura toda.
+
+## [0.64.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.63.0...panel-de-control-v0.64.0) (2026-10-08)
+
+
+### Español
+
+* **Temas:** Los ajustes de un tema pueden tener ahora un apartado «Extra» al final, con opciones que se salen de su diseño original. Eclipse lo estrena: ahí puedes quitar la oscuridad del fondo de Inicio y ver la imagen de la ficha del juego entera, sin el eclipse.
+
+### English
+
+* **Themes:** A theme's settings can now have an "Extra" section at the end, with options that step outside its original design. Eclipse is the first to use it: there you can drop the Home background darkness and see the game page image in full, without the eclipse.
+
+### Italiano
+
+* **Temi:** Le impostazioni di un tema ora possono avere una sezione «Extra» in fondo, con opzioni che escono dal suo design originale. Eclipse è il primo a usarla: lì puoi togliere l'oscuramento dello sfondo della Home e vedere l'immagine della scheda del gioco per intero, senza l'eclissi.
+
+### Deutsch
+
+* **Themes:** Die Einstellungen eines Themes können jetzt am Ende einen Bereich „Extra“ haben, mit Optionen, die vom ursprünglichen Design abweichen. Eclipse nutzt ihn als Erstes: Dort kannst du die Abdunklung des Startseiten-Hintergrunds abschalten und das Bild der Spielseite vollständig sehen, ohne Verfinsterung.
+
+### Português (Brasil)
+
+* **Temas:** Os ajustes de um tema agora podem ter uma seção "Extra" no final, com opções que fogem do design original. O Eclipse é o primeiro a usar: lá dá para tirar o escurecimento do fundo do Início e ver a imagem da página do jogo inteira, sem o eclipse.
+
 ## [0.63.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.62.0...panel-de-control-v0.63.0) (2026-10-07)
 
 

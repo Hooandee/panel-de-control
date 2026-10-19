@@ -471,6 +471,11 @@ def frontend_crash_diagnostics(
 # Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land
 # in dmesg/journal, NOT the plugin's own log. Captured via an injected runner so
 # this stays testable without spawning processes.
+_SLEEP_KERNEL_GREP = (
+    "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
+    "ACPI: PM:|amd_pmc|Last suspend"
+)
+
 _KERNEL_CMDS = {
     "dmesg": ["/usr/bin/dmesg", "--ctime", "--level=err,warn"],
     "journal": ["/usr/bin/journalctl", "-b", "-u", "plugin_loader", "-n", "400", "--no-pager"],
@@ -497,6 +502,26 @@ _KERNEL_CMDS = {
         "--grep", "(?i)power key|reboot|power-?off|shutdown|suspend|hibernat|(entering|returned from) sleep|lid (opened|closed)",
         "-n", "60", "--no-pager",
     ],
+    # Why a suspend ends early or never starts: the kernel wake reason, logind's view
+    # of each cycle and who holds a sleep or power-key inhibitor.
+    "sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "120", "--no-pager",
+    ],
+    "sleep_logind": [
+        "/usr/bin/journalctl", "-b",
+        "-t", "systemd-logind", "-t", "systemd-sleep",
+        "--grep", "(?i)power key|suspend|sleep|inhibit|lid (opened|closed)",
+        "-n", "120", "--no-pager",
+    ],
+    "previous_boot_sleep_kernel": [
+        "/usr/bin/journalctl", "-b", "-1", "-k",
+        "--grep", _SLEEP_KERNEL_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
+    "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
 }
 
 
@@ -864,7 +889,37 @@ def _snap_arm(root: str) -> dict:
         "x86_emulated": bool(re.search(r"GenuineIntel|AuthenticAMD", cpuinfo or "")),
         "devfreq": devfreq,
         "backlight": backlight,
+        "power_supplies": _snap_arm_supplies(root),
+        "pwm_fans": _snap_arm_pwm_fans(root),
     }
+
+
+_ARM_SUPPLY_FIELDS = ("type", "online", "status", "capacity",
+                      "charge_control_start_threshold", "charge_control_end_threshold")
+
+
+def _snap_arm_supplies(root: str) -> dict:
+    out: dict = {}
+    for supply in sorted(_glob(root, "sys/class/power_supply/*"))[:_SNAP_MAX_CHIPS]:
+        out[os.path.basename(supply)] = {
+            field: value
+            for field in _ARM_SUPPLY_FIELDS
+            if (value := read_str(os.path.join(supply, field))) is not None
+        }
+    return out
+
+
+def _snap_arm_pwm_fans(root: str) -> list[dict]:
+    fans = []
+    for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*")):
+        if read_str(os.path.join(chip, "name")) != "pwmfan":
+            continue
+        fans.append({
+            "hwmon": os.path.basename(chip),
+            **{node: read_str(os.path.join(chip, node))
+               for node in ("pwm1", "pwm1_enable", "fan1_input")},
+        })
+    return fans
 
 
 def _snap_desktop(root: str) -> dict:

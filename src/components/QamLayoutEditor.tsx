@@ -1,4 +1,4 @@
-import { ButtonItem } from "@decky/ui";
+import { ButtonItem, Focusable } from "@decky/ui";
 import { type FC, type ReactNode, useSyncExternalStore } from "react";
 import {
   LuChevronDown,
@@ -24,7 +24,7 @@ import {
 } from "../qam/runtime";
 import { resetQamLayout, saveQamLayout, useQamLayout } from "../qam/store";
 import type { QamViewDescriptor } from "../qam/viewCatalog";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { reloadDeckyAfterClosingMenus } from "../system/reloadDecky";
 import { IconAction } from "./IconAction";
 
@@ -52,15 +52,15 @@ export function nativeQamLabelKey(key: unknown): string | null {
   return null;
 }
 
-const rowStyle: React.CSSProperties = {
+const rowStyle: React.CSSProperties = themed(() => ({
   ...theme.card,
   display: "flex",
   alignItems: "center",
   gap: theme.space.sm,
   padding: `${theme.space.sm + 2}px ${theme.space.md}px`,
-};
+}));
 
-const rowIconStyle: React.CSSProperties = {
+const rowIconStyle: React.CSSProperties = themed(() => ({
   width: 30,
   height: 30,
   flexShrink: 0,
@@ -70,16 +70,16 @@ const rowIconStyle: React.CSSProperties = {
   justifyContent: "center",
   color: theme.color.accent,
   background: `rgba(${theme.color.accentRgb},0.14)`,
-};
+}));
 
-const rowLabelStyle: React.CSSProperties = {
+const rowLabelStyle: React.CSSProperties = themed(() => ({
   flex: 1,
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   color: theme.color.textPrimary,
-};
+}));
 
 function toggleToken(tokens: QamEntryToken[], token: QamEntryToken): QamEntryToken[] {
   return tokens.includes(token)
@@ -132,7 +132,7 @@ export const QamLayoutEditor: FC<{ catalog: QamViewDescriptor[] }> = ({ catalog 
     active: boolean,
     index: number,
   ) => (
-    <div key={token} style={{ ...rowStyle, opacity: active ? 1 : 0.55 }}>
+    <Focusable key={token} flow-children="row" style={{ ...rowStyle, opacity: active ? 1 : 0.55 }}>
       <span style={rowIconStyle}>{icon}</span>
       <span style={rowLabelStyle}>{label}</span>
       <IconAction
@@ -168,7 +168,7 @@ export const QamLayoutEditor: FC<{ catalog: QamViewDescriptor[] }> = ({ catalog 
           {active ? <LuPinOff size={18} /> : <LuPin size={18} />}
         </IconAction>
       )}
-    </div>
+    </Focusable>
   );
 
   let runtimeStatus: ReactNode;

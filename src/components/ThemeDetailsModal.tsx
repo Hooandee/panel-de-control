@@ -1,9 +1,12 @@
-import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, Navigation, showModal } from "@decky/ui";
+import { ButtonItem, DialogButton, Focusable, ModalRoot, Navigation } from "@decky/ui";
+import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
+import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
+import { LuDownload, LuFileArchive, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
 import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation";
@@ -11,6 +14,7 @@ import { labelsForPatch } from "../themes/themePatchLabels";
 import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
 import { FocusRoot } from "./FocusRoot";
+import { EarlyBadge } from "./ThemeCard";
 import { ThemePatchControl } from "./ThemePatchControl";
 
 interface ThemeDetailsModalProps {
@@ -25,7 +29,9 @@ interface ThemeOffer {
 
 type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" };
 
-const THEME_CONTROL_RESET = `
+const gamepadNavigation = createThemeNavigationAccess();
+
+const THEME_CONTROL_RESET = () => `
 [data-pdc-theme-settings] { color: ${theme.color.textPrimary} !important; }
 [data-pdc-theme-settings] [data-pdc-theme-muted] { color: ${theme.color.textMuted} !important; }
 [data-pdc-theme-settings] [data-pdc-theme-cover-header] { color: rgba(255,255,255,0.99) !important; }
@@ -52,12 +58,12 @@ const THEME_CONTROL_RESET = `
 }
 `;
 
-const STATUS_SURFACE: CSSProperties = {
+const STATUS_SURFACE: CSSProperties = themed(() => ({
   borderRadius: theme.radius.md,
   minWidth: 0,
   padding: theme.space.md,
   marginBottom: theme.space.section,
-};
+}));
 
 const COVER_IMAGE_STYLE: CSSProperties = {
   position: "absolute",
@@ -76,15 +82,15 @@ const COVER_GRADIENT_STYLE: CSSProperties = {
   background: "linear-gradient(0deg, rgba(0,0,0,1) 0, rgba(0,0,0,0.96) 4px, rgba(0,0,0,0) 14px), linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.66) 54%, rgba(0,0,0,0.38) 100%), linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.58) 58%, rgba(0,0,0,0.12) 100%)",
 };
 
-const CONFIRMATION_SURFACE_STYLE: CSSProperties = {
+const CONFIRMATION_SURFACE_STYLE: CSSProperties = themed(() => ({
   ...theme.card,
   padding: theme.space.md,
   marginBottom: theme.space.section,
   background: `linear-gradient(135deg, rgba(${theme.color.accentRgb},0.15), rgba(${theme.color.accentRgb},0.035) 48%, ${theme.color.surfaceRaised})`,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.25), 0 14px 32px rgba(0,0,0,0.2)`,
-};
+}));
 
-const CONFIRMATION_ICON_STYLE: CSSProperties = {
+const CONFIRMATION_ICON_STYLE: CSSProperties = themed(() => ({
   width: 42,
   height: 42,
   borderRadius: theme.radius.sm,
@@ -94,9 +100,9 @@ const CONFIRMATION_ICON_STYLE: CSSProperties = {
   color: theme.color.accent,
   background: `rgba(${theme.color.accentRgb},0.16)`,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.22)`,
-};
+}));
 
-const VERSION_PILL_STYLE: CSSProperties = {
+const VERSION_PILL_STYLE: CSSProperties = themed(() => ({
   alignSelf: "start",
   padding: "4px 9px",
   borderRadius: 999,
@@ -105,46 +111,53 @@ const VERSION_PILL_STYLE: CSSProperties = {
   whiteSpace: "nowrap",
   background: "rgba(255,255,255,0.055)",
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
-const SECONDARY_CONFIRM_STYLE: CSSProperties = {
+const SECONDARY_CONFIRM_STYLE: CSSProperties = themed(() => ({
   minWidth: 120,
   borderRadius: theme.radius.sm,
   background: "rgba(255,255,255,0.028)",
   color: theme.color.textMuted,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
-const PRIMARY_CONFIRM_STYLE: CSSProperties = {
+const PRIMARY_CONFIRM_STYLE: CSSProperties = themed(() => ({
   minWidth: 142,
   borderRadius: theme.radius.sm,
   background: `linear-gradient(180deg, rgba(${theme.color.accentRgb},0.18), rgba(${theme.color.accentRgb},0.08))`,
   color: theme.color.textPrimary,
   fontWeight: 780,
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.42), 0 7px 20px rgba(${theme.color.accentRgb},0.12)`,
-};
+}));
 
-const DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE: CSSProperties = {
+const DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE: CSSProperties = themed(() => ({
   ...CONFIRMATION_SURFACE_STYLE,
   background: theme.color.surfaceRaised,
   boxShadow: `inset 0 0 0 1px ${theme.color.warn}, 0 14px 32px rgba(0,0,0,0.2)`,
-};
+}));
 
-const DESTRUCTIVE_CONFIRM_STYLE: CSSProperties = {
+const DESTRUCTIVE_CONFIRM_STYLE: CSSProperties = themed(() => ({
   ...PRIMARY_CONFIRM_STYLE,
   background: theme.color.warn,
   color: theme.color.surface,
   boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
+}));
+
+const HEADER_ACTION_STYLE: CSSProperties = {
+  position: "relative",
+  flexShrink: 0,
+  minWidth: 240,
+  whiteSpace: "nowrap",
 };
 
-const DELETE_ACTION_STYLE: CSSProperties = {
+const DELETE_ACTION_STYLE: CSSProperties = themed(() => ({
   width: "100%",
   minWidth: 0,
   borderRadius: theme.radius.sm,
   background: theme.color.surfaceRaised,
   color: theme.color.textMuted,
   boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-};
+}));
 
 function formatVersion(value: string): string {
   return value.toLowerCase().startsWith("v") ? value : `v${value}`;
@@ -211,8 +224,8 @@ function ThemeConfirmation({
           </span>
         ) : null}
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
-        <DialogButton style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
+      <Focusable flow-children="row" style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
+        <DialogButton data-preferred-focus style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
           {t("themes.install.confirm.cancel")}
         </DialogButton>
         <DialogButton style={destructive ? DESTRUCTIVE_CONFIRM_STYLE : PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>
@@ -221,7 +234,7 @@ function ThemeConfirmation({
             <span>{t(confirmKey)}</span>
           </span>
         </DialogButton>
-      </div>
+      </Focusable>
     </div>
   );
 }
@@ -235,18 +248,19 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const patchLabels = useThemePatchLabels(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const previousInstalledRef = useRef<boolean | undefined>(undefined);
+  const switchConfirmation = (next: PendingThemeConfirmation | null) => {
+    refocusWhenRemoved(bodyRef.current?.querySelector<HTMLElement>(".gpfocus") ?? null);
+    setPendingConfirmation(next);
+  };
 
   useEffect(() => {
     const installed = card?.installed;
     if (previousInstalledRef.current === true && installed === false) {
       const installAction = installOfferRef.current?.querySelector<HTMLElement>("button,[role='button'],[tabindex]");
       const target = installAction ?? headingRef.current;
-      if (target) {
-        const focusController = getFocusNavController();
-        if (focusController?.FocusElement) focusController.FocusElement(target);
-        else target.focus();
-      }
+      if (target) gamepadNavigation.focus(target);
     }
     previousInstalledRef.current = installed;
   }, [card?.installed]);
@@ -278,7 +292,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const displayName = localizePublishedText(card.release.displayName, lang);
   const description = themeDescriptionFor(card.release, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
-  const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
+  const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id, patchLabels);
   const fullSizeLayout = card.installed && groups.length > 0;
   const availableCover = themeCoverFor(card.release);
   const cover = availableCover === failedCover ? undefined : availableCover;
@@ -299,27 +313,27 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     ? pendingConfirmation
     : null;
   const activeConfirmation = activeOfferConfirmation ?? activeUninstallConfirmation;
-  const cancelOrClose = activeConfirmation ? () => setPendingConfirmation(null) : closeModal;
+  const cancelOrClose = activeConfirmation ? () => switchConfirmation(null) : closeModal;
 
   return (
     <ModalRoot bAllowFullSize={fullSizeLayout} onCancel={cancelOrClose} onEscKeypress={cancelOrClose}>
       <FocusRoot style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
-        <Focusable style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
+        <Focusable ref={bodyRef} style={fullSizeLayout ? { minHeight: "100%" } : undefined}>
           <div data-testid="theme-settings-content" data-pdc-theme-settings="true" style={{ maxWidth: fullSizeLayout ? 760 : 620, margin: "0 auto", padding: fullSizeLayout ? "8px 8px 54px" : "4px 8px 18px", color: theme.color.textPrimary }}>
-            <style>{THEME_CONTROL_RESET}</style>
+            <style>{THEME_CONTROL_RESET()}</style>
             <header data-pdc-theme-cover-header={cover ? "true" : undefined} style={{
               ...theme.card,
               position: "relative",
               isolation: "isolate",
               overflow: "hidden",
-              display: "grid",
-              gridTemplateColumns: card.installed ? "minmax(0, 1fr) minmax(150px, 220px)" : "minmax(0, 1fr)",
-              alignItems: "center",
-              gap: theme.space.lg,
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.space.sm,
               padding: fullSizeLayout ? theme.space.md : theme.space.lg,
               minHeight: cover ? (fullSizeLayout ? 126 : 138) : undefined,
               marginBottom: theme.space.md,
               background: `linear-gradient(135deg, rgba(${theme.color.accentRgb},0.11), ${theme.color.surfaceRaised} 58%)`,
+              textShadow: cover ? "0 2px 10px rgba(0,0,0,0.9)" : undefined,
             }}>
               {cover ? (
                 <>
@@ -343,14 +357,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               ) : null}
               <div
                 data-testid={cover ? "theme-details-cover-copy" : undefined}
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: theme.space.md,
-                  minWidth: 0,
-                  textShadow: cover ? "0 2px 10px rgba(0,0,0,0.9)" : undefined,
-                }}
+                style={{ position: "relative", display: "flex", alignItems: "center", gap: theme.space.md, minWidth: 0 }}
               >
                 <span aria-hidden style={{
                   width: 42,
@@ -366,46 +373,53 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                 }}>
                   <LuPaintbrush size={20} />
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: theme.space.sm }}>
-                    <h2 ref={headingRef} tabIndex={-1} style={{ fontSize: fullSizeLayout ? 32 : 28, lineHeight: 1.05, margin: "1px 0 8px", letterSpacing: -0.8 }}>{displayName}</h2>
-                    {!card.installed ? (
-                      <span data-pdc-theme-muted style={{
-                        flexShrink: 0,
-                        padding: "3px 8px",
-                        borderRadius: 999,
-                        fontSize: theme.font.caption,
-                        background: cover ? "rgba(0,0,0,0.32)" : "rgba(255,255,255,0.045)",
-                        boxShadow: cover ? "inset 0 0 0 1px rgba(255,255,255,0.18)" : `inset 0 0 0 1px ${theme.color.hairline}`,
-                      }}>
-                        {t("themes.version.published", { version: formatVersion(card.release.publishedVersion) })}
-                      </span>
-                    ) : null}
+                <h2 ref={headingRef} tabIndex={-1} style={{ flex: 1, minWidth: 0, fontSize: fullSizeLayout ? 32 : 28, lineHeight: 1.05, margin: 0, letterSpacing: -0.8 }}>{displayName}</h2>
+                {card.installed ? (
+                  <div data-pdc-theme-action="true" style={HEADER_ACTION_STYLE}>
+                    <ButtonItem
+                      layout="below"
+                      disabled={activationBlocked}
+                      onClick={() => void (card.active ? controller.deactivate(card.id) : controller.activate(card.id))}
+                    >
+                      {card.active ? <LuPower size={14} aria-hidden /> : <LuSparkles size={14} aria-hidden />}{" "}
+                      {t(card.active
+                        ? deactivating ? "themes.action.deactivating" : "themes.action.deactivate"
+                        : activating ? "themes.action.activating" : "themes.action.activate")}
+                    </ButtonItem>
                   </div>
-                  <div data-pdc-theme-muted style={{ lineHeight: 1.45 }}>{description}</div>
-                  {card.installed ? (
-                    <div data-pdc-theme-muted style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 9, fontSize: theme.font.caption }}>
-                      {card.installedVersion ? <span>{t("themes.version.installed", { version: formatVersion(card.installedVersion) })}</span> : null}
-                      <span>{t("themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
-                    </div>
-                  ) : null}
-                </div>
+                ) : offer && !activeOfferConfirmation ? (
+                  <div ref={installOfferRef} data-pdc-theme-action="true" style={HEADER_ACTION_STYLE}>
+                    <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => switchConfirmation(offer)}>
+                      <LuDownload size={14} aria-hidden /> {t(installing ? "themes.action.installing" : "themes.action.install")}
+                    </ButtonItem>
+                  </div>
+                ) : null}
               </div>
-              {card.installed ? (
-                <div data-pdc-theme-action="true" style={{ position: "relative" }}>
-                  <ButtonItem
-                    layout="below"
-                    disabled={activationBlocked}
-                    onClick={() => void (card.active ? controller.deactivate(card.id) : controller.activate(card.id))}
-                  >
-                    {card.active ? <LuPower size={14} aria-hidden /> : <LuSparkles size={14} aria-hidden />}{" "}
-                    {t(card.active
-                      ? deactivating ? "themes.action.deactivating" : "themes.action.deactivate"
-                      : activating ? "themes.action.activating" : "themes.action.activate")}
+              <div data-pdc-theme-muted style={{ position: "relative", fontSize: 14, lineHeight: 1.45 }}>{description}</div>
+              <div data-pdc-theme-muted style={{ position: "relative", display: "flex", flexWrap: "wrap", gap: 7, fontSize: theme.font.caption }}>
+                {card.installed && card.installedVersion ? <span>{t("themes.version.installed", { version: formatVersion(card.installedVersion) })}</span> : null}
+                <span>{t(card.earlyOnly ? "themes.early.version" : "themes.version.published", { version: formatVersion(card.release.publishedVersion) })}</span>
+              </div>
+            </header>
+
+            {card.early && cssReady ? (
+              <section data-pdc-theme-early="true" data-pdc-theme-status-surface="true" style={STATUS_SURFACE}>
+                <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, fontWeight: 700 }}>
+                  <EarlyBadge /> {t("themes.early.title")}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
+                  {t("themes.early.version", { version: formatVersion(card.early.version) })}
+                </div>
+                <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.45 }}>
+                  {t(card.early.installable ? "themes.early.desc" : "themes.early.unavailable")}
+                </div>
+                <div style={{ marginTop: theme.space.sm }}>
+                  <ButtonItem layout="below" disabled={actionsBlocked || !card.early.installable} onClick={() => void controller.installEarly(card.id)}>
+                    <LuFileArchive size={14} aria-hidden /> {t(installing ? "themes.action.installing" : "themes.early.install")}
                   </ButtonItem>
                 </div>
-              ) : null}
-            </header>
+              </section>
+            ) : null}
 
             {!fullSizeLayout ? <div aria-hidden style={{ height: 1, margin: `0 ${theme.space.xs}px ${theme.space.md}px`, background: theme.color.hairline }} /> : null}
 
@@ -443,7 +457,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
 
             {controller.error ? (
               <div data-pdc-theme-status-surface="true" role="alert" style={STATUS_SURFACE}>
-                <div data-pdc-theme-warning>{t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}</div>
+                <div data-pdc-theme-warning>{t(controller.recoveryBlocked
+                  ? "themes.recovery.blocked"
+                  : controller.errorCode === "unknown_archive" ? "themes.early.rejected" : "themes.operation.failed")}</div>
                 {controller.errorCode ? (
                   <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
                     {t("themes.operation.code", { code: controller.errorCode })}
@@ -465,52 +481,33 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               </div>
             ) : null}
 
-            {offer ? activeOfferConfirmation ? (
+            {offer && activeOfferConfirmation ? (
               <ThemeConfirmation
                 confirmation={activeOfferConfirmation}
                 displayName={displayName}
                 actionsBlocked={actionsBlocked}
-                onCancel={() => setPendingConfirmation(null)}
+                onCancel={() => switchConfirmation(null)}
                 onConfirm={() => {
-                  setPendingConfirmation(null);
+                  switchConfirmation(null);
                   void controller.install(card.id, { version: activeOfferConfirmation.version });
                 }}
               />
-            ) : (
+            ) : null}
+            {offer && card.installed && !activeOfferConfirmation ? (
               <div
-                ref={installOfferRef}
                 role="group"
-                aria-labelledby="theme-install-ready-label"
+                aria-labelledby="theme-update-ready-label"
                 style={{
                   ...STATUS_SURFACE,
                   ...theme.card,
-                  ...(card.installed ? {} : { display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.md, padding: theme.space.sm }),
-                  background: card.installed
-                    ? theme.color.surfaceRaised
-                    : `linear-gradient(90deg, rgba(${theme.color.accentRgb},0.09), rgba(${theme.color.accentRgb},0.025))`,
+                  background: theme.color.surfaceRaised,
                   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.16)`,
                 }}
               >
-                <div id="theme-install-ready-label" style={{ display: "flex", alignItems: "center", gap: theme.space.sm, fontWeight: 750 }}>
-                  {!card.installed ? (
-                    <span aria-hidden style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: theme.radius.sm,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: theme.color.accent,
-                      background: `rgba(${theme.color.accentRgb},0.13)`,
-                    }}>
-                      <LuDownload size={16} />
-                    </span>
-                  ) : null}
-                  <span>{t(card.installed ? "themes.update.ready" : "themes.install.ready")}</span>
-                </div>
-                <div style={{ marginTop: card.installed ? theme.space.md : 0, flexShrink: 0 }}>
-                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => setPendingConfirmation(offer)}>
-                    {t(installing ? card.installed ? "themes.action.updating" : "themes.action.installing" : card.installed ? "themes.action.update" : "themes.action.install")}
+                <div id="theme-update-ready-label" style={{ fontWeight: 750 }}>{t("themes.update.ready")}</div>
+                <div style={{ marginTop: theme.space.md }}>
+                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => switchConfirmation(offer)}>
+                    {t(installing ? "themes.action.updating" : "themes.action.update")}
                   </ButtonItem>
                 </div>
               </div>
@@ -526,9 +523,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   return (
                     <section key={group.id} aria-labelledby={headingId} style={{ minWidth: 0 }}>
                       <h3 id={headingId} data-pdc-theme-muted style={{ ...theme.sectionLabel, margin: `0 0 ${theme.space.sm}px` }}>{t(`themes.group.${group.id}`)}</h3>
-                      {group.id === "sections" ? (
+                      {group.id === "sections" || group.id === "extra" ? (
                         <p data-pdc-theme-muted style={{ margin: `0 0 ${theme.space.sm}px`, lineHeight: 1.4 }}>
-                          {t("themes.group.sectionsDescription")}
+                          {t(`themes.group.${group.id}Description`)}
                         </p>
                       ) : null}
                       <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
@@ -550,9 +547,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                     confirmation={activeUninstallConfirmation}
                     displayName={displayName}
                     actionsBlocked={actionsBlocked}
-                    onCancel={() => setPendingConfirmation(null)}
+                    onCancel={() => switchConfirmation(null)}
                     onConfirm={() => {
-                      setPendingConfirmation(null);
+                      switchConfirmation(null);
                       void controller.uninstall(card.id);
                     }}
                   />
@@ -560,7 +557,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   <DialogButton
                     style={DELETE_ACTION_STYLE}
                     disabled={actionsBlocked}
-                    onClick={() => setPendingConfirmation({ kind: "uninstall" })}
+                    onClick={() => switchConfirmation({ kind: "uninstall" })}
                   >
                     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
                       <LuTrash2 size={15} aria-hidden />

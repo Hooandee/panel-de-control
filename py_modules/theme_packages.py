@@ -58,6 +58,7 @@ _MAX_REMOTE_TARGETS = 8
 _MAX_REMOTE_TEXT_BYTES = 4096
 _PATCH_LABEL_LOCALES = frozenset({"es", "en", "it", "de", "pt-BR"})
 _MAX_PATCH_LABEL_CHARS = 120
+_PATCH_LABEL_GROUPS = frozenset({"extra"})
 _REMOTE_MANIFEST_VERSION = 9
 _REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
     "name",
@@ -76,6 +77,8 @@ _REMOTE_TARGET_NAMES = frozenset({
     "QuickAccess",
     "MainMenu",
     "notificationtoasts.*",
+    # Steam's controller configurator opens as its own window, matched by its createflags URL.
+    "~createflags=18&~",
 })
 _CSS_LOADER_STATE_FILES = {"config_ROOT.json", "config_USER.json"}
 _TRANSACTION_PREFIX = ".panel-theme-transaction-"
@@ -109,6 +112,9 @@ def _durable_replace(source: Path, destination: Path) -> None:
     _fsync_directory(source_parent)
     if destination_parent != source_parent:
         _fsync_directory(destination_parent)
+
+
+durable_replace = _durable_replace
 
 
 def _durable_remove_tree(path: Path) -> None:
@@ -170,6 +176,9 @@ def _mutation_lock(themes_root: Path) -> Iterator[None]:
                     fcntl.flock(descriptor, fcntl.LOCK_UN)
             finally:
                 os.close(descriptor)
+
+
+theme_mutation_lock = _mutation_lock
 
 
 def _read_json(path: Path, code: str) -> dict[str, Any]:
@@ -631,6 +640,9 @@ def _usable_patch_labels(value: object) -> dict[str, Any]:
             }
             if options:
                 usable["values"] = options
+        group = entry.get("group")
+        if isinstance(group, str) and group in _PATCH_LABEL_GROUPS:
+            usable["group"] = group
         if usable:
             labels[patch] = usable
     return labels

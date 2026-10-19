@@ -8,6 +8,7 @@ import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
+import { createThemeCleanupHost } from "./themeCleanupHost";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
@@ -26,7 +27,7 @@ import {
   type SectionHandoffs,
   type SectionPatchRef,
 } from "./sectionOwnership";
-import { deriveThemeCards } from "./state";
+import { deriveThemeCards, managedThemeReleases, type ThemeCardModel } from "./state";
 import type { ThemeInstallRequest } from "./types";
 
 export interface ThemesAdapter {
@@ -47,6 +48,19 @@ export interface ThemesAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
   setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot>;
+  disableAllExcept?(before: CssLoaderReadySnapshot, keep: ReadonlySet<string>): Promise<CssLoaderReadySnapshot>;
+  enableAgain?(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+    names: readonly string[],
+  ): Promise<CssLoaderReadySnapshot>;
+}
+
+export interface ThemeCleanupHost {
+  setAside(disabled: readonly string[]): Promise<void>;
+  // Moves folders back and returns the themes to enable again; they stay recorded until acknowledged.
+  restore(): Promise<readonly string[]>;
+  acknowledgeRestore(): Promise<void>;
 }
 
 export interface ThemesInstaller {
@@ -92,9 +106,11 @@ export interface ThemesDependencies {
   publication?: ThemePublicationClient;
   reportFailure?: (failure: ThemeFailureReport) => void;
   sectionHandoffs?: SectionHandoffStore;
+  cleanup?: ThemeCleanupHost;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
   publicationFailureRetryIntervalMs?: number;
+  pickEarlyArchive?: () => Promise<string | null>;
 }
 
 export interface ThemeInstallConfirmation {
@@ -107,7 +123,9 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string };
+  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "cleaning" }
+  | { kind: "restoring" };
 
 export interface ThemesClientSnapshot {
   loading: boolean;
@@ -133,6 +151,14 @@ const MAX_INSTALL_RECONCILE_FAILURES = 3;
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
 let sectionHandoffStore: SectionHandoffStore | undefined;
+let earlyArchivePicker: (() => Promise<string | null>) | undefined;
+
+export function configureEarlyArchivePicker(picker: () => Promise<string | null>): () => void {
+  earlyArchivePicker = picker;
+  return () => {
+    if (earlyArchivePicker === picker) earlyArchivePicker = undefined;
+  };
+}
 
 export function configureThemeFailureReporter(
   reporter: (failure: ThemeFailureReport) => unknown,
@@ -158,6 +184,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
     installer: createPanelThemeInstaller(),
     activator: new ThemeActivator(adapter, createPanelThemeActivationJournal()),
     publication: createRemotePublicationClient(),
+    pickEarlyArchive: () => earlyArchivePicker?.() ?? Promise.resolve(null),
     reportFailure: (failure) => {
       void Promise.resolve(failureReporter?.(failure)).catch(() => undefined);
     },
@@ -165,6 +192,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
       read: () => sectionHandoffStore?.read() ?? {},
       write: (handoffs) => sectionHandoffStore?.write(handoffs),
     },
+    cleanup: createThemeCleanupHost(),
   };
   return productionDependencies;
 }
@@ -176,6 +204,18 @@ function errorMessage(error: unknown): string {
 function errorCode(error: unknown): string {
   const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
   return typeof code === "string" && code.length > 0 ? code : "unknown";
+}
+
+// Failure messages reach the logs in reports; other themes and profiles can carry personal names.
+async function withoutThemeNames<T>(operation: Promise<T>): Promise<T> {
+  try {
+    return await operation;
+  } catch (error) {
+    throw new CssLoaderOperationError(
+      error instanceof CssLoaderOperationError ? error.code : "transport",
+      "CSS Loader could not finish the theme cleanup",
+    );
+  }
 }
 
 function cssLoaderAnsweredWithMismatch(error: unknown): boolean {
@@ -332,7 +372,7 @@ export class ThemesClient {
   };
 
   activate = (themeId: string): Promise<boolean> => {
-    const themes = this.currentPublicationThemes();
+    const themes = this.managedThemes();
     const target = themes.find((theme) => theme.catalogId === themeId);
     if (this.current.snapshot.status !== "ready" || target?.compatibility !== "compatible") {
       return Promise.resolve(false);
@@ -350,10 +390,9 @@ export class ThemesClient {
   };
 
   deactivate = (themeId: string): Promise<boolean> => {
-    const themes = this.currentPublicationThemes();
-    if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
-      return Promise.resolve(false);
-    }
+    const themes = this.managedThemes();
+    if (this.current.snapshot.status !== "ready") return Promise.resolve(false);
+    if (!themes.some((theme) => theme.catalogId === themeId)) return this.rejectUnknownTheme("deactivating", themeId);
     const leaving = themes.find((theme) => theme.catalogId === themeId)!.cssLoaderName;
     return this.mutate(
       { kind: "deactivating", themeId },
@@ -380,7 +419,27 @@ export class ThemesClient {
       catalogId: card.release.catalogId,
       expectedVersion: card.targetVersion,
     };
-    const expectedVersion = card.targetVersion;
+    return this.runInstall(themeId, card, source, card.targetVersion);
+  };
+
+  /** Installs an early access zip the user picks; the backend accepts only a published early build. */
+  installEarly = async (themeId: string): Promise<boolean> => {
+    const card = deriveThemeCards(this.current.publication, this.current.snapshot)
+      .find((candidate) => candidate.id === themeId);
+    if (this.current.snapshot.status !== "ready" || !card?.early?.installable || !this.dependencies.pickEarlyArchive) {
+      return false;
+    }
+    const archivePath = await this.dependencies.pickEarlyArchive();
+    if (!archivePath) return false;
+    return this.runInstall(themeId, card, { kind: "early-archive", catalogId: card.release.catalogId, archivePath }, null);
+  };
+
+  private runInstall(
+    themeId: string,
+    card: ThemeCardModel,
+    source: ThemeInstallRequest,
+    expectedVersion: string | null,
+  ): Promise<boolean> {
     return this.mutate(
       { kind: "installing", themeId },
       async () => {
@@ -391,7 +450,7 @@ export class ThemesClient {
           if (
             installed.themeId !== card.release.catalogId
             || installed.themeName !== card.release.cssLoaderName
-            || installed.version !== expectedVersion
+            || (expectedVersion !== null && installed.version !== expectedVersion)
           ) {
             throw new ThemeInstallError(
               "identity_mismatch",
@@ -400,7 +459,7 @@ export class ThemesClient {
           }
           const verified = await this.dependencies.adapter.reloadTheme(
             card.release.cssLoaderName,
-            expectedVersion,
+            installed.version,
             before,
           );
           await this.dependencies.installer.commit(installed.transaction);
@@ -430,7 +489,7 @@ export class ThemesClient {
         }
       },
     );
-  };
+  }
 
   uninstall = (themeId: string): Promise<boolean> => {
     const card = deriveThemeCards(this.current.publication, this.current.snapshot)
@@ -509,8 +568,8 @@ export class ThemesClient {
   }
 
   setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
-    const entry = this.currentPublicationThemes().find((theme) => theme.catalogId === themeId);
-    if (!entry) return Promise.resolve(false);
+    const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
+    if (!entry) return this.rejectUnknownTheme("saving", themeId);
     return this.mutate(
       { kind: "saving", themeId, patchName },
       async () => {
@@ -522,8 +581,67 @@ export class ThemesClient {
     );
   };
 
+  // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
+  // set aside and the styles it left behind removed from the Steam windows the caller can reach.
+  // `keepActive` names the one Hooandee theme to leave on when several are; the others go off
+  // through the same path as their own Deactivate button, before CSS Loader reloads.
+  cleanUp = (
+    keep: readonly string[],
+    removeLeftoverStyles?: () => void,
+    keepActive?: string,
+  ): Promise<boolean> => this.mutate({ kind: "cleaning" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.disableAllExcept || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.setAside([]);
+      removeLeftoverStyles?.();
+      return current;
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    if (keepActive !== undefined) await this.deactivateOursExcept(current, keepActive);
+    const before = await adapter.requireReady();
+    await cleanup.setAside(before.themes.filter((theme) => theme.enabled && !kept.has(theme.name)).map((theme) => theme.name));
+    const after = await withoutThemeNames(adapter.disableAllExcept(before, kept));
+    if (!after.themes.some((theme) => theme.enabled)) removeLeftoverStyles?.();
+    return after;
+  });
+
+  undoCleanup = (keep: readonly string[]): Promise<boolean> => this.mutate({ kind: "restoring" }, async () => {
+    const { adapter, cleanup } = this.dependencies;
+    if (!adapter.enableAgain || !cleanup) {
+      throw new CssLoaderOperationError("transport", "Theme cleanup is unavailable");
+    }
+    const current = await adapter.inspect();
+    if (current.status === "missing" || current.status === "disabled") {
+      await cleanup.restore();
+      return current;
+    }
+    const kept = new Set([...keep, ...this.hooandeeThemeNames()]);
+    const before = await adapter.requireReady();
+    const after = await withoutThemeNames(adapter.enableAgain(before, kept, await cleanup.restore()));
+    await cleanup.acknowledgeRestore();
+    return after;
+  });
+
+  private async deactivateOursExcept(snapshot: CssLoaderSnapshot, keepActive: string): Promise<void> {
+    if (!snapshot.themes.some((theme) => theme.name === keepActive && theme.enabled)) {
+      throw new CssLoaderOperationError("verification_failed", "The theme chosen to stay active is no longer active");
+    }
+    const catalog = this.managedThemes();
+    for (const theme of snapshot.themes) {
+      if (!theme.enabled || theme.name === keepActive) continue;
+      const release = catalog.find((entry) => entry.cssLoaderName === theme.name);
+      if (release) {
+        await this.restoreSections(await this.dependencies.activator.deactivate(release.catalogId, catalog), theme.name);
+      }
+    }
+  }
+
   private hooandeeThemeNames(): ReadonlySet<string> {
-    return new Set(this.currentPublicationThemes().map((theme) => theme.cssLoaderName));
+    return new Set(this.managedThemes().map((theme) => theme.cssLoaderName));
   }
 
   private readHandoffs(): SectionHandoffs {
@@ -603,10 +721,8 @@ export class ThemesClient {
     return after;
   }
 
-  private currentPublicationThemes(): readonly PublishedThemeRelease[] {
-    return this.current.publication.status === "published" || this.current.publication.status === "cached"
-      ? this.current.publication.themes
-      : [];
+  private managedThemes(): readonly PublishedThemeRelease[] {
+    return managedThemeReleases(this.current.publication);
   }
 
   private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
@@ -723,6 +839,11 @@ export class ThemesClient {
     }
     this.report(operation, error);
     return { error: errorMessage(error), errorCode: errorCode(error) };
+  }
+
+  private rejectUnknownTheme(operation: ThemesOperation["kind"], themeId: string): Promise<boolean> {
+    this.report(operation, new Error(`Theme ${themeId} is not in the catalog`), "unknown_theme");
+    return Promise.resolve(false);
   }
 
   private report(operation: ThemesOperation["kind"], error: unknown, code = errorCode(error)): void {

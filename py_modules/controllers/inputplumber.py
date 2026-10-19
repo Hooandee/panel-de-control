@@ -26,6 +26,7 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
     buttons = ip_profile.buttons_for(device_key, caps)
     overrides = store.effective_overrides(appid)
     return {
+        **_unmapped_dropped(dbus, device_key, buttons, overrides),
         "kind": "remap",
         "device_key": device_key,
         "device_known": ip_profile.is_known_device(device_key),
@@ -39,6 +40,22 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
         "follows_global": store.is_following_global(appid),
         "has_game_profile": store.has_game(appid),
     }
+
+
+def _unmapped_dropped(dbus, device_key, buttons, overrides) -> dict:
+    """Whether a button left at its default is lost because the emulated gamepad has no
+    equivalent (Armada's Xbox Series target has no paddles). Read live, only for models
+    whose buttons come from a capability map, to spare a busctl spawn elsewhere."""
+    if device_key not in ip_profile.CAPABILITY_MAPPED_BUTTONS or not buttons:
+        return {}
+    reader = getattr(dbus, "target_capabilities", None)
+    target = reader() if callable(reader) else None
+    if target is None:
+        return {}
+    emitted = {cap.rsplit(":", 1)[-1] for cap in target}
+    return {"unmapped_dropped": any(
+        cap not in emitted and not overrides.get(cap) for cap, _label in buttons
+    )}
 
 
 def _apply_overrides(dbus, overrides: dict, merge=merge_profile) -> bool:

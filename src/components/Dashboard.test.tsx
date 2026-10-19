@@ -140,6 +140,14 @@ describe("Dashboard", () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
   });
 
+  it("prefers the first card when no section was just left", () => {
+    render(<Dashboard sections={sections()} activeId={null} onOpenSection={vi.fn()} />);
+
+    const cards = screen.getAllByTestId("dashboard-card");
+    expect(cards[0].dataset.preferredFocus).toBe("true");
+    expect(cards.slice(1).every((card) => card.dataset.preferredFocus === undefined)).toBe(true);
+  });
+
   it("reveals the newly focused card without taking focus itself", () => {
     render(<Dashboard sections={sections()} activeId="power" onOpenSection={vi.fn()} />);
     const laterCard = screen.getAllByTestId("dashboard-card")[1];

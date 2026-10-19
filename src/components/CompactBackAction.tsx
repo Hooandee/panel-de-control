@@ -27,6 +27,7 @@ export function CompactBackAction({ onBack, label }: CompactBackActionProps) {
   return (
     <Focusable
       role="button"
+      data-pdc-part="back"
       aria-label={text}
       onActivate={goBack}
       onClick={goBack}

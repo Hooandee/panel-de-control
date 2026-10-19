@@ -29,10 +29,13 @@ export interface ThemesController {
   refresh(): Promise<void>;
   refreshPublication(): Promise<void>;
   install(themeId: string, confirmation?: ThemeInstallConfirmation): Promise<boolean>;
+  installEarly(themeId: string): Promise<boolean>;
   uninstall(themeId: string): Promise<boolean>;
   activate(themeId: string): Promise<boolean>;
   deactivate(themeId: string): Promise<boolean>;
   setPatch(themeId: string, patchName: string, value: string): Promise<boolean>;
+  cleanUp(keep: readonly string[], removeLeftoverStyles?: () => void, keepActive?: string): Promise<boolean>;
+  undoCleanup(keep: readonly string[]): Promise<boolean>;
 }
 
 const clients = new WeakMap<ThemesDependencies, ThemesClient>();
@@ -61,9 +64,12 @@ export function useThemes(dependencies?: ThemesDependencies): ThemesController {
     refresh: client.refresh,
     refreshPublication: client.refreshPublication,
     install: client.install,
+    installEarly: client.installEarly,
     uninstall: client.uninstall,
     activate: client.activate,
     deactivate: client.deactivate,
     setPatch: client.setPatch,
+    cleanUp: client.cleanUp,
+    undoCleanup: client.undoCleanup,
   };
 }

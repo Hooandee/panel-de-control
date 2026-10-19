@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { theme } from "../theme";
@@ -21,17 +21,17 @@ vi.mock("@decky/ui", () => ({
       <button aria-label="modal-escape" onClick={onEscKeypress}>escape</button>
     </div>
   ),
-  Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Focusable: ({ children, style }: { children?: ReactNode; style?: CSSProperties }) => <div style={style}>{children}</div>,
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button onClick={onClick} disabled={disabled}>{children}</button>
   ),
   DialogButton: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
-  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   Navigation: { Navigate: mocks.navigate },
   showModal: mocks.showModal,
 }));
+vi.mock("../themes/runtime/navigationAccess", () => ({ createThemeNavigationAccess: () => ({ focus: mocks.focusElement }) }));
 vi.mock("../themes/useThemes", () => ({ useThemes: () => mocks.controller }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string) => key }) }));
 vi.mock("./ThemePatchControl", () => ({
@@ -71,11 +71,14 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
+    installEarly: vi.fn(async () => false),
     install: vi.fn(async () => true),
     uninstall: vi.fn(async () => true),
     activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true),
     setPatch: vi.fn(async () => true),
+    cleanUp: vi.fn(async () => true),
+    undoCleanup: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -101,6 +104,25 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 
 describe("ThemeDetailsModal", () => {
   afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
+
+  it("offers an early access build only from a file, and names a rejected one", () => {
+    const base = controller();
+    const installEarly = vi.fn(async () => true);
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [] },
+      cards: [{ ...base.cards[0], installable: false, targetVersion: undefined, earlyOnly: true, early: { version: "0.3.0", installable: true } }],
+      installEarly,
+    });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(view.container.querySelector("[data-pdc-theme-early]")).not.toBeNull();
+    expect(screen.queryByText(/themes.action.install$/)).toBeNull();
+    fireEvent.click(screen.getByText(/themes.early.install/));
+    expect(installEarly).toHaveBeenCalledWith("example-theme");
+    cleanup();
+    mocks.controller = { ...mocks.controller!, error: "x", errorCode: "unknown_archive" };
+    render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(screen.getByText("themes.early.rejected")).toBeTruthy();
+  });
 
   it("keeps working when its card disappears while the catalog refreshes", () => {
     mocks.controller = installedController();
@@ -162,7 +184,7 @@ describe("ThemeDetailsModal", () => {
     expect(screen.getByTestId("theme-details-cover").style.inset).toBe("-2px");
     expect(screen.getByTestId("theme-details-cover").style.width).toBe("calc(100% + 4px)");
     expect(screen.getByTestId("theme-details-cover-gradient")).toBeTruthy();
-    expect(screen.getByTestId("theme-details-cover-copy").style.textShadow).not.toBe("");
+    expect(screen.getByTestId("theme-details-cover-copy").closest("header")?.style.textShadow).not.toBe("");
   });
 
   it("keeps generic themes neutral and falls back if the HOOANDEE cover fails", () => {
@@ -235,9 +257,9 @@ describe("ThemeDetailsModal", () => {
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
 
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
-    expect(screen.queryByRole("group", { name: "themes.install.ready" })).toBeNull();
+    const header = screen.getByRole("heading").closest("header") as HTMLElement;
+    fireEvent.click(within(header).getByRole("button", { name: "themes.action.install" }));
+    expect(screen.queryByRole("button", { name: "themes.action.install" })).toBeNull();
 
     const confirmation = screen.getByRole("group", { name: "themes.install.confirm.title" });
     expect(within(confirmation).getByText("themes.remote.card.version")).toBeTruthy();
@@ -268,7 +290,7 @@ describe("ThemeDetailsModal", () => {
     const cancel = screen.getByRole("button", { name: "themes.install.confirm.cancel" });
     expect((cancel as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(cancel);
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.action.install" })).toBeTruthy();
   });
 
   it("uses Escape to restore the offer before closing the modal", () => {
@@ -280,7 +302,7 @@ describe("ThemeDetailsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
     fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
-    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "themes.action.install" })).toBeTruthy();
     expect(closeModal).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));

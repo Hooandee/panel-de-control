@@ -1301,3 +1301,61 @@ def test_pending_custom_return_is_recovered_from_the_lock_after_restart(tmp_path
     assert recovery["ok"] is True
     assert restarted.read_profile() == "custom"
     assert not os.path.exists(lock_path)
+
+
+def _gos_capped_by_firmware(tmp_path, probe=True):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 22, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 18, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 37, 5, 20)
+    _mk_profile(root, cur="custom")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(detect(product_name="83N6")),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        probe_live_max_on_ac=probe,
+    )
+    attempted = []
+    write = backend._write
+
+    def reject_above_max(path, value):
+        if path.endswith("current_value"):
+            attempted.append((os.path.basename(os.path.dirname(path)), int(value)))
+            with open(os.path.join(os.path.dirname(path), "max_value")) as f:
+                if int(value) > int(f.read()):
+                    backend._last_write_error = "EINVAL"
+                    return False
+        return write(path, value)
+
+    backend._write = reject_above_max
+    return backend, attempted
+
+
+def test_lenovo_probe_rejected_by_firmware_cap_rolls_back_within_live_max(tmp_path):
+    backend, attempted = _gos_capped_by_firmware(tmp_path)
+
+    result = backend.set_levels(25, 30, 35, ac=True)
+
+    assert result.ok is False
+    assert result.failure_kind == "live_max_rejected"
+    assert "rollback confirmed" in result.detail
+    assert backend.safety_locked is False
+    assert attempted[0] == ("ppt_pl3_fppt", 35)
+    caps = {"ppt_pl1_spl": 15, "ppt_pl2_sppt": 15, "ppt_pl3_fppt": 20}
+    assert all(value <= caps[attr] for attr, value in attempted[1:])
+    assert _rails(backend) == {"pl1": 15, "pl2": 15, "pl3": 20}
+
+
+def test_lenovo_rejection_without_probe_keeps_previous_failure_kind(tmp_path):
+    backend, _attempted = _gos_capped_by_firmware(tmp_path, probe=False)
+    backend._write = lambda path, value: (
+        setattr(backend, "_last_write_error", "EINVAL") or False
+        if path.endswith("current_value")
+        else True
+    )
+
+    result = backend.set_levels(10, 10, 10, ac=True)
+
+    assert result.ok is False
+    assert result.failure_kind is None

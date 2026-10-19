@@ -12,9 +12,15 @@ interface NavigationButtons {
   cancel: number;
 }
 
+interface NavigationContext {
+  m_rgGamepadNavigationTrees?: unknown;
+}
+
 interface NavigationController {
   GetActiveNavTree?(): NavigationTree | null;
   FocusElement?(element: HTMLElement): unknown;
+  m_ActiveContext?: NavigationContext | null;
+  m_LastActiveContext?: NavigationContext | null;
 }
 
 interface NavigationNode {
@@ -35,6 +41,9 @@ interface NavigationTree {
 interface ThemeNavigationAccessDependencies {
   getController?(): NavigationController | null | undefined;
   buttons?: Readonly<NavigationButtons>;
+  // Panel only: also place focus in the last active context (see inactiveContextTrees).
+  // Theme extensions keep the active-tree-only behaviour.
+  allowInactiveContext?: boolean;
 }
 
 const DEFAULT_BUTTONS: Readonly<NavigationButtons> = Object.freeze({
@@ -75,11 +84,20 @@ function findNavigationNode(tree: NavigationTree, element: HTMLElement): Navigat
   return null;
 }
 
+// With a game in front, closing a modal can leave Steam with no active context until
+// the next button press; focus taken in the last context is where that press resumes.
+function inactiveContextTrees(controller: NavigationController | null | undefined): NavigationTree | null {
+  const context = controller?.m_ActiveContext ?? controller?.m_LastActiveContext;
+  const trees = context?.m_rgGamepadNavigationTrees;
+  return Array.isArray(trees) ? { m_rgChildNavTrees: trees } : null;
+}
+
 function focusThroughNavigationNode(
   controller: NavigationController | null | undefined,
   element: HTMLElement,
+  allowInactiveContext: boolean,
 ): boolean {
-  const tree = controller?.GetActiveNavTree?.();
+  const tree = controller?.GetActiveNavTree?.() ?? (allowInactiveContext ? inactiveContextTrees(controller) : null);
   if (!tree) return false;
   const node = findNavigationNode(tree, element);
   if (typeof node?.BTakeFocus !== "function") return false;
@@ -97,6 +115,7 @@ function consumeInput(event: unknown): void {
 export function createThemeNavigationAccess({
   getController = getSteamNavigationController,
   buttons = DEFAULT_BUTTONS,
+  allowInactiveContext = false,
 }: ThemeNavigationAccessDependencies = {}): Readonly<ThemeExtensionNavigationAccess> {
   return Object.freeze({
     focus(element: HTMLElement): boolean {
@@ -106,7 +125,7 @@ export function createThemeNavigationAccess({
         if (typeof controller?.FocusElement === "function") {
           controller.FocusElement(element);
           hostFocused = true;
-        } else if (focusThroughNavigationNode(controller, element)) {
+        } else if (focusThroughNavigationNode(controller, element, allowInactiveContext)) {
           return true;
         }
       } catch {

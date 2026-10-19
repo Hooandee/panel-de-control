@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
+  getTdpState, setTdpWatts, setGpuLevel, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
   getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice,
   setLowBatteryTdpHold, getPowerPresets, applyPowerPreset, setAutoTdpConfig,
   TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState, AutoTdpConfig,
@@ -33,12 +33,14 @@ function confirmedAutoDrafts(drafts: AutoDrafts): AutoDrafts {
 
 export interface TdpControl {
   tdp: TdpState | null;
+  tdpSettled: boolean;
   power: PowerDraw | null;
   scope: TdpScope;
   game: ReturnType<typeof useRunningGame>;
   refresh: () => void;
   onScope: (s: TdpScope) => void;
   onWatts: (w: number) => void;
+  onGpuLevel: (level: number | null) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
   onAutoTdpToggle: (enabled: boolean) => void;
@@ -68,10 +70,12 @@ function levelsAtWatts(levels: TdpState["levels"], watts: number, mode: BoostMod
 export function useTdp(): TdpControl {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
+  const [tdpSettled, setTdpSettled] = useState(false);
   const [power, setPower] = useState<PowerDraw | null>(null);
   const [presets, setPresets] = useState<PowerPresetState | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitTimerGpu = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoDrafts = useRef<AutoDrafts>({});
   const followEpoch = useRef(0);
 
@@ -100,7 +104,8 @@ export function useTdp(): TdpControl {
     getTdpState().then((next) => {
       if (epoch !== followEpoch.current) return;
       setTdp(reconcileAutoState(next, confirmed));
-    }).catch(() => {});
+      setTdpSettled(true);
+    }).catch(() => setTdpSettled(true));
   }, [reconcileAutoState]);
 
   const refreshPresets = useCallback(() => {
@@ -163,11 +168,13 @@ export function useTdp(): TdpControl {
   useEffect(() => () => {
     if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
     if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
+    if (commitTimerGpu.current) clearTimeout(commitTimerGpu.current);
     for (const draft of Object.values(autoDrafts.current)) {
       if (draft.timer) clearTimeout(draft.timer);
     }
     commitTimerWatts.current = null;
     commitTimerLevels.current = null;
+    commitTimerGpu.current = null;
     autoDrafts.current = {};
     followEpoch.current += 1;
   }, [appid]);
@@ -189,7 +196,15 @@ export function useTdp(): TdpControl {
     },
     [reconcileAutoState, tdp],
   );
-  const { scope, onScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
+  const { scope, onScope: switchScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
+  // A debounced write still aimed at the old scope would detach the game from global again.
+  const onScope = useCallback((next: TdpScope) => {
+    if (next !== scope && commitTimerGpu.current) {
+      clearTimeout(commitTimerGpu.current);
+      commitTimerGpu.current = null;
+    }
+    switchScope(next);
+  }, [scope, switchScope]);
 
   const resolveTarget = useCallback((): {
     target: string | null;
@@ -228,6 +243,24 @@ export function useTdp(): TdpControl {
       commitTimerWatts.current = setTimeout(() => {
         setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {});
       }, 200);
+    },
+    [resolveTarget, refresh],
+  );
+
+  const onGpuLevel = useCallback(
+    (level: number | null) => {
+      const { target, sc, context } = resolveTarget();
+      setTdp((cur) => {
+        if (!cur) return cur;
+        return sc === "global" ? { ...cur, global_gpu_level: level } : { ...cur, gpu_level: level };
+      });
+      if (commitTimerGpu.current) clearTimeout(commitTimerGpu.current);
+      const commit = () => {
+        commitTimerGpu.current = null;
+        setGpuLevel(level, sc, target, context).then(refresh, refresh);
+      };
+      if (level === null) commit();
+      else commitTimerGpu.current = setTimeout(commit, 200);
     },
     [resolveTarget, refresh],
   );
@@ -408,12 +441,14 @@ export function useTdp(): TdpControl {
 
   return {
     tdp,
+    tdpSettled,
     power,
     scope,
     game,
     refresh,
     onScope,
     onWatts,
+    onGpuLevel,
     onSetLevels,
     onSetMode,
     onAutoTdpToggle,

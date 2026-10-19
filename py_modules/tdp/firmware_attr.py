@@ -315,6 +315,7 @@ class FirmwareAttrBackend(TDPBackend):
         allow_rearm=True,
     ):
         self._rollback_rearmed = False
+        snapshot = self._snapshot_within_live_max(surfaces, snapshot)
         write_failures = []
         if restore_rails:
             for surface, rail, path in reversed(surfaces):
@@ -580,6 +581,33 @@ class FirmwareAttrBackend(TDPBackend):
             self._last_write_error = errno.errorcode.get(error.errno, "OSError")
             journal.write_failed(path, value, error)
             return False
+
+    def _write_rejected_above_live_max(self, surface, rail, value, ac):
+        if not (
+            ac
+            and self.probe_live_max_on_ac
+            and surface == self.name
+            and self._last_write_error == "EINVAL"
+        ):
+            return False
+        _lo, live_hi = self._live_bounds(dict(_RAIL_ATTRS)[rail])
+        live_hi = self._effective_live_max(rail, live_hi)
+        return live_hi is not None and int(value) > live_hi
+
+    def _snapshot_within_live_max(self, surfaces, snapshot):
+        if not self.probe_live_max_on_ac:
+            return snapshot
+        attrs = dict(_RAIL_ATTRS)
+        bounded = dict(snapshot)
+        for surface, rail, path in surfaces:
+            value = bounded.get(path)
+            if surface != self.name or value is None:
+                continue
+            _lo, live_hi = self._live_bounds(attrs[rail])
+            live_hi = self._effective_live_max(rail, live_hi)
+            if live_hi is not None and value > live_hi:
+                bounded[path] = live_hi
+        return bounded
 
     def _failed_write_label(self, surface, rail):
         label = self._surface_label(surface, rail)
@@ -943,6 +971,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._runtime_lock_payload = lock_payload
 
         failed = []
+        live_max_rejected = False
         if self._pp_dir:
             profile_path = os.path.join(self._pp_dir, "profile")
             if not self._write(profile_path, "custom"):
@@ -957,6 +986,9 @@ class FirmwareAttrBackend(TDPBackend):
         if not failed:
             for surface, rail, path in surfaces:
                 if not self._write(path, targets[rail]):
+                    live_max_rejected = self._write_rejected_above_live_max(
+                        surface, rail, targets[rail], ac,
+                    )
                     failed.append(self._failed_write_label(surface, rail))
                     break
 
@@ -1064,6 +1096,8 @@ class FirmwareAttrBackend(TDPBackend):
                 if not failed
                 and mismatches
                 and all("=unavailable" not in mismatch for mismatch in mismatches)
+                else "live_max_rejected"
+                if live_max_rejected and rollback_ok
                 else None
             )
             return TdpResult(

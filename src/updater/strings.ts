@@ -1,6 +1,11 @@
 import type { Lang } from "../i18n";
 
 interface UpdaterStrings {
+  floating: {
+    title: string;
+    update: string;
+    later: string;
+  };
   panel: {
     version: string;
     latest: string;
@@ -25,6 +30,7 @@ interface UpdaterStrings {
 
 const STRINGS: Record<Lang, UpdaterStrings> = {
   es: {
+    floating: { title: "Nueva versión disponible", update: "Actualizar", later: "Más tarde" },
     panel: {
       version: "Versión",
       latest: "(última)",
@@ -47,6 +53,7 @@ const STRINGS: Record<Lang, UpdaterStrings> = {
     availableTitle: "Actualización disponible",
   },
   en: {
+    floating: { title: "New version available", update: "Update", later: "Later" },
     panel: {
       version: "Version",
       latest: "(latest)",
@@ -69,6 +76,7 @@ const STRINGS: Record<Lang, UpdaterStrings> = {
     availableTitle: "Update available",
   },
   it: {
+    floating: { title: "Nuova versione disponibile", update: "Aggiorna", later: "Più tardi" },
     panel: {
       version: "Versione",
       latest: "(più recente)",
@@ -91,6 +99,7 @@ const STRINGS: Record<Lang, UpdaterStrings> = {
     availableTitle: "Aggiornamento disponibile",
   },
   de: {
+    floating: { title: "Neue Version verfügbar", update: "Aktualisieren", later: "Später" },
     panel: {
       version: "Version",
       latest: "(aktuell)",
@@ -113,6 +122,7 @@ const STRINGS: Record<Lang, UpdaterStrings> = {
     availableTitle: "Update verfügbar",
   },
   "pt-BR": {
+    floating: { title: "Nova versão disponível", update: "Atualizar", later: "Mais tarde" },
     panel: {
       version: "Versão",
       latest: "(mais recente)",

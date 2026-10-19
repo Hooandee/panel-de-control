@@ -34,10 +34,12 @@ import journal
 import journal_context
 import self_updater
 import theme_activation
+import theme_health
 import theme_packages
 import theme_remote
 import theme_transport
 from version import read_version
+from json_store import atomic_json_save
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
@@ -90,6 +92,8 @@ from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
 from display.hdr import HdrBackend
+from display.input_wake import InputWake
+from display.screen_sleep import ScreenSleep
 from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
@@ -144,6 +148,7 @@ from report import client as report_client
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
+from remote_access import RemoteAccess
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
@@ -157,8 +162,16 @@ _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
 _SUPPORT_SAMPLE_INTERVAL_S = 30
+_SCREEN_LEASE_S = 15.0
+_ECO_INPUT_POLL_S = 0.25
+_ECO_INPUT_REPORT_S = 1.0
+_ECO_RESCAN_S = 5.0
+_SCREEN_WAKE_RETRY_S = 2.0
+_ECO_INPUT_EVENT = "pdc_eco_input"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
 _SUPPORT_AFTER_ACTION_S = 5
+_CHARGER_NOTICE_SNOOZE_S = 7 * 24 * 3600
+_CHARGER_NOTICE_TTL_S = 24 * 3600
 # Stable fields only: live readings would make every refresh look like a change.
 # tests/test_journal_sections.py requires an entry for every section.
 _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
@@ -166,13 +179,14 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_tdp_state", (
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
-            "global_auto_config", "low_battery_hold.enabled",
+            "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
+            "gpu_level", "global_gpu_level",
         )),
     ),
     "system": (
         ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
         ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
-        ("get_eco_state", ("enabled", "tdp_min_w")),
+        ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
     ),
     "display": (
@@ -203,8 +217,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
-            "installed", "other_active_themes", "activation_phase", "activation_quarantined",
-            "recent_failures",
+            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
     ),
@@ -257,9 +271,11 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
+_THEME_EARLY_INSTALLS_FILE = "theme-early-installs.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
     "recovering", "installing", "uninstalling", "activating", "deactivating", "saving",
+    "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
@@ -283,6 +299,7 @@ class _TdpCommand:
     on_ac: bool
     auto_tdp: bool
     ppt_probe_pending: bool
+    gpu_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -335,8 +352,22 @@ async def _emit_to_frontend(event: str, *args) -> None:
     await emit(event, *args)
 
 
+def _remote_access_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "remote_access", event, **fields)
+
+
 def _plugin_dir() -> str:
     return getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
+
+
+def _current_boot_id():
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as source:
+            return source.read().strip() or None
+    except OSError:
+        return None
 
 
 def _user_home() -> str:
@@ -354,6 +385,8 @@ DEFAULTS = {
     "tdp_unit": "W",
     "kiosk_enabled": False,
     "kiosk_brightness": None,
+    "developer_options": False,
+    "remote_access_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
@@ -395,6 +428,7 @@ DEFAULTS = {
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
+    "charger_notice_dismissed_at": None,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
@@ -406,6 +440,8 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    "charge_limit_chosen": None,
+    "low_battery_hold_latched_boot": None,
     "charge_limit_full_once_until": None,
     "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
@@ -481,6 +517,12 @@ class Plugin:
             brightness=self._settings.get("kiosk_brightness"),
         )
         self._kiosk_bridge = SteamBridge(_emit_to_frontend)
+        self._remote_access = RemoteAccess(
+            _plugin_dir(),
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "remote-access"),
+            _remote_access_journal,
+            login_user=getattr(decky, "DECKY_USER", None),
+        )
         self._kiosk_fps_at = None
         self._os_id = osinfo.read_os_id()
         self._os_name = osinfo.read_os_name()
@@ -723,6 +765,12 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._screen_sleep = ScreenSleep()
+        self._input_wake = InputWake()
+        self._screen_lease_at = 0.0
+        self._screen_lock = asyncio.Lock()
+        self._screen_want = False
+        self._eco_watch_task = None
         # In-game performance overlay (MangoHud). Single global model; applied by
         # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
         self._hud = HudStore(
@@ -750,6 +798,7 @@ class Plugin:
         self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
+        self._follow_system_charge_limit()
         self._charge_limit_last_apply = None
         self._charge_limit_failures = 0
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
@@ -1227,6 +1276,58 @@ class Plugin:
         self._save()
         return await self._kiosk.set_enabled(bool(enabled))
 
+    def _developer_options_on(self) -> bool:
+        return bool(self._settings.get("developer_options"))
+
+    async def get_developer_options(self) -> bool:
+        self._init()
+        return self._developer_options_on()
+
+    async def set_developer_options(self, enabled: bool) -> bool:
+        self._init()
+        self._settings["developer_options"] = bool(enabled)
+        if not enabled:
+            self._settings["remote_access_enabled"] = False
+            await self._remote_access.set_enabled(False)
+        self._save()
+        return self._developer_options_on()
+
+    async def get_remote_access_state(self) -> dict:
+        self._init()
+        return self._remote_access.state()
+
+    async def set_remote_access_enabled(self, enabled: bool) -> dict:
+        self._init()
+        enabled = bool(enabled) and self._developer_options_on()
+        self._settings["remote_access_enabled"] = enabled
+        self._save()
+        return await self._remote_access.set_enabled(enabled)
+
+    async def open_remote_access_pairing(self) -> dict:
+        self._init()
+        return await self._remote_access.open_pairing()
+
+    async def close_remote_access_pairing(self) -> dict:
+        self._init()
+        return await self._remote_access.close_pairing()
+
+    async def answer_remote_access_pairing(self, accept: bool) -> dict:
+        self._init()
+        return await self._remote_access.answer_pairing(bool(accept))
+
+    async def forget_remote_access_keys(self) -> dict:
+        self._init()
+        return self._remote_access.forget_keys()
+
+    async def _stop_remote_access(self) -> None:
+        remote = getattr(self, "_remote_access", None)
+        if remote is None:
+            return
+        try:
+            await asyncio.wait_for(remote.shutdown(), _KIOSK_STOP_TIMEOUT_S)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Remote access shutdown incomplete: %s", error)
+
     async def _stop_kiosk(self) -> None:
         task = getattr(self, "_kiosk_task", None)
         if task is not None:
@@ -1436,7 +1537,10 @@ class Plugin:
 
     def _theme_report_diagnostics(self) -> dict:
         activation = self._theme_activation_recovery_path()
+        inventory = self._installed_theme_inventory()
         return {
+            # Up front so the diary's bounded section snapshot never cuts it off.
+            "early_themes": [theme["name"] for theme in inventory["installed"] if theme["early"]],
             "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
             "activation_phase": theme_activation.theme_activation_phase(activation),
             "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
@@ -1445,14 +1549,26 @@ class Plugin:
                 for entry in self._theme_failures()
             ],
             "unreadable_theme_folders": self._unreadable_theme_folders(),
-            **self._installed_theme_inventory(),
+            **inventory,
+            "health": self._theme_health_summary(),
         }
+
+    def _theme_health_summary(self) -> dict:
+        try:
+            return {
+                "folders": theme_health.summary(theme_health.scan(self._themes_root())),
+                "cleanup": theme_health.undo_state(self._themes_root()),
+                "panel": theme_health.internal_panel_mode(),
+            }
+        except Exception as error:  # noqa: BLE001
+            return {"unavailable": type(error).__name__}
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
         so they are only counted."""
         installed = []
         other_active = 0
+        early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
         except OSError:
@@ -1481,6 +1597,7 @@ class Plugin:
                 "version": str(manifest.get("version", ""))[:32],
                 "active": active,
                 "runtime": (folder / "panel-extension.js").is_file(),
+                "early": early_installs.get(str(manifest.get("name", ""))) == manifest.get("version"),
                 "sections": {
                     key: value
                     for key, value in config.items()
@@ -1488,6 +1605,39 @@ class Plugin:
                 },
             })
         return {"installed": installed, "other_active_themes": other_active}
+
+    def _theme_early_installs(self) -> dict[str, str]:
+        """Installed theme name to the early version it was installed as."""
+        try:
+            value = json.loads((Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EARLY_INSTALLS_FILE).read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        return {name: version for name, version in value.items() if isinstance(version, str)}
+
+    def _remember_prepared_theme(self, result: dict, *, early: bool) -> None:
+        if result.get("ok") and isinstance(result.get("transaction"), str):
+            if getattr(self, "_prepared_themes", None) is None:
+                self._prepared_themes: dict[str, tuple[str, str, bool]] = {}
+            self._prepared_themes[result["transaction"]] = (str(result.get("theme_name", "")), str(result.get("version", "")), early)
+
+    def _record_committed_theme(self, transaction: str) -> None:
+        theme = (getattr(self, "_prepared_themes", None) or {}).pop(transaction, None)
+        if theme is None:
+            return
+        name, version, early = theme
+        if journal.active is not None:
+            journal.active.write("INFO", "themes", "installed", theme=name, version=version, early=early)
+        installs = self._theme_early_installs()
+        if early:
+            installs[name] = version
+        elif installs.pop(name, None) is None:
+            return
+        try:
+            atomic_json_save(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, _THEME_EARLY_INSTALLS_FILE), installs)
+        except OSError as error:
+            journal.write_failed(_THEME_EARLY_INSTALLS_FILE, name, error)
 
     def _unreadable_theme_folders(self) -> int:
         unreadable = 0
@@ -1657,7 +1807,9 @@ class Plugin:
             )
 
         try:
-            return await self._offload_theme_call(prepare)
+            result = await self._offload_theme_call(prepare)
+            self._remember_prepared_theme(result, early=False)
+            return result
         except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
             decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
             return {"ok": False, "code": error.code, "theme_id": theme_id}
@@ -1665,14 +1817,58 @@ class Plugin:
             decky.logger.error("Remote theme prepare failed: %s", type(error).__name__)
             return {"ok": False, "code": "install_failed", "theme_id": theme_id}
 
+    async def check_theme_early(self, force: bool = False) -> dict:
+        self._init()
+        if not isinstance(force, bool):
+            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": False}
+        try:
+            return await self._offload_theme_call(lambda: self._remote_themes().check_early(force))
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Early theme discovery failed: %s", type(error).__name__)
+            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
+
+    async def early_theme_archive_folder(self) -> str:
+        """Where the zip picker opens: the user's Downloads folder, else their home."""
+        home = decky.DECKY_USER_HOME
+        downloads = os.path.join(home, "Downloads")
+        return downloads if os.path.isdir(downloads) else home
+
+    async def prepare_early_theme_install(self, archive_path: str) -> dict:
+        """Installs a theme zip the user picked, only if it is byte for byte a published early build."""
+        self._init()
+        if not isinstance(archive_path, str) or not archive_path or len(archive_path) > 4096:
+            return {"ok": False, "code": "invalid_archive"}
+
+        def prepare() -> dict:
+            return self._remote_themes().prepare_early_install(
+                archive_path,
+                self._themes_root(),
+                self._theme_receipts_path(),
+            )
+
+        try:
+            result = await self._offload_theme_call(prepare)
+            decky.logger.info("Early theme prepared (%s %s)", result.get("catalogId"), result.get("version"))
+            self._remember_prepared_theme(result, early=True)
+            return result
+        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Early theme install rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Early theme install failed: %s", type(error).__name__)
+            return {"ok": False, "code": "install_failed"}
+
     async def commit_theme_install(self, transaction: str) -> dict:
         self._init()
         try:
-            return await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
+            result = await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
                 transaction,
                 self._themes_root(),
                 receipts_path=self._theme_receipts_path(),
             ))
+            if result.get("ok"):
+                self._record_committed_theme(transaction)
+            return result
         except theme_packages.ThemePackageError as error:
             decky.logger.warning("Theme package commit rejected (%s): %s", error.code, error)
             return {"ok": False, "code": error.code}
@@ -1885,6 +2081,54 @@ class Plugin:
                 type(error).__name__,
             )
             raise RuntimeError("extension_unavailable") from None
+
+    async def get_theme_health(self) -> dict:
+        self._init()
+        root = self._themes_root()
+
+        def read() -> dict:
+            return {
+                "folders": theme_health.scan(root),
+                "panel": theme_health.internal_panel_mode(),
+                "undo": theme_health.undo_state(root),
+            }
+
+        return await self._offload_theme_call(read)
+
+    async def set_aside_theme_leftovers(self, disabled: list) -> dict:
+        self._init()
+        try:
+            result = await self._offload_theme_call(
+                lambda: theme_health.set_aside(self._themes_root(), disabled)
+            )
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        if result["failed"]:
+            decky.logger.warning("Theme cleanup could not move %d folders", len(result["failed"]))
+        return {"ok": True, **result}
+
+    async def restore_theme_cleanup(self) -> dict:
+        self._init()
+        try:
+            result = await self._offload_theme_call(
+                lambda: theme_health.restore(self._themes_root())
+            )
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup undo refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        if result["kept"]:
+            decky.logger.warning("Theme cleanup undo kept %d folders set aside", len(result["kept"]))
+        return {"ok": True, **result}
+
+    async def acknowledge_theme_cleanup_undo(self) -> dict:
+        self._init()
+        try:
+            await self._offload_theme_call(lambda: theme_health.forget_reenabled(self._themes_root()))
+        except (theme_health.ThemeHealthError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Theme cleanup undo acknowledgement refused (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        return {"ok": True}
 
     async def get_device(self) -> dict:
         self._init()
@@ -2241,7 +2485,9 @@ class Plugin:
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
-            "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
+            "themes": self._with_theme_display(
+                await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
+            ),
             "ui_diagnostics": self._ui_diagnostics_snapshot(),
             "kiosk": self._kiosk_report_state(),
         }
@@ -2452,7 +2698,27 @@ class Plugin:
                         "set_available": bool(brightness.get("set_available", False)),
                     },
                 }
-        return {"backend": backend, "frontend": frontend}
+        screen = self._screen_sleep
+        return {"backend": backend, "frontend": frontend,
+                "screen_off": {"supported": screen.supported, "asleep": screen.asleep,
+                               "detail": screen.detail, "gamescope": screen.version}}
+
+    @staticmethod
+    def _with_theme_display(themes, context):
+        display = context.get("theme_display") if isinstance(context, dict) else None
+        if not isinstance(themes, dict) or not isinstance(display, dict):
+            return themes
+        sanitized = {}
+        for key, value in display.items():
+            if not isinstance(key, str) or len(key) > 32:
+                continue
+            if isinstance(value, bool) or value is None:
+                sanitized[key] = value
+            elif isinstance(value, (int, float)) and math.isfinite(value):
+                sanitized[key] = round(float(value), 3)
+            if len(sanitized) >= 16:
+                break
+        return {**themes, "display": sanitized}
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -2467,6 +2733,7 @@ class Plugin:
             n_custom = 0
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
+        frontend.pop("theme_display", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
@@ -2687,6 +2954,8 @@ class Plugin:
                 "max_tdp": tp["auto_max_tdp"],
                 "follows_global": self._tdp_profiles.is_following_global(appid),
             }
+            if tp.get("gpu_level") is not None:
+                row["tdp"]["gpu_level"] = int(tp["gpu_level"])
         if self._gpu_profiles.differs_from_global(appid):
             gp = self._gpu_profiles.game_profile(appid)
             row["gpu"] = {
@@ -3355,6 +3624,30 @@ class Plugin:
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def dismiss_charger_notice(self) -> bool:
+        self._init()
+        self._settings["charger_notice_dismissed_at"] = time.time()
+        self._save()
+        return True
+
+    def _charger_unstable_state(self, now: float | None = None) -> dict | None:
+        lifecycle = getattr(self, "_lifecycle", None)
+        episode = lifecycle.diagnostics().get("ac_unstable") if lifecycle is not None else None
+        if not episode:
+            return None
+        now = time.time() if now is None else now
+        dismissed_at = self._settings.get("charger_notice_dismissed_at")
+        snoozed = (
+            isinstance(dismissed_at, (int, float))
+            and now - dismissed_at < _CHARGER_NOTICE_SNOOZE_S
+        )
+        return {
+            "visible": not snoozed and now - episode["last_at"] < _CHARGER_NOTICE_TTL_S,
+            "started_at": episode["started_at"],
+            "last_at": episode["last_at"],
+            "transitions": episode["transitions"],
+        }
 
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
@@ -4859,7 +5152,7 @@ class Plugin:
             return await inactive("disabled")
         if self._firmware_mode() != _CUSTOM_MODE:
             return await inactive("firmware_mode")
-        if not self._auto_tdp_supported():
+        if not await asyncio.to_thread(self._auto_tdp_supported):
             return await inactive("tdp_unsupported")
         if not self._tdp_control_on():
             return await inactive("control_disabled")
@@ -5028,11 +5321,11 @@ class Plugin:
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
-        auto = (
+        auto = bool(
             self._tdp_profiles.auto_tdp(self._current_appid)
-            and self._auto_tdp_supported()
+            and await asyncio.to_thread(self._auto_tdp_supported)
         )
-        ac = read_on_ac()
+        ac = await asyncio.to_thread(read_on_ac)
         setpoint = (
             self._auto_setpoint
             if self._auto_runtime_active()
@@ -5043,11 +5336,7 @@ class Plugin:
             observation = self._tdp_observation
             applied = None
         else:
-            observation = (
-                await asyncio.to_thread(self._observe_tdp_sync)
-                if self._power_uses_levels()
-                else self._observe_tdp_sync()
-            )
+            observation = await asyncio.to_thread(self._observe_tdp_sync)
             primary = observation.surfaces.get(observation_backend.name, {})
             primary_rail = getattr(observation_backend, "primary_rail", "pl1")
             primary_reading = primary.get(primary_rail)
@@ -5849,6 +6138,62 @@ class Plugin:
     def _power_uses_levels(self) -> bool:
         return getattr(getattr(self, "_tdp_backend", None), "unit", None) == "level"
 
+    def _gpu_level_available(self) -> bool:
+        return self._power_uses_levels() and bool(
+            getattr(self._tdp_backend, "gpu_level_supported", False)
+        )
+
+    def _split_gpu_target(self, auto_level, limits, active, on_ac=False):
+        """GPU level for the next write, or None to keep the GPU on the CPU level.
+
+        Eco wants both at the floor, so it never splits. Under Auto the GPU keeps the
+        distance the player set from the CPU level, inside the player's Auto range."""
+        if not self._gpu_level_available() or self._settings.get("eco_enabled"):
+            return None
+        stored = self._tdp_profiles.gpu_level(self._current_appid)
+        if stored is None:
+            return None
+        if auto_level is not None:
+            cpu_level = self._tdp_profiles.effective(self._current_appid)["pl1"]
+            low, high = self._auto_effective_range(
+                self._current_appid, on_ac, self._tdp_observation,
+            )
+            return max(int(low), min(int(auto_level) + stored - int(cpu_level), int(high)))
+        return max(int(limits.min_w), min(int(stored), int(active)))
+
+    def _reported_gpu_level(self, appid):
+        if not self._gpu_level_available():
+            return None
+        return self._tdp_profiles.gpu_level(appid)
+
+    def _power_gpu_level(self):
+        if getattr(self._tdp_backend, "split_gpu_level", None) is not None:
+            applied = getattr(self._tdp_backend, "applied_split_gpu_level", None)
+            return None if applied is None else int(applied)
+        observation = getattr(self, "_tdp_observation", None)
+        surface = observation.surfaces.get(self._tdp_backend.name) if observation else None
+        reading = (surface or {}).get("pl1")
+        return None if reading is None else reading.applied_w
+
+    _GPU_SPLIT_REASSERT_S = 10.0
+
+    def _gpu_split_reassert_due(self, now) -> bool:
+        """A foreign write to the split GPU cap leaves the CPU level readable but the readback
+        unknown, which reconcile would hold forever; reassert it, at most every 10 s."""
+        drifted = getattr(self._tdp_backend, "split_gpu_drifted", None)
+        if not callable(drifted):
+            return False
+        last = getattr(self, "_gpu_split_reassert_at", None)
+        if last is not None and now - last < self._GPU_SPLIT_REASSERT_S:
+            return False
+        try:
+            if not drifted():
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        self._gpu_split_reassert_at = now
+        return True
+
     def _frequency_managed_by_power(self) -> bool:
         """On ARM the performance level owns the same cpufreq/devfreq ceilings that the
         CPU window and GPU clock controls write, so only one of them may drive them."""
@@ -5948,6 +6293,7 @@ class Plugin:
                 "mode": "estable",
             }
         auto_active = requested_auto_watts is not None
+        gpu_level = self._split_gpu_target(requested_auto_watts, limits, active, ac)
         if self._settings.get("eco_enabled"):
             minimum = limits.min_w
             logical_requested = {
@@ -6015,6 +6361,7 @@ class Plugin:
             on_ac=ac,
             auto_tdp=auto_active,
             ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
+            gpu_level=gpu_level,
         )
 
     def _tdp_menu_rail_floors(self) -> dict:
@@ -6087,11 +6434,26 @@ class Plugin:
         detail = result.detail or ""
         return bool(
             not result.ok
-            and getattr(result, "failure_kind", None) == "target_not_applied"
+            and getattr(result, "failure_kind", None)
+            in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
             and "; rollback confirmed" in detail
         )
+
+    def _apply_within_rejected_live_max(self, command, probe_live_max, result):
+        if not (
+            probe_live_max
+            and getattr(result, "failure_kind", None) == "live_max_rejected"
+            and self._tdp_live_max_probe_failed_safely(result)
+        ):
+            return
+        bounded = build_targets(
+            command.requested,
+            command.safe_bounds,
+            self._observe_tdp_sync(),
+        )
+        self._apply_tdp_targets(bounded.target, command.on_ac, command.auto_tdp)
 
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
@@ -6295,6 +6657,16 @@ class Plugin:
             if sidecar is None
             else None
         )
+        if command.generation != self._tdp_generation:
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "stale-generation",
+            )
+        split_gpu = getattr(self._tdp_backend, "set_split_gpu_level", None)
+        if callable(split_gpu):
+            split_gpu(command.gpu_level)
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -6329,6 +6701,7 @@ class Plugin:
             command.on_ac,
             command.auto_tdp,
         )
+        self._apply_within_rejected_live_max(command, probe_live_max, result)
         after = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -6510,7 +6883,13 @@ class Plugin:
         )
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         battery = self._battery.read() if enabled and strategy and not ac else {}
-        return decide_hold(
+        firmware_capped = bool(
+            enabled
+            and strategy
+            and (ac or (battery.get("percent") or 0) > LOW_BATTERY_PERCENT)
+            and self._primary_tdp_firmware_capped(ac)
+        )
+        decision = decide_hold(
             strategy=strategy,
             enabled=enabled,
             battery=battery,
@@ -6519,6 +6898,41 @@ class Plugin:
             write_authorized=self._tdp_write_authorized(),
             custom_mode=self._firmware_mode() == _CUSTOM_MODE,
             auto_tdp=self._auto_control_active(),
+            firmware_capped=firmware_capped,
+        )
+        if decision.active:
+            self._remember_low_battery_latch()
+        return decision
+
+    def _remember_low_battery_latch(self):
+        boot = _current_boot_id()
+        if boot and self._settings.get("low_battery_hold_latched_boot") != boot:
+            self._settings["low_battery_hold_latched_boot"] = boot
+            self._save()
+
+    def _primary_tdp_firmware_capped(self, on_ac):
+        cap = getattr(
+            getattr(self, "_low_battery_hold_backend", None),
+            "unverified_hold_restore",
+            None,
+        )
+        if not cap:
+            return False
+        requested = self._effective_levels(self._current_appid, on_ac)[0]
+        if int(requested.get("pl1", 0)) <= cap["pl1"]:
+            return False
+        boot = _current_boot_id()
+        # The firmware keeps its low-battery cap until the next boot, even on the charger.
+        if boot and self._settings.get("low_battery_hold_latched_boot") == boot:
+            return True
+        observation = getattr(self, "_tdp_observation", None)
+        surfaces = getattr(observation, "surfaces", None) or {}
+        rails = surfaces.get(self._tdp_backend.name, {})
+        return bool(rails) and all(
+            (reading := rails.get(rail)) is not None
+            and reading.max_w is not None
+            and int(reading.max_w) <= int(watts)
+            for rail, watts in cap.items()
         )
 
     def _remember_low_battery_primary_result(self, hold, result):
@@ -6614,7 +7028,7 @@ class Plugin:
         self._low_battery_hold_last_write_at = now
         sidecar_limits = getattr(sidecar, "low_battery_level_limits", None)
         limits = self._limits()
-        active_max = self._active_max(limits, False)
+        active_max = self._active_max(limits, bool(command.on_ac))
         bounds = (
             sidecar_limits(active_max)
             if callable(sidecar_limits)
@@ -6723,6 +7137,13 @@ class Plugin:
         if watch is None:
             watch = self._tdp_profile_watch = PlatformProfileWatch()
         return watch
+
+    def _consume_powerd_restart(self) -> bool:
+        consume = getattr(getattr(self, "_fan_ctrl", None), "consume_powerd_restart", None)
+        try:
+            return bool(consume()) if callable(consume) else False
+        except Exception:  # noqa: BLE001
+            return False
 
     def _profile_reassert_eligible(self, command, hold, status):
         backend = self._tdp_backend
@@ -6905,6 +7326,12 @@ class Plugin:
             return
         if self._auto_ui_blocks_tdp_write(command.reason):
             return
+        if outcome.action != "apply" and self._consume_powerd_restart():
+            action = "powerd-restart-reassert"
+            outcome = replace(outcome, action="apply")
+        if outcome.action != "apply" and self._gpu_split_reassert_due(now):
+            action = "gpu-split-reassert"
+            outcome = replace(outcome, action="apply")
         correction = None
         if (
             outcome.action != "apply"
@@ -6955,6 +7382,9 @@ class Plugin:
                     targets.target,
                     command.on_ac,
                     command.auto_tdp,
+                )
+                self._apply_within_rejected_live_max(
+                    command, probe_live_max, result,
                 )
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
@@ -7142,6 +7572,8 @@ class Plugin:
                 }
             ),
         }
+        if self._gpu_level_available():
+            fingerprint["gpu_level"] = self._tdp_backend.split_gpu_level
         if self._tdp_history:
             previous_full = self._tdp_history[-1]
             previous = {
@@ -7437,6 +7869,35 @@ class Plugin:
         self._clear_charge_limit_full_once()
         self._save()
         decky.logger.info("Full charge once finished: %s", reason)
+
+    def _follow_system_charge_limit(self):
+        backend = self._charge_limit
+        chosen = self._settings.get("charge_limit_chosen")
+        if chosen is None:
+            chosen = bool(self._settings.get("charge_limit_enabled"))
+            self._settings["charge_limit_chosen"] = chosen
+            self._save()
+        if chosen:
+            return
+        if not (backend.supported and backend.adjustable):
+            return
+        try:
+            current = backend.get()
+            low, high = backend.range()
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(current, int):
+            return
+        enabled = low <= current < high
+        percent = current if enabled else self._settings.get("charge_limit_percent", 80)
+        if (
+            self._settings.get("charge_limit_enabled") == enabled
+            and self._settings.get("charge_limit_percent") == percent
+        ):
+            return
+        self._settings["charge_limit_enabled"] = enabled
+        self._settings["charge_limit_percent"] = percent
+        self._save()
 
     def _charge_limit_requested_percent(self) -> int:
         if self._charge_limit_full_once_lifting():
@@ -8029,9 +8490,9 @@ class Plugin:
 
     async def get_battery_state(self) -> dict:
         self._init()
-        battery = self._battery.read()
+        battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
-        battery["ac_online"] = read_on_ac()
+        battery["ac_online"] = await asyncio.to_thread(read_on_ac)
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
 
     def _build_cpu_frequency_control(self):
@@ -8246,11 +8707,83 @@ class Plugin:
             "affects_boost": self._boost.supported,
             # The brightness % to wake back to (pre-eco snapshot).
             "wake_brightness": int(self._settings.get("eco_brightness", 40)),
+            "screen_off": self._screen_sleep.supported,
+            "screen_asleep": self._screen_sleep.asleep,
         }
 
     async def get_eco_state(self) -> dict:
         self._init()
+        self._screen_lease_at = time.monotonic()
+        if not self._screen_sleep.supported:
+            await asyncio.to_thread(self._screen_sleep.probe)
+        if self._settings.get("eco_enabled"):
+            self._start_eco_watch()
         return self._eco_state()
+
+    async def set_eco_screen(self, asleep: bool) -> dict:
+        """Download mode's panel power, only while download mode is on. A sleep that cannot be
+        confirmed is undone so the panel never stays dark unproven."""
+        self._init()
+        if asleep and not self._settings.get("eco_enabled"):
+            return {"ok": False, "asleep": self._screen_sleep.asleep}
+        self._screen_lease_at = time.monotonic()
+        ok = await self._apply_screen(bool(asleep), "frontend")
+        if asleep and not ok:
+            await self._apply_screen(False, "sleep_unconfirmed")
+        return {"ok": ok, "asleep": self._screen_sleep.asleep}
+
+    async def _apply_screen(self, asleep: bool, reason: str, source: str | None = None) -> bool:
+        """The latest request wins, so a wake arriving while a sleep is in flight is never lost."""
+        self._screen_want = asleep
+        async with self._screen_lock:
+            want, screen = self._screen_want, self._screen_sleep
+            ok = True
+            if want != screen.asleep:
+                ok = await asyncio.to_thread(screen.set, want)
+                diary = journal.active
+                if diary is not None:
+                    diary.write("INFO" if ok else "WARNING", "display",
+                                "screen_sleep" if want else "screen_wake", ok=ok, reason=reason,
+                                detail=screen.detail, **({"source": source} if source else {}))
+            return ok and want == asleep
+
+    def _start_eco_watch(self) -> None:
+        if self._eco_watch_task is None or self._eco_watch_task.done():
+            self._eco_watch_task = asyncio.create_task(self._eco_watch())
+
+    async def _eco_watch(self) -> None:
+        """Lights the panel on the first raw input and tells the frontend at once; idleness is
+        Steam's call (it reads every control, this watch may not). Also the panel's way back
+        when download mode ends or Steam's UI stops renewing the lease, retrying failed wakes."""
+        watch, screen = self._input_wake, self._screen_sleep
+        opened_at = reported_at = float("-inf")
+        try:
+            while True:
+                eco = bool(self._settings.get("eco_enabled"))
+                if screen.asleep and (not eco or time.monotonic() - self._screen_lease_at > _SCREEN_LEASE_S):
+                    if not await self._apply_screen(False, "lease_expired" if eco else "eco_disabled"):
+                        await asyncio.sleep(_SCREEN_WAKE_RETRY_S)
+                    continue
+                if not eco:
+                    return
+                if time.monotonic() - opened_at >= _ECO_RESCAN_S:
+                    # Controllers come and go (Bluetooth, docks, Steam recreating nodes).
+                    await asyncio.to_thread(watch.open)
+                    opened_at = time.monotonic()
+                source = await asyncio.to_thread(watch.wait, _ECO_INPUT_POLL_S)
+                if source is None:
+                    continue
+                woke = screen.asleep
+                if woke:
+                    await self._apply_screen(False, "input", source)
+                if woke or time.monotonic() - reported_at >= _ECO_INPUT_REPORT_S:
+                    reported_at = time.monotonic()
+                    try:
+                        await _emit_to_frontend(_ECO_INPUT_EVENT)
+                    except Exception:  # noqa: BLE001 - the frontend still has Steam's signal
+                        pass
+        finally:
+            await asyncio.to_thread(watch.close)
 
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
@@ -8265,6 +8798,10 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
+        if enabled:
+            self._start_eco_watch()
+        else:
+            await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
         return self._eco_state()
 
@@ -8670,6 +9207,8 @@ class Plugin:
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
                 snap["tdp_unit"] = getattr(self._tdp_backend, "unit", "W")
+                if self._gpu_level_available():
+                    snap["gpu_level"] = self._tdp_backend.applied_split_gpu_level
             if "pdc_auto_tdp" in active_ids:
                 snap["auto_tdp"] = (
                     self._auto_tdp_supported()
@@ -9589,9 +10128,14 @@ class Plugin:
         requested = getattr(self, "_gpu_requested", None)
         last = getattr(self, "_gpu_last_result", None)
         applied_min, applied_max = cur if cur else (None, None)
+        managed = self._frequency_managed_by_power()
         return {
             "supported": self._gpu_clock.supported,
-            "managed_by_power": self._frequency_managed_by_power(),
+            "managed_by_power": managed,
+            "power_level": self._power_gpu_level() if managed else None,
+            "power_level_split": bool(
+                managed and getattr(self._tdp_backend, "applied_split_gpu_level", None) is not None
+            ),
             "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
@@ -10049,6 +10593,7 @@ class Plugin:
         percent = max(lo, min(hi, int(percent)))
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
+        self._settings["charge_limit_chosen"] = True
         self._save()
         if not self._module_enabled("chargeLimit"):
             self._publish_charge_limit_handoff(generation)
@@ -10736,6 +11281,9 @@ class Plugin:
                 geff["watts"],
                 active,
             ),
+            "gpu_level_supported": self._gpu_level_available(),
+            "gpu_level": self._reported_gpu_level(self._current_appid),
+            "global_gpu_level": self._reported_gpu_level(None),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
@@ -10795,6 +11343,7 @@ class Plugin:
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "charger_unstable": self._charger_unstable_state(),
         }
 
     def _tdp_ownership_state(self, observation):
@@ -11625,6 +12174,43 @@ class Plugin:
         clamped = self._clamp_tdp_request(watts, active)
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._apply_tdp_now("manual-watts")
+        return self._apply_result(res)
+
+    async def set_gpu_level(
+        self, level, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        """ARM: cap the GPU on its own level, or link it back to the CPU level (None)."""
+        self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
+        if not self._gpu_level_available():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "gpu-level-unsupported"}
+        if not self._tdp_control_on():
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": level, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._clear_eco()
+        self._exit_firmware_mode()
+        clamped = None
+        if level is not None:
+            active = self._active_max(self._limits(), read_on_ac())
+            clamped = self._clamp_tdp_request(level, active)
+        self._tdp_profiles.set_gpu_level(resolved, clamped, appid=appid)
+        decky.logger.info(
+            "GPU level %s for %s", "linked" if clamped is None else clamped, resolved,
+        )
+        res = await self._apply_tdp_now(
+            "manual-gpu-link" if clamped is None else "manual-gpu-level"
+        )
         return self._apply_result(res)
 
     async def set_tdp_follow_global(
@@ -12464,6 +13050,8 @@ class Plugin:
             self._start_audio_loop()
             self._start_support_watch()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
+            if self._developer_options_on() and self._settings.get("remote_access_enabled"):
+                await self._remote_access.set_enabled(True)
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -12472,7 +13060,12 @@ class Plugin:
     async def _unload(self) -> None:
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        if getattr(self, "_screen_sleep", None) is not None:
+            if self._eco_watch_task is not None:
+                self._eco_watch_task.cancel()
+            await self._apply_screen(False, "unload")
         await self._stop_kiosk()
+        await self._stop_remote_access()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
@@ -12555,7 +13148,7 @@ class Plugin:
             None,
         )
         try:
-            battery = self._battery.read().get("percent")
+            battery = (await asyncio.to_thread(self._battery.read)).get("percent")
         except Exception:  # noqa: BLE001
             battery = None
         watts = power.get("watts")
@@ -12666,6 +13259,8 @@ class Plugin:
             "desktop_mode_enabled": self._settings.get("desktop_mode_enabled"),
             "kiosk_enabled": self._settings.get("kiosk_enabled"),
             "kiosk_brightness": self._settings.get("kiosk_brightness"),
+            "developer_options": self._developer_options_on(),
+            "remote_access": self._remote_access.diagnostics(),
         }
 
     async def _support_call(self, name: str):
@@ -12907,8 +13502,10 @@ class Plugin:
 
 journal.trace_calls(
     Plugin,
-    untraced=frozenset({"set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result"}),
+    untraced=frozenset({
+        "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+    }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report"}),
+    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

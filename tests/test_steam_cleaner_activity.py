@@ -88,3 +88,10 @@ def test_wine_is_not_identified_from_its_arguments(tmp_path):
     wine = process(root, 1, "wine64", b"USER=private\0")
     (wine / "cmdline").write_bytes(b"wine64\0/library/steamapps/compatdata/10/pfx/drive_c/game.exe\0")
     assert process_activity(tmp_path, str(root))["complete"] is False
+
+
+def test_wine_named_helpers_that_are_not_wine_do_not_block(tmp_path):
+    root = tmp_path / "proc"
+    process(root, 1, "wine_cellar", b"USER=private\0")
+    result = process_activity(tmp_path, str(root))
+    assert result == {"complete": True, "appids": [], "paths": [], "causes": []}

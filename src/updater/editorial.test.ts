@@ -4,8 +4,8 @@ import { SUPPORTED_LANGUAGES, type Lang } from "../i18n/languages";
 import { getUpdaterStrings } from "./strings";
 
 function updaterValues(lang: Lang): string[] {
-  const { panel, modal, availableTitle } = getUpdaterStrings(lang);
-  return [...Object.values(panel), ...Object.values(modal), availableTitle];
+  const { floating, panel, modal, availableTitle } = getUpdaterStrings(lang);
+  return [...Object.values(floating), ...Object.values(panel), ...Object.values(modal), availableTitle];
 }
 
 describe("Updater translation content", () => {

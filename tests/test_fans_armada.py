@@ -190,3 +190,41 @@ def test_a_daemon_that_came_back_is_taken_again(tmp_path):
     assert control.running is False
     assert control.calls.count("stop") == 2
     assert control.beats >= 2
+
+
+def _odin3(tmp_path):
+    root = str(tmp_path)
+    fan = "sys/class/hwmon/hwmon54"
+    _write(root, f"{fan}/name", "pwmfan")
+    _write(root, f"{fan}/pwm1", 51)
+    _write(root, f"{fan}/pwm1_enable", 3)
+    _write(root, "usr/lib/systemd/system/armada-powerd.service", "[Service]\n")
+    _write(root, "usr/share/armada/power-profiles.conf", "[fan]\nmin_pwm=51\nmax_pwm=255\n")
+    return root, fan
+
+
+def test_pwm_fan_without_a_tachometer_is_driven_and_handed_back(tmp_path):
+    from types import SimpleNamespace
+
+    from fans.control import select_fan_backend
+
+    root, fan = _odin3(tmp_path)
+    assert select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root).name == "armada-pwm"
+    control = FakeControl()
+    backend = ArmadaFanBackend(temp_fn=lambda: 60.0, root=root, control=control)
+    assert backend.apply_curve_all(CURVE)["ok"] is True
+    assert int(_read(root, f"{fan}/pwm1")) == 128
+    assert backend.read_state()["fans"][0]["rpm"] is None
+    assert backend.set_auto()["ok"] is True
+    assert _read(root, f"{fan}/pwm1_enable") == "3"
+    assert control.calls == ["guard+", "stop", "start", "guard-"]
+
+
+def test_handing_back_to_powerd_is_reported_once(tmp_path):
+    root, _ = _thor(tmp_path)
+    backend = ArmadaFanBackend(temp_fn=lambda: 60.0, root=root, control=FakeControl())
+    assert backend.consume_powerd_restart() is False
+    backend.apply_curve_all(CURVE)
+    backend.set_auto()
+    assert backend.consume_powerd_restart() is True
+    assert backend.consume_powerd_restart() is False

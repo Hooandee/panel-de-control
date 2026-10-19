@@ -12,7 +12,7 @@ export interface EcoController {
 
 /**
  * Drives the download-mode card. The persistent ambient controller
- * (ecoAmbient) actually owns the screen brightness; here we just flip the mode
+ * (ecoAmbient) actually owns the screen; here we just flip the mode
  * and hand it the wake level for an instant response, with the RPC as the
  * source of truth.
  */
@@ -43,7 +43,7 @@ export function useEco(): EcoController {
 
   const toggle = (enabled: boolean, currentBrightnessPct: number) => {
     const wake = enabled ? currentBrightnessPct : (state?.wake_brightness ?? currentBrightnessPct);
-    setEcoActiveHint(enabled, wake); // instant (persistent controller)
+    setEcoActiveHint(enabled, wake, state?.screen_off ?? false); // instant (persistent controller)
     setState((prev) => (prev ? { ...prev, enabled } : prev)); // optimistic
     pending.current = true;
     setEco(enabled, currentBrightnessPct)

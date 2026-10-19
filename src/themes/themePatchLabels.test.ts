@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { labelsForPatch, parseThemePatchLabels } from "./themePatchLabels";
+import { labelsForPatch, parseThemePatchLabels, patchLabelGroup } from "./themePatchLabels";
 
 const labels = parseThemePatchLabels({
   "Posición de la parrilla": {
@@ -37,5 +37,18 @@ describe("theme patch labels", () => {
     expect(labelsForPatch(parsed, "Bad", "de").option("B")).toBe("b");
     expect(labelsForPatch(parsed, "Worse", "en").name).toBe("Worse");
     expect(parseThemePatchLabels(null)).toEqual({});
+  });
+
+  it("keeps only the groups Panel knows how to show", () => {
+    const parsed = parseThemePatchLabels({
+      Extra: { name: { en: "Extra" }, group: "extra" },
+      Future: { name: { en: "Future" }, group: "experimental" },
+      Plain: { name: { en: "Plain" } },
+    });
+
+    expect(patchLabelGroup(parsed, "Extra")).toBe("extra");
+    expect(patchLabelGroup(parsed, "Future")).toBeUndefined();
+    expect(patchLabelGroup(parsed, "Plain")).toBeUndefined();
+    expect(patchLabelGroup(parsed, "Missing")).toBeUndefined();
   });
 });

@@ -7,7 +7,6 @@ vi.mock("@decky/ui", () => ({
     <button ref={ref} type="button" {...props}>{children}</button>
   ),
   GamepadButton: { DIR_UP: 9, DIR_DOWN: 10 },
-  getFocusNavController: () => ({ FocusElement: (element: HTMLElement) => element.focus() }),
   Focusable: ({ children, onActivate: _onActivate, noFocusRing: _noFocusRing, onGamepadDirection, ...props }: any) => (
     <div
       data-testid="notes-focus"

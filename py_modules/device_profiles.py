@@ -127,6 +127,9 @@ ARM_DEVICE_TABLE = (
     DeviceProfile("ayn_thor", "AYN Thor", "Snapdragon 8 Gen 2", "qualcomm",
                   1, 6, 10, 10, dt_compatible=("ayn,thor",), experimental=True,
                   panel="oled", arch="arm"),
+    DeviceProfile("ayn_odin3", "AYN Odin 3", "Snapdragon 8 Elite", "qualcomm",
+                  1, 6, 10, 10, dt_compatible=("ayn,odin3",), experimental=True,
+                  panel="oled", hdr=True, arch="arm"),
 )
 
 # Ordered most-specific first (so "ROG Ally X" wins before "ROG Ally").

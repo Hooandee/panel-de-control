@@ -21,12 +21,12 @@ import { Point, percentToPwm } from "../fans/curve";
 import { registerBlock } from "../customize/blocks";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
-import { theme } from "../theme";
+import { theme, themed } from "../theme";
 import { DesktopFanCurves } from "../components/DesktopFanCurves";
 import { FanInfo } from "../api";
 import { desktopFanVisible } from "../fans/presentation";
 
-const card = { ...theme.card, padding: theme.space.md } as const;
+const card = themed(() => ({ ...theme.card, padding: theme.space.md } as const));
 
 const tempLabel = (t: (k: string) => string, sensor: string) =>
   sensor === "CPU" ? t("fans.temp.cpu")
@@ -44,7 +44,8 @@ const DesktopFanTile: FC<{
   const label = t(`desktop.fan.channel.${channel}`);
   return (
     <div style={{ ...theme.tile, display: "flex", minWidth: 0, flexDirection: "column", alignItems: "center", gap: theme.space.xs }}>
-      <FanChip label={label} rpm={fan.rpm} values={values} maxRpm={fan.max_rpm} layout={layout} />
+      <FanChip label={label} rpm={fan.rpm} values={values} maxRpm={fan.max_rpm}
+               dutyPercent={fan.duty_only ? fan.percent : undefined} layout={layout} />
     </div>
   );
 };
@@ -63,6 +64,7 @@ const FanRpmBlock: FC = () => {
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
             <FanChip label={t("fans.fan", { n: 1 })} rpm={soloFan.rpm}
+                     dutyPercent={soloFan.duty_only ? soloFan.percent : undefined}
                      values={fanHistory[soloFan.label] ?? []} layout="ring" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <TempStat label={tempLabel(t, soloTemp.label)} celsius={soloTemp.celsius} variant="hero" />
@@ -96,6 +98,7 @@ const FanRpmBlock: FC = () => {
             ) : (
               <div key={fan.label} style={theme.tile}>
                 <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
+                         dutyPercent={fan.duty_only ? fan.percent : undefined}
                          values={fanHistory[fan.label] ?? []}
                          layout={visibleFans.length === 1 ? "wide" : "stack"} />
               </div>

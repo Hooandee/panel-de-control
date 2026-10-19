@@ -1,6 +1,7 @@
 import type { CssLoaderPatch } from "./cssLoaderTypes";
+import { patchLabelGroup, type ThemePatchLabels } from "./themePatchLabels";
 
-export type ThemePatchGroupId = "appearance" | "grid" | "animations" | "performance" | "compatibility" | "sections";
+export type ThemePatchGroupId = "appearance" | "grid" | "animations" | "performance" | "compatibility" | "sections" | "extra";
 
 export interface ThemePatchGroup {
   id: ThemePatchGroupId;
@@ -14,9 +15,10 @@ const GROUP_ORDER: readonly ThemePatchGroupId[] = [
   "performance",
   "compatibility",
   "sections",
+  "extra",
 ];
 
-const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | "sections">, RegExp>> = {
+const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | "sections" | "extra">, RegExp>> = {
   grid: /grid|parrilla|cover|portada|carátula|caratula|column|row|fila|library|biblioteca|card|tarjeta/,
   animations: /anim|motion|movimiento|flota|float|transition|transición|transicion|spring|parallax/,
   performance: /performance|rendimiento|quality|calidad|blur|desenfoque|effect|efecto|fps|budget/,
@@ -25,23 +27,28 @@ const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | 
 
 const SECTION_PATCH_PREFIX = "Estilizar ";
 
-function groupForPatch(patch: CssLoaderPatch, themeId?: string): ThemePatchGroupId {
+function groupForPatch(patch: CssLoaderPatch, themeId: string | undefined, labels: ThemePatchLabels): ThemePatchGroupId {
+  if (patchLabelGroup(labels, patch.name) === "extra") return "extra";
   if (themeId?.startsWith("hooandee-") && patch.type === "checkbox" && patch.name.startsWith(SECTION_PATCH_PREFIX)) {
     return "sections";
   }
   const name = patch.name.toLocaleLowerCase();
-  for (const group of Object.keys(GROUP_MATCHERS) as Exclude<ThemePatchGroupId, "appearance" | "sections">[]) {
+  for (const group of Object.keys(GROUP_MATCHERS) as Exclude<ThemePatchGroupId, "appearance" | "sections" | "extra">[]) {
     if (GROUP_MATCHERS[group].test(name)) return group;
   }
   return "appearance";
 }
 
-export function groupThemePatches(patches: readonly CssLoaderPatch[], themeId?: string): ThemePatchGroup[] {
+export function groupThemePatches(
+  patches: readonly CssLoaderPatch[],
+  themeId?: string,
+  labels: ThemePatchLabels = {},
+): ThemePatchGroup[] {
   const grouped = new Map(GROUP_ORDER.map((id) => [id, [] as CssLoaderPatch[]]));
   const hooandeeTheme = themeId?.startsWith("hooandee-") ?? false;
   for (const patch of patches) {
     if (hooandeeTheme && patch.type === "none") continue;
-    grouped.get(groupForPatch(patch, themeId))?.push(patch);
+    grouped.get(groupForPatch(patch, themeId, labels))?.push(patch);
   }
   return GROUP_ORDER
     .map((id) => ({ id, patches: grouped.get(id) ?? [] }))

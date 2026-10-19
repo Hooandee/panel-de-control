@@ -17,6 +17,19 @@ export function effectiveAutoRange(config: AutoTdpConfig, limits: TdpLimits, onA
   };
 }
 
+/** ARM: the GPU level Auto applies, keeping the player's distance inside the Auto range. */
+export function autoGpuLevel(
+  stored: number,
+  manualCpu: number,
+  autoCpu: number,
+  config: AutoTdpConfig,
+  limits: TdpLimits,
+  onAc: boolean,
+): number {
+  const range = effectiveAutoRange(config, limits, onAc);
+  return Math.max(range.min, Math.min(range.max, Math.round(autoCpu + stored - manualCpu)));
+}
+
 export function resolveAutoView(
   tdp: AutoScopeState,
   power: PowerDraw | null,

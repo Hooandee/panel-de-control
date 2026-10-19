@@ -28,6 +28,10 @@ type FocusableProps = HTMLAttributes<HTMLDivElement> & {
 
 const boundaries = vi.hoisted(() => ({ nextId: 0 }));
 const focusNavigation = vi.hoisted(() => ({ focus: vi.fn(), available: true }));
+Object.defineProperty(globalThis, "FocusNavController", {
+  configurable: true,
+  get: () => focusNavigation.available ? { FocusElement: focusNavigation.focus } : undefined,
+});
 const controller = vi.hoisted(() => ({
   callback: null as ControllerInputCallback | null,
   register: vi.fn(),
@@ -35,7 +39,6 @@ const controller = vi.hoisted(() => ({
 }));
 
 vi.mock("@decky/ui", () => ({
-  getFocusNavController: () => focusNavigation.available ? { FocusElement: focusNavigation.focus } : undefined,
   NavEntryPositionPreferences: { PREFERRED_CHILD: 4 },
   Focusable: forwardRef<HTMLDivElement, FocusableProps>(function Focusable(
     {
@@ -194,6 +197,19 @@ describe("ControlCenterShell", () => {
       configurable: true,
       value: originalScrollIntoView,
     });
+  });
+
+  it.each(["home", "tabs", "detail"] as const)("shows the update tray at the end of %s content", (mode) => {
+    setShellMode(mode);
+    const { container } = renderShell({
+      hasUpdate: true,
+      updateInfo: { current: "1", latest: "2", has_update: true, notes: "", download_url: "", error: "" },
+      updateStatus: "idle",
+    });
+    const surface = screen.getByTestId("shell-surface");
+    expect(surface.lastElementChild).toBe(screen.getByRole("status"));
+    expect(screen.getByText("v1 → v2")).toBeTruthy();
+    if (mode !== "detail") expect(alertDotWithin(container)).toBeTruthy();
   });
 
   it("mounts no section and no TabBar on Home", () => {
@@ -928,5 +944,17 @@ describe("ControlCenterShell", () => {
     expect(screen.queryByText("Aprendizaje en pausa")).toBeNull();
     expect(container.querySelectorAll(".pdc-root")).toHaveLength(1);
     expect(getQamDocument()).toBe(container.ownerDocument);
+  });
+
+  it("preserves the settings alert dot after dismissing the floating update", () => {
+    setShellMode("tabs");
+    const { container } = renderShell({
+      hasUpdate: true,
+      updateInfo: { current: "1", latest: "3", has_update: true, notes: "", download_url: "", error: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Más tarde" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector('[data-update-tray="card"]')).toBeNull();
+    expect(alertDotWithin(container)).toBeTruthy();
   });
 });

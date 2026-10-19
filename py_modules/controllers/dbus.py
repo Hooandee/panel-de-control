@@ -139,6 +139,16 @@ class IpDbus:
             self._last_reported_capabilities = reported_capabilities
         return list(self._last_capabilities)
 
+    def target_capabilities(self) -> list | None:
+        """What the emulated gamepad can emit; None when it can't be read."""
+        path = self._path()
+        if not path:
+            return None
+        r = self._run(["busctl", "get-property", SVC, path, IFACE, "TargetCapabilities"])
+        if not r or r.returncode != 0:
+            return None
+        return list(dict.fromkeys(re.findall(r'"([^"]+)"', r.stdout)))
+
     def get_profile_yaml(self) -> str | None:
         path = self._path()
         if not path:

@@ -6,6 +6,7 @@ _HWMON = "sys/class/hwmon"
 
 # Generic ACPI fan chip that usually mirrors a vendor chip with nicer labels.
 _GENERIC_FAN_CHIP = "acpi_fan"
+_PWM_FAN_CHIP = "pwmfan"
 
 # Friendly name + priority for well-known temperature sources (AMD handhelds +
 # Intel). Lower priority shows first. Unknown chips fall back to priority 2 with
@@ -203,6 +204,9 @@ class FanReader:
                         and name in ("steamdeck_hwmon", "jupiter")):
                     max_rpm = 1800
                 fans.append((inp, label, os.path.join(d, f"pwm{n}"), max_rpm))
+            if name == _PWM_FAN_CHIP and not fans:
+                for pwm in sorted(glob.glob(os.path.join(d, "pwm[0-9]"))):
+                    fans.append((None, f"Fan {os.path.basename(pwm)[len('pwm'):]}", pwm, None))
             temps = []
             for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
                 n = os.path.basename(inp)[len("temp"):-len("_input")]
@@ -272,6 +276,15 @@ class FanReader:
 
         for name, fans, temps in self._layout():
             for inp, label, pwm_path, max_rpm in fans:
+                if inp is None:
+                    pwm = _read_int(pwm_path)
+                    if pwm is None:
+                        vanished = vanished or not os.path.exists(pwm_path)
+                        continue
+                    raw_fans.append({"chip": name, "label": label, "rpm": None,
+                                     "percent": round(pwm / 255 * 100), "max_rpm": None,
+                                     "duty_only": True})
+                    continue
                 rpm = _read_int(inp)
                 if rpm is None:
                     vanished = vanished or not os.path.exists(inp)
@@ -299,6 +312,8 @@ class FanReader:
         for fan in fans:
             item = {"label": fan["label"], "rpm": fan["rpm"],
                     "percent": fan["percent"], "max_rpm": fan.get("max_rpm")}
+            if fan.get("duty_only"):
+                item["duty_only"] = True
             if self._desktop and self._device_key == "steam_machine":
                 if fan["chip"] in ("steamdeck_hwmon", "jupiter"):
                     item["channel"] = "system"

@@ -39,6 +39,7 @@ function deps(state: TdpState, patch: Partial<DeckPerfDeps> = {}) {
   const call = {
     applyPreset: vi.fn(async () => ({})),
     setWatts: vi.fn(async () => ({})),
+    setGpu: vi.fn(async () => ({})),
     setAuto: vi.fn(async () => ({ auto_tdp: true })),
     setAutoConfig: vi.fn(async () => state),
     seenNotice: vi.fn(async () => true),
@@ -56,6 +57,58 @@ function deps(state: TdpState, patch: Partial<DeckPerfDeps> = {}) {
   };
   return { d, call };
 }
+
+describe("deck performance view: ARM GPU level", () => {
+  it("reports a linked GPU on the CPU level", async () => {
+    const { d } = deps(tdpState({ gpu_level_supported: true, global_gpu_level: null }));
+    const view = await createDeckPerf(d)["perf.view"]();
+    expect(view).toMatchObject({ split: true, gpuLevel: null, gpuShown: 6 });
+    expect(view.presets.map((p) => p.level)).toEqual([3, 6, 10]);
+  });
+
+  it("keeps the player's distance under Auto", async () => {
+    const auto = { ...AUTO, enabled: true };
+    const { d } = deps(
+      tdpState({ gpu_level_supported: true, global_gpu_level: 8, global_watts: 4, global_auto_config: auto }),
+      { power: async () => ({ auto: { setpoint: 5 } }) as never },
+    );
+    const view = await createDeckPerf(d)["perf.view"]();
+    expect(view).toMatchObject({ autoOn: true, shown: 5, gpuLevel: 8, gpuShown: 9 });
+  });
+
+  it("keeps the Auto GPU inside the player's Auto range", async () => {
+    const auto = { ...AUTO, enabled: true, min_tdp: 2, max_tdp: 6 };
+    const { d } = deps(
+      tdpState({ gpu_level_supported: true, global_gpu_level: 6, global_watts: 3, global_auto_config: auto }),
+      { power: async () => ({ auto: { setpoint: 5 } }) as never },
+    );
+    expect((await createDeckPerf(d)["perf.view"]()).gpuShown).toBe(6);
+  });
+
+  it("lets the player unlink under Auto but not pick a GPU level", async () => {
+    const auto = { ...AUTO, enabled: true };
+    const linked = deps(tdpState({ gpu_level_supported: true, global_auto_config: auto }));
+    await createDeckPerf(linked.d)["perf.gpu"]([6]);
+    expect(linked.call.setGpu).toHaveBeenCalledWith(6, "global", null, null);
+    const split = deps(tdpState({ gpu_level_supported: true, global_gpu_level: 4, global_auto_config: auto }));
+    await expect(createDeckPerf(split.d)["perf.gpu"]([8])).rejects.toThrow("unsupported");
+  });
+
+  it("sets, clamps and links the GPU level", async () => {
+    const { d, call } = deps(tdpState({ gpu_level_supported: true }), { game: () => ({ appid: "894020" }) });
+    const perf = createDeckPerf(d);
+    await perf["perf.gpu"]([42]);
+    await perf["perf.gpu"]([null]);
+    expect(call.setGpu).toHaveBeenNthCalledWith(1, 10, "global", null, "894020");
+    expect(call.setGpu).toHaveBeenNthCalledWith(2, null, "global", null, "894020");
+  });
+
+  it("refuses a GPU level where the backend has none", async () => {
+    const { d, call } = deps(tdpState({ unit: "W", gpu_level_supported: false }));
+    await expect(createDeckPerf(d)["perf.gpu"]([5])).rejects.toThrow("unsupported");
+    expect(call.setGpu).not.toHaveBeenCalled();
+  });
+});
 
 describe("deck performance view", () => {
   it("resolves level, range and the builtin presets with the active one lit", async () => {

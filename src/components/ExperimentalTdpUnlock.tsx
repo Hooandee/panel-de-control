@@ -1,5 +1,6 @@
 import { FC } from "react";
-import { ToggleField, showModal } from "@decky/ui";
+import { ToggleField } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";

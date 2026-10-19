@@ -1,5 +1,5 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
-import { definePlugin } from "@decky/api";
+import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
 import { LuSlidersVertical } from "react-icons/lu";
 
@@ -7,13 +7,20 @@ import {
   acknowledgeThemeActivation,
   acknowledgeThemeInstallRollback,
   beginThemeActivation,
+  checkThemeEarly,
+  earlyThemeArchiveFolder,
   checkThemeReleases,
   commitThemeInstall,
   discardThemeExtensionReceipt,
   getThemeInstallRecoveries,
   getThemeActivationRecovery,
   listThemeExtensions,
+  getThemeHealth,
+  setAsideThemeLeftovers,
+  restoreThemeCleanup,
+  acknowledgeThemeCleanupUndo,
   loadThemeExtension,
+  prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
   recordUiEvent,
@@ -21,6 +28,8 @@ import {
   settleThemeActivation,
 } from "./api";
 import { I18nProvider, translate } from "./i18n";
+import { openThemeHealthModal } from "./components/ThemeHealth";
+import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { startFrontendErrorReporting } from "./system/uiDiagnostics";
@@ -41,16 +50,18 @@ import {
 } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
-import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
+import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
+  configureEarlyArchivePicker,
   configureSectionHandoffStore,
   configureThemeFailureReporter,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
-import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
@@ -85,6 +96,7 @@ export default definePlugin(() => {
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
     prepareRemote: prepareRemoteThemeInstall,
+    prepareEarly: prepareEarlyThemeInstall,
     commit: commitThemeInstall,
     discard: discardThemeExtensionReceipt,
     rollback: rollbackThemeInstall,
@@ -98,6 +110,21 @@ export default definePlugin(() => {
     acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeEarlyHost = configureThemeEarlyCheckHost(checkThemeEarly);
+  const releaseEarlyArchivePicker = configureEarlyArchivePicker(async () => {
+    try {
+      const picked = await openFilePicker(0 /* FileSelectionType.FILE */, await earlyThemeArchiveFolder(), true, true, undefined, ["zip"]);
+      return picked.realpath || picked.path || null;
+    } catch {
+      return null;
+    }
+  });
+  const releaseThemeHealthHost = configureThemeHealthHost({
+    health: getThemeHealth,
+    setAside: setAsideThemeLeftovers,
+    restore: restoreThemeCleanup,
+    acknowledgeRestore: acknowledgeThemeCleanupUndo,
+  });
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
     list: listThemeExtensions,
     load: loadThemeExtension,
@@ -159,12 +186,18 @@ export default definePlugin(() => {
   const stopContextMenu = installGameContextMenu();
   const stopListLocalizer = startPluginListLocalizer();
   const stopKioskSteamBridge = startKioskSteamBridgeWhenSupported();
+  const stopQamCoverWatch = watchQamCover(() => toaster.toast({
+    title: translate("themes.health.covered.title"),
+    body: translate("themes.health.covered.body"),
+    onClick: () => openThemeHealthModal(),
+  }));
   const standardLifecycle = new AbortController();
   const stopThemesRuntime = startThemesRuntime({
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
     subscribeQamDocument: onQamDocument,
+    subscribePackageChanges: onThemePackagesChanged,
   });
 
   return {
@@ -194,9 +227,13 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      stopQamCoverWatch();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
+      releaseThemeEarlyHost();
+      releaseEarlyArchivePicker();
+      releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
       releaseSectionHandoffStore();

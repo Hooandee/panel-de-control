@@ -1,5 +1,6 @@
 import { FC } from "react";
-import { ModalRoot, showModal } from "@decky/ui";
+import { ModalRoot } from "@decky/ui";
+import { showModal } from "../navigation/showModal";
 
 import { useI18n } from "../i18n";
 import { useFanCurve } from "../fans/useFanCurve";

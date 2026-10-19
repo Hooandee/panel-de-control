@@ -31,14 +31,18 @@ def fan_choices(fan: dict | None) -> list[str]:
     return choices if len(choices) > 1 else []
 
 
-def level_caption(frequencies: dict | None, level: int | None, decimal_comma: bool) -> str:
+def level_caption(frequencies: dict | None, level: int | None, decimal_comma: bool,
+                  gpu_level: int | None = None) -> str:
     entry = (frequencies or {}).get(str(level)) if level is not None else None
-    if not entry or not entry.get("cpu_khz"):
+    gpu = entry if gpu_level is None else (frequencies or {}).get(str(gpu_level))
+    if not entry or not entry.get("cpu_khz") or not gpu:
         return ""
     ghz = f"{max(entry['cpu_khz']) / 1e6:.1f}"
     if decimal_comma:
         ghz = ghz.replace(".", ",")
-    return f"{ghz} GHz · {entry['gpu_mhz']} MHz"
+    if gpu_level is None:
+        return f"{ghz} GHz · {entry['gpu_mhz']} MHz"
+    return f"CPU {ghz} GHz · GPU {gpu['gpu_mhz']} MHz"
 
 
 def step_at(offset: float, size: float, pad: float, low: int, high: int) -> int:

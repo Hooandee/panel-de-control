@@ -183,6 +183,35 @@ describe("startThemesRuntime", () => {
     expect(unsubscribe).toHaveBeenCalledOnce();
     expect(dispose).toHaveBeenCalledOnce();
   });
+
+  it("rereads extension receipts after a theme package changes on disk, even at the same version", () => {
+    const steamDocument = { title: "SP" } as unknown as Document;
+    const refreshDescriptors = vi.fn(async () => {});
+    const stopWatching = vi.fn();
+    let packagesChanged!: () => void;
+    const client = {
+      getSnapshot: () => ({ snapshot: READY }),
+      subscribe: vi.fn(() => vi.fn()),
+      refresh: vi.fn(async () => {}),
+    };
+
+    const stop = startThemesRuntime({
+      client,
+      getSteamDocument: () => steamDocument,
+      subscribePackageChanges: (listener) => {
+        packagesChanged = listener;
+        return stopWatching;
+      },
+      createManager: () => ({ reconcile: vi.fn(), refreshDescriptors, dispose: vi.fn() }),
+    });
+
+    expect(refreshDescriptors).not.toHaveBeenCalled();
+    packagesChanged();
+    expect(refreshDescriptors).toHaveBeenCalledOnce();
+
+    stop();
+    expect(stopWatching).toHaveBeenCalledOnce();
+  });
 });
 
 describe("createThemeNavigationAccess", () => {

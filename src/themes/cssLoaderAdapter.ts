@@ -387,6 +387,61 @@ export class CssLoaderAdapter {
     return after;
   }
 
+  // Reloads CSS Loader (dropping styles that no listed theme owns), turns off every theme outside
+  // `keep`, then confirms the kept themes still match `before`.
+  async disableAllExcept(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+  ): Promise<CssLoaderReadySnapshot> {
+    await this.resetThemes(keep);
+    const current = await this.requireReady();
+    for (const theme of current.themes) {
+      if (theme.enabled && !keep.has(theme.name)) {
+        await this.callMutation("set_theme_state", [theme.name, false, false, false]);
+      }
+    }
+    const after = await this.reassertKept(before, keep);
+    const stray = after.themes.find((theme) => theme.enabled && !keep.has(theme.name));
+    if (stray) {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader kept another theme enabled");
+    }
+    return after;
+  }
+
+  async enableAgain(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+    names: readonly string[],
+  ): Promise<CssLoaderReadySnapshot> {
+    await this.resetThemes(keep);
+    const current = await this.requireReady();
+    const present = names.filter((name) => !keep.has(name) && current.themes.some((theme) => theme.name === name));
+    for (const name of present) {
+      if (!current.themes.find((theme) => theme.name === name)?.enabled) {
+        await this.callMutation("set_theme_state", [name, true, false, false]);
+      }
+    }
+    const after = await this.reassertKept(before, keep);
+    const missing = present.find((name) => !after.themes.find((theme) => theme.name === name)?.enabled);
+    if (missing) {
+      throw new CssLoaderOperationError("verification_failed", "CSS Loader did not enable a restored theme");
+    }
+    return after;
+  }
+
+  private async reassertKept(
+    before: CssLoaderReadySnapshot,
+    keep: ReadonlySet<string>,
+  ): Promise<CssLoaderReadySnapshot> {
+    const kept = (snapshot: CssLoaderReadySnapshot): CssLoaderReadySnapshot => ({
+      ...snapshot,
+      themes: snapshot.themes.filter((theme) => keep.has(theme.name)),
+    });
+    const after = await this.restoreCompatibleSnapshotState(kept(before), await this.requireReady());
+    this.verifyInventoryState(kept(before), kept(after));
+    return after;
+  }
+
   private async restoreCompatibleSnapshotState(
     expected: CssLoaderReadySnapshot,
     current: CssLoaderReadySnapshot,

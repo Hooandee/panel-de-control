@@ -1285,3 +1285,62 @@ def test_sysfs_snapshot_marks_x86_hosts_without_arm_detail(tmp_path):
     (tmp_path / "proc").mkdir()
     (tmp_path / "proc/cpuinfo").write_text("vendor_id\t: AuthenticAMD\n")
     assert sysfs_snapshot(root=str(tmp_path))["arm"] == {"arch": "x86"}
+
+
+def test_kernel_logs_capture_suspend_cycles_wake_reason_and_inhibitors():
+    cmds = report_collector._KERNEL_CMDS
+    kernel = cmds["sleep_kernel"]
+    logind = cmds["sleep_logind"]
+    previous = cmds["previous_boot_sleep_kernel"]
+    assert kernel[:4] == ["/usr/bin/journalctl", "-b", "-k", "--grep"]
+    assert "PM: (suspend|resume)" in kernel[4]
+    assert "-t" in logind and "systemd-logind" in logind and "systemd-sleep" in logind
+    assert "-k" not in logind
+    assert previous[previous.index("-b") + 1] == "-1" and "-k" in previous
+    assert cmds["sleep_inhibitors"] == ["/usr/bin/systemd-inhibit", "--list", "--no-pager"]
+    assert cmds["pm_wakeup_irq"] == ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"]
+
+    def run(cmd):
+        if cmd == kernel:
+            return "kernel: PM: suspend entry (s2idle) /home/deck/x"
+        if cmd == cmds["sleep_inhibitors"]:
+            return "Colores 0 root 1 systemd-inhibit sleep Stop lighting delay"
+        if cmd == cmds["pm_wakeup_irq"]:
+            return "9"
+        return None
+
+    out = kernel_logs(run)
+    assert "suspend entry" in out["sleep_kernel"]
+    assert "/home/deck" not in out["sleep_kernel"]
+    assert "Stop lighting" in out["sleep_inhibitors"]
+    assert out["pm_wakeup_irq"] == "9"
+    assert out["sleep_logind"] is None
+
+
+def test_arm_snapshot_records_supplies_and_a_tachless_pwm_fan(tmp_path):
+    root = _arm_tree(tmp_path)
+    usb = tmp_path / "sys/class/power_supply/qcom-battmgr-usb"
+    usb.mkdir(parents=True)
+    (usb / "type").write_text("USB\n")
+    (usb / "online").write_text("1\n")
+    bat = tmp_path / "sys/class/power_supply/battery"
+    bat.mkdir(parents=True)
+    for name, value in (("type", "Battery"), ("status", "Charging"), ("capacity", "70"),
+                        ("charge_control_start_threshold", "95"),
+                        ("charge_control_end_threshold", "100"), ("model_name", "SECRET")):
+        (bat / name).write_text(value + "\n")
+    fan = tmp_path / "sys/class/hwmon/hwmon54"
+    fan.mkdir(parents=True)
+    (fan / "name").write_text("pwmfan\n")
+    (fan / "pwm1").write_text("51\n")
+    (fan / "pwm1_enable").write_text("3\n")
+
+    arm = sysfs_snapshot(root=root)["arm"]
+
+    assert arm["power_supplies"]["qcom-battmgr-usb"] == {"type": "USB", "online": "1"}
+    assert arm["power_supplies"]["battery"] == {
+        "type": "Battery", "status": "Charging", "capacity": "70",
+        "charge_control_start_threshold": "95", "charge_control_end_threshold": "100",
+    }
+    assert arm["pwm_fans"] == [{"hwmon": "hwmon54", "pwm1": "51", "pwm1_enable": "3",
+                                "fan1_input": None}]
