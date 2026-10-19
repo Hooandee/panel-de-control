@@ -21,6 +21,7 @@ interface RuntimeManagerLike {
 
 export interface SteamRuntimeBridge {
   reconcile(snapshot: CssLoaderSnapshot): void;
+  refreshDescriptors(): void;
   dispose(): void;
 }
 
@@ -126,6 +127,9 @@ export function createSteamRuntimeBridge(
       manager?.reconcile(snapshot);
       if (inventoryChanged) void manager?.refreshDescriptors?.();
     },
+    refreshDescriptors() {
+      void manager?.refreshDescriptors?.();
+    },
     dispose: release,
   };
 }
@@ -141,6 +145,9 @@ interface ThemesRuntimeOptions {
   getSteamDocument(): Document | null;
   getQamDocument?(): Document | null;
   subscribeQamDocument?(listener: (doc: Document) => void): () => void;
+  // A reinstall can replace a theme's extension without changing its name or version, which is
+  // all the CSS Loader inventory carries.
+  subscribePackageChanges?(listener: () => void): () => void;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
   createManager?(
@@ -156,6 +163,7 @@ export function startThemesRuntime({
   getSteamDocument,
   getQamDocument,
   subscribeQamDocument,
+  subscribePackageChanges,
   library = createThemeLibraryAccess(),
   navigation = createThemeNavigationAccess(),
   createManager,
@@ -179,6 +187,7 @@ export function startThemesRuntime({
   );
   const reconcile = () => bridge.reconcile(client.getSnapshot().snapshot);
   const unsubscribe = client.subscribe(reconcile, 30_000);
+  const stopPackageWatch = subscribePackageChanges?.(() => bridge.refreshDescriptors());
   let stopped = false;
   reconcile();
 
@@ -186,6 +195,7 @@ export function startThemesRuntime({
     if (stopped) return;
     stopped = true;
     unsubscribe();
+    stopPackageWatch?.();
     bridge.dispose();
   };
 }

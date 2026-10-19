@@ -50,7 +50,7 @@ import {
 } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
-import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
+import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
@@ -197,6 +197,7 @@ export default definePlugin(() => {
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
     subscribeQamDocument: onQamDocument,
+    subscribePackageChanges: onThemePackagesChanged,
   });
 
   return {

@@ -68,6 +68,36 @@ function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDepend
 }
 
 describe("ThemesClient", () => {
+  it("reports a setting change for a theme Panel does not know instead of dropping it silently", async () => {
+    const reportFailure = vi.fn();
+    const client = new ThemesClient(dependencies({ reportFailure }));
+    await client.refresh();
+    await client.refreshPublication();
+
+    await expect(client.setPatch("missing-theme", "Ring", "Still")).resolves.toBe(false);
+    expect(reportFailure).toHaveBeenCalledWith(expect.objectContaining({ operation: "saving", code: "unknown_theme" }));
+  });
+
+  it("saves settings and deactivates a theme that is only published as early access", async () => {
+    const earlyRelease = { ...RELEASE, catalogId: "early-theme", cssLoaderName: "Early Theme" };
+    const deps = dependencies({
+      publication: {
+        check: vi.fn(async (): Promise<ThemePublicationState> => ({
+          ...PUBLICATION,
+          early: [{ catalogId: "early-theme", earlyVersion: "0.1.0", release: earlyRelease }],
+        })),
+      },
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+    await client.refreshPublication();
+
+    await expect(client.setPatch("early-theme", "Ring", "Still")).resolves.toBe(true);
+    expect(deps.adapter.setPatchValue).toHaveBeenCalledWith("Early Theme", "Ring", "Still");
+    await expect(client.deactivate("early-theme")).resolves.toBe(true);
+    expect(deps.activator.deactivate).toHaveBeenCalledWith("early-theme", expect.arrayContaining([earlyRelease]));
+  });
+
   it("publishes the confirmed snapshot after uninstalling a catalog theme", async () => {
     const deps = dependencies();
     deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);

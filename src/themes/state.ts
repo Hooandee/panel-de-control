@@ -78,6 +78,19 @@ function earlyThemes(publication: ThemePublicationState): readonly PublishedEarl
     : [];
 }
 
+function earlyOnlyThemes(publication: ThemePublicationState): PublishedEarlyTheme[] {
+  const stable = usableThemes(publication);
+  const stableIds = new Set(stable.map((release) => release.catalogId));
+  const early = new Map(earlyThemes(publication).map((theme) => [theme.catalogId, theme]));
+  return [...early.values()].filter((theme) => !stableIds.has(theme.catalogId)
+    && !stable.some((release) => release.cssLoaderName === theme.release.cssLoaderName));
+}
+
+/** Every Hooandee theme Panel manages: the stable catalog plus themes published only as early access. */
+export function managedThemeReleases(publication: ThemePublicationState): readonly PublishedThemeRelease[] {
+  return [...usableThemes(publication), ...earlyOnlyThemes(publication).map((theme) => theme.release)];
+}
+
 export function deriveThemeCards(
   publication: ThemePublicationState,
   snapshot: CssLoaderSnapshot,
@@ -87,9 +100,7 @@ export function deriveThemeCards(
     : new Map<string, CssLoaderTheme>();
   const early = new Map(earlyThemes(publication).map((theme) => [theme.catalogId, theme]));
   const stable = usableThemes(publication);
-  const stableIds = new Set(stable.map((release) => release.catalogId));
-  const earlyOnly = [...early.values()].filter((theme) => !stableIds.has(theme.catalogId)
-    && !stable.some((release) => release.cssLoaderName === theme.release.cssLoaderName));
+  const earlyOnly = earlyOnlyThemes(publication);
   return [
     ...stable.map((release) => ({ release, earlyOnly: false })),
     ...earlyOnly.map((theme) => ({ release: theme.release, earlyOnly: true })),
