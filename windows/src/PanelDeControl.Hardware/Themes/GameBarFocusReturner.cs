@@ -97,7 +97,7 @@ public sealed class GameBarFocusReturner
         {
             using var process = Process.GetProcessById((int)processId);
             return GameBarProcesses.Contains(process.ProcessName) ? ForegroundKind.GameBar
-                : SteamProcesses.Contains(process.ProcessName) ? ForegroundKind.Steam
+                : SteamProcesses.Contains(process.ProcessName) ? (CoversItsMonitor(handle) ? ForegroundKind.Steam : ForegroundKind.Other)
                 : process.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase) ? ForegroundKind.Shell
                 : ForegroundKind.Other;
         }
@@ -106,6 +106,44 @@ public sealed class GameBarFocusReturner
             return ForegroundKind.Other;
         }
     }
+
+    // Only a full screen Steam window (Big Picture) is restored; the desktop client is left alone.
+    private static bool CoversItsMonitor(IntPtr handle)
+    {
+        var monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+        var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+        return GetWindowRect(handle, out var window)
+            && GetMonitorInfo(monitor, ref info)
+            && window.Left <= info.rcMonitor.Left && window.Top <= info.rcMonitor.Top
+            && window.Right >= info.rcMonitor.Right && window.Bottom >= info.rcMonitor.Bottom;
+    }
+
+    private const uint MonitorDefaultToNearest = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public Rect rcMonitor, rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();

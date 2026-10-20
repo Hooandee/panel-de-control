@@ -34,6 +34,15 @@ public sealed class GameBarFocusTrackerTests
     }
 
     [Fact]
+    public void ReturnsFocusWhenTheDesktopTakesItStraightFromBigPicture()
+    {
+        var tracker = new GameBarFocusTracker();
+        tracker.Observe(new ForegroundWindow(Steam, ForegroundKind.Steam));
+
+        Assert.Equal(Steam, tracker.Observe(new ForegroundWindow(Desktop, ForegroundKind.Shell)));
+    }
+
+    [Fact]
     public void LeavesFocusAloneWhenGameBarOpenedOverSomethingElse()
     {
         var tracker = new GameBarFocusTracker();

@@ -11,9 +11,9 @@ public enum ForegroundKind
 public sealed record ForegroundWindow(IntPtr Handle, ForegroundKind Kind);
 
 /// <summary>
-/// Windows hands the foreground to the desktop, not back to Steam, when Game Bar closes over Big
-/// Picture, and Steam themes pause while their window has no focus. This decides when focus should
-/// go back: only when Game Bar opened over Steam and nothing else took its place.
+/// Over a full screen Big Picture, Windows can leave the foreground on the desktop (after Game Bar
+/// or a touch on one of its widgets), and Steam themes pause while their window has no focus. Focus
+/// goes back only when Big Picture covered the screen and nothing but the shell or Game Bar took it.
 /// </summary>
 public sealed class GameBarFocusTracker
 {
@@ -32,9 +32,11 @@ public sealed class GameBarFocusTracker
             case ForegroundKind.GameBar:
                 overlayOverSteam |= lastSteam != IntPtr.Zero;
                 return IntPtr.Zero;
-            case ForegroundKind.Shell when overlayOverSteam:
+            case ForegroundKind.Shell when overlayOverSteam || lastSteam != IntPtr.Zero:
                 overlayOverSteam = false;
-                return lastSteam;
+                var restore = lastSteam;
+                lastSteam = IntPtr.Zero;
+                return restore;
             default:
                 overlayOverSteam = false;
                 lastSteam = current.Kind == ForegroundKind.Other ? IntPtr.Zero : lastSteam;
