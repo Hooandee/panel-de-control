@@ -2139,7 +2139,7 @@ def test_onexplayer_f1_unconfirmed_ryzenadj_has_no_auto_or_extra_range(tmp_path)
     )
 
 
-def _mk_readable_ryzenadj(root, watts=28):
+def _mk_static_ryzenadj(root, watts=28):
     path = os.path.join(root, "readable-ryzenadj")
     with open(path, "w") as handle:
         handle.write(
@@ -2156,7 +2156,7 @@ def _mk_readable_ryzenadj(root, watts=28):
 
 def test_onexplayer_f1_readable_ryzenadj_keeps_strict_route(tmp_path):
     root = str(tmp_path)
-    binary = _mk_readable_ryzenadj(root)
+    binary = _mk_static_ryzenadj(root)
     _mk_acpi_call(root)
 
     backend = select_backend(
@@ -2171,7 +2171,7 @@ def test_onexplayer_f1_readable_ryzenadj_keeps_strict_route(tmp_path):
 
 def test_onexplayer_f1_later_read_failure_does_not_mark_the_boot(tmp_path):
     root = str(tmp_path)
-    binary = _mk_readable_ryzenadj(root)
+    binary = _mk_static_ryzenadj(root)
     backend = select_backend(
         _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
     )
@@ -2192,7 +2192,7 @@ def _apex_marker(root):
 
 def test_onexplayer_apex_readable_ryzenadj_stays_after_probe(tmp_path):
     root = str(tmp_path)
-    binary = _mk_readable_ryzenadj(root)
+    binary = _mk_static_ryzenadj(root)
     _mk_acpi_call(root)
     backend = select_backend(
         _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
