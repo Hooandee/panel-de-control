@@ -233,6 +233,10 @@ public sealed class ThemeOption
 
     [DataMember(Name = "values", Order = 6, IsRequired = true)]
     public ThemeOptionValue[] Values { get; private set; }
+
+    /// <summary>appearance, grid, animations, performance, compatibility, sections or extra.</summary>
+    [DataMember(Name = "group", Order = 7, EmitDefaultValue = false)]
+    public string? Group { get; set; }
 }
 
 [DataContract]

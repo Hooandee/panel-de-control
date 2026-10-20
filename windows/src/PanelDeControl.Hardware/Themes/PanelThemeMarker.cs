@@ -8,7 +8,8 @@ public sealed record ThemeExtensionDeclaration(int AbiVersion, string Entrypoint
 
 public sealed record LocalizedPatchLabel(
     IReadOnlyDictionary<string, string> Name,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Values);
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Values,
+    bool Extra = false);
 
 /// <summary>
 /// <c>panel-theme.json</c>: the Panel identity of a CSS Loader theme folder.
@@ -124,7 +125,8 @@ public sealed class PanelThemeMarker
                 }
             }
 
-            labels[patch.Name] = new LocalizedPatchLabel(name, values);
+            var extra = patch.Value.TryGetProperty("group", out var group) && group.ValueKind == JsonValueKind.String && group.GetString() == "extra";
+            labels[patch.Name] = new LocalizedPatchLabel(name, values, extra);
         }
 
         return labels;

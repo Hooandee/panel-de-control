@@ -60,6 +60,9 @@ SERVICE_ARTIFACT="panel-de-control-service-x64"
 SERVICE_NAME="PanelDeControlService"
 REMOTE_STAGE="pdc-deploy"
 
+# Wi-Fi handhelds drop for a few seconds; without keepalives a copy hangs on the dead connection.
+SSH_OPTS="-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o ConnectTimeout=10"
+
 run() {
   printf '+'
   printf ' %q' "$@"
@@ -202,7 +205,7 @@ ENCODED_CLEAN="$(encode_powershell "\$ProgressPreference = 'SilentlyContinue'; R
 if [ "$REMOVE_SERVICE" -eq 1 ]; then
   echo "==> Removing $SERVICE_NAME from $HOST"
   [ "$DRY_RUN" -eq 0 ] || printf '%s\n' "$REMOTE_SCRIPT"
-  run ssh "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_SCRIPT"
+  run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_SCRIPT"
   echo "==> Done."
   exit 0
 fi
@@ -259,11 +262,11 @@ printf '%s\n' "$REGISTER_SCRIPT" > "$STAGE/register.ps1"
 [ "$DRY_RUN" -eq 0 ] || { echo "+ write $STAGE/deploy.ps1:"; printf '%s\n' "$REMOTE_SCRIPT"; }
 
 echo "==> Copying package to $HOST"
-run ssh "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_CLEAN"
-run scp -q -r "$STAGE" "$HOST:$REMOTE_STAGE"
+run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_CLEAN"
+run scp $SSH_OPTS -q -r "$STAGE" "$HOST:$REMOTE_STAGE"
 
 echo "==> Registering $PACKAGE_NAME on $HOST"
 [ "$WITH_SERVICE" -eq 0 ] || echo "==> Installing $SERVICE_NAME on $HOST"
-run ssh "$HOST" powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$REMOTE_STAGE/deploy.ps1"
+run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$REMOTE_STAGE/deploy.ps1"
 
 echo "==> Done. Open Xbox Game Bar (Win+G) > Widgets > Panel de Control on $HOST"

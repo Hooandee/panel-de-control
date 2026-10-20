@@ -240,8 +240,15 @@ public sealed class ThemesView : UserControl
         Grid.SetColumn(card.Toggle, 1);
         header.Children.Add(card.Toggle);
 
+        string? currentGroup = null;
         foreach (var option in theme.Options ?? new ThemeOption[0])
         {
+            if (option.Group is { } group && group != currentGroup)
+            {
+                currentGroup = group;
+                card.Options.Children.Add(GroupHeading(group));
+            }
+
             card.Options.Children.Add(BuildOption(card, option));
         }
 
@@ -251,6 +258,30 @@ public sealed class ThemesView : UserControl
             Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options },
         };
         return card;
+    }
+
+    private static FrameworkElement GroupHeading(string group)
+    {
+        var key = "ThemesGroup_" + group;
+        var heading = new StackPanel { Margin = new Thickness(0, 8, 0, -4), Spacing = 2 };
+        heading.Children.Add(new TextBlock
+        {
+            Text = Localized(key).ToUpperInvariant(),
+            Style = Resource<Style>("PdcCaptionStyle"),
+            CharacterSpacing = 60,
+        });
+        var description = Strings.GetString(key + "_Desc");
+        if (!string.IsNullOrEmpty(description))
+        {
+            heading.Children.Add(new TextBlock
+            {
+                Text = description,
+                Style = Resource<Style>("PdcMutedStyle"),
+                TextWrapping = TextWrapping.WrapWholeWords,
+            });
+        }
+
+        return heading;
     }
 
     private FrameworkElement BuildOption(ThemeCard card, ThemeOption option)

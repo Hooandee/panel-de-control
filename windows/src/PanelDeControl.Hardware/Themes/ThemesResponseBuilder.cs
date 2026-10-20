@@ -72,7 +72,12 @@ public static class ThemesResponseBuilder
 
     private static IEnumerable<ThemeOption> Options(InstalledTheme theme, ThemeSetting? setting)
     {
-        foreach (var patch in theme.Manifest.Patches)
+        var catalogId = theme.Marker?.CatalogIdentity;
+        var grouped = theme.Manifest.Patches
+            .Select(patch => (patch, group: ThemePatchGroups.GroupOf(patch, catalogId, theme.Marker)))
+            .Where(item => item.group is not null)
+            .OrderBy(item => ThemePatchGroups.Order.ToList().IndexOf(item.group!));
+        foreach (var (patch, group) in grouped)
         {
             ThemeManifestLabels(theme, patch.Name, out var name, out var values);
             var value = patch.Resolve(setting?.Patches.GetValueOrDefault(patch.Name)).Value;
@@ -84,7 +89,10 @@ public static class ThemesResponseBuilder
                 patch.DefaultValue,
                 patch.Options.Select(option => new ThemeOptionValue(
                     option.Value,
-                    values.TryGetValue(option.Value, out var label) ? label : Array.Empty<LocalizedText>())).ToArray());
+                    values.TryGetValue(option.Value, out var label) ? label : Array.Empty<LocalizedText>())).ToArray())
+            {
+                Group = group,
+            };
         }
     }
 

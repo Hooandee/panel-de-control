@@ -439,4 +439,13 @@
   <data name="ThemesPickerUnavailable" xml:space="preserve"><value>o seletor de arquivos não abre dentro da Game Bar; pelo Panel de Control no Iniciar, sim</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>com outro tema ativo não há animações; é preciso desligar um</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>esse zip não é uma early publicada deste tema</value></data>
+  <data name="ThemesGroup_appearance" xml:space="preserve"><value>Aparência</value></data>
+  <data name="ThemesGroup_grid" xml:space="preserve"><value>Grade</value></data>
+  <data name="ThemesGroup_animations" xml:space="preserve"><value>Animações</value></data>
+  <data name="ThemesGroup_performance" xml:space="preserve"><value>Desempenho</value></data>
+  <data name="ThemesGroup_compatibility" xml:space="preserve"><value>Compatibilidade</value></data>
+  <data name="ThemesGroup_sections" xml:space="preserve"><value>Seções do tema</value></data>
+  <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
+  <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Escolha em quais partes do Steam o tema será aplicado.</value></data>
+  <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Ajustes que fogem do design original do tema.</value></data>
 </root>
