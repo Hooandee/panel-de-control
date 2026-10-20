@@ -4620,6 +4620,12 @@ class Plugin:
             return config
         return {**config, "target_fps": maximum}
 
+    def _reported_auto_config(self, appid):
+        config = self._auto_config(appid)
+        if config.get("enabled") and not self._auto_tdp_supported():
+            return {**config, "enabled": False}
+        return config
+
     async def _sync_auto_stats_reader(self, active):
         self._auto_stats_reader_active = bool(active)
         await self._apply_stats_reader()
@@ -5373,7 +5379,6 @@ class Plugin:
         ):
             return {"auto_tdp": auto_tdp}
         if not self._auto_tdp_supported():
-            self._tdp_profiles.set_auto_tdp(scope, False, appid=appid)
             return {"auto_tdp": False}
         if not self._tdp_control_on():
             return {"auto_tdp": auto_tdp}
@@ -5822,7 +5827,9 @@ class Plugin:
         return levels, active, ac
 
     def _manual_boost(self, effective: dict, appid=None) -> bool:
-        return effective.get("mode") == "custom" and not self._tdp_profiles.auto_tdp(appid)
+        return effective.get("mode") == "custom" and not (
+            self._tdp_profiles.auto_tdp(appid) and self._auto_tdp_supported()
+        )
 
     def _safe_active_max(self, ac: bool) -> int | None:
         """None when the device has no manual extra range."""
@@ -11300,8 +11307,8 @@ class Plugin:
             "global_levels": global_levels,
             "global_requested_levels": global_requested_levels,
             "global_boost_mode": geff["mode"],
-            "auto_config": self._auto_config(self._current_appid),
-            "global_auto_config": self._auto_config(None),
+            "auto_config": self._reported_auto_config(self._current_appid),
+            "global_auto_config": self._reported_auto_config(None),
             "auto_target_max_fps": self._auto_target_max_fps(),
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
