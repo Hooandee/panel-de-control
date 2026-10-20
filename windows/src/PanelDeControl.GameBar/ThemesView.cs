@@ -183,6 +183,7 @@ public sealed class ThemesView : UserControl
         card.Description.Style = Resource<Style>("PdcMutedStyle");
         card.Description.TextWrapping = TextWrapping.WrapWholeWords;
         card.Description.MaxLines = 3;
+        card.Description.TextTrimming = TextTrimming.WordEllipsis;
         card.Description.Margin = new Thickness(0, 4, 0, 0);
         card.State.Style = Resource<Style>("PdcCaptionStyle");
         card.State.Margin = new Thickness(0, 10, 0, 0);
@@ -190,6 +191,8 @@ public sealed class ThemesView : UserControl
         card.Toggle.OnContent = string.Empty;
         card.Toggle.OffContent = string.Empty;
         card.Toggle.MinWidth = 0;
+        card.Toggle.Width = 44;
+        card.Toggle.HorizontalAlignment = HorizontalAlignment.Right;
         card.Toggle.VerticalAlignment = VerticalAlignment.Center;
         card.Toggle.Toggled += (_, _) => _ = ToggleThemeAsync(card);
         card.Action.Style = Resource<Style>("PdcChipButtonStyle");
