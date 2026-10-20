@@ -9,8 +9,9 @@ import {
 import { installHostClassMaps } from "./classMaps";
 import { installHostGameAudio } from "./gameAudio";
 import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
+import { installSteamButtonHome } from "./steamButton";
 
-export const WINDOWS_THEME_HOST_VERSION = 3;
+export const WINDOWS_THEME_HOST_VERSION = 4;
 
 export interface WindowsThemeHostState {
   revision: number;
@@ -161,6 +162,8 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
   const geometryTimer = setInterval(syncQamGeometry, QAM_GEOMETRY_POLL_MS);
   syncQamGeometry();
 
+  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError);
+
   const stopRuntime = startThemesRuntime({
     client: {
       getSnapshot: () => ({ snapshot: state.snapshot }),
@@ -217,6 +220,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     dispose() {
       stopRuntime();
       gameAudio.dispose();
+      stopSteamButton();
       releaseClassMaps();
       clearInterval(geometryTimer);
       watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
