@@ -1515,9 +1515,9 @@ def _measured_plugin(Plugin, tmp_path, monkeypatch, *, key="onexplayer_apex", am
     plugin._power_reader = types.SimpleNamespace(
         read=lambda: {"watts": watts["value"], "gpu_busy": 90},
         read_watts=lambda: watts["value"],
-        _amdgpu_dirs=lambda: ["hwmon"] * amdgpu,
+        apu_power_source=lambda: amdgpu == 1,
     )
-    plugin._measured_power_sources = None
+    plugin._measured_power_source = None
     return plugin, watts
 
 
@@ -1528,8 +1528,8 @@ def test_measured_route_offers_auto_tdp_only_with_a_single_apu_source(
     assert plugin._tdp_backend.name == "ryzenadj-unverified"
     assert plugin._auto_tdp_supported() is True
 
-    plugin._measured_power_sources = None
-    plugin._power_reader._amdgpu_dirs = lambda: ["a", "b"]
+    plugin._measured_power_source = None
+    plugin._power_reader.apu_power_source = lambda: False
     assert plugin._auto_tdp_supported() is False
 
 

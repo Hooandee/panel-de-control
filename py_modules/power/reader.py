@@ -83,6 +83,10 @@ class PowerReader:
             and os.path.basename(os.path.dirname(path))[4:].isdigit()
         ]
 
+    def apu_power_source(self) -> bool:
+        # A second amdgpu (dGPU, eGPU) reports its own board power, not the APU package.
+        return len(self._amdgpu_dirs()) == 1
+
     def _find_amdgpu_dir(self) -> str | None:
         directories = self._amdgpu_dirs()
         return directories[0] if directories else None

@@ -233,6 +233,7 @@ _OVERSHOOT_BACKENDS = frozenset(
     ("firmware-attr:asus-armoury", "firmware-attr:lenovo-wmi-other")
 )
 _OVERSHOOT_VIEW_STALE_S = 10.0
+_MEASURED_REASSERTS = 1
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
@@ -12032,16 +12033,12 @@ class Plugin:
             return False
         if self._device.is_generic or self._device.key in ("desktop_pc", "steam_machine"):
             return False
-        # A second amdgpu (dGPU, eGPU) would report its own board power, not the APU's.
-        sources = getattr(self, "_measured_power_sources", None)
-        if sources is None:
-            dirs = getattr(self._power_reader, "_amdgpu_dirs", None)
+        if getattr(self, "_measured_power_source", None) is None:
             try:
-                sources = len(dirs()) if callable(dirs) else 0
+                self._measured_power_source = bool(self._power_reader.apu_power_source())
             except Exception:  # noqa: BLE001
-                sources = 0
-            self._measured_power_sources = sources
-        return sources == 1
+                self._measured_power_source = False
+        return self._measured_power_source
 
     def _measured_route_active(self) -> bool:
         return bool(
@@ -12052,11 +12049,7 @@ class Plugin:
     async def _measured_power_tick(self) -> None:
         now = _monotonic()
         targets = self._tdp_targets
-        target = (
-            targets.target.get("pl1")
-            if targets is not None and isinstance(getattr(targets, "target", None), dict)
-            else None
-        )
+        target = targets.target.get("pl1") if targets is not None else None
         if (
             self._current_appid is None
             or target is None
@@ -12088,7 +12081,7 @@ class Plugin:
             "TDP limit exceeded by measured power %s",
             json.dumps(event, sort_keys=True, separators=(",", ":")),
         )
-        if self._measured_exceeded < 2:
+        if self._measured_exceeded <= _MEASURED_REASSERTS:
             self._measured_watch.reset(target, now)
             await self._apply_tdp_now("measured-reassert")
             return

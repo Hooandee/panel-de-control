@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 WINDOW_S = 10.0
 SETTLE_S = 4.0
@@ -15,12 +15,7 @@ class MeasuredVerdict:
     samples: int
 
     def as_dict(self) -> dict:
-        return {
-            "state": self.state,
-            "target_w": self.target_w,
-            "average_w": self.average_w,
-            "samples": self.samples,
-        }
+        return asdict(self)
 
 
 def exceed_threshold_w(target_w: int) -> float:
