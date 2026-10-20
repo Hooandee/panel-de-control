@@ -2471,7 +2471,7 @@ def test_last_route_not_honored_is_kept_instead_of_dropping_tdp(tmp_path):
 
 def test_strict_ryzenadj_recovers_after_a_transient_read_loss(tmp_path):
     root = str(tmp_path)
-    binary = _mk_readable_ryzenadj(root)
+    binary = _mk_static_ryzenadj(root)
     backend = select_backend(
         _p("onexplayer_superx"), root=root, ryzenadj_resolve=lambda: binary,
     )
