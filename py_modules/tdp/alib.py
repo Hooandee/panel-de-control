@@ -73,6 +73,7 @@ class AlibBackend(TDPBackend):
 
     name = "acpi-alib"
     readback = False
+    measured_verification = True
     guard_interval_s = 15.0
     heartbeat_s = 15.0
 

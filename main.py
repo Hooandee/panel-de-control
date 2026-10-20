@@ -45,6 +45,7 @@ from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
 from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
+from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -899,6 +900,11 @@ class Plugin:
         self._hud_apply_status = None
         self._tdp_generation = 0
         self._tdp_targets = None
+        self._measured_watch = MeasuredLimitWatch()
+        self._measured_watch_targets = None
+        self._measured_verdict = None
+        self._measured_exceeded = 0
+        self._measured_history = deque(maxlen=12)
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(self._tdp_backend, "readback", True)),
         )
@@ -4849,6 +4855,8 @@ class Plugin:
         )
 
     def _auto_apply_confirmed(self, result, setpoint):
+        if result.ok and result.applied_w is None and self._measured_route_active():
+            return True
         if not result.ok or result.applied_w is None:
             return False
         tolerance = max(
@@ -4872,6 +4880,9 @@ class Plugin:
                 return bool(confirm(observation, setpoint, tolerance))
             except Exception:  # noqa: BLE001
                 return False
+        if self._measured_route_active():
+            verdict = self._measured_verdict
+            return verdict is None or verdict.state != "exceeded"
         if not callable(getattr(self._tdp_backend, "observe", None)):
             primary = observation.surfaces.get(self._tdp_backend.name, {})
             reading = primary.get(getattr(self._tdp_backend, "primary_rail", "pl1"))
@@ -5310,6 +5321,7 @@ class Plugin:
             try:
                 await asyncio.sleep(2)
                 self._offer_pdc_refresh()
+                await self._measured_power_tick()
                 await self._auto_tick()
                 self._auto_last_tick_at = _monotonic()
                 self._auto_last_error = None
@@ -11649,6 +11661,16 @@ class Plugin:
                 **self._overshoot_monitor().as_dict(),
                 "profile_change": self._platform_profile_watch().last_change,
             },
+            "measured_power": {
+                "capable": self._measured_power_capable(),
+                "active": self._measured_route_active(),
+                "verdict": (
+                    self._measured_verdict.as_dict()
+                    if self._measured_verdict is not None
+                    else None
+                ),
+                "exceeded": list(self._measured_history),
+            },
             "auto": {
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),
@@ -11740,8 +11762,9 @@ class Plugin:
                 previous, probe, None, None, None, "recovery_pending"
             )
             return False
+        not_honored = bool(getattr(previous, "measured_not_honored", False))
         selection_ready = getattr(previous, "selection_ready", None)
-        if callable(selection_ready):
+        if callable(selection_ready) and not not_honored:
             try:
                 route_viable = bool(selection_ready())
             except Exception as error:  # noqa: BLE001
@@ -11763,7 +11786,7 @@ class Plugin:
                     "temporarily_unready",
                 )
                 return False
-        if self._tdp_backend_used and not getattr(
+        if self._tdp_backend_used and not not_honored and not getattr(
             previous,
             "reselection_safe_after_use",
             False,
@@ -11992,11 +12015,117 @@ class Plugin:
             return False
 
     def _auto_tdp_supported(self) -> bool:
-        return bool(
-            self._tdp_supported()
-            and getattr(self._tdp_backend, "readback", True)
+        if not self._tdp_supported():
+            return False
+        if (
+            getattr(self._tdp_backend, "readback", True)
             and getattr(self._tdp_backend, "auto_tdp_safe", True)
             and getattr(self._tdp_backend, "auto_tdp_supported", True)
+        ):
+            return True
+        return self._measured_power_capable()
+
+    def _measured_power_capable(self) -> bool:
+        backend = self._tdp_backend
+        if not getattr(backend, "measured_verification", False):
+            return False
+        if getattr(backend, "measured_not_honored", False):
+            return False
+        if self._device.is_generic or self._device.key in ("desktop_pc", "steam_machine"):
+            return False
+        # A second amdgpu (dGPU, eGPU) would report its own board power, not the APU's.
+        sources = getattr(self, "_measured_power_sources", None)
+        if sources is None:
+            dirs = getattr(self._power_reader, "_amdgpu_dirs", None)
+            try:
+                sources = len(dirs()) if callable(dirs) else 0
+            except Exception:  # noqa: BLE001
+                sources = 0
+            self._measured_power_sources = sources
+        return sources == 1
+
+    def _measured_route_active(self) -> bool:
+        return bool(
+            self._measured_power_capable()
+            and not getattr(self._tdp_backend, "readback", True)
+        )
+
+    async def _measured_power_tick(self) -> None:
+        now = _monotonic()
+        targets = self._tdp_targets
+        target = (
+            targets.target.get("pl1")
+            if targets is not None and isinstance(getattr(targets, "target", None), dict)
+            else None
+        )
+        if (
+            self._current_appid is None
+            or target is None
+            or not self._measured_route_active()
+            or not self._tdp_supported()
+        ):
+            self._measured_watch.reset(None, now)
+            self._measured_watch_targets = None
+            self._measured_verdict = None
+            return
+        if targets is not self._measured_watch_targets:
+            self._measured_watch.reset(target, now)
+            self._measured_watch_targets = targets
+        watts = await asyncio.to_thread(self._power_reader.read_watts)
+        verdict = self._measured_watch.feed(watts, now)
+        self._measured_verdict = verdict
+        if verdict.state == "within_limit":
+            self._measured_exceeded = 0
+            return
+        if verdict.state != "exceeded":
+            return
+        self._measured_exceeded += 1
+        event = {
+            "at": round(now, 3),
+            "backend": self._tdp_backend.name,
+            "episode": self._measured_exceeded,
+            **verdict.as_dict(),
+        }
+        self._measured_history.append(event)
+        decky.logger.warning(
+            "TDP limit exceeded by measured power %s",
+            json.dumps(event, sort_keys=True, separators=(",", ":")),
+        )
+        if self._measured_exceeded < 2:
+            self._measured_watch.reset(target, now)
+            await self._apply_tdp_now("measured-reassert")
+            return
+        async with self._tdp_probe_lock:
+            if await self._offload_call(self._leave_route_not_honored):
+                self._start_tdp_guard_loop()
+
+    def _leave_route_not_honored(self) -> bool:
+        previous = self._tdp_backend
+        verdict = self._measured_verdict
+        detail = json.dumps(
+            verdict.as_dict() if verdict is not None else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self._measured_exceeded = 0
+        if not tdp_factory.mark_route_not_honored(self._device, previous.name, detail):
+            return False
+        try:
+            alternative = tdp_factory.select_backend(
+                self._device,
+                os_id=self._os_id,
+                desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
+                    self._settings.get("desktop_power_handoff")),
+            )
+        except Exception:  # noqa: BLE001
+            return False
+        previous.measured_not_honored = True
+        if alternative.name == previous.name or not alternative.supported:
+            self._tdp_reason = "limit_not_honored"
+            return False
+        return self._replace_unviable_tdp_backend(
+            previous,
+            {"ready": False, "error": "limit_not_honored"},
         )
 
     def _tdp_backend_diagnostics(self):

@@ -1475,3 +1475,152 @@ def test_onexplayer_unreadable_ryzenadj_hands_over_to_unconfirmed_writes(
     assert transition["selected"] == "ryzenadj-unverified"
     assert transition["outcome"] == "reselected"
     assert [item["candidate"] for item in transition["selection_trace"]] == trace
+
+
+def _measured_plugin(Plugin, tmp_path, monkeypatch, *, key="onexplayer_apex", amdgpu=1):
+    import main as main_mod
+    from tdp import factory as factory_mod
+
+    binary = tmp_path / "ryzenadj"
+    binary.write_text(
+        "#!/bin/sh\nif [ \"$1\" = \"-i\" ]; then exit 255; fi\n", encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    (tmp_path / "proc/acpi").mkdir(parents=True)
+    (tmp_path / "proc/acpi/call").write_text("0x0", encoding="utf-8")
+    device = next(profile for profile in DEVICE_TABLE if profile.key == key)
+
+    def select(device, **kwargs):
+        return real_select_backend(
+            device,
+            root=str(tmp_path),
+            ryzenadj_resolve=lambda: str(binary),
+            os_id=kwargs.get("os_id"),
+        )
+
+    real_mark = factory_mod.mark_route_not_honored
+    monkeypatch.setattr(main_mod.tdp_factory, "select_backend", select)
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "mark_route_not_honored",
+        lambda device, name, detail: real_mark(device, name, detail, root=str(tmp_path)),
+    )
+    select(device).probe()
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = device
+    plugin._os_id = "cachyos"
+    plugin._tdp_backend = select(device, os_id="cachyos")
+    watts = {"value": 70.0}
+    plugin._power_reader = types.SimpleNamespace(
+        read=lambda: {"watts": watts["value"], "gpu_busy": 90},
+        read_watts=lambda: watts["value"],
+        _amdgpu_dirs=lambda: ["hwmon"] * amdgpu,
+    )
+    plugin._measured_power_sources = None
+    return plugin, watts
+
+
+def test_measured_route_offers_auto_tdp_only_with_a_single_apu_source(
+    Plugin, tmp_path, monkeypatch,
+):
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._auto_tdp_supported() is True
+
+    plugin._measured_power_sources = None
+    plugin._power_reader._amdgpu_dirs = lambda: ["a", "b"]
+    assert plugin._auto_tdp_supported() is False
+
+
+def test_measured_route_is_not_offered_on_generic_hardware(Plugin, tmp_path, monkeypatch):
+    from device_profiles import GENERIC
+
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    plugin._device = GENERIC
+    assert plugin._measured_power_capable() is False
+
+
+def test_measured_overshoot_reasserts_then_leaves_the_route(Plugin, tmp_path, monkeypatch):
+    import main as main_mod
+
+    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+    applied = []
+
+    async def apply_now(reason, **_kwargs):
+        applied.append(reason)
+        return TdpResult(30, None, True, "")
+
+    plugin._apply_tdp_now = apply_now
+    plugin._current_appid = 1234
+    plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 30})
+
+    async def run(seconds):
+        end = clock[0] + seconds
+        while clock[0] < end:
+            await plugin._measured_power_tick()
+            clock[0] += 2.0
+
+    asyncio.run(run(16))
+    assert applied == ["measured-reassert"]
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+
+    asyncio.run(run(16))
+    assert plugin._tdp_backend.name == "acpi-alib"
+    assert plugin._tdp_backend_history[-1]["outcome"] == "reselected"
+    assert (
+        tmp_path
+        / "run/panel-de-control/route-ryzenadj-unverified-onexplayer_apex.not-honored"
+    ).exists()
+    assert plugin._tdp_diagnostics()["measured_power"]["exceeded"][0]["average_w"] == 70.0
+
+
+def test_measured_power_within_limit_keeps_the_route(Plugin, tmp_path, monkeypatch):
+    import main as main_mod
+
+    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    watts["value"] = 29.0
+    clock = [100.0]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+    plugin._current_appid = 1234
+    plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 30})
+
+    async def run():
+        for _ in range(20):
+            await plugin._measured_power_tick()
+            clock[0] += 2.0
+
+    asyncio.run(run())
+    assert plugin._measured_verdict.state == "within_limit"
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._measured_history == type(plugin._measured_history)(maxlen=12)
+
+
+def test_last_route_not_honored_keeps_tdp_and_reports_it(Plugin, tmp_path, monkeypatch):
+    import main as main_mod
+
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    (tmp_path / "proc/acpi/call").unlink()
+    clock = [100.0]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+
+    async def apply_now(reason, **_kwargs):
+        return TdpResult(30, None, True, "")
+
+    plugin._apply_tdp_now = apply_now
+    plugin._current_appid = 1234
+    plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 30})
+
+    async def run():
+        for _ in range(20):
+            await plugin._measured_power_tick()
+            clock[0] += 2.0
+
+    asyncio.run(run())
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._tdp_backend.measured_not_honored is True
+    assert plugin._tdp_reason == "limit_not_honored"
+    assert plugin._tdp_supported() is True
+    assert plugin._auto_tdp_supported() is False

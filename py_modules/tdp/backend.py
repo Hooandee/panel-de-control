@@ -17,6 +17,8 @@ class TDPBackend(ABC):
     low_battery_hold_strategy: str | None = None
     read_tolerance_w: int = 0
     reselection_safe_after_use: bool = False
+    measured_verification: bool = False
+    measured_not_honored: bool = False
     probe_trace: tuple[dict, ...] = ()
     primary_rail: str = "pl1"
     # Highest charger PL1 this backend will write; the manual extra range never exceeds it.

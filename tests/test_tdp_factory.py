@@ -2430,3 +2430,40 @@ def test_generic_amd_ryzenadj_keeps_auto_tdp(tmp_path):
 
     assert backend.name == "ryzenadj"
     assert backend.auto_tdp_safe is True
+
+
+def test_route_not_honored_this_boot_moves_to_the_next_route(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+    assert factory.mark_route_not_honored(
+        _p("onexplayer_apex"), "ryzenadj-unverified", "70W at 30W", root=root,
+    )
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert backend.measured_verification is True
+    assert backend.measured_not_honored is False
+    assert backend.probe_trace[1]["not_honored_this_boot"] is True
+
+
+def test_last_route_not_honored_is_kept_instead_of_dropping_tdp(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    factory.mark_route_not_honored(
+        _p("onexplayer_apex"), "acpi-alib", "70W at 30W", root=root,
+    )
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert backend.supported is True
+    assert backend.measured_not_honored is True

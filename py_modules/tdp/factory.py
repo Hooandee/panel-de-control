@@ -51,6 +51,22 @@ def _runtime_lock_path(root, name):
     return os.path.join(root, "run/panel-de-control", name)
 
 
+def _not_honored_path(root, device_key, backend_name):
+    safe = backend_name.replace(":", "-").replace("/", "-")
+    return _runtime_lock_path(root, f"route-{safe}-{device_key}.not-honored")
+
+
+def mark_route_not_honored(device, backend_name, detail, root="/") -> bool:
+    path = _not_honored_path(root, device.key, backend_name)
+    try:
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(str(detail)[:512])
+        return True
+    except OSError:
+        return False
+
+
 def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 ryzenadj_unverified=None):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
@@ -322,12 +338,14 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             **kwargs,
         )
         backend.name = "ryzenadj-unverified"
+        backend.measured_verification = True
         backend.readback = False
         backend.auto_tdp_supported = False
         backend.auto_tdp_safe = False
         return backend
 
     trace = []
+    not_honored_fallback = None
     for make in _candidates(device, fallback, root, ryzenadj, os_id,
                             desktop_cpu=desktop_limits is not None,
                             ryzenadj_unverified=ryzenadj_unverified):
@@ -347,6 +365,15 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             "backend": backend.name,
             "supported": bool(backend.supported),
         }
+        if backend.supported and os.path.exists(
+            _not_honored_path(root, device.key, backend.name)
+        ):
+            trace_item["ready"] = False
+            trace_item["not_honored_this_boot"] = True
+            trace.append(trace_item)
+            if not_honored_fallback is None:
+                not_honored_fallback = backend
+            continue
         safety_locked = bool(getattr(backend, "safety_locked", False))
         ready = bool(backend.supported)
         if ready and not safety_locked:
@@ -369,6 +396,10 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
         if ready or safety_locked or (backend.supported and blocks_fallback):
             backend.probe_trace = tuple(trace)
             return backend
+    if not_honored_fallback is not None:
+        not_honored_fallback.measured_not_honored = True
+        not_honored_fallback.probe_trace = tuple(trace)
+        return not_honored_fallback
     backend = NullBackend(f"no supported TDP interface for {device.key}")
     backend.probe_trace = tuple(trace)
     return backend
