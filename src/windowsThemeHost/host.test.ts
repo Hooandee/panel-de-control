@@ -65,6 +65,18 @@ describe("Windows theme host", () => {
     expect(findBigPictureDocument(scopeWith([]))).toBeNull();
   });
 
+  it("finds Big Picture while a game's overlay holds the active context", () => {
+    const overlay = document.implementation.createHTMLDocument("overlay");
+    const scope = {
+      FocusNavController: {
+        m_ActiveContext: { m_rgGamepadNavigationTrees: [{ m_ID: "GamepadUI_Overlay_2514320289_Root", Root: { Element: { ownerDocument: overlay } } }] },
+        m_rgAllContexts: [{ m_rgGamepadNavigationTrees: [{ m_ID: "GamepadUI_Full_Root", Root: { Element: { ownerDocument: document } } }] }],
+      },
+    } as unknown as typeof globalThis;
+
+    expect(findBigPictureDocument(scope)).toBe(document);
+  });
+
   it("mounts the enabled theme's runtime and reports it", async () => {
     host = createWindowsThemeHost(scopeWith([{ m_ID: "GamepadUI_Full_Root", doc: document }]));
 

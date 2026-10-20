@@ -10,7 +10,7 @@ import { installHostClassMaps } from "./classMaps";
 import { installHostGameAudio } from "./gameAudio";
 import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
 
-export const WINDOWS_THEME_HOST_VERSION = 2;
+export const WINDOWS_THEME_HOST_VERSION = 3;
 
 export interface WindowsThemeHostState {
   revision: number;
@@ -40,9 +40,14 @@ interface NavigationTree {
   Root?: { Element?: { ownerDocument?: Document | null } | null } | null;
 }
 
+interface NavigationContext {
+  m_rgGamepadNavigationTrees?: readonly NavigationTree[];
+}
+
 interface FocusNavigationController {
-  m_ActiveContext?: { m_rgGamepadNavigationTrees?: readonly NavigationTree[] } | null;
-  m_LastActiveContext?: { m_rgGamepadNavigationTrees?: readonly NavigationTree[] } | null;
+  m_ActiveContext?: NavigationContext | null;
+  m_LastActiveContext?: NavigationContext | null;
+  m_rgAllContexts?: readonly NavigationContext[];
 }
 
 const MAX_ERRORS = 20;
@@ -50,14 +55,16 @@ const QAM_POLL_MS = 2_000;
 const DOCUMENT_POLL_MS = 2_000;
 const QAM_GEOMETRY_POLL_MS = 1_000;
 
+// With a game running the active context is the game's overlay (GamepadUI_Overlay_<appid>_Root); Big Picture's own
+// tree stays in another context, so every context is searched, the active one first.
 function navigationTrees(scope: typeof globalThis): readonly NavigationTree[] {
   const global = scope as typeof globalThis & {
     GamepadNavTree?: { m_context?: { m_controller?: FocusNavigationController } };
     FocusNavController?: FocusNavigationController;
   };
   const controller = global.GamepadNavTree?.m_context?.m_controller ?? global.FocusNavController;
-  const context = controller?.m_ActiveContext ?? controller?.m_LastActiveContext;
-  return context?.m_rgGamepadNavigationTrees ?? [];
+  const contexts = [controller?.m_ActiveContext, controller?.m_LastActiveContext, ...(controller?.m_rgAllContexts ?? [])];
+  return contexts.flatMap((context) => context?.m_rgGamepadNavigationTrees ?? []);
 }
 
 function treeDocument(scope: typeof globalThis, matches: (id: string) => boolean): Document | null {
