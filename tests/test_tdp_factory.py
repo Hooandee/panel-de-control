@@ -2467,3 +2467,25 @@ def test_last_route_not_honored_is_kept_instead_of_dropping_tdp(tmp_path):
     assert backend.name == "acpi-alib"
     assert backend.supported is True
     assert backend.measured_not_honored is True
+
+
+def test_strict_ryzenadj_recovers_after_a_transient_read_loss(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_readable_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_superx"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.probe() is True
+    assert backend.set_tdp(28, ac=True).ok is True
+    os.chmod(binary, 0o644)
+    assert backend.set_tdp(30, ac=True).ok is False
+    assert backend.supported is False
+    assert backend.probe_pending is True
+
+    assert backend.probe() is False
+    os.chmod(binary, 0o755)
+    assert backend.probe() is True
+
+    assert backend.supported is True
+    assert backend.safety_locked is False
+    assert backend.diagnostics()["readback_state"] == "ready"

@@ -1624,3 +1624,37 @@ def test_last_route_not_honored_keeps_tdp_and_reports_it(Plugin, tmp_path, monke
     assert plugin._tdp_reason == "limit_not_honored"
     assert plugin._tdp_supported() is True
     assert plugin._auto_tdp_supported() is False
+
+
+def test_guard_reprobe_recovers_strict_ryzenadj_after_read_loss(Plugin, tmp_path):
+    binary = tmp_path / "ryzenadj"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-i\" ]; then\n"
+        "  printf '| STAPM LIMIT | 28.000 | stapm-limit |\\n'\n"
+        "  printf '| PPT LIMIT FAST | 28.000 | fast-limit |\\n'\n"
+        "  printf '| PPT LIMIT SLOW | 28.000 | slow-limit |\\n'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    device = next(p for p in DEVICE_TABLE if p.key == "onexplayer_superx")
+    backend = real_select_backend(
+        device, root=str(tmp_path), ryzenadj_resolve=lambda: str(binary),
+    )
+    assert backend.probe() is True
+    assert backend.set_tdp(28, ac=True).ok is True
+    binary.chmod(0o644)
+    assert backend.set_tdp(30, ac=True).ok is False
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = device
+    plugin._tdp_backend = backend
+    plugin._tdp_backend_used = True
+    assert plugin._tdp_supported() is False
+
+    binary.chmod(0o755)
+    assert asyncio.run(plugin._probe_tdp_backend()) is True
+    assert plugin._tdp_backend is backend
+    assert plugin._tdp_supported() is True

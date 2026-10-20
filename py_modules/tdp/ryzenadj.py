@@ -240,11 +240,23 @@ class RyzenadjBackend(TDPBackend):
         self.low_battery_hold_strategy = None
         self.auto_tdp_safe = not self._power_only_retry
 
+    def _read_loss_retryable(self) -> bool:
+        return bool(
+            self._require_readback
+            and self._bin is not None
+            and self._readback_state == "circuit_open_initial"
+            and self._runtime_lock_payload is None
+            and not self.yields_to_next_route
+        )
+
     def probe(self) -> bool:
         if not self._require_readback:
             if self._readback_state == "pending":
                 return self._probe_normal_readback()
             return bool(self.supported)
+        if self._read_loss_retryable():
+            self.supported = True
+            self._readback_state = "ready" if self._has_written else "pending"
         snapshot = self._required_snapshot(retry_initial=True)
         return snapshot is not None or not self._require_readback
 
@@ -254,7 +266,7 @@ class RyzenadjBackend(TDPBackend):
 
     @property
     def probe_pending(self) -> bool:
-        return self._readback_state == "pending"
+        return self._readback_state == "pending" or self._read_loss_retryable()
 
     def _probe_normal_readback(self) -> bool:
         _exit_ok, out = self._read_info_result()
