@@ -234,6 +234,7 @@ _OVERSHOOT_BACKENDS = frozenset(
 )
 _OVERSHOOT_VIEW_STALE_S = 10.0
 _MEASURED_REASSERTS = 1
+_MEASURED_SOURCE_RECHECK_S = 60.0
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
@@ -5260,7 +5261,11 @@ class Plugin:
             return self._auto_status
         if self._ui_active:
             return self._hold_auto_session("ui_active", reading)
-        if decision.reason == "probe_stable" and self._learning_active():
+        if (
+            decision.reason == "probe_stable"
+            and self._learning_active()
+            and not self._measured_route_active()
+        ):
             try:
                 recorded = self._auto_learning.record(
                     appid,
@@ -12033,11 +12038,18 @@ class Plugin:
             return False
         if self._device.is_generic or self._device.key in ("desktop_pc", "steam_machine"):
             return False
-        if getattr(self, "_measured_power_source", None) is None:
+        now = _monotonic()
+        checked_at = getattr(self, "_measured_power_source_at", None)
+        if (
+            getattr(self, "_measured_power_source", None) is None
+            or checked_at is None
+            or now - checked_at >= _MEASURED_SOURCE_RECHECK_S
+        ):
             try:
                 self._measured_power_source = bool(self._power_reader.apu_power_source())
             except Exception:  # noqa: BLE001
                 self._measured_power_source = False
+            self._measured_power_source_at = now
         return self._measured_power_source
 
     def _measured_route_active(self) -> bool:
@@ -12046,8 +12058,14 @@ class Plugin:
             and not getattr(self._tdp_backend, "readback", True)
         )
 
+    def _reset_measured_watch(self, target, now):
+        self._measured_watch.reset(target, now)
+        self._measured_exceeded = 0
+
     async def _measured_power_tick(self) -> None:
         now = _monotonic()
+        backend = self._tdp_backend
+        generation = self._tdp_generation
         targets = self._tdp_targets
         target = targets.target.get("pl1") if targets is not None else None
         if (
@@ -12056,12 +12074,15 @@ class Plugin:
             or not self._measured_route_active()
             or not self._tdp_supported()
         ):
-            self._measured_watch.reset(None, now)
+            self._reset_measured_watch(None, now)
             self._measured_verdict = None
             return
         if self._measured_watch.target_w != int(target):
-            self._measured_watch.reset(target, now)
+            self._reset_measured_watch(target, now)
         watts = await asyncio.to_thread(self._power_reader.read_watts)
+        if self._tdp_backend is not backend or self._tdp_generation != generation:
+            self._reset_measured_watch(None, now)
+            return
         verdict = self._measured_watch.feed(watts, now)
         self._measured_verdict = verdict
         if verdict.state == "within_limit":
@@ -12072,7 +12093,7 @@ class Plugin:
         self._measured_exceeded += 1
         event = {
             "at": round(now, 3),
-            "backend": self._tdp_backend.name,
+            "backend": backend.name,
             "episode": self._measured_exceeded,
             **verdict.as_dict(),
         }
@@ -12086,37 +12107,53 @@ class Plugin:
             await self._apply_tdp_now("measured-reassert")
             return
         async with self._tdp_probe_lock:
-            if await self._offload_call(self._leave_route_not_honored):
+            if (
+                self._tdp_backend is not backend
+                or self._tdp_generation != generation
+                or self._current_appid is None
+                or not self._tdp_control_on()
+                or not self._measured_route_active()
+            ):
+                self._reset_measured_watch(None, _monotonic())
+                return
+            if await self._offload_call(lambda: self._leave_route_not_honored(backend)):
                 self._start_tdp_guard_loop()
 
-    def _leave_route_not_honored(self) -> bool:
-        previous = self._tdp_backend
+    def _external_tdp_writer(self) -> str | None:
+        try:
+            if self._powerstation_detector.tdp_active():
+                return "powerstation"
+        except Exception:  # noqa: BLE001
+            pass
+        if self._controller_backend.manager != controller_detect.HHD:
+            return None
+        try:
+            return "hhd" if self._hhd_tdp_client.current_tdp_enable() else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _leave_route_not_honored(self, backend) -> bool:
+        self._measured_exceeded = 0
+        writer = self._external_tdp_writer()
+        if writer is not None:
+            self._tdp_reason = f"external_writer:{writer}"
+            return False
         verdict = self._measured_verdict
         detail = json.dumps(
             verdict.as_dict() if verdict is not None else {},
             sort_keys=True,
             separators=(",", ":"),
         )
-        self._measured_exceeded = 0
-        if not tdp_factory.mark_route_not_honored(self._device, previous.name, detail):
+        if not tdp_factory.mark_route_not_honored(self._device, backend.name, detail):
             return False
-        try:
-            alternative = tdp_factory.select_backend(
-                self._device,
-                os_id=self._os_id,
-                desktop_ceiling_hint_w=handoff_cpu_ceiling_w(
-                    self._settings.get("desktop_power_handoff")),
-            )
-        except Exception:  # noqa: BLE001
-            return False
-        previous.measured_not_honored = True
-        if alternative.name == previous.name or not alternative.supported:
-            self._tdp_reason = "limit_not_honored"
-            return False
-        return self._replace_unviable_tdp_backend(
-            previous,
+        backend.measured_not_honored = True
+        ready = self._replace_unviable_tdp_backend(
+            backend,
             {"ready": False, "error": "limit_not_honored"},
         )
+        if getattr(self._tdp_backend, "measured_not_honored", False):
+            self._tdp_reason = "limit_not_honored"
+        return ready
 
     def _tdp_backend_diagnostics(self):
         errors = {}

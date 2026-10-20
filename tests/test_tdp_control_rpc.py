@@ -1680,3 +1680,80 @@ def test_guard_reprobe_recovers_strict_ryzenadj_after_read_loss(Plugin, tmp_path
     assert asyncio.run(plugin._probe_tdp_backend()) is True
     assert plugin._tdp_backend is backend
     assert plugin._tdp_supported() is True
+
+
+def _measured_run(plugin, main_mod, monkeypatch, start=100.0):
+    clock = [start]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+
+    async def apply_now(reason, **_kwargs):
+        return TdpResult(30, None, True, "")
+
+    plugin._apply_tdp_now = apply_now
+    plugin._current_appid = 1234
+    plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 30})
+
+    def run(seconds):
+        async def go():
+            end = clock[0] + seconds
+            while clock[0] < end:
+                await plugin._measured_power_tick()
+                clock[0] += 2.0
+        asyncio.run(go())
+
+    return run
+
+
+def test_measured_exceed_count_resets_when_the_game_ends(Plugin, tmp_path, monkeypatch):
+    import main as main_mod
+
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    run = _measured_run(plugin, main_mod, monkeypatch)
+    run(16)
+    assert plugin._measured_exceeded == 1
+
+    plugin._current_appid = None
+    run(2)
+    plugin._current_appid = 1234
+    run(16)
+
+    assert plugin._measured_exceeded == 1
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+
+
+def test_external_writer_is_reported_instead_of_marking_the_route(
+    Plugin, tmp_path, monkeypatch,
+):
+    import main as main_mod
+
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    monkeypatch.setattr(plugin, "_external_tdp_writer", lambda: "hhd")
+    run = _measured_run(plugin, main_mod, monkeypatch)
+
+    run(34)
+
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._tdp_reason == "external_writer:hhd"
+    assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
+
+
+def test_backend_swapped_during_the_power_read_is_never_marked(
+    Plugin, tmp_path, monkeypatch,
+):
+    import main as main_mod
+
+    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    run = _measured_run(plugin, main_mod, monkeypatch)
+    run(16)
+    other = FakeBackend()
+
+    def read_and_swap():
+        plugin._tdp_backend = other
+        return watts["value"]
+
+    plugin._power_reader.read_watts = read_and_swap
+    run(16)
+
+    assert plugin._tdp_backend is other
+    assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
+
