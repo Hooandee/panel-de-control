@@ -1577,6 +1577,28 @@ def test_measured_overshoot_reasserts_then_leaves_the_route(Plugin, tmp_path, mo
     assert plugin._tdp_diagnostics()["measured_power"]["exceeded"][0]["average_w"] == 70.0
 
 
+def test_measured_watch_survives_periodic_reasserts_of_the_same_target(
+    Plugin, tmp_path, monkeypatch,
+):
+    import main as main_mod
+
+    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    watts["value"] = 8.0
+    clock = [100.0]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+    plugin._current_appid = 1234
+
+    async def run():
+        for i in range(10):
+            if i % 3 == 0:
+                plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 8})
+            await plugin._measured_power_tick()
+            clock[0] += 2.0
+
+    asyncio.run(run())
+    assert plugin._measured_verdict.state == "within_limit"
+
+
 def test_measured_power_within_limit_keeps_the_route(Plugin, tmp_path, monkeypatch):
     import main as main_mod
 

@@ -901,7 +901,6 @@ class Plugin:
         self._tdp_generation = 0
         self._tdp_targets = None
         self._measured_watch = MeasuredLimitWatch()
-        self._measured_watch_targets = None
         self._measured_verdict = None
         self._measured_exceeded = 0
         self._measured_history = deque(maxlen=12)
@@ -12065,12 +12064,10 @@ class Plugin:
             or not self._tdp_supported()
         ):
             self._measured_watch.reset(None, now)
-            self._measured_watch_targets = None
             self._measured_verdict = None
             return
-        if targets is not self._measured_watch_targets:
+        if self._measured_watch.target_w != int(target):
             self._measured_watch.reset(target, now)
-            self._measured_watch_targets = targets
         watts = await asyncio.to_thread(self._power_reader.read_watts)
         verdict = self._measured_watch.feed(watts, now)
         self._measured_verdict = verdict
