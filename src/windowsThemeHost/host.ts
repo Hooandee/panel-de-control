@@ -6,6 +6,7 @@ import {
   parseThemeExtensionPayload,
   type ThemeExtensionPayload,
 } from "../themes/themeExtensionClient";
+import { installHostClassMaps } from "./classMaps";
 import { installHostGameAudio } from "./gameAudio";
 import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
 
@@ -129,6 +130,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
   };
 
   const gameAudio = installHostGameAudio(scope);
+  const releaseClassMaps = installHostClassMaps(scope);
 
   let qamGeometry: QamGeometry | null = null;
   let geometryDocument: Document | null = null;
@@ -208,6 +210,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     dispose() {
       stopRuntime();
       gameAudio.dispose();
+      releaseClassMaps();
       clearInterval(geometryTimer);
       watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
       if (geometryDocument) applyQamGeometry(geometryDocument, null);
