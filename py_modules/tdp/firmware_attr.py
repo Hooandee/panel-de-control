@@ -375,29 +375,34 @@ class FirmwareAttrBackend(TDPBackend):
             )
         return mismatches
 
+    def _unrestorable(self, purpose, detail):
+        if purpose == "transaction" and self._hand_off_to_firmware():
+            return {"ok": True, "detail": f"firmware handed off to {self._handoff_profile}"}
+        return {"ok": False, "detail": detail}
+
     def _restore_payload(self, purpose):
         payload = self._runtime_lock_payload
         if purpose == "ownership":
             payload = self._owned_payload
         saved = payload.get("snapshot") if isinstance(payload, dict) else None
         if not isinstance(saved, dict) or not saved:
-            return {"ok": False, "detail": f"firmware {purpose} snapshot unavailable"}
+            return self._unrestorable(purpose, f"firmware {purpose} snapshot unavailable")
         surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
         current = {
             self._surface_label(surface, rail): path
             for surface, rail, path in surfaces
         }
         if set(saved) != set(current):
-            return {"ok": False, "detail": f"firmware {purpose} surfaces changed"}
+            return self._unrestorable(purpose, f"firmware {purpose} surfaces changed")
         try:
             snapshot = {current[label]: int(value) for label, value in saved.items()}
         except (TypeError, ValueError):
-            return {"ok": False, "detail": f"firmware {purpose} snapshot invalid"}
+            return self._unrestorable(purpose, f"firmware {purpose} snapshot invalid")
         profile = payload.get("profile")
         if isinstance(profile, str) and not self._pp_dir:
-            return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
+            return self._unrestorable(purpose, f"firmware {purpose} profile unavailable")
         if self._pp_dir and not isinstance(profile, str):
-            return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
+            return self._unrestorable(purpose, f"firmware {purpose} profile unavailable")
         if (
             purpose == "transaction"
             and self._named_profile_owns_rails
@@ -405,7 +410,7 @@ class FirmwareAttrBackend(TDPBackend):
             and profile != "custom"
             and profile not in self.profile_choices()
         ):
-            return {"ok": False, "detail": "firmware transaction profile invalid"}
+            return self._unrestorable(purpose, "firmware transaction profile invalid")
         profile_owns_rails = self._named_profile_owns_transaction_rails(
             purpose,
             profile,

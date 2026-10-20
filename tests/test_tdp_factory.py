@@ -2489,3 +2489,41 @@ def test_strict_ryzenadj_recovers_after_a_transient_read_loss(tmp_path):
     assert backend.supported is True
     assert backend.safety_locked is False
     assert backend.diagnostics()["readback_state"] == "ready"
+
+
+def test_go_2_lock_with_changed_surfaces_hands_off_instead_of_retrying_forever(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={"firmware-attr:lenovo-wmi-other/pl9": 35},
+    )
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "firmware handed off to balanced"}
+    assert backend.read_profile() == "balanced"
+    assert not os.path.exists(lock_path)
+
+
+def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83E1", "custom")
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={"firmware-attr:lenovo-wmi-other/pl9": 35},
+    )
+    backend = select_backend(_p("legion_go"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is False
+    assert "surfaces changed" in recovered["detail"]
+    assert os.path.exists(lock_path)
