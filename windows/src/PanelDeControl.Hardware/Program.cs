@@ -69,6 +69,7 @@ public static class Program
             using var themeChannel = new OfficialThemeCatalogSource();
             using var classTable = new ClassTableSource(ThemeLibrary.DefaultRoot);
             var steam = new SteamInstallation();
+            var gameMixer = new CoreAudioGameMixer();
             var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam, PackageTempFolder.ResolveOrUnavailable());
             var themeEngine = new SteamThemeEngine(
                 steamDevTools,
@@ -95,7 +96,7 @@ public static class Program
                 SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token),
                 SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
                     steamDevTools,
-                    new CoreAudioGameMixer(),
+                    gameMixer,
                     new GameAudioPolicy(GameAudioSilencer.DefaultStatePath)).RunAsync(token), token))
                 .ConfigureAwait(false);
             return 0;
