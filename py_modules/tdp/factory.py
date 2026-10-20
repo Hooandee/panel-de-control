@@ -40,8 +40,8 @@ _RYZENADJ_ONLY_KEYS = frozenset({
 
 _STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 
-# Bazzite 43 kernels can block `ryzenadj -i` on the F1 while acpi_call still works.
-_UNREADABLE_RYZENADJ_YIELDS = frozenset({"onexplayer_f1"})
+# Some kernels block `ryzenadj -i` on OneXPlayer while acpi_call still works.
+_UNREADABLE_RYZENADJ_YIELDS = frozenset({"onexplayer_f1", "onexplayer_apex"})
 
 
 def _runtime_lock_path(root, name):
@@ -232,7 +232,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
             return [ryzenadj]
         if key == "onexplayer_apex":
             # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
-            return [ryzenadj, alib]
+            return [ryzenadj, *unreadable_tail]
         if key in _RYZENADJ_ONLY_KEYS:
             return [asus, lenovo, msi, ryzenadj, *unreadable_tail]
         if key.startswith("rog_"):
@@ -244,7 +244,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
     if key == "msi_claw_a8":
         return [msi_a8, ryzenadj]
     if key == "onexplayer_apex":
-        return [dptc, ryzenadj, alib]
+        return [dptc, ryzenadj, *unreadable_tail]
     if key in _RYZENADJ_ONLY_KEYS:
         return [dptc, asus, lenovo, msi, ryzenadj, *unreadable_tail]
     if key.startswith("rog_"):

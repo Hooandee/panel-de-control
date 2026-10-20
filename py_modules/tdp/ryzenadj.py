@@ -190,7 +190,8 @@ class RyzenadjBackend(TDPBackend):
         else:
             self._readback_state = (
                 "pending"
-                if self.supported and self._require_readback
+                if self.supported
+                and (self._require_readback or self._unreadable_marker is not None)
                 else "not_required" if self.supported else "binary_missing"
             )
             self._last_readback_failure = None
@@ -202,6 +203,7 @@ class RyzenadjBackend(TDPBackend):
         if not self.supported or self._readback_state.startswith("circuit_open"):
             return None
         recovery_pending = self._readback_state == "recovery_pending"
+        first_read = self._readback_state == "pending"
         snapshot = self._read_snapshot(require_zero_exit=True)
         if snapshot is None and retry_initial and self._readback_state == "pending":
             time.sleep(0.05)
@@ -215,7 +217,8 @@ class RyzenadjBackend(TDPBackend):
                 "ryzenadj required readback unavailable before write; circuit open"
             )
             self.supported = False
-            self._mark_unreadable()
+            if first_read:
+                self._mark_unreadable()
             return None
         if not recovery_pending:
             self._readback_state = "ready"
@@ -239,6 +242,8 @@ class RyzenadjBackend(TDPBackend):
 
     def probe(self) -> bool:
         if not self._require_readback:
+            if self._readback_state == "pending":
+                return self._probe_normal_readback()
             return bool(self.supported)
         snapshot = self._required_snapshot(retry_initial=True)
         return snapshot is not None or not self._require_readback
@@ -251,16 +256,27 @@ class RyzenadjBackend(TDPBackend):
     def probe_pending(self) -> bool:
         return self._readback_state == "pending"
 
+    def _probe_normal_readback(self) -> bool:
+        _exit_ok, out = self._read_info_result()
+        if out is not None and _parse_stapm(out) is not None:
+            self._readback_state = "not_required"
+            return True
+        if self._has_written:
+            self._readback_state = "not_required"
+            return bool(self.supported)
+        self._readback_state = "circuit_open_initial"
+        self._last_readback_failure = "ryzenadj limits unreadable before write"
+        self.supported = False
+        self._mark_unreadable()
+        return False
+
     @property
     def yields_to_next_route(self) -> bool:
         return bool(
             self._unreadable_marker is not None
+            and self._unreadable_detail is not None
             and self._runtime_lock_payload is None
             and not self._has_written
-            and (
-                self._unreadable_detail is not None
-                or self._readback_state == "circuit_open_initial"
-            )
         )
 
     @property

@@ -2156,6 +2156,80 @@ def test_onexplayer_f1_readable_ryzenadj_keeps_strict_route(tmp_path):
     assert os.path.exists(_f1_marker(root)) is False
 
 
+def test_onexplayer_f1_later_read_failure_does_not_mark_the_boot(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_readable_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.probe() is True
+    os.chmod(binary, 0o644)
+
+    assert backend.set_tdp(20, ac=True).ok is False
+
+    assert backend.yields_to_next_route is False
+    assert os.path.exists(_f1_marker(root)) is False
+
+
+def _apex_marker(root):
+    return os.path.join(
+        root, "run/panel-de-control/ryzenadj-onexplayer_apex.unreadable"
+    )
+
+
+def test_onexplayer_apex_readable_ryzenadj_stays_after_probe(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_readable_ryzenadj(root)
+    _mk_acpi_call(root)
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.probe_pending is True
+    assert backend.probe() is True
+    assert backend.probe_pending is False
+    assert backend.yields_to_next_route is False
+    assert backend.auto_tdp_safe is True
+    assert os.path.exists(_apex_marker(root)) is False
+
+
+def test_onexplayer_apex_unreadable_ryzenadj_yields_to_alib(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    first = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert first.name == "ryzenadj"
+
+    assert first.probe() is False
+    assert first.safety_locked is False
+    assert first.reselection_safe_after_use is True
+    assert os.path.exists(writes) is False
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj", "alib"]
+
+
+def test_onexplayer_apex_without_alib_keeps_unconfirmed_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "ryzenadj-unverified"
+    assert backend.auto_tdp_supported is False
+    assert backend.set_tdp(55, ac=False).ok is True
+
+
 def test_unreadable_marker_is_scoped_to_onexplayer_f1(tmp_path):
     for key in ("onexplayer_superx", "zotac_gaming_zone", "rog_flow_z13", "ayaneo_3"):
         root = str(tmp_path / key)

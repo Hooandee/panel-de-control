@@ -1420,10 +1420,19 @@ def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
     assert p._charger_unstable_state(now=last + 24 * 3600)["visible"] is False
 
 
-def test_onexplayer_f1_unreadable_ryzenadj_hands_over_to_alib(
+@pytest.mark.parametrize(
+    ("key", "trace"),
+    (
+        ("onexplayer_f1", ["asus", "lenovo", "msi", "ryzenadj", "alib"]),
+        ("onexplayer_apex", ["ryzenadj", "alib"]),
+    ),
+)
+def test_onexplayer_unreadable_ryzenadj_hands_over_to_alib(
     Plugin,
     tmp_path,
     monkeypatch,
+    key,
+    trace,
 ):
     import main as main_mod
 
@@ -1438,7 +1447,7 @@ def test_onexplayer_f1_unreadable_ryzenadj_hands_over_to_alib(
     (tmp_path / "proc/acpi").mkdir(parents=True)
     (tmp_path / "proc/acpi/call").write_text("not called", encoding="utf-8")
     device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "onexplayer_f1"
+        profile for profile in DEVICE_TABLE if profile.key == key
     )
 
     def select(device, **kwargs):
@@ -1465,6 +1474,4 @@ def test_onexplayer_f1_unreadable_ryzenadj_hands_over_to_alib(
     assert transition["previous"] == "ryzenadj"
     assert transition["selected"] == "acpi-alib"
     assert transition["outcome"] == "reselected"
-    assert [item["candidate"] for item in transition["selection_trace"]] == [
-        "asus", "lenovo", "msi", "ryzenadj", "alib",
-    ]
+    assert [item["candidate"] for item in transition["selection_trace"]] == trace
