@@ -1418,3 +1418,53 @@ def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
     p._init()
     last = _flap_charger(p, 1_000.0, 6)
     assert p._charger_unstable_state(now=last + 24 * 3600)["visible"] is False
+
+
+def test_onexplayer_f1_unreadable_ryzenadj_hands_over_to_alib(
+    Plugin,
+    tmp_path,
+    monkeypatch,
+):
+    import main as main_mod
+
+    binary = tmp_path / "ryzenadj"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "echo 'Unable to get memory access' >&2\n"
+        "exit 255\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    (tmp_path / "proc/acpi").mkdir(parents=True)
+    (tmp_path / "proc/acpi/call").write_text("not called", encoding="utf-8")
+    device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "onexplayer_f1"
+    )
+
+    def select(device, **kwargs):
+        return real_select_backend(
+            device,
+            root=str(tmp_path),
+            ryzenadj_resolve=lambda: str(binary),
+            os_id=kwargs.get("os_id"),
+        )
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = device
+    plugin._os_id = "bazzite"
+    plugin._tdp_backend = select(device, os_id="bazzite")
+    plugin._tdp_backend_used = True
+    assert plugin._tdp_backend.name == "ryzenadj"
+    monkeypatch.setattr(main_mod.tdp_factory, "select_backend", select)
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is True
+
+    assert plugin._tdp_backend.name == "acpi-alib"
+    transition = plugin._tdp_backend_history[-1]
+    assert transition["previous"] == "ryzenadj"
+    assert transition["selected"] == "acpi-alib"
+    assert transition["outcome"] == "reselected"
+    assert [item["candidate"] for item in transition["selection_trace"]] == [
+        "asus", "lenovo", "msi", "ryzenadj", "alib",
+    ]

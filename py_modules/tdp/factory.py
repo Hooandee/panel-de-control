@@ -40,12 +40,16 @@ _RYZENADJ_ONLY_KEYS = frozenset({
 
 _STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 
+# Bazzite 43 kernels can block `ryzenadj -i` on the F1 while acpi_call still works.
+_UNREADABLE_RYZENADJ_YIELDS = frozenset({"onexplayer_f1"})
+
 
 def _runtime_lock_path(root, name):
     return os.path.join(root, "run/panel-de-control", name)
 
 
-def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False):
+def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
+                ryzenadj_unverified=None):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
     known-good backend first, then falls through to every other known path by
@@ -202,6 +206,11 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    unreadable_tail = (
+        [alib, ryzenadj_unverified]
+        if key in _UNREADABLE_RYZENADJ_YIELDS and ryzenadj_unverified is not None
+        else []
+    )
     if getattr(device, "arch", "x86") == "arm":
         return [arm_levels]
     if key == "desktop_pc":
@@ -222,9 +231,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         if key == "msi_claw_a8":
             return [ryzenadj]
         if key == "onexplayer_apex":
-            return [alib, ryzenadj]
+            # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
+            return [ryzenadj, alib]
         if key in _RYZENADJ_ONLY_KEYS:
-            return [asus, lenovo, msi, ryzenadj]
+            return [asus, lenovo, msi, ryzenadj, *unreadable_tail]
         if key.startswith("rog_"):
             return [asus, asus_nb_wmi, lenovo, msi, *amd_tail]
         if key.startswith("legion_"):
@@ -234,9 +244,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     if key == "msi_claw_a8":
         return [msi_a8, ryzenadj]
     if key == "onexplayer_apex":
-        return [dptc, alib, ryzenadj]
+        return [dptc, ryzenadj, alib]
     if key in _RYZENADJ_ONLY_KEYS:
-        return [dptc, asus, lenovo, msi, ryzenadj]
+        return [dptc, asus, lenovo, msi, ryzenadj, *unreadable_tail]
     if key.startswith("rog_"):
         return [asus, asus_nb_wmi, *amd_tail]
     if key.startswith("legion_"):
@@ -286,12 +296,37 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                 root,
                 f"ryzenadj-{device.key}.lock",
             ),
+            unreadable_marker_path=(
+                _runtime_lock_path(root, f"ryzenadj-{device.key}.unreadable")
+                if device.key in _UNREADABLE_RYZENADJ_YIELDS
+                else None
+            ),
             **kwargs,
         )
 
+    def ryzenadj_unverified():
+        kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        backend = RyzenadjBackend(
+            fallback,
+            write_max=fallback.max_w,
+            write_max_ac=fallback.max_ac_w,
+            write_temp_limit=False,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                f"ryzenadj-unverified-{device.key}.lock",
+            ),
+            **kwargs,
+        )
+        backend.name = "ryzenadj-unverified"
+        backend.readback = False
+        backend.auto_tdp_supported = False
+        backend.auto_tdp_safe = False
+        return backend
+
     trace = []
     for make in _candidates(device, fallback, root, ryzenadj, os_id,
-                            desktop_cpu=desktop_limits is not None):
+                            desktop_cpu=desktop_limits is not None,
+                            ryzenadj_unverified=ryzenadj_unverified):
         candidate = make.__name__
         try:
             backend = make()

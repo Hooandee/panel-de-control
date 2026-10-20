@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -112,7 +113,9 @@ class RyzenadjBackend(TDPBackend):
                  allow_unverified_hold: bool = False,
                  unverified_hold_restore: dict[str, int] | None = None,
                  safety_lock_path: str | None = None,
-                 hold_rail_floors: dict[str, int] | None = None):
+                 hold_rail_floors: dict[str, int] | None = None,
+                 unreadable_marker_path: str | None = None,
+                 write_temp_limit: bool = True):
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self.manual_write_max_ac = self._write_limits.max_ac_w
@@ -151,6 +154,16 @@ class RyzenadjBackend(TDPBackend):
         )
         self._auto_readback_limits = None
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
+        # Under /run on purpose: a new boot or kernel retries the readable route.
+        self._unreadable_marker = (
+            RuntimeSafetyLock(unreadable_marker_path) if unreadable_marker_path else None
+        )
+        self._unreadable_detail = (
+            self._unreadable_marker.load() if self._unreadable_marker else None
+        )
+        self._last_read_error = None
+        self._has_written = False
+        self._write_temp_limit = bool(write_temp_limit)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
             self._safety_lock.load_payload()
@@ -202,6 +215,7 @@ class RyzenadjBackend(TDPBackend):
                 "ryzenadj required readback unavailable before write; circuit open"
             )
             self.supported = False
+            self._mark_unreadable()
             return None
         if not recovery_pending:
             self._readback_state = "ready"
@@ -238,11 +252,51 @@ class RyzenadjBackend(TDPBackend):
         return self._readback_state == "pending"
 
     @property
+    def yields_to_next_route(self) -> bool:
+        return bool(
+            self._unreadable_marker is not None
+            and self._runtime_lock_payload is None
+            and not self._has_written
+            and (
+                self._unreadable_detail is not None
+                or self._readback_state == "circuit_open_initial"
+            )
+        )
+
+    @property
+    def reselection_safe_after_use(self) -> bool:
+        return self.yields_to_next_route
+
+    @property
     def safety_locked(self) -> bool:
+        if self.yields_to_next_route:
+            return False
         return (
             self._runtime_lock_payload is not None
             or self._readback_state.startswith("circuit_open")
         )
+
+    def selection_ready(self) -> bool:
+        return bool(self.supported) and not self.yields_to_next_route
+
+    def selection_diagnostics(self) -> dict:
+        if not self.yields_to_next_route:
+            return {}
+        return {
+            "readback_state": "unreadable_this_boot",
+            "read_error": self._unreadable_detail or self._last_read_error,
+        }
+
+    def _mark_unreadable(self) -> None:
+        if self._unreadable_marker is None or self._has_written:
+            return
+        detail = json.dumps(
+            self._last_read_error or {"error": "unparseable"},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self._unreadable_detail = detail
+        self._unreadable_marker.persist(detail)
 
     def set_tdp(self, watts: int, ac: bool) -> TdpResult:
         if not self.supported:
@@ -288,11 +342,14 @@ class RyzenadjBackend(TDPBackend):
         #     some APUs where the write still applies) -> assume applied, unconfirmed;
         #     the re-assert is our best effort. Don't cry failure on a working device.
         applied = None
+        self._has_written = True
         for _ in range(2):
             try:
                 primary_exit = self._apply(
                     target,
-                    include_temp=not self._require_readback,
+                    include_temp=(
+                        self._write_temp_limit and not self._require_readback
+                    ),
                 )
             except (OSError, subprocess.SubprocessError) as e:
                 if self._require_readback:
@@ -793,6 +850,8 @@ class RyzenadjBackend(TDPBackend):
                 else None
             ),
             "last_readback_failure": self._last_readback_failure,
+            "last_read_error": self._last_read_error,
+            "unreadable_this_boot": self._unreadable_detail,
             "low_battery_hold_active": self._hold_recovery_target is not None,
         }
 
@@ -920,6 +979,18 @@ class RyzenadjBackend(TDPBackend):
                 timeout=5,
                 env=_clean_env(),
             )
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, subprocess.SubprocessError) as error:
+            self._last_read_error = {"error": type(error).__name__}
             return False, None
-        return not getattr(res, "returncode", 0), getattr(res, "stdout", "") or ""
+        returncode = getattr(res, "returncode", 0)
+        stdout = getattr(res, "stdout", "") or ""
+        if returncode or _parse_stapm(stdout) is None:
+            stderr = getattr(res, "stderr", "") or ""
+            self._last_read_error = {
+                "rc": returncode,
+                "stderr": " | ".join(stderr.strip().splitlines()[:3])[:240],
+                "stdout_head": " | ".join(stdout.strip().splitlines()[:2])[:160],
+            }
+        else:
+            self._last_read_error = None
+        return not returncode, stdout

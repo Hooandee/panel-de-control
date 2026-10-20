@@ -1982,7 +1982,7 @@ def test_ryzenadj_precedes_alib(tmp_path):
     assert b.name == "ryzenadj"
 
 
-def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
+def test_onexplayer_apex_prefers_readable_ryzenadj_over_alib(tmp_path):
     root = str(tmp_path)
     _mk_acpi_call(root)
 
@@ -1992,33 +1992,182 @@ def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
         ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
     )
 
-    assert backend.name == "acpi-alib"
-    assert [item["candidate"] for item in backend.probe_trace] == ["alib"]
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
 
 
 def test_onexplayer_apex_alib_reaches_cooler_ceiling_only_on_charger(tmp_path):
     root = str(tmp_path)
     _mk_acpi_call(root)
     backend = select_backend(_p("onexplayer_apex"), root=root,
-                             ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+                             ryzenadj_resolve=_NO_RYZENADJ)
 
     assert backend.name == "acpi-alib"
     assert backend._write_limits.max_ac_w == 120
     assert backend._write_limits.max_w == 55
 
 
-def test_onexplayer_apex_falls_back_to_ryzenadj_without_alib(tmp_path):
+def test_onexplayer_apex_falls_back_to_alib_without_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
     backend = select_backend(
         _p("onexplayer_apex"),
-        root=str(tmp_path),
-        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "ryzenadj",
+        "alib",
+    ]
+
+
+def _mk_unreadable_ryzenadj(root):
+    log = os.path.join(root, "unreadable-ryzenadj-writes")
+    path = os.path.join(root, "unreadable-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            "  echo 'Unable to get memory access' >&2\n"
+            "  exit 255\n"
+            "fi\n"
+            f"echo \"$@\" >> '{log}'\n"
+        )
+    os.chmod(path, 0o755)
+    return path, log
+
+
+def _f1_marker(root):
+    return os.path.join(
+        root, "run/panel-de-control/ryzenadj-onexplayer_f1.unreadable"
+    )
+
+
+def test_onexplayer_f1_unreadable_ryzenadj_yields_without_writing(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.name == "ryzenadj"
+
+    assert backend.probe() is False
+
+    assert backend.safety_locked is False
+    assert backend.yields_to_next_route is True
+    assert backend.reselection_safe_after_use is True
+    assert backend.selection_ready() is False
+    assert os.path.exists(writes) is False
+    with open(_f1_marker(root)) as handle:
+        marker = json.loads(handle.read())
+    assert marker == {
+        "rc": 255,
+        "stderr": "Unable to get memory access",
+        "stdout_head": "",
+    }
+    assert backend.diagnostics()["last_read_error"] == marker
+    assert backend.set_tdp(20, ac=True).ok is False
+    assert os.path.exists(writes) is False
+
+
+def test_onexplayer_f1_reselects_alib_after_unreadable_boot(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "acpi-alib"
+    trace = backend.probe_trace
+    assert [item["candidate"] for item in trace] == [
+        "asus", "lenovo", "msi", "ryzenadj", "alib",
+    ]
+    assert trace[3]["ready"] is False
+    assert trace[3]["readback_state"] == "unreadable_this_boot"
+    assert "Unable to get memory access" in trace[3]["read_error"]
+    assert backend._write_limits.max_w == 30
+
+
+def test_onexplayer_f1_last_resort_is_unconfirmed_ryzenadj_without_auto(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "ryzenadj-unverified"
+    assert [item["candidate"] for item in backend.probe_trace][-2:] == [
+        "alib", "ryzenadj_unverified",
+    ]
+    assert backend.readback is False
+    assert backend.auto_tdp_supported is False
+    assert backend.auto_tdp_safe is False
+    result = backend.set_tdp(40, ac=True)
+    assert result.ok is True
+    assert result.applied_w is None
+    assert backend.manual_write_max_ac == 30
+    with open(writes) as handle:
+        lines = handle.read().splitlines()
+    assert lines and all(
+        line == "--stapm-limit 30000 --fast-limit 30000 --slow-limit 30000"
+        for line in lines
+    )
+
+
+def _mk_readable_ryzenadj(root, watts=28):
+    path = os.path.join(root, "readable-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            f"  printf '| STAPM LIMIT | {watts}.000 | stapm-limit |\\n'\n"
+            f"  printf '| PPT LIMIT FAST | {watts}.000 | fast-limit |\\n'\n"
+            f"  printf '| PPT LIMIT SLOW | {watts}.000 | slow-limit |\\n'\n"
+            "fi\n"
+        )
+    os.chmod(path, 0o755)
+    return path
+
+
+def test_onexplayer_f1_readable_ryzenadj_keeps_strict_route(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_readable_ryzenadj(root)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
     )
 
     assert backend.name == "ryzenadj"
-    assert [item["candidate"] for item in backend.probe_trace] == [
-        "alib",
-        "ryzenadj",
-    ]
+    assert backend.probe() is True
+    assert backend.yields_to_next_route is False
+    assert os.path.exists(_f1_marker(root)) is False
+
+
+def test_unreadable_marker_is_scoped_to_onexplayer_f1(tmp_path):
+    for key in ("onexplayer_superx", "zotac_gaming_zone", "rog_flow_z13", "ayaneo_3"):
+        root = str(tmp_path / key)
+        os.makedirs(root)
+        binary, _writes = _mk_unreadable_ryzenadj(root)
+        _mk_acpi_call(root)
+        backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+
+        assert backend.name == "ryzenadj"
+        backend.probe()
+        assert backend.yields_to_next_route is False
+        assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj"
 
 
 def test_firmware_attr_still_wins_over_alib(tmp_path):
