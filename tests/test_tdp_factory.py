@@ -2230,18 +2230,35 @@ def test_onexplayer_apex_without_alib_keeps_unconfirmed_ryzenadj(tmp_path):
     assert backend.set_tdp(55, ac=False).ok is True
 
 
-def test_unreadable_marker_is_scoped_to_onexplayer_f1(tmp_path):
-    for key in ("onexplayer_superx", "zotac_gaming_zone", "rog_flow_z13", "ayaneo_3"):
-        root = str(tmp_path / key)
-        os.makedirs(root)
-        binary, _writes = _mk_unreadable_ryzenadj(root)
-        _mk_acpi_call(root)
-        backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+@pytest.mark.parametrize(
+    "key", ("onexplayer_superx", "rog_flow_z13", "ayaneo_3"),
+)
+def test_strict_ryzenadj_handhelds_yield_when_unreadable(tmp_path, key):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    first = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+    assert first.name == "ryzenadj"
 
-        assert backend.name == "ryzenadj"
-        backend.probe()
-        assert backend.yields_to_next_route is False
-        assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj"
+    assert first.probe() is False
+    assert first.yields_to_next_route is True
+    assert os.path.exists(writes) is False
+
+    backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+    assert backend.name == "acpi-alib"
+
+
+@pytest.mark.parametrize("key", ("zotac_gaming_zone", "gpd_win_mini_2025", "aokzoe_a1x"))
+def test_unreadable_yield_leaves_other_ryzenadj_routes_alone(tmp_path, key):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+
+    assert backend.name == "ryzenadj"
+    backend.probe()
+    assert backend.yields_to_next_route is False
+    assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj"
 
 
 def test_firmware_attr_still_wins_over_alib(tmp_path):

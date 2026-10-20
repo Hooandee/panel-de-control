@@ -40,8 +40,11 @@ _RYZENADJ_ONLY_KEYS = frozenset({
 
 _STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 
-# Some kernels block `ryzenadj -i` on OneXPlayer while acpi_call still works.
-_UNREADABLE_RYZENADJ_YIELDS = frozenset({"onexplayer_f1", "onexplayer_apex"})
+# Newer kernels block the /dev/mem PM-table read of `ryzenadj -i` (no ryzen_smu).
+# Zotac keeps its own unconfirmed-write fallback.
+_UNREADABLE_RYZENADJ_YIELDS = (
+    _STRICT_RYZENADJ_KEYS - {"zotac_gaming_zone"}
+) | {"onexplayer_apex"}
 
 
 def _runtime_lock_path(root, name):
