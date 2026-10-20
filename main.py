@@ -235,6 +235,7 @@ _OVERSHOOT_BACKENDS = frozenset(
 _OVERSHOOT_VIEW_STALE_S = 10.0
 _MEASURED_REASSERTS = 1
 _MEASURED_SOURCE_RECHECK_S = 60.0
+_MEASURED_EXTERNAL_HOLD_S = 60.0
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
@@ -906,6 +907,8 @@ class Plugin:
         self._measured_verdict = None
         self._measured_exceeded = 0
         self._measured_history = deque(maxlen=12)
+        self._measured_external_writer = None
+        self._measured_hold_until = 0.0
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(self._tdp_backend, "readback", True)),
         )
@@ -11675,6 +11678,7 @@ class Plugin:
                     else None
                 ),
                 "exceeded": list(self._measured_history),
+                "external_writer": self._measured_external_writer,
             },
             "auto": {
                 "status": dict(self._auto_status),
@@ -12077,6 +12081,8 @@ class Plugin:
             self._reset_measured_watch(None, now)
             self._measured_verdict = None
             return
+        if now < self._measured_hold_until:
+            return
         if self._measured_watch.target_w != int(target):
             self._reset_measured_watch(target, now)
         watts = await asyncio.to_thread(self._power_reader.read_watts)
@@ -12116,7 +12122,9 @@ class Plugin:
             ):
                 self._reset_measured_watch(None, _monotonic())
                 return
-            if await self._offload_call(lambda: self._leave_route_not_honored(backend)):
+            left = await self._offload_call(lambda: self._leave_route_not_honored(backend))
+            self._reset_measured_watch(target, _monotonic())
+            if left:
                 self._start_tdp_guard_loop()
 
     def _external_tdp_writer(self) -> str | None:
@@ -12135,7 +12143,9 @@ class Plugin:
     def _leave_route_not_honored(self, backend) -> bool:
         self._measured_exceeded = 0
         writer = self._external_tdp_writer()
+        self._measured_external_writer = writer
         if writer is not None:
+            self._measured_hold_until = _monotonic() + _MEASURED_EXTERNAL_HOLD_S
             self._tdp_reason = f"external_writer:{writer}"
             return False
         verdict = self._measured_verdict

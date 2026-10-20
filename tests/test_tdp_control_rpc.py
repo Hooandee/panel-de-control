@@ -1734,6 +1734,10 @@ def test_external_writer_is_reported_instead_of_marking_the_route(
 
     assert plugin._tdp_backend.name == "ryzenadj-unverified"
     assert plugin._tdp_reason == "external_writer:hhd"
+    assert plugin._tdp_diagnostics()["measured_power"]["external_writer"] == "hhd"
+    episodes = len(plugin._measured_history)
+    run(50)
+    assert len(plugin._measured_history) == episodes
     assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
 
 
