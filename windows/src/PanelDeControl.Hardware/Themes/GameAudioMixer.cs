@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace PanelDeControl.Hardware.Themes;
 
@@ -18,6 +19,7 @@ public interface IGameAudioScan : IDisposable
 }
 
 /// <summary>Windows' per-app mixer (Core Audio sessions), the same one the volume mixer shows.</summary>
+[SupportedOSPlatform("windows")]
 public sealed class CoreAudioGameMixer : IGameAudioMixer
 {
     private const uint ClassContextAll = 23;
