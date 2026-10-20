@@ -187,7 +187,7 @@ public sealed class SteamThemeEngineTests : IDisposable
         return new InstalledTheme(manifest, null, directory);
     }
 
-    private DevToolsTarget Page(string id, string title, string url = "about:blank") =>
+    private DevToolsTarget Page(string id, string title, string url = "about:blank?browserviewpopup=1") =>
         new(id, title, url, "page", $"ws://127.0.0.1:8080/devtools/page/{id}");
 
     private DevToolsTarget Shared() => Page("shared", SteamThemeEngine.SharedContextTitle, "https://steamloopback.host/routes/library/home");

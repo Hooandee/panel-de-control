@@ -33,8 +33,22 @@ public static class ThemeTargetMatcher
         ["All"] = new[] { "bigpicture", "bigpictureoverlay" },
     };
 
+    private static readonly HashSet<string> DesktopSelectors = new(StringComparer.Ordinal)
+    {
+        "desktop", "desktopchat", "desktoppopup", "desktopoverlay", "desktopcontextmenu", "store", "Steam", "SteamLibraryWindow",
+    };
+
+    // On Windows the desktop client runs next to Big Picture, and its windows share URL flags with
+    // gamepad popups (the Friends List carries createflags=18 like the controller configurator).
+    // Only selectors written for the desktop may reach a desktop window.
     public static bool Matches(SteamTarget target, string selector) =>
-        Expand(selector, MaximumAliasDepth).Any(pattern => MatchesPattern(target, pattern));
+        (DesktopSelectors.Contains(selector) || IsGamepadSurface(target))
+        && Expand(selector, MaximumAliasDepth).Any(pattern => MatchesPattern(target, pattern));
+
+    public static bool IsGamepadSurface(SteamTarget target) =>
+        target.Url.Contains("Valve%20Steam%20Gamepad", StringComparison.Ordinal)
+        || target.Url.Contains("Valve Steam Gamepad", StringComparison.Ordinal)
+        || target.Url.Contains("browserviewpopup=1", StringComparison.Ordinal);
 
     public static bool IsBigPicture(SteamTarget target) => Matches(target, "bigpicture");
 

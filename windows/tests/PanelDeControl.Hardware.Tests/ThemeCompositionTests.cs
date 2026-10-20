@@ -13,7 +13,7 @@ public sealed class ThemeCompositionTests
         "about:blank?createflags=6292754&browserType=3&useragent=Valve%20Steam%20Gamepad",
         NoClasses);
 
-    private static SteamTarget Target(string title, string url = "about:blank", params string[] classes) =>
+    private static SteamTarget Target(string title, string url = "about:blank?browserviewpopup=1", params string[] classes) =>
         new(title, title, url, new HashSet<string>(classes));
 
     [Fact]
@@ -23,6 +23,17 @@ public sealed class ThemeCompositionTests
         Assert.True(ThemeTargetMatcher.Matches(BigPicture, "SP"));
         Assert.True(ThemeTargetMatcher.Matches(BigPicture, "All"));
         Assert.False(ThemeTargetMatcher.Matches(Target("SharedJSContext"), "bigpicture"));
+    }
+
+    [Fact]
+    public void GamepadSelectorsSkipTheDesktopFriendsListThatSharesTheirUrlFlags()
+    {
+        var configurator = Target("Disposición del mando", "about:blank?createflags=18&pid=0&browser=-1&browserType=3&useragent=Valve%20Steam%20Gamepad");
+        var friends = Target("Lista de amigos", "about:blank?createflags=18&minwidth=226&minheight=400&pid=0&browser=-1&restoredetails=1");
+
+        Assert.True(ThemeTargetMatcher.Matches(configurator, "~createflags=18&~"));
+        Assert.False(ThemeTargetMatcher.Matches(friends, "~createflags=18&~"));
+        Assert.True(ThemeTargetMatcher.Matches(Target("Friends", "about:blank?restoredetails=1", "friendsui-container"), "desktopchat"));
     }
 
     [Theory]
@@ -46,7 +57,8 @@ public sealed class ThemeCompositionTests
         var friends = Target("Friends", "https://steamloopback.host/friends", "friendsui-container");
 
         Assert.True(ThemeTargetMatcher.Matches(friends, "desktopchat"));
-        Assert.True(ThemeTargetMatcher.Matches(friends, "~steamloopback.host/friends~"));
+        Assert.False(ThemeTargetMatcher.Matches(friends, "~steamloopback.host/friends~"));
+        Assert.True(ThemeTargetMatcher.Matches(Target("Popup", "about:blank?browserviewpopup=1&steamloopback.host/friends"), "~steamloopback.host/friends~"));
         Assert.False(ThemeTargetMatcher.Matches(Target("Friends"), "desktopchat"));
     }
 
