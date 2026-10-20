@@ -79,7 +79,7 @@ public sealed class GameBarFocusReturner
             GetForegroundWindow() == steamWindow ? "set_foreground_window" : $"failed steam_api={raisedBySteam} set_foreground={raised}");
     }
 
-    private static ForegroundKind Classify(IntPtr handle)
+    internal static ForegroundKind Classify(IntPtr handle)
     {
         if (handle == IntPtr.Zero)
         {
@@ -146,7 +146,7 @@ public sealed class GameBarFocusReturner
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    internal static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

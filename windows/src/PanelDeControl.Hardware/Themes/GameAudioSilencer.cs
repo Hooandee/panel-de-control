@@ -6,27 +6,35 @@ namespace PanelDeControl.Hardware.Themes;
 /// Steam on Windows has no per-app audio service, so a theme that silences the running game while Steam is in
 /// front asks the theme host (<c>__pdcHostGameAudio</c>), and this mutes the game's sessions in Windows' mixer.
 /// A DevTools binding wakes it the moment the host's state changes; the state itself is always read from the host.
+/// On Windows the game keeps running behind Big Picture, so the theme's request only silences it while Big Picture
+/// itself is in front: right after a launch Steam still shows the game's page with the game already in front.
 /// When Steam or the host goes away, every game silenced here gets its sound back.
 /// </summary>
 public sealed class GameAudioSilencer
 {
     private const string Binding = "pdcHostGameAudio";
     private const string StateExpression = "window.__pdcWindowsThemeHost?.status?.().gameSilenced === true";
-    private static readonly TimeSpan ActivePoll = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan IdlePoll = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan Rescan = TimeSpan.FromSeconds(1);
 
     private readonly ISteamDevTools devTools;
     private readonly IGameAudioMixer mixer;
     private readonly GameAudioPolicy policy;
     private readonly SemaphoreSlim wake = new(0);
+    private readonly Func<bool> bigPictureInFront;
     private ICdpEventSession? session;
 
-    public GameAudioSilencer(ISteamDevTools devTools, IGameAudioMixer mixer, GameAudioPolicy policy)
+    public GameAudioSilencer(ISteamDevTools devTools, IGameAudioMixer mixer, GameAudioPolicy policy, Func<bool> bigPictureInFront)
     {
         this.devTools = devTools;
         this.mixer = mixer;
         this.policy = policy;
+        this.bigPictureInFront = bigPictureInFront;
     }
+
+    public static bool ForegroundIsBigPicture() =>
+        GameBarFocusReturner.Classify(GameBarFocusReturner.GetForegroundWindow()) == ForegroundKind.Steam;
 
     public static string DefaultStatePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -37,15 +45,25 @@ public sealed class GameAudioSilencer
     {
         try
         {
+            bool? applied = null;
+            var appliedAt = DateTimeOffset.MinValue;
             while (!cancellationToken.IsCancellationRequested)
             {
-                var silenced = await ReadStateAsync(cancellationToken).ConfigureAwait(false);
-                if (silenced || policy.HasOwed)
+                var requested = await ReadStateAsync(cancellationToken).ConfigureAwait(false);
+                var silenced = requested && bigPictureInFront();
+                var now = DateTimeOffset.UtcNow;
+                if ((silenced || policy.HasOwed) && (silenced != applied || now - appliedAt >= Rescan))
                 {
                     Apply(silenced);
+                    applied = silenced;
+                    appliedAt = now;
+                }
+                else if (!silenced && !policy.HasOwed)
+                {
+                    applied = false;
                 }
 
-                await wake.WaitAsync(silenced || policy.HasOwed ? ActivePoll : IdlePoll, cancellationToken).ConfigureAwait(false);
+                await wake.WaitAsync(requested || policy.HasOwed ? ActivePoll : IdlePoll, cancellationToken).ConfigureAwait(false);
             }
         }
         finally

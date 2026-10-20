@@ -97,7 +97,8 @@ public static class Program
                 SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
                     steamDevTools,
                     gameMixer,
-                    new GameAudioPolicy(GameAudioSilencer.DefaultStatePath)).RunAsync(token), token))
+                    new GameAudioPolicy(GameAudioSilencer.DefaultStatePath),
+                    GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token))
                 .ConfigureAwait(false);
             return 0;
         }
