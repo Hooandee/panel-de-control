@@ -209,8 +209,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    # Unconfirmed ryzenadj writes were measured to hold the limit; ALIB let an Apex overshoot.
     unreadable_tail = (
-        [alib, ryzenadj_unverified]
+        [ryzenadj_unverified, alib]
         if key in _UNREADABLE_RYZENADJ_YIELDS and ryzenadj_unverified is not None
         else []
     )

@@ -2020,6 +2020,7 @@ def test_onexplayer_apex_falls_back_to_alib_without_ryzenadj(tmp_path):
     assert backend.name == "acpi-alib"
     assert [item["candidate"] for item in backend.probe_trace] == [
         "ryzenadj",
+        "ryzenadj_unverified",
         "alib",
     ]
 
@@ -2073,7 +2074,7 @@ def test_onexplayer_f1_unreadable_ryzenadj_yields_without_writing(tmp_path):
     assert os.path.exists(writes) is False
 
 
-def test_onexplayer_f1_reselects_alib_after_unreadable_boot(tmp_path):
+def test_onexplayer_f1_reselects_unconfirmed_ryzenadj_after_unreadable_boot(tmp_path):
     root = str(tmp_path)
     binary, _writes = _mk_unreadable_ryzenadj(root)
     _mk_acpi_call(root)
@@ -2085,10 +2086,10 @@ def test_onexplayer_f1_reselects_alib_after_unreadable_boot(tmp_path):
         _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
     )
 
-    assert backend.name == "acpi-alib"
+    assert backend.name == "ryzenadj-unverified"
     trace = backend.probe_trace
     assert [item["candidate"] for item in trace] == [
-        "asus", "lenovo", "msi", "ryzenadj", "alib",
+        "asus", "lenovo", "msi", "ryzenadj", "ryzenadj_unverified",
     ]
     assert trace[3]["ready"] is False
     assert trace[3]["readback_state"] == "unreadable_this_boot"
@@ -2096,7 +2097,21 @@ def test_onexplayer_f1_reselects_alib_after_unreadable_boot(tmp_path):
     assert backend._write_limits.max_w == 30
 
 
-def test_onexplayer_f1_last_resort_is_unconfirmed_ryzenadj_without_auto(tmp_path):
+def test_onexplayer_f1_without_ryzenadj_uses_alib(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace][-3:] == [
+        "ryzenadj", "ryzenadj_unverified", "alib",
+    ]
+
+
+def test_onexplayer_f1_unconfirmed_ryzenadj_has_no_auto_or_extra_range(tmp_path):
     root = str(tmp_path)
     binary, writes = _mk_unreadable_ryzenadj(root)
     select_backend(
@@ -2108,9 +2123,7 @@ def test_onexplayer_f1_last_resort_is_unconfirmed_ryzenadj_without_auto(tmp_path
     )
 
     assert backend.name == "ryzenadj-unverified"
-    assert [item["candidate"] for item in backend.probe_trace][-2:] == [
-        "alib", "ryzenadj_unverified",
-    ]
+    assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj_unverified"
     assert backend.readback is False
     assert backend.auto_tdp_supported is False
     assert backend.auto_tdp_safe is False
@@ -2193,7 +2206,7 @@ def test_onexplayer_apex_readable_ryzenadj_stays_after_probe(tmp_path):
     assert os.path.exists(_apex_marker(root)) is False
 
 
-def test_onexplayer_apex_unreadable_ryzenadj_yields_to_alib(tmp_path):
+def test_onexplayer_apex_unreadable_ryzenadj_yields_to_unconfirmed_writes(tmp_path):
     root = str(tmp_path)
     binary, writes = _mk_unreadable_ryzenadj(root)
     _mk_acpi_call(root)
@@ -2210,8 +2223,10 @@ def test_onexplayer_apex_unreadable_ryzenadj_yields_to_alib(tmp_path):
     backend = select_backend(
         _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
     )
-    assert backend.name == "acpi-alib"
-    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj", "alib"]
+    assert backend.name == "ryzenadj-unverified"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "ryzenadj", "ryzenadj_unverified",
+    ]
 
 
 def test_onexplayer_apex_without_alib_keeps_unconfirmed_ryzenadj(tmp_path):
@@ -2245,7 +2260,7 @@ def test_strict_ryzenadj_handhelds_yield_when_unreadable(tmp_path, key):
     assert os.path.exists(writes) is False
 
     backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
-    assert backend.name == "acpi-alib"
+    assert backend.name == "ryzenadj-unverified"
 
 
 @pytest.mark.parametrize("key", ("zotac_gaming_zone", "gpd_win_mini_2025", "aokzoe_a1x"))

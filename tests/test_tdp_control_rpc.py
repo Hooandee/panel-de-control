@@ -1423,11 +1423,11 @@ def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
 @pytest.mark.parametrize(
     ("key", "trace"),
     (
-        ("onexplayer_f1", ["asus", "lenovo", "msi", "ryzenadj", "alib"]),
-        ("onexplayer_apex", ["ryzenadj", "alib"]),
+        ("onexplayer_f1", ["asus", "lenovo", "msi", "ryzenadj", "ryzenadj_unverified"]),
+        ("onexplayer_apex", ["ryzenadj", "ryzenadj_unverified"]),
     ),
 )
-def test_onexplayer_unreadable_ryzenadj_hands_over_to_alib(
+def test_onexplayer_unreadable_ryzenadj_hands_over_to_unconfirmed_writes(
     Plugin,
     tmp_path,
     monkeypatch,
@@ -1469,9 +1469,9 @@ def test_onexplayer_unreadable_ryzenadj_hands_over_to_alib(
 
     assert asyncio.run(plugin._probe_tdp_backend(force=True)) is True
 
-    assert plugin._tdp_backend.name == "acpi-alib"
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
     transition = plugin._tdp_backend_history[-1]
     assert transition["previous"] == "ryzenadj"
-    assert transition["selected"] == "acpi-alib"
+    assert transition["selected"] == "ryzenadj-unverified"
     assert transition["outcome"] == "reselected"
     assert [item["candidate"] for item in transition["selection_trace"]] == trace
