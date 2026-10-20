@@ -58,6 +58,10 @@ function brazilianPortugueseCatalog(): Record<string, string> {
   return DICTS["pt-BR"];
 }
 
+function frenchCatalog(): Record<string, string> {
+  return DICTS.fr;
+}
+
 function placeholders(value: string): string[] {
   return [...(value.match(PLACEHOLDER) ?? [])].sort();
 }
@@ -80,6 +84,7 @@ describe("Every supported translation catalog", () => {
       it: { "steam.performance.title": "Prestazioni di Steam" },
       de: { "steam.performance.title": "Steam-Leistung" },
       "pt-BR": { "steam.performance.title": "Desempenho do Steam" },
+      fr: { "steam.performance.title": "Performances de Steam" },
     });
   });
 
@@ -422,6 +427,74 @@ describe("Brazilian Portuguese catalog", () => {
   });
 });
 
+describe("French catalog", () => {
+  it("is a first-class supported language with reviewed French wording", () => {
+    expect(i18n.SUPPORTED_LANGUAGES).toContain("fr");
+    expect(frenchCatalog()).toMatchObject({
+      "app.title": "Centre de contrôle",
+      "load.retry": "Réessayer",
+      "home.title": "Accueil",
+      "home.tabs": "Vue en onglets",
+      "customize.home.dashboard": "Tableau de bord",
+      "nav.mandos": "Manettes",
+      "nav.fans": "Ventilateurs",
+      "settings.language": "Langue",
+      "tdp.presets.add": "Ajouter un préréglage",
+      "tdp.conflict.cede": "Confier au Centre de contrôle",
+      "system.rgb.confirm.desc": "Colores va être téléchargé depuis GitHub puis installé. Continuer\u00a0?",
+    });
+  });
+
+  it("keeps established gaming, hardware and product terms", () => {
+    const values = Object.values(frenchCatalog());
+    for (const term of [
+      "TDP", "Auto-TDP", "FPS", "CPU", "GPU", "HDR", "RGB", "FSR", "XeSS",
+      "RDNA", "Proton", "SteamOS", "Decky", "MangoHud", "GameMode", "PowerStation",
+      "SimpleDeckyTDP", "Colores",
+    ]) {
+      expect(values.some((value) => value.includes(term)), term).toBe(true);
+    }
+  });
+
+  it("avoids reviewed calques and inconsistent French terms", () => {
+    const catalog = Object.values(frenchCatalog()).join("\n");
+
+    for (const rejected of [
+      "dispositif",
+      "RVB",
+      "le panneau",
+      "Panel de Control",
+      "Veuillez",
+      "screenshot",
+      "Hors Steam",
+      "version anticipée",
+    ]) {
+      expect(catalog, rejected).not.toContain(rejected);
+    }
+    expect(catalog).not.toMatch(/(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/u);
+  });
+
+  it("uses no-break spaces in French punctuation", () => {
+    for (const [key, value] of Object.entries(frenchCatalog())) {
+      expect(value, key).not.toMatch(/ [:;?!%»]|« /);
+    }
+  });
+
+  it("formats profile counts without a fixed plural", () => {
+    window.localStorage.setItem(STORAGE_KEY, "fr");
+
+    expect(i18n.translate("gameProfiles.cores", { n: 1 })).toBe("Cœurs\u00a0: 1");
+    expect(i18n.translate("gameProfiles.buttons", { n: 2 })).toBe("Boutons\u00a0: 2");
+    expect(i18n.translate("params.activeCount", { n: 1 })).toBe("Actifs\u00a0: 1");
+  });
+
+  it("accepts a persisted French selection for lookup", () => {
+    window.localStorage.setItem(STORAGE_KEY, "fr");
+
+    expect(i18n.translate("app.title")).toBe("Centre de contrôle");
+  });
+});
+
 describe("LanguageSelector", () => {
   it("notifies separate roots when the language changes", () => {
     const listener = vi.fn();
@@ -480,7 +553,7 @@ describe("LanguageSelector", () => {
     const selector = screen.getByRole("combobox", { name: "Idioma" });
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     const flags = [...container.querySelectorAll<HTMLImageElement>("[data-language-flag]")];
-    expect(flags).toHaveLength(5);
+    expect(flags).toHaveLength(6);
     expect(flags.every((flag) => flag.tagName === "IMG")).toBe(true);
     expect(flags.every((flag) => flag.src.startsWith("data:image/svg+xml,"))).toBe(true);
     expect([...selector.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
@@ -489,9 +562,20 @@ describe("LanguageSelector", () => {
       "Italiano",
       "Deutsch",
       "Português (Brasil)",
+      "Français",
     ]);
     fireEvent.change(selector, { target: { value: "pt-BR" } });
 
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("pt-BR");
+  });
+
+  it("persists French when selected", () => {
+    render(createElement(i18n.I18nProvider, null, createElement(LanguageSelector)));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), {
+      target: { value: "fr" },
+    });
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("fr");
   });
 });

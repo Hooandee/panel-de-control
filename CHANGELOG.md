@@ -25,6 +25,10 @@
 
 * **TDP no Legion Go S:** Em alguns Go S, o controle de TDP podia ficar indisponível por horas depois de iniciar no modo de baixo consumo. Agora ele se recupera sozinho e o TDP volta a poder ser ajustado.
 
+### Français
+
+* **TDP sur la Legion Go S :** Sur certaines Go S, le contrôle du TDP pouvait rester indisponible pendant des heures après un démarrage en mode économie d'énergie. Il se rétablit désormais tout seul et le TDP redevient réglable.
+
 ## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
 
 
@@ -47,6 +51,10 @@
 ### Português (Brasil)
 
 * **Temas:** A lista ficou mais limpa, com uma linha por tema e uma capa nova para o Duo. Os ajustes dos temas em acesso antecipado agora são salvos.
+
+### Français
+
+* **Thèmes :** La liste est plus épurée, avec une seule ligne par thème et un nouveau visuel pour Duo. Les réglages des thèmes en accès anticipé sont désormais enregistrés.
 
 ## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
 

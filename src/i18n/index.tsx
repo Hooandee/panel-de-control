@@ -22,6 +22,7 @@ import { readSteamLanguage } from "./steamLanguage";
 import { it } from "./it";
 import { de } from "./de";
 import { ptBR } from "./ptBR";
+import { fr } from "./fr";
 import { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
 export { SUPPORTED_LANGUAGES, type Lang } from "./languages";
@@ -3032,6 +3033,7 @@ export const DICTS: Record<Lang, Record<string, string>> = {
   it: { ...it, ...themeIt },
   de,
   "pt-BR": ptBR,
+  fr,
 };
 
 function initialLang(): Lang {

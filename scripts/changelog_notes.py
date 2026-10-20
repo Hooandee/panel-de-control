@@ -13,6 +13,7 @@ _LANGUAGE_BLOCKS = {
     "### Italiano": "IT",
     "### Deutsch": "DE",
     "### Português (Brasil)": "PT-BR",
+    "### Français": "FR",
 }
 _HEADINGS = {
     "ES": "### Novedades",
@@ -20,12 +21,14 @@ _HEADINGS = {
     "IT": "### Novità",
     "DE": "### Neuigkeiten",
     "PT-BR": "### Novidades em português (Brasil)",
+    "FR": "### Nouveautés",
 }
 _TRANSLATIONS = {
     "ES": ("Spanish", "### Español"),
     "IT": ("Italian", "### Italiano"),
     "DE": ("German", "### Deutsch"),
     "PT-BR": ("Brazilian Portuguese", "### Português (Brasil)"),
+    "FR": ("French", "### Français"),
 }
 _LANGUAGES = tuple(_HEADINGS)
 
@@ -91,7 +94,7 @@ def main():
         if error:
             print(f"::error::{error}")
             return 1
-        print("CHANGELOG top section includes all five languages.")
+        print("CHANGELOG top section includes all six languages.")
         return 0
 
     if mode == "--release-body":
