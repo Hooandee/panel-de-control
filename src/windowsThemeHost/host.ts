@@ -6,8 +6,10 @@ import {
   parseThemeExtensionPayload,
   type ThemeExtensionPayload,
 } from "../themes/themeExtensionClient";
+import { installHostGameAudio } from "./gameAudio";
+import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
 
-export const WINDOWS_THEME_HOST_VERSION = 1;
+export const WINDOWS_THEME_HOST_VERSION = 2;
 
 export interface WindowsThemeHostState {
   revision: number;
@@ -22,6 +24,7 @@ export interface WindowsThemeHostStatus {
   qamDocument: boolean;
   mounted: readonly string[];
   errors: readonly string[];
+  gameSilenced: boolean;
 }
 
 export interface WindowsThemeHost {
@@ -44,6 +47,7 @@ interface FocusNavigationController {
 const MAX_ERRORS = 20;
 const QAM_POLL_MS = 2_000;
 const DOCUMENT_POLL_MS = 2_000;
+const QAM_GEOMETRY_POLL_MS = 1_000;
 
 function navigationTrees(scope: typeof globalThis): readonly NavigationTree[] {
   const global = scope as typeof globalThis & {
@@ -124,6 +128,30 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     for (const listener of [...qamListeners]) listener(doc);
   };
 
+  const gameAudio = installHostGameAudio(scope);
+
+  let qamGeometry: QamGeometry | null = null;
+  let geometryDocument: Document | null = null;
+  let watchedQam: Document | null = null;
+  const syncQamGeometry = () => {
+    const steamDocument = findBigPictureDocument(scope);
+    const qamDocument = findQuickAccessDocument(scope);
+    if (qamDocument !== watchedQam) {
+      watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
+      watchedQam = qamDocument;
+      watchedQam?.addEventListener("visibilitychange", syncQamGeometry);
+    }
+    const qamWindow = qamDocument?.defaultView;
+    const steamWindow = steamDocument?.defaultView;
+    if (qamDocument?.visibilityState === "visible" && qamWindow && steamWindow) {
+      qamGeometry = measureQamGeometry(qamWindow, steamWindow) ?? qamGeometry;
+    }
+    if (steamDocument && qamGeometry) applyQamGeometry(steamDocument, qamGeometry);
+    geometryDocument = steamDocument;
+  };
+  const geometryTimer = setInterval(syncQamGeometry, QAM_GEOMETRY_POLL_MS);
+  syncQamGeometry();
+
   const stopRuntime = startThemesRuntime({
     client: {
       getSnapshot: () => ({ snapshot: state.snapshot }),
@@ -161,6 +189,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     qamDocument: findQuickAccessDocument(scope) !== null,
     mounted: [...mounted].sort(),
     errors: [...errors],
+    gameSilenced: gameAudio.silenced(),
   });
 
   return Object.freeze({
@@ -178,6 +207,10 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     status,
     dispose() {
       stopRuntime();
+      gameAudio.dispose();
+      clearInterval(geometryTimer);
+      watchedQam?.removeEventListener("visibilitychange", syncQamGeometry);
+      if (geometryDocument) applyQamGeometry(geometryDocument, null);
       releaseRpcHost();
       if (qamTimer !== undefined) clearInterval(qamTimer);
       listeners.clear();

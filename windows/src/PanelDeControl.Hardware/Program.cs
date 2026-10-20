@@ -92,7 +92,11 @@ public static class Program
                 SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
-                SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token))
+                SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token),
+                SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
+                    steamDevTools,
+                    new CoreAudioGameMixer(),
+                    new GameAudioPolicy(GameAudioSilencer.DefaultStatePath)).RunAsync(token), token))
                 .ConfigureAwait(false);
             return 0;
         }

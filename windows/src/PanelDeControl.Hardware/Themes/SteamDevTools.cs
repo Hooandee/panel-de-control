@@ -23,6 +23,14 @@ public interface ICdpSession : IAsyncDisposable
     Task<JsonElement> EvaluateAsync(string expression, CancellationToken cancellationToken);
 }
 
+/// <summary>A DevTools session that also sends arbitrary commands and reports protocol events.</summary>
+public interface ICdpEventSession : ICdpSession
+{
+    event Action<string, JsonElement>? EventReceived;
+
+    Task<JsonElement> SendAsync(string method, object parameters, CancellationToken cancellationToken);
+}
+
 public interface ISteamDevTools
 {
     Task<IReadOnlyList<DevToolsTarget>?> ListTargetsAsync(CancellationToken cancellationToken);
@@ -102,7 +110,7 @@ public sealed class SteamDevTools : ISteamDevTools, IDisposable
         && uri.Scheme == "ws"
         && uri.IsLoopback;
 
-    private sealed class CdpSession : ICdpSession
+    private sealed class CdpSession : ICdpEventSession
     {
         private const int MaximumMessageBytes = 16 * 1024 * 1024;
 
@@ -121,19 +129,30 @@ public sealed class SteamDevTools : ISteamDevTools, IDisposable
 
         public bool IsOpen => socket.State == WebSocketState.Open && !receiveLoop.IsCompleted;
 
+        public event Action<string, JsonElement>? EventReceived;
+
         public async Task<JsonElement> EvaluateAsync(string expression, CancellationToken cancellationToken)
+        {
+            var result = await SendAsync(
+                "Runtime.evaluate",
+                new { expression, returnByValue = true, awaitPromise = true },
+                cancellationToken).ConfigureAwait(false);
+            if (result.TryGetProperty("exceptionDetails", out var exception))
+            {
+                throw new CdpException(exception.TryGetProperty("text", out var text) ? text.ToString() : "evaluation failed");
+            }
+
+            return result.GetProperty("result").TryGetProperty("value", out var value) ? value.Clone() : default;
+        }
+
+        public async Task<JsonElement> SendAsync(string method, object parameters, CancellationToken cancellationToken)
         {
             var id = Interlocked.Increment(ref nextId);
             var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
             pending[id] = completion;
             try
             {
-                var message = JsonSerializer.SerializeToUtf8Bytes(new
-                {
-                    id,
-                    method = "Runtime.evaluate",
-                    @params = new { expression, returnByValue = true, awaitPromise = true },
-                });
+                var message = JsonSerializer.SerializeToUtf8Bytes(new { id, method, @params = parameters });
                 await sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
@@ -153,13 +172,7 @@ public sealed class SteamDevTools : ISteamDevTools, IDisposable
                     throw new CdpException(error.ToString());
                 }
 
-                var result = response.GetProperty("result");
-                if (result.TryGetProperty("exceptionDetails", out var exception))
-                {
-                    throw new CdpException(exception.TryGetProperty("text", out var text) ? text.ToString() : "evaluation failed");
-                }
-
-                return result.GetProperty("result").TryGetProperty("value", out var value) ? value.Clone() : default;
+                return response.GetProperty("result");
             }
             finally
             {
@@ -238,11 +251,18 @@ public sealed class SteamDevTools : ISteamDevTools, IDisposable
             try
             {
                 using var document = JsonDocument.Parse(payload);
-                if (document.RootElement.TryGetProperty("id", out var id)
-                    && id.TryGetInt32(out var value)
-                    && pending.TryGetValue(value, out var completion))
+                var root = document.RootElement;
+                if (root.TryGetProperty("id", out var id))
                 {
-                    completion.TrySetResult(document.RootElement.Clone());
+                    if (id.TryGetInt32(out var value) && pending.TryGetValue(value, out var completion))
+                    {
+                        completion.TrySetResult(root.Clone());
+                    }
+                }
+                else if (root.TryGetProperty("method", out var method) && method.ValueKind == JsonValueKind.String)
+                {
+                    var parameters = root.TryGetProperty("params", out var found) ? found.Clone() : default;
+                    EventReceived?.Invoke(method.GetString()!, parameters);
                 }
             }
             catch (JsonException)

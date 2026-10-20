@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CssLoaderSnapshot } from "../themes/cssLoaderTypes";
-import { createWindowsThemeHost, findBigPictureDocument, findQuickAccessDocument, type WindowsThemeHost } from "./host";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { createWindowsThemeHost, findBigPictureDocument, findQuickAccessDocument, WINDOWS_THEME_HOST_VERSION, type WindowsThemeHost } from "./host";
 
 const SOURCE = `
 module.exports = Object.freeze({
@@ -56,6 +59,11 @@ async function settle() {
 }
 
 describe("Windows theme host", () => {
+  it("declares the version the companion expects, so an older host left in Steam is replaced", () => {
+    const engine = readFileSync(resolve(process.cwd(), "windows/src/PanelDeControl.Hardware/Themes/SteamThemeEngine.cs"), "utf8");
+    expect(engine).toContain(`public const int HostVersion = ${WINDOWS_THEME_HOST_VERSION};`);
+  });
+
   it("finds Big Picture and the QAM through Steam's navigation trees", () => {
     const qam = document.implementation.createHTMLDocument("qam");
     const scope = scopeWith([{ m_ID: "QuickAccess-NA", doc: qam }, { m_ID: "GamepadUI_Full_Root", doc: document }]);

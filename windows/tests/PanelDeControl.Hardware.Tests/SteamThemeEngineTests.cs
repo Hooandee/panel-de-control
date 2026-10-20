@@ -125,6 +125,20 @@ public sealed class SteamThemeEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task ReplacesAnOlderHostLeftInSteamByAPreviousBuild()
+    {
+        devTools.Targets = new[] { Shared(), Page("bp", "SP", BigPictureUrl) };
+        var engine = Engine(Theme(), extension: true);
+        await engine.CycleAsync(default);
+
+        devTools.HostVersionInSteam = SteamThemeEngine.HostVersion - 1;
+        await engine.CycleAsync(default);
+
+        Assert.Equal(2, devTools.HostLoads);
+        Assert.Equal(2, devTools.HostUpdates);
+    }
+
+    [Fact]
     public async Task DisablingEveryThemeCleansThePagesItPainted()
     {
         devTools.Targets = new[] { Page("bp", "SP", BigPictureUrl) };
@@ -245,6 +259,8 @@ public sealed class SteamThemeEngineTests : IDisposable
         private bool hostPresent;
         private long hostRevision;
 
+        public int HostVersionInSteam { get; set; } = SteamThemeEngine.HostVersion;
+
         public IReadOnlyList<DevToolsTarget>? Targets { get; set; } = Array.Empty<DevToolsTarget>();
 
         public Dictionary<string, FakePage> Pages { get; } = new();
@@ -279,12 +295,13 @@ public sealed class SteamThemeEngineTests : IDisposable
             {
                 HostLoads++;
                 hostPresent = true;
+                HostVersionInSteam = SteamThemeEngine.HostVersion;
                 return default;
             }
 
             if (expression.Contains("?.hostVersion", StringComparison.Ordinal))
             {
-                return hostPresent ? Json("1") : Json("null");
+                return hostPresent ? Json(HostVersionInSteam.ToString(System.Globalization.CultureInfo.InvariantCulture)) : Json("null");
             }
 
             if (expression.Contains("?.status()", StringComparison.Ordinal))
@@ -326,7 +343,7 @@ public sealed class SteamThemeEngineTests : IDisposable
         }
 
         private JsonElement HostStatus() => Json($$"""
-            {"hostVersion":1,"revision":{{hostRevision}},"steamDocument":true,"qamDocument":true,
+            {"hostVersion":{{HostVersionInSteam}},"revision":{{hostRevision}},"steamDocument":true,"qamDocument":true,
              "mounted":{{(hostRevision > 0 ? "[\"hooandee-eclipse@0.2.5\"]" : "[]")}},"errors":[]}
             """);
 

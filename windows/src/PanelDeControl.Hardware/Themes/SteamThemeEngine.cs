@@ -57,6 +57,9 @@ public sealed class SteamThemeEngine
     private const string FingerprintGlobal = "__pdcThemeFingerprint";
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
+    /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
+    public const int HostVersion = 2;
+
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
 
@@ -432,7 +435,7 @@ public sealed class SteamThemeEngine
     private async Task<ThemeHostStatus> SyncHostAsync(ICdpSession session, ThemeEngineInputs current, CancellationToken cancellationToken)
     {
         var version = await session.EvaluateAsync($"window.{HostGlobal}?.hostVersion ?? null", cancellationToken).ConfigureAwait(false);
-        if (version.ValueKind != JsonValueKind.Number)
+        if (version.ValueKind != JsonValueKind.Number || version.GetInt32() != HostVersion)
         {
             await session.EvaluateAsync(hostBundle(), cancellationToken).ConfigureAwait(false);
             hostInputsFingerprint = null;
