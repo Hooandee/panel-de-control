@@ -58,7 +58,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
-    public const int HostVersion = 4;
+    public const int HostVersion = 5;
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
