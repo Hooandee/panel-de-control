@@ -37,6 +37,12 @@ describe("steamLangToLang (seed the default from Steam's UI language)", () => {
     expect(steamLangToLang("brazilian portuguese beta")).toBe("es");
   });
 
+  it("maps French and its language code to fr", () => {
+    expect(steamLangToLang("french")).toBe("fr");
+    expect(steamLangToLang("French")).toBe("fr");
+    expect(steamLangToLang("fr")).toBe("fr");
+  });
+
   it("maps any other language to es (our default)", () => {
     expect(steamLangToLang("schinese")).toBe("es");
   });

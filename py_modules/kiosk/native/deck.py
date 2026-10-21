@@ -38,14 +38,19 @@ class DeckState:
     colores: dict | None = None
 
 
+_DECIMAL_COMMA_LANGS = ("es", "it", "de", "pt-BR", "fr")
+
+
 def _number(value: float, digits: int, lang: str) -> str:
     text = f"{value:.{digits}f}"
-    return text.replace(".", ",") if lang in ("es", "it", "de", "pt-BR") else text
+    return text.replace(".", ",") if lang in _DECIMAL_COMMA_LANGS else text
 
 
 def _grouped(value: int, lang: str) -> str:
     text = f"{value:,}"
-    return text.replace(",", ".") if lang in ("es", "it", "de", "pt-BR") else text
+    if lang == "fr":
+        return text.replace(",", "\u202f")
+    return text.replace(",", ".") if lang in _DECIMAL_COMMA_LANGS else text
 
 
 def format_minutes(minutes: int) -> str:
@@ -532,4 +537,4 @@ class Deck:
         return None if model is None else (self.open_dialog, model, self.dialog_drag)
 
     def _comma(self) -> bool:
-        return self.state.lang in ("es", "it", "de", "pt-BR")
+        return self.state.lang in _DECIMAL_COMMA_LANGS

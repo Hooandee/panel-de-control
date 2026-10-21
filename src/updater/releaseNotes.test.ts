@@ -70,6 +70,20 @@ describe("releaseNotesForLanguage", () => {
     );
   });
 
+  it("selects French notes without falling back to English", () => {
+    const notes = [
+      "## v0.75.0",
+      "### What's new",
+      "- English change",
+      "### Nouveautés",
+      "- Changement en français",
+    ].join("\n");
+
+    expect(releaseNotesForLanguage(notes, "fr")).toBe(
+      "## v0.75.0\n- Changement en français",
+    );
+  });
+
   it("stops at the next heading even when its language is unknown", () => {
     const notes = [
       "## v0.36.0",
