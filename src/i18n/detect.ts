@@ -6,6 +6,7 @@ export function steamLangToLang(raw: string | null | undefined): Lang {
   if (v === "en" || v.startsWith("english")) return "en";
   if (v === "it" || v.startsWith("italian")) return "it";
   if (v === "de" || v.startsWith("german")) return "de";
+  if (v === "fr" || v.startsWith("french")) return "fr";
   if (v === "pt-br" || v === "brazilian" || v === "brazilian portuguese") return "pt-BR";
   return "es";
 }

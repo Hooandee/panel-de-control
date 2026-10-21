@@ -16,6 +16,7 @@ describe("report translations", () => {
     ["en", "Themes"],
     ["it", "Temi"],
     ["pt-BR", "Temas"],
+    ["fr", "Thèmes"],
   ] as const)("translates the themes category in %s", (lang, expected) => {
     expect(translateForLang(lang, "report.cat.themes")).toBe(expected);
   });
@@ -26,6 +27,7 @@ describe("report translations", () => {
     ["it", "TDP automatico"],
     ["de", "Automatische TDP-Steuerung"],
     ["pt-BR", "TDP automático"],
+    ["fr", "TDP automatique"],
   ] as const)("names AutoTDP independently from manual TDP in %s", (lang, expected) => {
     expect(translateForLang(lang, "report.cat.auto_tdp")).toBe(expected);
   });
@@ -36,6 +38,7 @@ describe("report translations", () => {
     ["it", "Una richiesta o un'idea", "Questa non è una segnalazione di errore."],
     ["de", "Einen Wunsch oder eine Idee", "Das ist keine Fehlermeldung."],
     ["pt-BR", "Um pedido ou uma ideia", "Isto não é um relatório de erro."],
+    ["fr", "Une demande ou une idée", "Ce n'est pas un rapport de bug."],
   ] as const)("makes feature requests explicit in %s", (lang, label, explanation) => {
     expect(translateForLang(lang, "report.kind.feature")).toBe(label);
     expect(translateForLang(lang, "report.intro.feature")).toContain(explanation);
@@ -47,6 +50,7 @@ describe("report translations", () => {
     ["it", "Cambia"],
     ["de", "Ändern"],
     ["pt-BR", "Alterar"],
+    ["fr", "Changer"],
   ] as const)("offers a translated report-type change action in %s", (lang, label) => {
     expect(translateForLang(lang, "report.kind.change")).toBe(label);
   });

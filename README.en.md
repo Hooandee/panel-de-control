@@ -26,7 +26,7 @@ If your device doesn't let it read or change something, it just doesn't show up,
 see are the real ones.
 
 It runs on [Decky Loader](https://decky.xyz/) and is available in English, Spanish, Italian,
-German and Brazilian Portuguese.
+German, Brazilian Portuguese and French.
 
 ## 🎬 Video guides
 

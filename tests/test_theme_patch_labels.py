@@ -61,7 +61,7 @@ def test_prepare_rejects_labels_that_are_not_a_bounded_object(tmp_path, labels):
 
 def test_malformed_entries_and_unknown_languages_are_dropped_without_blocking_the_theme(tmp_path):
     themes = install(tmp_path, {
-        "Good": {"name": {"en": "Good", "fr": "Bon"}, "values": {"A": {"de": "a", "xx": "?"}, "B": {"fr": "b"}}},
+        "Good": {"name": {"en": "Good", "ja": "良い"}, "values": {"A": {"de": "a", "xx": "?"}, "B": {"ja": "b"}}},
         "Blank": {"name": {"en": ""}},
         "Long": {"name": {"en": "x" * 121}},
         "Number": {"name": {"en": 3}},
