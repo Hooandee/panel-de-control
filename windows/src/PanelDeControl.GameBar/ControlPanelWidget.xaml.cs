@@ -1329,16 +1329,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             .OfType<FrameworkElement>()
             .Where(element => element.Tag is string)
             .ToDictionary(element => (string)element.Tag);
-        foreach (var section in SectionCatalog.All)
+        foreach (var section in WindowsPreview.VisibleSections(SectionCatalog.All))
         {
             var panel = CreateSectionPanel();
             var blocks = new List<FrameworkElement>();
-            foreach (var block in section.Blocks)
+            var readOnly = WindowsPreview.IsReadOnly(section);
+            foreach (var block in WindowsPreview.VisibleBlocks(section))
             {
                 if (library.TryGetValue(section.Id + "." + block.Id, out var element))
                 {
                     BlockLibrary.Children.Remove(element);
-                    blocks.Add(element);
+                    blocks.Add(readOnly ? ReadOnlyBlock(element) : element);
                 }
                 else
                 {
@@ -1386,6 +1387,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             sections.Add(new SectionView(section, tab, label, panel, blocks));
         }
     }
+
+    // A disabled host disables every control inside it, including ones the readings later re-enable.
+    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new ContentControl
+    {
+        Content = block,
+        IsEnabled = false,
+        IsTabStop = false,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        VerticalContentAlignment = VerticalAlignment.Stretch,
+    };
 
     private static Border CreatePendingBlock(SectionDefinition section, BlockDefinition block)
     {
