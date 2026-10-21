@@ -779,6 +779,25 @@ def test_sysfs_snapshot_acpi_present_and_writable(tmp_path):
     assert snap["acpi"]["call_writable"] is True
 
 
+def test_sysfs_snapshot_records_kernel_lockdown(tmp_path):
+    _mk(
+        os.path.join(str(tmp_path), "sys/kernel/security/lockdown"),
+        "none [integrity] confidentiality",
+    )
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["acpi"]["kernel_lockdown"] == "none [integrity] confidentiality"
+
+
+def test_sysfs_snapshot_records_amdgpu_power_draw(tmp_path):
+    chip = os.path.join(str(tmp_path), "sys/class/hwmon/hwmon3")
+    _mk(os.path.join(chip, "name"), "amdgpu")
+    _mk(os.path.join(chip, "power1_label"), "PPT")
+    _mk(os.path.join(chip, "power1_average"), "70000000")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    nodes = snap["hwmon"][0]["ppt_nodes"]
+    assert nodes["power1_average"]["value"] == "70000000"
+
+
 def test_sysfs_snapshot_acpi_absent(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap["acpi"]["call_present"] is False

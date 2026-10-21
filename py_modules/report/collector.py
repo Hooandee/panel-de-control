@@ -621,7 +621,7 @@ _HWMON_PATTERNS = (
 _DECK_PPT_NODES = tuple(
     f"power{rail}_{suffix}"
     for rail in (1, 2)
-    for suffix in ("label", "cap", "cap_min", "cap_max")
+    for suffix in ("label", "cap", "cap_min", "cap_max", "average", "input")
 )
 
 
@@ -766,7 +766,11 @@ def _snap_acpi(root: str) -> dict:
         writable = bool(present and os.access(path, os.W_OK))
     except Exception:  # noqa: BLE001
         present, writable = False, False
-    return {"call_present": present, "call_writable": writable}
+    out = {"call_present": present, "call_writable": writable}
+    lockdown = read_str(os.path.join(root, "sys/kernel/security/lockdown"))
+    if lockdown is not None:
+        out["kernel_lockdown"] = lockdown
+    return out
 
 
 def _snap_modules(root: str) -> list[str]:
