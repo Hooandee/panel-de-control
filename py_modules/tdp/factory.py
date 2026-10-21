@@ -40,12 +40,35 @@ _RYZENADJ_ONLY_KEYS = frozenset({
 
 _STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 
+# Newer kernels block the /dev/mem PM-table read of `ryzenadj -i` (no ryzen_smu).
+# Zotac keeps its own unconfirmed-write fallback.
+_UNREADABLE_RYZENADJ_YIELDS = (
+    _STRICT_RYZENADJ_KEYS - {"zotac_gaming_zone"}
+) | {"onexplayer_apex"}
+
 
 def _runtime_lock_path(root, name):
     return os.path.join(root, "run/panel-de-control", name)
 
 
-def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False):
+def _not_honored_path(root, device_key, backend_name):
+    safe = backend_name.replace(":", "-").replace("/", "-")
+    return _runtime_lock_path(root, f"route-{safe}-{device_key}.not-honored")
+
+
+def mark_route_not_honored(device, backend_name, detail, root="/") -> bool:
+    path = _not_honored_path(root, device.key, backend_name)
+    try:
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(str(detail)[:512])
+        return True
+    except OSError:
+        return False
+
+
+def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
+                ryzenadj_unverified=None):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
     known-good backend first, then falls through to every other known path by
@@ -202,6 +225,12 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     amd_tail = [ryzenadj, alib]
 
     key = device.key
+    # Unconfirmed ryzenadj writes were measured to hold the limit; ALIB let an Apex overshoot.
+    unreadable_tail = (
+        [ryzenadj_unverified, alib]
+        if key in _UNREADABLE_RYZENADJ_YIELDS and ryzenadj_unverified is not None
+        else []
+    )
     if getattr(device, "arch", "x86") == "arm":
         return [arm_levels]
     if key == "desktop_pc":
@@ -222,9 +251,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
         if key == "msi_claw_a8":
             return [ryzenadj]
         if key == "onexplayer_apex":
-            return [alib, ryzenadj]
+            # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
+            return [ryzenadj, *unreadable_tail]
         if key in _RYZENADJ_ONLY_KEYS:
-            return [asus, lenovo, msi, ryzenadj]
+            return [asus, lenovo, msi, ryzenadj, *unreadable_tail]
         if key.startswith("rog_"):
             return [asus, asus_nb_wmi, lenovo, msi, *amd_tail]
         if key.startswith("legion_"):
@@ -234,9 +264,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False)
     if key == "msi_claw_a8":
         return [msi_a8, ryzenadj]
     if key == "onexplayer_apex":
-        return [dptc, alib, ryzenadj]
+        return [dptc, ryzenadj, *unreadable_tail]
     if key in _RYZENADJ_ONLY_KEYS:
-        return [dptc, asus, lenovo, msi, ryzenadj]
+        return [dptc, asus, lenovo, msi, ryzenadj, *unreadable_tail]
     if key.startswith("rog_"):
         return [asus, asus_nb_wmi, *amd_tail]
     if key.startswith("legion_"):
@@ -286,12 +316,39 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                 root,
                 f"ryzenadj-{device.key}.lock",
             ),
+            unreadable_marker_path=(
+                _runtime_lock_path(root, f"ryzenadj-{device.key}.unreadable")
+                if device.key in _UNREADABLE_RYZENADJ_YIELDS
+                else None
+            ),
             **kwargs,
         )
 
+    def ryzenadj_unverified():
+        kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        backend = RyzenadjBackend(
+            fallback,
+            write_max=fallback.max_w,
+            write_max_ac=fallback.max_ac_w,
+            write_temp_limit=False,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                f"ryzenadj-unverified-{device.key}.lock",
+            ),
+            **kwargs,
+        )
+        backend.name = "ryzenadj-unverified"
+        backend.measured_verification = True
+        backend.readback = False
+        backend.auto_tdp_supported = False
+        backend.auto_tdp_safe = False
+        return backend
+
     trace = []
+    not_honored_fallback = None
     for make in _candidates(device, fallback, root, ryzenadj, os_id,
-                            desktop_cpu=desktop_limits is not None):
+                            desktop_cpu=desktop_limits is not None,
+                            ryzenadj_unverified=ryzenadj_unverified):
         candidate = make.__name__
         try:
             backend = make()
@@ -308,6 +365,15 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             "backend": backend.name,
             "supported": bool(backend.supported),
         }
+        if backend.supported and os.path.exists(
+            _not_honored_path(root, device.key, backend.name)
+        ):
+            trace_item["ready"] = False
+            trace_item["not_honored_this_boot"] = True
+            trace.append(trace_item)
+            if not_honored_fallback is None:
+                not_honored_fallback = backend
+            continue
         safety_locked = bool(getattr(backend, "safety_locked", False))
         ready = bool(backend.supported)
         if ready and not safety_locked:
@@ -330,6 +396,10 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
         if ready or safety_locked or (backend.supported and blocks_fallback):
             backend.probe_trace = tuple(trace)
             return backend
+    if not_honored_fallback is not None:
+        not_honored_fallback.measured_not_honored = True
+        not_honored_fallback.probe_trace = tuple(trace)
+        return not_honored_fallback
     backend = NullBackend(f"no supported TDP interface for {device.key}")
     backend.probe_trace = tuple(trace)
     return backend

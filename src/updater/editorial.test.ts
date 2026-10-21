@@ -19,5 +19,6 @@ describe("Updater translation content", () => {
     expect(getUpdaterStrings("it").panel.check).toBe("Cerca aggiornamenti");
     expect(getUpdaterStrings("de").panel.check).toBe("Nach Updates suchen");
     expect(getUpdaterStrings("pt-BR").panel.check).toBe("Verificar atualizações");
+    expect(getUpdaterStrings("fr").panel.check).toBe("Rechercher des mises à jour");
   });
 });

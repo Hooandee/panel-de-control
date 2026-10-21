@@ -779,6 +779,25 @@ def test_sysfs_snapshot_acpi_present_and_writable(tmp_path):
     assert snap["acpi"]["call_writable"] is True
 
 
+def test_sysfs_snapshot_records_kernel_lockdown(tmp_path):
+    _mk(
+        os.path.join(str(tmp_path), "sys/kernel/security/lockdown"),
+        "none [integrity] confidentiality",
+    )
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["acpi"]["kernel_lockdown"] == "none [integrity] confidentiality"
+
+
+def test_sysfs_snapshot_records_amdgpu_power_draw(tmp_path):
+    chip = os.path.join(str(tmp_path), "sys/class/hwmon/hwmon3")
+    _mk(os.path.join(chip, "name"), "amdgpu")
+    _mk(os.path.join(chip, "power1_label"), "PPT")
+    _mk(os.path.join(chip, "power1_average"), "70000000")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    nodes = snap["hwmon"][0]["ppt_nodes"]
+    assert nodes["power1_average"]["value"] == "70000000"
+
+
 def test_sysfs_snapshot_acpi_absent(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap["acpi"]["call_present"] is False
@@ -1344,3 +1363,29 @@ def test_arm_snapshot_records_supplies_and_a_tachless_pwm_fan(tmp_path):
     }
     assert arm["pwm_fans"] == [{"hwmon": "hwmon54", "pwm1": "51", "pwm1_enable": "3",
                                 "fan1_input": None}]
+
+
+def test_kernel_logs_keep_decky_stop_and_earlyoom_evidence_across_a_forced_reboot():
+    cmds = report_collector._KERNEL_CMDS
+    current, previous = cmds["loader_lifecycle"], cmds["previous_boot_loader"]
+    assert previous[previous.index("-b") + 1] == "-1"
+    for cmd in (current, previous):
+        assert cmd[cmd.index("-u") + 1] == "plugin_loader"
+        pattern = cmd[cmd.index("--grep") + 1]
+        for token in ("still alive", "SIGKILL", "already loaded", "has been stopped in"):
+            assert token in pattern
+    oom = cmds["previous_boot_earlyoom"]
+    assert oom[oom.index("-b") + 1] == "-1" and oom[oom.index("-t") + 1] == "earlyoom"
+
+    def run(cmd):
+        if cmd == previous:
+            return ("[plugin][WARNING]: Plugin Panel de Control (v0.75.0) still alive 5 seconds "
+                    "after stop request! Sending SIGKILL!")
+        if cmd == oom:
+            return "earlyoom[921]: sending SIGTERM to process 1369 uid 0 \"PluginLoader\""
+        return None
+
+    out = kernel_logs(run)
+    assert "Sending SIGKILL" in out["previous_boot_loader"]
+    assert "PluginLoader" in out["previous_boot_earlyoom"]
+

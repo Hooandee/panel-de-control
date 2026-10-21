@@ -1005,7 +1005,7 @@ def test_ui_power_activation_stays_off_when_gpd_backend_is_not_ready(
     assert p._settings["experimental_tdp_unlock"] is True
 
 
-def test_backend_without_auto_tdp_rejects_and_clears_stored_auto(PluginWithPower):
+def test_backend_without_auto_tdp_rejects_but_keeps_stored_auto(PluginWithPower):
     p = PluginWithPower()
     p._init()
     p._tdp_backend.auto_tdp_supported = False
@@ -1016,8 +1016,10 @@ def test_backend_without_auto_tdp_rejects_and_clears_stored_auto(PluginWithPower
     power = asyncio.run(p.get_power_draw())
 
     assert result == {"auto_tdp": False}
-    assert p._tdp_profiles.auto_tdp(None) is False
+    assert p._tdp_profiles.auto_tdp(None) is True
     assert state["supports_auto_tdp"] is False
+    assert state["auto_config"]["enabled"] is False
+    assert state["global_auto_config"]["enabled"] is False
     assert power["auto_tdp"] is False
 
 
@@ -1998,3 +2000,17 @@ def test_a_failed_cooler_correction_retries_with_the_safe_ceiling(Plugin, monkey
     p._retry_tdp_storage_migrations()
 
     assert p._tdp_profiles.effective(None)["pl1"] == 80
+
+
+def test_set_auto_tdp_keeps_saved_choice_while_auto_is_unavailable(
+    PluginWithPower, monkeypatch,
+):
+    p = PluginWithPower()
+    asyncio.run(p.set_auto_tdp(True))
+    monkeypatch.setattr(p, "_auto_tdp_supported", lambda: False)
+
+    assert asyncio.run(p.set_auto_tdp(True)) == {"auto_tdp": False}
+    assert p._tdp_profiles.auto_tdp(p._current_appid) is True
+
+    monkeypatch.setattr(p, "_auto_tdp_supported", lambda: True)
+    assert asyncio.run(p.get_power_draw())["auto_tdp"] is True

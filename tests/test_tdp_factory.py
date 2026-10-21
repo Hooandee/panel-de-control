@@ -1031,14 +1031,20 @@ def test_only_exact_legion_go_s_83n6_gets_the_unverified_low_battery_route(tmp_p
     assert generic is None
 
 
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
 @pytest.mark.parametrize("profile", ("low-power", "balanced", "performance"))
-def test_exact_legion_go_s_83l3_recovers_named_profile_without_restoring_rails(
+def test_exact_legion_go_s_recovers_named_profile_without_restoring_rails(
     tmp_path,
     monkeypatch,
     profile,
+    product_name,
 ):
     root = str(tmp_path)
-    backend, lock_path = _locked_legion_backend(root, current_profile=profile)
+    backend, lock_path = _locked_legion_backend(
+        root,
+        product_name=product_name,
+        current_profile=profile,
+    )
     original_write = backend._write
 
     def firmware_owns_rails(path, value):
@@ -1095,11 +1101,60 @@ def test_exact_legion_go_s_83l3_confirms_named_profile_rollback_with_live_rails(
     assert backend.ready() is True
 
 
+def test_exact_legion_go_s_83n6_low_power_boot_rollback_does_not_lock_tdp(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N6", "low-power", current=(21, 17, 36))
+    attrs = os.path.join(
+        root,
+        "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes",
+    )
+    for attr, mx in (("ppt_pl1_spl", 15), ("ppt_pl2_sppt", 15), ("ppt_pl3_fppt", 20)):
+        with open(os.path.join(attrs, attr, "max_value"), "w") as handle:
+            handle.write(str(mx))
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    profile_path = os.path.join(
+        root,
+        "sys/class/platform-profile/platform-profile-0/profile",
+    )
+    original_write = backend._write
+
+    def low_power_firmware(path, value):
+        profile = backend.read_profile()
+        if path.endswith("ppt_pl1_spl/current_value") and profile == "custom":
+            return original_write(path, 30)
+        if path.endswith("current_value") and profile != "custom":
+            return False
+        written = original_write(path, value)
+        if path == profile_path and value == "low-power":
+            _set_fw_current(root, "ppt_pl1_spl", 21)
+            _set_fw_current(root, "ppt_pl2_sppt", 17)
+            _set_fw_current(root, "ppt_pl3_fppt", 36)
+        return written
+
+    monkeypatch.setattr(backend, "_write", low_power_firmware)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+
+    result = backend.set_levels(5, 15, 20, ac=False)
+
+    assert result.ok is False
+    assert "rollback confirmed" in result.detail
+    assert backend.read_profile() == "low-power"
+    assert backend.safety_locked is False
+    assert backend.ready() is True
+
+
 @pytest.mark.parametrize(
     ("product_name", "profile"),
-    (("83L3", "custom"), ("83N6", "low-power")),
+    (("83L3", "custom"), ("83N6", "custom")),
 )
-def test_legion_go_s_keeps_strict_recovery_outside_83l3_named_profiles(
+def test_legion_go_s_keeps_strict_recovery_for_custom_profile(
     tmp_path,
     monkeypatch,
     product_name,
@@ -1160,15 +1215,18 @@ def test_exact_legion_go_s_83l3_without_platform_profile_recovers_strictly(tmp_p
         ("rail-unreadable", "pl2=unavailable"),
     ),
 )
-def test_exact_legion_go_s_83l3_named_recovery_fails_closed(
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
+def test_exact_legion_go_s_named_recovery_fails_closed(
     tmp_path,
     monkeypatch,
     failure,
     expected_detail,
+    product_name,
 ):
     root = str(tmp_path)
     backend, lock_path = _locked_legion_backend(
         root,
+        product_name=product_name,
         saved_profile="turbo" if failure == "unknown-profile" else None,
         snapshot=(
             {"firmware-attr:lenovo-wmi-other/pl1": 25}
@@ -1924,7 +1982,7 @@ def test_ryzenadj_precedes_alib(tmp_path):
     assert b.name == "ryzenadj"
 
 
-def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
+def test_onexplayer_apex_prefers_readable_ryzenadj_over_alib(tmp_path):
     root = str(tmp_path)
     _mk_acpi_call(root)
 
@@ -1934,33 +1992,288 @@ def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
         ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
     )
 
-    assert backend.name == "acpi-alib"
-    assert [item["candidate"] for item in backend.probe_trace] == ["alib"]
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
 
 
 def test_onexplayer_apex_alib_reaches_cooler_ceiling_only_on_charger(tmp_path):
     root = str(tmp_path)
     _mk_acpi_call(root)
     backend = select_backend(_p("onexplayer_apex"), root=root,
-                             ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+                             ryzenadj_resolve=_NO_RYZENADJ)
 
     assert backend.name == "acpi-alib"
     assert backend._write_limits.max_ac_w == 120
     assert backend._write_limits.max_w == 55
 
 
-def test_onexplayer_apex_falls_back_to_ryzenadj_without_alib(tmp_path):
+def test_onexplayer_apex_falls_back_to_alib_without_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
     backend = select_backend(
         _p("onexplayer_apex"),
-        root=str(tmp_path),
-        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "ryzenadj",
+        "ryzenadj_unverified",
+        "alib",
+    ]
+
+
+def _mk_unreadable_ryzenadj(root):
+    log = os.path.join(root, "unreadable-ryzenadj-writes")
+    path = os.path.join(root, "unreadable-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            "  echo 'Unable to get memory access' >&2\n"
+            "  exit 255\n"
+            "fi\n"
+            f"echo \"$@\" >> '{log}'\n"
+        )
+    os.chmod(path, 0o755)
+    return path, log
+
+
+def _f1_marker(root):
+    return os.path.join(
+        root, "run/panel-de-control/ryzenadj-onexplayer_f1.unreadable"
+    )
+
+
+def test_onexplayer_f1_unreadable_ryzenadj_yields_without_writing(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.name == "ryzenadj"
+
+    assert backend.probe() is False
+
+    assert backend.safety_locked is False
+    assert backend.yields_to_next_route is True
+    assert backend.reselection_safe_after_use is True
+    assert backend.selection_ready() is False
+    assert os.path.exists(writes) is False
+    with open(_f1_marker(root)) as handle:
+        marker = json.loads(handle.read())
+    assert marker == {
+        "rc": 255,
+        "stderr": "Unable to get memory access",
+        "stdout_head": "",
+    }
+    assert backend.diagnostics()["last_read_error"] == marker
+    assert backend.set_tdp(20, ac=True).ok is False
+    assert os.path.exists(writes) is False
+
+
+def test_onexplayer_f1_reselects_unconfirmed_ryzenadj_after_unreadable_boot(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "ryzenadj-unverified"
+    trace = backend.probe_trace
+    assert [item["candidate"] for item in trace] == [
+        "asus", "lenovo", "msi", "ryzenadj", "ryzenadj_unverified",
+    ]
+    assert trace[3]["ready"] is False
+    assert trace[3]["readback_state"] == "unreadable_this_boot"
+    assert "Unable to get memory access" in trace[3]["read_error"]
+    assert backend._write_limits.max_w == 30
+
+
+def test_onexplayer_f1_without_ryzenadj_uses_alib(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace][-3:] == [
+        "ryzenadj", "ryzenadj_unverified", "alib",
+    ]
+
+
+def test_onexplayer_f1_unconfirmed_ryzenadj_has_no_auto_or_extra_range(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "ryzenadj-unverified"
+    assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj_unverified"
+    assert backend.readback is False
+    assert backend.auto_tdp_supported is False
+    assert backend.auto_tdp_safe is False
+    result = backend.set_tdp(40, ac=True)
+    assert result.ok is True
+    assert result.applied_w is None
+    assert backend.manual_write_max_ac == 30
+    with open(writes) as handle:
+        lines = handle.read().splitlines()
+    assert lines and all(
+        line == "--stapm-limit 30000 --fast-limit 30000 --slow-limit 30000"
+        for line in lines
+    )
+
+
+def _mk_static_ryzenadj(root, watts=28):
+    path = os.path.join(root, "readable-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            f"  printf '| STAPM LIMIT | {watts}.000 | stapm-limit |\\n'\n"
+            f"  printf '| PPT LIMIT FAST | {watts}.000 | fast-limit |\\n'\n"
+            f"  printf '| PPT LIMIT SLOW | {watts}.000 | slow-limit |\\n'\n"
+            "fi\n"
+        )
+    os.chmod(path, 0o755)
+    return path
+
+
+def test_onexplayer_f1_readable_ryzenadj_keeps_strict_route(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_static_ryzenadj(root)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
     )
 
     assert backend.name == "ryzenadj"
+    assert backend.probe() is True
+    assert backend.yields_to_next_route is False
+    assert os.path.exists(_f1_marker(root)) is False
+
+
+def test_onexplayer_f1_later_read_failure_does_not_mark_the_boot(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_static_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_f1"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.probe() is True
+    os.chmod(binary, 0o644)
+
+    assert backend.set_tdp(20, ac=True).ok is False
+
+    assert backend.yields_to_next_route is False
+    assert os.path.exists(_f1_marker(root)) is False
+
+
+def _apex_marker(root):
+    return os.path.join(
+        root, "run/panel-de-control/ryzenadj-onexplayer_apex.unreadable"
+    )
+
+
+def test_onexplayer_apex_readable_ryzenadj_stays_after_probe(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_static_ryzenadj(root)
+    _mk_acpi_call(root)
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.probe_pending is True
+    assert backend.probe() is True
+    assert backend.probe_pending is False
+    assert backend.yields_to_next_route is False
+    assert backend.auto_tdp_safe is True
+    assert os.path.exists(_apex_marker(root)) is False
+
+
+def test_onexplayer_apex_unreadable_ryzenadj_yields_to_unconfirmed_writes(tmp_path):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    first = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert first.name == "ryzenadj"
+
+    assert first.probe() is False
+    assert first.safety_locked is False
+    assert first.reselection_safe_after_use is True
+    assert os.path.exists(writes) is False
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.name == "ryzenadj-unverified"
     assert [item["candidate"] for item in backend.probe_trace] == [
-        "alib",
-        "ryzenadj",
+        "ryzenadj", "ryzenadj_unverified",
     ]
+
+
+def test_onexplayer_apex_without_alib_keeps_unconfirmed_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "ryzenadj-unverified"
+    assert backend.auto_tdp_supported is False
+    assert backend.set_tdp(55, ac=False).ok is True
+
+
+@pytest.mark.parametrize(
+    "key", ("onexplayer_superx", "rog_flow_z13", "ayaneo_3"),
+)
+def test_strict_ryzenadj_handhelds_yield_when_unreadable(tmp_path, key):
+    root = str(tmp_path)
+    binary, writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    first = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+    assert first.name == "ryzenadj"
+
+    assert first.probe() is False
+    assert first.yields_to_next_route is True
+    assert os.path.exists(writes) is False
+
+    backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+    assert backend.name == "ryzenadj-unverified"
+
+
+@pytest.mark.parametrize("key", ("zotac_gaming_zone", "gpd_win_mini_2025", "aokzoe_a1x"))
+def test_unreadable_yield_leaves_other_ryzenadj_routes_alone(tmp_path, key):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    backend = select_backend(_p(key), root=root, ryzenadj_resolve=lambda: binary)
+
+    assert backend.name == "ryzenadj"
+    backend.probe()
+    assert backend.yields_to_next_route is False
+    assert [item["candidate"] for item in backend.probe_trace][-1] == "ryzenadj"
 
 
 def test_firmware_attr_still_wins_over_alib(tmp_path):
@@ -2117,3 +2430,100 @@ def test_generic_amd_ryzenadj_keeps_auto_tdp(tmp_path):
 
     assert backend.name == "ryzenadj"
     assert backend.auto_tdp_safe is True
+
+
+def test_route_not_honored_this_boot_moves_to_the_next_route(tmp_path):
+    root = str(tmp_path)
+    binary, _writes = _mk_unreadable_ryzenadj(root)
+    _mk_acpi_call(root)
+    select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    ).probe()
+    assert factory.mark_route_not_honored(
+        _p("onexplayer_apex"), "ryzenadj-unverified", "70W at 30W", root=root,
+    )
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert backend.measured_verification is True
+    assert backend.measured_not_honored is False
+    assert backend.probe_trace[1]["not_honored_this_boot"] is True
+
+
+def test_last_route_not_honored_is_kept_instead_of_dropping_tdp(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    factory.mark_route_not_honored(
+        _p("onexplayer_apex"), "acpi-alib", "70W at 30W", root=root,
+    )
+
+    backend = select_backend(
+        _p("onexplayer_apex"), root=root, ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "acpi-alib"
+    assert backend.supported is True
+    assert backend.measured_not_honored is True
+
+
+def test_strict_ryzenadj_recovers_after_a_transient_read_loss(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_static_ryzenadj(root)
+    backend = select_backend(
+        _p("onexplayer_superx"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.probe() is True
+    assert backend.set_tdp(28, ac=True).ok is True
+    os.chmod(binary, 0o644)
+    assert backend.set_tdp(30, ac=True).ok is False
+    assert backend.supported is False
+    assert backend.probe_pending is True
+
+    assert backend.probe() is False
+    os.chmod(binary, 0o755)
+    assert backend.probe() is True
+
+    assert backend.supported is True
+    assert backend.safety_locked is False
+    assert backend.diagnostics()["readback_state"] == "ready"
+
+
+def test_go_2_lock_with_changed_surfaces_hands_off_instead_of_retrying_forever(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={"firmware-attr:lenovo-wmi-other/pl9": 35},
+    )
+    backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "firmware handed off to balanced"}
+    assert backend.read_profile() == "balanced"
+    assert not os.path.exists(lock_path)
+
+
+def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83E1", "custom")
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={"firmware-attr:lenovo-wmi-other/pl9": 35},
+    )
+    backend = select_backend(_p("legion_go"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is False
+    assert "surfaces changed" in recovered["detail"]
+    assert os.path.exists(lock_path)

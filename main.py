@@ -24,6 +24,7 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
+import decky_socket_guard
 import device_registry
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
@@ -45,6 +46,7 @@ from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
 from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
+from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -232,11 +234,15 @@ _OVERSHOOT_BACKENDS = frozenset(
     ("firmware-attr:asus-armoury", "firmware-attr:lenovo-wmi-other")
 )
 _OVERSHOOT_VIEW_STALE_S = 10.0
+_MEASURED_REASSERTS = 1
+_MEASURED_SOURCE_RECHECK_S = 60.0
+_MEASURED_EXTERNAL_HOLD_S = 60.0
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
+_DECKY_SOCKET_GUARD = decky_socket_guard.install(log=decky.logger)
 _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
@@ -899,6 +905,12 @@ class Plugin:
         self._hud_apply_status = None
         self._tdp_generation = 0
         self._tdp_targets = None
+        self._measured_watch = MeasuredLimitWatch()
+        self._measured_verdict = None
+        self._measured_exceeded = 0
+        self._measured_history = deque(maxlen=12)
+        self._measured_external_writer = None
+        self._measured_hold_until = 0.0
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(self._tdp_backend, "readback", True)),
         )
@@ -4620,6 +4632,12 @@ class Plugin:
             return config
         return {**config, "target_fps": maximum}
 
+    def _reported_auto_config(self, appid):
+        config = self._auto_config(appid)
+        if config.get("enabled") and not self._auto_tdp_supported():
+            return {**config, "enabled": False}
+        return config
+
     async def _sync_auto_stats_reader(self, active):
         self._auto_stats_reader_active = bool(active)
         await self._apply_stats_reader()
@@ -4843,6 +4861,8 @@ class Plugin:
         )
 
     def _auto_apply_confirmed(self, result, setpoint):
+        if result.ok and result.applied_w is None and self._measured_route_active():
+            return True
         if not result.ok or result.applied_w is None:
             return False
         tolerance = max(
@@ -4866,6 +4886,9 @@ class Plugin:
                 return bool(confirm(observation, setpoint, tolerance))
             except Exception:  # noqa: BLE001
                 return False
+        if self._measured_route_active():
+            verdict = self._measured_verdict
+            return verdict is None or verdict.state != "exceeded"
         if not callable(getattr(self._tdp_backend, "observe", None)):
             primary = observation.surfaces.get(self._tdp_backend.name, {})
             reading = primary.get(getattr(self._tdp_backend, "primary_rail", "pl1"))
@@ -5243,7 +5266,11 @@ class Plugin:
             return self._auto_status
         if self._ui_active:
             return self._hold_auto_session("ui_active", reading)
-        if decision.reason == "probe_stable" and self._learning_active():
+        if (
+            decision.reason == "probe_stable"
+            and self._learning_active()
+            and not self._measured_route_active()
+        ):
             try:
                 recorded = self._auto_learning.record(
                     appid,
@@ -5304,6 +5331,7 @@ class Plugin:
             try:
                 await asyncio.sleep(2)
                 self._offer_pdc_refresh()
+                await self._measured_power_tick()
                 await self._auto_tick()
                 self._auto_last_tick_at = _monotonic()
                 self._auto_last_error = None
@@ -5373,7 +5401,6 @@ class Plugin:
         ):
             return {"auto_tdp": auto_tdp}
         if not self._auto_tdp_supported():
-            self._tdp_profiles.set_auto_tdp(scope, False, appid=appid)
             return {"auto_tdp": False}
         if not self._tdp_control_on():
             return {"auto_tdp": auto_tdp}
@@ -5822,7 +5849,9 @@ class Plugin:
         return levels, active, ac
 
     def _manual_boost(self, effective: dict, appid=None) -> bool:
-        return effective.get("mode") == "custom" and not self._tdp_profiles.auto_tdp(appid)
+        return effective.get("mode") == "custom" and not (
+            self._tdp_profiles.auto_tdp(appid) and self._auto_tdp_supported()
+        )
 
     def _safe_active_max(self, ac: bool) -> int | None:
         """None when the device has no manual extra range."""
@@ -11300,8 +11329,8 @@ class Plugin:
             "global_levels": global_levels,
             "global_requested_levels": global_requested_levels,
             "global_boost_mode": geff["mode"],
-            "auto_config": self._auto_config(self._current_appid),
-            "global_auto_config": self._auto_config(None),
+            "auto_config": self._reported_auto_config(self._current_appid),
+            "global_auto_config": self._reported_auto_config(None),
             "auto_target_max_fps": self._auto_target_max_fps(),
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
@@ -11642,6 +11671,17 @@ class Plugin:
                 **self._overshoot_monitor().as_dict(),
                 "profile_change": self._platform_profile_watch().last_change,
             },
+            "measured_power": {
+                "capable": self._measured_power_capable(),
+                "active": self._measured_route_active(),
+                "verdict": (
+                    self._measured_verdict.as_dict()
+                    if self._measured_verdict is not None
+                    else None
+                ),
+                "exceeded": list(self._measured_history),
+                "external_writer": self._measured_external_writer,
+            },
             "auto": {
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),
@@ -11733,8 +11773,9 @@ class Plugin:
                 previous, probe, None, None, None, "recovery_pending"
             )
             return False
+        not_honored = bool(getattr(previous, "measured_not_honored", False))
         selection_ready = getattr(previous, "selection_ready", None)
-        if callable(selection_ready):
+        if callable(selection_ready) and not not_honored:
             try:
                 route_viable = bool(selection_ready())
             except Exception as error:  # noqa: BLE001
@@ -11756,7 +11797,7 @@ class Plugin:
                     "temporarily_unready",
                 )
                 return False
-        if self._tdp_backend_used and not getattr(
+        if self._tdp_backend_used and not not_honored and not getattr(
             previous,
             "reselection_safe_after_use",
             False,
@@ -11985,12 +12026,146 @@ class Plugin:
             return False
 
     def _auto_tdp_supported(self) -> bool:
-        return bool(
-            self._tdp_supported()
-            and getattr(self._tdp_backend, "readback", True)
+        if not self._tdp_supported():
+            return False
+        if (
+            getattr(self._tdp_backend, "readback", True)
             and getattr(self._tdp_backend, "auto_tdp_safe", True)
             and getattr(self._tdp_backend, "auto_tdp_supported", True)
+        ):
+            return True
+        return self._measured_power_capable()
+
+    def _measured_power_capable(self) -> bool:
+        backend = self._tdp_backend
+        if not getattr(backend, "measured_verification", False):
+            return False
+        if getattr(backend, "measured_not_honored", False):
+            return False
+        if self._device.is_generic or self._device.key in ("desktop_pc", "steam_machine"):
+            return False
+        now = _monotonic()
+        checked_at = getattr(self, "_measured_power_source_at", None)
+        if (
+            getattr(self, "_measured_power_source", None) is None
+            or checked_at is None
+            or now - checked_at >= _MEASURED_SOURCE_RECHECK_S
+        ):
+            try:
+                self._measured_power_source = bool(self._power_reader.apu_power_source())
+            except Exception:  # noqa: BLE001
+                self._measured_power_source = False
+            self._measured_power_source_at = now
+        return self._measured_power_source
+
+    def _measured_route_active(self) -> bool:
+        return bool(
+            self._measured_power_capable()
+            and not getattr(self._tdp_backend, "readback", True)
         )
+
+    def _reset_measured_watch(self, target, now):
+        self._measured_watch.reset(target, now)
+        self._measured_exceeded = 0
+
+    async def _measured_power_tick(self) -> None:
+        now = _monotonic()
+        backend = self._tdp_backend
+        generation = self._tdp_generation
+        targets = self._tdp_targets
+        target = targets.target.get("pl1") if targets is not None else None
+        if (
+            self._current_appid is None
+            or target is None
+            or not self._measured_route_active()
+            or not self._tdp_supported()
+        ):
+            self._reset_measured_watch(None, now)
+            self._measured_verdict = None
+            return
+        if now < self._measured_hold_until:
+            return
+        if self._measured_watch.target_w != int(target):
+            self._reset_measured_watch(target, now)
+        watts = await asyncio.to_thread(self._power_reader.read_watts)
+        if self._tdp_backend is not backend or self._tdp_generation != generation:
+            self._reset_measured_watch(None, now)
+            return
+        verdict = self._measured_watch.feed(watts, now)
+        self._measured_verdict = verdict
+        if verdict.state == "within_limit":
+            self._measured_exceeded = 0
+            return
+        if verdict.state != "exceeded":
+            return
+        self._measured_exceeded += 1
+        event = {
+            "at": round(now, 3),
+            "backend": backend.name,
+            "episode": self._measured_exceeded,
+            **verdict.as_dict(),
+        }
+        self._measured_history.append(event)
+        decky.logger.warning(
+            "TDP limit exceeded by measured power %s",
+            json.dumps(event, sort_keys=True, separators=(",", ":")),
+        )
+        if self._measured_exceeded <= _MEASURED_REASSERTS:
+            self._measured_watch.reset(target, now)
+            await self._apply_tdp_now("measured-reassert")
+            return
+        async with self._tdp_probe_lock:
+            if (
+                self._tdp_backend is not backend
+                or self._tdp_generation != generation
+                or self._current_appid is None
+                or not self._tdp_control_on()
+                or not self._measured_route_active()
+            ):
+                self._reset_measured_watch(None, _monotonic())
+                return
+            left = await self._offload_call(lambda: self._leave_route_not_honored(backend))
+            self._reset_measured_watch(target, _monotonic())
+            if left:
+                self._start_tdp_guard_loop()
+
+    def _external_tdp_writer(self) -> str | None:
+        try:
+            if self._powerstation_detector.tdp_active():
+                return "powerstation"
+        except Exception:  # noqa: BLE001
+            pass
+        if self._controller_backend.manager != controller_detect.HHD:
+            return None
+        try:
+            return "hhd" if self._hhd_tdp_client.current_tdp_enable() else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _leave_route_not_honored(self, backend) -> bool:
+        self._measured_exceeded = 0
+        writer = self._external_tdp_writer()
+        self._measured_external_writer = writer
+        if writer is not None:
+            self._measured_hold_until = _monotonic() + _MEASURED_EXTERNAL_HOLD_S
+            self._tdp_reason = f"external_writer:{writer}"
+            return False
+        verdict = self._measured_verdict
+        detail = json.dumps(
+            verdict.as_dict() if verdict is not None else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if not tdp_factory.mark_route_not_honored(self._device, backend.name, detail):
+            return False
+        backend.measured_not_honored = True
+        ready = self._replace_unviable_tdp_backend(
+            backend,
+            {"ready": False, "error": "limit_not_honored"},
+        )
+        if getattr(self._tdp_backend, "measured_not_honored", False):
+            self._tdp_reason = "limit_not_honored"
+        return ready
 
     def _tdp_backend_diagnostics(self):
         errors = {}
@@ -13014,11 +13189,12 @@ class Plugin:
             decky.logger.error("Interrupted theme recovery failed: %s", error)
         device = getattr(self, "_device", None)
         decky.logger.info(
-            "Panel de Control v%s loaded (euid=%s device=%s arch=%s)",
+            "Panel de Control v%s loaded (euid=%s device=%s arch=%s socket_guard=%s)",
             read_version(),
             os.geteuid(),
             getattr(device, "key", None),
             getattr(device, "arch", None),
+            _DECKY_SOCKET_GUARD,
         )
         self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
@@ -13058,14 +13234,25 @@ class Plugin:
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
+        started = time.monotonic()
+
+        def stage(name):
+            decky.logger.info(
+                "Shutdown stage unload:%s at=%dms", name, (time.monotonic() - started) * 1000,
+            )
+
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        stage("prepared")
         if getattr(self, "_screen_sleep", None) is not None:
             if self._eco_watch_task is not None:
                 self._eco_watch_task.cancel()
             await self._apply_screen(False, "unload")
+            stage("screen")
         await self._stop_kiosk()
+        stage("kiosk")
         await self._stop_remote_access()
+        stage("remote")
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:

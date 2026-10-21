@@ -30,7 +30,7 @@ ROOT_LICENSE = ROOT / "LICENSE"
 ROOT_NOTICES = ROOT / "THIRD_PARTY_NOTICES.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-ci.yml"
 STRINGS_DIR = PROJECT_DIR / "Strings"
-LANGUAGES = ("en-US", "es", "de", "it", "pt-BR")
+LANGUAGES = ("en-US", "es", "de", "it", "pt-BR", "fr")
 XAML_UID = "{http://schemas.microsoft.com/winfx/2006/xaml}Uid"
 AUTOMATION = "[using:Windows.UI.Xaml.Automation]AutomationProperties"
 

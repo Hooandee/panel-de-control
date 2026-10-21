@@ -326,3 +326,12 @@ def test_gpu_busy_burst_clamps_per_read(tmp_path):
     r = _reader_with_samples(tmp_path, [150, 100, -5])
     # each read clamped to [0,100] -> mean(100, 100, 0) = 66.67 -> 67
     assert r.read_gpu_busy() == 67
+
+
+def test_apu_power_source_requires_a_single_amdgpu(tmp_path):
+    root = str(tmp_path)
+    assert PowerReader(root=root).apu_power_source() is False
+    _mk_hwmon(root, 0, "amdgpu", {"power1_average": 8000000})
+    assert PowerReader(root=root).apu_power_source() is True
+    _mk_hwmon(root, 1, "amdgpu", {"power1_average": 120000000})
+    assert PowerReader(root=root).apu_power_source() is False

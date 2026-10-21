@@ -31,7 +31,7 @@ describe("themeCoverFor", () => {
 });
 
 describe("themeDescriptionFor", () => {
-  it("describes Hooandee themes in German and Brazilian Portuguese, which the catalog cannot carry", () => {
+  it("describes Hooandee themes in German, Brazilian Portuguese and French, which the catalog cannot carry", () => {
     for (const [catalogId, cssLoaderName] of [
       ["hooandee-gallery", "Hooandee Gallery"],
       ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
@@ -41,7 +41,10 @@ describe("themeDescriptionFor", () => {
       const pt = themeDescriptionFor(release(catalogId, cssLoaderName), "pt-BR");
       expect(de).not.toBe("Published description.");
       expect(pt).not.toBe("Published description.");
+      const fr = themeDescriptionFor(release(catalogId, cssLoaderName), "fr");
       expect(de).not.toBe(pt);
+      expect(fr).not.toBe("Published description.");
+      expect(fr).not.toBe(de);
     }
   });
 
