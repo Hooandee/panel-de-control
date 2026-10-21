@@ -80,13 +80,18 @@ def test_listener_leaves_at_eof_instead_of_spinning(decky_module):
 
 def test_orphaned_plugin_shuts_itself_down(decky_module, monkeypatch):
     kills = []
-    parents = iter((100, 1))
-    decky_socket_guard.install(kill=lambda *a: kills.append(a), getppid=lambda: next(parents))
+    warnings = []
+    log = types.SimpleNamespace(warning=lambda *a: warnings.append(a))
+    parents = iter((100, 1, 1))
+    decky_socket_guard.install(
+        kill=lambda *a: kills.append(a), getppid=lambda: next(parents), log=log,
+    )
     monkeypatch.setattr(decky_socket_guard.os, "getpid", lambda: 4242)
 
     _listen(decky_module.UnixSocket(), b"", [])
 
     assert kills == [(4242, signal.SIGTERM)]
+    assert warnings and "is gone" in warnings[0][0]
 
 
 def test_install_is_idempotent_and_skips_missing_decky(decky_module, monkeypatch):
@@ -104,7 +109,10 @@ def test_unknown_decky_listener_is_left_untouched(decky_module):
         await self.handle_connection(reader, writer)
 
     decky_module.UnixSocket._listen_for_method_call = newer_listener
+    warnings = []
+    log = types.SimpleNamespace(warning=lambda *a: warnings.append(a))
 
-    assert decky_socket_guard.install(getppid=lambda: 1) == "skipped"
+    assert decky_socket_guard.install(getppid=lambda: 1, log=log) == "skipped"
+    assert "handle_connection" in str(warnings[0])
     assert decky_module.UnixSocket._listen_for_method_call is newer_listener
 

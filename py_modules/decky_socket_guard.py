@@ -12,7 +12,7 @@ _KNOWN_NAMES = frozenset({
 _KNOWN_VARNAMES = ("self", "reader", "writer", "_", "line")
 
 
-def install(kill=os.kill, getppid=os.getppid) -> str:
+def install(kill=os.kill, getppid=os.getppid, log=None) -> str:
     # Decky 3.2.x keeps reading the plugin socket after EOF without ever yielding: a stop
     # request then hangs _unload until SIGKILL, and an orphaned plugin grows by GB per minute.
     module = sys.modules.get(_MODULE)
@@ -28,6 +28,11 @@ def install(kill=os.kill, getppid=os.getppid) -> str:
         or frozenset(code.co_names) != _KNOWN_NAMES
         or code.co_varnames[: len(_KNOWN_VARNAMES)] != _KNOWN_VARNAMES
     ):
+        if log is not None and code is not None:
+            log.warning(
+                "Decky socket guard skipped: unknown listener names=%s vars=%s",
+                sorted(code.co_names), list(code.co_varnames),
+            )
         return "skipped"
     loader_pid = getppid()
 
@@ -45,6 +50,11 @@ def install(kill=os.kill, getppid=os.getppid) -> str:
                 break
             asyncio.create_task(self.on_new_message(line)).add_done_callback(_)
         if getppid() != loader_pid:
+            if log is not None:
+                log.warning(
+                    "Decky loader %s is gone (parent now %s); shutting Panel down",
+                    loader_pid, getppid(),
+                )
             kill(os.getpid(), signal.SIGTERM)
 
     _listen_for_method_call._pdc_eof_guard = True

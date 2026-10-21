@@ -238,7 +238,7 @@ _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
-_DECKY_SOCKET_GUARD = decky_socket_guard.install()
+_DECKY_SOCKET_GUARD = decky_socket_guard.install(log=decky.logger)
 _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
