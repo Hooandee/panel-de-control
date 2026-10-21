@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## [0.75.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.1...panel-de-control-v0.75.2) (2026-10-21)
+
+
+### Español
+
+* **TDP en la OneXPlayer F1, la OneXFly Apex y otras portátiles:** Con algunos kernels recientes el sistema no deja leer los límites de potencia, y en la F1 con Bazzite el control de TDP desaparecía sin más. Ahora sigue funcionando por otra vía y Panel comprueba con el consumo real del procesador que el límite se cumple. Lo mismo vale para la OneXPlayer Super X, la ROG Flow Z13 y la AYANEO 3.
+* **La OneXFly Apex respeta el TDP:** En CachyOS la Apex podía gastar mucho más de lo elegido, hasta 70 W con 30 W puestos. Ahora usa la vía que sí respeta el límite y, si alguna vez el consumo se pasa, Panel lo vuelve a aplicar o cambia de vía por su cuenta.
+* **Auto-TDP en más máquinas:** Esas mismas portátiles ya pueden usar el Auto-TDP.
+* **El Auto-TDP ya no se apaga solo:** Si dejaba de estar disponible un momento, se desactivaba en el perfil y había que volver a encenderlo. Ahora se conserva y vuelve en cuanto se puede. El TDP también se recupera solo en algunos casos en los que antes se quedaba bloqueado hasta reiniciar.
+
+### English
+
+* **TDP on the OneXPlayer F1, the OneXFly Apex and other handhelds:** Some recent kernels don't let the system read the power limits, and on the F1 with Bazzite TDP control simply disappeared. It now keeps working through another route, and Control Panel checks the processor's actual power draw to make sure the limit holds. The same applies to the OneXPlayer Super X, the ROG Flow Z13 and the AYANEO 3.
+* **The OneXFly Apex respects its TDP:** On CachyOS the Apex could draw far more than the chosen limit, up to 70 W with 30 W set. It now uses the route that actually respects the limit and, if power ever goes over, Control Panel applies it again or switches route on its own.
+* **Auto-TDP on more devices:** Those same handhelds can now use Auto-TDP.
+* **Auto-TDP no longer turns itself off:** When it was briefly unavailable, it got switched off in the profile and had to be turned back on. It now stays on and comes back as soon as it can. TDP also recovers on its own in a few cases where it used to stay stuck until a restart.
+
+### Italiano
+
+* **TDP su OneXPlayer F1, OneXFly Apex e altre console portatili:** Con alcuni kernel recenti il sistema non permette di leggere i limiti di potenza e sulla F1 con Bazzite il controllo del TDP spariva del tutto. Ora continua a funzionare per un'altra via e Pannello di controllo verifica con il consumo reale del processore che il limite venga rispettato. Lo stesso vale per OneXPlayer Super X, ROG Flow Z13 e AYANEO 3.
+* **La OneXFly Apex rispetta il TDP:** Su CachyOS la Apex poteva consumare molto più del valore scelto, fino a 70 W con 30 W impostati. Ora usa la via che rispetta davvero il limite e, se il consumo lo supera, Pannello di controllo lo riapplica o cambia via da solo.
+* **Auto-TDP su più dispositivi:** Queste stesse console portatili ora possono usare l'Auto-TDP.
+* **L'Auto-TDP non si spegne più da solo:** Se per un momento non era disponibile, veniva disattivato nel profilo e bisognava riattivarlo. Ora resta attivo e torna appena possibile. Inoltre il TDP si ripristina da solo in alcuni casi in cui prima restava bloccato fino al riavvio.
+
+### Deutsch
+
+* **TDP auf OneXPlayer F1, OneXFly Apex und anderen Handhelds:** Bei einigen neueren Kerneln lässt das System die Leistungsgrenzen nicht auslesen, und auf der F1 mit Bazzite verschwand die TDP-Steuerung einfach. Sie funktioniert jetzt über einen anderen Weg weiter, und das Kontrollzentrum prüft anhand des tatsächlichen Verbrauchs des Prozessors, ob die Grenze eingehalten wird. Das gilt auch für OneXPlayer Super X, ROG Flow Z13 und AYANEO 3.
+* **Die OneXFly Apex hält ihren TDP ein:** Unter CachyOS konnte die Apex deutlich mehr verbrauchen als eingestellt, bis zu 70 W bei 30 W. Jetzt nutzt sie den Weg, der die Grenze wirklich einhält, und wenn der Verbrauch doch darüber liegt, setzt das Kontrollzentrum sie erneut oder wechselt selbstständig den Weg.
+* **Auto-TDP auf mehr Geräten:** Dieselben Handhelds können jetzt Auto-TDP nutzen.
+* **Auto-TDP schaltet sich nicht mehr selbst ab:** War es kurz nicht verfügbar, wurde es im Profil deaktiviert und musste wieder eingeschaltet werden. Jetzt bleibt es aktiv und kommt zurück, sobald es geht. Außerdem erholt sich der TDP in einigen Fällen selbst, in denen er früher bis zum Neustart hängen blieb.
+
+### Português (Brasil)
+
+* **TDP no OneXPlayer F1, no OneXFly Apex e em outros portáteis:** Com alguns kernels recentes o sistema não deixa ler os limites de potência, e no F1 com Bazzite o controle de TDP simplesmente sumia. Agora ele continua funcionando por outro caminho, e o Painel de Controle confere pelo consumo real do processador que o limite está sendo respeitado. O mesmo vale para o OneXPlayer Super X, o ROG Flow Z13 e o AYANEO 3.
+* **O OneXFly Apex respeita o TDP:** No CachyOS o Apex podia consumir muito mais do que o escolhido, até 70 W com 30 W definidos. Agora ele usa o caminho que realmente respeita o limite e, se o consumo passar, o Painel de Controle aplica de novo ou troca de caminho sozinho.
+* **Auto-TDP em mais aparelhos:** Esses mesmos portáteis agora podem usar o Auto-TDP.
+* **O Auto-TDP não desliga mais sozinho:** Quando ficava indisponível por um instante, ele era desativado no perfil e era preciso ligá-lo de novo. Agora ele continua ativo e volta assim que possível. O TDP também se recupera sozinho em alguns casos em que antes ficava travado até reiniciar.
+
+### Français
+
+* **TDP sur la OneXPlayer F1, la OneXFly Apex et d'autres consoles portables :** Avec certains noyaux récents, le système ne permet pas de lire les limites de puissance, et sur la F1 sous Bazzite le contrôle du TDP disparaissait purement et simplement. Il continue désormais de fonctionner par une autre voie, et le Centre de contrôle vérifie avec la consommation réelle du processeur que la limite est respectée. C'est aussi le cas pour la OneXPlayer Super X, la ROG Flow Z13 et la AYANEO 3.
+* **La OneXFly Apex respecte son TDP :** Sous CachyOS, l'Apex pouvait consommer bien plus que la valeur choisie, jusqu'à 70 W pour 30 W réglés. Elle utilise maintenant la voie qui respecte vraiment la limite et, si la consommation la dépasse, le Centre de contrôle la réapplique ou change de voie tout seul.
+* **Auto-TDP sur plus d'appareils :** Ces mêmes consoles portables peuvent maintenant utiliser l'Auto-TDP.
+* **L'Auto-TDP ne se désactive plus tout seul :** Quand il était brièvement indisponible, il se désactivait dans le profil et il fallait le rallumer. Il reste maintenant actif et revient dès que possible. Le TDP se rétablit aussi tout seul dans certains cas où il restait bloqué jusqu'au redémarrage.
+
 ## [0.75.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.0...panel-de-control-v0.75.1) (2026-10-21)
 
 
