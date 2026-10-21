@@ -107,4 +107,8 @@ describe("localizePublishedText", () => {
   it("falls back to English for Brazilian Portuguese without widening the publication schema", () => {
     expect(localizePublishedText({ es: "ES", en: "EN", it: "IT" }, "pt-BR")).toBe("EN");
   });
+
+  it("falls back to English for French without widening the publication schema", () => {
+    expect(localizePublishedText({ es: "ES", en: "EN", it: "IT" }, "fr")).toBe("EN");
+  });
 });

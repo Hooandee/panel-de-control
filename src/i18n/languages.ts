@@ -4,6 +4,7 @@ export const LANGUAGE_OPTIONS = [
   { data: "it", label: "Italiano" },
   { data: "de", label: "Deutsch" },
   { data: "pt-BR", label: "Português (Brasil)" },
+  { data: "fr", label: "Français" },
 ] as const;
 
 export type Lang = (typeof LANGUAGE_OPTIONS)[number]["data"];

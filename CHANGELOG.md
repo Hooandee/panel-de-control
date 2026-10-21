@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## [0.75.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.1...panel-de-control-v0.75.0) (2026-10-21)
+
+
+### Español
+
+* **Idiomas:** Panel de Control ya está en francés. Puedes elegirlo en Ajustes, y en las instalaciones nuevas se pone solo si tienes Steam en francés.
+
+### English
+
+* **Languages:** Control Panel is now available in French. You can pick it in Settings, and new installs switch to it automatically when Steam is set to French.
+
+### Italiano
+
+* **Lingue:** Pannello di controllo ora è disponibile in francese. Puoi sceglierlo nelle Impostazioni e, nelle nuove installazioni, si attiva da solo se Steam è in francese.
+
+### Deutsch
+
+* **Sprachen:** Das Kontrollzentrum gibt es jetzt auch auf Französisch. Du kannst es in den Einstellungen auswählen, und bei neuen Installationen wird es automatisch aktiviert, wenn Steam auf Französisch eingestellt ist.
+
+### Português (Brasil)
+
+* **Idiomas:** O Painel de Controle agora está disponível em francês. Você pode escolhê-lo nas Configurações e, em novas instalações, ele é ativado automaticamente se o Steam estiver em francês.
+
+### Français
+
+* **Langues :** Le Centre de contrôle est désormais disponible en français. Vous pouvez le choisir dans les Paramètres, et sur une nouvelle installation il s'active tout seul si Steam est en français.
+
 ## [0.74.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.0...panel-de-control-v0.74.1) (2026-10-19)
 
 
@@ -25,6 +52,10 @@
 
 * **TDP no Legion Go S:** Em alguns Go S, o controle de TDP podia ficar indisponível por horas depois de iniciar no modo de baixo consumo. Agora ele se recupera sozinho e o TDP volta a poder ser ajustado.
 
+### Français
+
+* **TDP sur la Legion Go S :** Sur certaines Go S, le contrôle du TDP pouvait rester indisponible pendant des heures après un démarrage en mode économie d'énergie. Il se rétablit désormais tout seul et le TDP redevient réglable.
+
 ## [0.74.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.73.0...panel-de-control-v0.74.0) (2026-10-19)
 
 
@@ -47,6 +78,10 @@
 ### Português (Brasil)
 
 * **Temas:** A lista ficou mais limpa, com uma linha por tema e uma capa nova para o Duo. Os ajustes dos temas em acesso antecipado agora são salvos.
+
+### Français
+
+* **Thèmes :** La liste est plus épurée, avec une seule ligne par thème et un nouveau visuel pour Duo. Les réglages des thèmes en accès anticipé sont désormais enregistrés.
 
 ## [0.73.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.72.0...panel-de-control-v0.73.0) (2026-10-18)
 

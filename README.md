@@ -25,8 +25,8 @@ Lo hago yo, Hooandee, y cada cosa la pruebo en mis propias máquinas. Panel no s
 Si tu equipo no deja leer o cambiar algo, simplemente no aparece, y los números que ves son los
 reales.
 
-Funciona con [Decky Loader](https://decky.xyz/) y está en español, inglés, italiano, alemán y
-portugués de Brasil.
+Funciona con [Decky Loader](https://decky.xyz/) y está en español, inglés, italiano, alemán,
+portugués de Brasil y francés.
 
 ## 🎬 Guías en vídeo
 

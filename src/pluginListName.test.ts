@@ -34,6 +34,14 @@ describe("nextRowText", () => {
     );
   });
 
+  it("localizes the identity row from a persisted French selection", () => {
+    window.localStorage.setItem("panel-de-control-lang", "fr");
+
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
+      "Centre de contrôle",
+    );
+  });
+
   it("leaves the row untouched when the target equals the identity (Spanish)", () => {
     expect(nextRowText(IDENTITY, IDENTITY, IDENTITY)).toBeNull();
   });
