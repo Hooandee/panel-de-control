@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.75.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.1...panel-de-control-v0.75.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **tdp:** keep TDP control when limits can't be read back, checked by measured power ([#976](https://github.com/Hooandee/panel-de-control/issues/976)) ([54032b5](https://github.com/Hooandee/panel-de-control/commit/54032b5d8a55e459fb0323df8aa3cc82c29b2ac7))
+
 ## [0.75.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.0...panel-de-control-v0.75.1) (2026-10-21)
 
 
