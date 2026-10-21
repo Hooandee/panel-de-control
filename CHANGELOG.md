@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.75.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.0...panel-de-control-v0.75.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* keep Decky's socket loop from freezing the handheld when Panel is reinstalled ([#983](https://github.com/Hooandee/panel-de-control/issues/983)) ([9112393](https://github.com/Hooandee/panel-de-control/commit/9112393d92abbd31b9c0b2ad606b0d158fcf827e))
+
 ## [0.75.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.1...panel-de-control-v0.75.0) (2026-10-21)
 
 
