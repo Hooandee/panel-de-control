@@ -471,6 +471,13 @@ def frontend_crash_diagnostics(
 # Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land
 # in dmesg/journal, NOT the plugin's own log. Captured via an injected runner so
 # this stays testable without spawning processes.
+# Decky stopping, killing and reloading plugins, and earlyoom kills: a reinstall that hangs
+# Panel's unload ends in SIGKILL, a reload burst and possibly a frozen, force-rebooted device.
+_LOADER_LIFECYCLE_GREP = (
+    "(?i)still alive|SIGKILL|has been stopped in|already loaded|Shutting down|"
+    "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
+)
+
 _SLEEP_KERNEL_GREP = (
     "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
     "ACPI: PM:|amd_pmc|Last suspend"
@@ -519,6 +526,20 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b", "-1", "-k",
         "--grep", _SLEEP_KERNEL_GREP,
         "-n", "80", "--no-pager",
+    ],
+    "loader_lifecycle": [
+        "/usr/bin/journalctl", "-b", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "previous_boot_loader": [
+        "/usr/bin/journalctl", "-b", "-1", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
+    "previous_boot_earlyoom": [
+        "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",
     ],
     "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
     "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],

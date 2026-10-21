@@ -24,6 +24,7 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
+import decky_socket_guard
 import device_registry
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
@@ -237,6 +238,7 @@ _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
+_DECKY_SOCKET_GUARD = decky_socket_guard.install(log=decky.logger)
 _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
@@ -13014,11 +13016,12 @@ class Plugin:
             decky.logger.error("Interrupted theme recovery failed: %s", error)
         device = getattr(self, "_device", None)
         decky.logger.info(
-            "Panel de Control v%s loaded (euid=%s device=%s arch=%s)",
+            "Panel de Control v%s loaded (euid=%s device=%s arch=%s socket_guard=%s)",
             read_version(),
             os.geteuid(),
             getattr(device, "key", None),
             getattr(device, "arch", None),
+            _DECKY_SOCKET_GUARD,
         )
         self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
@@ -13058,14 +13061,25 @@ class Plugin:
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
+        started = time.monotonic()
+
+        def stage(name):
+            decky.logger.info(
+                "Shutdown stage unload:%s at=%dms", name, (time.monotonic() - started) * 1000,
+            )
+
         decky.logger.info("Shutdown stage unload:begin")
         self._prepare_shutdown()
+        stage("prepared")
         if getattr(self, "_screen_sleep", None) is not None:
             if self._eco_watch_task is not None:
                 self._eco_watch_task.cancel()
             await self._apply_screen(False, "unload")
+            stage("screen")
         await self._stop_kiosk()
+        stage("kiosk")
         await self._stop_remote_access()
+        stage("remote")
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
