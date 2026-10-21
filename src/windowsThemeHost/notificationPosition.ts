@@ -1,6 +1,6 @@
 // On the Deck a running game's notifications come through Big Picture's window, so they appear where Big Picture puts
-// its toasts (a theme can move them, as Duo does to the top left). On Windows each game has its own overlay window with
-// its own toast position (bottom right by default), so a friend coming online showed up in the opposite corner.
+// its toasts, and a theme can move them. On Windows each game has its own overlay window with
+// its own toast position (bottom right by default).
 // While a theme runtime is mounted every game overlay takes Big Picture's toast position, and gets its own back after.
 
 const POLL_MS = 1_000;

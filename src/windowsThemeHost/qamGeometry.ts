@@ -1,5 +1,5 @@
-// Steam on Windows opens quick access as a window narrower and shorter than on the Deck (Ally X at 1080p: the right
-// 348 of 1353 CSS px, 40 px below the top and 41 above the bottom). Themes that frame it read these properties.
+// Steam on Windows opens quick access as a window narrower and shorter than on the Deck (at 1080p: the right 348 of
+// 1353 CSS px, 40 px below the top and 41 above the bottom). Themes that frame it read these properties.
 export const QAM_GEOMETRY_PROPERTIES = {
   width: "--pdc-host-qam-width",
   top: "--pdc-host-qam-top",

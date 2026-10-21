@@ -1,6 +1,6 @@
 // Decky publishes Steam's CSS module maps ({ Name: "hash" }) as DFL.classMap and themes build their selectors from
 // them. Windows has no Decky: without this, every theme falls back to the hashes it was written with, and a client
-// build that renamed one leaves the selector matching nothing (Duo's leaving game page stayed visible).
+// build that renamed one leaves the selector matching nothing.
 export const HOST_CLASS_MAPS_KEY = "__pdcHostClassMaps";
 
 type WebpackRequire = ((id: string) => unknown) & { m: Record<string, unknown> };

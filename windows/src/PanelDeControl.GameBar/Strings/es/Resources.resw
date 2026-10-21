@@ -480,7 +480,7 @@
   <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
   <data name="ThemesInstallFromFile" xml:space="preserve"><value>Instalar desde archivo</value></data>
   <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
-  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>el selector de archivos no se abre dentro de Game Bar; desde Panel de Control en Inicio sí</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>no se pudo abrir el selector de archivos; también se abre desde Panel de Control en Inicio</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>con otro tema activo no hay animaciones; hay que apagar uno</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>ese zip no es una early publicada de este tema</value></data>
   <data name="ThemesGroup_appearance" xml:space="preserve"><value>Apariencia</value></data>

@@ -1,6 +1,6 @@
 // On Windows a running game gets Steam's in-game overlay: the Steam button opens that overlay's own menu instead of
 // Big Picture, which is where the theme lives. While a theme runtime is mounted the button goes back to Big Picture's
-// Home over the game, as on a console, and resuming the game raises its window again. However Big Picture comes back
+// Home over the game, as on a console, and resuming the game raises its window again. When Big Picture comes back
 // over a running game (Game Bar, Alt+Tab), Steam keeps the controller on the game until the game's overlay state says
 // Steam's UI is in front: that state is set whenever Big Picture has focus outside the running game's page.
 
@@ -90,6 +90,10 @@ export function installSteamButtonHome(
       log("steam_button_focus_failed");
     }
   };
+  const reactivateBigPicture = () => {
+    for (const delay of REACTIVATE_DELAYS_MS) timers.setTimeout(activateBigPicture, delay);
+  };
+  const runningGameId = () => gameIdFor(steam, main()?.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid);
 
   const showBigPictureHome = (appId: number | undefined) => {
     const gameId = gameIdFor(steam, appId);
@@ -101,12 +105,14 @@ export function installSteamButtonHome(
     } catch {
       log("steam_button_home_failed");
     }
-    for (const delay of REACTIVATE_DELAYS_MS) timers.setTimeout(activateBigPicture, delay);
+    reactivateBigPicture();
   };
 
   const patched = new Map<SteamWindowInstance, unknown>();
   const patchOverlays = () => {
-    for (const overlay of steam.SteamUIStore?.WindowStore?.m_mapOverlayPopupByPID?.values?.() ?? []) {
+    const overlays = [...(steam.SteamUIStore?.WindowStore?.m_mapOverlayPopupByPID?.values?.() ?? [])];
+    for (const closed of [...patched.keys()]) if (!overlays.includes(closed)) patched.delete(closed);
+    for (const overlay of overlays) {
       if (patched.has(overlay)) continue;
       const own = Object.prototype.hasOwnProperty.call(overlay, "OnHomeButtonPressed") ? overlay.OnHomeButtonPressed : undefined;
       const original = overlay.OnHomeButtonPressed;
@@ -139,7 +145,7 @@ export function installSteamButtonHome(
   let watchedHistory: SteamHistory | undefined;
   const raiseRunningGame = (pathname: string | undefined) => {
     if (!isActive() || !pathname?.startsWith("/apprunning")) return;
-    const gameId = gameIdFor(steam, main()?.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid);
+    const gameId = runningGameId();
     if (!gameId) return;
     try {
       steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_HIDDEN);
@@ -154,14 +160,14 @@ export function installSteamButtonHome(
     if (window.m_history?.location?.pathname?.startsWith("/apprunning")) return;
     const focused = window.m_CompositionStateStore?.GetCurrentlyFocusedAppidSubscribableValue?.()?.Value;
     if (focused === undefined || focused === STEAM_UI_APPID) return;
-    const gameId = gameIdFor(steam, window.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid);
+    const gameId = runningGameId();
     if (!gameId) return;
     try {
       steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_OVERLAY);
     } catch {
       log("steam_input_overlay_failed");
     }
-    for (const delay of REACTIVATE_DELAYS_MS) timers.setTimeout(activateBigPicture, delay);
+    reactivateBigPicture();
   };
 
   // Big Picture taking focus while it shows the running game's page means the player came back to it (Game Bar,
@@ -180,7 +186,7 @@ export function installSteamButtonHome(
   };
 
   let watchedWindow: SteamWindowInstance["BrowserWindow"];
-  const watchHistory = () => {
+  const watchSteamWindow = () => {
     const window = main()?.BrowserWindow;
     if (window && window !== watchedWindow) {
       watchedWindow?.removeEventListener("focus", onBigPictureFocus);
@@ -197,12 +203,12 @@ export function installSteamButtonHome(
       keepControllerOnBigPicture();
     });
   };
-  watchHistory();
-  const historyPoll = timers.setInterval(watchHistory, OVERLAY_POLL_MS);
+  watchSteamWindow();
+  const windowPoll = timers.setInterval(watchSteamWindow, OVERLAY_POLL_MS);
 
   return () => {
     timers.clearInterval(overlayPoll);
-    timers.clearInterval(historyPoll);
+    timers.clearInterval(windowPoll);
     stopHistory?.();
     watchedWindow?.removeEventListener("focus", onBigPictureFocus);
     for (const registration of registrations) {

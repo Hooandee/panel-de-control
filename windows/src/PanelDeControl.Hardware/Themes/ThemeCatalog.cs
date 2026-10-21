@@ -135,8 +135,6 @@ public static class ThemeCatalog
             artifacts);
     }
 
-    public static bool IsStableVersion(string version) => StableVersion.IsMatch(version);
-
     public static int CompareVersions(string left, string right)
     {
         var a = left.Split('.').Select(int.Parse).ToArray();
