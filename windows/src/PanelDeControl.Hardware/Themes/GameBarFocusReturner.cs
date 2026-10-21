@@ -8,17 +8,18 @@ namespace PanelDeControl.Hardware.Themes;
 /// Gives the foreground back to Steam Big Picture after Game Bar closes over it. First Steam is
 /// asked to raise itself through its client API; if Windows' foreground lock refuses that, the
 /// remembered Big Picture window is raised directly. Big Picture can also stay the foreground window
-/// while Steam's UI lost keyboard focus (after Game Bar, or Game Bar restarting): no page has it and no
-/// navigation context is active, so the controller and the theme do nothing until the screen is
-/// touched. The focus is then bounced through the shell. Quick access open is not that: its own
-/// navigation context is active.
+/// while none of Steam's documents has keyboard focus (after Game Bar, a redeploy or waking up): the
+/// controller and the theme do nothing until the screen is touched. The focus is then bounced through
+/// the shell. Quick access or a menu open is not that: their own document has the focus.
 /// </summary>
 public sealed class GameBarFocusReturner
 {
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan PageFocusCheck = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PageUnfocusedGrace = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan BounceInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan BounceRetry = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan BounceRest = TimeSpan.FromSeconds(10);
+    private const int BouncesInARow = 3;
     private static readonly HashSet<string> GameBarProcesses = new(StringComparer.OrdinalIgnoreCase)
     {
         "GameBar", "GameBarFTServer", "XboxGameBarWidgets", "PanelDeControl.GameBar",
@@ -39,7 +40,8 @@ public sealed class GameBarFocusReturner
     private ICdpSession? sharedContext;
     private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? pageUnfocusedSince;
-    private DateTimeOffset lastBounce = DateTimeOffset.MinValue;
+    private DateTimeOffset nextBounce = DateTimeOffset.MinValue;
+    private int failedBounces;
 
     public GameBarFocusReturner(SteamThemeEngine engine)
     {
@@ -66,9 +68,9 @@ public sealed class GameBarFocusReturner
 
             lastHandle = handle;
             var kind = Classify(handle);
-            if (lastKind == ForegroundKind.GameBar && kind != ForegroundKind.GameBar)
+            if (lastKind != kind && (lastKind == ForegroundKind.Steam || kind == ForegroundKind.Steam || lastKind == ForegroundKind.GameBar))
             {
-                CompanionLog.Write("themes.focus_gamebar_closed", kind.ToString());
+                CompanionLog.Write("themes.focus_foreground", $"{lastKind}->{kind}");
             }
 
             lastKind = kind;
@@ -93,17 +95,16 @@ public sealed class GameBarFocusReturner
         if (focused != false)
         {
             pageUnfocusedSince = null;
+            failedBounces = 0;
             return;
         }
 
         pageUnfocusedSince ??= now;
-        if (now - pageUnfocusedSince < PageUnfocusedGrace || now - lastBounce < BounceInterval)
+        if (now - pageUnfocusedSince < PageUnfocusedGrace || now < nextBounce)
         {
             return;
         }
 
-        lastBounce = now;
-        pageUnfocusedSince = null;
         keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
         keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
         SetForegroundWindow(GetShellWindow());
@@ -112,21 +113,38 @@ public sealed class GameBarFocusReturner
         keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
         SetForegroundWindow(steamWindow);
         await Task.Delay(300, cancellationToken).ConfigureAwait(false);
-        CompanionLog.Write(
-            "themes.focus_bounce",
-            await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false) == true ? "steam_ui_focused" : "steam_ui_still_unfocused");
+        var restored = await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false) == true;
+        failedBounces = restored ? 0 : failedBounces + 1;
+        nextBounce = DateTimeOffset.UtcNow + (failedBounces is > 0 and < BouncesInARow ? BounceRetry : BounceRest);
+        if (failedBounces >= BouncesInARow)
+        {
+            failedBounces = 0;
+        }
+
+        CompanionLog.Write("themes.focus_bounce", restored ? "steam_ui_focused" : "steam_ui_still_unfocused");
     }
 
+    // Every Steam document that hosts a navigation tree (Big Picture, quick access, menus, keyboard).
     private const string SteamUiFocusExpression = """
         (() => {
+          const docs = new Set();
           const page = SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance?.BrowserWindow?.document;
-          if (!page) return null;
-          const context = globalThis.FocusNavController?.m_ActiveContext;
-          return page.hasFocus() || (context?.m_rgGamepadNavigationTrees?.length ?? 0) > 0;
+          if (page) docs.add(page);
+          for (const context of globalThis.FocusNavController?.m_rgAllContexts ?? []) {
+            for (const tree of context?.m_rgGamepadNavigationTrees ?? []) {
+              const doc = tree?.Root?.Element?.ownerDocument ?? tree?.m_Root?.Element?.ownerDocument;
+              if (doc) docs.add(doc);
+            }
+          }
+          if (!docs.size) return null;
+          for (const doc of docs) {
+            try { if (doc.hasFocus()) return true; } catch { }
+          }
+          return false;
         })()
         """;
 
-    /// <summary>Whether Big Picture's page or any Steam navigation context has focus, or null when Steam cannot be asked.</summary>
+    /// <summary>Whether any of Steam's UI documents has keyboard focus, or null when Steam cannot be asked.</summary>
     private async Task<bool?> SteamUiHasFocusAsync(CancellationToken cancellationToken)
     {
         try
