@@ -72,11 +72,27 @@ public sealed class GameBarFocusReturner
             return;
         }
 
-        var raised = IsWindow(steamWindow) && SetForegroundWindow(steamWindow);
-        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
-        CompanionLog.Write(
-            "themes.focus_return",
-            GetForegroundWindow() == steamWindow ? "set_foreground_window" : $"failed steam_api={raisedBySteam} set_foreground={raised}");
+        // Windows refuses SetForegroundWindow to a process that did not get the last input event (foreground lock);
+        // a synthetic Alt press counts as that input (RC73XA, 2026-10-21).
+        for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
+        {
+            if (!IsWindow(steamWindow))
+            {
+                break;
+            }
+
+            keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
+            keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
+            SetForegroundWindow(steamWindow);
+            await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+            if (GetForegroundWindow() == steamWindow)
+            {
+                CompanionLog.Write("themes.focus_return", $"set_foreground_window attempt={attempt}");
+                return;
+            }
+        }
+
+        CompanionLog.Write("themes.focus_return", $"failed steam_api={raisedBySteam} attempts={RestoreAttempts}");
     }
 
     internal static ForegroundKind Classify(IntPtr handle)
@@ -119,6 +135,13 @@ public sealed class GameBarFocusReturner
     }
 
     private const uint MonitorDefaultToNearest = 2;
+    private const int RestoreAttempts = 3;
+    private const byte VkMenu = 0x12;
+    private const uint KeyEventKeyUp = 0x0002;
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
