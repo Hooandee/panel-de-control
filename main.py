@@ -13624,9 +13624,6 @@ class Plugin:
     ) -> None:
         fans_released = self._restore_fans_safe()
         desktop_power_released = self._restore_desktop_power_safe()
-        self._restore_color_safe()
-        self._restore_audio_safe()
-        decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
         decky.logger.info(
             "Shutdown stage %s:fan-handoff ok=%s",
             stage,
@@ -13666,6 +13663,11 @@ class Plugin:
             f"Shutdown stage {stage}:power-handoff status=%s",
             power_status,
         )
+        # Display and audio go last: PipeWire teardown can take seconds and must never
+        # delay handing power and clocks back before Decky kills the process.
+        self._restore_color_safe()
+        self._restore_audio_safe()
+        decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
 
     def _defer_shutdown_handoff(self, stage: str, remove_fan_conf: bool = False) -> bool:
         executor = getattr(self, "_apply_executor", None)
