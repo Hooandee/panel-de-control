@@ -10,6 +10,9 @@ _KNOWN_NAMES = frozenset({
     "on_new_message", "server_writer",
 })
 _KNOWN_VARNAMES = ("self", "reader", "writer", "_", "line")
+# Python 3.11 (Decky's) evaluates the inner callback's `asyncio.Task[str|None]` annotation when it is defined, so those
+# names also show up; Python 3.14 defers annotations and they do not.
+_ANNOTATION_NAMES = frozenset({"Task", "str"})
 
 
 def install(kill=os.kill, getppid=os.getppid, log=None) -> str:
@@ -25,7 +28,7 @@ def install(kill=os.kill, getppid=os.getppid, log=None) -> str:
     code = getattr(original, "__code__", None)
     if (
         code is None
-        or frozenset(code.co_names) != _KNOWN_NAMES
+        or frozenset(code.co_names) - _ANNOTATION_NAMES != _KNOWN_NAMES
         or code.co_varnames[: len(_KNOWN_VARNAMES)] != _KNOWN_VARNAMES
     ):
         if log is not None and code is not None:
