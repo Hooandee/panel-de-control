@@ -192,7 +192,7 @@ public sealed class GameBarFocusReturner
         }
 
         // Windows refuses SetForegroundWindow to a process that did not get the last input event (foreground lock);
-        // a synthetic Alt press counts as that input (RC73XA, 2026-10-21).
+        // a synthetic Alt press counts as that input.
         for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
         {
             if (!IsWindow(steamWindow))
