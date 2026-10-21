@@ -1452,7 +1452,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
             tab.Click += SectionTab_Click;
             var tabHost = !desktopLayout
-                ? SectionTabs
+                ? (Panel)SectionTabs
                 : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
             if (!desktopLayout)
             {
