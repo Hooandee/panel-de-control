@@ -5,9 +5,29 @@
 ## [0.75.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.0...panel-de-control-v0.75.1) (2026-10-21)
 
 
-### Bug Fixes
+### Español
 
-* keep Decky's socket loop from freezing the handheld when Panel is reinstalled ([#983](https://github.com/Hooandee/panel-de-control/issues/983)) ([9112393](https://github.com/Hooandee/panel-de-control/commit/9112393d92abbd31b9c0b2ad606b0d158fcf827e))
+* **Actualizar Panel de Control:** Al actualizar o reinstalar Panel de Control, la consola podía quedarse congelada hasta tener que apagarla a la fuerza. Ya no pasa: Panel se cierra limpio al actualizarse y, si Decky se cae, se apaga solo en vez de quedarse consumiendo memoria.
+
+### English
+
+* **Updating Control Panel:** Updating or reinstalling Control Panel could freeze the handheld until it had to be forced off. That no longer happens: Control Panel now closes cleanly when it updates and, if Decky crashes, it shuts itself down instead of eating memory.
+
+### Italiano
+
+* **Aggiornare Pannello di controllo:** Aggiornando o reinstallando Pannello di controllo, la console poteva bloccarsi fino a doverla spegnere a forza. Ora non succede più: Pannello di controllo si chiude correttamente quando si aggiorna e, se Decky si blocca, si spegne da solo invece di continuare a consumare memoria.
+
+### Deutsch
+
+* **Kontrollzentrum aktualisieren:** Beim Aktualisieren oder Neuinstallieren des Kontrollzentrums konnte das Gerät einfrieren, bis es hart ausgeschaltet werden musste. Das passiert nicht mehr: Das Kontrollzentrum beendet sich beim Update sauber und schaltet sich selbst ab, wenn Decky abstürzt, statt weiter Speicher zu belegen.
+
+### Português (Brasil)
+
+* **Atualizar o Painel de Controle:** Ao atualizar ou reinstalar o Painel de Controle, o console podia travar até ser preciso desligá-lo à força. Isso não acontece mais: o Painel de Controle agora fecha corretamente ao se atualizar e, se o Decky travar, ele se desliga sozinho em vez de continuar consumindo memória.
+
+### Français
+
+* **Mettre à jour le Centre de contrôle :** En mettant à jour ou en réinstallant le Centre de contrôle, la console pouvait se figer jusqu'à devoir être éteinte de force. Ce n'est plus le cas : le Centre de contrôle se ferme proprement lors de sa mise à jour et, si Decky plante, il s'arrête tout seul au lieu de continuer à consommer de la mémoire.
 
 ## [0.75.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.1...panel-de-control-v0.75.0) (2026-10-21)
 
