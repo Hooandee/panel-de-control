@@ -4,6 +4,12 @@ import signal
 import sys
 
 _MODULE = "decky_loader.localplatform.localsocket"
+# Shape of the listener in Decky 3.0.0 through 3.3.0; any other version is left untouched.
+_KNOWN_NAMES = frozenset({
+    "_read_single_line", "active", "add_done_callback", "asyncio", "create_task",
+    "on_new_message", "server_writer",
+})
+_KNOWN_VARNAMES = ("self", "reader", "writer", "_", "line")
 
 
 def install(kill=os.kill, getppid=os.getppid) -> str:
@@ -16,6 +22,13 @@ def install(kill=os.kill, getppid=os.getppid) -> str:
         return "absent"
     if getattr(original, "_pdc_eof_guard", False):
         return "installed"
+    code = getattr(original, "__code__", None)
+    if (
+        code is None
+        or frozenset(code.co_names) != _KNOWN_NAMES
+        or code.co_varnames[: len(_KNOWN_VARNAMES)] != _KNOWN_VARNAMES
+    ):
+        return "skipped"
     loader_pid = getppid()
 
     async def _listen_for_method_call(self, reader, writer):

@@ -14,8 +14,18 @@ class _OriginalSocket:
         self.on_new_message = None
         self.server_writer = None
 
-    async def _listen_for_method_call(self, reader, writer):
-        raise AssertionError("the guard must replace the spinning listener")
+    # Verbatim from Decky 3.3.0 localsocket.py: it spins forever at EOF.
+    async def _listen_for_method_call(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self.server_writer = writer
+        while self.active and self.on_new_message:
+
+            def _(task: asyncio.Task[str|None]):
+                res = task.result()
+                if res is not None:
+                    asyncio.create_task(self._write_single_line(writer, res))
+
+            line = await self._read_single_line(reader)
+            asyncio.create_task(self.on_new_message(line)).add_done_callback(_)
 
     async def _read_single_line(self, reader):
         try:
@@ -87,3 +97,14 @@ def test_install_is_idempotent_and_skips_missing_decky(decky_module, monkeypatch
 
     monkeypatch.delitem(sys.modules, decky_socket_guard._MODULE)
     assert decky_socket_guard.install() == "absent"
+
+
+def test_unknown_decky_listener_is_left_untouched(decky_module):
+    async def newer_listener(self, reader, writer):
+        await self.handle_connection(reader, writer)
+
+    decky_module.UnixSocket._listen_for_method_call = newer_listener
+
+    assert decky_socket_guard.install(getppid=lambda: 1) == "skipped"
+    assert decky_module.UnixSocket._listen_for_method_call is newer_listener
+
