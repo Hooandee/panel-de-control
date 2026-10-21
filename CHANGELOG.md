@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.75.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.1...panel-de-control-v0.75.0) (2026-10-21)
+
+
+### Features
+
+* add French localization ([#981](https://github.com/Hooandee/panel-de-control/issues/981)) ([eb07142](https://github.com/Hooandee/panel-de-control/commit/eb07142850a72b25f6ba318e19fc31a7eb703cbd))
+
 ## [0.74.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.74.0...panel-de-control-v0.74.1) (2026-10-19)
 
 
