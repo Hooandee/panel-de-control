@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Management;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
@@ -17,7 +16,8 @@ public interface ISteamInstallation
 
     void EnableDebugging();
 
-    Task RestartAsync(bool bigPicture, CancellationToken cancellationToken);
+    /// <summary>Restarts Steam in Big Picture, the only place themes show.</summary>
+    Task RestartInBigPictureAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -57,10 +57,9 @@ public sealed class SteamInstallation : ISteamInstallation
 
     // Steam is driven through its URL protocol and handed to the already running Explorer, so it
     // starts outside this package; a child of a packaged app inherits the package's virtual AppData.
-    public async Task RestartAsync(bool bigPicture, CancellationToken cancellationToken)
+    public async Task RestartInBigPictureAsync(CancellationToken cancellationToken)
     {
         _ = SteamPath ?? throw new InvalidOperationException("Steam is not installed");
-        bigPicture |= RunningInBigPicture();
         if (IsRunning)
         {
             OpenSteamUrl("steam://exit");
@@ -76,7 +75,7 @@ public sealed class SteamInstallation : ISteamInstallation
             }
         }
 
-        OpenSteamUrl(bigPicture ? "steam://open/bigpicture" : "steam://open/main");
+        OpenSteamUrl("steam://open/bigpicture");
     }
 
     private static void OpenSteamUrl(string url)
@@ -84,21 +83,6 @@ public sealed class SteamInstallation : ISteamInstallation
         var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         using (Process.Start(new ProcessStartInfo(explorer, url) { UseShellExecute = false }))
         {
-        }
-    }
-
-    private static bool RunningInBigPicture()
-    {
-        try
-        {
-            using var searcher = new ManagementObjectSearcher("SELECT CommandLine FROM Win32_Process WHERE Name = 'steam.exe'");
-            return searcher.Get()
-                .Cast<ManagementObject>()
-                .Any(process => (process["CommandLine"] as string)?.Contains("-gamepadui", StringComparison.OrdinalIgnoreCase) == true);
-        }
-        catch (ManagementException)
-        {
-            return false;
         }
     }
 }

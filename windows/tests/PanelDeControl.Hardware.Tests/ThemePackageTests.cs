@@ -354,6 +354,6 @@ public sealed class ThemePackageTests : IDisposable
         {
         }
 
-        public Task RestartAsync(bool bigPicture, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RestartInBigPictureAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

@@ -321,7 +321,7 @@ public sealed class ThemeService
         }
 
         CompanionLog.Write("themes.restart_steam", "requested");
-        await steam.RestartAsync(bigPicture: false, cancellationToken).ConfigureAwait(false);
+        await steam.RestartInBigPictureAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public ThemeEngineInputs EngineInputs()

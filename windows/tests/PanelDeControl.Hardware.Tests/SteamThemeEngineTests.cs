@@ -233,7 +233,7 @@ public sealed class SteamThemeEngineTests : IDisposable
 
         public void EnableDebugging() => Debugging = true;
 
-        public Task RestartAsync(bool bigPicture, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RestartInBigPictureAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakePage
