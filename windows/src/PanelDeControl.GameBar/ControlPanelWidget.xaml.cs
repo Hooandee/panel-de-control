@@ -1369,7 +1369,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var tab = new Button
             {
                 Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
-                HorizontalAlignment = desktopLayout ? HorizontalAlignment.Stretch : HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = desktopLayout ? HorizontalAlignment.Left : HorizontalAlignment.Center,
                 Padding = desktopLayout ? new Thickness(14, 11, 14, 11) : new Thickness(11, 8, 11, 8),
                 Content = content,
@@ -1380,6 +1380,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var tabHost = !desktopLayout
                 ? SectionTabs
                 : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
+            if (!desktopLayout)
+            {
+                SectionTabs.ColumnDefinitions.Add(new ColumnDefinition());
+                Grid.SetColumn(tab, SectionTabs.ColumnDefinitions.Count - 1);
+            }
+
             tabHost.Children.Add(tab);
             sections.Add(new SectionView(section, tab, label, panel, blocks));
         }
@@ -1459,6 +1465,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    // Fills the bar when the tabs fit; when they do not, the grid grows past it and the bar scrolls.
+    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args) =>
+        SectionTabs.MinWidth = args.NewSize.Width;
+
     private void SelectSection(int index)
     {
         var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
@@ -1478,6 +1488,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
             view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
             view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+            if (!desktopLayout)
+            {
+                SectionTabs.ColumnDefinitions[position].Width = selected ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+            }
         }
 
         if (!desktopLayout)

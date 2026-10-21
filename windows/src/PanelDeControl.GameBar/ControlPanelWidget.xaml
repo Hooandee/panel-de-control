@@ -82,8 +82,9 @@
                     HorizontalScrollMode="Enabled"
                     HorizontalScrollBarVisibility="Hidden"
                     VerticalScrollMode="Disabled"
-                    VerticalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="SectionTabs" Orientation="Horizontal" Spacing="4" />
+                    VerticalScrollBarVisibility="Disabled"
+                    SizeChanged="SectionTabsScroller_SizeChanged">
+                    <Grid x:Name="SectionTabs" ColumnSpacing="4" />
                 </ScrollViewer>
             </Border>
 
