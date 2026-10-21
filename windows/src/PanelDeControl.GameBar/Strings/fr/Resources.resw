@@ -400,4 +400,52 @@
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacité</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cycles</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Thèmes de Steam</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Thèmes de Panel de Control pour Steam en mode Big Picture.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>Le service des thèmes ne répond pas</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>Nouvel essai dans quelques secondes.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>Steam n'est pas installé</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Les thèmes s'appliquent à Steam en mode Big Picture.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>Steam doit redémarrer</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Pour appliquer des thèmes, Steam doit démarrer avec le débogage à distance activé. Il est activé et Steam redémarre en Big Picture ; il ne faut le faire qu'une fois.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Activer et redémarrer Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>Steam est fermé</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>Le thème actif sera appliqué dès que Steam s'ouvrira en Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>En attente de Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>Steam est ouvert en mode bureau. Le thème sera appliqué au passage en Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Connecté à Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>Les changements se voient tout de suite en Big Picture.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Impossible de terminer : {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Chargement du catalogue de thèmes…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Impossible de charger le catalogue. Une connexion à internet est nécessaire.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Installer · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Mettre à jour vers {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Installation…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Options</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>La copie installée est endommagée et doit être réinstallée.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Non installé</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>appliqué sur {0} écrans</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>sera appliqué à l'ouverture de Big Picture</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>appliqué sur {0} écrans sur {1}</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>le style est actif, il manque ses animations</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>le paquet téléchargé n'a pas passé la vérification</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>le catalogue est indisponible ou a changé</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>Steam a mis trop de temps à répondre</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>erreur inattendue ; elle a été écrite dans le journal</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Installer depuis un fichier</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>le sélecteur de fichiers ne s'ouvre pas dans la Game Bar ; il s'ouvre depuis Panel de Control dans Démarrer</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>avec un autre thème actif il n'y a pas d'animations ; il faut en désactiver un</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>ce zip n'est pas une early publiée de ce thème</value></data>
+  <data name="ThemesGroup_appearance" xml:space="preserve"><value>Apparence</value></data>
+  <data name="ThemesGroup_grid" xml:space="preserve"><value>Grille</value></data>
+  <data name="ThemesGroup_animations" xml:space="preserve"><value>Animations</value></data>
+  <data name="ThemesGroup_performance" xml:space="preserve"><value>Performances</value></data>
+  <data name="ThemesGroup_compatibility" xml:space="preserve"><value>Compatibilité</value></data>
+  <data name="ThemesGroup_sections" xml:space="preserve"><value>Sections du thème</value></data>
+  <data name="ThemesGroup_extra" xml:space="preserve"><value>Extras</value></data>
+  <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Choisissez quelles parties de Steam utilisent le thème.</value></data>
+  <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Réglages qui sortent du design d'origine du thème.</value></data>
 </root>
