@@ -144,12 +144,6 @@
   <data name="MuteStatus.Text" xml:space="preserve">
     <value>Checking mute state…</value>
   </data>
-  <data name="MuteToggle.OffContent" xml:space="preserve">
-    <value>Sound on</value>
-  </data>
-  <data name="MuteToggle.OnContent" xml:space="preserve">
-    <value>Muted</value>
-  </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Mutes or unmutes the default audio device and verifies the state read back</value>
   </data>
@@ -224,12 +218,6 @@
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
     <value>Experimental control</value>
-  </data>
-  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve">
-    <value>Off</value>
-  </data>
-  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve">
-    <value>Enabled</value>
   </data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Explicitly enables experimental TDP writes for this service session</value>
@@ -430,8 +418,6 @@
   <data name="FanOne" xml:space="preserve"><value>Fan 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Fan 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Processor boost</value></data>
-  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>On</value></data>
-  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Off</value></data>
   <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Processor boost</value></data>
   <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Maximum performance</value></data>
   <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Maximum processor state</value></data>

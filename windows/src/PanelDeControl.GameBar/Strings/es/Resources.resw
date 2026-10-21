@@ -144,12 +144,6 @@
   <data name="MuteStatus.Text" xml:space="preserve">
     <value>Comprobando estado de silencio…</value>
   </data>
-  <data name="MuteToggle.OffContent" xml:space="preserve">
-    <value>Con sonido</value>
-  </data>
-  <data name="MuteToggle.OnContent" xml:space="preserve">
-    <value>Silenciado</value>
-  </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Activa o desactiva el silencio del dispositivo de audio predeterminado y verifica el estado leído</value>
   </data>
@@ -224,12 +218,6 @@
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
     <value>Control experimental</value>
-  </data>
-  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve">
-    <value>Apagado</value>
-  </data>
-  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve">
-    <value>Activado</value>
   </data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Activa explícitamente las escrituras TDP experimentales durante esta sesión del servicio</value>
@@ -430,8 +418,6 @@
   <data name="FanOne" xml:space="preserve"><value>Ventilador 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventilador 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost del procesador</value></data>
-  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Activado</value></data>
-  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Desactivado</value></data>
   <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost del procesador</value></data>
   <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Rendimiento máximo</value></data>
   <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Estado máximo del procesador</value></data>

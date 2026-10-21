@@ -302,7 +302,8 @@ public sealed class ThemesView : UserControl
                     CharacterSpacing = 60,
                 };
             case "checkbox":
-                var toggle = new ToggleSwitch { Header = label, OnContent = string.Empty, OffContent = string.Empty, Tag = option.Name };
+                var toggle = new ToggleSwitch { OnContent = string.Empty, OffContent = string.Empty, MinWidth = 0, Tag = option.Name };
+                AutomationProperties.SetName(toggle, label);
                 toggle.Toggled += (_, _) =>
                 {
                     var on = option.Values.FirstOrDefault(value => value.Value == "Yes")?.Value ?? option.Values.Last().Value;
@@ -310,7 +311,14 @@ public sealed class ThemesView : UserControl
                     _ = SetOptionAsync(card, option.Name, toggle.IsOn ? on : off);
                 };
                 card.OptionControls[option.Name] = toggle;
-                return toggle;
+                var toggleRow = new Grid { ColumnSpacing = 12 };
+                toggleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                toggleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var toggleLabel = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Style = Resource<Style>("PdcBodyStyle") };
+                Grid.SetColumn(toggle, 1);
+                toggleRow.Children.Add(toggleLabel);
+                toggleRow.Children.Add(toggle);
+                return toggleRow;
             case "slider" when option.Values.Length <= 4:
                 var segments = new Grid { ColumnSpacing = 4, Tag = option.Name };
                 foreach (var value in option.Values)

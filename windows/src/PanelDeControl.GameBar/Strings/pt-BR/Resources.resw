@@ -144,12 +144,6 @@
   <data name="MuteStatus.Text" xml:space="preserve">
     <value>Verificando o estado do silêncio…</value>
   </data>
-  <data name="MuteToggle.OffContent" xml:space="preserve">
-    <value>Com som</value>
-  </data>
-  <data name="MuteToggle.OnContent" xml:space="preserve">
-    <value>Silenciado</value>
-  </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Ativa ou desativa o silêncio do dispositivo de áudio padrão e verifica o estado lido</value>
   </data>
@@ -223,8 +217,6 @@
     <value>Verificando o dispositivo de áudio padrão…</value>
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>Controle experimental</value></data>
-  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve"><value>Desligado</value></data>
-  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve"><value>Ativado</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Ativa explicitamente as gravações experimentais de TDP nesta sessão do serviço</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Permissão de gravação experimental de TDP</value></data>
   <data name="ManufacturerRecoveryHint.Text" xml:space="preserve"><value>Recuperação do fabricante não verificada: reinicie o Windows ou reabra o Armoury Crate para devolver o controle.</value></data>
@@ -386,8 +378,6 @@
   <data name="FanOne" xml:space="preserve"><value>Ventoinha 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventoinha 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost do processador</value></data>
-  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Ativado</value></data>
-  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Desativado</value></data>
   <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost do processador</value></data>
   <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Desempenho máximo</value></data>
   <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Estado máximo do processador</value></data>

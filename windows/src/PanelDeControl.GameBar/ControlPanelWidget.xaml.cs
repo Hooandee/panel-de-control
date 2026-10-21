@@ -103,6 +103,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
         CreateHeroGlow();
+        foreach (var line in new[]
+        {
+            PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
+            VolumeStatus, MuteStatus, BrightnessStatus,
+        })
+        {
+            CollapseWhenEmpty(line);
+        }
+
+        foreach (var toggle in new[] { ExperimentalTdpToggle, MuteToggle, CpuBoostToggle })
+        {
+            toggle.OnContent = string.Empty;
+            toggle.OffContent = string.Empty;
+        }
+
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -1018,7 +1033,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             }
 
             TdpControls.Visibility = Visibility.Visible;
-            PowerReadout.Visibility = Visibility.Visible;
+            PowerValue.Visibility = Visibility.Visible;
+            PowerLimits.Visibility = Visibility.Visible;
             PowerReadbackHint.Visibility = Visibility.Visible;
             UpdatePowerArc();
             UpdateTdpPresetButtons(response.PresetWatts);
@@ -1027,7 +1043,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             PowerValue.Text = "—";
             TdpControls.Visibility = Visibility.Collapsed;
-            PowerReadout.Visibility = Visibility.Collapsed;
+            PowerValue.Visibility = Visibility.Collapsed;
+            PowerLimits.Visibility = Visibility.Collapsed;
             PowerReadbackHint.Visibility = Visibility.Collapsed;
             HideTdpPresetButtons();
         }
@@ -1093,6 +1110,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             .Distinct()
             .Take(TdpPresetButtons.Count)
             .ToArray();
+        TdpPresetGrid.ColumnDefinitions.Clear();
+        for (var column = 0; column < Math.Max(available.Length, 1); column++)
+        {
+            TdpPresetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
         for (var index = 0; index < TdpPresetButtons.Count; index++)
         {
             var button = TdpPresetButtons[index];
@@ -1246,6 +1269,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         HeaderDetail.TextWrapping = TextWrapping.Wrap;
         HeaderDetail.TextTrimming = TextTrimming.None;
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
+        SectionHeaderBlock.Visibility = Visibility.Visible;
         SectionTitle.FontSize = 30;
         SectionDescription.FontSize = 14;
         DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
@@ -1277,6 +1301,56 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             {
                 stacks[split ? index % 2 : 0].Children.Add(view.Blocks[index]);
             }
+        }
+
+        if (sections.Count > selectedSection)
+        {
+            ScheduleDesktopBalance(sections[selectedSection]);
+        }
+    }
+
+    private void ScheduleDesktopBalance(SectionView view) =>
+        _ = Dispatcher.RunIdleAsync(_ => BalanceDesktopColumns(view));
+
+    // Heights are only known once a section has been laid out, so the first pass alternates and this one
+    // keeps the block order while sending each block to the shorter column.
+    private void BalanceDesktopColumns(SectionView view)
+    {
+        if (!desktopLayout || desktopColumns != 2 || view.Blocks.Count < 2 || view.Panel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var stacks = ((Grid)view.Panel).Children.OfType<StackPanel>().ToArray();
+        var heights = new double[2];
+        var targets = new int[view.Blocks.Count];
+        for (var index = 0; index < view.Blocks.Count; index++)
+        {
+            var height = view.Blocks[index].ActualHeight;
+            if (height <= 0 && view.Blocks[index].Visibility == Visibility.Visible)
+            {
+                return;
+            }
+
+            targets[index] = heights[0] <= heights[1] ? 0 : 1;
+            heights[targets[index]] += height;
+        }
+
+        var unchanged = Enumerable.Range(0, view.Blocks.Count)
+            .All(index => stacks[targets[index]].Children.Contains(view.Blocks[index]));
+        if (unchanged)
+        {
+            return;
+        }
+
+        foreach (var stack in stacks)
+        {
+            stack.Children.Clear();
+        }
+
+        for (var index = 0; index < view.Blocks.Count; index++)
+        {
+            stacks[targets[index]].Children.Add(view.Blocks[index]);
         }
     }
 
@@ -1497,6 +1571,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (!desktopLayout)
         {
             sections[index].Tab.StartBringIntoView();
+        }
+
+        if (desktopLayout)
+        {
+            ScheduleDesktopBalance(sections[index]);
         }
 
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
@@ -1869,8 +1948,26 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private static void CollapseWhenEmpty(TextBlock line)
+    {
+        void Update() => line.Visibility = string.IsNullOrEmpty(line.Text) ? Visibility.Collapsed : Visibility.Visible;
+        line.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => Update());
+        Update();
+    }
+
     private void BuildAccentSwatches()
     {
+        const int SwatchesPerRow = 8;
+        for (var column = 0; column < SwatchesPerRow; column++)
+        {
+            AccentSwatches.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var row = 0; row < (AccentPalette.All.Count + SwatchesPerRow - 1) / SwatchesPerRow; row++)
+        {
+            AccentSwatches.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
         var index = 0;
         foreach (var accent in AccentPalette.All)
         {
@@ -1881,7 +1978,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 Width = 36,
                 Height = 36,
                 Padding = new Thickness(0),
-                Margin = new Thickness(3),
+                HorizontalAlignment = HorizontalAlignment.Center,
                 CornerRadius = new CornerRadius(18),
                 Background = new SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0),
@@ -1897,6 +1994,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 swatch,
                 string.Format(Localized("AccentSwatchAutomation"), index, AccentPalette.All.Count));
             swatch.Click += AccentSwatch_Click;
+            Grid.SetRow(swatch, (index - 1) / SwatchesPerRow);
+            Grid.SetColumn(swatch, (index - 1) % SwatchesPerRow);
             AccentSwatches.Children.Add(swatch);
         }
 

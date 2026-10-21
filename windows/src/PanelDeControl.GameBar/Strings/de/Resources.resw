@@ -144,12 +144,6 @@
   <data name="MuteStatus.Text" xml:space="preserve">
     <value>Stummschaltung wird geprüft…</value>
   </data>
-  <data name="MuteToggle.OffContent" xml:space="preserve">
-    <value>Ton an</value>
-  </data>
-  <data name="MuteToggle.OnContent" xml:space="preserve">
-    <value>Stumm</value>
-  </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Schaltet das Standard-Audiogerät stumm oder laut und prüft den zurückgelesenen Zustand</value>
   </data>
@@ -223,8 +217,6 @@
     <value>Standard-Audiogerät wird geprüft…</value>
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>Experimentelle Steuerung</value></data>
-  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve"><value>Aus</value></data>
-  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve"><value>Aktiviert</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Aktiviert experimentelle TDP-Schreibvorgänge ausdrücklich für diese Dienstsitzung</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Experimentelle TDP-Schreibfreigabe</value></data>
   <data name="ManufacturerRecoveryHint.Text" xml:space="preserve"><value>Hersteller-Wiederherstellung nicht geprüft: Windows neu starten oder Armoury Crate erneut öffnen, um die Steuerung zurückzugeben.</value></data>
@@ -386,8 +378,6 @@
   <data name="FanOne" xml:space="preserve"><value>Lüfter 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Lüfter 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Prozessor-Boost</value></data>
-  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>An</value></data>
-  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Aus</value></data>
   <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Prozessor-Boost</value></data>
   <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Maximale Leistung</value></data>
   <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Maximaler Prozessorzustand</value></data>
