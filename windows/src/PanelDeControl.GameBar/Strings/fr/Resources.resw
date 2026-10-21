@@ -383,7 +383,6 @@
   <data name="RefreshRateLabel" xml:space="preserve"><value>Fréquence de l'écran</value></data>
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>Impossible de lire la fréquence de l'écran</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Passer l'écran à {0} Hz</value></data>
-  <data name="PerformancePending" xml:space="preserve"><value>Limite de FPS et mise à l'échelle : bientôt sur Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventilateur 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventilateur 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost du processeur</value></data>
@@ -395,7 +394,6 @@
   <data name="CpuWindowsNote" xml:space="preserve"><value>Sous Windows, le SMT et les cœurs actifs se modifient uniquement depuis le BIOS.</value></data>
   <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows ne permet pas de modifier le mode de gestion de l'alimentation</value></data>
   <data name="CpuUnavailable" xml:space="preserve"><value>Impossible de lire le mode de gestion de l'alimentation</value></data>
-  <data name="ChargeLimitPending" xml:space="preserve"><value>Limite de charge : bientôt sur Windows</value></data>
   <data name="BatteryHealthLabel" xml:space="preserve"><value>Santé</value></data>
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacité</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cycles</value></data>

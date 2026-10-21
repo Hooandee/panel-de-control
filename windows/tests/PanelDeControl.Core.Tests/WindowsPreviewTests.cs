@@ -17,11 +17,18 @@ public sealed class WindowsPreviewTests
     }
 
     [Fact]
-    public void OnlyThemesCanBeChanged()
+    public void OnlyThemesCanBeChangedAndDiagnosticsCanBeOpened()
     {
-        Assert.False(WindowsPreview.IsReadOnly(SectionCatalog.Find("themes")));
+        var themes = SectionCatalog.Find("themes");
+        Assert.All(themes.Blocks, block => Assert.False(WindowsPreview.IsReadOnly(themes, block)));
+
+        var settings = SectionCatalog.Find("settings");
+        Assert.False(WindowsPreview.IsReadOnly(settings, settings.Blocks.Single(block => block.Id == "diagnostics")));
+
         Assert.All(
             SectionCatalog.All.Where(section => section.Id != "themes"),
-            section => Assert.True(WindowsPreview.IsReadOnly(section)));
+            section => Assert.All(
+                section.Blocks.Where(block => !(section.Id == "settings" && block.Id == "diagnostics")),
+                block => Assert.True(WindowsPreview.IsReadOnly(section, block))));
     }
 }

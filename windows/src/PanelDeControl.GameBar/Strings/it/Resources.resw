@@ -383,7 +383,6 @@
   <data name="RefreshRateLabel" xml:space="preserve"><value>Frequenza dello schermo</value></data>
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>Impossibile leggere la frequenza dello schermo</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Imposta lo schermo a {0} Hz</value></data>
-  <data name="PerformancePending" xml:space="preserve"><value>Limite FPS e scalatura: in arrivo su Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventola 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventola 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost del processore</value></data>
@@ -395,7 +394,6 @@
   <data name="CpuWindowsNote" xml:space="preserve"><value>SMT e core attivi si cambiano solo dal BIOS su Windows.</value></data>
   <data name="CpuPermissionRequired" xml:space="preserve"><value>Windows non consente di cambiare il piano energetico</value></data>
   <data name="CpuUnavailable" xml:space="preserve"><value>Impossibile leggere il piano energetico</value></data>
-  <data name="ChargeLimitPending" xml:space="preserve"><value>Limite di carica: in arrivo su Windows</value></data>
   <data name="BatteryHealthLabel" xml:space="preserve"><value>Salute</value></data>
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacità</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Cicli</value></data>

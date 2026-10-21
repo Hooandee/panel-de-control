@@ -302,7 +302,6 @@
                         Margin="0,6,0,0"
                         AutomationProperties.LiveSetting="Polite"
                         Style="{StaticResource PdcCaptionStyle}" />
-                    <TextBlock x:Name="PerformancePending" Margin="0,12,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
                 </StackPanel>
             </Border>
 
@@ -372,7 +371,6 @@
                             <TextBlock x:Name="BatteryCyclesValue" Margin="0,2,0,0" Text="—" FontSize="20" TextWrapping="Wrap" Style="{StaticResource PdcValueStyle}" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock x:Name="SystemBatteryPending" Margin="0,12,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
                 </StackPanel>
             </Border>
 

@@ -1313,7 +1313,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
         SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
-        SystemBatteryPending.Text = Localized("ChargeLimitPending");
         BatteryHealthLabel.Text = Localized("BatteryHealthLabel");
         BatteryCapacityLabel.Text = Localized("BatteryCapacityLabel");
         BatteryCyclesLabel.Text = Localized("BatteryCyclesLabel");
@@ -1321,7 +1320,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         RefreshRateLabel.Text = Localized("RefreshRateLabel");
         CpuControlTitle.Text = Localized("BlockCpuTitle");
         CpuControlNote.Text = Localized("CpuWindowsNote");
-        PerformancePending.Text = Localized("PerformancePending");
         FanTitle.Text = Localized("BlockFanRpmTitle");
         FanOneLabel.Text = Localized("FanOne");
         FanTwoLabel.Text = Localized("FanTwo");
@@ -1333,13 +1331,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             var panel = CreateSectionPanel();
             var blocks = new List<FrameworkElement>();
-            var readOnly = WindowsPreview.IsReadOnly(section);
             foreach (var block in WindowsPreview.VisibleBlocks(section))
             {
                 if (library.TryGetValue(section.Id + "." + block.Id, out var element))
                 {
                     BlockLibrary.Children.Remove(element);
-                    blocks.Add(readOnly ? ReadOnlyBlock(element) : element);
+                    blocks.Add(WindowsPreview.IsReadOnly(section, block) ? ReadOnlyBlock(element) : element);
                 }
                 else
                 {
