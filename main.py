@@ -34,6 +34,7 @@ import pdc_platform as platform_support
 import journal
 import journal_context
 import self_updater
+from shutdown_budget import ShutdownBudget, run_bounded
 import theme_activation
 import theme_health
 import theme_packages
@@ -241,7 +242,15 @@ _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
-_SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
+_SHUTDOWN_BUDGET_S = 1.8
+_SHUTDOWN_DRAIN_TIMEOUT_S = 0.4
+_SHUTDOWN_SCREEN_CAP_S = 0.25
+_SHUTDOWN_HUD_CAP_S = 0.25
+_SHUTDOWN_CLEANER_CAP_S = 0.1
+_SHUTDOWN_TAIL_RESERVE_S = 0.35
+_SHUTDOWN_THEME_CAP_S = 0.15
+_SHUTDOWN_SERVICE_CAP_S = 0.15
+_SHUTDOWN_JOURNAL_RESERVE_S = 0.05
 _DECKY_SOCKET_GUARD = decky_socket_guard.install(log=decky.logger)
 _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
@@ -1181,24 +1190,29 @@ class Plugin:
         except Exception:  # noqa: BLE001
             return {"error": "diagnostics_unavailable"}
 
-    def _close_steam_cleaner_sync(self) -> None:
+    def _close_steam_cleaner_sync(self, timeout_s=_SHUTDOWN_CLEANER_CAP_S) -> None:
         if getattr(self, "_steam_cleaner_closed", False):
             return
         self._steam_cleaner_closed = True
         executor = getattr(self, "_steam_cleaner_executor", None)
-        service = getattr(self, "_steam_cleaner", None)
-        try:
+
+        def close():
+            service = getattr(self, "_steam_cleaner", None)
             pending = getattr(self, "_steam_cleaner_init_future", None)
             if service is None and pending is not None:
-                service = pending.result()
+                service = pending.result(timeout=timeout_s)
                 self._steam_cleaner = service
             if service is not None:
                 service.close()
+
+        try:
+            if not run_bounded(close, timeout_s, "pdc-steam-cleaner-close"):
+                decky.logger.warning("Steam cleaner close incomplete: timeout")
         except Exception:  # noqa: BLE001
             decky.logger.warning("Steam cleaner close failed: internal_error")
         finally:
             if executor is not None:
-                executor.shutdown(wait=True, cancel_futures=True)
+                executor.shutdown(wait=False, cancel_futures=True)
                 self._steam_cleaner_executor = None
 
     async def get_launch_tools(self) -> dict:
@@ -1331,16 +1345,16 @@ class Plugin:
         self._init()
         return self._remote_access.forget_keys()
 
-    async def _stop_remote_access(self) -> None:
+    async def _stop_remote_access(self, timeout_s=_KIOSK_STOP_TIMEOUT_S) -> None:
         remote = getattr(self, "_remote_access", None)
         if remote is None:
             return
         try:
-            await asyncio.wait_for(remote.shutdown(), _KIOSK_STOP_TIMEOUT_S)
+            await asyncio.wait_for(remote.shutdown(), timeout_s)
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("Remote access shutdown incomplete: %s", error)
 
-    async def _stop_kiosk(self) -> None:
+    async def _stop_kiosk(self, timeout_s=_KIOSK_STOP_TIMEOUT_S) -> None:
         task = getattr(self, "_kiosk_task", None)
         if task is not None:
             task.cancel()
@@ -1348,7 +1362,7 @@ class Plugin:
         if kiosk is None:
             return
         try:
-            await asyncio.wait_for(kiosk.shutdown(), _KIOSK_STOP_TIMEOUT_S)
+            await asyncio.wait_for(kiosk.shutdown(), timeout_s)
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("Kiosk shutdown incomplete: %s", error)
 
@@ -13241,32 +13255,82 @@ class Plugin:
                 "Shutdown stage unload:%s at=%dms", name, (time.monotonic() - started) * 1000,
             )
 
+        budget = ShutdownBudget(_SHUTDOWN_BUDGET_S)
         decky.logger.info("Shutdown stage unload:begin")
-        self._prepare_shutdown()
+        self._prepare_shutdown(budget)
         stage("prepared")
-        if getattr(self, "_screen_sleep", None) is not None:
-            if self._eco_watch_task is not None:
-                self._eco_watch_task.cancel()
-            await self._apply_screen(False, "unload")
+        if self._wake_screen_for_shutdown(budget):
             stage("screen")
-        await self._stop_kiosk()
-        stage("kiosk")
-        await self._stop_remote_access()
-        stage("remote")
         try:
-            drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
-            if drained:
-                decky.logger.info("Shutdown stage unload:drained")
-                self._perform_shutdown_handoff("unload")
-                self._shutdown_apply_executor()
-            else:
-                decky.logger.warning("Shutdown stage unload:drain-timeout")
-                self._handoff_after_drain_timeout("unload")
+            self._bounded_shutdown_handoff("unload", budget)
         finally:
             self._shutdown_controller_action_executor()
-            self._finish_theme_shutdown_sync()
+            self._finish_theme_shutdown_sync(
+                budget.slice(_SHUTDOWN_THEME_CAP_S, reserve_s=_SHUTDOWN_TAIL_RESERVE_S / 2)
+            )
+        stage("handoff")
+        await self._stop_kiosk(budget.slice(_SHUTDOWN_SERVICE_CAP_S, _SHUTDOWN_JOURNAL_RESERVE_S))
+        await self._stop_remote_access(
+            budget.slice(_SHUTDOWN_SERVICE_CAP_S, _SHUTDOWN_JOURNAL_RESERVE_S)
+        )
+        stage("services")
         decky.logger.info("Panel de Control unloaded")
-        self._stop_journal()
+        self._stop_journal(budget.remaining())
+
+    def _wake_screen_for_shutdown(self, budget) -> bool:
+        screen = getattr(self, "_screen_sleep", None)
+        if screen is None:
+            return False
+        if self._eco_watch_task is not None:
+            self._eco_watch_task.cancel()
+        self._screen_want = False
+        was_asleep = screen.asleep
+        woke = []
+        finished = run_bounded(
+            lambda: woke.append(screen.close()),
+            budget.slice(_SHUTDOWN_SCREEN_CAP_S),
+            "pdc-shutdown-screen",
+        )
+        diary = journal.active
+        if was_asleep and diary is not None:
+            diary.write(
+                "INFO" if finished and all(woke) else "WARNING",
+                "display",
+                "screen_wake",
+                ok=bool(finished and all(woke)),
+                reason="unload",
+                detail=getattr(screen, "detail", None) if finished else "timeout",
+            )
+        return True
+
+    def _bounded_shutdown_handoff(
+        self, stage: str, budget, remove_fan_conf: bool = False
+    ) -> None:
+        drained = self._drain_offloaded_sync(
+            budget.slice(_SHUTDOWN_DRAIN_TIMEOUT_S, reserve_s=_SHUTDOWN_TAIL_RESERVE_S)
+        )
+        if drained:
+            decky.logger.info("Shutdown stage %s:drained", stage)
+
+            def handoff():
+                self._perform_shutdown_handoff(stage)
+                if remove_fan_conf:
+                    fan_expose.remove_conf()
+        else:
+            decky.logger.warning("Shutdown stage %s:drain-timeout", stage)
+
+            def handoff():
+                self._handoff_after_drain_timeout(stage, remove_fan_conf=remove_fan_conf)
+
+        finished = run_bounded(
+            handoff,
+            budget.slice(_SHUTDOWN_BUDGET_S, reserve_s=_SHUTDOWN_TAIL_RESERVE_S),
+            f"pdc-shutdown-{stage}",
+        )
+        if not finished:
+            decky.logger.warning("Shutdown stage %s:handoff-timeout", stage)
+        if drained:
+            self._shutdown_apply_executor()
 
     def _start_journal(self) -> None:
         if journal.active is not None:
@@ -13491,7 +13555,7 @@ class Plugin:
             rivals=context.get("rivals", []),
         )
 
-    def _stop_journal(self) -> None:
+    def _stop_journal(self, timeout_s=1.0) -> None:
         diary = journal.active
         if diary is None:
             return
@@ -13509,9 +13573,10 @@ class Plugin:
         handler = getattr(self, "_journal_handler", None)
         if handler is not None:
             decky.logger.removeHandler(handler)
-        diary.stop(timeout=1.0)
+        diary.stop(timeout=max(timeout_s, 0.01))
 
-    def _prepare_shutdown(self) -> None:
+    def _prepare_shutdown(self, budget=None) -> None:
+        budget = budget or ShutdownBudget(_SHUTDOWN_BUDGET_S)
         self._cancel_charge_limit_reconcile("shutdown")
         self._stop_charge_limit_full_once_monitor()
         self._shutting_down = True
@@ -13520,7 +13585,14 @@ class Plugin:
             self._hud_generation = int(getattr(self, "_hud_generation", 0)) + 1
             coordinator = getattr(self, "_hud_coordinator", None)
             if coordinator is not None:
-                coordinator.close(self._hud_generation, self._restore_hud_safe)
+                try:
+                    coordinator.close(
+                        self._hud_generation,
+                        self._restore_hud_safe,
+                        budget.slice(_SHUTDOWN_HUD_CAP_S),
+                    )
+                except FutureTimeoutError:
+                    decky.logger.warning("HUD shutdown restore incomplete: timeout")
         self._cpu_shutdown = True
         self._gpu_shutdown = True
         self._next_cpu_generation()
@@ -13545,7 +13617,7 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
-        self._close_steam_cleaner_sync()
+        self._close_steam_cleaner_sync(budget.slice(_SHUTDOWN_CLEANER_CAP_S))
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
@@ -13644,7 +13716,7 @@ class Plugin:
                 executor.shutdown(wait=False)
             self._controller_action_executor = None
 
-    def _finish_theme_shutdown_sync(self) -> None:
+    def _finish_theme_shutdown_sync(self, timeout_s=_SHUTDOWN_THEME_CAP_S) -> None:
         executor = getattr(self, "_theme_executor", None)
 
         def recover() -> list[dict]:
@@ -13654,9 +13726,14 @@ class Plugin:
             )
 
         try:
-            recovered = executor.submit(recover).result() if executor is not None else recover()
+            if executor is not None:
+                recovered = executor.submit(recover).result(timeout=timeout_s)
+            else:
+                recovered = recover()
             if recovered:
                 decky.logger.warning("Rolled back %s pending theme transaction(s)", len(recovered))
+        except FutureTimeoutError:
+            decky.logger.warning("Pending theme rollback deferred to next start: timeout")
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Pending theme rollback failed: %s", error)
         finally:
@@ -13665,26 +13742,21 @@ class Plugin:
     def _shutdown_theme_executor(self) -> None:
         ex = getattr(self, "_theme_executor", None)
         if ex is not None:
-            ex.shutdown(wait=True)
+            ex.shutdown(wait=False, cancel_futures=True)
             self._theme_executor = None
 
     async def _uninstall(self) -> None:
+        budget = ShutdownBudget(_SHUTDOWN_BUDGET_S)
         decky.logger.info("Shutdown stage uninstall:begin")
-        self._prepare_shutdown()
+        self._prepare_shutdown(budget)
         try:
-            drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
-            if drained:
-                decky.logger.info("Shutdown stage uninstall:drained")
-                self._perform_shutdown_handoff("uninstall")
-                fan_expose.remove_conf()
-                self._shutdown_apply_executor()
-            else:
-                decky.logger.warning("Shutdown stage uninstall:drain-timeout")
-                self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
+            self._bounded_shutdown_handoff("uninstall", budget, remove_fan_conf=True)
         finally:
-            self._finish_theme_shutdown_sync()
+            self._finish_theme_shutdown_sync(
+                budget.slice(_SHUTDOWN_THEME_CAP_S, reserve_s=_SHUTDOWN_JOURNAL_RESERVE_S)
+            )
         decky.logger.info("Panel de Control uninstalled")
-        self._stop_journal()
+        self._stop_journal(budget.remaining())
 
 
 journal.trace_calls(

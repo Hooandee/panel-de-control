@@ -236,14 +236,14 @@ def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     assert rec.count == 1  # went THROUGH the executor, not the inline branch
 
 
-def test_theme_executor_shutdown_waits_for_completed_work(tmp_path, monkeypatch):
+def test_theme_executor_shutdown_never_blocks(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     executor = _ShutdownRecordingExecutor()
     p._theme_executor = executor
 
     p._shutdown_theme_executor()
 
-    assert executor.shutdown_wait is True
+    assert executor.shutdown_wait is False
     assert p._theme_executor is None
 
 
@@ -338,7 +338,7 @@ def test_shared_apply_worker_progresses_while_hud_worker_is_blocked(
     finally:
         release.set()
         p._hud_generation += 1
-        p._hud_coordinator.close(p._hud_generation, lambda: None)
+        p._hud_coordinator.close(p._hud_generation, lambda: None, 1)
         p._shutdown_apply_executor()
 
     assert result == "tdp-progress"

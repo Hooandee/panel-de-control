@@ -6,6 +6,7 @@ import glob
 import os
 import re
 import subprocess
+import threading
 import time
 
 CONVAR = "drm_sleep_internal_screen"
@@ -43,6 +44,8 @@ class ScreenSleep:
         self.asleep = False
         self.detail = "not probed"
         self.version = None
+        self._lock = threading.Lock()
+        self._closed = False
 
     def _dpms(self):
         states = []
@@ -71,6 +74,19 @@ class ScreenSleep:
 
     def set(self, asleep):
         """True only once every internal connector reads back the requested state."""
+        with self._lock:
+            if asleep and self._closed:
+                self.detail = "closed"
+                return False
+            return self._set(asleep)
+
+    def close(self):
+        """Final wake: a sleep request already in flight can no longer land after it."""
+        with self._lock:
+            self._closed = True
+            return self._set(False) if self.asleep else True
+
+    def _set(self, asleep):
         if not self.supported:
             return False
         if asleep:

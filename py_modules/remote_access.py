@@ -264,7 +264,10 @@ class RemoteAccess:
             await asyncio.wait_for(process.wait(), _STOP_TIMEOUT_S)
         except asyncio.TimeoutError:
             process.kill()
-            await process.wait()
+            try:
+                await asyncio.wait_for(process.wait(), _STOP_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                pass
 
     async def _supervise(self) -> None:
         failures = 0
