@@ -14,24 +14,38 @@ class ShutdownBudget:
         return max(0.0, min(cap_s, self.remaining() - reserve_s))
 
 
-def run_bounded(fn, timeout_s: float, name: str) -> bool:
-    """Run fn on a daemon thread and wait at most timeout_s; False if it is still running.
+class BoundedWork:
+    """fn on a daemon thread that shutdown can stop waiting for.
 
     Decky kills the plugin process a few seconds after asking it to stop, so a stuck
     syscall must never hold shutdown hostage: the thread is abandoned, not joined."""
-    errors = []
 
-    def target():
+    def __init__(self, fn, name: str) -> None:
+        self.name = name
+        self.error: BaseException | None = None
+        self._thread = threading.Thread(target=self._run, args=(fn,), name=name, daemon=True)
+        self._thread.start()
+
+    def _run(self, fn) -> None:
         try:
             fn()
         except BaseException as error:  # noqa: BLE001
-            errors.append(error)
+            self.error = error
 
-    thread = threading.Thread(target=target, name=name, daemon=True)
-    thread.start()
-    thread.join(max(0.0, timeout_s))
-    if thread.is_alive():
+    @property
+    def done(self) -> bool:
+        return not self._thread.is_alive()
+
+    def join(self, timeout_s: float) -> bool:
+        self._thread.join(max(0.0, timeout_s))
+        return self.done
+
+
+def run_bounded(fn, timeout_s: float, name: str) -> bool:
+    """False if fn is still running after timeout_s; re-raises what fn raised."""
+    work = BoundedWork(fn, name)
+    if not work.join(timeout_s):
         return False
-    if errors:
-        raise errors[0]
+    if work.error is not None:
+        raise work.error
     return True

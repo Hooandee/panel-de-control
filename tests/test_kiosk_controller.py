@@ -290,3 +290,15 @@ def test_a_running_kiosk_stops_an_armada_bottom_gamescope_that_came_back():
     assert launcher.started_with == ["http://127.0.0.1:4000/?k=t"]
     assert launcher.armada_bottom is False
     assert controller.state()["armada_bottom_yielded"] is True
+
+
+def test_release_hardware_runs_once_and_shutdown_still_stops_the_server():
+    controller, launchers, _, _ = _controller([Detection(DISPLAY, "ok")])
+    asyncio.run(controller.tick())
+
+    controller.release_hardware()
+    controller.release_hardware()
+    asyncio.run(controller.shutdown())
+
+    assert launchers[0].stops == 1
+    assert controller._server.port is None

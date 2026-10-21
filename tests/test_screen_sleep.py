@@ -99,3 +99,23 @@ def test_close_on_a_lit_panel_sends_nothing(tmp_path):
 
     assert screen.close()
     assert len(gs.calls) == sent
+
+
+def test_close_during_an_in_flight_sleep_leaves_the_panel_lit(tmp_path):
+    gs = FakeGamescope(tmp_path, lag=3)
+    screen = gs.screen()
+    original_ctl = gs.ctl
+
+    def ctl_then_close(*args):
+        result = original_ctl(*args)
+        if args == (CONVAR, "1"):
+            screen.close()
+        return result
+
+    screen._ctl = ctl_then_close
+
+    assert not screen.set(True)
+    for _ in range(5):
+        gs.advance()
+    assert gs.calls[-1] == (CONVAR, "0")
+    assert gs.panel.read_text().strip() == "On" and not screen.asleep

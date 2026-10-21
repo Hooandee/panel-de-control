@@ -27,6 +27,18 @@ class _HangingScreen:
 
 
 class _HangingAsyncService:
+    def __init__(self, release):
+        self._release = release
+        self.terminated = False
+        self.released = False
+
+    def terminate_now(self):
+        self.terminated = True
+
+    def release_hardware(self):
+        self.released = True
+        self._release.wait(timeout=10)
+
     async def shutdown(self):
         await asyncio.sleep(10)
 
@@ -37,9 +49,9 @@ def _hang_everything(p, monkeypatch, release):
 
     p._screen_sleep = _HangingScreen(release)
     p._eco_watch_task = None
-    p._kiosk = _HangingAsyncService()
+    p._kiosk = _HangingAsyncService(release)
     p._kiosk_task = None
-    p._remote_access = _HangingAsyncService()
+    p._remote_access = _HangingAsyncService(release)
     p._apply_executor = _NeverCompletingExecutor()
 
     p._restore_fans_safe = hang
@@ -125,3 +137,46 @@ def test_unload_without_async_services_never_suspends(tmp_path, monkeypatch):
     unload = p._unload()
     with pytest.raises(StopIteration):
         unload.send(None)
+
+
+def test_unload_then_uninstall_stays_bounded_and_never_doubles_the_handoff(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    release = threading.Event()
+    executors = _hang_everything(p, monkeypatch, release)
+    starts = []
+    p._restore_fans_safe = lambda: starts.append("fans") or release.wait(timeout=10)
+
+    try:
+        before = time.monotonic()
+        asyncio.run(p._unload())
+        unload_s = time.monotonic() - before
+        before = time.monotonic()
+        asyncio.run(p._uninstall())
+        uninstall_s = time.monotonic() - before
+    finally:
+        release.set()
+        for executor in executors:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    assert unload_s < _BUDGET_S and uninstall_s < _BUDGET_S
+    assert starts == ["fans"]
+
+
+def test_unload_signals_the_ssh_server_and_releases_the_kiosk_even_when_stalled(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    release = threading.Event()
+    executors = _hang_everything(p, monkeypatch, release)
+
+    try:
+        asyncio.run(p._unload())
+    finally:
+        release.set()
+        for executor in executors:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    assert p._remote_access.terminated
+    assert p._kiosk.released

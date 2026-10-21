@@ -245,13 +245,29 @@ class RemoteAccess:
         await self.close_pairing()
         await self._stop_supervisor()
 
+    def terminate_now(self) -> None:
+        """Synchronous first step of shutdown: the root SSH server gets SIGTERM even if the
+        event loop never resumes the shutdown coroutine."""
+        if self._supervisor is not None:
+            self._supervisor.cancel()
+        process = self._process
+        if process is not None and process.returncode is None:
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass
+
     async def _stop_supervisor(self) -> None:
         task, self._supervisor = self._supervisor, None
         if task is not None:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except asyncio.CancelledError:
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    raise
+            except Exception:  # noqa: BLE001
                 pass
         await self._stop_process()
 
