@@ -1,6 +1,8 @@
 // On Windows a running game gets Steam's in-game overlay: the Steam button opens that overlay's own menu instead of
 // Big Picture, which is where the theme lives. While a theme runtime is mounted the button goes back to Big Picture's
-// Home over the game, as on a console, and resuming the game raises its window again.
+// Home over the game, as on a console, and resuming the game raises its window again. However Big Picture comes back
+// over a running game (Game Bar, Alt+Tab), Steam keeps the controller on the game until the game's overlay state says
+// Steam's UI is in front: that state is set whenever Big Picture has focus outside the running game's page.
 
 /** Steam's composition modes (`SetOverlayState`): with the game's overlay state above Hidden, Steam gives the
  * controller to its own UI (focused appid 769); Hidden gives it back to the game. */
@@ -11,6 +13,8 @@ const REACTIVATE_DELAYS_MS = [0, 120, 400];
 /** A game asking for its overlay (store page, purchase) is followed within this window by the activation. */
 const GAME_REQUEST_WINDOW_MS = 1_500;
 const OVERLAY_POLL_MS = 1_000;
+/** Steam's own UI in its focus events and composition queue. */
+const STEAM_UI_APPID = 769;
 
 interface Unregistrable {
   unregister?(): void;
@@ -27,10 +31,14 @@ interface NavigationContext {
 
 interface SteamWindowInstance {
   OnHomeButtonPressed?(...args: unknown[]): unknown;
+  m_CompositionStateStore?: { GetCurrentlyFocusedAppidSubscribableValue?(): { Value?: unknown } };
   GetFocusNavContext?(): NavigationContext | undefined;
   MainRunningAppID?: number;
   Navigator?: { Home?(): void };
-  BrowserWindow?: { SteamClient?: { Window?: { BringToFront?(): void } } } | null;
+  BrowserWindow?: (Pick<Window, "addEventListener" | "removeEventListener"> & {
+    document?: Pick<Document, "hasFocus">;
+    SteamClient?: { Window?: { BringToFront?(): void } };
+  }) | null;
   m_history?: SteamHistory;
 }
 
@@ -140,12 +148,54 @@ export function installSteamButtonHome(
       log("raise_game_failed");
     }
   };
+  const keepControllerOnBigPicture = () => {
+    const window = main();
+    if (!isActive() || !window?.BrowserWindow?.document?.hasFocus?.()) return;
+    if (window.m_history?.location?.pathname?.startsWith("/apprunning")) return;
+    const focused = window.m_CompositionStateStore?.GetCurrentlyFocusedAppidSubscribableValue?.()?.Value;
+    if (focused === undefined || focused === STEAM_UI_APPID) return;
+    const gameId = gameIdFor(steam, window.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid);
+    if (!gameId) return;
+    try {
+      steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_OVERLAY);
+    } catch {
+      log("steam_input_overlay_failed");
+    }
+    for (const delay of REACTIVATE_DELAYS_MS) timers.setTimeout(activateBigPicture, delay);
+  };
+
+  // Big Picture taking focus while it shows the running game's page means the player came back to it (Game Bar,
+  // Alt+Tab): that page is only Steam's logo, so it goes Home as with the Steam button. Resuming and launching keep
+  // Big Picture's focus and never send this event.
+  const onBigPictureFocus = () => {
+    const window = main();
+    if (isActive() && window?.m_history?.location?.pathname?.startsWith("/apprunning")) {
+      const appId = window.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid;
+      if (appId) {
+        showBigPictureHome(appId);
+        return;
+      }
+    }
+    keepControllerOnBigPicture();
+  };
+
+  let watchedWindow: SteamWindowInstance["BrowserWindow"];
   const watchHistory = () => {
+    const window = main()?.BrowserWindow;
+    if (window && window !== watchedWindow) {
+      watchedWindow?.removeEventListener("focus", onBigPictureFocus);
+      watchedWindow = window;
+      window.addEventListener("focus", onBigPictureFocus);
+    }
+    keepControllerOnBigPicture();
     const history = main()?.m_history;
     if (!history || history === watchedHistory) return;
     stopHistory?.();
     watchedHistory = history;
-    stopHistory = history.listen?.((location) => raiseRunningGame(location.pathname));
+    stopHistory = history.listen?.((location) => {
+      raiseRunningGame(location.pathname);
+      keepControllerOnBigPicture();
+    });
   };
   watchHistory();
   const historyPoll = timers.setInterval(watchHistory, OVERLAY_POLL_MS);
@@ -154,6 +204,7 @@ export function installSteamButtonHome(
     timers.clearInterval(overlayPoll);
     timers.clearInterval(historyPoll);
     stopHistory?.();
+    watchedWindow?.removeEventListener("focus", onBigPictureFocus);
     for (const registration of registrations) {
       try {
         registration?.unregister?.();

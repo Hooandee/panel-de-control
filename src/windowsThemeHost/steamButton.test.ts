@@ -9,6 +9,8 @@ function steam() {
   let activated: Activated | undefined;
   let requested: (() => void) | undefined;
   let historyListener: ((location: { pathname?: string }) => void) | undefined;
+  const state = { focusedAppid: 769 as number, pathname: "/library/home", bigPictureFocused: false };
+  const focusListeners: (() => void)[] = [];
   const overlayPrototype = { OnHomeButtonPressed() { calls.push("steam overlay menu"); } };
   const overlay = Object.assign(Object.create(overlayPrototype), { MainRunningAppID: 2514320289 });
   const scope = {
@@ -25,10 +27,16 @@ function steam() {
       WindowStore: {
         GamepadUIMainWindowInstance: {
           MainRunningAppID: 2514320289,
+          m_CompositionStateStore: { GetCurrentlyFocusedAppidSubscribableValue: () => ({ Value: state.focusedAppid }) },
           GetFocusNavContext: () => ({ SetActive: (active: boolean) => calls.push(`context ${active}`) }),
           Navigator: { Home: () => calls.push("home") },
-          BrowserWindow: { SteamClient: { Window: { BringToFront: () => calls.push("front") } } },
-          m_history: { listen: (listener: (location: { pathname?: string }) => void) => { historyListener = listener; return () => calls.push("unlisten"); } },
+          BrowserWindow: {
+            document: { hasFocus: () => state.bigPictureFocused },
+            addEventListener: (_type: string, listener: () => void) => { focusListeners.push(listener); },
+            removeEventListener: () => {},
+            SteamClient: { Window: { BringToFront: () => calls.push("front") } },
+          },
+          m_history: { location: { get pathname() { return state.pathname; } }, listen: (listener: (location: { pathname?: string }) => void) => { historyListener = listener; return () => calls.push("unlisten"); } },
         },
         m_mapOverlayPopupByPID: new Map([[19984, overlay]]),
       },
@@ -40,7 +48,9 @@ function steam() {
     overlay,
     activate: (active: boolean, user = true) => activated?.(19984, 2514320289, active, user),
     gameRequest: () => requested?.(),
-    navigate: (pathname: string) => historyListener?.({ pathname }),
+    navigate: (pathname: string) => { state.pathname = pathname; historyListener?.({ pathname }); },
+    state,
+    focusBigPicture: () => { state.bigPictureFocused = true; focusListeners.forEach((listener) => listener()); },
   };
 }
 
@@ -104,6 +114,42 @@ describe("Steam button on Windows", () => {
     navigate("/apprunning");
 
     expect(calls).toEqual(["steam overlay menu"]);
+    stop();
+  });
+
+  it("keeps the controller on Big Picture however it comes back over a running game", () => {
+    vi.useFakeTimers();
+    const { scope, calls, state, focusBigPicture, navigate } = steam();
+    const stop = installSteamButtonHome(scope, () => true, log);
+
+    state.focusedAppid = 2514320289;
+    focusBigPicture();
+    vi.advanceTimersByTime(500);
+    expect(calls).toEqual(["overlay 10798923412957822976 2", "context true", "context true", "context true"]);
+
+    calls.length = 0;
+    state.focusedAppid = 769;
+    vi.advanceTimersByTime(1_000);
+    expect(calls).toEqual([]);
+
+    state.focusedAppid = 2514320289;
+    navigate("/apprunning");
+    vi.advanceTimersByTime(1_000);
+    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976"]);
+    stop();
+  });
+
+  it("goes Home when the player comes back to Big Picture over the running game's page", () => {
+    vi.useFakeTimers();
+    const { scope, calls, state, focusBigPicture, navigate } = steam();
+    const stop = installSteamButtonHome(scope, () => true, log);
+    navigate("/apprunning");
+    calls.length = 0;
+
+    state.focusedAppid = 2514320289;
+    focusBigPicture();
+
+    expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
     stop();
   });
 });
