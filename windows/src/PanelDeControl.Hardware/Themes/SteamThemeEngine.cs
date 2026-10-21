@@ -136,6 +136,14 @@ public sealed class SteamThemeEngine
     }
 
     /// <summary>Asks Steam to raise its Big Picture window, over a connection of its own.</summary>
+    /// <summary>A DevTools session of its own on Steam's shared context, or null while Steam shows none.</summary>
+    public async Task<ICdpSession?> ConnectSharedContextAsync(CancellationToken cancellationToken)
+    {
+        var targets = await devTools.ListTargetsAsync(cancellationToken).ConfigureAwait(false);
+        var shared = targets?.FirstOrDefault(target => target.Title == SharedContextTitle);
+        return shared is null ? null : await devTools.ConnectAsync(shared, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<bool> BringBigPictureToFrontAsync(CancellationToken cancellationToken)
     {
         var targets = await devTools.ListTargetsAsync(cancellationToken).ConfigureAwait(false);

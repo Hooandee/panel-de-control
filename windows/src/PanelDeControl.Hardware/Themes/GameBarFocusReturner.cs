@@ -7,11 +7,18 @@ namespace PanelDeControl.Hardware.Themes;
 /// <summary>
 /// Gives the foreground back to Steam Big Picture after Game Bar closes over it. First Steam is
 /// asked to raise itself through its client API; if Windows' foreground lock refuses that, the
-/// remembered Big Picture window is raised directly.
+/// remembered Big Picture window is raised directly. Big Picture can also stay the foreground window
+/// while Steam's UI lost keyboard focus (after Game Bar, or Game Bar restarting): no page has it and no
+/// navigation context is active, so the controller and the theme do nothing until the screen is
+/// touched. The focus is then bounced through the shell. Quick access open is not that: its own
+/// navigation context is active.
 /// </summary>
 public sealed class GameBarFocusReturner
 {
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan PageFocusCheck = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PageUnfocusedGrace = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan BounceInterval = TimeSpan.FromSeconds(5);
     private static readonly HashSet<string> GameBarProcesses = new(StringComparer.OrdinalIgnoreCase)
     {
         "GameBar", "GameBarFTServer", "XboxGameBarWidgets", "PanelDeControl.GameBar",
@@ -29,6 +36,10 @@ public sealed class GameBarFocusReturner
     private readonly GameBarFocusTracker tracker = new();
     private IntPtr lastHandle;
     private ForegroundKind lastKind = ForegroundKind.Other;
+    private ICdpSession? sharedContext;
+    private DateTimeOffset nextPageCheck = DateTimeOffset.MinValue;
+    private DateTimeOffset? pageUnfocusedSince;
+    private DateTimeOffset lastBounce = DateTimeOffset.MinValue;
 
     public GameBarFocusReturner(SteamThemeEngine engine)
     {
@@ -43,8 +54,15 @@ public sealed class GameBarFocusReturner
             var handle = GetForegroundWindow();
             if (handle == lastHandle)
             {
+                if (lastKind == ForegroundKind.Steam)
+                {
+                    await KeepPageFocusAsync(handle, cancellationToken).ConfigureAwait(false);
+                }
+
                 continue;
             }
+
+            pageUnfocusedSince = null;
 
             lastHandle = handle;
             var kind = Classify(handle);
@@ -59,6 +77,89 @@ public sealed class GameBarFocusReturner
             {
                 await RestoreAsync(restore, cancellationToken).ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task KeepPageFocusAsync(IntPtr steamWindow, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now < nextPageCheck)
+        {
+            return;
+        }
+
+        nextPageCheck = now + PageFocusCheck;
+        var focused = await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false);
+        if (focused != false)
+        {
+            pageUnfocusedSince = null;
+            return;
+        }
+
+        pageUnfocusedSince ??= now;
+        if (now - pageUnfocusedSince < PageUnfocusedGrace || now - lastBounce < BounceInterval)
+        {
+            return;
+        }
+
+        lastBounce = now;
+        pageUnfocusedSince = null;
+        keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
+        keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
+        SetForegroundWindow(GetShellWindow());
+        await Task.Delay(60, cancellationToken).ConfigureAwait(false);
+        keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
+        keybd_event(VkMenu, 0, KeyEventKeyUp, UIntPtr.Zero);
+        SetForegroundWindow(steamWindow);
+        await Task.Delay(300, cancellationToken).ConfigureAwait(false);
+        CompanionLog.Write(
+            "themes.focus_bounce",
+            await SteamUiHasFocusAsync(cancellationToken).ConfigureAwait(false) == true ? "steam_ui_focused" : "steam_ui_still_unfocused");
+    }
+
+    private const string SteamUiFocusExpression = """
+        (() => {
+          const page = SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance?.BrowserWindow?.document;
+          if (!page) return null;
+          const context = globalThis.FocusNavController?.m_ActiveContext;
+          return page.hasFocus() || (context?.m_rgGamepadNavigationTrees?.length ?? 0) > 0;
+        })()
+        """;
+
+    /// <summary>Whether Big Picture's page or any Steam navigation context has focus, or null when Steam cannot be asked.</summary>
+    private async Task<bool?> SteamUiHasFocusAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (sharedContext is null || !sharedContext.IsOpen)
+            {
+                if (sharedContext is not null)
+                {
+                    await sharedContext.DisposeAsync().ConfigureAwait(false);
+                }
+
+                sharedContext = await engine.ConnectSharedContextAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (sharedContext is null)
+            {
+                return null;
+            }
+
+            var focused = await sharedContext.EvaluateAsync(SteamUiFocusExpression, cancellationToken).ConfigureAwait(false);
+            return focused.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
+                _ => null,
+            };
+        }
+        catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException
+            or System.Net.Http.HttpRequestException or InvalidOperationException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            sharedContext = null;
+            return null;
         }
     }
 
@@ -138,6 +239,9 @@ public sealed class GameBarFocusReturner
     private const int RestoreAttempts = 3;
     private const byte VkMenu = 0x12;
     private const uint KeyEventKeyUp = 0x0002;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetShellWindow();
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
