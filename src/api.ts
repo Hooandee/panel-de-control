@@ -1215,3 +1215,39 @@ export const openRemoteAccessPairing = callable<[], RemoteAccessState>("open_rem
 export const closeRemoteAccessPairing = callable<[], RemoteAccessState>("close_remote_access_pairing");
 export const answerRemoteAccessPairing = callable<[accept: boolean], RemoteAccessState>("answer_remote_access_pairing");
 export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_remote_access_keys");
+
+export interface AccessorySceneMeta {
+  id: string;
+  category: string;
+  labelKey: string;
+}
+export interface AccessoriesState {
+  ok?: boolean;
+  error?: string;
+  supported: boolean;
+  enabled: boolean;
+  present: boolean;
+  port: string | null;
+  bus_port: string | null;
+  strong_supply: boolean | null;
+  busy_by: string | null;
+  scene: string | null;
+  options: Record<string, unknown>;
+  brightness: number;
+  pwm: number | null;
+  power: boolean;
+  catalog: AccessorySceneMeta[];
+}
+export interface PixelFrames {
+  ok?: boolean;
+  error?: string;
+  palette: number[][];
+  frames: string[];
+  delays: number[];
+  firmwareAnimation: number | null;
+}
+export const getAccessoriesState = callable<[], AccessoriesState>("get_accessories_state");
+export const setAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], AccessoriesState>("set_accessory_scene");
+export const setAccessoryBrightness = callable<[percent: number], AccessoriesState>("set_accessory_brightness");
+export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
+export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");

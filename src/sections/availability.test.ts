@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { allBlocksHidden } from "./availability";
+import { allBlocksHidden, sectionHiddenOnDevice } from "./availability";
 
 describe("desktop power visibility", () => {
   const blocks = { power: { order: [], hidden: ["desktopPower"] } };
@@ -21,5 +21,14 @@ describe("desktop power visibility", () => {
 
   it("does not let an empty handheld cache hide desktop power", () => {
     expect(allBlocksHidden("power", { power: { order: [], hidden: [] } }, [], true)).toBe(false);
+  });
+});
+
+describe("accessories section", () => {
+  it("exists only on the Steam Machine", () => {
+    expect(sectionHiddenOnDevice({ key: "steam_machine" }, "accessories")).toBe(false);
+    expect(sectionHiddenOnDevice({ key: "steam_deck_oled" }, "accessories")).toBe(true);
+    expect(sectionHiddenOnDevice({ key: "rog_ally" }, "accessories")).toBe(true);
+    expect(sectionHiddenOnDevice(null, "accessories")).toBe(true);
   });
 });

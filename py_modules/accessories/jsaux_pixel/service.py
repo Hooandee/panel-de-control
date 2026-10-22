@@ -26,7 +26,6 @@ _RECONNECT_S = 5.0
 _ACK_TIMEOUT_S = 2.0
 _END_TIMEOUT_S = 3.0
 _DEFAULT_BRIGHTNESS = 60
-_DEFAULT_SCENE = "clock_digital"
 
 
 class PixelService:
@@ -50,16 +49,13 @@ class PixelService:
         self._last_upload: dict | None = None
         stored = self._load()
         scene = stored.get("scene") if isinstance(stored.get("scene"), dict) else {}
-        self._scene_id = scene.get("id") if scene.get("id") in scenes else self._fallback_scene()
+        self._scene_id: str | None = scene.get("id") if scene.get("id") in scenes else None
         self._options = scene.get("options") if isinstance(scene.get("options"), dict) else {}
         brightness = stored.get("brightness")
         self._brightness = brightness if isinstance(brightness, int) and 0 <= brightness <= 100 else _DEFAULT_BRIGHTNESS
         self._power = stored.get("power") is not False
         governor = stored.get("governor")
         self._governor = Governor(clock, governor if isinstance(governor, dict) else None)
-
-    def _fallback_scene(self) -> str:
-        return _DEFAULT_SCENE if _DEFAULT_SCENE in self._scenes else next(iter(self._scenes))
 
     # Commands from the UI ------------------------------------------------------------------
 
@@ -177,6 +173,8 @@ class PixelService:
             self._brightness_sent = pwm
 
     def _sync_scene(self, now: float) -> None:
+        if self._scene_id is None:
+            return
         scene = self._scenes[self._scene_id]
         ctx = dataclasses.replace(self._context(now), options=dict(self._options))
         key = (self._scene_id, json.dumps(self._options, sort_keys=True), scene.key(ctx))

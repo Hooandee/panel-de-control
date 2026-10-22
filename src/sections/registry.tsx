@@ -14,6 +14,7 @@ import { LimpiezaSection } from "./LimpiezaSection";
 import { AmbienteSection } from "./AmbienteSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
+import { AccesoriosSection } from "./AccesoriosSection";
 import { buildSections } from "./registryModel";
 import { registerSystemBlocks } from "./systemBlocks";
 import { registerFanBlocks } from "./fanBlocks";
@@ -38,6 +39,7 @@ const COMPONENTS: Record<string, FC> = {
   hud: HudSection,
   params: ParametrosSection,
   cleaner: LimpiezaSection,
+  accessories: AccesoriosSection,
   ambient: AmbienteSection,
   themes: TemasSection,
   settings: AjustesSection,

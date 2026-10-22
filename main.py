@@ -41,6 +41,7 @@ import theme_remote
 import theme_transport
 from version import read_version
 from json_store import atomic_json_save
+from accessories.jsaux_pixel.runtime import Runtime as PixelRuntime
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
@@ -217,6 +218,12 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "params": (("_support_launch_state", None),),
     "cleaner": (("_steam_cleaner_diagnostics", ("phase", "interrupted", "persistence_error")),),
     "ambient": (("_support_ambient_state", None),),
+    "accessories": (
+        ("get_accessories_state", (
+            "supported", "present", "busy_by", "bus_port", "strong_supply", "scene", "brightness",
+            "pwm", "power",
+        )),
+    ),
     "themes": (
         ("_theme_report_diagnostics", (
             "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
@@ -384,6 +391,12 @@ def _kiosk_journal(level: str, event: str, **fields) -> None:
     diary = journal.active
     if diary is not None:
         diary.write(level, "kiosk", event, **fields)
+
+
+def _accessories_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "accessories", event, **fields)
 
 
 DEFAULTS = {
@@ -9443,6 +9456,50 @@ class Plugin:
             self._apply_hud,
         )
 
+    def _pixel_runtime(self) -> PixelRuntime:
+        runtime = getattr(self, "_pixel", None)
+        if runtime is None:
+            self._init()
+            runtime = PixelRuntime(
+                settings_dir=decky.DECKY_PLUGIN_SETTINGS_DIR,
+                device_key=getattr(getattr(self, "_device", None), "key", None),
+                log=_accessories_journal,
+                context_source=self._pixel_context,
+            )
+            self._pixel = runtime
+        return runtime
+
+    def _pixel_context(self) -> dict:
+        appid = getattr(self, "_current_appid", None)
+        game = {"appid": appid, "name": getattr(self, "_current_game_name", None)} if appid else None
+        return {"game": game}
+
+    async def _pixel_call(self, fn, *args) -> dict:
+        try:
+            return {"ok": True, **await asyncio.to_thread(fn, *args)}
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+
+    async def get_accessories_state(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().state)
+
+    async def set_accessory_scene(self, scene_id, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_scene, str(scene_id), dict(options or {}))
+
+    async def set_accessory_brightness(self, percent) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))
+
+    async def set_accessory_power(self, on) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_power, bool(on))
+
+    async def preview_accessory_scene(self, scene_id, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().preview, str(scene_id), dict(options or {}))
+
+    async def _stop_pixel(self) -> None:
+        runtime = getattr(self, "_pixel", None)
+        if runtime is not None:
+            await asyncio.to_thread(runtime.stop)
+
     async def get_hud_state(self) -> dict:
         self._init()
         def refresh_pending_state():
@@ -13225,6 +13282,7 @@ class Plugin:
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            self._pixel_runtime().start()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
                 await self._remote_access.set_enabled(True)
@@ -13251,6 +13309,8 @@ class Plugin:
             stage("screen")
         await self._stop_kiosk()
         stage("kiosk")
+        await self._stop_pixel()
+        stage("accessories")
         await self._stop_remote_access()
         stage("remote")
         try:
@@ -13671,6 +13731,7 @@ class Plugin:
     async def _uninstall(self) -> None:
         decky.logger.info("Shutdown stage uninstall:begin")
         self._prepare_shutdown()
+        await self._stop_pixel()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
             if drained:
@@ -13691,6 +13752,7 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+        "get_accessories_state", "preview_accessory_scene",
     }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),

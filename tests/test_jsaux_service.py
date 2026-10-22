@@ -150,6 +150,7 @@ def test_restart_does_not_resend_what_the_panel_already_shows(rig):
 def test_brightness_is_sent_capped_to_the_supply(rig):
     panel, _, _, make = rig
     svc = make()
+    svc.set_scene("steady", {})
     svc.tick()
     svc.set_brightness(100)
     svc.tick()
@@ -170,6 +171,7 @@ def test_firmware_animations_never_upload_a_gif(rig):
 def test_unplug_mid_upload_logs_and_waits_for_the_panel_to_return(rig):
     panel, clock, logs, make = rig
     svc = make()
+    svc.set_scene("steady", {})
     svc.tick()
     panel.fail_after = len(panel.sent) + 2
     svc.set_scene("steady", {"colour": 2})
@@ -238,3 +240,14 @@ def test_worker_thread_ticks_until_stopped(rig):
     worker.stop()
     assert not worker.is_alive()
     assert len(panel.uploads()) == 1
+
+
+def test_nothing_is_written_until_a_scene_is_chosen(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    for _ in range(3):
+        svc.tick()
+        clock.t += 10
+    assert panel.uploads() == [] and panel.commands(codec.Cmd.ANIMATION) == []
+    assert svc.state()["scene"] is None
+    assert svc.state()["present"] is True

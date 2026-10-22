@@ -1,11 +1,5 @@
 import { ReactNode } from "react";
-import {
-  LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
-  LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
-  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive,
-  LuMonitorCog, LuImage,
-} from "react-icons/lu";
+import { LuActivity, LuAudioLines, LuBatteryCharging, LuBatteryFull, LuChartSpline, LuCpu, LuFan, LuGamepad2, LuGauge, LuGrid3X3, LuHardDrive, LuHeartPulse, LuImage, LuLayoutDashboard, LuLeaf, LuLightbulb, LuMemoryStick, LuMonitorCog, LuMoon, LuPaintbrush, LuPalette, LuPuzzle, LuReplace, LuRocket, LuSettings, LuSlidersHorizontal, LuSlidersVertical, LuSparkles, LuSun, LuThermometer, LuVolume2, LuWind } from "react-icons/lu";
 import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
 import type { ModuleId } from "./moduleLogic";
@@ -52,6 +46,7 @@ export const TABS: TabMeta[] = [
   { id: "hud", labelKey: "nav.hud", descriptionKey: "nav.hud.desc", accent: "#3e7e5e", icon: (size) => <LuLayoutDashboard size={size} /> },
   { id: "params", labelKey: "nav.params", descriptionKey: "nav.params.desc", accent: "#955e44", icon: (size) => <LuRocket size={size} /> },
   { id: "cleaner", labelKey: "nav.cleaner", descriptionKey: "nav.cleaner.desc", accent: "#507e86", icon: (size) => <LuHardDrive size={size} /> },
+  { id: "accessories", labelKey: "nav.accessories", descriptionKey: "nav.accessories.desc", accent: "#7a5fb0", icon: (size) => <LuGrid3X3 size={size} /> },
   { id: "ambient", labelKey: "nav.ambient", descriptionKey: "nav.ambient.desc", accent: "#5f7fb0", icon: (size) => <LuImage size={size} /> },
   { id: "themes", labelKey: "nav.themes", descriptionKey: "nav.themes.desc", accent: "#925783", icon: (size) => <LuPaintbrush size={size} /> },
   { id: "settings", labelKey: "nav.settings", descriptionKey: "nav.settings.desc", accent: "#626b73", icon: (size) => <LuSettings size={size} /> },

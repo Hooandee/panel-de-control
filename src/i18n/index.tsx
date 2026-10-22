@@ -23,6 +23,7 @@ import { it } from "./it";
 import { de } from "./de";
 import { ptBR } from "./ptBR";
 import { fr } from "./fr";
+import { ACCESSORIES_STRINGS } from "./accessories";
 import { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
 export { SUPPORTED_LANGUAGES, type Lang } from "./languages";
@@ -3028,12 +3029,12 @@ const themeIt: Record<string, string> = {
 };
 
 export const DICTS: Record<Lang, Record<string, string>> = {
-  es,
-  en,
-  it: { ...it, ...themeIt },
-  de,
-  "pt-BR": ptBR,
-  fr,
+  es: { ...es, ...ACCESSORIES_STRINGS.es },
+  en: { ...en, ...ACCESSORIES_STRINGS.en },
+  it: { ...it, ...themeIt, ...ACCESSORIES_STRINGS.it },
+  de: { ...de, ...ACCESSORIES_STRINGS.de },
+  "pt-BR": { ...ptBR, ...ACCESSORIES_STRINGS["pt-BR"] },
+  fr: { ...fr, ...ACCESSORIES_STRINGS.fr },
 };
 
 function initialLang(): Lang {
