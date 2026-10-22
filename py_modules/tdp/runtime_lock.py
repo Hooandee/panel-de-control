@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 
 class RuntimeSafetyLock:
@@ -65,3 +66,10 @@ class RuntimeSafetyLock:
             return True
         except OSError:
             return False
+
+
+def seconds_since_boot() -> float:
+    clock = getattr(time, "CLOCK_BOOTTIME", None)
+    if clock is None:
+        return time.monotonic()
+    return time.clock_gettime(clock)

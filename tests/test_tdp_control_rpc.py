@@ -453,7 +453,9 @@ def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
 def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
     Plugin,
     tmp_path,
+    monkeypatch,
 ):
+    monkeypatch.setattr("tdp.firmware_attr.seconds_since_boot", lambda: 30.0)
     lock_path = (
         tmp_path
         / "run/panel-de-control/firmware-lenovo-wmi-other.lock"

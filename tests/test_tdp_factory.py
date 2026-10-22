@@ -1210,8 +1210,6 @@ def test_exact_legion_go_s_83l3_without_platform_profile_recovers_strictly(tmp_p
     (
         ("profile-unreadable", "platform-profile=unavailable"),
         ("lock-clear", "runtime lock clear failed"),
-        ("unknown-profile", "firmware transaction profile invalid"),
-        ("surface-changed", "firmware transaction surfaces changed"),
         ("rail-unreadable", "pl2=unavailable"),
     ),
 )
@@ -1248,6 +1246,35 @@ def test_exact_legion_go_s_named_recovery_fails_closed(
     assert expected_detail in recovered["detail"]
     assert backend.safety_locked is True
     assert os.path.exists(lock_path)
+
+
+@pytest.mark.parametrize("failure", ("unknown-profile", "surface-changed"))
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
+def test_exact_legion_go_s_stale_lock_resets_to_the_profile_default(
+    tmp_path,
+    monkeypatch,
+    failure,
+    product_name,
+):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    root = str(tmp_path)
+    backend, lock_path = _locked_legion_backend(
+        root,
+        product_name=product_name,
+        saved_profile="turbo" if failure == "unknown-profile" else None,
+        snapshot=(
+            {"firmware-attr:lenovo-wmi-other/pl1": 25}
+            if failure == "surface-changed"
+            else None
+        ),
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True, recovered["detail"]
+    assert backend.read_applied() == _p("legion_go_s").tdp_default
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
 
 
 @pytest.mark.parametrize("product_name", ("83L3", "83N6"))
@@ -2512,7 +2539,9 @@ def test_go_2_lock_with_changed_surfaces_hands_off_instead_of_retrying_forever(
     assert not os.path.exists(lock_path)
 
 
-def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path):
+def test_lock_with_changed_surfaces_and_no_handoff_profile_resets_to_profile_default(
+    tmp_path,
+):
     root = str(tmp_path)
     _mk_legion_firmware(root, "83E1", "custom")
     lock_path = _arm_lenovo_transaction_lock(
@@ -2524,6 +2553,7 @@ def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path
 
     recovered = backend.recover_runtime_transaction()
 
-    assert recovered["ok"] is False
-    assert "surfaces changed" in recovered["detail"]
-    assert os.path.exists(lock_path)
+    assert recovered["ok"] is True
+    assert backend.read_applied() == _p("legion_go").tdp_default
+    assert not os.path.exists(lock_path)
+    assert backend.safety_locked is False

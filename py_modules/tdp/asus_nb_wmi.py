@@ -215,7 +215,7 @@ class AsusNbWmiBackend(TDPBackend):
         if not self._ownership_recovery_pending:
             return {"ok": True, "detail": "no ASUS legacy recovery pending"}
         if self._owned_snapshot is None:
-            return {"ok": False, "detail": "ASUS legacy recovery snapshot invalid"}
+            return self._reset_to_profile_default()
         ok = self.release()
         return {
             "ok": ok,
@@ -225,6 +225,26 @@ class AsusNbWmiBackend(TDPBackend):
                 else "ASUS legacy ownership recovery failed"
             ),
         }
+
+    def _reset_to_profile_default(self) -> dict:
+        """A stale ownership snapshot can never be restored: drop it and write the profile
+        default, which claims a fresh snapshot and confirms by readback."""
+        detail = "ASUS legacy recovery snapshot invalid"
+        if not self.supported or self._read_snapshot() is None:
+            return {"ok": False, "detail": detail}
+        stale = self._ownership_lock.load_payload()
+        if not self._ownership_lock.clear():
+            return {"ok": False, "detail": f"{detail}; lock clear failed"}
+        self._ownership_recovery_pending = False
+        self._recovery_blocked = False
+        watts = self._fallback.default_w
+        result = self.set_levels(watts, watts, watts, False)
+        if result.ok:
+            return {"ok": True, "detail": f"{detail}; reset to profile default {watts} W"}
+        if self._owned_snapshot is None and isinstance(stale, dict):
+            self._ownership_lock.persist_payload(stale)
+            self._ownership_recovery_pending = True
+        return {"ok": False, "detail": f"{detail}; profile default failed: {result.detail}"}
 
     def relinquish_ownership(self) -> dict:
         if self._recovery_blocked:

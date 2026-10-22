@@ -782,3 +782,41 @@ def test_firmware_auto_capability_recovers_once_rails_read(tmp_path):
     _write(_fw_path(root, "asus-armoury", "pl2"), 20)
 
     assert backend.refresh_auto_tdp_safe() is True
+
+
+def test_asus_legacy_stale_ownership_resets_to_the_profile_default(tmp_path):
+    root = str(tmp_path)
+    _mk_asus_legacy(root)
+    lock = os.path.join(root, "run/ownership-asus-nb-wmi.lock")
+    _write(lock, '{"state": "ownership_pending", "snapshot": {"pl1": "x"}}')
+    backend = AsusNbWmiBackend(LIMITS, root=root, ownership_lock_path=lock)
+    assert backend.safety_locked is True
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True, recovered["detail"]
+    assert backend.safety_locked is False
+    assert {_read(_legacy_path(root, rail)) for rail in ("pl1", "pl2", "pl3")} == {
+        str(LIMITS.default_w)
+    }
+
+
+def test_firmware_lock_waits_for_a_loading_interface_then_resets_once_settled(
+    tmp_path, monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_firmware(root, "asus-armoury", {"pl1": 15, "pl2": 20})
+    lock = os.path.join(root, "run/firmware-asus-armoury.lock")
+    _write(lock, '{"state": "transaction_pending", "snapshot": {"x/pl1": 12}}')
+    monkeypatch.setattr("tdp.firmware_attr.seconds_since_boot", lambda: 30.0)
+    backend = FirmwareAttrBackend("asus-armoury", LIMITS, root=root, safety_lock_path=lock)
+
+    assert backend.recover_runtime_transaction()["ok"] is False
+    assert os.path.exists(lock)
+
+    monkeypatch.setattr("tdp.firmware_attr.seconds_since_boot", lambda: 900.0)
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True, recovered["detail"]
+    assert not os.path.exists(lock)
+    assert _read(_fw_path(root, "asus-armoury", "pl1")) == str(LIMITS.default_w)

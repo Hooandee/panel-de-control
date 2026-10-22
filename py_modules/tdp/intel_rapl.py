@@ -204,6 +204,40 @@ class IntelRaplBackend(TDPBackend):
             for surface in ("mmio", "msr")
         )
 
+    def _reset_to_profile_default(self, purpose, detail):
+        """A stale snapshot can never be restored: drop it and write the profile default
+        PL1, confirmed by readback."""
+        if not self.supported:
+            return {"ok": False, "detail": detail}
+        transaction = purpose == "transaction"
+        lock = self._safety_lock if transaction else self._ownership_lock
+        stale = self._runtime_lock_payload if transaction else self._owned_payload
+        if not lock.clear():
+            return {"ok": False, "detail": f"{detail}; lock clear failed"}
+        if transaction:
+            self._runtime_lock_payload = None
+        else:
+            self._owned_payload = None
+            self._owns_state = False
+            self._ownership_recovery_pending = False
+        self._write_circuit_open = None
+        if self._runtime_lock_payload is not None or self._ownership_recovery_pending:
+            return {"ok": True, "detail": f"{detail}; stale lock cleared"}
+        watts = self._fallback.default_w
+        result = self.set_tdp(watts, False)
+        if result.ok:
+            return {"ok": True, "detail": f"{detail}; reset to profile default {watts} W"}
+        failed = f"{detail}; profile default failed: {result.detail}"
+        if isinstance(stale, dict):
+            lock.persist_payload(stale)
+            if transaction:
+                self._runtime_lock_payload = stale
+            else:
+                self._owned_payload = stale
+                self._ownership_recovery_pending = True
+            self._write_circuit_open = failed
+        return {"ok": False, "detail": failed}
+
     def _restore_payload(self, purpose):
         payload = (
             self._runtime_lock_payload
@@ -212,13 +246,13 @@ class IntelRaplBackend(TDPBackend):
         )
         snapshot = payload.get("snapshot") if isinstance(payload, dict) else None
         if not isinstance(snapshot, dict) or not snapshot:
-            return {"ok": False, "detail": f"RAPL {purpose} snapshot unavailable"}
+            return self._reset_to_profile_default(purpose, f"RAPL {purpose} snapshot unavailable")
         try:
             normalized = {label: int(value) for label, value in snapshot.items()}
         except (TypeError, ValueError):
-            return {"ok": False, "detail": f"RAPL {purpose} snapshot invalid"}
+            return self._reset_to_profile_default(purpose, f"RAPL {purpose} snapshot invalid")
         if not self._snapshot_valid(normalized):
-            return {"ok": False, "detail": f"RAPL {purpose} snapshot invalid"}
+            return self._reset_to_profile_default(purpose, f"RAPL {purpose} snapshot invalid")
         restored, problems = self._write_and_verify_snapshot(normalized)
         lock = self._safety_lock if purpose == "transaction" else self._ownership_lock
         if not restored:
