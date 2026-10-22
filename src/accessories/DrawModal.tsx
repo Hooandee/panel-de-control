@@ -6,6 +6,7 @@ import { saveAccessoryDrawing } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
+import { confirmDestructive } from "./SafeConfirm";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
@@ -52,8 +53,9 @@ const ToolButton: FC<{ active: boolean; label: string; onPick: () => void; child
   </DialogButton>
 );
 
-const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal }) => {
+const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal, onDirty }) => {
   const { t } = useI18n();
+  const [saveFailed, setSaveFailed] = useState(false);
   const [frames, setFrames] = useState<Uint8Array[]>(() => initial.frames.length ? initial.frames.map((f) => new Uint8Array(f)) : [blankFrame()]);
   const [index, setIndex] = useState(0);
   const [colour, setColour] = useState<Rgb>(DRAW_PALETTE[9]);
@@ -77,6 +79,7 @@ const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeM
   useEffect(repaint, [repaint]);
 
   const apply = (x: number, y: number, chosen: Tool = tool) => {
+    onDirty?.();
     if (chosen === "fill") fill(frame, x, y, colour);
     else paint(frame, x, y, chosen === "eraser" ? [0, 0, 0] : colour, mirror);
     redraw((n) => n + 1);
@@ -115,12 +118,14 @@ const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeM
 
   const addFrame = (copy: boolean) => {
     if (frames.length >= MAX_FRAMES) return;
+    onDirty?.();
     const next = copy ? new Uint8Array(frame) : blankFrame();
     const list = [...frames.slice(0, index + 1), next, ...frames.slice(index + 1)];
     setFrames(list);
     setIndex(index + 1);
   };
   const removeFrame = () => {
+    onDirty?.();
     if (frames.length === 1) {
       frame.fill(0);
       redraw((n) => n + 1);
@@ -140,7 +145,11 @@ const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeM
         drawingId.current = result.id;
         onSent(result.id);
         closeModal?.();
+      } else {
+        setSaveFailed(true);
       }
+    } catch {
+      setSaveFailed(true);
     } finally {
       setBusy(false);
     }
@@ -173,7 +182,7 @@ const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeM
         </Focusable>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 220 }}>
-        <TextField value={name} onChange={(e) => setName(e.target.value.slice(0, 40))} />
+        <TextField value={name} onChange={(e) => { onDirty?.(); setName(e.target.value.slice(0, 40)); }} />
         <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
           {DRAW_PALETTE.map((rgb) => {
             const selected = rgb.every((v, k) => v === colour[k]);
@@ -209,17 +218,27 @@ const DrawBody: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeM
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700 }}>
           <LuSend /> {t("accessories.draw.send")}
         </DialogButton>
+        {saveFailed && <span style={{ fontSize: 11, color: theme.color.warn }}>{t("accessories.draw.saveFailed")}</span>}
         <span style={{ fontSize: 11, color: theme.color.textMuted, lineHeight: 1.4 }}>{t("accessories.draw.hint")}</span>
       </div>
     </div>
   );
 };
 
-const DrawModal: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal }) => (
-  <ModalRoot closeModal={closeModal}>
-    <DrawBody initial={initial} onSent={onSent} closeModal={closeModal} />
-  </ModalRoot>
-);
+const DrawModal: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal }) => {
+  const { t } = useI18n();
+  const dirty = useRef(false);
+  const leave = () => {
+    if (!dirty.current) return closeModal?.();
+    confirmDestructive({ title: t("accessories.draw.discardTitle"), desc: t("accessories.draw.discardDesc"),
+      confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: () => closeModal?.() });
+  };
+  return (
+    <ModalRoot onCancel={leave} onEscKeypress={leave}>
+      <DrawBody initial={initial} onSent={onSent} closeModal={closeModal} onDirty={() => { dirty.current = true; }} />
+    </ModalRoot>
+  );
+};
 
 export function openDrawModal(initial: DrawingDraft, onSent: (id: string) => void): void {
   showModal(<DrawModal initial={initial} onSent={onSent} />, window);

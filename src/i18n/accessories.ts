@@ -2,6 +2,11 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.draw.discardTitle": "¿Descartar los cambios?",
+  "accessories.draw.discardDesc": "Lo que has hecho desde la última vez que lo mostraste se perderá.",
+  "accessories.draw.discard": "Descartar",
+  "accessories.draw.keepEditing": "Seguir editando",
+  "accessories.draw.saveFailed": "No se pudo guardar. Inténtalo otra vez.",
   "accessories.busy.other.title": "Otro programa está usando la pantalla",
   "accessories.busy.other.body": "Ciérralo para controlar la pantalla desde aquí: {name}.",
   "accessories.compose.moving": "Moviendo · A para soltar",
@@ -117,6 +122,11 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.draw.discardTitle": "Discard your changes?",
+  "accessories.draw.discardDesc": "Anything you did since you last showed it will be lost.",
+  "accessories.draw.discard": "Discard",
+  "accessories.draw.keepEditing": "Keep editing",
+  "accessories.draw.saveFailed": "Could not save. Try again.",
   "accessories.busy.other.title": "Another program is using the display",
   "accessories.busy.other.body": "Close it to control the display from here: {name}.",
   "accessories.compose.moving": "Moving · A to drop",
@@ -232,6 +242,11 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.draw.discardTitle": "Scartare le modifiche?",
+  "accessories.draw.discardDesc": "Quello che hai fatto dall'ultima volta che l'hai mostrato andrà perso.",
+  "accessories.draw.discard": "Scarta",
+  "accessories.draw.keepEditing": "Continua a modificare",
+  "accessories.draw.saveFailed": "Impossibile salvare. Riprova.",
   "accessories.busy.other.title": "Un altro programma sta usando lo schermo",
   "accessories.busy.other.body": "Chiudilo per gestire lo schermo da qui: {name}.",
   "accessories.compose.moving": "Spostamento · A per rilasciare",
@@ -347,6 +362,11 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.draw.discardTitle": "Änderungen verwerfen?",
+  "accessories.draw.discardDesc": "Alles seit dem letzten Anzeigen geht verloren.",
+  "accessories.draw.discard": "Verwerfen",
+  "accessories.draw.keepEditing": "Weiter bearbeiten",
+  "accessories.draw.saveFailed": "Speichern fehlgeschlagen. Bitte erneut versuchen.",
   "accessories.busy.other.title": "Ein anderes Programm nutzt das Display",
   "accessories.busy.other.body": "Zum Steuern hier schließen: {name}.",
   "accessories.compose.moving": "Verschieben · A zum Ablegen",
@@ -462,6 +482,11 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.draw.discardTitle": "Descartar as alterações?",
+  "accessories.draw.discardDesc": "O que você fez desde a última vez que mostrou será perdido.",
+  "accessories.draw.discard": "Descartar",
+  "accessories.draw.keepEditing": "Continuar editando",
+  "accessories.draw.saveFailed": "Não foi possível salvar. Tente de novo.",
   "accessories.busy.other.title": "Outro programa está usando a tela",
   "accessories.busy.other.body": "Feche-o para controlar a tela por aqui: {name}.",
   "accessories.compose.moving": "Movendo · A para soltar",
@@ -577,6 +602,11 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.draw.discardTitle": "Abandonner les modifications ?",
+  "accessories.draw.discardDesc": "Tout ce que vous avez fait depuis le dernier affichage sera perdu.",
+  "accessories.draw.discard": "Abandonner",
+  "accessories.draw.keepEditing": "Continuer",
+  "accessories.draw.saveFailed": "Impossible d'enregistrer. Réessayez.",
   "accessories.busy.other.title": "Un autre programme utilise l'écran",
   "accessories.busy.other.body": "Fermez-le pour piloter l'écran d'ici : {name}.",
   "accessories.compose.moving": "Déplacement · A pour lâcher",

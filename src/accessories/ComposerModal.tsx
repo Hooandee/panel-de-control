@@ -1,11 +1,12 @@
 import { DialogButton, Focusable, GamepadButton, GamepadEvent, ModalRoot, TextField } from "@decky/ui";
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 import { LuCalendar, LuClock3, LuGauge, LuImage, LuMove, LuSend, LuSparkles, LuTrash2, LuType } from "react-icons/lu";
 
 import { DrawingSummary, listAccessoryDrawings, previewAccessoryScene } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
+import { confirmDestructive } from "./SafeConfirm";
 import { decodeFrames, DecodedFrames, PANEL_H, PANEL_W } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 
@@ -36,7 +37,7 @@ export const STARTER_LAYOUT: Block[] = [
 
 const next = <T,>(list: T[], value: T | undefined): T => list[(list.indexOf(value as T) + 1) % list.length];
 
-const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal }) => {
+const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal, onDirty }) => {
   const { t } = useI18n();
   const [blocks, setBlocks] = useState<Block[]>(initial.length ? initial : STARTER_LAYOUT);
   const [selected, setSelected] = useState(0);
@@ -60,15 +61,18 @@ const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; cl
   const current = blocks[selected];
   const update = (patch: Partial<Block>) => {
     if (!current) return;
+    onDirty?.();
     setBlocks(blocks.map((block, i) => (i === selected ? { ...block, ...patch } : block)));
   };
   const add = (block: Block) => {
     if (blocks.length >= MAX_BLOCKS) return;
+    onDirty?.();
     setBlocks([...blocks, block]);
     setSelected(blocks.length);
   };
   const remove = () => {
     if (!current) return;
+    onDirty?.();
     setBlocks(blocks.filter((_, i) => i !== selected));
     setSelected(Math.max(0, selected - 1));
   };
@@ -158,11 +162,20 @@ const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; cl
   );
 };
 
-const ComposerModal: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal }) => (
-  <ModalRoot closeModal={closeModal}>
-    <ComposerBody initial={initial} onShow={onShow} closeModal={closeModal} />
-  </ModalRoot>
-);
+const ComposerModal: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal }) => {
+  const { t } = useI18n();
+  const dirty = useRef(false);
+  const leave = () => {
+    if (!dirty.current) return closeModal?.();
+    confirmDestructive({ title: t("accessories.draw.discardTitle"), desc: t("accessories.draw.discardDesc"),
+      confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: () => closeModal?.() });
+  };
+  return (
+    <ModalRoot onCancel={leave} onEscKeypress={leave}>
+      <ComposerBody initial={initial} onShow={onShow} closeModal={closeModal} onDirty={() => { dirty.current = true; }} />
+    </ModalRoot>
+  );
+};
 
 export function openComposerModal(initial: Block[], onShow: (blocks: Block[]) => void): void {
   showModal(<ComposerModal initial={initial} onShow={onShow} />, window);

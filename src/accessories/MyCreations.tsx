@@ -4,8 +4,7 @@ import { FC, useCallback, useEffect, useState } from "react";
 import { LuBlocks, LuImagePlus, LuPencil } from "react-icons/lu";
 
 import { deleteAccessoryDrawing, DrawingSummary, listAccessoryDrawings, loadAccessoryDrawing, readAccessoryImage, saveAccessoryDrawing } from "../api";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { showModal } from "../navigation/showModal";
+import { confirmDestructive } from "./SafeConfirm";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { decodeFrame } from "./drawing";
@@ -90,12 +89,11 @@ export const MyCreations: FC<{
     openDrawModal({ id: full.id, name: full.name ?? "", frames: full.frames.map(decodeFrame), fps: full.fps ?? 8 }, sent);
   };
   const remove = (summary: DrawingSummary) => {
-    showModal(
-      <ConfirmDialog title={t("accessories.draw.deleteTitle")} desc={summary.name || t("accessories.draw.untitled")}
-        confirmLabel={t("accessories.draw.delete")} cancelLabel={t("accessories.draw.cancel")}
-        onConfirm={() => void deleteAccessoryDrawing(summary.id).then(refresh)} />,
-      window,
-    );
+    confirmDestructive({
+      title: t("accessories.draw.deleteTitle"), desc: summary.name || t("accessories.draw.untitled"),
+      confirmLabel: t("accessories.draw.delete"), cancelLabel: t("accessories.draw.cancel"),
+      onConfirm: () => void deleteAccessoryDrawing(summary.id).then(refresh),
+    });
   };
   const importFile = async () => {
     try {
