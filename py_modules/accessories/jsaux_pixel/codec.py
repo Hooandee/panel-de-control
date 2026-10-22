@@ -56,3 +56,7 @@ def is_ack(reply: bytes, version: int, command: int) -> bool:
     expected = frame(version, command, b"\x01")
     return reply[:len(expected)] == expected
 
+
+
+def is_reply(reply: bytes, version: int, command: int) -> bool:
+    return any(reply[:9] == frame(version, command, bytes((status,))) for status in (0, 1))

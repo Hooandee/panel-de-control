@@ -1,0 +1,147 @@
+import os
+import termios
+import threading
+
+import pytest
+
+from accessories.jsaux_pixel import codec, detect, transport
+
+BAUD = getattr(termios, "B1000000", termios.B38400)
+
+
+def _fake_usb_serial(root, bus_port="7-1", vendor="1a86", product="7523", tty="ttyUSB0"):
+    device = root / "devices/pci0000:00/0000:09:00.4/usb7" / bus_port
+    iface = device / f"{bus_port}:1.0" / tty
+    iface.mkdir(parents=True)
+    (device / "idVendor").write_text(vendor + "\n")
+    (device / "idProduct").write_text(product + "\n")
+    links = root / "bus/usb-serial/devices"
+    links.mkdir(parents=True, exist_ok=True)
+    (links / tty).symlink_to(iface)
+    return root
+
+
+def test_finds_the_ch340_and_its_supply_strength(tmp_path):
+    panel = detect.find_panel(_fake_usb_serial(tmp_path))
+    assert panel == detect.PanelPort(dev="/dev/ttyUSB0", bus_port="7-1", strong_supply=True)
+
+
+@pytest.mark.parametrize("bus_port,strong", [("5-1", True), ("1-2", True), ("3-2", False), ("7-1.4", False)])
+def test_supply_strength_follows_the_official_strong_port_list(tmp_path, bus_port, strong):
+    assert detect.find_panel(_fake_usb_serial(tmp_path, bus_port=bus_port)).strong_supply is strong
+
+
+def test_other_usb_serial_adapters_are_ignored(tmp_path):
+    assert detect.find_panel(_fake_usb_serial(tmp_path, vendor="0403", product="6001")) is None
+    assert detect.find_panel(tmp_path / "missing") is None
+
+
+def test_lists_other_processes_holding_the_port(tmp_path):
+    for pid, comm, target in [("100", "jsaux-matrix-dae", "/dev/ttyUSB0"), ("200", "bash", "/dev/null")]:
+        fd = tmp_path / pid / "fd"
+        fd.mkdir(parents=True)
+        (fd / "3").symlink_to(target)
+        (tmp_path / pid / "comm").write_text(comm + "\n")
+    (tmp_path / "self").mkdir()
+    assert detect.port_holders("/dev/ttyUSB0", proc_root=tmp_path, own_pid=999) == [(100, "jsaux-matrix-dae")]
+
+
+class _FakePanel:
+    """Answers each received frame like the firmware: echo with payload 1, or nothing."""
+
+    def __init__(self, master, mute_commands=()):
+        self.master, self.mute, self.received = master, set(mute_commands), []
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        buf = b""
+        while True:
+            try:
+                data = os.read(self.master, 4096)
+            except OSError:
+                return
+            buf += data
+            while len(buf) >= 8 and buf[:2] == b"DY":
+                size = 6 + int.from_bytes(buf[4:6], "big") + 2
+                if len(buf) < size:
+                    break
+                frame, buf = buf[:size], buf[size:]
+                self.received.append(frame)
+                if frame[3] in self.mute:
+                    continue
+                known = not (frame[3] == codec.Cmd.ANIMATION and frame[6] > 3)
+                os.write(self.master, codec.frame(frame[2], frame[3], b"\x01" if known else b"\x00"))
+
+
+@pytest.fixture
+def pty_panel():
+    master, slave = os.openpty()
+    path = os.ttyname(slave)
+    os.close(slave)
+    yield master, path
+    os.close(master)
+
+
+def test_request_returns_the_panel_echo(pty_panel):
+    master, path = pty_panel
+    _FakePanel(master)
+    link = transport.Transport(path, baud=BAUD)
+    link.open()
+    try:
+        assert transport.handshake(link)
+        reply = link.request(codec.frame(1, codec.Cmd.GIF_END, b"\x01"), timeout=1.0)
+        assert codec.is_ack(reply, 1, codec.Cmd.GIF_END)
+    finally:
+        link.close()
+
+
+def test_silence_times_out_without_raising(pty_panel):
+    master, path = pty_panel
+    _FakePanel(master, mute_commands={codec.Cmd.POWER, codec.Cmd.ANIMATION})
+    link = transport.Transport(path, baud=BAUD)
+    link.open()
+    try:
+        assert link.request(codec.frame(1, codec.Cmd.POWER, b"\x01"), timeout=0.2) is None
+        assert not transport.handshake(link, timeout=0.2)
+    finally:
+        link.close()
+
+
+def test_send_writes_without_waiting_for_a_reply(pty_panel):
+    master, path = pty_panel
+    fake = _FakePanel(master, mute_commands={codec.Cmd.BRIGHTNESS})
+    link = transport.Transport(path, baud=BAUD)
+    link.open()
+    try:
+        link.send(codec.frame(1, codec.Cmd.BRIGHTNESS, b"\x28"))
+        assert link.request(codec.frame(1, codec.Cmd.POWER, b"\x01"), timeout=1.0)
+        assert fake.received[0] == codec.frame(1, codec.Cmd.BRIGHTNESS, b"\x28")
+    finally:
+        link.close()
+
+
+def test_closed_link_reports_a_transport_error():
+    link = transport.Transport("/dev/does-not-exist", baud=BAUD)
+    with pytest.raises(transport.TransportError):
+        link.open()
+    with pytest.raises(transport.TransportError):
+        link.request(b"DY", timeout=0.1)
+
+
+def test_handshake_is_a_rejected_animation_that_leaves_the_screen_alone(pty_panel):
+    master, path = pty_panel
+    fake = _FakePanel(master)
+    link = transport.Transport(path, baud=BAUD)
+    link.open()
+    try:
+        assert transport.handshake(link)
+        assert fake.received == [codec.frame(1, codec.Cmd.ANIMATION, b"\x0c")]
+    finally:
+        link.close()
+
+
+def test_is_reply_accepts_nak_but_not_corruption():
+    assert codec.is_reply(codec.frame(1, codec.Cmd.ANIMATION, b"\x00"), 1, codec.Cmd.ANIMATION)
+    assert not codec.is_reply(codec.frame(1, codec.Cmd.POWER, b"\x00"), 1, codec.Cmd.ANIMATION)
+    assert not codec.is_reply(codec.frame(1, codec.Cmd.ANIMATION, b"\x00")[:-1] + b"\x00", 1, codec.Cmd.ANIMATION)
