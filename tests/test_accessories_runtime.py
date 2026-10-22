@@ -70,3 +70,13 @@ def test_only_live_scenes_ask_for_frame_rate(tmp_path):
     assert rt.wants_fps() is False
     rt.set_scene("game_heart", {})
     assert rt.wants_fps() is True
+
+
+def test_catalog_declares_each_scene_options(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None)
+    options = {scene["id"]: scene["options"] for scene in rt.state()["catalog"]}
+    assert options["clock_digital"] == ["theme", "hour12"]
+    assert options["art_lava"] == ["theme"]
+    assert options["fw_tunnel"] == []
+    assert options["hooandee"] == []

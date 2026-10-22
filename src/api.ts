@@ -1220,6 +1220,7 @@ export interface AccessorySceneMeta {
   id: string;
   category: string;
   labelKey: string;
+  options: string[];
 }
 export interface AccessoriesState {
   ok?: boolean;

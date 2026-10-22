@@ -25,6 +25,7 @@ class SessionScene(Scene):
     """Time in the current game, precomputed an hour ahead like the clocks."""
 
     id = "game_session"
+    OPTIONS = ("theme",)
     UPLOADS_PER_HOUR = 2
 
     def key(self, ctx: SceneContext):

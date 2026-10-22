@@ -5,6 +5,7 @@ import { LuPlug, LuSun } from "react-icons/lu";
 import { PixelPreview } from "../accessories/PixelPreview";
 import { DecodedFrames } from "../accessories/pixelFrames";
 import { SceneGallery } from "../accessories/SceneGallery";
+import { SceneOptions } from "../accessories/SceneOptions";
 import { loadPreview, useAccessories } from "../accessories/useAccessories";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
@@ -27,7 +28,7 @@ const StatusPill: FC<{ status: Status }> = ({ status }) => {
   );
 };
 
-const Hero: FC<{ status: Status; sceneId: string | null; labelKey: string | undefined; power: boolean }> = ({ status, sceneId, labelKey, power }) => {
+const Hero: FC<{ status: Status; sceneId: string | null; options: Record<string, unknown>; labelKey: string | undefined; power: boolean }> = ({ status, sceneId, options, labelKey, power }) => {
   const { t } = useI18n();
   const [decoded, setDecoded] = useState<DecodedFrames | null>(null);
   useEffect(() => {
@@ -36,9 +37,9 @@ const Hero: FC<{ status: Status; sceneId: string | null; labelKey: string | unde
       setDecoded(null);
       return undefined;
     }
-    void loadPreview(sceneId).then((value) => { if (live) setDecoded(value); });
+    void loadPreview(sceneId, options).then((value) => { if (live) setDecoded(value); });
     return () => { live = false; };
-  }, [sceneId]);
+  }, [sceneId, JSON.stringify(options)]);
   const caption = !power ? t("accessories.power.off") : labelKey ? t(labelKey) : t("accessories.pick");
   return (
     <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", alignItems: "center",
@@ -84,7 +85,11 @@ export const AccesoriosSection: FC = () => {
     <>
       <PanelSectionRow>
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
-          <Hero status={status} sceneId={state.scene} labelKey={active?.labelKey} power={state.power} />
+          <Hero status={status} sceneId={state.scene} options={state.options} labelKey={active?.labelKey} power={state.power} />
+          {state.present && active && (
+            <SceneOptions options={active.options} values={state.options}
+              onChange={(values) => void chooseScene(active.id, values)} />
+          )}
           {!state.present && <EmptyState busy={!!state.busy_by} />}
         </div>
       </PanelSectionRow>

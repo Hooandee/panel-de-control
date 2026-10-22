@@ -28,6 +28,7 @@ def _fmt(value, suffix: str = "") -> str:
 
 class LiveScene(Scene):
     METRIC = ""
+    OPTIONS = ("theme",)
 
     def render(self, ctx: SceneContext) -> Segment:
         segment = self._render(ctx)
@@ -173,6 +174,7 @@ class DashboardScene(LiveScene):
     """Date, clock and CPU/GPU/RAM/FPS: the official app's layout, redrawn only when a bar moves."""
 
     id = "game_dashboard"
+    OPTIONS = ("theme", "hour12")
     METRIC = "dashboard"
     UPLOADS_PER_HOUR = 30
 

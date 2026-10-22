@@ -36,6 +36,7 @@ class Scene:
 
     id: str = ""
     UPLOADS_PER_HOUR: float = 0
+    OPTIONS: tuple[str, ...] = ()
 
     def key(self, ctx: SceneContext) -> Hashable:
         return None

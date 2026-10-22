@@ -2,6 +2,11 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.hour12": "12 horas",
+  "accessories.theme.aurora": "Aurora",
+  "accessories.theme.sunset": "Atardecer",
+  "accessories.theme.mint": "Menta",
+  "accessories.theme.mono": "Blanco",
   "accessories.scene.pet": "Mascota",
   "accessories.scene.game_cover": "Carátula",
   "accessories.scene.game_session": "Partida",
@@ -47,6 +52,11 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.hour12": "12-hour clock",
+  "accessories.theme.aurora": "Aurora",
+  "accessories.theme.sunset": "Sunset",
+  "accessories.theme.mint": "Mint",
+  "accessories.theme.mono": "White",
   "accessories.scene.pet": "Pet",
   "accessories.scene.game_cover": "Cover art",
   "accessories.scene.game_session": "Session",
@@ -92,6 +102,11 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.hour12": "Formato 12 ore",
+  "accessories.theme.aurora": "Aurora",
+  "accessories.theme.sunset": "Tramonto",
+  "accessories.theme.mint": "Menta",
+  "accessories.theme.mono": "Bianco",
   "accessories.scene.pet": "Mascotte",
   "accessories.scene.game_cover": "Copertina",
   "accessories.scene.game_session": "Partita",
@@ -137,6 +152,11 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.hour12": "12-Stunden-Format",
+  "accessories.theme.aurora": "Aurora",
+  "accessories.theme.sunset": "Abendrot",
+  "accessories.theme.mint": "Minze",
+  "accessories.theme.mono": "Weiß",
   "accessories.scene.pet": "Haustier",
   "accessories.scene.game_cover": "Cover",
   "accessories.scene.game_session": "Sitzung",
@@ -182,6 +202,11 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.hour12": "Formato 12 horas",
+  "accessories.theme.aurora": "Aurora",
+  "accessories.theme.sunset": "Pôr do sol",
+  "accessories.theme.mint": "Menta",
+  "accessories.theme.mono": "Branco",
   "accessories.scene.pet": "Mascote",
   "accessories.scene.game_cover": "Capa",
   "accessories.scene.game_session": "Partida",
@@ -227,6 +252,11 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.hour12": "Format 12 heures",
+  "accessories.theme.aurora": "Aurore",
+  "accessories.theme.sunset": "Coucher de soleil",
+  "accessories.theme.mint": "Menthe",
+  "accessories.theme.mono": "Blanc",
   "accessories.scene.pet": "Compagnon",
   "accessories.scene.game_cover": "Jaquette",
   "accessories.scene.game_session": "Partie",

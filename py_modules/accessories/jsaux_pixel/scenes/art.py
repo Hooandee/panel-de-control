@@ -17,6 +17,7 @@ W, H = codec.WIDTH, codec.HEIGHT
 
 class Loop(Scene):
     UPLOADS_PER_HOUR = 0
+    OPTIONS = ("theme",)
     FRAMES = 32
     DELAY_CS = 8
     seamless = True
@@ -69,6 +70,7 @@ class Starfield(Loop):
 
 class MatrixRain(Loop):
     id = "art_matrix"
+    OPTIONS = ()
     FRAMES = 27
     DELAY_CS = 8
 
@@ -125,6 +127,7 @@ class LavaLamp(Loop):
 
 class Aquarium(Loop):
     id = "art_aquarium"
+    OPTIONS = ()
     FRAMES = 40
     DELAY_CS = 10
 

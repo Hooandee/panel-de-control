@@ -45,6 +45,7 @@ def _gradient_text(canvas: Canvas, y: int, text: str, font: fonts.Font, theme: T
 
 class HourClock(Scene):
     UPLOADS_PER_HOUR = 1
+    OPTIONS = ("theme", "hour12")
 
     def key(self, ctx: SceneContext):
         t = datetime.fromtimestamp(ctx.now, ctx.tz)

@@ -39,6 +39,7 @@ def _word_pixels() -> list[tuple[int, int]]:
 
 class SignatureScene(Loop):
     id = "hooandee"
+    OPTIONS = ()
     FRAMES = 40
     DELAY_CS = 6
 

@@ -42,6 +42,7 @@ _BODY = (
 
 class PetScene(Scene):
     id = "pet"
+    OPTIONS = ("theme",)
     UPLOADS_PER_HOUR = 8
 
     def __init__(self):

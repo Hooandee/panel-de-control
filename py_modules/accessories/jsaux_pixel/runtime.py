@@ -53,7 +53,8 @@ class Runtime:
         state = self.service.state()
         state["supported"] = self.supported
         state["catalog"] = [
-            {"id": scene.id, "category": category, "labelKey": f"accessories.scene.{scene.id}"}
+            {"id": scene.id, "category": category, "labelKey": f"accessories.scene.{scene.id}",
+             "options": list(scene.OPTIONS)}
             for category, scene in self._entries
         ]
         return state
