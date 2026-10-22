@@ -174,6 +174,31 @@ public sealed class ThemePackageTests : IDisposable
     }
 
     [Fact]
+    public void UninstallRemovesTheThemeAndItsSettingsSoTheEngineDropsIt()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+        service.SetEnabled(Name, true);
+
+        service.Uninstall(Name);
+
+        Assert.Empty(service.Library().Themes);
+        Assert.Empty(service.Settings());
+        Assert.Empty(service.EngineInputs().Enabled);
+        Assert.Empty(service.EngineInputs().Extensions);
+    }
+
+    [Fact]
+    public void UninstallRefusesAThemeThatIsNotInstalled()
+    {
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+
+        Assert.Equal("not_installed", Assert.Throws<ThemeInstallException>(() => service.Uninstall(Name)).Code);
+    }
+
+    [Fact]
     public void ParsesTheEarlyListAndRejectsAVersionWithoutArtifact()
     {
         var early = ThemeCatalog.ParseEarly(Encoding.UTF8.GetBytes(EarlyList("0.2.5", 10, new string('a', 64))));

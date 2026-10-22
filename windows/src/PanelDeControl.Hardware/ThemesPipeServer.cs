@@ -53,6 +53,9 @@ public sealed class ThemesController : IThemesController
                 case ThemesOperation.SetEnabled:
                     service.SetEnabled(request.Name!, request.Enabled!.Value);
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
+                case ThemesOperation.Uninstall:
+                    service.Uninstall(request.Name!);
+                    return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
                 case ThemesOperation.SetOption:
                     service.SetPatch(request.Name!, request.Option!, request.Value!);
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);

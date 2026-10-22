@@ -275,6 +275,35 @@ public sealed class ThemeService
         CompanionLog.Write("themes.enabled", $"{name} {enabled}");
     }
 
+    /// <summary>
+    /// Removes an installed theme: its settings first, so the engine drops its sheets and runtime on the
+    /// next read even if a file is still busy, then its folder and the copy Steam serves its assets from.
+    /// </summary>
+    public void Uninstall(string name)
+    {
+        var theme = Library().Themes.FirstOrDefault(candidate => candidate.Name == name)
+            ?? throw new ThemeInstallException("not_installed", "Theme is not installed");
+        settings.Update(themes => themes.Where(setting => setting.Name != name).ToArray());
+        Directory.Delete(theme.Directory, recursive: true);
+        if (ThemesCustomRoot is { } root && !IsForeignLink(root))
+        {
+            var mirror = Path.Combine(root, theme.Name);
+            try
+            {
+                if (Directory.Exists(mirror))
+                {
+                    Directory.Delete(mirror, recursive: true);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                CompanionLog.Write("themes.uninstall_assets", exception);
+            }
+        }
+
+        CompanionLog.Write("themes.uninstall", name);
+    }
+
     public void SetPatch(string name, string patch, string value)
     {
         var theme = Library().Themes.FirstOrDefault(candidate => candidate.Name == name)

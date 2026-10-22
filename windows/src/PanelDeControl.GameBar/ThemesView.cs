@@ -221,6 +221,83 @@ public sealed class ThemesView : UserControl
         return cover;
     }
 
+    private void BuildRemoval(ThemeCard card)
+    {
+        card.RemoveButton.Style = Resource<Style>("PdcSoftButtonStyle");
+        card.RemoveButton.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
+        card.RemoveButton.Foreground = Resource<Brush>("PdcTextMutedBrush");
+        card.RemoveButton.HorizontalAlignment = HorizontalAlignment.Left;
+        card.RemoveButton.Padding = new Thickness(0, 8, 0, 2);
+        card.RemoveButton.Margin = new Thickness(0, 6, 0, 0);
+        card.RemoveButton.Click += (_, _) => SetRemovalConfirmation(card, true);
+
+        card.RemoveTitle.Style = Resource<Style>("PdcTitleStyle");
+        card.RemoveTitle.TextWrapping = TextWrapping.WrapWholeWords;
+        card.RemoveDescription.Style = Resource<Style>("PdcMutedStyle");
+        card.RemoveDescription.TextWrapping = TextWrapping.WrapWholeWords;
+        card.RemoveDescription.Margin = new Thickness(0, 4, 0, 0);
+        card.RemoveConfirmButton.Style = Resource<Style>("PdcChipButtonStyle");
+        card.RemoveConfirmButton.Padding = new Thickness(14, 9, 14, 9);
+        card.RemoveConfirmButton.Background = new SolidColorBrush(WithAlpha(((SolidColorBrush)Resource<Brush>("PdcDangerBrush")).Color, 0x40));
+        card.RemoveConfirmButton.Foreground = Resource<Brush>("PdcDangerBrush");
+        card.RemoveConfirmButton.FontWeight = FontWeights.SemiBold;
+        card.RemoveConfirmButton.Click += (_, _) => _ = RemoveAsync(card);
+        card.RemoveCancelButton.Style = Resource<Style>("PdcChipButtonStyle");
+        card.RemoveCancelButton.Padding = new Thickness(14, 9, 14, 9);
+        card.RemoveCancelButton.Click += (_, _) => SetRemovalConfirmation(card, false);
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        buttons.Children.Add(card.RemoveConfirmButton);
+        buttons.Children.Add(card.RemoveCancelButton);
+        card.RemoveConfirm.Background = Resource<Brush>("PdcLayerBrush");
+        card.RemoveConfirm.CornerRadius = Resource<CornerRadius>("PdcRadiusInset");
+        card.RemoveConfirm.Padding = new Thickness(14, 12, 14, 14);
+        card.RemoveConfirm.Margin = new Thickness(0, 10, 0, 0);
+        card.RemoveConfirm.Child = new StackPanel { Children = { card.RemoveTitle, card.RemoveDescription, buttons } };
+    }
+
+    private void SetRemovalConfirmation(ThemeCard card, bool confirming)
+    {
+        if (applying || operationPending || card.Entry is null)
+        {
+            return;
+        }
+
+        card.ConfirmingRemoval = confirming;
+        UpdateCard(card, card.Entry);
+        if (confirming)
+        {
+            card.RemoveCancelButton.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private async Task RemoveAsync(ThemeCard card)
+    {
+        if (applying || card.Entry is null || !card.Entry.Installed)
+        {
+            return;
+        }
+
+        card.Removing = true;
+        try
+        {
+            await RunAsync(() => client.UninstallAsync(card.Name));
+        }
+        finally
+        {
+            card.Removing = false;
+            card.ConfirmingRemoval = false;
+            expanded.Remove(card.Name);
+            if (last is not null)
+            {
+                Apply(last, null);
+            }
+        }
+    }
+
+    private static Windows.UI.Color WithAlpha(Windows.UI.Color color, byte alpha) =>
+        Windows.UI.Color.FromArgb(alpha, color.R, color.G, color.B);
+
     private ThemeCard BuildCard(ThemeEntry theme)
     {
         var card = new ThemeCard(theme.Name);
@@ -280,6 +357,7 @@ public sealed class ThemesView : UserControl
         };
         card.Options.Spacing = 14;
         card.Options.Margin = new Thickness(0, 8, 0, 4);
+        BuildRemoval(card);
 
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -303,7 +381,7 @@ public sealed class ThemesView : UserControl
         card.Root.Style = Resource<Style>("PdcCardStyle");
         var content = new StackPanel
         {
-            Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options },
+            Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options, card.RemoveButton, card.RemoveConfirm },
         };
         if (BuildCover(theme.Name) is { } cover)
         {
@@ -439,6 +517,18 @@ public sealed class ThemesView : UserControl
         card.EarlyAction.Content = card.ImportingEarly ? Localized("ThemesInstalling") : Localized("ThemesInstallFromFile");
         card.EarlyAction.Visibility = theme.EarlyVersion is null ? Visibility.Collapsed : Visibility.Visible;
         card.EarlyAction.IsEnabled = !operationPending;
+
+        card.ConfirmingRemoval &= theme.Installed;
+        card.RemoveButton.Content = card.Removing ? Localized("ThemesRemoving") : Localized("ThemesRemove");
+        card.RemoveButton.Visibility = theme.Installed && !card.ConfirmingRemoval ? Visibility.Visible : Visibility.Collapsed;
+        card.RemoveButton.IsEnabled = !operationPending;
+        card.RemoveConfirm.Visibility = card.ConfirmingRemoval ? Visibility.Visible : Visibility.Collapsed;
+        card.RemoveTitle.Text = string.Format(Localized("ThemesRemoveTitle"), card.Title.Text);
+        card.RemoveDescription.Text = Localized("ThemesRemoveDescription");
+        card.RemoveConfirmButton.Content = card.Removing ? Localized("ThemesRemoving") : Localized("ThemesRemoveConfirm");
+        card.RemoveConfirmButton.IsEnabled = !operationPending;
+        card.RemoveCancelButton.Content = Localized("ThemesRemoveCancel");
+        card.RemoveCancelButton.IsEnabled = !operationPending;
 
         var hasOptions = theme.Installed && theme.Broken is null && (theme.Options?.Any(option => option.Type != "none") ?? false);
         card.OptionsButton.Visibility = hasOptions ? Visibility.Visible : Visibility.Collapsed;
@@ -715,5 +805,21 @@ public sealed class ThemesView : UserControl
         public StackPanel Options { get; } = new();
 
         public Dictionary<string, FrameworkElement> OptionControls { get; } = new(StringComparer.Ordinal);
+
+        public bool ConfirmingRemoval { get; set; }
+
+        public bool Removing { get; set; }
+
+        public Button RemoveButton { get; } = new();
+
+        public Border RemoveConfirm { get; } = new();
+
+        public TextBlock RemoveTitle { get; } = new();
+
+        public TextBlock RemoveDescription { get; } = new();
+
+        public Button RemoveConfirmButton { get; } = new();
+
+        public Button RemoveCancelButton { get; } = new();
     }
 }

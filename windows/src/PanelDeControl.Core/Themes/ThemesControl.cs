@@ -32,6 +32,9 @@ public enum ThemesOperation
 
     [EnumMember(Value = "install_early")]
     InstallEarly = 7,
+
+    [EnumMember(Value = "uninstall")]
+    Uninstall = 8,
 }
 
 /// <summary>Why themes can or cannot reach Steam, as the widget explains it.</summary>
@@ -128,6 +131,8 @@ public sealed class ThemesRequest
 
     public static ThemesRequest InstallEarly(string catalogId, string archivePath) => new(ThemesOperation.InstallEarly, catalogId: catalogId, archivePath: archivePath);
 
+    public static ThemesRequest Uninstall(string name) => new(ThemesOperation.Uninstall, name: name);
+
     public static ThemesRequest EnableSteamDebugging() => new(ThemesOperation.EnableSteamDebugging);
 
     public static ThemesRequest RestartSteam() => new(ThemesOperation.RestartSteam);
@@ -144,6 +149,7 @@ public sealed class ThemesRequest
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.InstallEarly => Present(CatalogId) && ArchivePath is not null && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.Uninstall => Present(Name) && Enabled is null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
             ThemesOperation.SetEnabled => Present(Name) && Enabled is not null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
             ThemesOperation.SetOption => Present(Name) && Present(Option) && Present(Value) && Absent(CatalogId) && Absent(Version) && Enabled is null,
             _ => false,

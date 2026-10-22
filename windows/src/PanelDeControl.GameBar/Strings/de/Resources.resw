@@ -457,4 +457,10 @@
   <data name="ReportCopy" xml:space="preserve"><value>Code kopieren</value></data>
   <data name="ReportCopied" xml:space="preserve"><value>Kopiert!</value></data>
   <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesRemove" xml:space="preserve"><value>Theme entfernen</value></data>
+  <data name="ThemesRemoving" xml:space="preserve"><value>Wird entfernt…</value></data>
+  <data name="ThemesRemoveTitle" xml:space="preserve"><value>{0} entfernen?</value></data>
+  <data name="ThemesRemoveDescription" xml:space="preserve"><value>Seine Dateien und Einstellungen werden gelöscht. Du kannst es später erneut installieren.</value></data>
+  <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Entfernen</value></data>
+  <data name="ThemesRemoveCancel" xml:space="preserve"><value>Abbrechen</value></data>
 </root>

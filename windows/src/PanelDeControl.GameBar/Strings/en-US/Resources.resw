@@ -497,4 +497,10 @@
   <data name="ReportCopy" xml:space="preserve"><value>Copy code</value></data>
   <data name="ReportCopied" xml:space="preserve"><value>Copied!</value></data>
   <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesRemove" xml:space="preserve"><value>Remove theme</value></data>
+  <data name="ThemesRemoving" xml:space="preserve"><value>Removing…</value></data>
+  <data name="ThemesRemoveTitle" xml:space="preserve"><value>Remove {0}?</value></data>
+  <data name="ThemesRemoveDescription" xml:space="preserve"><value>Its files and settings will be deleted. It can be installed again later.</value></data>
+  <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Remove</value></data>
+  <data name="ThemesRemoveCancel" xml:space="preserve"><value>Cancel</value></data>
 </root>
