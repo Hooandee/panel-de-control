@@ -25,6 +25,9 @@ from .transport import TransportError
 _RECONNECT_S = 5.0
 _ACK_TIMEOUT_S = 2.0
 _END_TIMEOUT_S = 3.0
+# The official daemon waits 20 ms after every command the firmware does not answer; sending the
+# next frame sooner can make the panel drop it.
+_SETTLE_S = 0.02
 _DEFAULT_BRIGHTNESS = 60
 
 
@@ -32,11 +35,13 @@ class PixelService:
     def __init__(self, *, store_path: Path, find_panel: Callable[[], PanelPort | None],
                  open_link: Callable[[PanelPort], object], port_holders: Callable[[str], list],
                  scenes: dict[str, Scene], context: Callable[[float], SceneContext],
-                 log: Callable[..., None], clock: Callable[[], float] = time.time, enabled: bool = True):
+                 log: Callable[..., None], clock: Callable[[], float] = time.time, enabled: bool = True,
+                 sleep: Callable[[float], None] = time.sleep):
         self._store_path = Path(store_path)
         self._find_panel, self._open_link, self._port_holders = find_panel, open_link, port_holders
         self._scenes, self._context, self._log, self._clock = scenes, context, log, clock
         self._enabled = enabled
+        self._sleep = sleep
         self._lock = threading.RLock()
         self._port: PanelPort | None = None
         self._link = None
@@ -169,7 +174,7 @@ class PixelService:
             return
         frame = codec.frame(1, codec.Cmd.BRIGHTNESS, bytes((pwm,)))
         if power_guard.allowed(frame):
-            self._link.send(frame)
+            self._send_unanswered(frame)
             self._brightness_sent = pwm
 
     def _sync_scene(self, now: float) -> None:
@@ -224,14 +229,19 @@ class PixelService:
     def _send_gif(self, data: bytes) -> bool:
         if not power_guard.allowed(codec.frame(1, codec.Cmd.TEST, b"\x00")):
             return False
-        self._link.send(codec.frame(1, codec.Cmd.TEST, b"\x00"))
+        self._send_unanswered(codec.frame(1, codec.Cmd.TEST, b"\x00"))
         for frame in codec.gif_upload(data):
             timeout = _END_TIMEOUT_S if frame[3] == codec.Cmd.GIF_END else _ACK_TIMEOUT_S
             reply = self._request(frame, timeout)
             if reply is None or not codec.is_ack(reply, frame[2], frame[3]):
-                self._log("WARNING", "nak", command=frame[3], reply=(reply or b"").hex())
+                self._log("WARNING", "nak", command=frame[3], reply=(reply or b"").hex(),
+                          frame=frame[:24].hex(), gif_bytes=len(data), gif_head=data[:64].hex())
                 return False
         return True
+
+    def _send_unanswered(self, frame: bytes) -> None:
+        self._link.send(frame)
+        self._sleep(_SETTLE_S)
 
     def _request(self, frame: bytes, timeout: float = _ACK_TIMEOUT_S) -> bytes | None:
         if not power_guard.allowed(frame):

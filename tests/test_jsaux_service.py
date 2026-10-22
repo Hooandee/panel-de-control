@@ -251,3 +251,13 @@ def test_nothing_is_written_until_a_scene_is_chosen(rig):
     assert panel.uploads() == [] and panel.commands(codec.Cmd.ANIMATION) == []
     assert svc.state()["scene"] is None
     assert svc.state()["present"] is True
+
+
+def test_commands_without_reply_get_the_official_settle_gap(rig):
+    panel, clock, _, make = rig
+    sleeps = []
+    svc = make(sleep=sleeps.append)
+    svc.set_scene("steady", {})
+    svc.tick()
+    assert sleeps and all(s >= 0.02 for s in sleeps)
+    assert len(sleeps) >= 2
