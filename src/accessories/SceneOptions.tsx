@@ -66,6 +66,22 @@ export const SceneOptions: FC<{
             : t("accessories.city.pick")}
         </DialogButton>
       )}
+      {options.includes("style") && (
+        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
+          {(["icon", "sky"] as const).map((style) => {
+            const selected = (values.style === "sky" ? "sky" : "icon") === style;
+            const choose = () => onChange({ ...values, style });
+            return (
+              <DialogButton key={style} onClick={choose} onOKButton={choose}
+                style={{ flex: 1, minWidth: 0, padding: "8px 0", fontWeight: 700,
+                  background: selected ? theme.color.accent : "rgba(255,255,255,0.06)",
+                  color: selected ? theme.color.onAccent : theme.color.textPrimary }}>
+                {t(`accessories.style.${style}`)}
+              </DialogButton>
+            );
+          })}
+        </Focusable>
+      )}
       {options.includes("hour12") && (
         <ToggleField label={t("accessories.hour12")} checked={values.hour12 === true}
           onChange={(on) => onChange({ ...values, hour12: on })} bottomSeparator="none" />

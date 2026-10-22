@@ -1,9 +1,9 @@
 """A pixel creature with a life of its own.
 
-Every half hour a new, random "life script" is written to the panel as one GIF: mostly resting
-(blinks, glances), and every few minutes an episode (eating, playing ball, napping, sneezing...).
+Every ten minutes a new, random "life script" is written to the panel as one GIF: short rests
+(blinks, glances every few seconds) between episodes (eating, playing ball, napping, sneezing...).
 Its mood follows the Steam Machine: asleep at night, playing with the controller during a game,
-sweating when the GPU runs hot, partying when a game starts. Two writes per hour plus mood changes.
+sweating when the GPU runs hot, partying when a game starts. Six writes per hour plus mood changes.
 """
 
 import math
@@ -23,7 +23,7 @@ _HOT_ENTER, _HOT_EXIT = 82, 74
 _PARTY_S = 60
 _MOOD_DWELL_S = 450
 _NIGHT = range(0, 7)
-_SCRIPT_MINUTES = 30
+_SCRIPT_MINUTES = 10
 _EPISODE_CS = 6
 
 _BODY = (
@@ -303,7 +303,7 @@ def episode_frames(name: str, mood: str, options: dict) -> list[tuple[Canvas, in
 
 class PetScene(Scene):
     id = "pet"
-    UPLOADS_PER_HOUR = 8
+    UPLOADS_PER_HOUR = 10
     OPTIONS = ("theme",)
 
     def __init__(self):
@@ -345,7 +345,7 @@ class PetScene(Scene):
         script, used, last = [], 0.0, None
         total = (end - start).total_seconds()
         while used < total:
-            rest = rng.uniform(45, 120)
+            rest = 0.5 if not script else rng.uniform(6, 20)
             name = rng.choice([p for p in pool if p != last] or pool)
             script.append((name, rest))
             used += rest + 4
@@ -367,7 +367,7 @@ class PetScene(Scene):
             segment = self._life(mood, theme, script, remaining_cs, end.timestamp())
             if fits(segment) or len(script) <= 2:
                 return segment
-            script = script[::2]
+            script = _thinned(script)
 
     def _life(self, mood: str, theme, script, total_cs: int, until: float) -> Segment:
         rest = _frame(mood, theme, Pose(eyes_closed=mood == "sleep"))
@@ -378,14 +378,14 @@ class PetScene(Scene):
         for name, rest_s in script:
             rest_cs = round(rest_s * 100)
             while rest_cs > 0:
-                hold = min(rest_cs, 1500)
+                hold = min(rest_cs, 350)
                 frames.append(rest)
                 delays.append(hold)
                 rest_cs -= hold
                 if rest_cs > 0 and mood != "sleep":
                     quick = len(frames) % 3 != 0
                     frames.append(blink if quick else glance)
-                    delays.append(15 if quick else 120)
+                    delays.append(15 if quick else 80)
                     rest_cs -= delays[-1]
             for canvas in EPISODES[name](mood, theme):
                 frames.append(canvas)
@@ -404,6 +404,17 @@ class PetScene(Scene):
             kept_frames.append(rest)
             kept_delays.append(total_cs - elapsed)
         return Segment(kept_frames, kept_delays, valid_until=until)
+
+    def preview(self, ctx: SceneContext) -> Segment:
+        """A montage of what the pet gets up to, instead of the first seconds of its script."""
+        mood = self._mood or self.state(ctx)
+        if mood == "party":
+            return self.render_state("party", ctx.options)
+        theme = theme_for(ctx.options)
+        frames: list[Canvas] = []
+        for name, _rest in self.script(ctx)[:4]:
+            frames += EPISODES[name](mood, theme)
+        return Segment(frames, [_EPISODE_CS] * len(frames))
 
     def render_state(self, mood: str, options: dict, activity: str = "hop") -> Segment:
         """A short loop of one mood, used for the party burst and for gallery thumbnails."""
@@ -434,6 +445,17 @@ ACTIVITIES = ("hop", "dance", "wander", "spin")
 def activity_for(now: float) -> str:
     hour = int(now // 3600)
     return ACTIVITIES[random.Random(hour).randrange(len(ACTIVITIES))]
+
+
+def _thinned(script: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Every other episode, folding the dropped episode's time into the next rest."""
+    out = []
+    for index in range(0, len(script), 2):
+        name, rest = script[index]
+        if index + 1 < len(script):
+            rest += script[index + 1][1] + 4
+        out.append((name, rest))
+    return out
 
 
 def _window(ctx: SceneContext) -> tuple[datetime, datetime]:

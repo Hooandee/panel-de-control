@@ -7,19 +7,30 @@ import {
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 
 const POLL_MS = 2500;
-const previews = new Map<string, Promise<DecodedFrames | null>>();
+const PREVIEW_TTL_MS = 60_000;
+const NOT_READY_RETRY_MS = 1500;
+const previews = new Map<string, { at: number; value: Promise<DecodedFrames | null> }>();
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchPreview(sceneId: string, options: Record<string, unknown>): Promise<DecodedFrames | null> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const preview = await previewAccessoryScene(sceneId, options);
+    if (!preview || preview.ok === false) return null;
+    if (preview.ready !== false || attempt === 5) return decodeFrames(preview);
+    await sleep(NOT_READY_RETRY_MS);
+  }
+  return null;
+}
 
 export function loadPreview(sceneId: string, options: Record<string, unknown> = {}): Promise<DecodedFrames | null> {
   const key = `${sceneId}:${JSON.stringify(options)}`;
-  let pending = previews.get(key);
-  if (!pending) {
-    pending = previewAccessoryScene(sceneId, options)
-      .then((preview) => (preview && preview.ok !== false ? decodeFrames(preview) : null))
-      .catch(() => null);
-    previews.set(key, pending);
-    pending.then((value) => { if (!value) previews.delete(key); });
-  }
-  return pending;
+  const cached = previews.get(key);
+  if (cached && Date.now() - cached.at < PREVIEW_TTL_MS) return cached.value;
+  const value = fetchPreview(sceneId, options).catch(() => null);
+  previews.set(key, { at: Date.now(), value });
+  value.then((result) => { if (!result) previews.delete(key); });
+  return value;
 }
 
 export function forgetPreviews(): void {

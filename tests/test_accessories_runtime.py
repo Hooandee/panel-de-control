@@ -284,3 +284,22 @@ def test_clock_follows_a_time_zone_change_without_a_restart(tmp_path):
     link.unlink()
     link.symlink_to(zoneinfo / "Asia" / "Tokyo")
     assert str(rt._context(0.0).tz) == "Asia/Tokyo"
+
+
+def test_locating_passes_the_time_zone_as_fallback(tmp_path, monkeypatch):
+    zoneinfo = tmp_path / "zoneinfo" / "Europe"
+    zoneinfo.mkdir(parents=True)
+    (zoneinfo / "Madrid").write_text("x")
+    link = tmp_path / "localtime"
+    link.symlink_to(zoneinfo / "Madrid")
+    seen = {}
+    monkeypatch.setattr(runtime.weather, "locate", lambda zone=None: seen.setdefault("zone", zone) and {"name": "Madrid"})
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, localtime=link)
+    assert rt.locate_city() == {"city": {"name": "Madrid"}}
+    assert seen["zone"] == "Europe/Madrid"
+
+
+def test_locating_is_off_outside_the_steam_machine(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="rog_ally", log=lambda *a, **k: None, find_panel=lambda: None)
+    assert rt.locate_city() == {"city": None}

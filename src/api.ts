@@ -1256,6 +1256,7 @@ export interface PixelFrames {
   frames: string[];
   delays: number[];
   firmwareAnimation: number | null;
+  ready?: boolean;
 }
 export const getAccessoriesState = callable<[], AccessoriesState>("get_accessories_state");
 export const setAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], AccessoriesState>("set_accessory_scene");
@@ -1270,6 +1271,7 @@ export interface WeatherCity {
   lon: number;
 }
 export const searchAccessoryCities = callable<[query: string, language: string], { cities: WeatherCity[] }>("search_accessory_cities");
+export const locateAccessoryCity = callable<[], { city: WeatherCity | null }>("locate_accessory_city");
 export interface DrawingSummary {
   id: string;
   name: string;

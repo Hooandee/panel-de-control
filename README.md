@@ -127,6 +127,8 @@ desactivarlo o borrarlo cuando quieras desde Ajustes.
 
 Si pones la escena del tiempo en la pantalla JSAUX PIXEL, Panel consulta en Open-Meteo el tiempo
 de la ciudad que eliges. Es lo único que sale del equipo, y solo mientras esa escena está puesta.
+Si pulsas «Usar mi ubicación» al buscar ciudad, Panel pregunta a ipwho.is una ciudad aproximada
+según tu IP, solo esa vez.
 
 > [!WARNING]
 > Panel funciona con permisos de root y cambia ajustes de potencia, temperatura y firmware. Está

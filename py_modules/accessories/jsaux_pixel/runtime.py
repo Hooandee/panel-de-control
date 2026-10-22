@@ -220,6 +220,11 @@ class Runtime:
     def search_cities(self, query: str, language: str) -> dict:
         return {"cities": weather.search_cities(query, language) if query.strip() else []}
 
+    def locate_city(self) -> dict:
+        if not self.supported:
+            return {"city": None}
+        return {"city": weather.locate(zone=str(self._local_zone()))}
+
     def wants_fps(self, playing: bool) -> bool:
         if not playing:
             return False
@@ -265,7 +270,7 @@ class Runtime:
             raise ValueError(f"unknown scene {scene_id!r}")
         segment = self.service.preview(scene_id, options)
         if segment.firmware_animation is not None:
-            return {"palette": [], "frames": [], "delays": [], "firmwareAnimation": segment.firmware_animation}
+            return {"palette": [], "frames": [], "delays": [], "firmwareAnimation": segment.firmware_animation, "ready": True}
         frames = segment.frames[:PREVIEW_MAX_FRAMES]
         palette, indexed = quantize(frames)
         return {
@@ -273,6 +278,7 @@ class Runtime:
             "frames": [base64.b64encode(ix).decode("ascii") for ix in indexed],
             "delays": list(segment.delays_cs[:len(frames)]),
             "firmwareAnimation": None,
+            "ready": segment.ready,
         }
 
     def _local_zone(self) -> tzinfo:

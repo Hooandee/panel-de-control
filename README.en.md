@@ -127,6 +127,8 @@ can turn it off or wipe it anytime from Settings.
 
 If you put the weather scene on the JSAUX PIXEL display, Panel asks Open-Meteo for the weather in
 the city you pick. That's the only thing that leaves your device, and only while that scene is on.
+If you press "Use my location" while picking a city, Panel asks ipwho.is for a rough city based on
+your IP, just that once.
 
 > [!WARNING]
 > Panel runs with root permissions and changes power, thermal and firmware settings. It's built to

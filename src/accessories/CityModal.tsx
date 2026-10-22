@@ -1,8 +1,8 @@
 import { DialogButton, Focusable, ModalRoot, TextField } from "@decky/ui";
 import { FC, useEffect, useRef, useState } from "react";
-import { LuMapPin } from "react-icons/lu";
+import { LuLocateFixed, LuMapPin } from "react-icons/lu";
 
-import { searchAccessoryCities, WeatherCity } from "../api";
+import { locateAccessoryCity, searchAccessoryCities, WeatherCity } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
 import { FocusRoot } from "../components/FocusRoot";
@@ -15,7 +15,19 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   const [query, setQuery] = useState("");
   const [cities, setCities] = useState<WeatherCity[]>([]);
   const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const request = useRef(0);
+  const pick = (city: WeatherCity) => { onPick(city); closeModal?.(); };
+  const locate = () => {
+    if (locating) return;
+    setLocating(true);
+    setNotFound(false);
+    locateAccessoryCity()
+      .then((result) => { if (result?.city) pick(result.city); else setNotFound(true); })
+      .catch(() => setNotFound(true))
+      .finally(() => setLocating(false));
+  };
 
   useEffect(() => {
     const text = query.trim();
@@ -37,10 +49,16 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: theme.color.textPrimary }}>{t("accessories.city.title")}</div>
+      <DialogButton onClick={locate} onOKButton={locate}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm, fontWeight: 700 }}>
+        <LuLocateFixed size={16} color={theme.color.accent} />
+        {locating ? t("accessories.city.locating") : t("accessories.city.locate")}
+      </DialogButton>
+      {notFound && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.city.locateFailed")}</span>}
       <TextField value={query} onChange={(e) => setQuery(e.target.value)} />
       <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
         {cities.map((city) => (
-          <DialogButton key={`${city.lat},${city.lon}`} onClick={() => { onPick(city); closeModal?.(); }}
+          <DialogButton key={`${city.lat},${city.lon}`} onClick={() => pick(city)}
             style={{ display: "flex", alignItems: "center", gap: theme.space.sm, textAlign: "left", padding: "10px 14px" }}>
             <LuMapPin size={16} color={theme.color.accent} />
             <span style={{ display: "flex", flexDirection: "column" }}>

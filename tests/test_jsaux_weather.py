@@ -136,3 +136,30 @@ def test_weather_shows_its_placeholder_once_the_fetch_has_failed():
     ctx = SceneContext(now=0.0, tz=timezone.utc, options={"city": SEVILLE})
     scene.key(ctx)
     assert scene.render(ctx).ready is True
+
+
+@pytest.mark.parametrize("group", ["clear", "cloud", "fog", "rain", "snow", "storm"])
+@pytest.mark.parametrize("day", [True, False])
+def test_sky_style_fills_the_display_and_fits(group, day):
+    scene = weather.WeatherScene(source=None)
+    reading = {"temp": 18.0, "code": weather.SAMPLE_CODES[group], "day": day, "high": 21.0, "low": 9.0}
+    segment = scene.render_reading(reading, {"city": SEVILLE, "style": "sky"})
+    lit = sum(1 for p in segment.frames[0].pixels() if p != (0, 0, 0))
+    assert lit > 64 * 54 * 0.6
+    assert encoded_size(segment) <= codec.MAX_GIF_BYTES
+
+
+def test_locate_uses_ip_lookup_when_asked():
+    fetch = Fetch({"ipwho.is": {"success": True, "city": "Sevilla", "region": "Andalucía", "country": "España",
+                                "latitude": 37.39, "longitude": -5.98}})
+    assert weather.locate(fetch=fetch) == {"name": "Sevilla", "detail": "Andalucía, España", "lat": 37.39, "lon": -5.98}
+
+
+def test_locate_falls_back_to_the_time_zone_city():
+    fetch = Fetch({"geocoding-api": {"results": [
+        {"name": "Madrid", "country": "España", "admin1": "Madrid", "latitude": 40.4, "longitude": -3.7}]}})
+    assert weather.locate(fetch=fetch, zone="Europe/Madrid")["name"] == "Madrid"
+
+
+def test_locate_gives_up_cleanly():
+    assert weather.locate(fetch=Fetch({}), zone=None) is None

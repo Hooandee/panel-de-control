@@ -46,5 +46,8 @@ class Scene:
     def render(self, ctx: SceneContext) -> Segment:
         raise NotImplementedError
 
+    def preview(self, ctx: SceneContext) -> Segment:
+        return self.render(ctx)
+
     def describe(self) -> dict[str, Any]:
         return {"id": self.id}

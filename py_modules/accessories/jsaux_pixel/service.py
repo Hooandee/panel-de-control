@@ -214,7 +214,7 @@ class PixelService:
         ctx = dataclasses.replace(self._context(self._clock()), options={**options, **self._option_extras(options)})
         with self._lock:
             scene.key(ctx)
-            return scene.render(ctx)
+            return scene.preview(ctx)
 
     # Worker ---------------------------------------------------------------------------------
 

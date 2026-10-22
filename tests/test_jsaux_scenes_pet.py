@@ -57,7 +57,7 @@ def test_an_evening_of_play_changes_scene_only_a_few_times_per_hour():
 
 
 def test_pet_changes_pastime_by_the_hour_at_most():
-    keys = {pet.PetScene().key(_ctx(_at(12, m))) for m in range(30)}
+    keys = {pet.PetScene().key(_ctx(_at(12, m))) for m in range(10)}
     assert len(keys) == 1
     activities = {pet.activity_for(_at(h)) for h in range(24)}
     assert len(activities) >= 3
@@ -70,12 +70,12 @@ def test_every_pastime_moves_and_fits(activity):
     assert encoded_size(segment) <= codec.MAX_GIF_BYTES
 
 
-def test_life_script_covers_exactly_until_the_next_half_hour():
+def test_life_script_covers_exactly_until_the_next_window():
     scene = pet.PetScene()
     ctx = _ctx(_at(12, 7))
     scene.key(ctx)
     segment = scene.render(ctx)
-    boundary = _at(12, 30)
+    boundary = _at(12, 10)
     assert segment.valid_until == boundary
     assert sum(segment.delays_cs) == round((boundary - ctx.now) * 100)
     assert encoded_size(segment) <= codec.MAX_GIF_BYTES
@@ -98,5 +98,33 @@ def test_every_episode_draws_frames_that_change():
 def test_each_half_hour_gets_a_new_life():
     scene = pet.PetScene()
     a = scene.script(_ctx(_at(12, 0)))
-    b = scene.script(_ctx(_at(12, 31)))
+    b = scene.script(_ctx(_at(12, 11)))
     assert a != b
+
+
+def test_something_happens_within_the_first_seconds_and_rests_stay_short():
+    scene = pet.PetScene()
+    ctx = _ctx(_at(12, 0))
+    scene.key(ctx)
+    script = scene.script(ctx)
+    assert script[0][1] < 1
+    assert all(rest <= 20 for _, rest in script)
+    segment = scene.render(ctx)
+    assert max(segment.delays_cs[:-1]) <= 350
+
+
+def test_preview_is_a_montage_of_actions():
+    scene = pet.PetScene()
+    ctx = _ctx(_at(12, 0))
+    scene.key(ctx)
+    preview = scene.preview(ctx)
+    assert len(preview.frames) >= 40
+    assert max(preview.delays_cs) <= 10
+
+
+def test_thinning_keeps_the_pet_busy_until_the_end_of_the_window():
+    scene = pet.PetScene()
+    ctx = _ctx(_at(12, 0))
+    scene.key(ctx)
+    segment = scene.render(ctx)
+    assert segment.delays_cs[-1] <= 2500

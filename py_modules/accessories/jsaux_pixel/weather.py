@@ -145,7 +145,7 @@ def _city(options: dict) -> dict | None:
 class WeatherScene(Scene):
     id = "weather"
     UPLOADS_PER_HOUR = 3
-    OPTIONS = ("city",)
+    OPTIONS = ("city", "style")
 
     def __init__(self, source: WeatherSource | None):
         self._source = source
@@ -181,6 +181,8 @@ class WeatherScene(Scene):
         return Segment(frames, [8] * count)
 
     def _frame(self, group: str, day: bool, t: float, reading: dict, options: dict) -> Canvas:
+        if options.get("style") == "sky":
+            return _sky_frame(group, day, t, reading, options)
         canvas = Canvas()
         _ICONS[group if day or group not in ("clear",) else "night"](canvas, t)
         _degrees(canvas, str(round(reading["temp"])), 6)
@@ -287,3 +289,113 @@ def _storm(canvas: Canvas, t: float) -> None:
 
 
 _ICONS = {"clear": _sun, "night": _night, "cloud": _clouds, "fog": _fog, "rain": _rain, "snow": _snow, "storm": _storm}
+
+
+# Full-sky style: the whole display is the weather, with the reading on top -------------------
+
+_SKIES = {
+    ("clear", True): ((40, 90, 190), (110, 170, 240)),
+    ("clear", False): ((4, 8, 30), (20, 26, 70)),
+    ("cloud", True): ((70, 90, 130), (130, 145, 175)),
+    ("cloud", False): ((12, 16, 34), (34, 40, 66)),
+    ("fog", True): ((90, 96, 110), (140, 146, 158)),
+    ("fog", False): ((24, 26, 34), (52, 56, 66)),
+    ("rain", True): ((40, 48, 70), (80, 90, 112)),
+    ("rain", False): ((10, 12, 24), (30, 34, 52)),
+    ("snow", True): ((90, 110, 150), (170, 185, 210)),
+    ("snow", False): ((16, 20, 40), (46, 54, 84)),
+    ("storm", True): ((18, 18, 34), (46, 44, 70)),
+    ("storm", False): ((6, 6, 16), (26, 24, 44)),
+}
+
+
+_BOLT = ((44, 12), (39, 20), (43, 20), (37, 30))
+
+
+def _sky_frame(group: str, day: bool, t: float, reading: dict, options: dict) -> Canvas:
+    canvas = Canvas()
+    top, bottom = _SKIES[(group, day)]
+    flash = group == "storm" and (0.5 <= t < 0.56 or 0.62 <= t < 0.66)
+    for y in range(H):
+        colour = mix(top, bottom, y / (H - 1))
+        canvas.rect(0, y, W, 1, mix(colour, (200, 200, 230), 0.55) if flash else colour)
+    if group == "clear" and day:
+        _sun(canvas, t, 50, 11)
+        _puff(canvas, round(((t + 0.2) % 1.0) * (W + 24)) - 12, 22, (235, 240, 255))
+    elif group == "clear":
+        canvas.circle(50, 11, 6, (235, 230, 205), filled=True)
+        canvas.circle(53, 8, 5, top, filled=True)
+        for k, (x, y) in enumerate(((6, 4), (18, 9), (30, 3), (40, 18), (8, 20), (26, 24), (58, 26), (36, 10))):
+            glow = 0.5 + 0.5 * math.sin(math.tau * (t + k / 8))
+            canvas.px(x, y, scale((230, 230, 255), 0.3 + 0.7 * glow))
+    else:
+        cloud = {"cloud": (200, 206, 222), "fog": (170, 174, 184), "rain": (120, 126, 146), "snow": (210, 216, 232),
+                 "storm": (78, 76, 98)}[group]
+        if not day:
+            cloud = scale(cloud, 0.45)
+        for layer, (y, speed, size) in enumerate(((3, 1, 1.0), (12, 2, 0.8), (-2, 1, 1.2))):
+            x = round(((t * speed + layer / 3) % 1.0) * (W + 30)) - 15
+            _puff(canvas, x, y, mix(cloud, (255, 255, 255), 0.15 * layer) if layer != 2 else scale(cloud, 0.85))
+            _puff(canvas, x - W - 30, y, cloud)
+        if group in ("rain", "storm"):
+            for k in range(22):
+                phase = (t * 3 + k / 22) % 1.0
+                x = (k * 13 + round(phase * 6)) % W
+                y = round(phase * (H + 6)) - 4
+                canvas.line(x, y, x - 1, y + 3, (110, 170, 240) if day else (70, 110, 170))
+        if group == "snow":
+            for k in range(26):
+                phase = (t + k / 26) % 1.0
+                x = (k * 17 + round(math.sin(math.tau * (phase + k / 5)) * 2)) % W
+                canvas.px(x, round(phase * (H + 2)) - 1, (245, 248, 255))
+        if group == "fog":
+            for row in range(4):
+                offset = round(((t + row * 0.3) % 1.0) * 16)
+                for x in range(W):
+                    if (x + offset) % 16 < 11:
+                        canvas.px(x, 26 + row * 6, mix(top, (230, 232, 236), 0.45))
+        if flash:
+            for (x0, y0), (x1, y1) in zip(_BOLT, _BOLT[1:]):
+                canvas.line(x0, y0, x1, y1, (255, 245, 150))
+                canvas.line(x0 + 1, y0, x1 + 1, y1, (255, 220, 90))
+    _shadowed(canvas, 3, 31, str(round(reading["temp"])), fonts.big(14), (255, 255, 255))
+    degree_x = 3 + fonts.measure(str(round(reading["temp"])), fonts.big(14)) + 1
+    _shadowed(canvas, degree_x, 31, "°", fonts.TINY, (255, 255, 255))
+    hi_lo = f"{round(reading['high'])}/{round(reading['low'])}"
+    _shadowed(canvas, W - 2 - fonts.measure(hi_lo, fonts.TINY), 47, hi_lo, fonts.TINY, (230, 235, 255))
+    city = (_city(options) or {}).get("name", "").upper()
+    while city and fonts.measure(city, fonts.TINY) > W - 6:
+        city = city[:-1]
+    _shadowed(canvas, W - 2 - fonts.measure(city, fonts.TINY), 39, city, fonts.TINY, (230, 235, 255))
+    return canvas
+
+
+def _puff(canvas: Canvas, x: int, y: int, colour) -> None:
+    canvas.circle(x + 5, y + 5, 4, colour, filled=True)
+    canvas.circle(x + 11, y + 3, 5, colour, filled=True)
+    canvas.circle(x + 17, y + 6, 3, colour, filled=True)
+    canvas.rect(x + 2, y + 6, 18, 3, colour)
+
+
+def _shadowed(canvas: Canvas, x: int, y: int, text: str, font, colour) -> None:
+    canvas.text(x + 1, y + 1, text, font, (0, 0, 0))
+    canvas.text(x, y, text, font, colour)
+
+
+_IP_LOOKUP = "https://ipwho.is/?fields=success,city,region,country,latitude,longitude"
+
+
+def locate(fetch: Callable[[str], dict] = _http_json, zone: str | None = None) -> dict | None:
+    """Approximate city: by IP (only when the user asks), else the city of the time zone."""
+    try:
+        data = fetch(_IP_LOOKUP)
+        if data.get("success") and data.get("city"):
+            detail = ", ".join(part for part in (data.get("region"), data.get("country")) if part)
+            return {"name": str(data["city"]), "detail": detail, "lat": float(data["latitude"]), "lon": float(data["longitude"])}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    if zone and "/" in zone:
+        found = search_cities(zone.rsplit("/", 1)[-1].replace("_", " "), fetch=fetch)
+        if found:
+            return found[0]
+    return None

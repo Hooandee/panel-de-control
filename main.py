@@ -9516,6 +9516,11 @@ class Plugin:
     async def search_accessory_cities(self, query, language="es") -> dict:
         return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
 
+    async def locate_accessory_city(self) -> dict:
+        result = await asyncio.to_thread(self._pixel_runtime().locate_city)
+        _accessories_journal("info", "locate_city", found=result.get("city") is not None)
+        return result
+
     def _pixel_game_started(self, appid) -> int | None:
         cached = getattr(self, "_pixel_started", None)
         if cached and cached[0] == appid:
