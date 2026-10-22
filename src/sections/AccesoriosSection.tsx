@@ -157,10 +157,6 @@ export const AccesoriosSection: FC = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
           <Hero status={status} sceneId={current?.id ?? null} options={current?.options ?? {}} labelKey={meta?.labelKey}
             power={state.power && !state.night_active} onPanel={onPanel} canShow={state.present} onShow={show} />
-          {current && meta && meta.options.length > 0 && (
-            <SceneOptions options={meta.options} values={current.options}
-              onChange={(values) => preview(current.id, values)} />
-          )}
           {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
         </div>
       </PanelSectionRow>
@@ -173,7 +169,12 @@ export const AccesoriosSection: FC = () => {
             selectedDrawing={current?.id === "custom" && typeof current.options.drawing === "string" ? current.options.drawing : null}
             panelDrawing={state.scene === "custom" && typeof state.options.drawing === "string" ? state.options.drawing : null}
             layout={current?.id === "composed" ? ((current.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
-            onPick={(id, options) => preview(id, options ?? {})} onSend={(id, options) => void send(id, options)} />
+            onPick={(id, options) => preview(id, options ?? {})} onSend={(id, options) => void send(id, options)}>
+            {current && meta && meta.options.length > 0 && (
+              <SceneOptions options={meta.options} values={current.options}
+                onChange={(values) => preview(current.id, values)} />
+            )}
+          </SceneGallery>
         </div>
       </PanelSectionRow>
       {state.present && (

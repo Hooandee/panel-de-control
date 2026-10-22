@@ -12,7 +12,6 @@ import { loadPreview } from "./useAccessories";
 import { tileStyle, OnPanelDot } from "./tiles";
 
 const TILE_PITCH = 1.75;
-const CHIPS_PER_ROW = 3;
 
 const SceneTile: FC<{ scene: AccessorySceneMeta; selected: boolean; onPanel: boolean; onPick: () => void }> = ({ scene, selected, onPanel, onPick }) => {
   const { t } = useI18n();
@@ -41,12 +40,12 @@ const CategoryChip: FC<{ label: string; selected: boolean; onPick: () => void }>
   return (
     <Focusable onActivate={onPick} onClick={onPick} onGamepadFocus={() => { setFocused(true); onPick(); }}
       onGamepadBlur={() => setFocused(false)}
-      style={{ flex: 1, minWidth: 0, textAlign: "center", padding: "7px 4px", borderRadius: 999, fontSize: theme.font.caption, fontWeight: 700,
+      style={{ flex: "0 0 auto", textAlign: "center", padding: "7px 12px", borderRadius: 999, fontSize: theme.font.caption, fontWeight: 700,
         background: selected ? theme.color.selectedFill : "rgba(255,255,255,0.06)",
         color: selected ? theme.color.onAccent : theme.color.textPrimary,
         boxShadow: focused ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${theme.color.accent}` : "none",
         transform: focused ? "scale(1.05)" : "scale(1)", transition: "transform 120ms ease, box-shadow 120ms ease",
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        whiteSpace: "nowrap" }}>
       {label}
     </Focusable>
   );
@@ -61,24 +60,21 @@ export const SceneGallery: FC<{
   layout: Block[];
   onPick: (sceneId: string, options?: Record<string, unknown>) => void;
   onSend: (sceneId: string, options: Record<string, unknown>) => void;
-}> = ({ catalog, selectedScene, panelScene, selectedDrawing, panelDrawing, layout, onPick, onSend }) => {
+  children?: React.ReactNode;
+}> = ({ catalog, selectedScene, panelScene, selectedDrawing, panelDrawing, layout, onPick, onSend, children }) => {
   const { t } = useI18n();
   const categories = useMemo(() => Array.from(new Set(catalog.map((scene) => scene.category))), [catalog]);
   const initial = catalog.find((scene) => scene.id === selectedScene)?.category ?? categories[0];
   const [category, setCategory] = useState(initial);
   const active = categories.includes(category) ? category : categories[0];
   const shown = catalog.filter((scene) => scene.category === active);
-  const rows: string[][] = [];
-  for (let i = 0; i < categories.length; i += CHIPS_PER_ROW) rows.push(categories.slice(i, i + CHIPS_PER_ROW));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      {rows.map((row) => (
-        <Focusable key={row.join()} flow-children="row" style={{ display: "flex", gap: 6 }}>
-          {row.map((id) => (
-            <CategoryChip key={id} label={t(`accessories.category.${id}`)} selected={id === active} onPick={() => setCategory(id)} />
-          ))}
-        </Focusable>
-      ))}
+      <Focusable flow-children="row" style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", padding: "4px 2px" }}>
+        {categories.map((id) => (
+          <CategoryChip key={id} label={t(`accessories.category.${id}`)} selected={id === active} onPick={() => setCategory(id)} />
+        ))}
+      </Focusable>
       {active === "custom" ? (
         <MyCreations selectedDrawing={selectedDrawing} panelDrawing={panelDrawing} composing={selectedScene === "composed"}
           composedOnPanel={panelScene === "composed"} layout={layout}
@@ -92,6 +88,7 @@ export const SceneGallery: FC<{
           ))}
         </Focusable>
       )}
+      {children}
     </div>
   );
 };
