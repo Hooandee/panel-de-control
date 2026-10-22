@@ -176,9 +176,9 @@ class WeatherScene(Scene):
 
     def render_reading(self, reading: dict, options: dict) -> Segment:
         group, day = group_for(reading["code"]), reading["day"]
-        count = 16
+        count = 24
         frames = [self._frame(group, day, i / count, reading, options) for i in range(count)]
-        return Segment(frames, [10] * count)
+        return Segment(frames, [8] * count)
 
     def _frame(self, group: str, day: bool, t: float, reading: dict, options: dict) -> Canvas:
         canvas = Canvas()
@@ -216,10 +216,12 @@ _CLOUD = (200, 210, 235)
 
 def _sun(canvas: Canvas, t: float, cx: int = 15, cy: int = 16) -> None:
     canvas.circle(cx, cy, 6, _SUN, filled=True)
+    canvas.circle(cx - 2, cy - 2, 2, (255, 235, 150), filled=True)
     for ray in range(8):
         angle = math.tau * (ray / 8 + t / 8)
-        for r in (9, 10, 11):
-            canvas.px(round(cx + r * math.cos(angle)), round(cy + r * math.sin(angle)), scale(_SUN, 1.1 - (r - 9) * 0.25))
+        reach = 11 + round(math.sin(math.tau * (t * 2 + ray / 8)) * 2)
+        for r in range(8, reach + 1):
+            canvas.px(round(cx + r * math.cos(angle)), round(cy + r * math.sin(angle)), scale(_SUN, 1.1 - (r - 8) * 0.15))
 
 
 def _night(canvas: Canvas, t: float) -> None:
@@ -238,9 +240,12 @@ def _cloud(canvas: Canvas, x: int, y: int, colour=_CLOUD) -> None:
 
 
 def _clouds(canvas: Canvas, t: float) -> None:
-    _sun(canvas, 0, 21, 10)
-    shift = round(math.sin(math.tau * t) * 2)
+    _sun(canvas, t, 21, 10)
+    shift = round(math.sin(math.tau * t) * 5)
     _cloud(canvas, 2 + shift, 12)
+    small = round(((t + 0.5) % 1.0) * 40) - 8
+    canvas.circle(small + 3, 4, 2, (170, 180, 210), filled=True)
+    canvas.rect(small + 1, 5, 7, 2, (170, 180, 210))
 
 
 def _fog(canvas: Canvas, t: float) -> None:
@@ -253,7 +258,7 @@ def _fog(canvas: Canvas, t: float) -> None:
 
 def _falling(canvas: Canvas, t: float, colour, count: int, speed: int, wiggle: float) -> None:
     for k in range(count):
-        x0 = 5 + (k * 7) % 22
+        x0 = 4 + (k * 7) % 25
         phase = (t * speed + k / count) % 1.0
         y = 18 + round(phase * 14)
         x = x0 + round(math.sin(math.tau * (phase + k / count)) * wiggle)
@@ -263,19 +268,20 @@ def _falling(canvas: Canvas, t: float, colour, count: int, speed: int, wiggle: f
 
 
 def _rain(canvas: Canvas, t: float) -> None:
-    _falling(canvas, t, (90, 170, 255), 7, 2, 0)
+    _falling(canvas, t, (90, 170, 255), 12, 3, 0)
     _cloud(canvas, 3, 4, (150, 160, 190))
 
 
 def _snow(canvas: Canvas, t: float) -> None:
-    _falling(canvas, t, (240, 245, 255), 7, 1, 1.2)
+    _falling(canvas, t, (240, 245, 255), 11, 1, 1.6)
     _cloud(canvas, 3, 4, (190, 200, 225))
 
 
 def _storm(canvas: Canvas, t: float) -> None:
-    _falling(canvas, t, (90, 170, 255), 6, 2, 0)
-    _cloud(canvas, 3, 4, (110, 110, 140))
-    if 0.5 <= t < 0.625:
+    _falling(canvas, t, (90, 170, 255), 10, 3, 0)
+    flash = 0.5 <= t < 0.6
+    _cloud(canvas, 3, 4, (200, 200, 230) if flash else (110, 110, 140))
+    if flash:
         for x, y in ((15, 14), (14, 16), (13, 18), (15, 18), (14, 20), (13, 22), (12, 24)):
             canvas.px(x, y, (255, 240, 120))
 

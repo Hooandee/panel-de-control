@@ -5,6 +5,7 @@ import { LuMapPin } from "react-icons/lu";
 import { searchAccessoryCities, WeatherCity } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
+import { FocusRoot } from "../components/FocusRoot";
 import { theme } from "../theme";
 
 const SEARCH_DELAY_MS = 450;
@@ -57,8 +58,10 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
 };
 
 const CityModal: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => void }> = ({ onPick, closeModal }) => (
-  <ModalRoot closeModal={closeModal}>
-    <CityBody onPick={onPick} closeModal={closeModal} />
+  <ModalRoot closeModal={closeModal} bAllowFullSize>
+    <FocusRoot>
+      <CityBody onPick={onPick} closeModal={closeModal} />
+    </FocusRoot>
   </ModalRoot>
 );
 

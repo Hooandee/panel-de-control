@@ -54,3 +54,17 @@ def test_an_evening_of_play_changes_scene_only_a_few_times_per_hour():
         if key != previous:
             changes, previous = changes + 1, key
     assert changes <= pet.PetScene.UPLOADS_PER_HOUR
+
+
+def test_pet_changes_pastime_by_the_hour_at_most():
+    keys = {pet.PetScene().key(_ctx(_at(12, m))) for m in range(60)}
+    assert len(keys) == 1
+    activities = {pet.activity_for(_at(h)) for h in range(24)}
+    assert len(activities) >= 3
+
+
+@pytest.mark.parametrize("activity", pet.ACTIVITIES)
+def test_every_pastime_moves_and_fits(activity):
+    segment = pet.PetScene().render_state("idle", {}, activity)
+    assert len({tuple(frame.pixels()) for frame in segment.frames}) >= 10
+    assert encoded_size(segment) <= codec.MAX_GIF_BYTES

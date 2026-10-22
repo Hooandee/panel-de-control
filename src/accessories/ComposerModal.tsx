@@ -5,6 +5,7 @@ import { LuCalendar, LuClock3, LuGauge, LuImage, LuMove, LuSend, LuSparkles, LuT
 import { DrawingSummary, listAccessoryDrawings, previewAccessoryScene } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
+import { FocusRoot } from "../components/FocusRoot";
 import { theme } from "../theme";
 import { confirmDestructive } from "./SafeConfirm";
 import { decodeFrames, DecodedFrames, PANEL_H, PANEL_W } from "./pixelFrames";
@@ -96,10 +97,10 @@ const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks
   };
 
   return (
-    <div style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, alignItems: "center" }}>
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, alignItems: "center" }}>
         <PixelPreview decoded={preview} pitch={6} animate />
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6, flexWrap: "wrap", maxWidth: PANEL_W * 6 }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: 6, maxWidth: PANEL_W * 6 }}>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "clock", x: 4, y: 16, size: "m", color: "aurora" })}><LuClock3 /></DialogButton>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "date", x: 4, y: 4, size: "m", color: "aurora" })}><LuCalendar /></DialogButton>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "text", x: 4, y: 30, size: "m", text: "HOOANDEE", color: "aurora" })}><LuType /></DialogButton>
@@ -109,8 +110,8 @@ const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks
             <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "drawing", x: 40, y: 30, size: "s", drawing: drawings[0].id, color: "aurora" })}><LuImage /></DialogButton>
           )}
         </Focusable>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 240 }}>
+      </Focusable>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 240 }}>
         <Focusable style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 170, overflowY: "auto" }}>
           {blocks.map((block, i) => (
             <DialogButton key={i} onClick={() => setSelected(i)}
@@ -157,8 +158,8 @@ const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700 }}>
           <LuSend /> {t("accessories.draw.send")}
         </DialogButton>
-      </div>
-    </div>
+      </Focusable>
+    </Focusable>
   );
 };
 
@@ -171,8 +172,10 @@ const ComposerModal: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; c
       confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: () => closeModal?.() });
   };
   return (
-    <ModalRoot onCancel={leave} onEscKeypress={leave}>
+    <ModalRoot onCancel={leave} onEscKeypress={leave} bAllowFullSize>
+      <FocusRoot>
       <ComposerBody initial={initial} onShow={onShow} closeModal={closeModal} onDirty={() => { dirty.current = true; }} />
+      </FocusRoot>
     </ModalRoot>
   );
 };

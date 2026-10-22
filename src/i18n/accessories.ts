@@ -2,6 +2,12 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.badge.onPanel": "En el panel",
+  "accessories.badge.preview": "Vista previa",
+  "accessories.show": "Mostrar en el panel",
+  "accessories.show.done": "Ya está en el panel",
+  "accessories.show.sending": "Enviando…",
+  "accessories.action.preview": "Previsualizar",
   "accessories.draw.discardTitle": "¿Descartar los cambios?",
   "accessories.draw.discardDesc": "Lo que has hecho desde la última vez que lo mostraste se perderá.",
   "accessories.draw.discard": "Descartar",
@@ -122,6 +128,12 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.badge.onPanel": "On display",
+  "accessories.badge.preview": "Preview",
+  "accessories.show": "Show on the display",
+  "accessories.show.done": "Already on the display",
+  "accessories.show.sending": "Sending…",
+  "accessories.action.preview": "Preview",
   "accessories.draw.discardTitle": "Discard your changes?",
   "accessories.draw.discardDesc": "Anything you did since you last showed it will be lost.",
   "accessories.draw.discard": "Discard",
@@ -242,6 +254,12 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.badge.onPanel": "Sullo schermo",
+  "accessories.badge.preview": "Anteprima",
+  "accessories.show": "Mostra sullo schermo",
+  "accessories.show.done": "Già sullo schermo",
+  "accessories.show.sending": "Invio…",
+  "accessories.action.preview": "Anteprima",
   "accessories.draw.discardTitle": "Scartare le modifiche?",
   "accessories.draw.discardDesc": "Quello che hai fatto dall'ultima volta che l'hai mostrato andrà perso.",
   "accessories.draw.discard": "Scarta",
@@ -362,6 +380,12 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.badge.onPanel": "Auf dem Display",
+  "accessories.badge.preview": "Vorschau",
+  "accessories.show": "Auf dem Display zeigen",
+  "accessories.show.done": "Schon auf dem Display",
+  "accessories.show.sending": "Wird gesendet…",
+  "accessories.action.preview": "Vorschau",
   "accessories.draw.discardTitle": "Änderungen verwerfen?",
   "accessories.draw.discardDesc": "Alles seit dem letzten Anzeigen geht verloren.",
   "accessories.draw.discard": "Verwerfen",
@@ -482,6 +506,12 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.badge.onPanel": "Na tela",
+  "accessories.badge.preview": "Prévia",
+  "accessories.show": "Mostrar na tela",
+  "accessories.show.done": "Já está na tela",
+  "accessories.show.sending": "Enviando…",
+  "accessories.action.preview": "Prévia",
   "accessories.draw.discardTitle": "Descartar as alterações?",
   "accessories.draw.discardDesc": "O que você fez desde a última vez que mostrou será perdido.",
   "accessories.draw.discard": "Descartar",
@@ -602,6 +632,12 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.badge.onPanel": "À l'écran",
+  "accessories.badge.preview": "Aperçu",
+  "accessories.show": "Afficher sur l'écran",
+  "accessories.show.done": "Déjà à l'écran",
+  "accessories.show.sending": "Envoi…",
+  "accessories.action.preview": "Aperçu",
   "accessories.draw.discardTitle": "Abandonner les modifications ?",
   "accessories.draw.discardDesc": "Tout ce que vous avez fait depuis le dernier affichage sera perdu.",
   "accessories.draw.discard": "Abandonner",

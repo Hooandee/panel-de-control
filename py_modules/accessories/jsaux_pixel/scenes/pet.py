@@ -73,55 +73,63 @@ class PetScene(Scene):
         settled = wanted in playing and self._mood in playing
         if self._mood is None or (wanted != self._mood and (not settled or ctx.now - self._since >= _MOOD_DWELL_S)):
             self._mood, self._since = wanted, ctx.now
-        return self._mood, ctx.options.get("theme")
+        self._activity = activity_for(ctx.now)
+        return self._mood, self._activity, ctx.options.get("theme")
 
     def render(self, ctx: SceneContext) -> Segment:
         if self._mood is None:
             self.key(ctx)
-        return self.render_state(self._mood, ctx.options)
+        return self.render_state(self._mood, ctx.options, getattr(self, "_activity", ACTIVITIES[0]))
 
-    def render_state(self, mood: str, options: dict) -> Segment:
+    def render_state(self, mood: str, options: dict, activity: str = "hop") -> Segment:
         theme = theme_for(options)
-        count, delay = {"sleep": (24, 12), "idle": (20, 8), "play": (16, 6), "hot": (16, 7), "party": (18, 6)}[mood]
-        frames = [self._frame(mood, i / count, theme) for i in range(count)]
+        count, delay = {"sleep": (32, 10), "idle": (48, 7), "play": (40, 5), "hot": (32, 7), "party": (32, 5)}[mood]
+        frames = [self._frame(mood, i / count, theme, activity) for i in range(count)]
         return Segment(frames, [delay] * count)
 
-    def _frame(self, mood: str, t: float, theme) -> Canvas:
+    def _frame(self, mood: str, t: float, theme, activity: str = "hop") -> Canvas:
         canvas = Canvas()
         rng = random.Random(9)
-        bounce = {"sleep": 0.6, "idle": 1.5, "play": 3.0, "hot": 1.0, "party": 5.0}[mood]
-        lift = abs(math.sin(math.tau * t * (2 if mood in ("play", "party") else 1))) * bounce
-        x0, y0 = (W - 22) // 2, 24 - round(lift)
+        pose = _pose(mood, activity, t)
+        width, height = 22 + pose.squash, 16 - pose.squash
+        x0 = (W - width) // 2 + pose.dx
+        y0 = 40 - height - round(pose.lift)
         body_colour = {"hot": (255, 90, 70), "sleep": scale(theme.start, 0.55)}.get(mood, theme.start)
-        shadow = max(6, 11 - round(lift))
+        shadow = max(5, 11 - round(pose.lift / 2))
         for dx in range(-shadow, shadow + 1):
-            canvas.px(W // 2 + dx, 47, scale(theme.dim, 1.6))
-        for gy, row in enumerate(_BODY):
-            for gx, cell in enumerate(row):
-                if cell == "#":
+            canvas.px(W // 2 + pose.dx + dx, 41, scale(theme.dim, 1.6))
+        for y in range(height):
+            gy = min(len(_BODY) - 1, y * len(_BODY) // height)
+            for x in range(width):
+                gx = min(21, x * 22 // width)
+                if _BODY[gy][gx] == "#":
                     shade = mix(body_colour, theme.end if mood != "hot" else (255, 170, 60), gy / len(_BODY))
                     if (gy, gx) in ((2, 6), (2, 7), (3, 5), (3, 6)):
                         shade = mix(shade, (255, 255, 255), 0.55)
-                    canvas.px(x0 + gx, y0 + gy, shade)
-        eye_y = y0 + 6
-        for ex in (x0 + 6, x0 + 13):
-            if mood == "sleep" or (mood == "idle" and 0.62 < t < 0.68):
+                    canvas.px(x0 + x, y0 + y, shade)
+        eye_y = y0 + round(height * 0.38)
+        for ex in (x0 + round(width * 0.27), x0 + round(width * 0.6)):
+            if mood == "sleep" or pose.blink:
                 canvas.rect(ex, eye_y + 2, 3, 1, (30, 20, 40))
             else:
                 canvas.rect(ex, eye_y, 3, 4, (255, 255, 255))
-                look = 1 if mood == "play" and math.sin(math.tau * t) > 0 else 0
-                canvas.rect(ex + look, eye_y + 1 + (1 if mood == "hot" else 0), 2, 2, (20, 16, 30))
-        mouth_y = y0 + 12
-        if mood in ("party", "play"):
-            canvas.rect(x0 + 9, mouth_y, 4, 2, (60, 20, 50))
-            canvas.rect(x0 + 10, mouth_y + 1, 2, 1, (255, 120, 150))
+                canvas.rect(ex + (1 if pose.look > 0 else 0), eye_y + 1 + (1 if mood == "hot" else 0) - (1 if pose.look_up else 0),
+                            2, 2, (20, 16, 30))
+        mouth_x, mouth_y = x0 + width // 2 - 2, y0 + round(height * 0.75)
+        if pose.happy or mood in ("party", "play"):
+            canvas.rect(mouth_x, mouth_y, 4, 2, (60, 20, 50))
+            canvas.rect(mouth_x + 1, mouth_y + 1, 2, 1, (255, 120, 150))
         elif mood == "hot":
-            canvas.rect(x0 + 9, mouth_y + 1, 4, 1, (90, 30, 30))
+            canvas.rect(mouth_x, mouth_y + 1, 4, 1, (90, 30, 30))
         else:
-            canvas.px(x0 + 10, mouth_y, (60, 20, 50))
-            canvas.px(x0 + 11, mouth_y, (60, 20, 50))
-        canvas.px(x0 + 4, eye_y + 5, scale((255, 120, 160), 0.7))
-        canvas.px(x0 + 17, eye_y + 5, scale((255, 120, 160), 0.7))
+            canvas.rect(mouth_x + 1, mouth_y, 2, 1, (60, 20, 50))
+        canvas.px(x0 + 3, eye_y + 5, scale((255, 120, 160), 0.7))
+        canvas.px(x0 + width - 4, eye_y + 5, scale((255, 120, 160), 0.7))
+        if activity == "spin" and mood in ("idle", "play"):
+            for k in range(3):
+                angle = math.tau * (t + k / 3)
+                canvas.px(W // 2 + round(math.cos(angle) * 18), 30 + round(math.sin(angle) * 9), theme.spark)
+                canvas.px(W // 2 + round(math.cos(angle) * 18) + 1, 30 + round(math.sin(angle) * 9), scale(theme.spark, 0.5))
         getattr(self, f"_extras_{mood}")(canvas, t, theme, rng, x0, y0)
         return canvas
 
@@ -172,6 +180,47 @@ class PetScene(Scene):
             phase = (t + rng.random()) % 1.0
             y = round(phase * (H + 4)) - 4
             canvas.px(x + round(math.sin(math.tau * (phase * 2 + k)) * 1), y, palette[k % len(palette)])
+
+
+ACTIVITIES = ("hop", "dance", "wander", "spin")
+
+
+def activity_for(now: float) -> str:
+    """A different pastime each hour, the same one all hour long (one write per hour at most)."""
+    hour = int(now // 3600)
+    return ACTIVITIES[random.Random(hour).randrange(len(ACTIVITIES))]
+
+
+class _Pose:
+    def __init__(self, dx=0, lift=0.0, squash=0, look=0, blink=False, happy=False, look_up=False):
+        self.dx, self.lift, self.squash, self.look = dx, lift, squash, look
+        self.blink, self.happy, self.look_up = blink, happy, look_up
+
+
+def _pose(mood: str, activity: str, t: float) -> _Pose:
+    wave = math.sin(math.tau * t)
+    blink = 0.86 < t < 0.9 or 0.36 < t < 0.39
+    if mood == "sleep":
+        return _Pose(squash=round(math.sin(math.tau * t) * 1), blink=True)
+    if mood == "hot":
+        return _Pose(dx=round(math.sin(math.tau * t * 2) * 1), squash=1, look=0, blink=blink)
+    if mood == "party":
+        hop = abs(math.sin(math.tau * t * 2))
+        return _Pose(lift=hop * 9, squash=2 if hop < 0.15 else -1, happy=True, look_up=True)
+    speed = 2 if mood == "play" else 1
+    if activity == "dance":
+        hop = abs(math.sin(math.tau * t * 2 * speed))
+        return _Pose(dx=round(wave * 5), lift=hop * 3, squash=2 if hop < 0.2 else 0, look=1 if wave > 0 else -1,
+                     happy=True, blink=blink)
+    if activity == "wander":
+        step = abs(math.sin(math.tau * t * 4))
+        return _Pose(dx=round(wave * 13), lift=step * 2, look=1 if math.cos(math.tau * t) > 0 else -1, blink=blink)
+    if activity == "spin":
+        return _Pose(lift=abs(wave) * 2, look=1 if wave > 0 else -1, happy=True, look_up=True, blink=blink)
+    phase = (t * 2 * speed) % 1.0
+    lift = math.sin(math.pi * phase) * 8 if phase < 0.6 else 0.0
+    squash = 3 if 0.6 <= phase < 0.7 else -1 if 0.1 < phase < 0.5 else 0
+    return _Pose(lift=lift, squash=squash, look_up=phase < 0.3, blink=blink, happy=lift > 5)
 
 
 SCENES = [PetScene()]

@@ -5,6 +5,7 @@ import { LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil,
 import { saveAccessoryDrawing } from "../api";
 import { useI18n } from "../i18n";
 import { showModal } from "../navigation/showModal";
+import { FocusRoot } from "../components/FocusRoot";
 import { theme } from "../theme";
 import { confirmDestructive } from "./SafeConfirm";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
@@ -66,6 +67,7 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
   const [name, setName] = useState(initial.name || t("accessories.draw.untitled"));
   const [cursor, setCursor] = useState<[number, number]>([32, 27]);
   const [busy, setBusy] = useState(false);
+  const [canvasFocused, setCanvasFocused] = useState(false);
   const [, redraw] = useState(0);
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawingId = useRef(initial.id);
@@ -74,8 +76,8 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
   const frame = frames[index];
   const repaint = useCallback(() => {
     const ctx = canvas.current?.getContext("2d");
-    if (ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, cursor);
-  }, [frame, frames, index, onion, cursor]);
+    if (ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, canvasFocused ? cursor : null);
+  }, [frame, frames, index, onion, cursor, canvasFocused]);
   useEffect(repaint, [repaint]);
 
   const apply = (x: number, y: number, chosen: Tool = tool) => {
@@ -156,15 +158,17 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
   };
 
   return (
-    <div style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         <Focusable onGamepadDirection={onDirection} onButtonDown={onButton} onOKButton={() => apply(cursor[0], cursor[1])}
           onSecondaryButton={() => apply(cursor[0], cursor[1], "eraser")} onOptionsButton={() => apply(cursor[0], cursor[1], "fill")}
           onOKActionDescription={t(`accessories.draw.tool.${tool}`)} onSecondaryActionDescription={t("accessories.draw.tool.eraser")}
           onOptionsActionDescription={t("accessories.draw.tool.fill")}
-          style={{ borderRadius: theme.radius.md, overflow: "hidden", boxShadow: `0 0 0 1px ${theme.color.outline}, 0 12px 40px rgba(0,0,0,0.5)` }}>
+          onGamepadFocus={() => setCanvasFocused(true)} onGamepadBlur={() => setCanvasFocused(false)}
+          style={{ borderRadius: theme.radius.md, overflow: "hidden", transition: "box-shadow 120ms ease",
+            boxShadow: canvasFocused ? `0 0 0 3px ${theme.color.accent}, 0 12px 40px rgba(0,0,0,0.5)` : `0 0 0 1px ${theme.color.outline}, 0 12px 40px rgba(0,0,0,0.5)` }}>
           <canvas ref={canvas} width={PANEL_W * PITCH} height={PANEL_H * PITCH} style={{ display: "block", touchAction: "none" }}
-            onPointerDown={(e) => { dragging.current = true; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
+            onPointerDown={(e) => { setCanvasFocused(true); dragging.current = true; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
             onPointerMove={(e) => { if (!dragging.current || tool === "fill") return; const [x, y] = cellFrom(e); setCursor([x, y]); apply(x, y); }}
             onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }} />
         </Focusable>
@@ -180,8 +184,8 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
           <DialogButton onClick={() => addFrame(true)} aria-label={t("accessories.draw.frame.copy")} style={{ minWidth: 34, width: 34, padding: "6px 0" }}><LuCopy /></DialogButton>
           <DialogButton onClick={removeFrame} aria-label={t("accessories.draw.frame.delete")} style={{ minWidth: 34, width: 34, padding: "6px 0" }}><LuTrash2 /></DialogButton>
         </Focusable>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 220 }}>
+      </Focusable>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 220 }}>
         <TextField value={name} onChange={(e) => { onDirty?.(); setName(e.target.value.slice(0, 40)); }} />
         <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
           {DRAW_PALETTE.map((rgb) => {
@@ -220,8 +224,8 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
         </DialogButton>
         {saveFailed && <span style={{ fontSize: 11, color: theme.color.warn }}>{t("accessories.draw.saveFailed")}</span>}
         <span style={{ fontSize: 11, color: theme.color.textMuted, lineHeight: 1.4 }}>{t("accessories.draw.hint")}</span>
-      </div>
-    </div>
+      </Focusable>
+    </Focusable>
   );
 };
 
@@ -234,8 +238,10 @@ const DrawModal: FC<{ initial: DrawingDraft; onSent: (id: string) => void; close
       confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: () => closeModal?.() });
   };
   return (
-    <ModalRoot onCancel={leave} onEscKeypress={leave}>
+    <ModalRoot onCancel={leave} onEscKeypress={leave} bAllowFullSize>
+      <FocusRoot>
       <DrawBody initial={initial} onSent={onSent} closeModal={closeModal} onDirty={() => { dirty.current = true; }} />
+      </FocusRoot>
     </ModalRoot>
   );
 };
