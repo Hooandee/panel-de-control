@@ -222,3 +222,24 @@ def test_wind_at_home_does_not_flap():
         if key != previous:
             changes, previous = changes + 1, key
     assert changes <= pet.PetScene.UPLOADS_PER_HOUR
+
+
+def _habit(scene, weekday_hour, weeks=3):
+    for k in range(weeks):
+        t = BORN + k * 7 * 86400
+        for s in range(0, 3600, 10):
+            scene.mind.observe(t + s, night=False, playing=True, hour_of_week=weekday_hour)
+
+
+def test_at_your_usual_time_it_waits_and_then_celebrates(tmp_path):
+    scene = _scene()
+    when = datetime(2026, 11, 12, 21, 0, tzinfo=TZ)
+    _habit(scene, when.weekday() * 24 + 21)
+    ctx = _ctx(when.timestamp())
+    scene.key(ctx)
+    assert "await" in {name for name, _ in scene.script(ctx)}
+    now = when.timestamp() + 1200
+    game, events = _game(now, tags=(19,), started=now - 5)
+    ctx = _ctx(now, game, events=events)
+    scene.key(ctx)
+    assert scene.script(ctx)[0][0] == "excited"

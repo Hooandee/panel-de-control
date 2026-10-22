@@ -1312,6 +1312,7 @@ export interface PetState {
   favourite: string | null;
   age_days: number;
   achievements: number;
+  usual_hours: [number, number] | null;
 }
 export type PetAction = "feed" | "play" | "pet" | "sleep" | "wake";
 export const getAccessoryPet = callable<[], PetState>("get_accessory_pet");

@@ -146,3 +146,64 @@ def test_a_rename_is_kept_short_and_clean(tmp_path):
     assert mind.memory["name"] == "Pixi la mascota"
     mind.rename("")
     assert mind.memory["name"] == "Pixi la mascota"
+
+
+MONDAY_21 = 0 * 24 + 21
+
+
+def _play(mind, start, minutes, hour_of_week, step=5.0):
+    t = start
+    while t < start + minutes * 60:
+        mind.observe(t, night=False, playing=True, hour_of_week=hour_of_week)
+        t += step
+    return t
+
+
+def test_it_learns_when_you_usually_play(tmp_path):
+    mind = _mind(tmp_path)
+    week = 7 * 86400
+    for k in range(3):
+        _play(mind, 1_000_000.0 + k * week, 60, MONDAY_21)
+    later = 1_000_000.0 + 3 * week
+    assert mind.expectation(MONDAY_21, later) > 0.8
+    assert mind.expectation(1 * 24 + 10, later) == 0.0
+    assert mind.describe(later)["usual_hours"] == [21, 22]
+
+
+def test_one_evening_is_not_a_habit(tmp_path):
+    mind = _mind(tmp_path)
+    _play(mind, 1_000_000.0, 40, MONDAY_21)
+    assert mind.expectation(MONDAY_21, 1_000_000.0 + 3600) == 0.0
+
+
+def test_an_old_habit_fades(tmp_path):
+    mind = _mind(tmp_path)
+    week = 7 * 86400
+    for k in range(3):
+        _play(mind, 1_000_000.0 + k * week, 60, MONDAY_21)
+    assert mind.expectation(MONDAY_21, 1_000_000.0 + 12 * week) == 0.0
+
+
+def test_learning_saves_at_most_every_few_minutes(tmp_path, monkeypatch):
+    mind = _mind(tmp_path)
+    saves = []
+    monkeypatch.setattr(mind, "_save", lambda: saves.append(1))
+    _play(mind, 1_000_000.0, 60, MONDAY_21, step=1.0)
+    assert len(saves) <= 8
+
+
+def test_the_habit_survives_a_restart(tmp_path):
+    mind = _mind(tmp_path)
+    week = 7 * 86400
+    for k in range(3):
+        _play(mind, 1_000_000.0 + k * week, 60, MONDAY_21)
+    again = _mind(tmp_path)
+    assert again.expectation(MONDAY_21, 1_000_000.0 + 3 * week) > 0.8
+
+
+def test_at_the_usual_hour_it_waits_for_you(tmp_path):
+    mind = _mind(tmp_path)
+    plan = mind.plan(1_000_000.0 + 600, 600, situation="home", rng=random.Random(3), expect=1.0)
+    assert "await" in {name for name, _ in plan}
+    calm = mind.plan(1_000_000.0 + 600, 600, situation="home", rng=random.Random(3), expect=0.0)
+    assert "await" not in {name for name, _ in calm}

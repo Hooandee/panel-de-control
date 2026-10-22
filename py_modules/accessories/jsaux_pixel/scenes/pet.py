@@ -458,6 +458,34 @@ def _ep_explore(mood, theme, n=24):
     return out
 
 
+def _ep_await(mood, theme, n=24):
+    """Pad in hand, eyes on the screen: it knows you usually come to play about now."""
+    out = []
+    for i in range(n):
+        def hope(canvas, box):
+            x, y = box[0] + box[2] + 2, max(1, box[1] - 12)
+            _bubble(canvas, x, y)
+            canvas.rect(x + 3, y + 3, 5, 3, (170, 175, 195))
+            canvas.px(x + 4, y + 4, (235, 50, 70))
+            canvas.px(x + 6, y + 4, (90, 220, 110))
+        pose = Pose(look=1, look_up=i % 12 < 8, lift=2 if i % 6 in (0, 1) and i >= 8 else 0, happy=i >= 16)
+        out.append(_frame("play", theme, pose, hope if i >= 8 else None))
+    return out
+
+
+def _ep_impatient(mood, theme, n=20):
+    out = []
+    for i in range(n):
+        def clock(canvas, box, i=i):
+            x, y = box[0] + box[2] + 2, max(1, box[1] - 12)
+            _bubble(canvas, x, y)
+            canvas.circle(x + 5, y + 4, 3, (230, 230, 240))
+            angle = math.tau * i / n
+            canvas.line(x + 5, y + 4, x + 5 + round(math.cos(angle) * 2), y + 4 + round(math.sin(angle) * 2), (255, 214, 60))
+        out.append(_frame(mood, theme, Pose(squash=1 if i % 4 < 2 else 0, look=(-1, 1)[i // 5 % 2], face="sad" if i > 10 else None), clock))
+    return out
+
+
 # While playing --------------------------------------------------------------------------------
 
 def _ep_watch(mood, theme, n=20):
@@ -836,6 +864,7 @@ EPISODES: dict[str, Callable] = {
     "turn": _ep_turn, "snore": _ep_snore, "refuse": _ep_refuse, "purr": _ep_purr, "play": _ep_play,
     "sleep": _ep_sleep, "wake": _ep_wake, "tired": _ep_tired, "trophy": _ep_trophy, "greet": _ep_greet,
     "scared": _ep_scared, "flinch": _ep_flinch, "party": _ep_party, "excited": _ep_excited,
+    "await": _ep_await, "impatient": _ep_impatient,
 }
 REACTIONS = ("eat", "refuse", "play", "tired", "purr", "sleep", "snore", "wake", "trophy", "greet", "scared", "flinch",
              "party", "excited")
@@ -924,9 +953,13 @@ class PetScene(Scene):
         genre = self._genre(ctx)
         if genre == "horror":
             return "scared" if self.mind.fear(genre) >= _FRIGHT else "flinch"
-        if genre and genre == self.mind.favourite():
+        if genre and genre == self.mind.favourite() or self._expect(ctx, started) >= 0.5:
             return "excited"
         return "party"
+
+    def _expect(self, ctx: SceneContext, at: float) -> float:
+        local = datetime.fromtimestamp(at, ctx.tz)
+        return self.mind.expectation(local.weekday() * 24 + local.hour, ctx.now)
 
     def face(self, ctx: SceneContext) -> str | None:
         needs = self.mind.needs(ctx.now)
@@ -954,7 +987,8 @@ class PetScene(Scene):
         remaining = max(1.0, (end - now).total_seconds())
         rng = random.Random(f"{start.timestamp()}:{situation}:{self.mind.memory['revision']}")
         head = self._head(ctx)
-        plan = self.mind.plan(ctx.now, remaining - (4 if head else 0), situation=situation, rng=rng)
+        expect = self._expect(ctx, ctx.now) if situation == "home" else 0.0
+        plan = self.mind.plan(ctx.now, remaining - (4 if head else 0), situation=situation, rng=rng, expect=expect)
         if head:
             plan = [(head, 0.5)] + [(name, rng.uniform(3, 6) if i == 0 else rest) for i, (name, rest) in enumerate(plan)]
         return plan or [("hop", 0.5)]

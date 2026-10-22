@@ -1,6 +1,6 @@
 import { DialogButton, Focusable, TextField } from "@decky/ui";
 import { FC, ReactNode, useEffect, useRef, useState } from "react";
-import { LuApple, LuGamepad2, LuHeart, LuMoon, LuSmile, LuSun, LuZap } from "react-icons/lu";
+import { LuApple, LuClock3, LuGamepad2, LuHeart, LuMoon, LuSmile, LuSun, LuZap } from "react-icons/lu";
 
 import { accessoryPetAction, getAccessoryPet, PetAction, PetNeeds, PetState, renameAccessoryPet } from "../api";
 import { useI18n } from "../i18n";
@@ -97,6 +97,12 @@ export const PetCare: FC = () => {
           <LuSmile size={13} />
           {[...traits, pet.favourite ? t("accessories.pet.favourite", { genre: t(`accessories.pet.genre.${pet.favourite}`) }) : null]
             .filter(Boolean).join(" · ")}
+        </span>
+      )}
+      {pet.usual_hours && (
+        <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, display: "flex", alignItems: "center", gap: 6 }}>
+          <LuClock3 size={13} />
+          {t("accessories.pet.usual", { from: `${String(pet.usual_hours[0]).padStart(2, "0")}:00`, to: `${String(pet.usual_hours[1]).padStart(2, "0")}:00` })}
         </span>
       )}
       {(Object.keys(NEED_STYLE) as (keyof PetNeeds)[]).map((need) => <NeedBar key={need} need={need} value={pet.needs[need]} />)}

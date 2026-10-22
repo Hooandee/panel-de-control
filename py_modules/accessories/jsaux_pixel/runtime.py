@@ -412,8 +412,9 @@ class Runtime:
     def _context(self, now: float) -> SceneContext:
         extra = self._context_source() or {}
         zone = self._local_zone()
-        hour = datetime.fromtimestamp(now, zone).hour
-        self.mind.observe(now, night=hour in _PET_BEDTIME, playing=bool(extra.get("game")))
+        local = datetime.fromtimestamp(now, zone)
+        self.mind.observe(now, night=local.hour in _PET_BEDTIME, playing=bool(extra.get("game")),
+                          hour_of_week=local.weekday() * 24 + local.hour)
         readings = {key: value for key, value in (self._system_metrics() or {}).items() if value is not None}
         readings.update({key: value for key, value in (extra.get("metrics") or {}).items() if value is not None})
         events = self._events

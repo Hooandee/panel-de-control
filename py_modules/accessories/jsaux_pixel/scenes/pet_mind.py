@@ -25,6 +25,12 @@ _LOVE_S = 20 * 3600
 _FULL = 0.8
 _PLAY_REFRESH_S = 600
 _NAME_MAX = 15
+_WEEK_HOURS = 7 * 24
+_HABIT_HALF_LIFE_S = 14 * 86400
+_HABIT_MIN_TOTAL = 60.0
+_HABIT_FULL_WEEKLY = 40.0
+_HABIT_FULL_DAILY = 120.0
+_TICK_CAP_S = 10.0
 DEFAULT_NAME = "Pixi"
 
 # Steam store tag ids, matched in the order the store ranks a game's tags.
@@ -70,7 +76,7 @@ ACTIONS: dict[str, tuple[frozenset, float]] = {
         ("explore", "home", 2.0), ("watch", "game", 2.0), ("cheer", "game", 1.2), ("shiver", "game", 1.6),
         ("zoom", "game", 1.4), ("aim", "game", 1.6), ("sword", "game", 1.4), ("think", "game", 1.8),
         ("box", "game", 1.2), ("sweat", "game hot", 1.4), ("fan_self", "hot", 1.6), ("blown", "windy", 2.4),
-        ("hold", "windy", 1.6), ("dream", "night", 2.4), ("turn", "night", 1.2), ("snore", "night", 1.6),
+        ("hold", "windy", 1.6), ("await", "home", 2.0), ("impatient", "home", 1.6), ("dream", "night", 2.4), ("turn", "night", 1.2), ("snore", "night", 1.6),
     )
 }
 _PLAYFUL = ("hop", "dance", "stars", "ball", "butterfly", "peekaboo", "wave")
@@ -101,11 +107,17 @@ class Mind:
             "name": DEFAULT_NAME, "born_at": now, "fed_at": now, "fun_at": now, "petted_at": now,
             "woke_at": now, "energy_base": 1.0, "asleep_since": None, "genres": {}, "last_session": None,
             "achievements": 0, "proud_at": None, "interaction": None, "revision": 0,
+            "routine": [0.0] * _WEEK_HOURS, "routine_at": now,
         }
         for key, value in memory.items():
             if key in self.memory and (value is None or isinstance(value, type(self.memory[key])) or
                                        isinstance(value, (int, float)) and isinstance(self.memory[key], (int, float))):
                 self.memory[key] = value
+        routine = self.memory["routine"]
+        if len(routine) != _WEEK_HOURS or not all(isinstance(v, (int, float)) and v >= 0 for v in routine):
+            self.memory["routine"] = [0.0] * _WEEK_HOURS
+        self._pending: dict[int, float] = {}
+        self._play_tick: float | None = None
         if not stored:
             self._save()
 
@@ -176,10 +188,21 @@ class Mind:
             self._remember(now, reaction)
             return reaction
 
-    def observe(self, now: float, *, night: bool, playing: bool) -> None:
-        """Called on every tick: night puts it to bed, morning wakes it, play keeps it amused."""
+    def observe(self, now: float, *, night: bool, playing: bool, hour_of_week: int | None = None) -> None:
+        """Called on every tick: night puts it to bed, morning wakes it, play keeps it amused, and the
+        hours you play are learnt (saved together with the play refresh, every ten minutes)."""
         with self._lock:
             changed = False
+            if playing and hour_of_week is not None and 0 <= hour_of_week < _WEEK_HOURS:
+                if self._play_tick is not None:
+                    minutes = min(_TICK_CAP_S, max(0.0, now - self._play_tick)) / 60
+                    self._pending[hour_of_week] = self._pending.get(hour_of_week, 0.0) + minutes
+                self._play_tick = now
+            else:
+                self._play_tick = None
+                if self._pending:
+                    self._learn(now)
+                    changed = True
             if night and not playing and not self.asleep():
                 self._fall_asleep(now)
                 changed = True
@@ -191,9 +214,45 @@ class Mind:
                 changed = True
             if playing and now - self.memory["fun_at"] >= _PLAY_REFRESH_S:
                 self.memory["fun_at"] = now
+                self._learn(now)
                 changed = True
             if changed:
                 self._save()
+
+    def _learn(self, now: float) -> None:
+        self.memory["routine"] = [w + self._pending.get(h, 0.0) for h, w in enumerate(self._routine(now))]
+        self.memory["routine_at"] = now
+        self._pending = {}
+
+    def _routine(self, now: float) -> list[float]:
+        """Minutes played per hour of the week, fading with a two-week half-life so habits change."""
+        fade = 0.5 ** (max(0.0, now - self.memory["routine_at"]) / _HABIT_HALF_LIFE_S)
+        return [w * fade for w in self.memory["routine"]]
+
+    def _weights(self, now: float) -> list[float]:
+        return [w + self._pending.get(h, 0.0) for h, w in enumerate(self._routine(now))]
+
+    def expectation(self, hour_of_week: int, now: float) -> float:
+        """How sure it is that you come to play at this hour: 0 until a real habit exists."""
+        weights = self._weights(now)
+        if sum(weights) < _HABIT_MIN_TOTAL:
+            return 0.0
+        hour = hour_of_week % 24
+        daily = sum(weights[day * 24 + hour] for day in range(7))
+        return round(min(1.0, max(weights[hour_of_week % _WEEK_HOURS] / _HABIT_FULL_WEEKLY, daily / _HABIT_FULL_DAILY)), 3)
+
+    def usual_hours(self, now: float) -> list[int] | None:
+        weights = self._weights(now)
+        if sum(weights) < _HABIT_MIN_TOTAL:
+            return None
+        daily = [sum(weights[day * 24 + hour] for day in range(7)) for hour in range(24)]
+        peak = max(range(24), key=lambda h: daily[h])
+        start = end = peak
+        while daily[(start - 1) % 24] >= daily[peak] / 2 and (start - 1) % 24 != peak:
+            start = (start - 1) % 24
+        while daily[(end + 1) % 24] >= daily[peak] / 2 and (end + 1) % 24 != start:
+            end = (end + 1) % 24
+        return [start, (end + 1) % 24]
 
     def saw_game(self, appid: str, genre: str | None, started_at: float) -> None:
         with self._lock:
@@ -271,11 +330,13 @@ class Mind:
             "favourite": self.favourite(),
             "age_days": max(0, int((now - self.memory["born_at"]) // 86400)),
             "achievements": self.memory["achievements"],
+            "usual_hours": self.usual_hours(now),
         }
 
     # The brain ------------------------------------------------------------------------------
 
-    def plan(self, now: float, seconds: float, *, situation: str, rng: random.Random) -> list[tuple[str, float]]:
+    def plan(self, now: float, seconds: float, *, situation: str, rng: random.Random,
+             expect: float = 0.0) -> list[tuple[str, float]]:
         """(action, seconds of rest before it) filling `seconds`, chosen by what it needs and is."""
         place, _, genre = situation.partition(":")
         needs = self.needs(now)
@@ -284,7 +345,7 @@ class Mind:
         plan: list[tuple[str, float]] = []
         used = 0.0
         while True:
-            options = {name: self._score(name, place, genre, needs, traits, proud)
+            options = {name: self._score(name, place, genre, needs, traits, proud, expect)
                        for name, (places, _length) in ACTIONS.items() if place in places}
             for name in [p for p, _ in plan[-3:]]:
                 if name in options:
@@ -307,7 +368,7 @@ class Mind:
             needs = _after(name, needs)
         return plan
 
-    def _score(self, name: str, place: str, genre: str, needs: dict, traits: dict, proud: bool) -> float:
+    def _score(self, name: str, place: str, genre: str, needs: dict, traits: dict, proud: bool, expect: float = 0.0) -> float:
         hunger, energy, fun, love = needs["hunger"], needs["energy"], needs["fun"], needs["love"]
         if place == "night":
             return {"dream": 1.0 + traits["curious"] * 0.3, "snore": 0.8 + traits["sleepy"] * 0.5, "turn": 0.6}[name]
@@ -329,6 +390,10 @@ class Mind:
             return 3.0 * _urgency(love) if love < 0.25 else -1
         if name == "sneeze":
             return 0.15
+        if name == "await":
+            return 2.4 * expect + traits["playful"] * 0.3 if expect >= 0.5 else -1
+        if name == "impatient":
+            return 1.8 * expect + (1 - fun) * 0.5 if expect >= 0.7 and fun < 0.7 else -1
         if name in ("wander", "explore"):
             return 0.5 + traits["curious"] * 0.6
         if place == "game":
