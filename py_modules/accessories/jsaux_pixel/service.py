@@ -6,6 +6,8 @@ it; it never runs on the asyncio loop.
 """
 
 import dataclasses
+import re
+from datetime import datetime
 import hashlib
 import json
 import threading
@@ -29,6 +31,20 @@ _END_TIMEOUT_S = 3.0
 # next frame sooner can make the panel drop it.
 _SETTLE_S = 0.02
 _DEFAULT_BRIGHTNESS = 60
+
+
+_DEFAULT_NIGHT = {"enabled": False, "from": "23:00", "to": "07:00"}
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _minutes(hhmm: str) -> int:
+    hours, minutes = hhmm.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def _valid_night(night: dict) -> bool:
+    return (isinstance(night.get("enabled"), bool) and isinstance(night.get("from"), str)
+            and isinstance(night.get("to"), str) and bool(_HHMM.match(night["from"])) and bool(_HHMM.match(night["to"])))
 
 
 class PixelService:
@@ -59,6 +75,9 @@ class PixelService:
         brightness = stored.get("brightness")
         self._brightness = brightness if isinstance(brightness, int) and 0 <= brightness <= 100 else _DEFAULT_BRIGHTNESS
         self._power = stored.get("power") is not False
+        self._power_sent: bool | None = None
+        night = stored.get("night")
+        self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
         governor = stored.get("governor")
         self._governor = Governor(clock, governor if isinstance(governor, dict) else None)
 
@@ -81,8 +100,20 @@ class PixelService:
         with self._lock:
             self._power = bool(on)
             self._save()
-            if self._link is not None:
-                self._request(codec.frame(1, codec.Cmd.POWER, b"\x01" if on else b"\x00"))
+
+    def set_night(self, night: dict) -> None:
+        if not _valid_night(night):
+            raise ValueError("invalid night schedule")
+        with self._lock:
+            self._night = {"enabled": bool(night["enabled"]), "from": night["from"], "to": night["to"]}
+            self._save()
+
+    def _night_active(self, now: float) -> bool:
+        if not self._night.get("enabled"):
+            return False
+        minute = _minutes(datetime.fromtimestamp(now).strftime("%H:%M"))
+        start, end = _minutes(self._night["from"]), _minutes(self._night["to"])
+        return start <= minute < end if start < end else minute >= start or minute < end
 
     def state(self) -> dict:
         with self._lock:
@@ -99,6 +130,8 @@ class PixelService:
                 "brightness": self._brightness,
                 "pwm": pwm,
                 "power": self._power,
+                "night": dict(self._night),
+                "night_active": self._night_active(self._clock()),
                 "last_upload": self._last_upload,
                 "writes": self._governor.stats(),
             }
@@ -121,6 +154,7 @@ class PixelService:
                 return
             try:
                 self._sync_brightness()
+                self._sync_power(now)
                 self._sync_scene(now)
             except TransportError as error:
                 self._log("WARNING", "upload_failed", error=str(error), scene=self._scene_id)
@@ -157,7 +191,7 @@ class PixelService:
         except TransportError as error:
             self._log("WARNING", "open_failed", error=str(error))
             return False
-        self._port, self._link, self._brightness_sent = port, link, None
+        self._port, self._link, self._brightness_sent, self._power_sent = port, link, None, None
         self._rendered_key, self._valid_until = None, None
         self._log("INFO", "connected", port=port.dev, bus_port=port.bus_port, strong=port.strong_supply)
         return True
@@ -178,6 +212,15 @@ class PixelService:
         if power_guard.allowed(frame):
             self._send_unanswered(frame)
             self._brightness_sent = pwm
+
+    def _sync_power(self, now: float) -> None:
+        wanted = self._power and not self._night_active(now)
+        if wanted == self._power_sent:
+            return
+        reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x01" if wanted else b"\x00"))
+        if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
+            self._power_sent = wanted
+            self._log("INFO", "power", on=wanted, night=self._night_active(now))
 
     def _sync_scene(self, now: float) -> None:
         if self._scene_id is None:
@@ -266,6 +309,7 @@ class PixelService:
                 "scene": {"id": self._scene_id, "options": self._options},
                 "brightness": self._brightness,
                 "power": self._power,
+                "night": self._night,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:

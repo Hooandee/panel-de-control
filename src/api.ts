@@ -1222,6 +1222,11 @@ export interface AccessorySceneMeta {
   labelKey: string;
   options: string[];
 }
+export interface NightSchedule {
+  enabled: boolean;
+  from: string;
+  to: string;
+}
 export interface AccessoriesState {
   ok?: boolean;
   error?: string;
@@ -1237,6 +1242,8 @@ export interface AccessoriesState {
   brightness: number;
   pwm: number | null;
   power: boolean;
+  night: NightSchedule;
+  night_active: boolean;
   catalog: AccessorySceneMeta[];
 }
 export interface PixelFrames {
@@ -1272,3 +1279,5 @@ export const saveAccessoryDrawing = callable<[drawing: { id?: string; name: stri
 export const deleteAccessoryDrawing = callable<[id: string], { ok: boolean }>("delete_accessory_drawing");
 export const readAccessoryImage = callable<[path: string], { ok: boolean; mime?: string; data?: string; error?: string }>("read_accessory_image");
 export const loadAccessoryDrawing = callable<[id: string], { ok: boolean; id?: string; name?: string; frames?: string[]; fps?: number }>("load_accessory_drawing");
+export const pauseJsauxApp = callable<[], { ok: boolean }>("pause_jsaux_app");
+export const setAccessoryNight = callable<[night: NightSchedule], AccessoriesState>("set_accessory_night");

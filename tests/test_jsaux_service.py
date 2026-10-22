@@ -261,3 +261,46 @@ def test_commands_without_reply_get_the_official_settle_gap(rig):
     svc.tick()
     assert sleeps and all(s >= 0.02 for s in sleeps)
     assert len(sleeps) >= 2
+
+
+def _local(hour, minute=0):
+    from datetime import datetime
+    return datetime(2026, 10, 22, hour, minute).timestamp()
+
+
+def test_night_schedule_switches_the_screen_off_and_back(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.set_night({"enabled": True, "from": "23:00", "to": "07:30"})
+    clock.t = _local(22, 59)
+    svc.tick()
+    clock.t = _local(23, 1)
+    svc.tick()
+    assert panel.commands(codec.Cmd.POWER)[-1] == codec.frame(1, codec.Cmd.POWER, b"\x00")
+    assert svc.state()["night_active"] is True
+    clock.t = _local(23, 30)
+    svc.tick()
+    offs = [f for f in panel.commands(codec.Cmd.POWER) if f[6] == 0]
+    assert len(offs) == 1
+    clock.t = _local(7, 31) + 86400
+    svc.tick()
+    assert panel.commands(codec.Cmd.POWER)[-1] == codec.frame(1, codec.Cmd.POWER, b"\x01")
+    assert svc.state()["night_active"] is False
+
+
+def test_night_schedule_never_turns_on_a_screen_the_user_switched_off(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.set_night({"enabled": True, "from": "23:00", "to": "07:00"})
+    svc.set_power(False)
+    clock.t = _local(7, 30)
+    svc.tick()
+    assert all(f[6] == 0 for f in panel.commands(codec.Cmd.POWER))
+
+
+def test_invalid_night_schedule_is_rejected(rig):
+    _, _, _, make = rig
+    with pytest.raises(ValueError):
+        make().set_night({"enabled": True, "from": "25:00", "to": "07:00"})

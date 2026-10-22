@@ -1,6 +1,9 @@
 """Glue between Panel de Control and the JSAUX PIXEL service."""
 
 import base64
+import os
+import pwd
+import subprocess
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +21,21 @@ _FPS_SCENES = frozenset({"game_heart", "game_dashboard"})
 _ART_BYTES = 64 * 54 * 3
 _IMAGE_TYPES = {".png": "image/png", ".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 _IMAGE_LIMIT = 8 * 1024 * 1024
+_OFFICIAL_SERVICE = "jsaux-matrix-hub.service"
+
+
+def _uid_of(user: str) -> int:
+    try:
+        return pwd.getpwnam(user).pw_uid
+    except KeyError:
+        return 1000
+
+
+def _run(argv: list[str], env: dict) -> int:
+    try:
+        return subprocess.run(argv, env=env, timeout=15, capture_output=True).returncode
+    except (OSError, subprocess.TimeoutExpired):
+        return -1
 
 
 class Runtime:
@@ -25,11 +43,16 @@ class Runtime:
                  find_panel: Callable[[], detect.PanelPort | None] = detect.find_panel,
                  context_source: Callable[[], dict] | None = None,
                  system_metrics: Callable[[], dict] | None = None,
-                 user_home: Path | str = "/home/deck"):
+                 user_home: Path | str = "/home/deck",
+                 run: Callable[[list[str], dict], int] | None = None,
+                 user: str = "deck", uid: int | None = None):
         self.supported = device_key in SUPPORTED_DEVICES
         self._library = Library(Path(settings_dir) / "accessories" / "library")
         self._home = Path(user_home).resolve()
         self._entries = catalog.build(self._library)
+        self._run = run or _run
+        self._user, self._uid = user, uid if uid is not None else _uid_of(user)
+        self._log = log
         self._context_source = context_source or (lambda: {})
         self._system_metrics = system_metrics or metrics.SystemMetrics().sample
         self._events: dict = {}
@@ -73,9 +96,23 @@ class Runtime:
         self.service.set_brightness(percent)
         return self.state()
 
+    def set_night(self, night: dict) -> dict:
+        self.service.set_night(night)
+        return self.state()
+
     def set_power(self, on: bool) -> dict:
         self.service.set_power(on)
         return self.state()
+
+    def pause_official_app(self) -> dict:
+        if not self.supported:
+            return {"ok": False}
+        env = {**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{self._uid}",
+               "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{self._uid}/bus"}
+        argv = ["runuser", "-u", self._user, "--", "systemctl", "--user", "disable", "--now", _OFFICIAL_SERVICE]
+        code = self._run(argv, env)
+        self._log("INFO" if code == 0 else "WARNING", "official_app_paused", code=code)
+        return {"ok": code == 0}
 
     def list_drawings(self) -> dict:
         return {"drawings": self._library.list()}

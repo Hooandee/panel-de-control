@@ -221,7 +221,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "accessories": (
         ("get_accessories_state", (
             "supported", "present", "busy_by", "bus_port", "strong_supply", "scene", "brightness",
-            "pwm", "power",
+            "pwm", "power", "night",
         )),
     ),
     "themes": (
@@ -9467,6 +9467,7 @@ class Plugin:
                 settings_dir=decky.DECKY_PLUGIN_SETTINGS_DIR,
                 device_key=getattr(getattr(self, "_device", None), "key", None),
                 user_home=_user_home(),
+                user=getattr(decky, "DECKY_USER", None) or "deck",
                 log=_accessories_journal,
                 context_source=self._pixel_context,
             )
@@ -9494,6 +9495,9 @@ class Plugin:
             if rpms:
                 readings["fan_rpm"] = max(rpms)
         return {"game": game, "metrics": readings}
+
+    async def pause_jsaux_app(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().pause_official_app)
 
     async def list_accessory_drawings(self) -> dict:
         return await asyncio.to_thread(self._pixel_runtime().list_drawings)
@@ -9540,6 +9544,9 @@ class Plugin:
 
     async def set_accessory_brightness(self, percent) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))
+
+    async def set_accessory_night(self, night) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_night, dict(night or {}))
 
     async def set_accessory_power(self, on) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_power, bool(on))

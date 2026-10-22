@@ -1,4 +1,4 @@
-import { PanelSectionRow, ToggleField } from "@decky/ui";
+import { DialogButton, DropdownItem, PanelSectionRow, ToggleField } from "@decky/ui";
 import { FC, useEffect, useState } from "react";
 import { LuPlug, LuSun } from "react-icons/lu";
 
@@ -8,12 +8,17 @@ import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
 import type { Block } from "../accessories/ComposerModal";
 import { loadPreview, useAccessories } from "../accessories/useAccessories";
+import { pauseJsauxApp } from "../api";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
 const HERO_PITCH = 4;
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => {
+  const value = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
+  return { data: value, label: value };
+});
 
 type Status = "connected" | "busy" | "searching";
 
@@ -61,8 +66,9 @@ const Hero: FC<{ status: Status; sceneId: string | null; options: Record<string,
   );
 };
 
-const EmptyState: FC<{ busy: boolean }> = ({ busy }) => {
+const EmptyState: FC<{ busy: boolean; onTakeOver: () => void }> = ({ busy, onTakeOver }) => {
   const { t } = useI18n();
+  const [failed, setFailed] = useState(false);
   return (
     <div style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
       <LuPlug size={28} color={busy ? theme.color.warn : theme.color.accent} />
@@ -72,13 +78,20 @@ const EmptyState: FC<{ busy: boolean }> = ({ busy }) => {
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.45 }}>
         {t(busy ? "accessories.busy.body" : "accessories.empty.body")}
       </span>
+      {busy && (
+        <DialogButton style={{ marginTop: theme.space.xs }}
+          onClick={() => void pauseJsauxApp().then((r) => { setFailed(!r?.ok); if (r?.ok) onTakeOver(); }).catch(() => setFailed(true))}>
+          {t("accessories.busy.takeOver")}
+        </DialogButton>
+      )}
+      {failed && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("accessories.busy.failed")}</span>}
     </div>
   );
 };
 
 export const AccesoriosSection: FC = () => {
   const { t } = useI18n();
-  const { state, chooseScene, setBrightness, setPower } = useAccessories();
+  const { state, chooseScene, setBrightness, setPower, setNight, refresh } = useAccessories();
   if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const active = state.catalog.find((scene) => scene.id === state.scene);
@@ -91,7 +104,7 @@ export const AccesoriosSection: FC = () => {
             <SceneOptions options={active.options} values={state.options}
               onChange={(values) => void chooseScene(active.id, values)} />
           )}
-          {!state.present && <EmptyState busy={!!state.busy_by} />}
+          {!state.present && <EmptyState busy={!!state.busy_by} onTakeOver={() => void refresh()} />}
         </div>
       </PanelSectionRow>
       {state.present && (
@@ -103,6 +116,22 @@ export const AccesoriosSection: FC = () => {
           <PanelSectionRow>
             <ToggleField label={t("accessories.power")} checked={state.power} onChange={(on) => void setPower(on)} />
           </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField label={t("accessories.night")} description={state.night.enabled ? t("accessories.night.range", { from: state.night.from, to: state.night.to }) : undefined}
+              checked={state.night.enabled} onChange={(on) => void setNight({ ...state.night, enabled: on })} />
+          </PanelSectionRow>
+          {state.night.enabled && (
+            <>
+              <PanelSectionRow>
+                <DropdownItem label={t("accessories.night.from")} rgOptions={HALF_HOURS} selectedOption={state.night.from}
+                  onChange={(option) => void setNight({ ...state.night, from: String(option.data) })} />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <DropdownItem label={t("accessories.night.to")} rgOptions={HALF_HOURS} selectedOption={state.night.to}
+                  onChange={(option) => void setNight({ ...state.night, to: String(option.data) })} />
+              </PanelSectionRow>
+            </>
+          )}
         </>
       )}
       <PanelSectionRow>

@@ -106,3 +106,27 @@ def test_image_import_reads_only_pictures_under_home(tmp_path):
     assert rt.read_image(str(home / "notes.txt"))["ok"] is False
     assert rt.read_image("/etc/passwd")["ok"] is False
     assert rt.read_image(str(home / "Pictures" / ".." / ".." / "x.png"))["ok"] is False
+
+
+def test_pausing_the_official_daemon_stops_and_disables_it_for_the_user(tmp_path):
+    calls = []
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, run=lambda argv, env: calls.append((argv, env)) or 0)
+    assert rt.pause_official_app()["ok"] is True
+    argv, env = calls[0]
+    assert argv[:4] == ["runuser", "-u", "deck", "--"]
+    assert argv[4:] == ["systemctl", "--user", "disable", "--now", "jsaux-matrix-hub.service"]
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+
+
+def test_pausing_reports_failure(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, run=lambda argv, env: 1)
+    assert rt.pause_official_app()["ok"] is False
+
+
+def test_pausing_is_refused_off_the_steam_machine(tmp_path):
+    calls = []
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="rog_ally", log=lambda *a, **k: None,
+                         run=lambda argv, env: calls.append(argv) or 0)
+    assert rt.pause_official_app()["ok"] is False and calls == []

@@ -2,6 +2,12 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.night": "Modo noche",
+  "accessories.night.range": "Pantalla apagada de {from} a {to}",
+  "accessories.night.from": "Apagar a las",
+  "accessories.night.to": "Encender a las",
+  "accessories.busy.takeOver": "Usar Panel de Control",
+  "accessories.busy.failed": "No se pudo detener la app de JSAUX.",
   "accessories.compose.title": "Componer",
   "accessories.compose.move": "Mueve el bloque con la cruceta",
   "accessories.compose.remove": "Quitar bloque",
@@ -82,7 +88,7 @@ const es: Strings = {
   "accessories.empty.title": "Conecta tu JSAUX PIXEL",
   "accessories.empty.body": "Coloca la carcasa en la Steam Machine y conecta su cable USB. La pantalla aparecerá aquí al momento.",
   "accessories.busy.title": "La app de JSAUX está usando la pantalla",
-  "accessories.busy.body": "Cierra la app oficial de JSAUX para controlar la pantalla desde Panel de Control.",
+  "accessories.busy.body": "Cierra la app oficial de JSAUX o deja que Panel de Control la detenga para controlar la pantalla desde aquí.",
   "accessories.brightness": "Brillo",
   "accessories.power": "Pantalla encendida",
   "accessories.power.off": "Pantalla apagada",
@@ -101,6 +107,12 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.night": "Night mode",
+  "accessories.night.range": "Display off from {from} to {to}",
+  "accessories.night.from": "Turn off at",
+  "accessories.night.to": "Turn on at",
+  "accessories.busy.takeOver": "Use Control Panel",
+  "accessories.busy.failed": "The JSAUX app could not be stopped.",
   "accessories.compose.title": "Compose",
   "accessories.compose.move": "Move the block with the D-pad",
   "accessories.compose.remove": "Remove block",
@@ -181,7 +193,7 @@ const en: Strings = {
   "accessories.empty.title": "Connect your JSAUX PIXEL",
   "accessories.empty.body": "Fit the faceplate on the Steam Machine and plug in its USB cable. The display shows up here right away.",
   "accessories.busy.title": "The JSAUX app is using the display",
-  "accessories.busy.body": "Close the official JSAUX app to control the display from Control Panel.",
+  "accessories.busy.body": "Close the official JSAUX app, or let Control Panel stop it, to control the display from here.",
   "accessories.brightness": "Brightness",
   "accessories.power": "Display on",
   "accessories.power.off": "Display off",
@@ -200,6 +212,12 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.night": "Modalità notte",
+  "accessories.night.range": "Schermo spento dalle {from} alle {to}",
+  "accessories.night.from": "Spegni alle",
+  "accessories.night.to": "Accendi alle",
+  "accessories.busy.takeOver": "Usa il Pannello di controllo",
+  "accessories.busy.failed": "Impossibile fermare l'app JSAUX.",
   "accessories.compose.title": "Componi",
   "accessories.compose.move": "Sposta il blocco con la croce direzionale",
   "accessories.compose.remove": "Rimuovi blocco",
@@ -280,7 +298,7 @@ const it: Strings = {
   "accessories.empty.title": "Collega il tuo JSAUX PIXEL",
   "accessories.empty.body": "Monta la cover sulla Steam Machine e collega il suo cavo USB. Lo schermo comparirà qui subito.",
   "accessories.busy.title": "L'app JSAUX sta usando lo schermo",
-  "accessories.busy.body": "Chiudi l'app ufficiale JSAUX per controllare lo schermo dal Pannello di controllo.",
+  "accessories.busy.body": "Chiudi l'app ufficiale JSAUX o lascia che il Pannello di controllo la fermi per gestire lo schermo da qui.",
   "accessories.brightness": "Luminosità",
   "accessories.power": "Schermo acceso",
   "accessories.power.off": "Schermo spento",
@@ -299,6 +317,12 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.night": "Nachtmodus",
+  "accessories.night.range": "Display aus von {from} bis {to}",
+  "accessories.night.from": "Ausschalten um",
+  "accessories.night.to": "Einschalten um",
+  "accessories.busy.takeOver": "Kontrollzentrum verwenden",
+  "accessories.busy.failed": "Die JSAUX-App konnte nicht gestoppt werden.",
   "accessories.compose.title": "Gestalten",
   "accessories.compose.move": "Block mit dem Steuerkreuz verschieben",
   "accessories.compose.remove": "Block entfernen",
@@ -379,7 +403,7 @@ const de: Strings = {
   "accessories.empty.title": "JSAUX PIXEL anschließen",
   "accessories.empty.body": "Blende an der Steam Machine anbringen und das USB-Kabel einstecken. Das Display erscheint sofort hier.",
   "accessories.busy.title": "Die JSAUX-App nutzt das Display",
-  "accessories.busy.body": "Die offizielle JSAUX-App schließen, um das Display über das Kontrollzentrum zu steuern.",
+  "accessories.busy.body": "Die offizielle JSAUX-App schließen oder vom Kontrollzentrum stoppen lassen, um das Display hier zu steuern.",
   "accessories.brightness": "Helligkeit",
   "accessories.power": "Display an",
   "accessories.power.off": "Display aus",
@@ -398,6 +422,12 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.night": "Modo noturno",
+  "accessories.night.range": "Tela desligada das {from} às {to}",
+  "accessories.night.from": "Desligar às",
+  "accessories.night.to": "Ligar às",
+  "accessories.busy.takeOver": "Usar o Painel de Controle",
+  "accessories.busy.failed": "Não foi possível parar o app da JSAUX.",
   "accessories.compose.title": "Compor",
   "accessories.compose.move": "Mova o bloco com o direcional",
   "accessories.compose.remove": "Remover bloco",
@@ -478,7 +508,7 @@ const ptBR: Strings = {
   "accessories.empty.title": "Conecte sua JSAUX PIXEL",
   "accessories.empty.body": "Encaixe a tampa na Steam Machine e conecte o cabo USB. A tela aparece aqui na hora.",
   "accessories.busy.title": "O app da JSAUX está usando a tela",
-  "accessories.busy.body": "Feche o app oficial da JSAUX para controlar a tela pelo Painel de Controle.",
+  "accessories.busy.body": "Feche o app oficial da JSAUX ou deixe o Painel de Controle pará-lo para controlar a tela por aqui.",
   "accessories.brightness": "Brilho",
   "accessories.power": "Tela ligada",
   "accessories.power.off": "Tela desligada",
@@ -497,6 +527,12 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.night": "Mode nuit",
+  "accessories.night.range": "Écran éteint de {from} à {to}",
+  "accessories.night.from": "Éteindre à",
+  "accessories.night.to": "Allumer à",
+  "accessories.busy.takeOver": "Utiliser le Centre de contrôle",
+  "accessories.busy.failed": "Impossible d'arrêter l'app JSAUX.",
   "accessories.compose.title": "Composer",
   "accessories.compose.move": "Déplacez le bloc avec la croix",
   "accessories.compose.remove": "Retirer le bloc",
@@ -577,7 +613,7 @@ const fr: Strings = {
   "accessories.empty.title": "Branchez votre JSAUX PIXEL",
   "accessories.empty.body": "Fixez la façade sur la Steam Machine et branchez son câble USB. L'écran apparaît ici aussitôt.",
   "accessories.busy.title": "L'app JSAUX utilise l'écran",
-  "accessories.busy.body": "Fermez l'app officielle JSAUX pour piloter l'écran depuis le Centre de contrôle.",
+  "accessories.busy.body": "Fermez l'app officielle JSAUX, ou laissez le Centre de contrôle l'arrêter, pour piloter l'écran d'ici.",
   "accessories.brightness": "Luminosité",
   "accessories.power": "Écran allumé",
   "accessories.power.off": "Écran éteint",
