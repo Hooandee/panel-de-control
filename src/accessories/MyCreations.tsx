@@ -8,7 +8,7 @@ import { confirmDestructive } from "./SafeConfirm";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { decodeFrame } from "./drawing";
-import type { Block } from "./ComposerModal";
+import type { Block } from "./ComposerEditor";
 import { openEditor } from "./editorRoute";
 import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";

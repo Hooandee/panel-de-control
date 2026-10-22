@@ -74,3 +74,35 @@ export function useAccessories() {
     setGameScene: (sceneId: string | null) => apply(() => setAccessoryGameScene(sceneId), { game_scene: sceneId }),
   };
 }
+
+/** The scene being previewed and the open gallery category live outside React: Steam unmounts
+ *  the panel under every modal (the city picker, confirmations), which would otherwise lose them. */
+export interface SceneDraft {
+  id: string;
+  options: Record<string, unknown>;
+}
+
+let draft: SceneDraft | null = null;
+let category: string | null = null;
+const listeners = new Set<() => void>();
+const notify = () => listeners.forEach((listener) => listener());
+
+export function setSceneDraft(next: SceneDraft | null): void {
+  draft = next;
+  notify();
+}
+
+export function setGalleryCategory(next: string): void {
+  category = next;
+  notify();
+}
+
+export function useSceneDraft(): { draft: SceneDraft | null; category: string | null } {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const listener = () => force((n) => n + 1);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
+  return { draft, category };
+}

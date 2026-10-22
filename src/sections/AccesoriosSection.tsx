@@ -6,8 +6,8 @@ import { PixelPreview } from "../accessories/PixelPreview";
 import { DecodedFrames } from "../accessories/pixelFrames";
 import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
-import type { Block } from "../accessories/ComposerModal";
-import { loadPreview, useAccessories } from "../accessories/useAccessories";
+import type { Block } from "../accessories/ComposerEditor";
+import { loadPreview, setSceneDraft, useAccessories, useSceneDraft } from "../accessories/useAccessories";
 import { pauseJsauxApp } from "../api";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
@@ -134,7 +134,8 @@ const sameOptions = (a: Record<string, unknown>, b: Record<string, unknown>) => 
 export const AccesoriosSection: FC = () => {
   const { t } = useI18n();
   const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, refresh } = useAccessories();
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const { draft } = useSceneDraft();
+  const setDraft = setSceneDraft;
   if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const current: Draft | null = draft ?? (state.scene ? { id: state.scene, options: state.options } : null);

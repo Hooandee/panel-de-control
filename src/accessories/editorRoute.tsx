@@ -5,8 +5,8 @@ import { LuBlocks, LuPencil } from "react-icons/lu";
 import { FocusRoot } from "../components/FocusRoot";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { Block, ComposerBody } from "./ComposerModal";
-import { DrawBody, DrawingDraft } from "./DrawModal";
+import { Block, ComposerBody } from "./ComposerEditor";
+import { DrawBody, DrawingDraft } from "./DrawEditor";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 import { confirmDestructive } from "./SafeConfirm";
 

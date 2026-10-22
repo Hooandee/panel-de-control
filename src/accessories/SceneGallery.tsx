@@ -4,11 +4,11 @@ import { FC, useEffect, useMemo, useState } from "react";
 import type { AccessorySceneMeta } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import type { Block } from "./ComposerModal";
+import type { Block } from "./ComposerEditor";
 import { MyCreations } from "./MyCreations";
 import { DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
-import { loadPreview } from "./useAccessories";
+import { loadPreview, setGalleryCategory, useSceneDraft } from "./useAccessories";
 import { tileStyle, OnPanelDot } from "./tiles";
 
 const TILE_PITCH = 1.75;
@@ -38,7 +38,7 @@ const SceneTile: FC<{ scene: AccessorySceneMeta; selected: boolean; onPanel: boo
 const CategoryChip: FC<{ label: string; selected: boolean; onPick: () => void }> = ({ label, selected, onPick }) => {
   const [focused, setFocused] = useState(false);
   return (
-    <Focusable onActivate={onPick} onClick={onPick} onGamepadFocus={() => { setFocused(true); onPick(); }}
+    <Focusable onActivate={onPick} onClick={onPick} onGamepadFocus={() => setFocused(true)}
       onGamepadBlur={() => setFocused(false)}
       style={{ flex: "0 0 auto", textAlign: "center", padding: "7px 12px", borderRadius: 999, fontSize: theme.font.caption, fontWeight: 700,
         background: selected ? theme.color.selectedFill : "rgba(255,255,255,0.06)",
@@ -64,8 +64,9 @@ export const SceneGallery: FC<{
 }> = ({ catalog, selectedScene, panelScene, selectedDrawing, panelDrawing, layout, onPick, onSend, children }) => {
   const { t } = useI18n();
   const categories = useMemo(() => Array.from(new Set(catalog.map((scene) => scene.category))), [catalog]);
-  const initial = catalog.find((scene) => scene.id === selectedScene)?.category ?? categories[0];
-  const [category, setCategory] = useState(initial);
+  const remembered = useSceneDraft().category;
+  const category = remembered ?? catalog.find((scene) => scene.id === selectedScene)?.category ?? categories[0];
+  const setCategory = setGalleryCategory;
   const active = categories.includes(category) ? category : categories[0];
   const shown = catalog.filter((scene) => scene.category === active);
   return (

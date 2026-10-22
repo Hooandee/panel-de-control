@@ -1,13 +1,10 @@
-import { DialogButton, Focusable, GamepadButton, GamepadEvent, ModalRoot, TextField } from "@decky/ui";
+import { DialogButton, Focusable, GamepadButton, GamepadEvent, TextField } from "@decky/ui";
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { LuCopy, LuEraser, LuFlipHorizontal2, LuLayers, LuPaintBucket, LuPencil, LuPlus, LuSend, LuTrash2 } from "react-icons/lu";
 
 import { saveAccessoryDrawing } from "../api";
 import { useI18n } from "../i18n";
-import { showModal } from "../navigation/showModal";
-import { FocusRoot } from "../components/FocusRoot";
 import { theme } from "../theme";
-import { confirmDestructive } from "./SafeConfirm";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
@@ -229,24 +226,3 @@ export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: Drawi
     </Focusable>
   );
 };
-
-const DrawModal: FC<{ initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal }) => {
-  const { t } = useI18n();
-  const dirty = useRef(false);
-  const leave = () => {
-    if (!dirty.current) return closeModal?.();
-    confirmDestructive({ title: t("accessories.draw.discardTitle"), desc: t("accessories.draw.discardDesc"),
-      confirmLabel: t("accessories.draw.discard"), cancelLabel: t("accessories.draw.keepEditing"), onConfirm: () => closeModal?.() });
-  };
-  return (
-    <ModalRoot onCancel={leave} onEscKeypress={leave} bAllowFullSize>
-      <FocusRoot>
-      <DrawBody initial={initial} onSent={onSent} closeModal={closeModal} onDirty={() => { dirty.current = true; }} />
-      </FocusRoot>
-    </ModalRoot>
-  );
-};
-
-export function openDrawModal(initial: DrawingDraft, onSent: (id: string) => void): void {
-  showModal(<DrawModal initial={initial} onSent={onSent} />, window);
-}
