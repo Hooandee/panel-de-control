@@ -14,7 +14,7 @@ namespace PanelDeControl.Hardware.Reports;
 public static class MachineInventory
 {
     private const int MaximumDrivers = 600;
-    private const int MaximumWmiClasses = 400;
+    private const int MaximumWmiClasses = 2000;
     private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(8);
 
     // Services and drivers that own or block a power, fan or sensor path on handhelds.
@@ -48,9 +48,7 @@ public static class MachineInventory
                 "SELECT Name, Chemistry, DesignVoltage, EstimatedChargeRemaining, BatteryStatus FROM Win32_Battery",
                 "name:Name", "chemistry:Chemistry", "design_voltage_mv:DesignVoltage", "charge_percent:EstimatedChargeRemaining", "status:BatteryStatus")),
             ["battery_capacity"] = Part(ReadBatteryCapacity),
-            ["power_plans"] = Part(() => AllIn(
-                @"root\cimv2\power", "SELECT ElementName, IsActive FROM Win32_PowerPlan",
-                "name:ElementName", "active:IsActive")),
+            ["power_plans"] = Part(ReadPowerPlans),
             ["drivers"] = Part(ReadDrivers),
             ["vendor_wmi_classes"] = Part(ReadVendorWmiClasses),
             ["vendor_services"] = Part(ReadVendorServices),
@@ -101,6 +99,44 @@ public static class MachineInventory
             ["full_charge_mwh"] = Part(() => Value("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity", @"root\wmi", "FullChargedCapacity")),
             ["cycle_count"] = Part(() => Value("SELECT CycleCount FROM BatteryCycleCount", @"root\wmi", "CycleCount")),
         };
+    }
+
+    // Win32_PowerPlan answers with a COM error on current Windows 11 builds; powercfg lists the same plans
+    // in any language as "<guid>  (<name>) *".
+    private static readonly Regex PowerPlanLine = new(
+        @"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s+\((.+?)\)\s*(\*)?\s*$",
+        RegexOptions.CultureInvariant);
+
+    private static JsonNode ReadPowerPlans()
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powercfg.exe", "/list")
+        {
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        }) ?? throw new InvalidOperationException("powercfg did not start");
+        var output = process.StandardOutput.ReadToEndAsync();
+        if (!process.WaitForExit(5000) || !output.Wait(1000))
+        {
+            process.Kill();
+            throw new TimeoutException("powercfg did not answer");
+        }
+
+        var plans = new JsonArray();
+        foreach (var line in output.Result.Split('\n'))
+        {
+            var match = PowerPlanLine.Match(line.TrimEnd('\r'));
+            if (match.Success)
+            {
+                plans.Add(new JsonObject
+                {
+                    ["name"] = match.Groups[2].Value,
+                    ["active"] = match.Groups[3].Success,
+                });
+            }
+        }
+
+        return plans;
     }
 
     private static JsonNode ReadDrivers()
