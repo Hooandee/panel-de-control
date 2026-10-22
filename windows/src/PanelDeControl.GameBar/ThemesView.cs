@@ -178,17 +178,18 @@ public sealed class ThemesView : UserControl
     }
 
     // Same covers as the Decky theme cards (src/assets), linked into the package by the project file.
-    private static readonly Dictionary<string, string> CoverFiles = new(StringComparer.Ordinal)
+    // Height over width of each cover, so the whole picture shows at any card width.
+    private static readonly Dictionary<string, (string File, double Ratio)> Covers = new(StringComparer.Ordinal)
     {
-        ["Hooandee Duo"] = "duo-cover.jpg",
-        ["Hooandee Eclipse"] = "eclipse-cover.jpg",
-        ["Hooandee Gallery"] = "hooandee-cover.jpg",
-        ["Hooandee Luminous Atlas"] = "luminous-atlas-cover.jpg",
+        ["Hooandee Duo"] = ("duo-cover.jpg", 340.0 / 960),
+        ["Hooandee Eclipse"] = ("eclipse-cover.jpg", 240.0 / 960),
+        ["Hooandee Gallery"] = ("hooandee-cover.jpg", 240.0 / 960),
+        ["Hooandee Luminous Atlas"] = ("luminous-atlas-cover.jpg", 240.0 / 960),
     };
 
     private static FrameworkElement? BuildCover(string themeName)
     {
-        if (!CoverFiles.TryGetValue(themeName, out var file))
+        if (!Covers.TryGetValue(themeName, out var entry))
         {
             return null;
         }
@@ -198,17 +199,24 @@ public sealed class ThemesView : UserControl
             Stretch = Stretch.UniformToFill,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Source = new BitmapImage(new Uri("ms-appx:///Assets/ThemeCovers/" + file)) { DecodePixelWidth = 960 },
+            Source = new BitmapImage(new Uri("ms-appx:///Assets/ThemeCovers/" + entry.File)) { DecodePixelWidth = 960 },
         };
         var cover = new Border
         {
-            Height = 112,
             Margin = new Thickness(0, 0, 0, 14),
             CornerRadius = Resource<CornerRadius>("PdcRadiusInset"),
             Background = Resource<Brush>("PdcLayerBrush"),
             Child = image,
         };
         image.ImageFailed += (_, _) => cover.Visibility = Visibility.Collapsed;
+        cover.SizeChanged += (_, args) =>
+        {
+            var height = Math.Round(args.NewSize.Width * entry.Ratio);
+            if (Math.Abs(cover.Height - height) >= 1 || double.IsNaN(cover.Height))
+            {
+                cover.Height = height;
+            }
+        };
         AutomationProperties.SetAccessibilityView(cover, Windows.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         return cover;
     }
