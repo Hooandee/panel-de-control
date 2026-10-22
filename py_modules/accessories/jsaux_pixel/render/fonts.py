@@ -717,16 +717,33 @@ def _stroke_glyph(segments: str, width: int, height: int, thickness: int) -> tup
 
 
 def _one_glyph(width: int, height: int, thickness: int) -> tuple[str, ...]:
+    """Stem right of centre plus a diagonal flag of the same weight, so the 1 is not a thin bar."""
     grid = [[False] * width for _ in range(height)]
-    left = (width - thickness) // 2 + thickness // 2
+    stem = width - thickness - 1
     for y in range(height):
-        for x in range(left, left + thickness):
+        for x in range(stem, stem + thickness):
             grid[y][x] = True
-    for y in range(thickness):
-        for x in range(max(0, left - thickness + 1), left):
-            if y >= x - (left - thickness):
-                grid[y][x] = True
-    return _rounded(grid)
+    rows = [list(row) for row in _rounded(grid)]
+    flag = min(stem, max(2, round(height * 0.26)))
+    for k in range(1, flag + 1):
+        for dy in range(thickness):
+            y = k + dy - 1
+            if y < height:
+                rows[y][stem - k] = "#"
+    for x in range(stem - 1, stem + thickness - 1):
+        rows[0][x] = "#"
+    return tuple("".join(row) for row in rows)
+
+
+def _run(grid: list[list[bool]], x: int, y: int, dx: int, dy: int) -> int:
+    height, width = len(grid), len(grid[0])
+    count = 1
+    for sign in (1, -1):
+        cx, cy = x + sign * dx, y + sign * dy
+        while 0 <= cx < width and 0 <= cy < height and grid[cy][cx]:
+            count += 1
+            cx, cy = cx + sign * dx, cy + sign * dy
+    return count
 
 
 def _rounded(grid: list[list[bool]]) -> tuple[str, ...]:
@@ -740,6 +757,7 @@ def _rounded(grid: list[list[bool]]) -> tuple[str, ...]:
         if grid[y][x] and any(not lit(x + dx, y) and not lit(x, y + dy) and not lit(x + dx, y + dy)
                               for dx in (-1, 1) for dy in (-1, 1))
         and sum(lit(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))) == 2
+        and _run(grid, x, y, 1, 0) >= 4 and _run(grid, x, y, 0, 1) >= 4
     ]
     for x, y in corners:
         grid[y][x] = False
