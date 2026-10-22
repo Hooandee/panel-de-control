@@ -2,6 +2,11 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.art_starfield": "Hiperespacio",
+  "accessories.scene.art_matrix": "Lluvia digital",
+  "accessories.scene.art_lava": "Lámpara de lava",
+  "accessories.scene.art_aquarium": "Pecera",
+  "accessories.scene.art_life": "Juego de la vida",
   "accessories.scene.clock_digital": "Digital",
   "accessories.scene.clock_analog": "Agujas",
   "accessories.scene.clock_tetris": "Bloques",
@@ -35,6 +40,11 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.art_starfield": "Hyperspace",
+  "accessories.scene.art_matrix": "Digital rain",
+  "accessories.scene.art_lava": "Lava lamp",
+  "accessories.scene.art_aquarium": "Aquarium",
+  "accessories.scene.art_life": "Game of Life",
   "accessories.scene.clock_digital": "Digital",
   "accessories.scene.clock_analog": "Analog",
   "accessories.scene.clock_tetris": "Blocks",
@@ -68,6 +78,11 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.art_starfield": "Iperspazio",
+  "accessories.scene.art_matrix": "Pioggia digitale",
+  "accessories.scene.art_lava": "Lampada lava",
+  "accessories.scene.art_aquarium": "Acquario",
+  "accessories.scene.art_life": "Gioco della vita",
   "accessories.scene.clock_digital": "Digitale",
   "accessories.scene.clock_analog": "Lancette",
   "accessories.scene.clock_tetris": "Blocchi",
@@ -101,6 +116,11 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.art_starfield": "Hyperraum",
+  "accessories.scene.art_matrix": "Digitaler Regen",
+  "accessories.scene.art_lava": "Lavalampe",
+  "accessories.scene.art_aquarium": "Aquarium",
+  "accessories.scene.art_life": "Spiel des Lebens",
   "accessories.scene.clock_digital": "Digital",
   "accessories.scene.clock_analog": "Zeiger",
   "accessories.scene.clock_tetris": "Blöcke",
@@ -134,6 +154,11 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.art_starfield": "Hiperespaço",
+  "accessories.scene.art_matrix": "Chuva digital",
+  "accessories.scene.art_lava": "Lâmpada de lava",
+  "accessories.scene.art_aquarium": "Aquário",
+  "accessories.scene.art_life": "Jogo da vida",
   "accessories.scene.clock_digital": "Digital",
   "accessories.scene.clock_analog": "Ponteiros",
   "accessories.scene.clock_tetris": "Blocos",
@@ -167,6 +192,11 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.art_starfield": "Hyperespace",
+  "accessories.scene.art_matrix": "Pluie numérique",
+  "accessories.scene.art_lava": "Lampe à lave",
+  "accessories.scene.art_aquarium": "Aquarium",
+  "accessories.scene.art_life": "Jeu de la vie",
   "accessories.scene.clock_digital": "Numérique",
   "accessories.scene.clock_analog": "Aiguilles",
   "accessories.scene.clock_tetris": "Blocs",
