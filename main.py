@@ -9580,6 +9580,13 @@ class Plugin:
     async def accessory_resume(self) -> dict:
         return await self._pixel_call(self._pixel_runtime().resume)
 
+    async def compose_accessory_layout(self, layout, place=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().compose, dict(layout or {}),
+                                      place if isinstance(place, int) else None)
+
+    async def get_accessory_stickers(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().sticker_book)
+
     async def get_accessory_pet(self) -> dict:
         return await asyncio.to_thread(self._pixel_runtime().pet_state)
 

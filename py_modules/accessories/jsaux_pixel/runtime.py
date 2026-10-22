@@ -17,7 +17,9 @@ from . import detect, metrics, transport, weather
 from .library import Library
 from .render.canvas import quantize
 from .scenes import catalog
+from .render import stickers
 from .scenes.base import SceneContext
+from .scenes.composed import layout_info, place_free, validate_layout
 from .scenes.pet_mind import Mind, genre_for
 from .service import PixelService, Worker
 
@@ -374,6 +376,17 @@ class Runtime:
             "firmwareAnimation": None,
             "ready": segment.ready,
         }
+
+    def compose(self, layout: dict, place: int | None = None) -> dict:
+        blocks = validate_layout(layout)
+        if isinstance(place, int) and 0 <= place < len(blocks):
+            blocks = place_free(blocks, place, self._library)
+        info = layout_info(blocks, self._library)
+        return {**self.preview("composed", {"layout": {"blocks": blocks}}), "blocks": blocks, **info}
+
+    def sticker_book(self) -> dict:
+        return {"palette": {key: list(rgb) for key, rgb in stickers.PALETTE.items()},
+                "stickers": {name: [list(rows) for rows in frames] for name, frames in stickers.STICKERS.items()}}
 
     def _local_zone(self) -> tzinfo:
         """The zone Steam's clock uses right now; glibc caches it at start, so read the link."""

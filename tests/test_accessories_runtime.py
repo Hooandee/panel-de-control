@@ -382,3 +382,20 @@ def test_a_new_game_drops_the_old_speedrun(tmp_path):
     rt.notify("speedrun", {"action": "reset"})
     game["appid"] = "2"
     assert "speedrun" not in rt._context(6000.0).events
+
+
+def test_composing_returns_the_preview_boxes_mode_and_drops_new_pieces(tmp_path):
+    rt = _rt(tmp_path)
+    layout = {"blocks": [{"type": "pill", "x": 0, "y": 0, "text": "GG"}, {"type": "sticker", "x": 0, "y": 0, "sticker": "star"}]}
+    result = rt.compose(layout, place=1)
+    assert result["frames"] and result["mode"] == "static"
+    assert len(result["boxes"]) == 2
+    assert result["blocks"][1]["y"] > 0 or result["blocks"][1]["x"] > 0
+    with pytest.raises(ValueError):
+        rt.compose({"blocks": [{"type": "sticker", "x": 0, "y": 0, "sticker": "nuke"}]})
+
+
+def test_the_sticker_book_lists_every_sticker_with_its_colours(tmp_path):
+    book = _rt(tmp_path).sticker_book()
+    assert "fire" in book["stickers"] and len(book["stickers"]["fire"]) == 3
+    assert book["palette"]["R"] == [235, 50, 70]

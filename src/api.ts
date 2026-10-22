@@ -1267,6 +1267,13 @@ export const setAccessoryScene = callable<[sceneId: string, options: Record<stri
 export const setAccessoryBrightness = callable<[percent: number], AccessoriesState>("set_accessory_brightness");
 export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
 export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");
+export interface ComposedLayout extends PixelFrames {
+  blocks: Record<string, unknown>[];
+  boxes: { x: number; y: number; w: number; h: number }[];
+  mode: "static" | "animated" | "clock" | "live";
+}
+export const composeAccessoryLayout = callable<[layout: { blocks: unknown[] }, place: number | null], ComposedLayout>("compose_accessory_layout");
+export const getAccessoryStickers = callable<[], { palette: Record<string, number[]>; stickers: Record<string, string[][]> }>("get_accessory_stickers");
 export const accessoryEvent = callable<[name: string, data: Record<string, unknown>], boolean>("accessory_event");
 export interface WeatherCity {
   name: string;
