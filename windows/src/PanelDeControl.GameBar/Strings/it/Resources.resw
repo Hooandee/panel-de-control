@@ -436,4 +436,25 @@
   <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
   <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Scegli a quali parti di Steam applicare il tema.</value></data>
   <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Impostazioni che escono dal design originale del tema.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Invia una segnalazione</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Descrivi ciò che accade. Le informazioni tecniche vengono raccolte automaticamente.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Questa non è una segnalazione di errore. Dimmi cosa vorresti aggiungere o migliorare; raccoglierò anche il contesto tecnico del dispositivo.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>Che cosa vuoi inviare?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Un problema</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Una richiesta o un'idea</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>Quale parte riguarda?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Descrivi cosa è successo (obbligatorio)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Descrivi cosa vorresti (obbligatorio)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Dimmi cosa ti aspettavi e cosa è successo.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Spiega cosa vuoi ottenere e, se puoi, fai un esempio.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Pubblico: la segnalazione mostra solo un riepilogo con modello, versione, categorie e il tuo testo.</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Privato: i log e lo stato completo NON sono pubblici. Sono cifrati e solo Hooandee può leggerli.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Crea e invia segnalazione</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Invio…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Segnalazione inviata! Codice della segnalazione: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Invio non riuscito. Sei offline? La segnalazione è stata salvata in {0}. Puoi inviarmela manualmente.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Invio non riuscito. Sei offline?</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copia codice</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Copiato!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
 </root>

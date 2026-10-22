@@ -117,7 +117,7 @@ public static class SectionCatalog
         new SectionDefinition("settings", "Settings", 0xFF626B73, "", new[]
         {
             new BlockDefinition("diagnostics", "BlockDiagnostics", "", implementedOnWindows: true),
-            new BlockDefinition("reports", "BlockReports", ""),
+            new BlockDefinition("reports", "BlockReports", "", implementedOnWindows: true),
             new BlockDefinition("updates", "BlockUpdates", ""),
         }),
     };

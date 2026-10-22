@@ -476,4 +476,25 @@
   <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
   <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Elige en qué partes de Steam se aplica el tema.</value></data>
   <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Ajustes que se salen del diseño original del tema.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Enviar un reporte</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Cuéntame lo que veas. Recojo la info técnica automáticamente.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Esto no es un fallo. Cuéntame qué te gustaría añadir o mejorar; también recogeré el contexto técnico de tu equipo.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>¿Qué quieres enviar?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Un problema</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Una petición o idea</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>¿Sobre qué parte?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Cuéntame qué pasó (obligatorio)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Cuéntame qué te gustaría (obligatorio)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Dime qué esperabas y qué pasó.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Explícame qué quieres conseguir y, si puedes, pon un ejemplo.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Público: en el reporte solo va un resumen (modelo, versión, categorías y tu texto).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Privado: los logs y el estado completo NO son públicos; van cifrados y solo Hooandee puede verlos.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Crear y enviar reporte</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Enviando…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>¡Reporte enviado! Código de tu reporte: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>No se pudo enviar (¿sin conexión?). Guardé el reporte en {0}. Puedes mandármelo a mano.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>No se pudo enviar (¿sin conexión?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copiar código</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>¡Copiado!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
 </root>

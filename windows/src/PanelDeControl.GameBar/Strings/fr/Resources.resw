@@ -436,4 +436,25 @@
   <data name="ThemesGroup_extra" xml:space="preserve"><value>Extras</value></data>
   <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Choisissez quelles parties de Steam utilisent le thème.</value></data>
   <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Réglages qui sortent du design d'origine du thème.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Envoyer un rapport</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Décrivez ce que vous voyez. Les infos techniques sont récupérées automatiquement.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Ce n'est pas un rapport de bug. Dites-moi ce que vous aimeriez voir ajouté ou amélioré ; je récupérerai aussi le contexte technique de votre appareil.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>Que voulez-vous envoyer ?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Un problème</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Une demande ou une idée</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>Quelle partie est concernée ?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Racontez-moi ce qui s'est passé (obligatoire)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Dites-moi ce que vous aimeriez (obligatoire)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Dites-moi ce que vous attendiez et ce qui s'est passé.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Expliquez ce que vous voulez obtenir et, si possible, donnez un exemple.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Public : le rapport n'affiche qu'un résumé (modèle, version, catégories et votre texte).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Privé : les journaux et l'état complet ne sont PAS publics ; ils sont chiffrés et seul Hooandee peut les consulter.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Créer et envoyer le rapport</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Envoi…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Rapport envoyé ! Code de votre rapport : {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Échec de l'envoi (pas de connexion ?). J'ai enregistré le rapport dans {0}. Vous pouvez me l'envoyer vous-même.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Échec de l'envoi (pas de connexion ?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copier le code</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Copié !</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
 </root>

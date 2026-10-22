@@ -34,14 +34,29 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock
-                        x:Name="DeviceName"
-                        x:Uid="DeviceName"
-                        FontFamily="{StaticResource PdcDisplayFontFamily}"
-                        FontSize="24"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource PdcTextPrimaryBrush}"
-                        TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock
+                            x:Name="DeviceName"
+                            x:Uid="DeviceName"
+                            FontFamily="{StaticResource PdcDisplayFontFamily}"
+                            FontSize="24"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource PdcTextPrimaryBrush}"
+                            TextTrimming="CharacterEllipsis" />
+                        <Border
+                            x:Name="EarlyBadge"
+                            Padding="8,1,8,2"
+                            VerticalAlignment="Center"
+                            BorderThickness="1"
+                            BorderBrush="{StaticResource PdcAccentBrush}"
+                            CornerRadius="{StaticResource PdcRadiusPill}">
+                            <TextBlock
+                                x:Name="EarlyBadgeText"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource PdcAccentBrush}" />
+                        </Border>
+                    </StackPanel>
                     <TextBlock x:Name="HeaderDetail" Margin="0,3,0,0" Style="{StaticResource PdcMutedStyle}" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                         <Run x:Name="PowerSourceValue" Text="—" />
                         <Run Text=" · " />
@@ -585,6 +600,59 @@
                 <StackPanel>
                     <TextBlock x:Uid="AccentLabel" Style="{StaticResource PdcTitleStyle}" />
                     <Grid x:Name="AccentSwatches" Margin="0,12,0,0" RowSpacing="4" />
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="ReportCard" Tag="settings.reports" Style="{StaticResource PdcCardStyle}">
+                <StackPanel>
+                    <TextBlock x:Name="ReportTitle" Style="{StaticResource PdcTitleStyle}" />
+                    <TextBlock x:Name="ReportIntro" Margin="0,4,0,0" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
+                    <TextBlock x:Name="ReportKindLabel" Margin="0,16,0,8" Style="{StaticResource PdcBodyStyle}" />
+                    <Border Padding="4" CornerRadius="{StaticResource PdcRadiusInset}" Background="{StaticResource PdcLayerBrush}">
+                        <Grid ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="ReportKindBug" Style="{StaticResource PdcSegmentButtonStyle}" Click="ReportKind_Click" />
+                            <Button x:Name="ReportKindFeature" Grid.Column="1" Style="{StaticResource PdcSegmentButtonStyle}" Click="ReportKind_Click" />
+                        </Grid>
+                    </Border>
+                    <Grid Margin="0,14,0,0" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ReportAreaLabel" VerticalAlignment="Center" Style="{StaticResource PdcBodyStyle}" />
+                        <TextBlock x:Name="ReportAreaValue" Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Style="{StaticResource PdcBodyStyle}" />
+                    </Grid>
+                    <TextBlock x:Name="ReportTextLabel" Margin="0,14,0,8" Style="{StaticResource PdcBodyStyle}" />
+                    <TextBox
+                        x:Name="ReportText"
+                        MinHeight="104"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        MaxLength="4000"
+                        TextChanged="ReportText_TextChanged" />
+                    <StackPanel Margin="0,12,0,0" Spacing="4">
+                        <TextBlock x:Name="ReportPrivacyPublic" FontSize="12" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
+                        <TextBlock x:Name="ReportPrivacyPrivate" FontSize="12" TextWrapping="WrapWholeWords" Style="{StaticResource PdcMutedStyle}" />
+                    </StackPanel>
+                    <Grid Margin="0,14,0,0" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="ReportSendButton" Padding="14,9" IsEnabled="False" Style="{StaticResource PdcChipButtonStyle}" Click="ReportSend_Click" />
+                        <Button x:Name="ReportCopyButton" Grid.Column="1" Padding="14,9" Visibility="Collapsed" Style="{StaticResource PdcChipButtonStyle}" Click="ReportCopy_Click" />
+                    </Grid>
+                    <TextBlock
+                        x:Name="ReportResultText"
+                        Margin="0,10,0,0"
+                        TextWrapping="WrapWholeWords"
+                        AutomationProperties.LiveSetting="Polite"
+                        Style="{StaticResource PdcCaptionStyle}" />
                 </StackPanel>
             </Border>
 

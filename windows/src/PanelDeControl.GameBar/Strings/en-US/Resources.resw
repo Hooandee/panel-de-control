@@ -476,4 +476,25 @@
   <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
   <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Choose which parts of Steam use the theme.</value></data>
   <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Settings that step outside the theme's original design.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Send a report</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Tell me what you saw. I collect the technical info automatically.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>This is not a bug report. Tell me what you would like added or improved; I'll also collect your device's technical context.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>What would you like to send?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>A problem</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>A request or idea</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>Which area is it about?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Tell me what happened (required)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Tell me what you would like (required)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Say what you expected and what happened.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Explain what you want to achieve and include an example if you can.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Public: the report only shows a summary (model, version, categories and your text).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Private: the full logs and state are NOT public; they're encrypted and only Hooandee can read them.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Create and send report</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Sending…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Report sent! Your report code: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Couldn't send (offline?). I saved the report to {0}. You can send it to me manually.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Couldn't send (offline?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copy code</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Copied!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
 </root>

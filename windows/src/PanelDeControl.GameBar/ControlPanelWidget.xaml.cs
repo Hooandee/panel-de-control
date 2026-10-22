@@ -7,8 +7,10 @@ using System.Collections.Generic;
 using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Presentation;
+using PanelDeControl.Core.Reports;
 using PanelDeControl.Core.Telemetry;
 using Windows.Foundation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.Resources;
 using Windows.Storage;
 using Windows.System;
@@ -93,6 +95,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
+    private readonly ReportClient reportClient = new();
+    private ReportKind reportKind = ReportKind.Bug;
+    private bool reportSending;
+    private string? reportCode;
 
     public ControlPanelWidget()
     {
@@ -106,7 +112,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         foreach (var line in new[]
         {
             PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
-            VolumeStatus, MuteStatus, BrightnessStatus,
+            VolumeStatus, MuteStatus, BrightnessStatus, ReportResultText,
         })
         {
             CollapseWhenEmpty(line);
@@ -1400,6 +1406,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         FanTitle.Text = Localized("BlockFanRpmTitle");
         FanOneLabel.Text = Localized("FanOne");
         FanTwoLabel.Text = Localized("FanTwo");
+        EarlyBadgeText.Text = Localized("EarlyBadge");
+        ReportTitle.Text = Localized("ReportTitle");
+        ReportKindLabel.Text = Localized("ReportKindLabel");
+        ReportKindBug.Content = Localized("ReportKindBug");
+        ReportKindFeature.Content = Localized("ReportKindFeature");
+        ReportAreaLabel.Text = Localized("ReportAreaLabel");
+        ReportAreaValue.Text = Localized("NavThemes");
+        ReportPrivacyPublic.Text = Localized("ReportPrivacyPublic");
+        ReportPrivacyPrivate.Text = Localized("ReportPrivacyPrivate");
+        ReportSendButton.Content = Localized("ReportSend");
+        UpdateReportForm();
         var library = BlockLibrary.Children
             .OfType<FrameworkElement>()
             .Where(element => element.Tag is string)
@@ -1949,6 +1966,104 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             CrashLog.Write("hero-glow", exception);
         }
+    }
+
+    private void ReportKind_Click(object sender, RoutedEventArgs args)
+    {
+        if (reportSending)
+        {
+            return;
+        }
+
+        reportKind = ReferenceEquals(sender, ReportKindFeature) ? ReportKind.Feature : ReportKind.Bug;
+        UpdateReportForm();
+    }
+
+    private void ReportText_TextChanged(object sender, TextChangedEventArgs args) => UpdateReportForm();
+
+    private void UpdateReportForm()
+    {
+        var feature = reportKind == ReportKind.Feature;
+        ReportIntro.Text = Localized(feature ? "ReportIntroFeature" : "ReportIntro");
+        ReportTextLabel.Text = Localized(feature ? "ReportDescribeFeature" : "ReportDescribe");
+        ReportText.PlaceholderText = Localized(feature ? "ReportDescribeHintFeature" : "ReportDescribeHint");
+        foreach (var (chip, active) in new[] { (ReportKindBug, !feature), (ReportKindFeature, feature) })
+        {
+            chip.Background = active
+                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
+                : new SolidColorBrush(Colors.Transparent);
+            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            chip.IsEnabled = !reportSending;
+        }
+
+        ReportText.IsEnabled = !reportSending;
+        ReportSendButton.IsEnabled = !reportSending && !string.IsNullOrWhiteSpace(ReportText.Text);
+    }
+
+    private async void ReportSend_Click(object sender, RoutedEventArgs args)
+    {
+        if (disposed || reportSending || string.IsNullOrWhiteSpace(ReportText.Text))
+        {
+            return;
+        }
+
+        reportSending = true;
+        reportCode = null;
+        ReportCopyButton.Visibility = Visibility.Collapsed;
+        ReportResultText.Text = string.Empty;
+        ReportSendButton.Content = Localized("ReportSending");
+        UpdateReportForm();
+
+        ReportResponse response;
+        try
+        {
+            response = await reportClient.SendAsync(
+                new ReportRequest(reportKind, ReportRequest.AvailableCategories, ReportText.Text.Trim()));
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("report", exception);
+            response = ReportResponse.Rejected("report_failed");
+        }
+
+        if (disposed)
+        {
+            return;
+        }
+
+        reportSending = false;
+        ReportSendButton.Content = Localized("ReportSend");
+        switch (response.Status)
+        {
+            case ReportStatus.Sent:
+                reportCode = response.Code;
+                ReportResultText.Text = string.Format(Localized("ReportSent"), response.Code);
+                ReportCopyButton.Content = Localized("ReportCopy");
+                ReportCopyButton.Visibility = Visibility.Visible;
+                ReportText.Text = string.Empty;
+                break;
+            case ReportStatus.Saved when response.SavedPath is not null:
+                ReportResultText.Text = string.Format(Localized("ReportSaved"), response.SavedPath);
+                break;
+            default:
+                ReportResultText.Text = Localized("ReportFailed");
+                break;
+        }
+
+        UpdateReportForm();
+    }
+
+    private void ReportCopy_Click(object sender, RoutedEventArgs args)
+    {
+        if (reportCode is null)
+        {
+            return;
+        }
+
+        var data = new DataPackage();
+        data.SetText(reportCode);
+        Clipboard.SetContent(data);
+        ReportCopyButton.Content = Localized("ReportCopied");
     }
 
     private static void CollapseWhenEmpty(TextBlock line)

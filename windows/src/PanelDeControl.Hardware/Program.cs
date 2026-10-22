@@ -1,3 +1,4 @@
+using PanelDeControl.Hardware.Reports;
 using PanelDeControl.Hardware.Themes;
 
 namespace PanelDeControl.Hardware;
@@ -82,6 +83,20 @@ public static class Program
                 new ThemesController(themeService, themeEngine),
                 PackageNamedPipeServerFactory.CreateControl);
 
+            using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            var reportServer = new ReportPipeServer(
+                ReportPipeServer.PackagedPipeName,
+                new ReportController(
+                    () => ThemesResponseBuilder.Build(themeService.Catalog, themeService.Library(), themeService.Settings(), themeEngine.Status),
+                    () => serviceClient.ReadInventory(clock),
+                    new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
+                    new ReportSender(
+                        reportHttp,
+                        new Uri(Environment.GetEnvironmentVariable("PDC_REPORT_URL") ?? ReportSender.DefaultServiceUrl),
+                        ReportSender.DefaultOfflineFolder),
+                    ReportController.DefaultLogs),
+                PackageNamedPipeServerFactory.CreateControl);
+
             using var brokerLifetime = new CancellationTokenSource();
             var token = brokerLifetime.Token;
             await Task.WhenAll(
@@ -91,6 +106,7 @@ public static class Program
                 SuperviseAsync("tdp", () => tdpServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("refresh", () => refreshServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("reports", () => reportServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
                 SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
                 SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token),

@@ -436,4 +436,25 @@
   <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
   <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Escolha em quais partes do Steam o tema será aplicado.</value></data>
   <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Ajustes que fogem do design original do tema.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Enviar um relatório</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Me conte o que você viu. Eu coleto as informações técnicas automaticamente.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Isto não é um relatório de erro. Conte-me o que você gostaria de adicionar ou melhorar; também vou coletar o contexto técnico do seu dispositivo.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>O que você gostaria de enviar?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Um problema</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Um pedido ou uma ideia</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>Sobre qual área é?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Me diga o que aconteceu (obrigatório)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Me diga o que você gostaria (obrigatório)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Diga o que você esperava e o que realmente aconteceu.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Explique o que você quer alcançar e inclua um exemplo, se puder.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Público: o relatório mostrará apenas um resumo (modelo, versão, categorias e seu texto).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Privado: os logs e o estado completos NÃO são públicos; eles são criptografados e só Hooandee pode lê-los.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Criar e enviar relatório</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Enviando…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Relatório enviado! Código do seu relatório: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Não foi possível enviar (sem conexão?). Eu salvei o relatório em {0}. Você pode enviá-lo para mim manualmente.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Não foi possível enviar (sem conexão?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copiar código</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Copiado!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
 </root>
