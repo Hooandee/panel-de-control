@@ -23,28 +23,11 @@ from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.intel_rapl import IntelRaplBackend, firmware_pl1_ceiling_w
 from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
+from tdp.routes import DEFAULT as DEFAULT_ROUTES, TdpRoutes
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
 from tdp.write_ceilings import charger_cooler_max, charger_write_max, cooler_write_max
-
-
-_RYZENADJ_ONLY_KEYS = frozenset({
-    "onexplayer_superx",
-    "zotac_gaming_zone",
-    "rog_flow_z13",
-    "onexplayer_f1",
-    "gpd_win_mini_2025",
-    "ayaneo_3",
-})
-
-_STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
-
-# Newer kernels block the /dev/mem PM-table read of `ryzenadj -i` (no ryzen_smu).
-# Zotac keeps its own unconfirmed-write fallback.
-_UNREADABLE_RYZENADJ_YIELDS = (
-    _STRICT_RYZENADJ_KEYS - {"zotac_gaming_zone"}
-) | {"onexplayer_apex"}
 
 
 def _runtime_lock_path(root, name):
@@ -67,16 +50,18 @@ def mark_route_not_honored(device, backend_name, detail, root="/") -> bool:
         return False
 
 
+def _routes(device) -> TdpRoutes:
+    return getattr(device, "tdp_routes", DEFAULT_ROUTES)
+
+
 def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 ryzenadj_unverified=None):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
-    so an early match costs no extra sysfs work). The detected family puts its
-    known-good backend first, then falls through to every other known path by
-    capability — so a known device stays robust if a kernel update moves its
-    interface, and an unrecognised handheld still lands on whatever it actually
-    exposes. The generic AMD write paths (ryzenadj, then ALIB via acpi_call) sit
-    strictly last, after every device-specific interface, so a recognised device
-    never changes selection. Both are AMD-only and excluded on Intel."""
+    so an early match costs no extra sysfs work). The machine's route ladder lists its
+    known-good interface first, then every other known path by capability, so a known
+    device stays robust if a kernel update moves its interface and an unrecognised
+    handheld still lands on whatever it actually exposes."""
+    routes = _routes(device)
     generic = device.is_generic
 
     def asus():
@@ -89,7 +74,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 device,
                 root,
             ),
-            trust_live_bounds=device.key == "rog_flow_z13",
+            trust_live_bounds=routes.asus_trust_live_bounds,
             safety_lock_path=_runtime_lock_path(
                 root,
                 "firmware-asus-armoury.lock",
@@ -174,7 +159,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
             ),
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
             write_max_ac=device.experimental_tdp_max_ac,
-            sync_surfaces=device.key in ("onexplayer_3", "desktop_pc"),
+            sync_surfaces=routes.rapl_sync_surfaces,
         )
 
     def deck():
@@ -220,68 +205,35 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                            write_max=cooler_write_max(device),
                            write_max_ac=charger_write_max(device))
 
-    # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
-    # first, then the acpi_call ALIB path when ryzenadj is absent.
-    amd_tail = [ryzenadj, alib]
-
-    key = device.key
-    # Unconfirmed ryzenadj writes were measured to hold the limit; ALIB let an Apex overshoot.
-    unreadable_tail = (
-        [ryzenadj_unverified, alib]
-        if key in _UNREADABLE_RYZENADJ_YIELDS and ryzenadj_unverified is not None
-        else []
+    builders = {
+        "asus": asus,
+        "asus_nb_wmi": asus_nb_wmi,
+        "lenovo": lenovo,
+        "msi": msi,
+        "msi_a8": msi_a8,
+        "dptc": dptc,
+        "deck": deck,
+        "intel": intel,
+        "arm_levels": arm_levels,
+        "ryzenadj": ryzenadj,
+        "ryzenadj_unverified": ryzenadj_unverified,
+        "alib": alib,
+    }
+    if routes.requires_firmware_ceiling and not desktop_cpu:
+        return []
+    chain = routes.chain(
+        arch=getattr(device, "arch", "x86"),
+        vendor=device.vendor,
+        os_id=os_id,
     )
-    if getattr(device, "arch", "x86") == "arm":
-        return [arm_levels]
-    if key == "desktop_pc":
-        # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
-        # without readback, AMD RAPL can confirm a write it ignores).
-        return [intel] if desktop_cpu else []
-    if device.vendor == "intel":
-        return [msi, intel]
-    if key == "steam_machine":
-        # Fremont's AMD Custom CPU 1772 is not a Ryzen Mobile model: physical
-        # validation returns "unsupported model 124" from ryzenadj. A bundled
-        # binary is therefore not a capability. Keep future firmware-attribute
-        # paths discoverable, but never fall into write-only generic AMD methods.
-        return [asus, lenovo, msi]
-    if key.startswith("steam_deck"):
-        return [deck]
-    if os_id != "anatase":
-        if key == "msi_claw_a8":
-            return [ryzenadj]
-        if key == "onexplayer_apex":
-            # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
-            return [ryzenadj, *unreadable_tail]
-        if key in _RYZENADJ_ONLY_KEYS:
-            return [asus, lenovo, msi, ryzenadj, *unreadable_tail]
-        if key.startswith("rog_"):
-            return [asus, asus_nb_wmi, lenovo, msi, *amd_tail]
-        if key.startswith("legion_"):
-            return [lenovo, asus, msi, *amd_tail]
-        return [asus, lenovo, msi, *amd_tail]
-
-    if key == "msi_claw_a8":
-        return [msi_a8, ryzenadj]
-    if key == "onexplayer_apex":
-        return [dptc, ryzenadj, *unreadable_tail]
-    if key in _RYZENADJ_ONLY_KEYS:
-        return [dptc, asus, lenovo, msi, ryzenadj, *unreadable_tail]
-    if key.startswith("rog_"):
-        return [asus, asus_nb_wmi, *amd_tail]
-    if key.startswith("legion_"):
-        return [lenovo, asus, msi, *amd_tail]
-    # generic / other AMD. intel-rapl excluded (AMD RAPL can confirm a write without
-    # changing real TDP); deck excluded (steamdeck-hwmon matches any power*_cap chip,
-    # incl. amdgpu's GPU cap — wrong rail).
-    return [dptc, asus, lenovo, msi, *amd_tail]
+    return [builders[name] for name in chain]
 
 
 _DESKTOP_MIN_W = 15
 
 
 def _desktop_limits(device, root, hint_w=None) -> TdpLimits | None:
-    if device.key != "desktop_pc" or device.vendor != "intel":
+    if not _routes(device).requires_firmware_ceiling or device.vendor != "intel":
         return None
     ceiling = firmware_pl1_ceiling_w(root, hint_w)
     if ceiling is None:
@@ -296,12 +248,11 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
     desktop_limits = _desktop_limits(device, root, desktop_ceiling_hint_w)
     fallback = desktop_limits or TdpLimits.from_profile(device)
 
+    routes = _routes(device)
+
     def ryzenadj():
         kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
         gpd_recovery = is_gpd_win_mini_2025_tdp_recovery(device, root)
-        strict_readback = device.key in _STRICT_RYZENADJ_KEYS or (
-            device.key == "gpd_win_mini_2025" and not gpd_recovery
-        )
         return RyzenadjBackend(
             fallback,
             write_max=cooler_write_max(device),
@@ -309,8 +260,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                 None if gpd_recovery else charger_write_max(device)
             ),
             power_only_retry=gpd_recovery,
-            require_readback=strict_readback,
-            readback_fallback=device.key == "zotac_gaming_zone",
+            require_readback=routes.ryzenadj == "strict" and not gpd_recovery,
+            readback_fallback=routes.ryzenadj_readback_fallback,
             lock_experimental=bool(getattr(device, "experimental_tdp_max_ac", None)),
             safety_lock_path=_runtime_lock_path(
                 root,
@@ -318,7 +269,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
             ),
             unreadable_marker_path=(
                 _runtime_lock_path(root, f"ryzenadj-{device.key}.unreadable")
-                if device.key in _UNREADABLE_RYZENADJ_YIELDS
+                if routes.ryzenadj_yields_when_unreadable
                 else None
             ),
             **kwargs,
@@ -326,7 +277,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
 
     def ryzenadj_unverified():
         kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
-        backend = RyzenadjBackend(
+        return RyzenadjBackend(
             fallback,
             write_max=fallback.max_w,
             write_max_ac=fallback.max_ac_w,
@@ -335,14 +286,9 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None,
                 root,
                 f"ryzenadj-unverified-{device.key}.lock",
             ),
+            measured_only=True,
             **kwargs,
         )
-        backend.name = "ryzenadj-unverified"
-        backend.measured_verification = True
-        backend.readback = False
-        backend.auto_tdp_supported = False
-        backend.auto_tdp_safe = False
-        return backend
 
     trace = []
     not_honored_fallback = None

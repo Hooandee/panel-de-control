@@ -115,7 +115,8 @@ class RyzenadjBackend(TDPBackend):
                  safety_lock_path: str | None = None,
                  hold_rail_floors: dict[str, int] | None = None,
                  unreadable_marker_path: str | None = None,
-                 write_temp_limit: bool = True):
+                 write_temp_limit: bool = True,
+                 measured_only: bool = False):
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self.manual_write_max_ac = self._write_limits.max_ac_w
@@ -195,6 +196,13 @@ class RyzenadjBackend(TDPBackend):
                 else "not_required" if self.supported else "binary_missing"
             )
             self._last_readback_failure = None
+        if measured_only:
+            # Writes are never read back: measured package power is the only confirmation.
+            self.name = "ryzenadj-unverified"
+            self.measured_verification = True
+            self.readback = False
+            self.auto_tdp_supported = False
+            self.auto_tdp_safe = False
 
     def get_limits(self) -> TdpLimits:
         return self._fallback

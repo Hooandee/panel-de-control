@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from tdp import routes
+
 
 @dataclass(frozen=True)
 class DmiMatch:
@@ -77,6 +79,7 @@ class DeviceProfile:
     # x86-only paths (watt-based TDP backends, ryzenadj, amdgpu/i915 clocks).
     arch: str = "x86"
     dt_compatible: tuple[str, ...] = field(default_factory=tuple)
+    tdp_routes: routes.TdpRoutes = routes.DEFAULT
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -107,8 +110,7 @@ DESKTOP_PC = DeviceProfile(
     tdp_max=GENERIC.tdp_max,
     tdp_max_charger=GENERIC.tdp_max_charger,
     experimental=True,
-    desktop_mode=True,
-)
+    desktop_mode=True, tdp_routes=routes.DESKTOP)
 
 GENERIC_ARM = DeviceProfile(
     key="generic_arm",
@@ -137,34 +139,36 @@ DEVICE_TABLE = (
     DeviceProfile("steam_machine", "Steam Machine", "AMD Custom CPU 1772", "amd",
                   4, 23, 30, 30,
                   dmi_matches=(DmiMatch("Fremont", "Valve", ("Fremont",)),),
-                  experimental=True, desktop_mode=True),
+                  experimental=True, desktop_mode=True, tdp_routes=routes.STEAM_MACHINE),
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
-                  3, 12, 15, 15, match_names=("Jupiter",), display_refresh_hz=60),
+                  3, 12, 15, 15, match_names=("Jupiter",), display_refresh_hz=60,
+                  tdp_routes=routes.STEAM_DECK),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
                   3, 12, 15, 15, match_names=("Galileo",), panel="oled", hdr=True,
-                  display_refresh_hz=90),
+                  display_refresh_hz=90, tdp_routes=routes.STEAM_DECK),
     DeviceProfile("rog_xbox_ally_x", "ROG Xbox Ally X", "AMD Ryzen AI Z2 Extreme", "amd",
                   7, 17, 25, 35, match_names=("ROG Xbox Ally X",),
-                  tdp_presets=(13, 17, 25, 30)),
+                  tdp_presets=(13, 17, 25, 30), tdp_routes=routes.ASUS),
     DeviceProfile("rog_xbox_ally", "ROG Xbox Ally", "AMD Ryzen Z2 A", "amd",
                   5, 13, 17, 20, match_names=("RC73YA",), experimental=True,
-                  tdp_presets=(10, 15, 17, 20)),
+                  tdp_presets=(10, 15, 17, 20), tdp_routes=routes.ASUS),
     DeviceProfile("rog_ally_x", "ROG Ally X", "AMD Z1 Extreme", "amd",
                   7, 17, 25, 30, match_names=("ROG Ally X",),
-                  tdp_presets=(13, 17, 25, 30), charger_only_extra=True),
+                  tdp_presets=(13, 17, 25, 30), charger_only_extra=True, tdp_routes=routes.ASUS),
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
                   7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally"),
-                  charger_only_extra=True),
+                  charger_only_extra=True, tdp_routes=routes.ASUS),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
                   5, 15, 30, 35, match_names=("83N0", "83N1", "Legion Go 2"),
-                  panel="oled", hdr=True),
+                  panel="oled", hdr=True, tdp_routes=routes.LENOVO),
     # 83L3/83N6, Z1 Extreme or Z2 Go (real chip read live from cpuinfo; this is the
     # fallback). PL1 33 W on battery, 40 W on charger — the extra is charger-only.
     DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z1 Extreme / Z2 Go", "amd",
                   5, 15, 33, 40, match_names=("83L3", "83N6", "Legion Go S"),
-                  charger_only_extra=True),
+                  charger_only_extra=True, tdp_routes=routes.LENOVO),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
-                  5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
+                  5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True,
+                  tdp_routes=routes.LENOVO),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
                   8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
@@ -173,13 +177,15 @@ DEVICE_TABLE = (
     DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
                   "AMD Ryzen AI Max+ 395", "amd",
                   5, 20, 55, 80, match_names=("ONEXPLAYER APEX",), experimental=True,
-                  charger_only_extra=True, cooler_max=120, cooler_charger_only=True),
+                  charger_only_extra=True, cooler_max=120, cooler_charger_only=True,
+                  tdp_routes=routes.ONEXPLAYER_APEX),
     DeviceProfile("onexplayer_superx", "OneXPlayer Super X",
                   "AMD Ryzen AI Max+ 395", "amd",
                   10, 30, 55, 75,
                   dmi_matches=(DmiMatch(
                       "ONEXPLAYER SUPER X", "ONE-NETBOOK", ("ONEXPLAYER SUPER X",)),),
-                  experimental=True, panel="oled", hdr=True, charger_only_extra=True),
+                  experimental=True, panel="oled", hdr=True, charger_only_extra=True,
+                  tdp_routes=routes.STRICT_RYZENADJ),
     # OEM rates 6-80 W on air; 120 W needs the external Frost Bay liquid cooler,
     # so it is only reachable through the explicit "external cooler" opt-in.
     DeviceProfile("onexplayer_x2_mini_pro", "OneXPlayer X2 Mini Pro",
@@ -194,12 +200,13 @@ DEVICE_TABLE = (
     DeviceProfile("onexplayer_3", "OneXPlayer 3", "Intel Arc G3 Extreme", "intel",
                   8, 20, 35, 35, experimental_tdp_max_ac=45,
                   dmi_matches=(DmiMatch("ONEXPLAYER 3", "ONE-NETBOOK", ("ONEXPLAYER 3",)),),
-                  experimental=True, panel="oled", hdr=True, display_refresh_hz=144),
+                  experimental=True, panel="oled", hdr=True, display_refresh_hz=144,
+                  tdp_routes=routes.ONEXPLAYER_3),
     DeviceProfile("zotac_gaming_zone", "Zotac Gaming Zone",
                   "AMD Ryzen 7 8840U", "amd",
                   8, 15, 28, 28,
                   dmi_matches=(DmiMatch(None, "ZOTAC", ("G0A1W", "G1A1W")),),
-                  experimental=True, panel="oled", hdr=True),
+                  experimental=True, panel="oled", hdr=True, tdp_routes=routes.ZOTAC),
     DeviceProfile("rog_flow_z13", "ROG Flow Z13",
                   "AMD Ryzen AI Max 390", "amd",
                   5, 20, 54, 65,
@@ -208,7 +215,7 @@ DEVICE_TABLE = (
                       "ASUSTeK COMPUTER INC.",
                       ("GZ302EA",),
                   ),),
-                  experimental=True, charger_only_extra=True),
+                  experimental=True, charger_only_extra=True, tdp_routes=routes.ROG_FLOW_Z13),
     DeviceProfile("onexplayer_f1", "OneXPlayer F1",
                   "AMD Ryzen 7 7840U", "amd",
                   15, 28, 30, 30,
@@ -221,12 +228,12 @@ DEVICE_TABLE = (
                           "ONEXPLAYER F1 OLED",
                       )
                   ),
-                  experimental=True),
+                  experimental=True, tdp_routes=routes.STRICT_RYZENADJ),
     DeviceProfile("ayaneo_3", "AYANEO 3",
                   "AMD Ryzen AI 9 HX 370 / Ryzen 7 8840U", "amd",
                   8, 15, 35, 35,
                   dmi_matches=(DmiMatch("AYANEO 3", "AYANEO"),),
-                  experimental=True),
+                  experimental=True, tdp_routes=routes.STRICT_RYZENADJ),
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),
@@ -238,10 +245,10 @@ DEVICE_TABLE = (
                       DmiMatch("G1617-02-L", "GPD"),
                   ),
                   experimental=True,
-                  tdp_presets=(20, 25, 30, 35)),
+                  tdp_presets=(20, 25, 30, 35), tdp_routes=routes.GPD_WIN_MINI),
     DeviceProfile("msi_claw_a8", "MSI Claw A8", "AMD Ryzen Z2 Extreme", "amd",
                   6, 17, 35, 35, match_names=("Claw A8",), experimental=True,
-                  tdp_presets=(10, 20, 33, 33)),
+                  tdp_presets=(10, 20, 33, 33), tdp_routes=routes.MSI_CLAW_A8),
     DeviceProfile("onexplayer_f1pro", "OneXPlayer F1 Pro",
                   "AMD Ryzen AI 9 HX 370", "amd",
                   5, 18, 30, 30, match_names=("ONEXPLAYER F1Pro",), experimental=True,
