@@ -1,0 +1,148 @@
+import random
+
+import pytest
+
+from accessories.jsaux_pixel.scenes import pet_mind
+from accessories.jsaux_pixel.scenes.pet_mind import Mind
+
+HOUR = 3600.0
+
+
+def _mind(tmp_path, now=1_000_000.0, seed=1):
+    return Mind(tmp_path / "pet.json", clock=lambda: now, rng=random.Random(seed))
+
+
+def test_a_new_pet_is_born_content_with_a_personality(tmp_path):
+    mind = _mind(tmp_path)
+    needs = mind.needs(1_000_000.0)
+    assert all(value >= 0.9 for value in needs.values())
+    assert set(mind.traits) == set(pet_mind.TRAITS)
+    assert all(0.0 <= value <= 1.0 for value in mind.traits.values())
+
+
+def test_the_personality_and_memories_survive_a_restart(tmp_path):
+    mind = _mind(tmp_path)
+    mind.interact("feed", 1_000_000.0 + 5 * HOUR)
+    again = _mind(tmp_path, seed=99)
+    assert again.traits == mind.traits
+    assert again.memory["fed_at"] == 1_000_000.0 + 5 * HOUR
+
+
+def test_needs_drift_with_real_time_and_care_restores_them(tmp_path):
+    mind = _mind(tmp_path)
+    later = 1_000_000.0 + 7 * HOUR
+    hungry = mind.needs(later)
+    assert hungry["hunger"] < 0.3
+    assert hungry["fun"] < 0.3
+    assert mind.interact("feed", later) == "eat"
+    assert mind.needs(later)["hunger"] == pytest.approx(1.0)
+    assert mind.interact("play", later) == "play"
+    assert mind.needs(later)["fun"] > 0.9
+    assert mind.interact("pet", later) == "purr"
+    assert mind.needs(later)["love"] > 0.9
+
+
+def test_a_full_pet_turns_food_down(tmp_path):
+    mind = _mind(tmp_path)
+    assert mind.interact("feed", 1_000_000.0 + 60) == "refuse"
+
+
+def test_sleep_restores_energy(tmp_path):
+    mind = _mind(tmp_path)
+    evening = mind.needs(1_000_000.0 + 15 * HOUR)["energy"]
+    assert evening < 0.3
+    mind.interact("sleep", 1_000_000.0 + 15 * HOUR)
+    assert mind.needs(1_000_000.0 + 23 * HOUR)["energy"] > 0.9
+
+
+def test_unknown_interactions_are_refused(tmp_path):
+    with pytest.raises(ValueError):
+        _mind(tmp_path).interact("hack", 1_000_000.0)
+
+
+@pytest.mark.parametrize("tags,genre", [
+    ([4145, 1742, 1667, 19], "horror"),
+    ([699, 19], "racing"),
+    ([4182, 3814, 1774], "shooter"),
+    ([122, 4434], "rpg"),
+    ([1664], "puzzle"),
+    ([4726, 597], "cozy"),
+    ([492, 4182], None),
+])
+def test_games_are_read_by_their_top_store_tags(tags, genre):
+    assert pet_mind.genre_for(tags) == genre
+
+
+def test_scary_games_scare_less_with_practice(tmp_path):
+    mind = _mind(tmp_path)
+    first = mind.fear("horror")
+    for i in range(6):
+        mind.saw_game(str(i), "horror", 1_000_000.0 + i)
+    assert mind.fear("horror") < first
+    assert mind.fear("cozy") == 0.0
+
+
+def test_the_favourite_genre_is_the_one_played_most(tmp_path):
+    mind = _mind(tmp_path)
+    mind.saw_game("1", "racing", 1_000_000.0)
+    mind.saw_game("2", "rpg", 1_000_100.0)
+    mind.saw_game("3", "racing", 1_000_200.0)
+    assert mind.favourite() == "racing"
+
+
+def test_seeing_the_same_session_twice_counts_once(tmp_path):
+    mind = _mind(tmp_path)
+    mind.saw_game("1", "racing", 1_000_000.0)
+    mind.saw_game("1", "racing", 1_000_000.0)
+    assert mind.memory["genres"]["racing"] == 1
+
+
+def test_the_plan_answers_needs_and_never_repeats_back_to_back(tmp_path):
+    mind = _mind(tmp_path)
+    plan = mind.plan(1_000_000.0 + 7 * HOUR, 600, situation="home", rng=random.Random(3))
+    names = [name for name, _rest in plan]
+    assert any(name in ("snack", "hungry") for name in names)
+    assert all(a != b for a, b in zip(names, names[1:]))
+    assert all(name in pet_mind.ACTIONS for name in names)
+    assert sum(rest for _name, rest in plan) <= 600
+
+
+def test_the_plan_is_the_same_for_the_same_moment(tmp_path):
+    mind = _mind(tmp_path)
+    a = mind.plan(1_000_000.0 + HOUR, 600, situation="home", rng=random.Random(5))
+    b = mind.plan(1_000_000.0 + HOUR, 600, situation="home", rng=random.Random(5))
+    assert a == b
+
+
+def test_a_lonely_pet_asks_for_attention(tmp_path):
+    mind = _mind(tmp_path)
+    plan = mind.plan(1_000_000.0 + 30 * HOUR, 600, situation="home", rng=random.Random(4))
+    assert any(name in ("call", "sulk") for name, _ in plan)
+
+
+def test_planning_never_changes_the_memory(tmp_path):
+    mind = _mind(tmp_path)
+    before = dict(mind.memory)
+    mind.plan(1_000_000.0 + 7 * HOUR, 600, situation="game:racing", rng=random.Random(1))
+    assert mind.memory == before
+
+
+def test_while_playing_it_does_game_things(tmp_path):
+    mind = _mind(tmp_path)
+    plan = mind.plan(1_000_000.0 + HOUR, 600, situation="game:racing", rng=random.Random(2))
+    names = {name for name, _ in plan}
+    assert names & {"zoom", "watch", "cheer"}
+    assert not names & {"nap", "snack", "peekaboo"}
+
+
+def test_a_corrupt_store_starts_a_fresh_pet(tmp_path):
+    (tmp_path / "pet.json").write_text("{nope")
+    assert _mind(tmp_path).needs(1_000_000.0)["hunger"] > 0.9
+
+
+def test_a_rename_is_kept_short_and_clean(tmp_path):
+    mind = _mind(tmp_path)
+    mind.rename("  Pixi la mascota más bonita  ")
+    assert mind.memory["name"] == "Pixi la mascota"
+    mind.rename("")
+    assert mind.memory["name"] == "Pixi la mascota"

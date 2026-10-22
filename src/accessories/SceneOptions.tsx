@@ -5,6 +5,7 @@ import { FC, useState } from "react";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { openCityModal } from "./CityModal";
+import { PetCare } from "./PetCare";
 
 export const SCENE_THEMES: { id: string; from: string; to: string }[] = [
   { id: "aurora", from: "#b078ff", to: "#40dcff" },
@@ -49,6 +50,7 @@ export const SceneOptions: FC<{
   const current = typeof values.theme === "string" ? values.theme : "aurora";
   return (
     <div style={{ ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+      {options.includes("care") && <PetCare />}
       {options.includes("theme") && (
         <Focusable flow-children="row" style={{ display: "flex", gap: 4 }}>
           {SCENE_THEMES.map((swatch) => (

@@ -6,14 +6,15 @@ from .composed import ComposedScene
 from .custom import CustomScene
 from .. import weather
 from .base import Scene
+from .pet_mind import Mind
 
 CATEGORIES = ("clocks", "living", "game", "panel", "art", "firmware", "custom")
 
 
-def build(library: Library) -> list[tuple[str, Scene]]:
+def build(library: Library, pet_mind: Mind | None = None) -> list[tuple[str, Scene]]:
     return [
         *(("art", scene) for scene in signature.SCENES),
-        *(("living", scene) for scene in pet.SCENES),
+        ("living", pet.PetScene(pet_mind)),
         ("living", weather.WeatherScene(weather.WeatherSource())),
         *(("clocks", scene) for scene in clocks.SCENES),
         *(("game", scene) for scene in game.SCENES + performance.SCENES),

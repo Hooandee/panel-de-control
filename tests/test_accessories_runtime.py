@@ -303,3 +303,60 @@ def test_locating_passes_the_time_zone_as_fallback(tmp_path, monkeypatch):
 def test_locating_is_off_outside_the_steam_machine(tmp_path):
     rt = runtime.Runtime(settings_dir=tmp_path, device_key="rog_ally", log=lambda *a, **k: None, find_panel=lambda: None)
     assert rt.locate_city() == {"city": None}
+
+
+def _rt(tmp_path, game=None, now=None):
+    return runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                           find_panel=lambda: None, context_source=lambda: {"game": game} if game else {})
+
+
+def test_game_info_feeds_the_pet_memory_once_per_session(tmp_path):
+    game = {"appid": "10", "name": "Forza", "started_at": 1000.0}
+    rt = _rt(tmp_path, game)
+    info = {"appid": "10", "tags": [699, 19], "playtime_min": 600, "achievements": {"done": 3, "total": 50}}
+    assert rt.notify("game_info", info) is True
+    assert rt.notify("game_info", info) is True
+    assert rt.pet_state()["favourite"] == "racing"
+    assert rt.mind.memory["genres"] == {"racing": 1}
+    assert rt._events["game_info"]["achievements"] == {"done": 3, "total": 50}
+
+
+def test_game_info_is_validated(tmp_path):
+    rt = _rt(tmp_path)
+    assert rt.notify("game_info", {"appid": "10", "tags": "nope"}) is False
+    assert rt.notify("game_info", {"tags": [1]}) is False
+
+
+def test_caring_for_the_pet_answers_with_a_reaction_and_its_needs(tmp_path):
+    rt = _rt(tmp_path)
+    result = rt.pet_action("pet")
+    assert result["reaction"] == "purr"
+    assert set(result["pet"]["needs"]) == {"hunger", "energy", "fun", "love"}
+    with pytest.raises(ValueError):
+        rt.pet_action("hack")
+    rt.rename_pet("Bolita")
+    assert _rt(tmp_path).pet_state()["name"] == "Bolita"
+
+
+def test_an_achievement_makes_the_pet_proud(tmp_path):
+    rt = _rt(tmp_path)
+    rt.set_scene("pet", {})
+    rt.notify("achievement", {"title": "X"})
+    assert rt.pet_state()["achievements"] == 1
+
+
+def test_suspend_choice_reaches_the_service(tmp_path):
+    rt = _rt(tmp_path)
+    assert rt.set_on_suspend("pet")["on_suspend"] == "pet"
+    rt.suspend()
+    assert rt.state()["suspended"] is True
+    rt.resume()
+    assert rt.state()["suspended"] is False
+
+
+def test_the_pet_sleeps_through_the_night_by_itself(tmp_path):
+    from datetime import datetime
+    rt = _rt(tmp_path)
+    night = datetime(2026, 10, 22, 23, 30).astimezone().timestamp()
+    rt._context(night)
+    assert rt.pet_state()["asleep"] is True

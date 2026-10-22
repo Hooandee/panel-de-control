@@ -17,3 +17,10 @@ describe("cover crop", () => {
     expect(crop.sy).toBeCloseTo((900 - crop.sh) / 2);
   });
 });
+
+describe("portrait crop", () => {
+  it("fits a capsule into the side column", () => {
+    const crop = coverCrop(600, 900, 36, 54);
+    expect(crop.sw / crop.sh).toBeCloseTo(36 / 54);
+  });
+});

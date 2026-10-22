@@ -58,6 +58,10 @@ def _valid_night(night: dict) -> bool:
             and isinstance(night.get("to"), str) and bool(_HHMM.match(night["from"])) and bool(_HHMM.match(night["to"])))
 
 
+SUSPEND_MODES = ("off", "pet")
+_RESUME_JUMP_S = 30.0
+
+
 class PixelService:
     def __init__(self, *, store_path: Path, find_panel: Callable[[], PanelPort | None],
                  open_link: Callable[[PanelPort], object], port_holders: Callable[[str], list],
@@ -108,6 +112,9 @@ class PixelService:
         self._alerts = {"achievements": True}
         if isinstance(prefs, dict):
             self._alerts.update({k: bool(v) for k, v in prefs.items() if k in self._alerts})
+        self._on_suspend = stored.get("on_suspend") if stored.get("on_suspend") in SUSPEND_MODES else "off"
+        self._suspended = False
+        self._restoring = False
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
         governor = stored.get("governor")
@@ -170,6 +177,43 @@ class PixelService:
                 return
             self._alert = (scene_id, dict(alert), self._clock() + seconds)
 
+    def set_on_suspend(self, mode: str) -> None:
+        if mode not in SUSPEND_MODES:
+            raise ValueError(f"unknown suspend mode {mode!r}")
+        with self._lock:
+            self._on_suspend = mode
+            self._save()
+
+    def suspend(self, asleep: Callable[[], Segment]) -> None:
+        """Called just before the Steam Machine sleeps: the panel goes dark or keeps a sleeping pet."""
+        with self._lock:
+            if self._suspended:
+                return
+            self._suspended = True
+            self._log("INFO", "suspend", mode=self._on_suspend)
+            if self._link is None or self._scene_id is None:
+                return
+            try:
+                if self._on_suspend == "pet":
+                    self._upload(asleep(), "alert", "pet", ("suspend",), self._clock())
+                    self._rendered_key = ("suspend",)
+                else:
+                    reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x00"))
+                    if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
+                        self._power_sent = False
+            except TransportError as error:
+                self._log("WARNING", "suspend_failed", error=str(error))
+                self._drop(self._clock())
+
+    def resume(self) -> None:
+        with self._lock:
+            if not self._suspended:
+                return
+            self._suspended = False
+            self._rendered_key, self._valid_until, self._retry_at = None, None, 0.0
+            self._restoring = True
+            self._log("INFO", "resume")
+
     def set_night(self, night: dict) -> None:
         if not _valid_night(night):
             raise ValueError("invalid night schedule")
@@ -203,6 +247,8 @@ class PixelService:
                 "pwm": pwm,
                 "power": self._power,
                 "night": dict(self._night),
+                "on_suspend": self._on_suspend,
+                "suspended": self._suspended,
                 "night_active": self._night_active(self._clock()),
                 "last_upload": self._last_upload,
                 "writes": self._governor.stats(),
@@ -219,7 +265,7 @@ class PixelService:
     # Worker ---------------------------------------------------------------------------------
 
     def tick(self) -> None:
-        if not self._enabled or self._scene_id is None:
+        if not self._enabled or self._scene_id is None or self._suspended:
             return
         with self._lock:
             now = self._clock()
@@ -355,7 +401,7 @@ class PixelService:
             return
         if self._pending_user:
             kind = "user"
-        elif self._alert is not None or showing != self._showing and self._showing == "alert":
+        elif self._alert is not None or self._restoring or showing != self._showing and self._showing == "alert":
             kind = "alert"
         elif expired and key[:2] == (self._rendered_key or (None, None))[:2]:
             kind = "boundary"
@@ -366,7 +412,7 @@ class PixelService:
         elif not self._upload(segment, kind, showing, key, now):
             return
         self._rendered_key, self._valid_until, self._pending_user = key, segment.valid_until, False
-        self._showing = showing
+        self._showing, self._restoring = showing, False
 
     def _back_off(self, now: float) -> None:
         delay = _FAILURE_BACKOFF_S[min(self._failures, len(_FAILURE_BACKOFF_S) - 1)]
@@ -459,6 +505,7 @@ class PixelService:
                 "night": self._night,
                 "game_scene": self._game_scene,
                 "alerts": self._alerts,
+                "on_suspend": self._on_suspend,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:
@@ -475,8 +522,11 @@ def _detached(scene: Scene) -> Scene:
 
 
 class Worker:
-    def __init__(self, svc: PixelService, interval: float = 1.0):
+    def __init__(self, svc: PixelService, interval: float = 1.0, wall: Callable[[], float] = time.time,
+                 monotonic: Callable[[], float] = time.monotonic):
         self._svc, self._interval = svc, interval
+        self._wall, self._monotonic = wall, monotonic
+        self._last: tuple[float, float] | None = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="jsaux-pixel", daemon=True)
 
@@ -491,10 +541,18 @@ class Worker:
     def is_alive(self) -> bool:
         return self._thread.is_alive()
 
+    def step(self) -> None:
+        wall, mono = self._wall(), self._monotonic()
+        if self._last is not None and (wall - self._last[0]) - (mono - self._last[1]) > _RESUME_JUMP_S:
+            # The monotonic clock stops while the machine sleeps; the wall clock does not.
+            self._svc.resume()
+        self._last = (wall, mono)
+        self._svc.tick()
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                self._svc.tick()
+                self.step()
             except Exception as error:  # a scene bug must not kill the worker
                 self._svc.log("ERROR", "tick_failed", error=repr(error))
             self._stop.wait(self._interval)

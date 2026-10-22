@@ -63,3 +63,18 @@ def test_back_to_back_samples_share_one_reading(tmp_path):
     assert reader.sample()["cpu_pct"] is None
     clock[0] += 1.0
     assert reader.sample()["cpu_pct"] == 50
+
+
+def test_fan_speed_is_a_share_of_the_system_fan_limit(tmp_path):
+    _write(tmp_path, "sys/class/hwmon/hwmon2/name", "steamdeck_hwmon\n")
+    _write(tmp_path, "sys/class/hwmon/hwmon2/fan1_input", "1620\n")
+    assert metrics.SystemMetrics(tmp_path).sample()["fan_pct"] == 0.9
+
+
+def test_fan_speed_uses_a_declared_maximum(tmp_path):
+    _write(tmp_path, "sys/class/hwmon/hwmon5/name", "amdgpu\n")
+    _write(tmp_path, "sys/class/hwmon/hwmon5/fan1_input", "0\n")
+    _write(tmp_path, "sys/class/hwmon/hwmon5/fan1_max", "4900\n")
+    _write(tmp_path, "sys/class/hwmon/hwmon2/name", "steamdeck_hwmon\n")
+    _write(tmp_path, "sys/class/hwmon/hwmon2/fan1_input", "900\n")
+    assert metrics.SystemMetrics(tmp_path).sample()["fan_pct"] == 0.5

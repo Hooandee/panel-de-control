@@ -18,16 +18,20 @@ from .library import Library
 from .render.canvas import quantize
 from .scenes import catalog
 from .scenes.base import SceneContext
+from .scenes.pet_mind import Mind, genre_for
 from .service import PixelService, Worker
 
 SUPPORTED_DEVICES = frozenset({"steam_machine"})
 PREVIEW_MAX_FRAMES = 64
 _FPS_SCENES = frozenset({"game_heart", "game_dashboard"})
 _ART_BYTES = 64 * 54 * 3
+_PORTRAIT_BYTES = 36 * 54 * 3
 _IMAGE_TYPES = {".png": "image/png", ".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 _IMAGE_LIMIT = 4 * 1024 * 1024
 _OFFICIAL_SERVICE = "jsaux-matrix-hub.service"
 _OFFICIAL_RECHECK_S = 60.0
+_PET_BEDTIME = frozenset({23, 0, 1, 2, 3, 4, 5, 6})
+_MAX_TAGS = 20
 
 
 def _uid_of(user: str) -> int:
@@ -58,7 +62,8 @@ class Runtime:
         self._colores_state = Path(settings_dir).parent / "Colores" / "state.json"
         self._library = Library(Path(settings_dir) / "accessories" / "library")
         self._home = Path(user_home).resolve()
-        self._entries = catalog.build(self._library)
+        self.mind = Mind(Path(settings_dir) / "accessories" / "pet.json")
+        self._entries = catalog.build(self._library, self.mind)
         self._run = run or _run
         self._user, self._uid = user, uid if uid is not None else _uid_of(user)
         self._monotonic = monotonic
@@ -122,6 +127,35 @@ class Runtime:
     def set_power(self, on: bool) -> dict:
         self.service.set_power(on)
         return self.state()
+
+    def set_on_suspend(self, mode: str) -> dict:
+        self.service.set_on_suspend(mode)
+        return self.state()
+
+    def suspend(self) -> dict:
+        pet = next(scene for _, scene in self._entries if scene.id == "pet")
+        options = self.service.wanted_scenes()[3] if self.service.wanted_scenes()[0] == "pet" else {}
+        self.service.suspend(lambda: pet.asleep({**options, **self._option_extras(options)}))
+        return self.state()
+
+    def resume(self) -> dict:
+        self.service.resume()
+        return self.state()
+
+    def pet_state(self) -> dict:
+        return self.mind.describe(time.time())
+
+    def pet_action(self, kind: str) -> dict:
+        reaction = self.mind.interact(kind, time.time())
+        scene, showing, _game, _options = self.service.wanted_scenes()
+        if "pet" in (scene, showing):
+            self.service.forget_shown()
+        self._log("INFO", "pet_action", kind=kind, reaction=reaction)
+        return {"reaction": reaction, "pet": self.pet_state()}
+
+    def rename_pet(self, name: str) -> dict:
+        self.mind.rename(name)
+        return self.pet_state()
 
     def ledbar_colors(self) -> list[list[int]] | None:
         """Read-only view of the colours Colores is showing on the Steam Machine's LED bar."""
@@ -252,8 +286,11 @@ class Runtime:
                 return False
             icon = data.get("icon") if isinstance(data.get("icon"), str) else None
             self.service.show_alert("alert", {"kind": name, "title": str(data.get("title") or "")[:40], "icon": icon})
+            self.mind.achievement(time.time())
             self._log("INFO", "alert", kind=name)
             return True
+        if name == "game_info":
+            return self._game_info(data)
         if name != "game_art" or not isinstance(data, dict):
             return False
         try:
@@ -263,6 +300,34 @@ class Runtime:
         if not valid:
             return False
         self._events = {**self._events, "game_art": {"appid": str(data.get("appid")), "rgb": data["rgb"]}}
+        return True
+
+    def _game_info(self, data) -> bool:
+        if not isinstance(data, dict) or not data.get("appid") or not isinstance(data.get("tags"), list):
+            return False
+        tags = [tag for tag in data["tags"][:_MAX_TAGS] if isinstance(tag, int)]
+        achievements = data.get("achievements")
+        done = achievements.get("done") if isinstance(achievements, dict) else None
+        total = achievements.get("total") if isinstance(achievements, dict) else None
+        playtime = data.get("playtime_min")
+        info = {
+            "appid": str(data["appid"]),
+            "tags": tags,
+            "playtime_min": int(playtime) if isinstance(playtime, (int, float)) and playtime >= 0 else None,
+            "achievements": {"done": int(done), "total": int(total)}
+            if isinstance(done, int) and isinstance(total, int) and 0 <= done <= total and total > 0 else None,
+        }
+        portrait = data.get("portrait")
+        if isinstance(portrait, str):
+            try:
+                if len(base64.b64decode(portrait, validate=True)) == _PORTRAIT_BYTES:
+                    info["portrait"] = portrait
+            except ValueError:
+                pass
+        self._events = {**self._events, "game_info": info}
+        game = (self._context_source() or {}).get("game") or {}
+        if str(game.get("appid")) == info["appid"] and isinstance(game.get("started_at"), (int, float)):
+            self.mind.saw_game(info["appid"], genre_for(tags), game["started_at"])
         return True
 
     def preview(self, scene_id: str, options: dict) -> dict:
@@ -299,11 +364,14 @@ class Runtime:
 
     def _context(self, now: float) -> SceneContext:
         extra = self._context_source() or {}
+        zone = self._local_zone()
+        hour = datetime.fromtimestamp(now, zone).hour
+        self.mind.observe(now, night=hour in _PET_BEDTIME, playing=bool(extra.get("game")))
         readings = {key: value for key, value in (self._system_metrics() or {}).items() if value is not None}
         readings.update({key: value for key, value in (extra.get("metrics") or {}).items() if value is not None})
         return SceneContext(
             now=now,
-            tz=self._local_zone(),
+            tz=zone,
             game=extra.get("game"),
             metrics=readings,
             events=self._events,

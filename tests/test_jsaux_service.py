@@ -373,3 +373,77 @@ def test_alerts_are_ignored_when_no_scene_is_chosen(rig):
     svc.show_alert("fw", {}, seconds=20)
     svc.tick()
     assert panel.commands(codec.Cmd.ANIMATION) == []
+
+
+def _asleep():
+    c = Canvas()
+    c.rect(20, 20, 6, 6, (40, 40, 120))
+    return Segment([c, Canvas()], [50, 50])
+
+
+def test_suspend_turns_the_panel_off_and_resume_brings_it_back(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc.suspend(_asleep)
+    assert codec.frame(1, codec.Cmd.POWER, b"\x00") in panel.sent
+    uploads = len(panel.uploads())
+    for _ in range(5):
+        clock.t += 30
+        svc.tick()
+    assert len(panel.uploads()) == uploads
+    assert panel.commands(codec.Cmd.POWER)[-1] == codec.frame(1, codec.Cmd.POWER, b"\x00")
+    svc.resume()
+    svc.tick()
+    assert panel.commands(codec.Cmd.POWER)[-1] == codec.frame(1, codec.Cmd.POWER, b"\x01")
+    assert svc.state()["suspended"] is False
+
+
+def test_suspend_can_leave_the_pet_asleep_instead(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.set_on_suspend("pet")
+    svc.tick()
+    svc.suspend(_asleep)
+    assert len(panel.uploads()) == 2
+    assert codec.frame(1, codec.Cmd.POWER, b"\x00") not in panel.sent
+    assert svc.state()["on_suspend"] == "pet"
+    svc.resume()
+    svc.tick()
+    assert len(panel.uploads()) == 3
+
+
+def test_suspend_choice_is_validated_and_kept(rig):
+    _, _, _, make = rig
+    svc = make()
+    with pytest.raises(ValueError):
+        svc.set_on_suspend("explode")
+    svc.set_on_suspend("pet")
+    assert make().state()["on_suspend"] == "pet"
+
+
+def test_the_worker_notices_a_resume_by_the_clock_jump():
+    calls = []
+
+    class Svc:
+        def tick(self):
+            calls.append("tick")
+
+        def resume(self):
+            calls.append("resume")
+
+        def log(self, *a, **k):
+            pass
+
+    wall, mono = [1000.0], [50.0]
+    worker = service.Worker(Svc(), wall=lambda: wall[0], monotonic=lambda: mono[0])
+    worker.step()
+    wall[0] += 2
+    mono[0] += 2
+    worker.step()
+    wall[0] += 3600
+    mono[0] += 2
+    worker.step()
+    assert calls.count("resume") == 1

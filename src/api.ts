@@ -1247,6 +1247,8 @@ export interface AccessoriesState {
   game_scene: string | null;
   showing: string | null;
   alerts: { achievements: boolean };
+  on_suspend: "off" | "pet";
+  suspended: boolean;
   catalog: AccessorySceneMeta[];
 }
 export interface PixelFrames {
@@ -1287,4 +1289,26 @@ export const loadAccessoryDrawing = callable<[id: string], { ok: boolean; id?: s
 export const pauseJsauxApp = callable<[], { ok: boolean }>("pause_jsaux_app");
 export const setAccessoryNight = callable<[night: NightSchedule], AccessoriesState>("set_accessory_night");
 export const setAccessoryGameScene = callable<[sceneId: string | null], AccessoriesState>("set_accessory_game_scene");
+export interface PetNeeds {
+  hunger: number;
+  energy: number;
+  fun: number;
+  love: number;
+}
+export interface PetState {
+  name: string;
+  needs: PetNeeds;
+  traits: Record<string, number>;
+  asleep: boolean;
+  favourite: string | null;
+  age_days: number;
+  achievements: number;
+}
+export type PetAction = "feed" | "play" | "pet" | "sleep" | "wake";
+export const getAccessoryPet = callable<[], PetState>("get_accessory_pet");
+export const accessoryPetAction = callable<[kind: PetAction], { ok: boolean; reaction?: string; pet?: PetState; error?: string }>("accessory_pet_action");
+export const renameAccessoryPet = callable<[name: string], PetState>("rename_accessory_pet");
+export const setAccessoryOnSuspend = callable<[mode: "off" | "pet"], AccessoriesState>("set_accessory_on_suspend");
+export const accessorySuspend = callable<[], AccessoriesState>("accessory_suspend");
+export const accessoryResume = callable<[], AccessoriesState>("accessory_resume");
 export const setAccessoryAlerts = callable<[prefs: { achievements: boolean }], AccessoriesState>("set_accessory_alerts");

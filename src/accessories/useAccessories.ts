@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AccessoriesState, getAccessoriesState, NightSchedule, previewAccessoryScene, setAccessoryBrightness,
-  setAccessoryAlerts, setAccessoryGameScene, setAccessoryNight, setAccessoryPower, setAccessoryScene,
+  setAccessoryAlerts, setAccessoryGameScene, setAccessoryNight, setAccessoryOnSuspend, setAccessoryPower, setAccessoryScene,
 } from "../api";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 
@@ -33,8 +33,21 @@ export function loadPreview(sceneId: string, options: Record<string, unknown> = 
   return value;
 }
 
-export function forgetPreviews(): void {
-  previews.clear();
+let previewEpoch = 0;
+
+export function forgetPreviews(sceneId?: string): void {
+  if (sceneId) {
+    for (const key of [...previews.keys()]) if (key.startsWith(`${sceneId}:`)) previews.delete(key);
+  } else {
+    previews.clear();
+  }
+  previewEpoch += 1;
+  notify();
+}
+
+export function usePreviewEpoch(): number {
+  useSceneDraft();
+  return previewEpoch;
 }
 
 export function useAccessories() {
@@ -83,6 +96,7 @@ export function useAccessories() {
     setNight: (night: NightSchedule) => apply(() => setAccessoryNight(night), { night }),
     setAlerts: (achievements: boolean) => apply(() => setAccessoryAlerts({ achievements }), { alerts: { achievements } }),
     setGameScene: (sceneId: string | null) => apply(() => setAccessoryGameScene(sceneId), { game_scene: sceneId }),
+    setOnSuspend: (mode: "off" | "pet") => apply(() => setAccessoryOnSuspend(mode), { on_suspend: mode }),
   };
 }
 

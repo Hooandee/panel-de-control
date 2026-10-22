@@ -1,4 +1,5 @@
-import { accessoryEvent, getAccessoriesState } from "../api";
+import { accessoryEvent, accessoryResume, accessorySuspend, getAccessoriesState } from "../api";
+import { refreshGameInfo } from "./gameInfo";
 
 const ICON = 24;
 const LOCAL_CLIENT = "0";
@@ -7,6 +8,11 @@ interface Achievement {
   strName?: string;
   strImage?: string;
   bAchieved?: boolean;
+}
+
+interface SuspendEvents {
+  RegisterForPrepareForSystemSuspendProgress(callback: () => void): { unregister(): void };
+  RegisterForResumeSuspendedGamesProgress(callback: () => void): { unregister(): void };
 }
 
 interface Overview {
@@ -52,7 +58,7 @@ function appName(appid: number): string {
   }
 }
 
-/** Forwards achievements and the local download progress to the panel; only on the Steam Machine. */
+/** Forwards achievements, suspend and the local download progress to the panel; only on the Steam Machine. */
 export function startAccessorySteamEvents(): () => void {
   const registrations: { unregister(): void }[] = [];
   let alive = true;
@@ -64,9 +70,19 @@ export function startAccessorySteamEvents(): () => void {
       registrations.push(SteamClient.GameSessions.RegisterForAchievementNotification((notification: unknown) => {
         const raw = (notification as { achievement?: Achievement }).achievement;
         if (!raw || raw.bAchieved === false || !raw.strName) return;
+        refreshGameInfo();
         const send = (icon: string | null) => void accessoryEvent("achievement", { title: raw.strName ?? "", icon }).catch(() => undefined);
         if (raw.strImage) void iconPixels(raw.strImage).then(send);
         else send(null);
+      }));
+    } catch { /* not available on this client */ }
+    try {
+      const system = SteamClient.User as unknown as SuspendEvents;
+      registrations.push(system.RegisterForPrepareForSystemSuspendProgress(() => {
+        void accessorySuspend().catch(() => undefined);
+      }));
+      registrations.push(system.RegisterForResumeSuspendedGamesProgress(() => {
+        void accessoryResume().catch(() => undefined);
       }));
     } catch { /* not available on this client */ }
     try {

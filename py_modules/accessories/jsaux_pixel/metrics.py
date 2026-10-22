@@ -25,6 +25,8 @@ def _number(path: str) -> float | None:
 
 
 _MIN_SAMPLE_GAP_S = 0.8
+# Valve's fan controller on the Steam Machine tops the system fan at 1800 RPM.
+_SYSTEM_FANS = {"steamdeck_hwmon": 1800.0}
 
 
 class SystemMetrics:
@@ -58,6 +60,7 @@ class SystemMetrics:
             "gpu_w": self._gpu_watts(),
             "gpu_temp": self._first_temp("sys/class/drm/card*/device/hwmon/hwmon*/temp1_input"),
             "cpu_temp": self._cpu_temp(),
+            "fan_pct": self._fan_share(),
         }
 
     def _cpu_pct(self) -> int | None:
@@ -102,6 +105,19 @@ class SystemMetrics:
             value = _number(path)
             if value is not None:
                 return int(value // 1000)
+        return None
+
+    def _fan_share(self) -> float | None:
+        """The system fan; the GPU hwmon channel reads 0 on the Steam Machine, so it is not used."""
+        for name_path in sorted(glob.glob(self._path("sys/class/hwmon/hwmon*/name"))):
+            cap = _SYSTEM_FANS.get(_read(name_path) or "")
+            if cap is None:
+                continue
+            folder = os.path.dirname(name_path)
+            rpm = _number(os.path.join(folder, "fan1_input"))
+            limit = _number(os.path.join(folder, "fan1_max")) or cap
+            if rpm is not None and limit > 0:
+                return round(max(0.0, min(1.0, rpm / limit)), 2)
         return None
 
     def _cpu_temp(self) -> int | None:

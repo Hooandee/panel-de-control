@@ -7,7 +7,7 @@ import { DecodedFrames } from "../accessories/pixelFrames";
 import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
 import type { Block } from "../accessories/ComposerEditor";
-import { loadPreview, setSceneDraft, useAccessories, useSceneDraft } from "../accessories/useAccessories";
+import { loadPreview, setSceneDraft, useAccessories, usePreviewEpoch, useSceneDraft } from "../accessories/useAccessories";
 import { pauseJsauxApp } from "../api";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
@@ -47,6 +47,7 @@ const Hero: FC<{
   const { t } = useI18n();
   const [decoded, setDecoded] = useState<DecodedFrames | null>(null);
   const [sending, setSending] = useState(false);
+  const epoch = usePreviewEpoch();
   useEffect(() => {
     let live = true;
     if (!sceneId) {
@@ -55,7 +56,7 @@ const Hero: FC<{
     }
     void loadPreview(sceneId, options).then((value) => { if (live) setDecoded(value); });
     return () => { live = false; };
-  }, [sceneId, JSON.stringify(options)]);
+  }, [sceneId, JSON.stringify(options), epoch]);
   const title = labelKey ? t(labelKey) : t("accessories.pick");
   const badge = !sceneId ? null : onPanel ? t("accessories.badge.onPanel") : t("accessories.badge.preview");
   const show = () => {
@@ -133,7 +134,7 @@ const sameOptions = (a: Record<string, unknown>, b: Record<string, unknown>) => 
 
 export const AccesoriosSection: FC = () => {
   const { t } = useI18n();
-  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, refresh } = useAccessories();
+  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, setOnSuspend, refresh } = useAccessories();
   const { draft } = useSceneDraft();
   const setDraft = setSceneDraft;
   if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
@@ -194,6 +195,11 @@ export const AccesoriosSection: FC = () => {
           <PanelSectionRow>
             <ToggleField label={t("accessories.alerts.achievements")} description={t("accessories.alerts.achievements.desc")}
               checked={state.alerts.achievements} onChange={(on) => void setAlerts(on)} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <DropdownItem label={t("accessories.suspend")} description={t("accessories.suspend.desc")}
+              rgOptions={[{ data: "off", label: t("accessories.suspend.off") }, { data: "pet", label: t("accessories.suspend.pet") }]}
+              selectedOption={state.on_suspend ?? "off"} onChange={(option) => void setOnSuspend(option.data === "pet" ? "pet" : "off")} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.night")} description={state.night.enabled ? t("accessories.night.range", { from: state.night.from, to: state.night.to }) : undefined}

@@ -9518,7 +9518,7 @@ class Plugin:
 
     async def locate_accessory_city(self) -> dict:
         result = await asyncio.to_thread(self._pixel_runtime().locate_city)
-        _accessories_journal("info", "locate_city", found=result.get("city") is not None)
+        _accessories_journal("INFO", "locate_city", found=result.get("city") is not None)
         return result
 
     def _pixel_game_started(self, appid) -> int | None:
@@ -9569,6 +9569,28 @@ class Plugin:
 
     async def set_accessory_alerts(self, prefs) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_alerts, dict(prefs or {}))
+
+    async def set_accessory_on_suspend(self, mode) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_on_suspend, str(mode))
+
+    async def accessory_suspend(self) -> dict:
+        return await self._pixel_call(self._pixel_runtime().suspend)
+
+    async def accessory_resume(self) -> dict:
+        return await self._pixel_call(self._pixel_runtime().resume)
+
+    async def get_accessory_pet(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().pet_state)
+
+    async def accessory_pet_action(self, kind) -> dict:
+        try:
+            return {"ok": True, **await asyncio.to_thread(self._pixel_runtime().pet_action, str(kind))}
+        except ValueError as error:
+            _accessories_journal("WARNING", "pet_action_rejected", error=str(error))
+            return {"ok": False, "error": str(error)}
+
+    async def rename_accessory_pet(self, name) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().rename_pet, str(name or ""))
 
     async def set_accessory_night(self, night) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_night, dict(night or {}))
