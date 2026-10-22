@@ -2,6 +2,7 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.pet": "Mascota",
   "accessories.scene.game_cover": "Carátula",
   "accessories.scene.game_session": "Partida",
   "accessories.scene.game_power": "Potencia",
@@ -46,6 +47,7 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.pet": "Pet",
   "accessories.scene.game_cover": "Cover art",
   "accessories.scene.game_session": "Session",
   "accessories.scene.game_power": "Power",
@@ -90,6 +92,7 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.pet": "Mascotte",
   "accessories.scene.game_cover": "Copertina",
   "accessories.scene.game_session": "Partita",
   "accessories.scene.game_power": "Potenza",
@@ -134,6 +137,7 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.pet": "Haustier",
   "accessories.scene.game_cover": "Cover",
   "accessories.scene.game_session": "Sitzung",
   "accessories.scene.game_power": "Leistung",
@@ -178,6 +182,7 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.pet": "Mascote",
   "accessories.scene.game_cover": "Capa",
   "accessories.scene.game_session": "Partida",
   "accessories.scene.game_power": "Potência",
@@ -222,6 +227,7 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.pet": "Compagnon",
   "accessories.scene.game_cover": "Jaquette",
   "accessories.scene.game_session": "Partie",
   "accessories.scene.game_power": "Puissance",
