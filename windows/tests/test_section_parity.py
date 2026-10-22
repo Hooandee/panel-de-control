@@ -6,7 +6,7 @@ REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "src" / "customize" / "manifest.tsx"
 CATALOG = REPO / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "SectionCatalog.cs"
 WINDOWS_ONLY_BLOCKS = {"energy"}
-LINUX_ONLY_SECTIONS = {"ambient"}
+LINUX_ONLY_SECTIONS = {"ambient", "accessories"}
 
 
 def linux_tabs():
