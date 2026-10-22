@@ -89,7 +89,6 @@ def test_allowlist_has_no_stale_entries():
     for path in _sources():
         relative = path.relative_to(_ROOT).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for call in ast.walk(node):
