@@ -447,3 +447,13 @@ def test_the_worker_notices_a_resume_by_the_clock_jump():
     mono[0] += 2
     worker.step()
     assert calls.count("resume") == 1
+
+
+def test_the_game_scene_keeps_its_own_options(rig):
+    _, _, _, make = rig
+    svc = make()
+    svc.set_game_scene("steady", {"colour": 2})
+    assert svc.state()["game_options"] == {"colour": 2}
+    assert make().state()["game_options"] == {"colour": 2}
+    svc.set_game_scene(None)
+    assert svc.state()["game_options"] == {}

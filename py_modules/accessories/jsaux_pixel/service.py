@@ -106,6 +106,8 @@ class PixelService:
         self._power_sent: bool | None = None
         game_scene = stored.get("game_scene")
         self._game_scene: str | None = game_scene if game_scene in scenes else None
+        game_options = stored.get("game_options")
+        self._game_options: dict = game_options if isinstance(game_options, dict) and self._game_scene else {}
         self._showing: str | None = None
         self._alert: tuple[str, dict, float] | None = None
         prefs = stored.get("alerts")
@@ -153,11 +155,12 @@ class PixelService:
             self._power = bool(on)
             self._save()
 
-    def set_game_scene(self, scene_id: str | None) -> None:
+    def set_game_scene(self, scene_id: str | None, options: dict | None = None) -> None:
         if scene_id is not None and scene_id not in self._scenes:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._game_scene = scene_id
+            self._game_options = dict(options or {}) if scene_id else {}
             self._user_changed()
             self._save()
 
@@ -241,6 +244,7 @@ class PixelService:
                 "scene": self._scene_id,
                 "options": dict(self._options),
                 "game_scene": self._game_scene,
+                "game_options": dict(self._game_options),
                 "showing": self._showing,
                 "alerts": dict(self._alerts),
                 "brightness": self._brightness,
@@ -381,7 +385,7 @@ class PixelService:
             showing, chosen = self._alert[0], {"alert": self._alert[1]}
         else:
             showing = self._game_scene if playing else self._scene_id
-            chosen = {} if playing else self._options
+            chosen = self._game_options if playing else self._options
         scene = self._scenes[showing]
         options = {**chosen, **self._option_extras(chosen)}
         ctx = dataclasses.replace(base, options=options)
@@ -504,6 +508,7 @@ class PixelService:
                 "power": self._power,
                 "night": self._night,
                 "game_scene": self._game_scene,
+                "game_options": self._game_options,
                 "alerts": self._alerts,
                 "on_suspend": self._on_suspend,
                 "governor": self._governor.snapshot(),

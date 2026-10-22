@@ -116,8 +116,8 @@ class Runtime:
         self.service.set_brightness(percent)
         return self.state()
 
-    def set_game_scene(self, scene_id: str | None) -> dict:
-        self.service.set_game_scene(scene_id)
+    def set_game_scene(self, scene_id: str | None, options: dict | None = None) -> dict:
+        self.service.set_game_scene(scene_id, options)
         return self.state()
 
     def set_night(self, night: dict) -> dict:
@@ -312,6 +312,7 @@ class Runtime:
         playtime = data.get("playtime_min")
         info = {
             "appid": str(data["appid"]),
+            "sent_at": time.time(),
             "tags": tags,
             "playtime_min": int(playtime) if isinstance(playtime, (int, float)) and playtime >= 0 else None,
             "achievements": {"done": int(done), "total": int(total)}

@@ -144,7 +144,17 @@ export const AccesoriosSection: FC = () => {
   const onPanel = !!current && current.id === state.scene && sameOptions(current.options, state.options);
   const gameScenes = state.catalog.filter((scene) => scene.category === "game" || scene.id === "pet");
   const gameOptions = [{ data: "", label: t("accessories.gameScene.none") },
-    ...gameScenes.map((scene) => ({ data: scene.id, label: t(scene.labelKey) }))];
+    ...gameScenes.flatMap((scene) => scene.id === "game_cover"
+      ? [{ data: "game_cover|full", label: `${t(scene.labelKey)} · ${t("accessories.layout.full")}` },
+        { data: "game_cover|side", label: `${t(scene.labelKey)} · ${t("accessories.layout.side")}` }]
+      : [{ data: scene.id, label: t(scene.labelKey) }])];
+  const gameSelected = state.game_scene === "game_cover"
+    ? `game_cover|${state.game_options?.layout === "side" ? "side" : "full"}` : state.game_scene ?? "";
+  const pickGameScene = (value: string) => {
+    if (!value) return void setGameScene(null);
+    const [id, layout] = value.split("|");
+    void setGameScene(id, layout ? { layout } : {});
+  };
   const preview = (id: string, options: Record<string, unknown> = {}) => setDraft({ id, options });
   const show = async () => {
     if (!current) return;
@@ -190,7 +200,7 @@ export const AccesoriosSection: FC = () => {
           </PanelSectionRow>
           <PanelSectionRow>
             <DropdownItem label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")} rgOptions={gameOptions}
-              selectedOption={state.game_scene ?? ""} onChange={(option) => void setGameScene(option.data ? String(option.data) : null)} />
+              selectedOption={gameSelected} onChange={(option) => pickGameScene(String(option.data ?? ""))} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.alerts.achievements")} description={t("accessories.alerts.achievements.desc")}

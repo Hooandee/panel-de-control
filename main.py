@@ -9564,8 +9564,9 @@ class Plugin:
     async def set_accessory_brightness(self, percent) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))
 
-    async def set_accessory_game_scene(self, scene_id=None) -> dict:
-        return await self._pixel_call(self._pixel_runtime().set_game_scene, str(scene_id) if scene_id else None)
+    async def set_accessory_game_scene(self, scene_id=None, options=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_game_scene, str(scene_id) if scene_id else None,
+                                      dict(options) if isinstance(options, dict) else None)
 
     async def set_accessory_alerts(self, prefs) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_alerts, dict(prefs or {}))

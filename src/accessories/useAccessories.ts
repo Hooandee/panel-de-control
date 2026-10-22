@@ -95,7 +95,8 @@ export function useAccessories() {
     setPower: (on: boolean) => apply(() => setAccessoryPower(on), { power: on }),
     setNight: (night: NightSchedule) => apply(() => setAccessoryNight(night), { night }),
     setAlerts: (achievements: boolean) => apply(() => setAccessoryAlerts({ achievements }), { alerts: { achievements } }),
-    setGameScene: (sceneId: string | null) => apply(() => setAccessoryGameScene(sceneId), { game_scene: sceneId }),
+    setGameScene: (sceneId: string | null, options: Record<string, unknown> = {}) =>
+      apply(() => setAccessoryGameScene(sceneId, options), { game_scene: sceneId, game_options: options }),
     setOnSuspend: (mode: "off" | "pet") => apply(() => setAccessoryOnSuspend(mode), { on_suspend: mode }),
   };
 }

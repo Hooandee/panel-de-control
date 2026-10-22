@@ -92,3 +92,59 @@ def test_cover_scene_without_a_game_shows_an_idle_card():
     ctx = _ctx(START, {}, game_info=None)
     scene.key(ctx)
     assert scene.render(ctx).frames
+
+
+def _cctx(now, options, events):
+    return SceneContext(now=now, tz=TZ, game=GAME, options=options, events=events)
+
+
+def _cover_events(portrait=True, done=3, total=50, playtime=725):
+    events = {
+        "game_art": {"appid": "1145360", "rgb": base64.b64encode(bytes([120, 40, 200]) * (64 * 54)).decode()},
+        "game_info": {"appid": "1145360", "tags": [], "playtime_min": playtime,
+                      "achievements": {"done": done, "total": total} if total else None},
+    }
+    if portrait:
+        events["game_info"]["portrait"] = base64.b64encode(bytes([10, 220, 90]) * (36 * 54)).decode()
+    return events
+
+
+def test_full_cover_is_only_the_art():
+    scene = game.CoverScene()
+    ctx = _cctx(START, {"layout": "full"}, events=_cover_events())
+    scene.key(ctx)
+    segment = scene.render(ctx)
+    assert len(segment.frames) == 1
+    assert {segment.frames[0].get(x, y) for x in range(64) for y in range(54)} == {(120, 40, 200)}
+
+
+def test_side_cover_shows_the_capsule_and_the_numbers():
+    scene = game.CoverScene()
+    ctx = _cctx(START, {"layout": "side"}, events=_cover_events())
+    scene.key(ctx)
+    segment = scene.render(ctx)
+    first = segment.frames[0]
+    assert first.get(5, 27) == (10, 220, 90)
+    assert any(first.get(x, y) != (0, 0, 0) for x in range(38, 64) for y in range(54))
+    assert segment.valid_until is not None
+    assert encoded_size(segment) <= codec.MAX_GIF_BYTES
+
+
+def test_side_cover_rewrites_when_an_achievement_lands_but_not_every_minute():
+    scene = game.CoverScene()
+    a = scene.key(_cctx(START, {"layout": "side"}, events=_cover_events(done=3)))
+    assert a == scene.key(_cctx(START + 120, {"layout": "side"}, events=_cover_events(done=3)))
+    assert a != scene.key(_cctx(START, {"layout": "side"}, events=_cover_events(done=4)))
+
+
+def test_side_cover_without_a_capsule_crops_the_wide_art_and_skips_missing_numbers():
+    scene = game.CoverScene()
+    ctx = _cctx(START, {"layout": "side"}, events=_cover_events(portrait=False, total=0, playtime=None))
+    scene.key(ctx)
+    segment = scene.render(ctx)
+    assert segment.frames[0].get(5, 27) == (120, 40, 200)
+
+
+@pytest.mark.parametrize("minutes,text", [(45, "45 MIN"), (125, "2H 05"), (725, "12 H"), (60_000, "1000 H")])
+def test_play_time_reads_naturally(minutes, text):
+    assert game.play_time(minutes) == text

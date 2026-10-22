@@ -40,6 +40,26 @@ const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPi
   );
 };
 
+const Segmented: FC<{ values: string[]; current: string; labelPrefix: string; onPick: (value: string) => void }> = ({ values, current, labelPrefix, onPick }) => {
+  const { t } = useI18n();
+  return (
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
+      {values.map((value) => {
+        const selected = current === value;
+        const choose = () => onPick(value);
+        return (
+          <DialogButton key={value} onClick={choose} onOKButton={choose}
+            style={{ flex: 1, minWidth: 0, padding: "8px 0", fontWeight: 700,
+              background: selected ? theme.color.accent : "rgba(255,255,255,0.06)",
+              color: selected ? theme.color.onAccent : theme.color.textPrimary }}>
+            {t(`${labelPrefix}.${value}`)}
+          </DialogButton>
+        );
+      })}
+    </Focusable>
+  );
+};
+
 export const SceneOptions: FC<{
   options: string[];
   values: Record<string, unknown>;
@@ -69,20 +89,12 @@ export const SceneOptions: FC<{
         </DialogButton>
       )}
       {options.includes("style") && (
-        <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
-          {(["icon", "sky"] as const).map((style) => {
-            const selected = (values.style === "sky" ? "sky" : "icon") === style;
-            const choose = () => onChange({ ...values, style });
-            return (
-              <DialogButton key={style} onClick={choose} onOKButton={choose}
-                style={{ flex: 1, minWidth: 0, padding: "8px 0", fontWeight: 700,
-                  background: selected ? theme.color.accent : "rgba(255,255,255,0.06)",
-                  color: selected ? theme.color.onAccent : theme.color.textPrimary }}>
-                {t(`accessories.style.${style}`)}
-              </DialogButton>
-            );
-          })}
-        </Focusable>
+        <Segmented values={["icon", "sky"]} current={values.style === "sky" ? "sky" : "icon"} labelPrefix="accessories.style"
+          onPick={(style) => onChange({ ...values, style })} />
+      )}
+      {options.includes("layout") && (
+        <Segmented values={["full", "side"]} current={values.layout === "side" ? "side" : "full"} labelPrefix="accessories.layout"
+          onPick={(layout) => onChange({ ...values, layout })} />
       )}
       {options.includes("hour12") && (
         <ToggleField label={t("accessories.hour12")} checked={values.hour12 === true}
