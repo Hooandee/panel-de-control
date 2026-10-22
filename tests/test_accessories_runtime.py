@@ -399,3 +399,18 @@ def test_the_sticker_book_lists_every_sticker_with_its_colours(tmp_path):
     book = _rt(tmp_path).sticker_book()
     assert "fire" in book["stickers"] and len(book["stickers"]["fire"]) == 3
     assert book["palette"]["R"] == [235, 50, 70]
+
+
+def test_a_burst_of_care_rewrites_the_panel_once(tmp_path, monkeypatch):
+    clock = [5000.0]
+    monkeypatch.setattr(runtime.time, "time", lambda: clock[0])
+    rt = _rt(tmp_path)
+    rt.set_scene("pet", {})
+    refreshed = []
+    monkeypatch.setattr(rt.service, "refresh", lambda: refreshed.append(clock[0]))
+    for kind in ("feed", "pet", "play", "pet", "pet"):
+        rt.pet_action(kind)
+        clock[0] += 3
+    clock[0] += 60
+    rt.pet_action("pet")
+    assert refreshed == [5000.0, 5075.0]

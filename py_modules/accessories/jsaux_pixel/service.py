@@ -60,6 +60,7 @@ def _valid_night(night: dict) -> bool:
 
 SUSPEND_MODES = ("off", "pet")
 _RESUME_JUMP_S = 30.0
+_SUSPEND_TIMEOUT_S = 180.0
 
 
 class PixelService:
@@ -116,6 +117,7 @@ class PixelService:
             self._alerts.update({k: bool(v) for k, v in prefs.items() if k in self._alerts})
         self._on_suspend = stored.get("on_suspend") if stored.get("on_suspend") in SUSPEND_MODES else "off"
         self._suspended = False
+        self._suspended_at = 0.0
         self._restoring = False
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
@@ -135,6 +137,11 @@ class PixelService:
     def _user_changed(self) -> None:
         self._rendered_key, self._valid_until, self._pending_user = None, None, True
         self._retry_at, self._failures, self._refused = 0.0, 0, None
+
+    def refresh(self) -> None:
+        """Render again as a user action; identical content is still not rewritten."""
+        with self._lock:
+            self._user_changed()
 
     def forget_shown(self) -> None:
         with self._lock:
@@ -192,7 +199,7 @@ class PixelService:
         with self._lock:
             if self._suspended:
                 return
-            self._suspended = True
+            self._suspended, self._suspended_at = True, self._clock()
             self._log("INFO", "suspend", mode=self._on_suspend)
             if self._link is None or self._scene_id is None:
                 return
@@ -269,6 +276,10 @@ class PixelService:
     # Worker ---------------------------------------------------------------------------------
 
     def tick(self) -> None:
+        if self._suspended and self._clock() - self._suspended_at >= _SUSPEND_TIMEOUT_S:
+            # Steam announced a suspend that never came: the worker kept ticking without a gap.
+            self._log("WARNING", "suspend_expired")
+            self.resume()
         if not self._enabled or self._scene_id is None or self._suspended:
             return
         with self._lock:

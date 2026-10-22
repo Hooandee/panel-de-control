@@ -172,7 +172,7 @@ class HeartScene(LiveScene):
 
 
 class DashboardScene(LiveScene):
-    """Date, clock and CPU/GPU/RAM/FPS: the official app's layout, redrawn only when a bar moves."""
+    """Date, clock and CPU/GPU/RAM/FPS bars, redrawn only when a bar moves."""
 
     id = "game_dashboard"
     OPTIONS = ("theme", "hour12")

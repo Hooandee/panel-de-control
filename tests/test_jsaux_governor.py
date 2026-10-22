@@ -1,3 +1,4 @@
+from accessories.jsaux_pixel import governor
 from accessories.jsaux_pixel.governor import Decision, Governor
 
 
@@ -101,3 +102,34 @@ def test_live_gap_counts_the_users_own_upload_of_that_metric():
     assert gov.decide("b", "live", metric="dashboard") is Decision.TOO_SOON
     clock.t += 56
     assert gov.decide("b", "live", metric="dashboard") is Decision.ALLOW
+
+
+def test_boundaries_keep_a_gap_and_an_hourly_cap_so_a_broken_expiry_cannot_hammer_the_flash():
+    clock = [1000.0]
+    gov = governor.Governor(lambda: clock[0])
+    assert gov.decide("a", "boundary") is governor.Decision.ALLOW
+    gov.record("a", ok=True, kind="boundary")
+    clock[0] += 5
+    assert gov.decide("b", "boundary") is governor.Decision.TOO_SOON
+    allowed = 0
+    for i in range(200):
+        clock[0] += 61
+        if gov.decide(f"x{i}", "boundary") is governor.Decision.ALLOW:
+            gov.record(f"x{i}", ok=True, kind="boundary")
+            allowed += 1
+    assert allowed <= 30 * 4
+
+
+def test_a_daily_ceiling_covers_every_kind_of_write():
+    clock = [1000.0]
+    gov = governor.Governor(lambda: clock[0])
+    allowed = 0
+    for i in range(5000):
+        clock[0] += 15
+        kind = ("user", "boundary", "alert")[i % 3]
+        if gov.decide(f"h{i}", kind) is governor.Decision.ALLOW:
+            gov.record(f"h{i}", ok=True, kind=kind)
+            allowed += 1
+        if clock[0] - 1000 > 86400:
+            break
+    assert allowed <= governor.DAILY_CEILING

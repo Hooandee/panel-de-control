@@ -18,6 +18,7 @@ from ..render.canvas import Canvas
 from ..render.palettes import THEMES, mix, scale
 from .base import Scene, SceneContext, Segment
 from .clocks import _DAYS, _MONTHS, _hm, hour_segment
+from .fit import fits
 
 W, H = codec.WIDTH, codec.HEIGHT
 MAX_BLOCKS = 30
@@ -34,8 +35,8 @@ _ICONS = {
     "bolt": ("...##", "..##.", ".####", "..##.", ".##..", "##..."),
 }
 _ANIM_CS = 15
+_WIDEST_TIME = datetime(2026, 1, 3, 20, 28)
 _MAX_ANIM_FRAMES = 12
-_TEXT_TYPES = {"text", "pill", "clock", "date", "metric"}
 _INK = (20, 16, 30)
 
 
@@ -147,7 +148,7 @@ def _pill(text: str, font: str, theme) -> Canvas:
     return out
 
 
-def _is_animated(block: dict, library: Library | None, cache: dict) -> int:
+def _frame_count(block: dict, library: Library | None, cache: dict) -> int:
     if block["type"] == "sticker":
         return len(stickers.frames_of(block["sticker"]))
     if block["type"] == "drawing":
@@ -173,7 +174,7 @@ def layout_info(blocks: list[dict], library: Library | None = None) -> dict:
     cache: dict = {}
     boxes = []
     for block in blocks:
-        sprite = _sprite(block, datetime(2026, 1, 1, 18, 88 % 60), {}, library, cache, 0, measuring=True)
+        sprite = _sprite(block, _WIDEST_TIME, {}, library, cache, 0, measuring=True)
         boxes.append({"x": block["x"], "y": block["y"], "w": sprite.width, "h": sprite.height})
     return {"boxes": boxes, "mode": refresh_mode(blocks, library, cache)}
 
@@ -185,7 +186,7 @@ def refresh_mode(blocks: list[dict], library: Library | None = None, cache: dict
         return "live"
     if kinds & {"clock", "date"}:
         return "clock"
-    if any(_is_animated(block, library, cache) > 1 for block in blocks):
+    if any(_frame_count(block, library, cache) > 1 for block in blocks):
         return "animated"
     return "static"
 
@@ -320,15 +321,19 @@ class ComposedScene(Scene):
                 return [draw(minute, frame) for _ in range(repeats) for frame in range(cycle)]
 
             return hour_segment(now, boundary, draw, wiggle if cycle > 1 else (lambda a, b: []))
-        frames = [draw(now, frame) for frame in range(cycle)]
-        segment = Segment(frames, [_ANIM_CS if cycle > 1 else 100] * len(frames))
+        while True:
+            frames = [draw(now, frame) for frame in range(cycle)]
+            segment = Segment(frames, [_ANIM_CS if cycle > 1 else 100] * len(frames))
+            if cycle == 1 or fits(segment):
+                break
+            cycle //= 2
         if mode == "live":
             segment.kind, segment.metric = "live", "composed"
         return segment
 
 
 def _cycle(blocks: list[dict], library: Library | None, cache: dict) -> int:
-    lengths = {_is_animated(block, library, cache) for block in blocks} - {1}
+    lengths = {_frame_count(block, library, cache) for block in blocks} - {1}
     cycle = 1
     for length in lengths:
         cycle = cycle * length // math.gcd(cycle, length)

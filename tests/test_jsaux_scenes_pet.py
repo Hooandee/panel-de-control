@@ -197,3 +197,28 @@ def test_its_face_shows_how_it_feels():
     scene = _scene()
     assert scene.face(_ctx(BORN + 600)) is None
     assert scene.face(_ctx(BORN + 30 * 3600)) == "sad"
+
+
+def test_care_costs_one_write_not_a_second_when_the_reaction_fades():
+    scene = _scene()
+    now = _at(16, 1)
+    scene.mind.interact("pet", now)
+    first = scene.key(_ctx(now + 1))
+    assert scene.key(_ctx(now + 120)) == first
+
+
+def test_a_game_start_costs_one_write_not_a_second_when_the_reaction_fades():
+    scene = _scene()
+    now = _at(20, 1)
+    game, events = _game(now, tags=(1667,), started=now - 5)
+    first = scene.key(_ctx(now, game, events=events))
+    assert scene.key(_ctx(now + 200, game, events=events)) == first
+
+
+def test_wind_at_home_does_not_flap():
+    scene, rng, changes, previous = _scene(), random.Random(5), 0, None
+    for second in range(0, 3600, 2):
+        key = scene.key(_ctx(_at(12) + second, metrics={"fan_pct": 0.75 + rng.uniform(-0.15, 0.15)}))
+        if key != previous:
+            changes, previous = changes + 1, key
+    assert changes <= pet.PetScene.UPLOADS_PER_HOUR

@@ -34,6 +34,7 @@ _OFFICIAL_SERVICE = "jsaux-matrix-hub.service"
 _OFFICIAL_RECHECK_S = 60.0
 _PET_BEDTIME = frozenset({23, 0, 1, 2, 3, 4, 5, 6})
 _MAX_TAGS = 20
+_CARE_REWRITE_S = 30.0
 
 
 def _uid_of(user: str) -> int:
@@ -76,6 +77,7 @@ class Runtime:
         self._context_source = context_source or (lambda: {})
         self._system_metrics = system_metrics or metrics.SystemMetrics().sample
         self._events: dict = {}
+        self._care_shown_at = float("-inf")
         self.service = PixelService(
             store_path=Path(settings_dir) / "accessories" / "jsaux_pixel.json",
             find_panel=find_panel,
@@ -138,7 +140,8 @@ class Runtime:
 
     def suspend(self) -> dict:
         pet = next(scene for _, scene in self._entries if scene.id == "pet")
-        options = self.service.wanted_scenes()[3] if self.service.wanted_scenes()[0] == "pet" else {}
+        scene_id, _showing, _game, options = self.service.wanted_scenes()
+        options = options if scene_id == "pet" else {}
         self.service.suspend(lambda: pet.asleep({**options, **self._option_extras(options)}))
         return self.state()
 
@@ -150,10 +153,12 @@ class Runtime:
         return self.mind.describe(time.time())
 
     def pet_action(self, kind: str) -> dict:
-        reaction = self.mind.interact(kind, time.time())
+        now = time.time()
+        reaction = self.mind.interact(kind, now)
         scene, showing, _game, _options = self.service.wanted_scenes()
-        if "pet" in (scene, showing):
-            self.service.forget_shown()
+        if "pet" in (scene, showing) and now - self._care_shown_at >= _CARE_REWRITE_S:
+            self._care_shown_at = now
+            self.service.refresh()
         self._log("INFO", "pet_action", kind=kind, reaction=reaction)
         return {"reaction": reaction, "pet": self.pet_state()}
 
@@ -328,7 +333,7 @@ class Runtime:
         self._events = {**self._events, "speedrun": run}
         scene, showing, game_scene, _options = self.service.wanted_scenes()
         if "speedrun" in (scene, showing, game_scene):
-            self.service.forget_shown()
+            self.service.refresh()
         self._log("INFO", "speedrun", action=action)
         return True
 

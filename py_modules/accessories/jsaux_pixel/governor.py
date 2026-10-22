@@ -10,6 +10,9 @@ _MIN_GAP = {"scheduled": 20.0, "live": 60.0, "alert": 0.0}
 _AUTOMATIC_PER_HOUR = 60
 _AUTOMATIC_PER_DAY = 600
 _USER_PER_HOUR = 120
+_BOUNDARY_GAP = 60.0
+_BOUNDARY_PER_HOUR = 30
+DAILY_CEILING = 1500
 
 
 class Decision(Enum):
@@ -31,11 +34,19 @@ class Governor:
             return Decision.DUPLICATE
         now = self._clock()
         self._prune(now)
+        if len(self._uploads) >= DAILY_CEILING:
+            return Decision.BUDGET
         if kind == "user":
             recent = sum(1 for t, k, _ in self._uploads if k == "user" and now - t < _HOUR)
             return Decision.BUDGET if recent >= _USER_PER_HOUR else Decision.ALLOW
         if kind == "boundary":
-            # A precomputed hour runs out: without this upload the clock would loop back.
+            # A precomputed window runs out: without this upload a clock would loop back. It skips the
+            # automatic budget but keeps its own, so a scene with a wrong expiry cannot hammer the flash.
+            boundaries = [t for t, k, _ in self._uploads if k == "boundary" and now - t < _HOUR]
+            if len(boundaries) >= _BOUNDARY_PER_HOUR:
+                return Decision.BUDGET
+            if boundaries and now - max(boundaries) < _BOUNDARY_GAP:
+                return Decision.TOO_SOON
             return Decision.ALLOW
         automatic = [(t, k, m) for t, k, m in self._uploads if k not in ("user", "boundary")]
         if sum(1 for t, _, _ in automatic if now - t < _HOUR) >= _AUTOMATIC_PER_HOUR:
@@ -57,6 +68,8 @@ class Governor:
         gap = _MIN_GAP.get(kind, _MIN_GAP["scheduled"])
         if kind == "live":
             relevant = [t for t, _, m in self._uploads if m == metric]
+        elif kind == "boundary":
+            gap, relevant = _BOUNDARY_GAP, [t for t, k, _ in self._uploads if k == "boundary"]
         else:
             relevant = [t for t, _, _ in automatic]
         wait = gap - (now - max(relevant)) if relevant else 0.0

@@ -823,7 +823,7 @@ def _ep_party(mood, theme, n=32):
 
 
 def _ep_excited(mood, theme):
-    return _ep_party(mood, theme, 16) + [_frame("idle", theme, Pose(face="love", lift=l)) for l in (0, 2, 4, 2, 0, 0)]
+    return _ep_party(mood, theme, 16) + [_frame("idle", theme, Pose(face="love", lift=lift)) for lift in (0, 2, 4, 2, 0, 0)]
 
 
 EPISODES: dict[str, Callable] = {
@@ -839,14 +839,13 @@ EPISODES: dict[str, Callable] = {
 }
 REACTIONS = ("eat", "refuse", "play", "tired", "purr", "sleep", "snore", "wake", "trophy", "greet", "scared", "flinch",
              "party", "excited")
-_STARTS = frozenset({"scared", "flinch", "party", "excited"})
 
 
 def episode_frames(name: str, mood: str, options: dict) -> list[tuple[Canvas, int]]:
     return [(canvas, _EPISODE_CS) for canvas in EPISODES[name](mood, theme_for(options))]
 
 
-def _draw_mood(situation: str, action: str) -> str:
+def _draw_mood(situation: str) -> str:
     if situation == "night":
         return "sleep"
     if situation == "hot":
@@ -868,6 +867,8 @@ class PetScene(Scene):
         self._hot = False
         self._windy = False
         self._was_night = False
+        self._playing = False
+        self._slot_seen: str | None = None
         self._greet_slot: str | None = None
 
     def _genre(self, ctx: SceneContext) -> str | None:
@@ -896,23 +897,24 @@ class PetScene(Scene):
     def key(self, ctx: SceneContext):
         wanted = self.situation(ctx)
         slot = _slot(ctx)
+        playing = bool(ctx.game)
         if self._situation is None:
             self._situation, self._since = wanted, ctx.now
         elif wanted != self._situation:
-            playing_changed = wanted.startswith("game") != self._situation.startswith(("game", "hot", "windy"))
+            # Hot and windy start at once (at most every few minutes) but only end with the
+            # window, so a fan hovering on a threshold cannot rewrite the panel over and over.
             entering = wanted in ("hot", "windy") and ctx.now - self._since >= _DWELL_S
-            boundary = slot != self._slot_seen
-            if playing_changed or entering or boundary or wanted == "night" or self._situation == "night":
+            if playing != self._playing or entering or slot != self._slot_seen or "night" in (wanted, self._situation):
                 self._situation, self._since = wanted, ctx.now
+        self._playing = playing
         if self._situation == "night":
             self._was_night = True
         elif self._was_night:
             self._was_night, self._greet_slot = False, slot
         self._slot_seen = slot
-        fresh = self.mind.recent(ctx.now)
-        return self._situation, slot, ctx.options.get("theme"), self.mind.memory["revision"] if fresh else None, self._start(ctx)
-
-    _slot_seen: str | None = None
+        game = ctx.game or {}
+        session = (game.get("appid"), game.get("started_at")) if game else None
+        return self._situation, slot, ctx.options.get("theme"), self.mind.memory["revision"], session
 
     def _start(self, ctx: SceneContext) -> str | None:
         game = ctx.game or {}
@@ -979,7 +981,7 @@ class PetScene(Scene):
             script = _thinned(script)
 
     def _life(self, situation: str, theme, script, total_cs: int, until: float, face: str | None) -> Segment:
-        mood = _draw_mood(situation, "")
+        mood = _draw_mood(situation)
         asleep = situation == "night"
         rest = _frame(mood, theme, Pose(eyes_closed=asleep, face=face))
         blink = _frame(mood, theme, Pose(blink=True))
@@ -1020,7 +1022,7 @@ class PetScene(Scene):
         """A montage of what the pet is about to get up to, instead of its first seconds of rest."""
         if self._situation is None:
             self.key(ctx)
-        mood = _draw_mood(self._situation or "home", "")
+        mood = _draw_mood(self._situation or "home")
         theme = theme_for(ctx.options)
         frames: list[Canvas] = []
         for name, _rest in self.script(ctx)[:4]:

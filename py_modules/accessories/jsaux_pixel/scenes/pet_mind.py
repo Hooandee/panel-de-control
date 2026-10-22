@@ -17,7 +17,6 @@ from pathlib import Path
 from json_store import atomic_json_save
 
 TRAITS = ("brave", "playful", "greedy", "sleepy", "curious")
-NEEDS = ("hunger", "energy", "fun", "love")
 _HUNGER_S = 8 * 3600
 _AWAKE_S = 16 * 3600
 _SLEEP_RECOVERY_S = 7 * 3600
@@ -46,7 +45,6 @@ _GENRE_ACTION = {
     "horror": "shiver", "racing": "zoom", "shooter": "aim", "rpg": "sword", "puzzle": "think",
     "platformer": "hop", "fighting": "box", "sports": "ball", "rhythm": "dance", "souls": "sweat", "cozy": "hearts",
 }
-GENRES = tuple(sorted(set(_GENRE_TAGS.values())))
 
 
 def genre_for(tags) -> str | None:

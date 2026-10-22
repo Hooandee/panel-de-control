@@ -164,3 +164,17 @@ def test_an_animated_drawing_moves_as_a_sticker(tmp_path):
     scene.key(_ctx(blocks))
     segment = scene.render(_ctx(blocks))
     assert {segment.frames[i].get(0, 0) for i in range(len(segment.frames))} == {(90, 0, 0), (180, 0, 0)}
+
+
+def test_a_layout_too_rich_to_animate_sheds_frames_until_it_fits(tmp_path):
+    import random as _random
+    lib = library.Library(tmp_path)
+    rng = _random.Random(3)
+    frames = [base64.b64encode(bytes(rng.randrange(256) for _ in range(64 * 54 * 3))).decode() for _ in range(12)]
+    saved = lib.save({"name": "noise", "frames": frames, "fps": 8})
+    scene = ComposedScene(lib)
+    blocks = [{"type": "drawing", "x": 0, "y": 0, "size": "l", "drawing": saved["id"]}]
+    scene.key(_ctx(blocks))
+    segment = scene.render(_ctx(blocks))
+    assert encoded_size(segment) <= codec.MAX_GIF_BYTES
+    assert segment.frames

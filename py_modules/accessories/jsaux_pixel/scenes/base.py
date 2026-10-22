@@ -32,7 +32,7 @@ class Scene:
     """A scene re-renders only when `key` changes or its segment expires.
 
     UPLOADS_PER_HOUR is the steady-state write cost the scene is designed for; tests hold each
-    scene to it (`.pdc/decisions/accessory-write-once.md`).
+    scene to it.
     """
 
     id: str = ""

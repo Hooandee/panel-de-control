@@ -1,8 +1,7 @@
 """Regressions from the branch review: writes must stay rare even when things go wrong."""
 
-import pytest
 
-from accessories.jsaux_pixel import codec, detect, service
+from accessories.jsaux_pixel import codec, service
 from accessories.jsaux_pixel.governor import Decision, Governor
 from accessories.jsaux_pixel.scenes.base import SceneContext
 from test_jsaux_service import FakeLink, FakePanel, Firmware, Hourly, Steady

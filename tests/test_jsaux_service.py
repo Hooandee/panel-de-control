@@ -457,3 +457,29 @@ def test_the_game_scene_keeps_its_own_options(rig):
     assert make().state()["game_options"] == {"colour": 2}
     svc.set_game_scene(None)
     assert svc.state()["game_options"] == {}
+
+
+def test_a_suspend_that_never_happened_wears_off(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc.suspend(_asleep)
+    clock.t += 60
+    svc.tick()
+    assert svc.state()["suspended"] is True
+    clock.t += 200
+    svc.tick()
+    assert svc.state()["suspended"] is False
+    assert panel.commands(codec.Cmd.POWER)[-1] == codec.frame(1, codec.Cmd.POWER, b"\x01")
+
+
+def test_refresh_rewrites_without_forgetting_what_is_shown(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc.refresh()
+    clock.t += 1
+    svc.tick()
+    assert len(panel.uploads()) == 1
