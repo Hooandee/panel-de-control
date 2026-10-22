@@ -257,3 +257,23 @@ def test_a_scene_that_is_not_ready_waits_without_writing(tmp_path):
         svc.tick()
         clock.t += 1
     assert len(panel.commands(codec.Cmd.GIF_END)) == 1
+
+
+def test_previews_do_not_move_the_live_scenes_steps(tmp_path):
+    from accessories.jsaux_pixel.scenes import performance
+    panel, clock = FakePanel(), Clock()
+    heart = performance.HeartScene()
+    readings = {"fps": 60}
+    svc = service.PixelService(
+        store_path=tmp_path / "s.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None, scenes={"game_heart": heart},
+        context=lambda now: SceneContext(now=now, metrics=dict(readings)), handshake=lambda link: True,
+        sleep=lambda s: None,
+    )
+    svc.set_scene("game_heart", {})
+    for _ in range(3):
+        svc.tick()
+        clock.t += 1
+    readings["fps"] = 140
+    svc.preview("game_heart", {})
+    assert heart._fps.shown == 60

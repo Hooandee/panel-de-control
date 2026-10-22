@@ -2,6 +2,9 @@
 
 import glob
 import os
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -21,15 +24,33 @@ def _number(path: str) -> float | None:
         return None
 
 
+_MIN_SAMPLE_GAP_S = 0.8
+
+
 class SystemMetrics:
-    def __init__(self, root: Path | str = "/"):
+    """Thread-safe: callers less than a second apart share one reading, so a preview on another
+    thread cannot shorten the CPU-load window the worker relies on."""
+
+    def __init__(self, root: Path | str = "/", clock: Callable[[], float] = time.monotonic):
         self._root = str(root)
+        self._clock = clock
         self._last_cpu: tuple[int, int] | None = None
+        self._lock = threading.Lock()
+        self._cached: tuple[float, dict] | None = None
 
     def _path(self, rel: str) -> str:
         return os.path.join(self._root, rel)
 
     def sample(self) -> dict:
+        with self._lock:
+            now = self._clock()
+            if self._cached and now - self._cached[0] < _MIN_SAMPLE_GAP_S:
+                return dict(self._cached[1])
+            reading = self._read()
+            self._cached = (now, reading)
+            return dict(reading)
+
+    def _read(self) -> dict:
         return {
             "cpu_pct": self._cpu_pct(),
             "ram_pct": self._ram_pct(),

@@ -30,9 +30,11 @@ def test_reads_gpu_ram_watts_and_temperatures(tmp_path):
 
 
 def test_cpu_load_comes_from_the_delta_between_samples(tmp_path):
-    reader = metrics.SystemMetrics(_fake_sys(tmp_path))
+    clock = [0.0]
+    reader = metrics.SystemMetrics(_fake_sys(tmp_path), clock=lambda: clock[0])
     assert reader.sample()["cpu_pct"] is None
     _write(tmp_path, "proc/stat", "cpu  250 0 0 850 0 0 0 0 0 0\n")
+    clock[0] += 1
     assert reader.sample()["cpu_pct"] == 50
 
 
@@ -50,3 +52,14 @@ def test_steps_hold_until_the_change_is_clear():
     assert step(46) == 50
     assert step(42) == 40
     assert step(None) is None
+
+
+def test_back_to_back_samples_share_one_reading(tmp_path):
+    clock = [100.0]
+    reader = metrics.SystemMetrics(_fake_sys(tmp_path), clock=lambda: clock[0])
+    reader.sample()
+    _write(tmp_path, "proc/stat", "cpu  250 0 0 850 0 0 0 0 0 0\n")
+    clock[0] += 0.2
+    assert reader.sample()["cpu_pct"] is None
+    clock[0] += 1.0
+    assert reader.sample()["cpu_pct"] == 50

@@ -5,6 +5,7 @@ segment expired, and upload only what the governor and power guard allow. A work
 it; it never runs on the asyncio loop.
 """
 
+import copy
 import dataclasses
 import re
 from datetime import datetime
@@ -20,6 +21,7 @@ from json_store import atomic_json_save
 from . import codec, gif, power_guard
 from .detect import PanelPort
 from .governor import Decision, Governor
+from .metrics import Stepper
 from .render.canvas import quantize
 from .scenes.base import Scene, SceneContext, Segment
 from .transport import TransportError, handshake as panel_handshake
@@ -207,7 +209,7 @@ class PixelService:
             }
 
     def preview(self, scene_id: str, options: dict) -> Segment:
-        scene = self._scenes[scene_id]
+        scene = _detached(self._scenes[scene_id])
         options = dict(options or {})
         ctx = dataclasses.replace(self._context(self._clock()), options={**options, **self._option_extras(options)})
         with self._lock:
@@ -461,6 +463,15 @@ class PixelService:
             })
         except OSError as error:
             self._log("WARNING", "save_failed", error=str(error))
+
+
+def _detached(scene: Scene) -> Scene:
+    """A copy whose hysteresis state can move without touching the scene the worker uploads."""
+    twin = copy.copy(scene)
+    for name, value in vars(scene).items():
+        if isinstance(value, (Stepper, dict)):
+            setattr(twin, name, copy.deepcopy(value))
+    return twin
 
 
 class Worker:
