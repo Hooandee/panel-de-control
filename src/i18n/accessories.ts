@@ -2,6 +2,9 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.gameScene": "Al jugar, mostrar",
+  "accessories.gameScene.desc": "Cambia sola al lanzar un juego y vuelve al salir.",
+  "accessories.gameScene.none": "Nada",
   "accessories.theme.ledbar": "Barra LED",
   "accessories.night": "Modo noche",
   "accessories.night.range": "Pantalla apagada de {from} a {to}",
@@ -108,6 +111,9 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.gameScene": "While playing, show",
+  "accessories.gameScene.desc": "Switches by itself when a game starts and goes back when it ends.",
+  "accessories.gameScene.none": "Nothing",
   "accessories.theme.ledbar": "LED bar",
   "accessories.night": "Night mode",
   "accessories.night.range": "Display off from {from} to {to}",
@@ -214,6 +220,9 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.gameScene": "Durante il gioco, mostra",
+  "accessories.gameScene.desc": "Cambia da sola all'avvio di un gioco e torna all'uscita.",
+  "accessories.gameScene.none": "Niente",
   "accessories.theme.ledbar": "Barra LED",
   "accessories.night": "Modalità notte",
   "accessories.night.range": "Schermo spento dalle {from} alle {to}",
@@ -320,6 +329,9 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.gameScene": "Beim Spielen zeigen",
+  "accessories.gameScene.desc": "Wechselt beim Spielstart von selbst und kehrt danach zurück.",
+  "accessories.gameScene.none": "Nichts",
   "accessories.theme.ledbar": "LED-Leiste",
   "accessories.night": "Nachtmodus",
   "accessories.night.range": "Display aus von {from} bis {to}",
@@ -426,6 +438,9 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.gameScene": "Ao jogar, mostrar",
+  "accessories.gameScene.desc": "Muda sozinha ao abrir um jogo e volta ao sair.",
+  "accessories.gameScene.none": "Nada",
   "accessories.theme.ledbar": "Barra de LED",
   "accessories.night": "Modo noturno",
   "accessories.night.range": "Tela desligada das {from} às {to}",
@@ -532,6 +547,9 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.gameScene": "En jeu, afficher",
+  "accessories.gameScene.desc": "Change d'elle-même au lancement d'un jeu et revient à la sortie.",
+  "accessories.gameScene.none": "Rien",
   "accessories.theme.ledbar": "Barre LED",
   "accessories.night": "Mode nuit",
   "accessories.night.range": "Écran éteint de {from} à {to}",

@@ -304,3 +304,38 @@ def test_invalid_night_schedule_is_rejected(rig):
     _, _, _, make = rig
     with pytest.raises(ValueError):
         make().set_night({"enabled": True, "from": "25:00", "to": "07:00"})
+
+
+def test_game_scene_takes_over_while_playing_and_returns_after(rig, tmp_path):
+    panel, clock, _, make = rig
+    game = {"on": False}
+    from accessories.jsaux_pixel import service as svc_module
+    svc = svc_module.PixelService(
+        store_path=tmp_path / "auto.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None,
+        scenes={s.id: s for s in (Steady(), Firmware())},
+        context=lambda now: SceneContext(now=now, game={"appid": "1"} if game["on"] else None),
+    )
+    svc.set_scene("steady", {})
+    svc.set_game_scene("fw")
+    svc.tick()
+    assert panel.uploads() and not panel.commands(codec.Cmd.ANIMATION)
+    game["on"] = True
+    clock.t += 30
+    svc.tick()
+    assert panel.commands(codec.Cmd.ANIMATION)
+    assert svc.state()["scene"] == "steady" and svc.state()["showing"] == "fw"
+    game["on"] = False
+    clock.t += 30
+    svc.tick()
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 2
+    assert svc.state()["showing"] == "steady"
+
+
+def test_game_scene_can_be_cleared(rig):
+    _, _, _, make = rig
+    svc = make()
+    svc.set_game_scene(None)
+    assert svc.state()["game_scene"] is None
+    with pytest.raises(ValueError):
+        svc.set_game_scene("nope")

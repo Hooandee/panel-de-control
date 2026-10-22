@@ -78,6 +78,9 @@ class PixelService:
         self._brightness = brightness if isinstance(brightness, int) and 0 <= brightness <= 100 else _DEFAULT_BRIGHTNESS
         self._power = stored.get("power") is not False
         self._power_sent: bool | None = None
+        game_scene = stored.get("game_scene")
+        self._game_scene: str | None = game_scene if game_scene in scenes else None
+        self._showing: str | None = None
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
         governor = stored.get("governor")
@@ -101,6 +104,14 @@ class PixelService:
     def set_power(self, on: bool) -> None:
         with self._lock:
             self._power = bool(on)
+            self._save()
+
+    def set_game_scene(self, scene_id: str | None) -> None:
+        if scene_id is not None and scene_id not in self._scenes:
+            raise ValueError(f"unknown scene {scene_id!r}")
+        with self._lock:
+            self._game_scene = scene_id
+            self._rendered_key, self._valid_until, self._pending_user = None, None, True
             self._save()
 
     def set_night(self, night: dict) -> None:
@@ -129,6 +140,8 @@ class PixelService:
                 "busy_by": self._busy_by,
                 "scene": self._scene_id,
                 "options": dict(self._options),
+                "game_scene": self._game_scene,
+                "showing": self._showing,
                 "brightness": self._brightness,
                 "pwm": pwm,
                 "power": self._power,
@@ -228,10 +241,16 @@ class PixelService:
     def _sync_scene(self, now: float) -> None:
         if self._scene_id is None:
             return
-        scene = self._scenes[self._scene_id]
-        options = {**self._options, **self._option_extras(self._options)}
-        ctx = dataclasses.replace(self._context(now), options=options)
-        key = (self._scene_id, json.dumps(options, sort_keys=True), scene.key(ctx))
+        base = self._context(now)
+        playing = bool(base.game) and self._game_scene is not None
+        showing = self._game_scene if playing else self._scene_id
+        chosen = {} if playing else self._options
+        if showing != self._showing:
+            self._pending_user = True
+        scene = self._scenes[showing]
+        options = {**chosen, **self._option_extras(chosen)}
+        ctx = dataclasses.replace(base, options=options)
+        key = (showing, json.dumps(options, sort_keys=True), scene.key(ctx))
         expired = self._valid_until is not None and now >= self._valid_until
         if key == self._rendered_key and not expired:
             return
@@ -240,9 +259,10 @@ class PixelService:
         if segment.firmware_animation is not None:
             self._show_animation(segment.firmware_animation, kind)
         else:
-            if not self._upload(segment, kind):
+            if not self._upload(segment, kind, showing):
                 return
         self._rendered_key, self._valid_until, self._pending_user = key, segment.valid_until, False
+        self._showing = showing
 
     def _show_animation(self, animation: int, kind: str) -> None:
         content = f"firmware:{animation}"
@@ -253,7 +273,7 @@ class PixelService:
         self._governor.record(content, ok=ok, kind=kind)
         self._log("INFO", "animation", animation=animation, ok=ok)
 
-    def _upload(self, segment: Segment, kind: str) -> bool:
+    def _upload(self, segment: Segment, kind: str, scene_id: str) -> bool:
         palette, indexed = quantize(segment.frames)
         frames = [gif.Frame(px, delay) for px, delay in zip(indexed, segment.delays_cs)]
         palette = power_guard.limit_palette(palette, frames)
@@ -263,14 +283,14 @@ class PixelService:
         if decision is Decision.DUPLICATE:
             return True
         if decision is not Decision.ALLOW:
-            self._log("INFO", "skipped", reason=decision.value, scene=self._scene_id)
+            self._log("INFO", "skipped", reason=decision.value, scene=scene_id)
             return False
         started = time.monotonic()
         ok = self._send_gif(data)
         elapsed = round((time.monotonic() - started) * 1000)
         self._governor.record(content, ok=ok, kind=kind, metric=segment.metric)
         self._save()
-        self._last_upload = {"at": self._clock(), "scene": self._scene_id, "bytes": len(data),
+        self._last_upload = {"at": self._clock(), "scene": scene_id, "bytes": len(data),
                              "frames": len(frames), "ok": ok, "ms": elapsed}
         self._log("INFO" if ok else "WARNING", "upload", **self._last_upload, kind=kind)
         return ok
@@ -314,6 +334,7 @@ class PixelService:
                 "brightness": self._brightness,
                 "power": self._power,
                 "night": self._night,
+                "game_scene": self._game_scene,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:

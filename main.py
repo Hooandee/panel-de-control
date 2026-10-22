@@ -221,7 +221,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "accessories": (
         ("get_accessories_state", (
             "supported", "present", "busy_by", "bus_port", "strong_supply", "scene", "brightness",
-            "pwm", "power", "night",
+            "pwm", "power", "night", "game_scene",
         )),
     ),
     "themes": (
@@ -9544,6 +9544,9 @@ class Plugin:
 
     async def set_accessory_brightness(self, percent) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_brightness, int(percent))
+
+    async def set_accessory_game_scene(self, scene_id=None) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_game_scene, str(scene_id) if scene_id else None)
 
     async def set_accessory_night(self, night) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_night, dict(night or {}))

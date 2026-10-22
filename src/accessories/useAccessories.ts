@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AccessoriesState, getAccessoriesState, NightSchedule, previewAccessoryScene, setAccessoryBrightness,
-  setAccessoryNight, setAccessoryPower, setAccessoryScene,
+  setAccessoryGameScene, setAccessoryNight, setAccessoryPower, setAccessoryScene,
 } from "../api";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 
@@ -70,5 +70,6 @@ export function useAccessories() {
     setBrightness: (percent: number) => apply(() => setAccessoryBrightness(percent), { brightness: percent }),
     setPower: (on: boolean) => apply(() => setAccessoryPower(on), { power: on }),
     setNight: (night: NightSchedule) => apply(() => setAccessoryNight(night), { night }),
+    setGameScene: (sceneId: string | null) => apply(() => setAccessoryGameScene(sceneId), { game_scene: sceneId }),
   };
 }

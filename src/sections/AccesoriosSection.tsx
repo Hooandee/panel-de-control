@@ -91,15 +91,21 @@ const EmptyState: FC<{ busy: boolean; onTakeOver: () => void }> = ({ busy, onTak
 
 export const AccesoriosSection: FC = () => {
   const { t } = useI18n();
-  const { state, chooseScene, setBrightness, setPower, setNight, refresh } = useAccessories();
+  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, refresh } = useAccessories();
   if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const active = state.catalog.find((scene) => scene.id === state.scene);
+  const showingId = state.showing ?? state.scene;
+  const showing = state.catalog.find((scene) => scene.id === showingId);
+  const gameScenes = state.catalog.filter((scene) => scene.category === "game" || scene.id === "pet");
+  const gameOptions = [{ data: "", label: t("accessories.gameScene.none") },
+    ...gameScenes.map((scene) => ({ data: scene.id, label: t(scene.labelKey) }))];
   return (
     <>
       <PanelSectionRow>
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
-          <Hero status={status} sceneId={state.scene} options={state.options} labelKey={active?.labelKey} power={state.power} />
+          <Hero status={status} sceneId={showingId} options={showingId === state.scene ? state.options : {}}
+            labelKey={showing?.labelKey} power={state.power && !state.night_active} />
           {state.present && active && (
             <SceneOptions options={active.options} values={state.options}
               onChange={(values) => void chooseScene(active.id, values)} />
@@ -115,6 +121,10 @@ export const AccesoriosSection: FC = () => {
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.power")} checked={state.power} onChange={(on) => void setPower(on)} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <DropdownItem label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")} rgOptions={gameOptions}
+              selectedOption={state.game_scene ?? ""} onChange={(option) => void setGameScene(option.data ? String(option.data) : null)} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.night")} description={state.night.enabled ? t("accessories.night.range", { from: state.night.from, to: state.night.to }) : undefined}

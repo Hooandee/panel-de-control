@@ -99,6 +99,10 @@ class Runtime:
         self.service.set_brightness(percent)
         return self.state()
 
+    def set_game_scene(self, scene_id: str | None) -> dict:
+        self.service.set_game_scene(scene_id)
+        return self.state()
+
     def set_night(self, night: dict) -> dict:
         self.service.set_night(night)
         return self.state()
@@ -183,7 +187,8 @@ class Runtime:
         return {"cities": weather.search_cities(query, language) if query.strip() else []}
 
     def wants_fps(self) -> bool:
-        return self.service.state()["scene"] in _FPS_SCENES
+        state = self.service.state()
+        return bool({state["scene"], state["showing"], state["game_scene"]} & _FPS_SCENES)
 
     def notify(self, name: str, data: dict) -> bool:
         if name != "game_art" or not isinstance(data, dict):
