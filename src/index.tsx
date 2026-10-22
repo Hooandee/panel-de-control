@@ -35,6 +35,7 @@ import { ReportingBoundary } from "./components/ReportingBoundary";
 import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { startAccessoryArtWatcher } from "./accessories/gameArt";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
@@ -179,6 +180,7 @@ export default definePlugin(() => {
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
+  const stopAccessoryArtWatcher = startAccessoryArtWatcher();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
   const stopEcoAmbient = startEcoAmbient();
@@ -219,6 +221,7 @@ export default definePlugin(() => {
       stopSteamOverlayActivity();
       shutdownUiActivity();
       stopGameWatcher();
+      stopAccessoryArtWatcher();
       stopFrontendErrorReporting();
       setUiEventSink(null);
       stopEcoAmbient();

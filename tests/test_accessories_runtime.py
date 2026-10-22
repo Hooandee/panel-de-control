@@ -41,3 +41,32 @@ def test_unknown_scene_raises(tmp_path):
                          find_panel=lambda: None)
     with pytest.raises(ValueError):
         rt.set_scene("nope", {})
+
+
+def test_game_art_event_reaches_the_cover_scene_and_is_validated(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, context_source=lambda: {"game": {"appid": "10", "name": "X"}})
+    good = base64.b64encode(bytes([200, 10, 10]) * (64 * 54)).decode()
+    assert rt.notify("game_art", {"appid": "10", "rgb": good}) is True
+    assert rt.notify("game_art", {"appid": "10", "rgb": "short"}) is False
+    assert rt.notify("unknown", {}) is False
+    preview = rt.preview("game_cover", {})
+    first = base64.b64decode(preview["frames"][0])
+    assert preview["palette"][first[0]] == [200, 10, 10]
+
+
+def test_context_merges_system_readings_with_panel_values(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, context_source=lambda: {"metrics": {"fps": 99.0}},
+                         system_metrics=lambda: {"gpu_w": 80.0, "fps": None})
+    ctx = rt._context(0.0)
+    assert ctx.metrics == {"gpu_w": 80.0, "fps": 99.0}
+
+
+def test_only_live_scenes_ask_for_frame_rate(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None)
+    rt.set_scene("clock_digital", {})
+    assert rt.wants_fps() is False
+    rt.set_scene("game_heart", {})
+    assert rt.wants_fps() is True

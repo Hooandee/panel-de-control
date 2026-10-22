@@ -37,3 +37,14 @@ export function frameAt(delaysMs: number[], elapsedMs: number): number {
   }
   return delaysMs.length - 1;
 }
+
+/** Source rectangle that fills the panel's 64:54 frame from an image of any shape. */
+export function coverCrop(width: number, height: number): { sx: number; sy: number; sw: number; sh: number } {
+  const target = PANEL_W / PANEL_H;
+  if (width / height > target) {
+    const sw = height * target;
+    return { sx: (width - sw) / 2, sy: 0, sw, sh: height };
+  }
+  const sh = width / target;
+  return { sx: 0, sy: (height - sh) / 2, sw: width, sh };
+}

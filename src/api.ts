@@ -1251,3 +1251,4 @@ export const setAccessoryScene = callable<[sceneId: string, options: Record<stri
 export const setAccessoryBrightness = callable<[percent: number], AccessoriesState>("set_accessory_brightness");
 export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
 export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");
+export const accessoryEvent = callable<[name: string, data: Record<string, unknown>], boolean>("accessory_event");

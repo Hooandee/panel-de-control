@@ -106,7 +106,9 @@ class PixelService:
     def preview(self, scene_id: str, options: dict) -> Segment:
         scene = self._scenes[scene_id]
         ctx = dataclasses.replace(self._context(self._clock()), options=dict(options or {}))
-        return scene.render(ctx)
+        with self._lock:
+            scene.key(ctx)
+            return scene.render(ctx)
 
     # Worker ---------------------------------------------------------------------------------
 

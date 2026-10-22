@@ -2,6 +2,11 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.game_cover": "Carátula",
+  "accessories.scene.game_session": "Partida",
+  "accessories.scene.game_power": "Potencia",
+  "accessories.scene.game_heart": "Latido",
+  "accessories.scene.game_dashboard": "Rendimiento",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hiperespacio",
   "accessories.scene.art_matrix": "Lluvia digital",
@@ -41,6 +46,11 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.game_cover": "Cover art",
+  "accessories.scene.game_session": "Session",
+  "accessories.scene.game_power": "Power",
+  "accessories.scene.game_heart": "Heartbeat",
+  "accessories.scene.game_dashboard": "Performance",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperspace",
   "accessories.scene.art_matrix": "Digital rain",
@@ -80,6 +90,11 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.game_cover": "Copertina",
+  "accessories.scene.game_session": "Partita",
+  "accessories.scene.game_power": "Potenza",
+  "accessories.scene.game_heart": "Battito",
+  "accessories.scene.game_dashboard": "Prestazioni",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Iperspazio",
   "accessories.scene.art_matrix": "Pioggia digitale",
@@ -119,6 +134,11 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.game_cover": "Cover",
+  "accessories.scene.game_session": "Sitzung",
+  "accessories.scene.game_power": "Leistung",
+  "accessories.scene.game_heart": "Herzschlag",
+  "accessories.scene.game_dashboard": "Leistungsdaten",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperraum",
   "accessories.scene.art_matrix": "Digitaler Regen",
@@ -158,6 +178,11 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.game_cover": "Capa",
+  "accessories.scene.game_session": "Partida",
+  "accessories.scene.game_power": "Potência",
+  "accessories.scene.game_heart": "Batimento",
+  "accessories.scene.game_dashboard": "Desempenho",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hiperespaço",
   "accessories.scene.art_matrix": "Chuva digital",
@@ -197,6 +222,11 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.game_cover": "Jaquette",
+  "accessories.scene.game_session": "Partie",
+  "accessories.scene.game_power": "Puissance",
+  "accessories.scene.game_heart": "Battement",
+  "accessories.scene.game_dashboard": "Performances",
   "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperespace",
   "accessories.scene.art_matrix": "Pluie numérique",

@@ -4675,8 +4675,11 @@ class Plugin:
         return int(current) if current and str(current).isdigit() else None
 
     def _kiosk_wants_fps(self) -> bool:
-        polled = getattr(self, "_kiosk_fps_at", None)
-        return polled is not None and time.monotonic() - polled < _KIOSK_FPS_HOLD_S
+        now = time.monotonic()
+        return any(
+            polled is not None and now - polled < _KIOSK_FPS_HOLD_S
+            for polled in (getattr(self, "_kiosk_fps_at", None), getattr(self, "_pixel_fps_at", None))
+        )
 
     async def _apply_stats_reader(self):
         kiosk = self._kiosk_wants_fps()
@@ -9471,8 +9474,38 @@ class Plugin:
 
     def _pixel_context(self) -> dict:
         appid = getattr(self, "_current_appid", None)
-        game = {"appid": appid, "name": getattr(self, "_current_game_name", None)} if appid else None
-        return {"game": game}
+        game = None
+        if appid:
+            since = getattr(self, "_current_appid_at", None)
+            started = time.time() - (time.monotonic() - since) if since is not None else None
+            game = {"appid": appid, "name": getattr(self, "_current_game_name", None), "started_at": started}
+        readings: dict = {}
+        perf = getattr(self, "_gamescope_perf", None)
+        fps = perf.fps() if perf is not None and self._pixel_runtime().wants_fps() else None
+        if fps is not None:
+            readings["fps"] = fps
+        reader = getattr(self, "_fan_reader", None)
+        if reader is not None:
+            try:
+                rpms = reader.fan_rpms()
+            except Exception:  # noqa: BLE001
+                rpms = None
+            if rpms:
+                readings["fan_rpm"] = max(rpms)
+        return {"game": game, "metrics": readings}
+
+    async def accessory_event(self, name, data=None) -> bool:
+        return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data or {}))
+
+    def _start_pixel_fps_keeper(self) -> None:
+        async def keep() -> None:
+            while not getattr(self, "_shutting_down", False):
+                if self._pixel_runtime().wants_fps():
+                    self._pixel_fps_at = time.monotonic()
+                    await self._apply_stats_reader()
+                await asyncio.sleep(3)
+
+        self._pixel_fps_task = asyncio.create_task(keep())
 
     async def _pixel_call(self, fn, *args) -> dict:
         try:
@@ -9496,6 +9529,9 @@ class Plugin:
         return await self._pixel_call(self._pixel_runtime().preview, str(scene_id), dict(options or {}))
 
     async def _stop_pixel(self) -> None:
+        task = getattr(self, "_pixel_fps_task", None)
+        if task is not None:
+            task.cancel()
         runtime = getattr(self, "_pixel", None)
         if runtime is not None:
             await asyncio.to_thread(runtime.stop)
@@ -13283,6 +13319,8 @@ class Plugin:
             self._start_audio_loop()
             self._start_support_watch()
             self._pixel_runtime().start()
+            if self._pixel_runtime().supported:
+                self._start_pixel_fps_keeper()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
                 await self._remote_access.set_enabled(True)
