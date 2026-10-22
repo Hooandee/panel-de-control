@@ -302,7 +302,7 @@ public sealed class ThemesView : UserControl
                     CharacterSpacing = 60,
                 };
             case "checkbox":
-                var toggle = new ToggleSwitch { OnContent = string.Empty, OffContent = string.Empty, MinWidth = 0, Tag = option.Name };
+                var toggle = new ToggleSwitch { OnContent = string.Empty, OffContent = string.Empty, MinWidth = 0, Width = 44, HorizontalAlignment = HorizontalAlignment.Right, Tag = option.Name };
                 AutomationProperties.SetName(toggle, label);
                 toggle.Toggled += (_, _) =>
                 {

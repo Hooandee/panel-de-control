@@ -128,7 +128,7 @@
 
         <Grid x:Name="BlockLibrary" Visibility="Collapsed">
             <StackPanel x:Name="TdpBlock" Tag="power.tdp">
-                <Grid Height="256">
+                <Grid Height="236">
                     <Grid
                         x:Name="HeroGlowHost"
                         Width="380"

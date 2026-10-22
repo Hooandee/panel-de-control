@@ -116,6 +116,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             toggle.OnContent = string.Empty;
             toggle.OffContent = string.Empty;
+            toggle.MinWidth = 0;
+            toggle.Width = 44;
+            toggle.HorizontalAlignment = HorizontalAlignment.Right;
         }
 
         refreshTimer.Tick += OnRefreshTimerTick;
