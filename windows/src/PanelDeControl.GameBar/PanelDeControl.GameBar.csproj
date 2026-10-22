@@ -102,6 +102,18 @@
     <Content Include="Assets\SplashScreen.png" />
     <Content Include="Assets\WidgetIcon.png" />
     <Content Include="Properties\Default.rd.xml" />
+    <Content Include="..\..\..\src\assets\duo-cover.jpg">
+      <Link>Assets\ThemeCovers\duo-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\eclipse-cover.jpg">
+      <Link>Assets\ThemeCovers\eclipse-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\hooandee-cover.jpg">
+      <Link>Assets\ThemeCovers\hooandee-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\luminous-atlas-cover.jpg">
+      <Link>Assets\ThemeCovers\luminous-atlas-cover.jpg</Link>
+    </Content>
     <Content Include="Assets\WidgetIcon.png">
       <Link>GameBar\PanelDeControl\WidgetIcon.png</Link>
     </Content>

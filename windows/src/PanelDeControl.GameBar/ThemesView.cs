@@ -12,6 +12,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace PanelDeControl.GameBar;
 
@@ -176,6 +177,42 @@ public sealed class ThemesView : UserControl
         connectionAction.IsEnabled = !operationPending;
     }
 
+    // Same covers as the Decky theme cards (src/assets), linked into the package by the project file.
+    private static readonly Dictionary<string, string> CoverFiles = new(StringComparer.Ordinal)
+    {
+        ["Hooandee Duo"] = "duo-cover.jpg",
+        ["Hooandee Eclipse"] = "eclipse-cover.jpg",
+        ["Hooandee Gallery"] = "hooandee-cover.jpg",
+        ["Hooandee Luminous Atlas"] = "luminous-atlas-cover.jpg",
+    };
+
+    private static FrameworkElement? BuildCover(string themeName)
+    {
+        if (!CoverFiles.TryGetValue(themeName, out var file))
+        {
+            return null;
+        }
+
+        var image = new Image
+        {
+            Stretch = Stretch.UniformToFill,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Source = new BitmapImage(new Uri("ms-appx:///Assets/ThemeCovers/" + file)) { DecodePixelWidth = 960 },
+        };
+        var cover = new Border
+        {
+            Height = 112,
+            Margin = new Thickness(0, 0, 0, 14),
+            CornerRadius = Resource<CornerRadius>("PdcRadiusInset"),
+            Background = Resource<Brush>("PdcLayerBrush"),
+            Child = image,
+        };
+        image.ImageFailed += (_, _) => cover.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetAccessibilityView(cover, Windows.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        return cover;
+    }
+
     private ThemeCard BuildCard(ThemeEntry theme)
     {
         var card = new ThemeCard(theme.Name);
@@ -256,10 +293,16 @@ public sealed class ThemesView : UserControl
         }
 
         card.Root.Style = Resource<Style>("PdcCardStyle");
-        card.Root.Child = new StackPanel
+        var content = new StackPanel
         {
             Children = { header, card.Description, card.State, card.Action, card.EarlyAction, card.OptionsButton, card.Options },
         };
+        if (BuildCover(theme.Name) is { } cover)
+        {
+            content.Children.Insert(0, cover);
+        }
+
+        card.Root.Child = content;
         return card;
     }
 
