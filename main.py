@@ -239,6 +239,7 @@ _MEASURED_SOURCE_RECHECK_S = 60.0
 _MEASURED_EXTERNAL_HOLD_S = 60.0
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
+_LOW_BATTERY_HOLD_RETRY_S = (2.0, 8.0, 30.0, 120.0)
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
@@ -3309,6 +3310,27 @@ class Plugin:
             "Interrupted TDP transaction recovery deferred: %s",
             reason,
         )
+        return False
+
+    def _retry_low_battery_hold_recovery(self, now: float) -> bool:
+        """Off-loop guard path: a hold left behind by a previous run is restored on its own,
+        with backoff, whenever Panel owns the TDP."""
+        if now < getattr(self, "_low_battery_hold_retry_at", 0.0):
+            return False
+        if not self._tdp_control_on() or not self._tdp_write_authorized():
+            return False
+        if self._recover_low_battery_hold_transaction():
+            self._low_battery_hold_recovery_pending = False
+            self._low_battery_hold_last_failure = None
+            self._low_battery_hold_retries = 0
+            self._low_battery_hold_retry_at = 0.0
+            return True
+        retries = getattr(self, "_low_battery_hold_retries", 0)
+        self._low_battery_hold_retries = retries + 1
+        self._low_battery_hold_retry_at = now + _LOW_BATTERY_HOLD_RETRY_S[
+            min(retries, len(_LOW_BATTERY_HOLD_RETRY_S) - 1)
+        ]
+        self._low_battery_hold_last_failure = "restore_failed"
         return False
 
     def _recover_low_battery_hold_transaction(self) -> bool:
@@ -7272,7 +7294,10 @@ class Plugin:
         )
         if self._tdp_shutdown:
             return
-        if self._low_battery_hold_recovery_pending:
+        if (
+            self._low_battery_hold_recovery_pending
+            and not self._retry_low_battery_hold_recovery(now)
+        ):
             self._tdp_status = "rejected"
             self._tdp_reason = "low_battery_hold_recovery_pending"
             self._tdp_reconcile_memory = ReconcileMemory()
@@ -12260,6 +12285,7 @@ class Plugin:
                 "active": hold_active,
                 "verified": hold_active and hold_verified,
                 "recovery_pending": self._low_battery_hold_recovery_pending,
+                "recovery_retries": getattr(self, "_low_battery_hold_retries", 0),
                 "reason": self._low_battery_hold_last_failure or hold.reason,
                 "battery_percent": hold.battery_percent,
                 "sidecar": sidecar_detail,

@@ -1886,6 +1886,7 @@ def test_backend_diagnostics_explain_selection_without_personal_identifiers(plug
         "active": False,
         "verified": False,
         "recovery_pending": False,
+        "recovery_retries": 0,
         "reason": "disabled",
         "battery_percent": None,
         "sidecar": None,
@@ -2832,3 +2833,56 @@ def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
     plugin._tdp_guard_tick(now=13.0)
     assert plugin._tdp_backend.set_levels_calls == 1
     assert plugin._tdp_history[-1]["action"] == "powerd-restart-reassert"
+
+
+def _pending_sidecar(plugin, results):
+    attempts = []
+
+    def recover():
+        attempts.append(True)
+        ok = results.pop(0) if results else False
+        if ok:
+            sidecar.safety_locked = False
+        return {"ok": ok, "detail": "restored" if ok else "restore failed"}
+
+    sidecar = types.SimpleNamespace(safety_locked=True, recover_runtime_transaction=recover)
+    plugin._low_battery_hold_backend = sidecar
+    plugin._low_battery_hold_recovery_pending = True
+    return attempts
+
+
+def test_guard_retries_a_pending_low_battery_hold_recovery_with_backoff(plugin):
+    attempts = _pending_sidecar(plugin, [False, False, True])
+
+    for now in (100.0, 101.0, 102.0, 109.0, 110.0):
+        plugin._tdp_guard_tick(now=now)
+
+    assert len(attempts) == 3
+    assert plugin._low_battery_hold_recovery_pending is False
+    assert plugin._low_battery_hold_last_failure is None
+
+
+def test_guard_keeps_retrying_a_stuck_hold_recovery_at_a_steady_pace(plugin):
+    attempts = _pending_sidecar(plugin, [])
+
+    now = 100.0
+    while now < 100.0 + 2 + 8 + 30 + 120 * 3:
+        plugin._tdp_guard_tick(now=now)
+        now += 1.0
+
+    assert len(attempts) == 6
+    assert plugin._low_battery_hold_recovery_pending is True
+    assert plugin._tdp_reason == "low_battery_hold_recovery_pending"
+
+
+def test_guard_never_retries_hold_recovery_when_panel_does_not_own_tdp(plugin):
+    attempts = _pending_sidecar(plugin, [True])
+    plugin._settings["tdp_control_enabled"] = False
+    plugin._tdp_guard_tick(now=100.0)
+    plugin._settings["tdp_control_enabled"] = True
+    plugin._os_id = "anatase"
+    plugin._tdp_external_owner = True
+    plugin._tdp_guard_tick(now=200.0)
+
+    assert attempts == []
+    assert plugin._low_battery_hold_recovery_pending is True
