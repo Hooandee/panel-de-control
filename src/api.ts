@@ -1246,6 +1246,7 @@ export interface AccessoriesState {
   night_active: boolean;
   game_scene: string | null;
   showing: string | null;
+  alerts: { achievements: boolean };
   catalog: AccessorySceneMeta[];
 }
 export interface PixelFrames {
@@ -1284,3 +1285,4 @@ export const loadAccessoryDrawing = callable<[id: string], { ok: boolean; id?: s
 export const pauseJsauxApp = callable<[], { ok: boolean }>("pause_jsaux_app");
 export const setAccessoryNight = callable<[night: NightSchedule], AccessoriesState>("set_accessory_night");
 export const setAccessoryGameScene = callable<[sceneId: string | null], AccessoriesState>("set_accessory_game_scene");
+export const setAccessoryAlerts = callable<[prefs: { achievements: boolean }], AccessoriesState>("set_accessory_alerts");

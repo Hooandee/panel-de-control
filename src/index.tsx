@@ -36,6 +36,7 @@ import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startAccessoryArtWatcher } from "./accessories/gameArt";
+import { startAccessorySteamEvents } from "./accessories/steamEvents";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
@@ -181,6 +182,7 @@ export default definePlugin(() => {
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
   const stopAccessoryArtWatcher = startAccessoryArtWatcher();
+  const stopAccessorySteamEvents = startAccessorySteamEvents();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
   const stopEcoAmbient = startEcoAmbient();
@@ -222,6 +224,7 @@ export default definePlugin(() => {
       shutdownUiActivity();
       stopGameWatcher();
       stopAccessoryArtWatcher();
+      stopAccessorySteamEvents();
       stopFrontendErrorReporting();
       setUiEventSink(null);
       stopEcoAmbient();

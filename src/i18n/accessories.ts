@@ -2,6 +2,9 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.alerts.achievements": "Avisos de logros",
+  "accessories.alerts.achievements.desc": "Al desbloquear un logro aparece en la pantalla unos segundos.",
+  "accessories.scene.game_download": "Descargas",
   "accessories.gameScene": "Al jugar, mostrar",
   "accessories.gameScene.desc": "Cambia sola al lanzar un juego y vuelve al salir.",
   "accessories.gameScene.none": "Nada",
@@ -111,6 +114,9 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.alerts.achievements": "Achievement alerts",
+  "accessories.alerts.achievements.desc": "When you unlock an achievement it shows on the display for a few seconds.",
+  "accessories.scene.game_download": "Downloads",
   "accessories.gameScene": "While playing, show",
   "accessories.gameScene.desc": "Switches by itself when a game starts and goes back when it ends.",
   "accessories.gameScene.none": "Nothing",
@@ -220,6 +226,9 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.alerts.achievements": "Avvisi obiettivi",
+  "accessories.alerts.achievements.desc": "Quando sblocchi un obiettivo compare sullo schermo per qualche secondo.",
+  "accessories.scene.game_download": "Download",
   "accessories.gameScene": "Durante il gioco, mostra",
   "accessories.gameScene.desc": "Cambia da sola all'avvio di un gioco e torna all'uscita.",
   "accessories.gameScene.none": "Niente",
@@ -329,6 +338,9 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.alerts.achievements": "Erfolgshinweise",
+  "accessories.alerts.achievements.desc": "Freigeschaltete Erfolge erscheinen ein paar Sekunden auf dem Display.",
+  "accessories.scene.game_download": "Downloads",
   "accessories.gameScene": "Beim Spielen zeigen",
   "accessories.gameScene.desc": "Wechselt beim Spielstart von selbst und kehrt danach zurück.",
   "accessories.gameScene.none": "Nichts",
@@ -438,6 +450,9 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.alerts.achievements": "Avisos de conquistas",
+  "accessories.alerts.achievements.desc": "Ao desbloquear uma conquista ela aparece na tela por alguns segundos.",
+  "accessories.scene.game_download": "Downloads",
   "accessories.gameScene": "Ao jogar, mostrar",
   "accessories.gameScene.desc": "Muda sozinha ao abrir um jogo e volta ao sair.",
   "accessories.gameScene.none": "Nada",
@@ -547,6 +562,9 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.alerts.achievements": "Alertes de succès",
+  "accessories.alerts.achievements.desc": "Quand vous débloquez un succès, il s'affiche quelques secondes sur l'écran.",
+  "accessories.scene.game_download": "Téléchargements",
   "accessories.gameScene": "En jeu, afficher",
   "accessories.gameScene.desc": "Change d'elle-même au lancement d'un jeu et revient à la sortie.",
   "accessories.gameScene.none": "Rien",

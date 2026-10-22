@@ -80,6 +80,8 @@ vi.mock("./components/QamPanelGate", () => ({
 vi.mock("./qam/pluginRuntime", () => ({ startPluginQamRuntime: qamRuntime.start }));
 
 vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: persistentServices.startGameWatcher }));
+vi.mock("./accessories/gameArt", () => ({ startAccessoryArtWatcher: () => () => undefined }));
+vi.mock("./accessories/steamEvents", () => ({ startAccessorySteamEvents: () => () => undefined }));
 vi.mock("./system/ecoAmbient", () => ({ startEcoAmbient: () => () => {} }));
 vi.mock("./system/valueToast", () => ({
   refreshValueToast: vi.fn(),

@@ -91,7 +91,7 @@ const EmptyState: FC<{ busy: boolean; onTakeOver: () => void }> = ({ busy, onTak
 
 export const AccesoriosSection: FC = () => {
   const { t } = useI18n();
-  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, refresh } = useAccessories();
+  const { state, chooseScene, setBrightness, setPower, setNight, setGameScene, setAlerts, refresh } = useAccessories();
   if (!state) return <PanelSectionRow><Loading /></PanelSectionRow>;
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const active = state.catalog.find((scene) => scene.id === state.scene);
@@ -140,6 +140,10 @@ export const AccesoriosSection: FC = () => {
           <PanelSectionRow>
             <DropdownItem label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")} rgOptions={gameOptions}
               selectedOption={state.game_scene ?? ""} onChange={(option) => void setGameScene(option.data ? String(option.data) : null)} />
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField label={t("accessories.alerts.achievements")} description={t("accessories.alerts.achievements.desc")}
+              checked={state.alerts.achievements} onChange={(on) => void setAlerts(on)} />
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField label={t("accessories.night")} description={state.night.enabled ? t("accessories.night.range", { from: state.night.from, to: state.night.to }) : undefined}

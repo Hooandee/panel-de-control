@@ -87,7 +87,7 @@ class Runtime:
         state["catalog"] = [
             {"id": scene.id, "category": category, "labelKey": f"accessories.scene.{scene.id}",
              "options": list(scene.OPTIONS)}
-            for category, scene in self._entries
+            for category, scene in self._entries if category != "hidden"
         ]
         return state
 
@@ -190,7 +190,26 @@ class Runtime:
         state = self.service.state()
         return bool({state["scene"], state["showing"], state["game_scene"]} & _FPS_SCENES)
 
-    def notify(self, name: str, data: dict) -> bool:
+    def set_alerts(self, prefs: dict) -> dict:
+        self.service.set_alerts(prefs)
+        return self.state()
+
+    def notify(self, name: str, data: dict | None) -> bool:
+        if name == "download":
+            event = None
+            if isinstance(data, dict) and isinstance(data.get("total"), (int, float)) and data["total"] > 0:
+                event = {"name": str(data.get("name") or "")[:40], "done": float(data.get("done") or 0),
+                         "total": float(data["total"]), "seconds": float(data.get("seconds") or 0),
+                         "paused": bool(data.get("paused"))}
+            self._events = {**self._events, "download": event}
+            return True
+        if name == "achievement" and isinstance(data, dict):
+            if not self.service.alert_enabled("achievements"):
+                return False
+            icon = data.get("icon") if isinstance(data.get("icon"), str) else None
+            self.service.show_alert("alert", {"kind": name, "title": str(data.get("title") or "")[:40], "icon": icon})
+            self._log("INFO", "alert", kind=name)
+            return True
         if name != "game_art" or not isinstance(data, dict):
             return False
         try:

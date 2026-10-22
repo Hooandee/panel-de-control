@@ -9518,7 +9518,7 @@ class Plugin:
         return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
 
     async def accessory_event(self, name, data=None) -> bool:
-        return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data or {}))
+        return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data) if isinstance(data, dict) else None)
 
     def _start_pixel_fps_keeper(self) -> None:
         async def keep() -> None:
@@ -9547,6 +9547,9 @@ class Plugin:
 
     async def set_accessory_game_scene(self, scene_id=None) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_game_scene, str(scene_id) if scene_id else None)
+
+    async def set_accessory_alerts(self, prefs) -> dict:
+        return await self._pixel_call(self._pixel_runtime().set_alerts, dict(prefs or {}))
 
     async def set_accessory_night(self, night) -> dict:
         return await self._pixel_call(self._pixel_runtime().set_night, dict(night or {}))

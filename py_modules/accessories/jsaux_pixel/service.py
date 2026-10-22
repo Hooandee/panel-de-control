@@ -81,6 +81,11 @@ class PixelService:
         game_scene = stored.get("game_scene")
         self._game_scene: str | None = game_scene if game_scene in scenes else None
         self._showing: str | None = None
+        self._alert: tuple[str, dict, float] | None = None
+        prefs = stored.get("alerts")
+        self._alerts = {"achievements": True}
+        if isinstance(prefs, dict):
+            self._alerts.update({k: bool(v) for k, v in prefs.items() if k in self._alerts})
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
         governor = stored.get("governor")
@@ -114,6 +119,22 @@ class PixelService:
             self._rendered_key, self._valid_until, self._pending_user = None, None, True
             self._save()
 
+    def set_alerts(self, prefs: dict) -> None:
+        with self._lock:
+            self._alerts.update({k: bool(v) for k, v in prefs.items() if k in self._alerts})
+            self._save()
+
+    def alert_enabled(self, kind: str) -> bool:
+        return self._alerts.get(kind, False)
+
+    def show_alert(self, scene_id: str, alert: dict, seconds: float = 20.0) -> None:
+        if scene_id not in self._scenes:
+            raise ValueError(f"unknown scene {scene_id!r}")
+        with self._lock:
+            if self._scene_id is None:
+                return
+            self._alert = (scene_id, dict(alert), self._clock() + seconds)
+
     def set_night(self, night: dict) -> None:
         if not _valid_night(night):
             raise ValueError("invalid night schedule")
@@ -142,6 +163,7 @@ class PixelService:
                 "options": dict(self._options),
                 "game_scene": self._game_scene,
                 "showing": self._showing,
+                "alerts": dict(self._alerts),
                 "brightness": self._brightness,
                 "pwm": pwm,
                 "power": self._power,
@@ -242,9 +264,14 @@ class PixelService:
         if self._scene_id is None:
             return
         base = self._context(now)
+        if self._alert is not None and now >= self._alert[2]:
+            self._alert = None
         playing = bool(base.game) and self._game_scene is not None
-        showing = self._game_scene if playing else self._scene_id
-        chosen = {} if playing else self._options
+        if self._alert is not None:
+            showing, chosen = self._alert[0], {"alert": self._alert[1]}
+        else:
+            showing = self._game_scene if playing else self._scene_id
+            chosen = {} if playing else self._options
         if showing != self._showing:
             self._pending_user = True
         scene = self._scenes[showing]
@@ -335,6 +362,7 @@ class PixelService:
                 "power": self._power,
                 "night": self._night,
                 "game_scene": self._game_scene,
+                "alerts": self._alerts,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:

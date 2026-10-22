@@ -339,3 +339,31 @@ def test_game_scene_can_be_cleared(rig):
     assert svc.state()["game_scene"] is None
     with pytest.raises(ValueError):
         svc.set_game_scene("nope")
+
+
+def test_alert_interrupts_then_returns(rig, tmp_path):
+    panel, clock, _, make = rig
+    from accessories.jsaux_pixel import service as svc_module
+    svc = svc_module.PixelService(
+        store_path=tmp_path / "alert.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None,
+        scenes={s.id: s for s in (Steady(), Firmware())},
+        context=lambda now: SceneContext(now=now),
+    )
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc.show_alert("fw", {"kind": "x"}, seconds=20)
+    svc.tick()
+    assert svc.state()["showing"] == "fw"
+    clock.t += 21
+    svc.tick()
+    assert svc.state()["showing"] == "steady"
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 2
+
+
+def test_alerts_are_ignored_when_no_scene_is_chosen(rig):
+    panel, _, _, make = rig
+    svc = make()
+    svc.show_alert("fw", {}, seconds=20)
+    svc.tick()
+    assert panel.commands(codec.Cmd.ANIMATION) == []

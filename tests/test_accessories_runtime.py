@@ -164,3 +164,23 @@ def test_ledbar_colours_reach_the_scene_palette(tmp_path):
     rt = runtime.Runtime(settings_dir=settings, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
     palette = rt.preview("clock_digital", {"theme": "ledbar"})["palette"]
     assert [10, 200, 30] in palette
+
+
+def test_achievement_event_raises_an_alert_unless_turned_off(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    rt.set_scene("clock_digital", {})
+    assert rt.notify("achievement", {"title": "Primera sangre", "icon": None}) is True
+    assert rt.service._alert[0] == "alert"
+    rt.service._alert = None
+    rt.set_alerts({"achievements": False})
+    assert rt.notify("achievement", {"title": "X"}) is False
+    assert rt.state()["alerts"] == {"achievements": False}
+    assert rt.notify("friend", {"title": "Kuronca"}) is False
+    assert "alert" not in [scene["id"] for scene in rt.state()["catalog"]]
+
+
+def test_download_event_feeds_the_download_scene(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    assert rt.notify("download", {"name": "Hades", "done": 50, "total": 100, "seconds": 120, "paused": False}) is True
+    assert rt.preview("game_download", {})["frames"]
+    assert rt.notify("download", None) is True

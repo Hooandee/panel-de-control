@@ -1,6 +1,6 @@
 """Every scene Panel offers for the panel, with its gallery category."""
 
-from . import art, clocks, firmware, game, performance, pet, signature
+from . import alerts, art, clocks, firmware, game, performance, pet, signature
 from ..library import Library
 from .composed import ComposedScene
 from .custom import CustomScene
@@ -17,8 +17,10 @@ def build(library: Library) -> list[tuple[str, Scene]]:
         ("living", weather.WeatherScene(weather.WeatherSource())),
         *(("clocks", scene) for scene in clocks.SCENES),
         *(("game", scene) for scene in game.SCENES + performance.SCENES),
+        ("game", alerts.DownloadScene()),
         *(("art", scene) for scene in art.SCENES),
         *(("firmware", scene) for scene in firmware.SCENES),
         ("custom", CustomScene(library)),
         ("custom", ComposedScene(library)),
+        ("hidden", alerts.AlertScene()),
     ]
