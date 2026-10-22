@@ -109,7 +109,9 @@ export const AccesoriosSection: FC = () => {
           <span style={{ fontSize: theme.font.caption, fontWeight: 700, color: theme.color.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>
             {t("accessories.gallery")}
           </span>
-          <SceneGallery catalog={state.catalog} activeScene={state.scene ?? ""} onChoose={(id) => void chooseScene(id)} />
+          <SceneGallery catalog={state.catalog} activeScene={state.scene ?? ""}
+            activeDrawing={typeof state.options.drawing === "string" ? state.options.drawing : null}
+            onChoose={(id, options) => void chooseScene(id, options ?? {})} />
         </div>
       </PanelSectionRow>
     </>

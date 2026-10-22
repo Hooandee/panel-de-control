@@ -1260,3 +1260,15 @@ export interface WeatherCity {
   lon: number;
 }
 export const searchAccessoryCities = callable<[query: string, language: string], { cities: WeatherCity[] }>("search_accessory_cities");
+export interface DrawingSummary {
+  id: string;
+  name: string;
+  frames: number;
+  fps: number;
+  thumb: string;
+}
+export const listAccessoryDrawings = callable<[], { drawings: DrawingSummary[] }>("list_accessory_drawings");
+export const saveAccessoryDrawing = callable<[drawing: { id?: string; name: string; frames: string[]; fps: number }], { ok: boolean; id?: string; error?: string }>("save_accessory_drawing");
+export const deleteAccessoryDrawing = callable<[id: string], { ok: boolean }>("delete_accessory_drawing");
+export const readAccessoryImage = callable<[path: string], { ok: boolean; mime?: string; data?: string; error?: string }>("read_accessory_image");
+export const loadAccessoryDrawing = callable<[id: string], { ok: boolean; id?: string; name?: string; frames?: string[]; fps?: number }>("load_accessory_drawing");

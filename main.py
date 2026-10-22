@@ -9466,6 +9466,7 @@ class Plugin:
             runtime = PixelRuntime(
                 settings_dir=decky.DECKY_PLUGIN_SETTINGS_DIR,
                 device_key=getattr(getattr(self, "_device", None), "key", None),
+                user_home=_user_home(),
                 log=_accessories_journal,
                 context_source=self._pixel_context,
             )
@@ -9493,6 +9494,21 @@ class Plugin:
             if rpms:
                 readings["fan_rpm"] = max(rpms)
         return {"game": game, "metrics": readings}
+
+    async def list_accessory_drawings(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().list_drawings)
+
+    async def load_accessory_drawing(self, drawing_id) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().load_drawing, str(drawing_id))
+
+    async def save_accessory_drawing(self, drawing) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().save_drawing, dict(drawing or {}))
+
+    async def delete_accessory_drawing(self, drawing_id) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().delete_drawing, str(drawing_id))
+
+    async def read_accessory_image(self, path) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().read_image, str(path))
 
     async def search_accessory_cities(self, query, language="es") -> dict:
         return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
@@ -13793,9 +13809,9 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
-        "get_accessories_state", "preview_accessory_scene",
+        "get_accessories_state", "preview_accessory_scene", "list_accessory_drawings", "load_accessory_drawing",
     }),
     automatic=frozenset({"load_theme_extension"}),
-    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),
+    hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers", "save_accessory_drawing", "accessory_event"}),
     untraced_when={"kiosk_steam": lambda args: bool(args) and str(args[0]) in kiosk_bridge_reads},
 )

@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import detect, metrics, transport, weather
+from .library import Library
 from .render.canvas import quantize
 from .scenes import catalog
 from .scenes.base import SceneContext
@@ -15,15 +16,20 @@ SUPPORTED_DEVICES = frozenset({"steam_machine"})
 PREVIEW_MAX_FRAMES = 64
 _FPS_SCENES = frozenset({"game_heart", "game_dashboard"})
 _ART_BYTES = 64 * 54 * 3
+_IMAGE_TYPES = {".png": "image/png", ".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+_IMAGE_LIMIT = 8 * 1024 * 1024
 
 
 class Runtime:
     def __init__(self, *, settings_dir: Path, device_key: str | None, log: Callable[..., None],
                  find_panel: Callable[[], detect.PanelPort | None] = detect.find_panel,
                  context_source: Callable[[], dict] | None = None,
-                 system_metrics: Callable[[], dict] | None = None):
+                 system_metrics: Callable[[], dict] | None = None,
+                 user_home: Path | str = "/home/deck"):
         self.supported = device_key in SUPPORTED_DEVICES
-        self._entries = catalog.build()
+        self._library = Library(Path(settings_dir) / "accessories" / "library")
+        self._home = Path(user_home).resolve()
+        self._entries = catalog.build(self._library)
         self._context_source = context_source or (lambda: {})
         self._system_metrics = system_metrics or metrics.SystemMetrics().sample
         self._events: dict = {}
@@ -70,6 +76,44 @@ class Runtime:
     def set_power(self, on: bool) -> dict:
         self.service.set_power(on)
         return self.state()
+
+    def list_drawings(self) -> dict:
+        return {"drawings": self._library.list()}
+
+    def load_drawing(self, drawing_id: str) -> dict:
+        try:
+            drawing = self._library.load(drawing_id)
+        except ValueError:
+            drawing = None
+        if not drawing:
+            return {"ok": False}
+        return {"ok": True, "id": drawing["id"], "name": drawing.get("name", ""), "frames": drawing["frames"],
+                "fps": drawing.get("fps", 8)}
+
+    def save_drawing(self, drawing: dict) -> dict:
+        try:
+            return {"ok": True, **self._library.save(drawing)}
+        except (ValueError, KeyError) as error:
+            return {"ok": False, "error": str(error)}
+
+    def delete_drawing(self, drawing_id: str) -> dict:
+        try:
+            self._library.delete(drawing_id)
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+        return {"ok": True}
+
+    def read_image(self, path: str) -> dict:
+        target = Path(path).resolve()
+        mime = _IMAGE_TYPES.get(target.suffix.lower())
+        if mime is None or self._home not in target.parents:
+            return {"ok": False, "error": "unsupported"}
+        try:
+            if target.stat().st_size > _IMAGE_LIMIT:
+                return {"ok": False, "error": "too_large"}
+            return {"ok": True, "mime": mime, "data": base64.b64encode(target.read_bytes()).decode("ascii")}
+        except OSError:
+            return {"ok": False, "error": "unreadable"}
 
     def search_cities(self, query: str, language: str) -> dict:
         return {"cities": weather.search_cities(query, language) if query.strip() else []}

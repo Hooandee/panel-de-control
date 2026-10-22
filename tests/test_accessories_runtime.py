@@ -80,3 +80,29 @@ def test_catalog_declares_each_scene_options(tmp_path):
     assert options["art_lava"] == ["theme"]
     assert options["fw_tunnel"] == []
     assert options["hooandee"] == []
+
+
+def test_drawings_round_trip_through_the_runtime(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None)
+    frame = base64.b64encode(bytes([9, 9, 9]) * (64 * 54)).decode()
+    saved = rt.save_drawing({"name": "Yo", "frames": [frame], "fps": 6})
+    assert saved["ok"] and [d["name"] for d in rt.list_drawings()["drawings"]] == ["Yo"]
+    assert rt.preview("custom", {"drawing": saved["id"]})["frames"]
+    assert rt.delete_drawing(saved["id"])["ok"]
+    assert rt.list_drawings()["drawings"] == []
+    assert rt.save_drawing({"name": "bad", "frames": [], "fps": 6})["ok"] is False
+
+
+def test_image_import_reads_only_pictures_under_home(tmp_path):
+    home = tmp_path / "home"
+    (home / "Pictures").mkdir(parents=True)
+    (home / "Pictures" / "a.png").write_bytes(b"\x89PNGdata")
+    (home / "notes.txt").write_text("x")
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, user_home=home)
+    ok = rt.read_image(str(home / "Pictures" / "a.png"))
+    assert ok["ok"] and base64.b64decode(ok["data"]) == b"\x89PNGdata" and ok["mime"] == "image/png"
+    assert rt.read_image(str(home / "notes.txt"))["ok"] is False
+    assert rt.read_image("/etc/passwd")["ok"] is False
+    assert rt.read_image(str(home / "Pictures" / ".." / ".." / "x.png"))["ok"] is False

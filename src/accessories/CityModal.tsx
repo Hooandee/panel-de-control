@@ -56,6 +56,12 @@ const CityBody: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => voi
   );
 };
 
+const CityModal: FC<{ onPick: (city: WeatherCity) => void; closeModal?: () => void }> = ({ onPick, closeModal }) => (
+  <ModalRoot closeModal={closeModal}>
+    <CityBody onPick={onPick} closeModal={closeModal} />
+  </ModalRoot>
+);
+
 export function openCityModal(onPick: (city: WeatherCity) => void): void {
-  showModal(<ModalRoot><CityBody onPick={onPick} /></ModalRoot>, window);
+  showModal(<CityModal onPick={onPick} />, window);
 }

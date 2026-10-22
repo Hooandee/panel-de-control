@@ -7,6 +7,7 @@ import { theme } from "../theme";
 import { DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { loadPreview } from "./useAccessories";
+import { MyCreations } from "./MyCreations";
 
 const TILE_PITCH = 1.75;
 
@@ -56,8 +57,9 @@ const SceneTile: FC<{ scene: AccessorySceneMeta; active: boolean; onChoose: () =
 export const SceneGallery: FC<{
   catalog: AccessorySceneMeta[];
   activeScene: string;
-  onChoose: (sceneId: string) => void;
-}> = ({ catalog, activeScene, onChoose }) => {
+  onChoose: (sceneId: string, options?: Record<string, unknown>) => void;
+  activeDrawing: string | null;
+}> = ({ catalog, activeScene, onChoose, activeDrawing }) => {
   const { t } = useI18n();
   const categories = useMemo(() => Array.from(new Set(catalog.map((scene) => scene.category))), [catalog]);
   const activeCategory = catalog.find((scene) => scene.id === activeScene)?.category ?? categories[0];
@@ -80,11 +82,16 @@ export const SceneGallery: FC<{
           })}
         </Focusable>
       )}
+      {(categories.includes(category) ? category : categories[0]) === "custom" ? (
+        <MyCreations activeDrawing={activeScene === "custom" ? activeDrawing : null}
+          onShow={(id) => onChoose("custom", { drawing: id })} />
+      ) : (
       <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
         {shown.map((scene) => (
           <SceneTile key={scene.id} scene={scene} active={scene.id === activeScene} onChoose={() => onChoose(scene.id)} />
         ))}
       </Focusable>
+      )}
     </div>
   );
 };
