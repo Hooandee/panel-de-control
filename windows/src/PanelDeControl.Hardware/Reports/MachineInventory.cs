@@ -141,7 +141,7 @@ public static class MachineInventory
         using var searcher = new ManagementObjectSearcher(
             scope,
             new WqlObjectQuery("SELECT * FROM meta_class"),
-            new EnumerationOptions { Timeout = QueryTimeout, ReturnImmediately = true });
+            new System.Management.EnumerationOptions { Timeout = QueryTimeout, ReturnImmediately = true });
         using var results = searcher.Get();
         foreach (ManagementClass managementClass in results)
         {
@@ -221,7 +221,7 @@ public static class MachineInventory
         return new ManagementObjectSearcher(
             new ManagementScope(scope),
             new ObjectQuery(query),
-            new EnumerationOptions { Timeout = QueryTimeout, ReturnImmediately = true, Rewindable = false });
+            new System.Management.EnumerationOptions { Timeout = QueryTimeout, ReturnImmediately = true, Rewindable = false });
     }
 
     // fields are "json_name:WmiProperty".
