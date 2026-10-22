@@ -784,7 +784,7 @@ def test_firmware_auto_capability_recovers_once_rails_read(tmp_path):
     assert backend.refresh_auto_tdp_safe() is True
 
 
-def test_asus_legacy_stale_ownership_resets_to_the_profile_default(tmp_path):
+def test_asus_legacy_stale_ownership_is_released_without_writing(tmp_path):
     root = str(tmp_path)
     _mk_asus_legacy(root)
     lock = os.path.join(root, "run/ownership-asus-nb-wmi.lock")
@@ -796,9 +796,24 @@ def test_asus_legacy_stale_ownership_resets_to_the_profile_default(tmp_path):
 
     assert recovered["ok"] is True, recovered["detail"]
     assert backend.safety_locked is False
-    assert {_read(_legacy_path(root, rail)) for rail in ("pl1", "pl2", "pl3")} == {
-        str(LIMITS.default_w)
-    }
+    assert not os.path.exists(lock)
+    assert [_read(_legacy_path(root, rail)) for rail in ("pl1", "pl2", "pl3")] == ["15", "20", "25"]
+
+
+def test_firmware_stale_ownership_is_released_without_writing(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware(root, "asus-armoury")
+    lock = os.path.join(root, "run/ownership-asus-armoury.lock")
+    _write(lock, '{"state": "ownership_pending", "snapshot": {"x/pl1": 9}}')
+    backend = FirmwareAttrBackend(
+        "asus-armoury", LIMITS, root=root, restore_on_release=True, ownership_lock_path=lock,
+    )
+    assert backend.safety_locked is True
+
+    assert backend.release() is True
+    assert not os.path.exists(lock)
+    assert backend.safety_locked is False
+    assert _read(_fw_path(root, "asus-armoury", "pl2")) == "20"
 
 
 def test_firmware_lock_waits_for_a_loading_interface_then_resets_once_settled(

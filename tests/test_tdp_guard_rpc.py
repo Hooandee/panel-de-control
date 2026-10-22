@@ -2904,3 +2904,38 @@ def test_guard_rechecks_a_lost_auto_capability_once_a_minute(plugin):
 
     assert len(checks) == 2
     assert plugin._tdp_backend.auto_tdp_safe is True
+
+
+def test_guard_leaves_the_hold_alone_while_another_daemon_writes_tdp(plugin, monkeypatch):
+    attempts = _pending_sidecar(plugin, [True])
+    monkeypatch.setattr(plugin, "_external_tdp_writer", lambda: "hhd")
+
+    plugin._tdp_guard_tick(now=100.0)
+
+    assert attempts == []
+    assert plugin._low_battery_hold_recovery_pending is True
+
+
+def test_recovered_route_that_does_not_yield_is_not_replaced(plugin, monkeypatch):
+    import tdp.factory as factory
+
+    backend = types.SimpleNamespace(
+        name="firmware-attr:lenovo-wmi-other",
+        safety_locked=True,
+        supported=False,
+        yields_to_next_route=False,
+    )
+
+    def recover():
+        backend.safety_locked = False
+        return {"ok": True, "detail": "recovered"}
+
+    backend.recover_runtime_transaction = recover
+    plugin._tdp_backend = backend
+    monkeypatch.setattr(plugin, "_probe_tdp_candidate", lambda candidate: {"ready": False})
+    monkeypatch.setattr(
+        factory, "select_backend", lambda *_a, **_k: pytest.fail("must not reselect"),
+    )
+
+    assert plugin._replace_unviable_tdp_backend(backend, {"ready": False}) is False
+    assert plugin._tdp_reason == "recovery_pending"

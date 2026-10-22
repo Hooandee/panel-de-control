@@ -6,7 +6,7 @@ import subprocess
 import time
 
 from tdp.backend import TDPBackend
-from tdp.runtime_lock import RuntimeSafetyLock
+from tdp.runtime_lock import RuntimeSafetyLock, seconds_since_boot
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 # The sustained (STAPM) limit line of `ryzenadj -i`.
@@ -20,6 +20,9 @@ _UNREADABLE_READS_TO_HIDE_AUTO = 2
 # Strict writes that failed and were rolled back this many times in a boot stop being
 # retried: the route yields to the next rung, measured by package power.
 _STRICT_FAILURES_BEFORE_YIELD = 3
+# Without a lower rung the route stays locked after that, retried this rarely instead of
+# writing and rolling back on every reprobe.
+_STRICT_RETRY_WITHOUT_RUNG_S = 600.0
 
 
 def _unreadable(applied):
@@ -920,7 +923,14 @@ class RyzenadjBackend(TDPBackend):
         """A strict write failed earlier this boot. Re-enable the route once its limits read
         back safely, or yield to the next rung when they cannot be read or keep failing."""
         state = payload.get("state")
-        failures = self._failure_count() + 1
+        previous, last_failure_at = self._failure_record()
+        failures = previous + 1
+        if (
+            previous >= _STRICT_FAILURES_BEFORE_YIELD
+            and self._unreadable_marker is None
+            and seconds_since_boot() - last_failure_at < _STRICT_RETRY_WITHOUT_RUNG_S
+        ):
+            return {"ok": False, "detail": f"ryzenadj circuit open after {previous} failed writes"}
         self.supported = True
         snapshot = self._read_snapshot(require_zero_exit=True)
         if snapshot is None:
@@ -940,18 +950,19 @@ class RyzenadjBackend(TDPBackend):
         if not self._safety_lock.clear():
             self.supported = False
             return {"ok": False, "detail": "ryzenadj circuit recovery; runtime lock clear failed"}
-        self._strict_failures.persist(str(failures))
+        self._strict_failures.persist(f"{failures} {seconds_since_boot():.0f}")
         self._runtime_lock_payload = None
         self._readback_state = "ready"
         self._last_readback_failure = None
         self.supported = True
         return {"ok": True, "detail": f"ryzenadj circuit closed after failure {failures}"}
 
-    def _failure_count(self) -> int:
+    def _failure_record(self) -> tuple[int, float]:
+        fields = (self._strict_failures.load() or "").split()
         try:
-            return int(self._strict_failures.load() or 0)
-        except ValueError:
-            return 0
+            return int(fields[0]), float(fields[1]) if len(fields) > 1 else 0.0
+        except (IndexError, ValueError):
+            return 0, 0.0
 
     def _yield_or_stay_locked(self, payload: dict, reason: str) -> dict:
         self.supported = False

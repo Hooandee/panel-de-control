@@ -1,4 +1,5 @@
 import os
+import time
 
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
@@ -16,6 +17,7 @@ _CLAW_PL2_RESTORE_MAX_W = 37
 
 
 _DESKTOP_MAX_SANE_W = 500
+_RESET_RETRY_S = (30.0, 120.0, 600.0)
 
 
 def _sane_w(value) -> int | None:
@@ -74,6 +76,8 @@ class IntelRaplBackend(TDPBackend):
         sync_surfaces: bool = False,
     ) -> None:
         self._fallback = fallback
+        self._reset_failures = 0
+        self._reset_retry_at = 0.0
         self._write_limits = fallback.with_ac_max(write_max_ac)
         self._root = root
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
@@ -205,36 +209,40 @@ class IntelRaplBackend(TDPBackend):
         )
 
     def _reset_to_profile_default(self, purpose, detail):
-        """A stale snapshot can never be restored: drop it and write the profile default
-        PL1, confirmed by readback."""
+        """A stale snapshot can never be restored. Ownership is released without a write;
+        a pending transaction is replaced by the profile default PL1, confirmed by readback."""
         if not self.supported:
             return {"ok": False, "detail": detail}
-        transaction = purpose == "transaction"
-        lock = self._safety_lock if transaction else self._ownership_lock
-        stale = self._runtime_lock_payload if transaction else self._owned_payload
-        if not lock.clear():
-            return {"ok": False, "detail": f"{detail}; lock clear failed"}
-        if transaction:
-            self._runtime_lock_payload = None
-        else:
+        if purpose == "ownership":
+            if not self._ownership_lock.clear():
+                return {"ok": False, "detail": f"{detail}; lock clear failed"}
             self._owned_payload = None
             self._owns_state = False
             self._ownership_recovery_pending = False
+            if self._runtime_lock_payload is None:
+                self._write_circuit_open = None
+            return {"ok": True, "detail": f"{detail}; ownership released without restore"}
+        if time.monotonic() < self._reset_retry_at:
+            return {"ok": False, "detail": f"{detail}; profile default retry pending"}
+        stale = self._runtime_lock_payload
+        if not self._safety_lock.clear():
+            return {"ok": False, "detail": f"{detail}; lock clear failed"}
+        self._runtime_lock_payload = None
         self._write_circuit_open = None
-        if self._runtime_lock_payload is not None or self._ownership_recovery_pending:
+        if self._ownership_recovery_pending:
             return {"ok": True, "detail": f"{detail}; stale lock cleared"}
         watts = self._fallback.default_w
         result = self.set_tdp(watts, False)
         if result.ok:
             return {"ok": True, "detail": f"{detail}; reset to profile default {watts} W"}
         failed = f"{detail}; profile default failed: {result.detail}"
+        self._reset_failures += 1
+        self._reset_retry_at = time.monotonic() + _RESET_RETRY_S[
+            min(self._reset_failures - 1, len(_RESET_RETRY_S) - 1)
+        ]
         if isinstance(stale, dict):
-            lock.persist_payload(stale)
-            if transaction:
-                self._runtime_lock_payload = stale
-            else:
-                self._owned_payload = stale
-                self._ownership_recovery_pending = True
+            self._safety_lock.persist_payload(stale)
+            self._runtime_lock_payload = stale
             self._write_circuit_open = failed
         return {"ok": False, "detail": failed}
 

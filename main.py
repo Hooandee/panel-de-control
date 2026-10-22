@@ -3343,6 +3343,9 @@ class Plugin:
             return False
         if not self._tdp_control_on() or not self._tdp_write_authorized():
             return False
+        if self._external_tdp_writer() is not None:
+            self._low_battery_hold_retry_at = now + _LOW_BATTERY_HOLD_RETRY_S[-1]
+            return False
         if self._recover_low_battery_hold_transaction():
             self._low_battery_hold_recovery_pending = False
             self._low_battery_hold_last_failure = None
@@ -11817,7 +11820,12 @@ class Plugin:
                         "recovered",
                     )
                     return True
-            if not recovered or getattr(previous, "safety_locked", False):
+            yielded = bool(
+                recovered
+                and not getattr(previous, "safety_locked", False)
+                and getattr(previous, "yields_to_next_route", False)
+            )
+            if not yielded:
                 self._tdp_status = "unsupported"
                 self._tdp_reason = "recovery_pending"
                 self._record_tdp_backend_transition(

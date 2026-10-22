@@ -1512,3 +1512,20 @@ def test_experimental_restored_circuit_still_waits_for_the_safe_range_recovery(t
 
     assert backend.recover_runtime_transaction()["ok"] is False
     assert lock.exists()
+
+
+def test_strict_route_without_a_lower_rung_waits_after_repeated_failures(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(ryzenadj, "seconds_since_boot", lambda: clock[0])
+    fake = _StatefulRyzenadj()
+    backend, lock, _marker = _locked_strict(
+        tmp_path, fake, "circuit_open_restored", yields=False, failures=3,
+    )
+    (tmp_path / "ryzenadj.lock.failures").write_text("3 900", encoding="utf-8")
+
+    assert backend.recover_runtime_transaction()["ok"] is False
+    assert lock.exists()
+
+    clock[0] = 1600.0
+    assert backend.recover_runtime_transaction()["ok"] is True
+    assert not lock.exists()

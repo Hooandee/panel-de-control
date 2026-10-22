@@ -11,6 +11,7 @@ import journal
 
 # Drivers can expose rails one by one after boot; a partial interface is still loading.
 _INTERFACE_SETTLE_S = 600.0
+_RESET_RETRY_S = (30.0, 120.0, 600.0)
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
 # ASUS exposes a SECOND, legacy PL1 interface (asus-nb-wmi: direct ppt files) that Steam
@@ -125,6 +126,8 @@ class FirmwareAttrBackend(TDPBackend):
         self._rollback_rearmed = False
         self._handoff_profile = firmware_handoff_profile
         self._handoff = None
+        self._reset_failures = 0
+        self._reset_retry_at = 0.0
         self._custom_return_pending = False
         self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -394,27 +397,36 @@ class FirmwareAttrBackend(TDPBackend):
         )
         return rails_present and (self._profile_name is None or self._pp_dir is not None)
 
+    def _drop_stale_ownership(self, detail):
+        """The pre-control state can no longer be restored; claiming the current values as
+        if they were the original would lie on the next release, so ownership is released."""
+        if not self._ownership_lock.clear():
+            return {"ok": False, "detail": f"{detail}; lock clear failed"}
+        self._owned_payload = None
+        self._owns_state = False
+        self._ownership_recovery_pending = False
+        if self._runtime_lock_payload is None:
+            self._write_circuit_open = None
+        return {"ok": True, "detail": f"{detail}; ownership released without restore"}
+
     def _reset_to_profile_default(self, purpose, detail):
         """The saved state no longer fits this firmware (rails, profile or values changed),
         so it can never be restored. Drop it and write the profile default through a normal
         transaction: that captures a fresh snapshot and confirms by readback."""
+        if purpose == "ownership":
+            return self._drop_stale_ownership(detail)
         if not self.supported or not self._rails or not (
             self._interface_complete() or seconds_since_boot() >= _INTERFACE_SETTLE_S
         ):
             return {"ok": False, "detail": detail}
-        transaction = purpose == "transaction"
-        lock = self._safety_lock if transaction else self._ownership_lock
-        stale = self._runtime_lock_payload if transaction else self._owned_payload
+        if time.monotonic() < self._reset_retry_at:
+            return {"ok": False, "detail": f"{detail}; profile default retry pending"}
+        stale = self._runtime_lock_payload
         circuit = self._write_circuit_open
-        if not lock.clear():
+        if not self._safety_lock.clear():
             return {"ok": False, "detail": f"{detail}; lock clear failed"}
-        if transaction:
-            self._runtime_lock_payload = None
-            self._recovery_failures = 0
-        else:
-            self._owned_payload = None
-            self._owns_state = False
-            self._ownership_recovery_pending = False
+        self._runtime_lock_payload = None
+        self._recovery_failures = 0
         self._write_circuit_open = None
         if self._ownership_recovery_pending:
             return {"ok": True, "detail": f"{detail}; stale lock cleared"}
@@ -423,14 +435,14 @@ class FirmwareAttrBackend(TDPBackend):
         if result.ok:
             return {"ok": True, "detail": f"{detail}; reset to profile default {watts} W"}
         failed = f"{detail}; profile default failed: {result.detail}"
-        if transaction and self._runtime_lock_payload is None and isinstance(stale, dict):
-            lock.persist_payload(stale)
+        self._reset_failures += 1
+        self._reset_retry_at = time.monotonic() + _RESET_RETRY_S[
+            min(self._reset_failures - 1, len(_RESET_RETRY_S) - 1)
+        ]
+        if self._runtime_lock_payload is None and isinstance(stale, dict):
+            self._safety_lock.persist_payload(stale)
             self._runtime_lock_payload = stale
             self._write_circuit_open = circuit or failed
-        elif not transaction and not self._ownership_recovery_pending and isinstance(stale, dict):
-            lock.persist_payload(stale)
-            self._owned_payload = stale
-            self._ownership_recovery_pending = True
         return {"ok": False, "detail": failed}
 
     def _restore_payload(self, purpose):

@@ -383,7 +383,7 @@ class TestIntelRapl:
         assert backend.ready() is True
         assert backend.probe() is True
 
-    def test_unconfirmed_profile_default_keeps_an_out_of_range_snapshot_locked(
+    def test_stale_ownership_snapshot_is_released_without_writing(
         self, tmp_path, monkeypatch
     ):
         _mk_rapl(str(tmp_path), _MMIO)
@@ -415,36 +415,46 @@ class TestIntelRapl:
 
         recovered = backend.recover_runtime_transaction()
 
-        assert recovered["ok"] is False
-        assert recovered["detail"].startswith(
-            "RAPL ownership snapshot invalid; profile default failed"
-        )
-        assert {value for _path, value in writes} == {_FALLBACK.default_w * 1_000_000}
-        assert ownership_lock.exists()
-        assert backend.safety_locked is True
+        assert recovered["ok"] is True
+        assert writes == []
+        assert not ownership_lock.exists()
+        assert backend.safety_locked is False
 
-    def test_out_of_range_snapshot_resets_to_the_profile_default(self, tmp_path):
+    def test_stale_transaction_resets_to_the_profile_default(self, tmp_path):
         mmio = _mk_rapl(str(tmp_path), _MMIO)
-        ownership_lock = tmp_path / "run/pdc/intel-rapl-ownership.lock"
-        RuntimeSafetyLock(str(ownership_lock)).persist_payload(
-            {
-                "state": "ownership_pending",
-                "detail": "test",
-                "snapshot": {"mmio/pl1": 22_000_000, "mmio/pl2": 95_000_000},
-            }
+        lock = tmp_path / "run/pdc/intel-rapl-transaction.lock"
+        RuntimeSafetyLock(str(lock)).persist_payload(
+            {"state": "transaction_pending", "snapshot": {"mmio/pl1": "x"}}
         )
-        backend = IntelRaplBackend(
-            _FALLBACK,
-            root=str(tmp_path),
-            ownership_lock_path=str(ownership_lock),
-        )
+        backend = IntelRaplBackend(_FALLBACK, root=str(tmp_path), safety_lock_path=str(lock))
 
         recovered = backend.recover_runtime_transaction()
 
         assert recovered["ok"] is True
         assert _read_uw(mmio, 0) == _FALLBACK.default_w * 1_000_000
-        assert not ownership_lock.exists()
+        assert not lock.exists()
         assert backend.safety_locked is False
+
+    def test_unconfirmed_profile_default_restores_the_lock_and_backs_off(
+        self, tmp_path, monkeypatch
+    ):
+        _mk_rapl(str(tmp_path), _MMIO)
+        lock = tmp_path / "run/pdc/intel-rapl-transaction.lock"
+        RuntimeSafetyLock(str(lock)).persist_payload(
+            {"state": "transaction_pending", "snapshot": {"mmio/pl1": "x"}}
+        )
+        backend = IntelRaplBackend(_FALLBACK, root=str(tmp_path), safety_lock_path=str(lock))
+        writes = []
+        monkeypatch.setattr(
+            backend, "_write", lambda path, value: writes.append(value) or True,
+        )
+
+        assert backend.recover_runtime_transaction()["ok"] is False
+        first = len(writes)
+        assert backend.recover_runtime_transaction()["ok"] is False
+
+        assert first > 0 and len(writes) == first
+        assert lock.exists() and backend.safety_locked is True
 
     def test_prefers_mmio_over_legacy(self, tmp_path):
         _mk_rapl(str(tmp_path), _LEGACY)
