@@ -1763,3 +1763,50 @@ def test_backend_swapped_during_the_power_read_is_never_marked(
     assert plugin._tdp_backend is other
     assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
 
+
+
+def test_f1_strict_lock_without_readback_moves_to_the_measured_route(
+    Plugin, tmp_path, monkeypatch,
+):
+    import tdp.factory as factory
+    from tdp.ryzenadj import RyzenadjBackend
+
+    def unreadable_ryzenadj(argv, **_kwargs):
+        if argv[1:2] == ["-i"]:
+            return types.SimpleNamespace(returncode=251, stdout="", stderr="no access")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    defaults = list(RyzenadjBackend.__init__.__defaults__)
+    defaults[1] = unreadable_ryzenadj
+    monkeypatch.setattr(RyzenadjBackend.__init__, "__defaults__", tuple(defaults))
+    lock = tmp_path / "run/panel-de-control/ryzenadj-onexplayer_f1.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(json.dumps({
+        "state": "circuit_open_unresolved",
+        "baseline": {"stapm": 15, "fast": 15, "slow": 15},
+    }))
+
+    def select(device, **kwargs):
+        return real_select_backend(
+            device,
+            root=str(tmp_path),
+            ryzenadj_resolve=lambda: "/opt/ryzenadj",
+            os_id=kwargs.get("os_id"),
+        )
+
+    monkeypatch.setattr(factory, "select_backend", select)
+    device = next(profile for profile in DEVICE_TABLE if profile.key == "onexplayer_f1")
+    backend = select(device, os_id="bazzite")
+    assert backend.name == "ryzenadj" and backend.safety_locked is True
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = device
+    plugin._os_id = "bazzite"
+    plugin._tdp_backend = backend
+    plugin._tdp_backend_used = True
+
+    assert plugin._replace_unviable_tdp_backend(backend, {"ready": False}) is True
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._tdp_backend.measured_verification is True
+    assert not lock.exists()

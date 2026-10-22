@@ -619,6 +619,9 @@ class Plugin:
             self._tdp_profiles.drop_legacy_gpu_clocks()
             self._settings["_gpu_scope_migrated"] = True
             self._store.save(self._settings)
+        retried = tdp_factory.retry_degraded_routes(self._device)
+        if retried:
+            decky.logger.info("TDP routes retried on load: %s", ",".join(retried))
         self._tdp_backend = tdp_factory.select_backend(
             self._device,
             os_id=self._os_id,
@@ -11814,12 +11817,13 @@ class Plugin:
                         "recovered",
                     )
                     return True
-            self._tdp_status = "unsupported"
-            self._tdp_reason = "recovery_pending"
-            self._record_tdp_backend_transition(
-                previous, probe, None, None, None, "recovery_pending"
-            )
-            return False
+            if not recovered or getattr(previous, "safety_locked", False):
+                self._tdp_status = "unsupported"
+                self._tdp_reason = "recovery_pending"
+                self._record_tdp_backend_transition(
+                    previous, probe, None, None, None, "recovery_pending"
+                )
+                return False
         not_honored = bool(getattr(previous, "measured_not_honored", False))
         selection_ready = getattr(previous, "selection_ready", None)
         if callable(selection_ready) and not not_honored:

@@ -17,6 +17,9 @@ _SLOW_RE = re.compile(r"PPT LIMIT SLOW\s*\|\s*([\d.]+)", re.IGNORECASE)
 # Readback slack (W): the STAPM readback rounds, so treat a near-match as applied.
 _READBACK_TOLERANCE_W = 2
 _UNREADABLE_READS_TO_HIDE_AUTO = 2
+# Strict writes that failed and were rolled back this many times in a boot stop being
+# retried: the route yields to the next rung, measured by package power.
+_STRICT_FAILURES_BEFORE_YIELD = 3
 
 
 def _unreadable(applied):
@@ -164,6 +167,10 @@ class RyzenadjBackend(TDPBackend):
         )
         self._last_read_error = None
         self._has_written = False
+        self._yielded = False
+        self._strict_failures = RuntimeSafetyLock(
+            f"{safety_lock_path}.failures" if safety_lock_path else None
+        )
         self._write_temp_limit = bool(write_temp_limit)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
@@ -293,10 +300,13 @@ class RyzenadjBackend(TDPBackend):
     @property
     def yields_to_next_route(self) -> bool:
         return bool(
-            self._unreadable_marker is not None
-            and self._unreadable_detail is not None
-            and self._runtime_lock_payload is None
-            and not self._has_written
+            self._yielded
+            or (
+                self._unreadable_marker is not None
+                and self._unreadable_detail is not None
+                and self._runtime_lock_payload is None
+                and not self._has_written
+            )
         )
 
     @property
@@ -906,8 +916,69 @@ class RyzenadjBackend(TDPBackend):
         self._readback_state = "recovery_pending"
         return True
 
+    def _recover_strict_circuit(self, payload: dict) -> dict:
+        """A strict write failed earlier this boot. Re-enable the route once its limits read
+        back safely, or yield to the next rung when they cannot be read or keep failing."""
+        state = payload.get("state")
+        failures = self._failure_count() + 1
+        self.supported = True
+        snapshot = self._read_snapshot(require_zero_exit=True)
+        if snapshot is None:
+            return self._yield_or_stay_locked(payload, "limits unreadable after a failed write")
+        if state == "circuit_open_unresolved":
+            baseline = payload.get("baseline")
+            if isinstance(baseline, dict):
+                if self._restore_snapshot(baseline) != "confirmed":
+                    return self._yield_or_stay_locked(payload, "baseline restore unconfirmed")
+            elif not all(
+                self._fallback.min_w <= value <= self._fallback.max_ac_w
+                for value in snapshot.values()
+            ):
+                return self._yield_or_stay_locked(payload, "limits outside the profile range")
+        if failures >= _STRICT_FAILURES_BEFORE_YIELD and self._unreadable_marker is not None:
+            return self._yield_or_stay_locked(payload, f"{failures} failed writes this boot")
+        if not self._safety_lock.clear():
+            self.supported = False
+            return {"ok": False, "detail": "ryzenadj circuit recovery; runtime lock clear failed"}
+        self._strict_failures.persist(str(failures))
+        self._runtime_lock_payload = None
+        self._readback_state = "ready"
+        self._last_readback_failure = None
+        self.supported = True
+        return {"ok": True, "detail": f"ryzenadj circuit closed after failure {failures}"}
+
+    def _failure_count(self) -> int:
+        try:
+            return int(self._strict_failures.load() or 0)
+        except ValueError:
+            return 0
+
+    def _yield_or_stay_locked(self, payload: dict, reason: str) -> dict:
+        self.supported = False
+        if self._unreadable_marker is None:
+            return {"ok": False, "detail": f"ryzenadj circuit open: {reason}"}
+        detail = json.dumps({"after_write": reason}, sort_keys=True, separators=(",", ":"))
+        if not self._unreadable_marker.persist(detail) or not self._safety_lock.clear():
+            return {"ok": False, "detail": f"ryzenadj circuit open: {reason}; yield failed"}
+        self._unreadable_detail = detail
+        self._runtime_lock_payload = None
+        self._yielded = True
+        self.supported = False
+        self._readback_state = "yielded"
+        self._last_readback_failure = f"ryzenadj yields to the next route: {reason}"
+        return {"ok": True, "detail": self._last_readback_failure}
+
     def recover_runtime_transaction(self) -> dict:
         payload = self._runtime_lock_payload
+        if (
+            isinstance(payload, dict)
+            and self._require_readback
+            and not self._power_only_retry
+            and payload.get("state") in ("circuit_open_restored", "circuit_open_unresolved")
+            and payload.get("experimental") is not True
+            and self._bin is not None
+        ):
+            return self._recover_strict_circuit(payload)
         if (
             isinstance(payload, dict)
             and payload.get("state") == "low_battery_hold_active"

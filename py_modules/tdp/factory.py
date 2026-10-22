@@ -24,6 +24,7 @@ from tdp.intel_rapl import IntelRaplBackend, firmware_pl1_ceiling_w
 from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.routes import DEFAULT as DEFAULT_ROUTES, TdpRoutes
+from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
@@ -37,6 +38,43 @@ def _runtime_lock_path(root, name):
 def _not_honored_path(root, device_key, backend_name):
     safe = backend_name.replace(":", "-").replace("/", "-")
     return _runtime_lock_path(root, f"route-{safe}-{device_key}.not-honored")
+
+
+_ROUTE_RETRIES_PER_BOOT = 2
+
+
+def retry_degraded_routes(device, root="/") -> list[str]:
+    """On plugin load, give routes this boot marked unreadable, failing or not honored
+    another chance, at most a couple of times per boot so a broken route cannot flap."""
+    run = _runtime_lock_path(root, "")
+    suffix = f"-{device.key}"
+    try:
+        names = sorted(os.listdir(run))
+    except OSError:
+        return []
+    markers = [
+        name for name in names
+        if name.endswith(
+            (f"{suffix}.unreadable", f"{suffix}.not-honored", f"{suffix}.lock.failures")
+        )
+    ]
+    if not markers:
+        return []
+    counter = RuntimeSafetyLock(os.path.join(run, f"route-retries{suffix}"))
+    try:
+        retries = int(counter.load() or 0)
+    except ValueError:
+        retries = 0
+    if retries >= _ROUTE_RETRIES_PER_BOOT or not counter.persist(str(retries + 1)):
+        return []
+    cleared = []
+    for name in markers:
+        try:
+            os.unlink(os.path.join(run, name))
+            cleared.append(name)
+        except OSError:
+            pass
+    return cleared
 
 
 def mark_route_not_honored(device, backend_name, detail, root="/") -> bool:

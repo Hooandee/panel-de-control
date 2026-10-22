@@ -1384,3 +1384,131 @@ def test_a_rejected_extra_request_restores_without_locking_the_backend():
     assert rejected.ok is False
     assert backend.supported is True
     assert backend.safety_locked is False
+
+
+class _StatefulRyzenadj:
+    def __init__(self, readable=True, watts=15):
+        self.readable = readable
+        self.limits = {"--stapm-limit": watts * 1000, "--fast-limit": watts * 1000,
+                       "--slow-limit": watts * 1000}
+        self.writes = []
+
+    def __call__(self, argv, **_kwargs):
+        args = list(argv[1:])
+        if args[:1] == ["-i"]:
+            if not self.readable:
+                return SimpleNamespace(returncode=251, stdout="", stderr="no access")
+            return SimpleNamespace(returncode=0, stdout=_snapshot_info(
+                self.limits["--stapm-limit"] // 1000,
+                fast=self.limits["--fast-limit"] // 1000,
+                slow=self.limits["--slow-limit"] // 1000,
+            ), stderr="")
+        self.writes.append(args)
+        for flag, value in zip(args[::2], args[1::2]):
+            if flag in self.limits:
+                self.limits[flag] = int(value)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+
+def _locked_strict(tmp_path, fake, state, *, yields=True, failures=None, baseline=None):
+    lock = tmp_path / "ryzenadj.lock"
+    lock.write_text(json.dumps({"state": state, "baseline": baseline}), encoding="utf-8")
+    if failures is not None:
+        (tmp_path / "ryzenadj.lock.failures").write_text(str(failures), encoding="utf-8")
+    marker = tmp_path / "ryzenadj.unreadable"
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/opt/ryzenadj",
+        runner=fake,
+        require_readback=True,
+        safety_lock_path=str(lock),
+        unreadable_marker_path=str(marker) if yields else None,
+    )
+    assert backend.safety_locked is True
+    return backend, lock, marker
+
+
+def test_restored_strict_circuit_closes_once_limits_read_back(tmp_path):
+    fake = _StatefulRyzenadj()
+    backend, lock, _marker = _locked_strict(tmp_path, fake, "circuit_open_restored")
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True, recovered
+    assert not lock.exists()
+    assert backend.safety_locked is False
+    result = backend.set_tdp(20, ac=True)
+    assert result.ok is True and result.applied_w == 20
+
+
+def test_strict_route_yields_after_repeated_failed_writes(tmp_path):
+    fake = _StatefulRyzenadj()
+    backend, lock, marker = _locked_strict(
+        tmp_path, fake, "circuit_open_restored", failures=2,
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert marker.exists() and not lock.exists()
+    assert backend.yields_to_next_route is True
+    assert backend.selection_ready() is False
+    assert backend.reselection_safe_after_use is True
+    assert backend.safety_locked is False
+
+
+def test_unresolved_strict_circuit_restores_its_baseline_before_closing(tmp_path):
+    fake = _StatefulRyzenadj(watts=28)
+    backend, lock, _marker = _locked_strict(
+        tmp_path, fake, "circuit_open_unresolved",
+        baseline={"stapm": 15, "fast": 20, "slow": 18},
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True, recovered
+    assert fake.limits == {"--stapm-limit": 15000, "--fast-limit": 20000, "--slow-limit": 18000}
+    assert not lock.exists()
+
+
+def test_unreadable_unresolved_strict_circuit_yields_to_the_next_rung(tmp_path):
+    fake = _StatefulRyzenadj(readable=False)
+    backend, lock, marker = _locked_strict(
+        tmp_path, fake, "circuit_open_unresolved",
+        baseline={"stapm": 15, "fast": 15, "slow": 15},
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert marker.exists() and not lock.exists()
+    assert backend.yields_to_next_route is True
+    assert fake.writes == []
+
+
+def test_strict_route_without_a_lower_rung_stays_locked_until_it_reads_again(tmp_path):
+    fake = _StatefulRyzenadj(readable=False)
+    backend, lock, marker = _locked_strict(
+        tmp_path, fake, "circuit_open_unresolved", yields=False,
+    )
+
+    assert backend.recover_runtime_transaction()["ok"] is False
+    assert lock.exists() and not marker.exists()
+    assert backend.safety_locked is True
+
+    fake.readable = True
+    assert backend.recover_runtime_transaction()["ok"] is True
+    assert not lock.exists()
+
+
+def test_experimental_restored_circuit_still_waits_for_the_safe_range_recovery(tmp_path):
+    fake = _StatefulRyzenadj()
+    lock = tmp_path / "ryzenadj.lock"
+    lock.write_text(json.dumps({"state": "circuit_open_restored", "experimental": True}))
+    backend = RyzenadjBackend(
+        FALLBACK, resolve=lambda: "/opt/ryzenadj", runner=fake,
+        require_readback=True, safety_lock_path=str(lock),
+    )
+
+    assert backend.recover_runtime_transaction()["ok"] is False
+    assert lock.exists()

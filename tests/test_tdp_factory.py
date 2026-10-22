@@ -2557,3 +2557,34 @@ def test_lock_with_changed_surfaces_and_no_handoff_profile_resets_to_profile_def
     assert backend.read_applied() == _p("legion_go").tdp_default
     assert not os.path.exists(lock_path)
     assert backend.safety_locked is False
+
+
+def test_degraded_routes_get_two_retries_per_boot_on_load(tmp_path):
+    run = tmp_path / "run/panel-de-control"
+    run.mkdir(parents=True)
+    device = _p("onexplayer_f1")
+
+    def mark():
+        (run / "ryzenadj-onexplayer_f1.unreadable").write_text("{}")
+        (run / "route-acpi-alib-onexplayer_f1.not-honored").write_text("{}")
+        (run / "ryzenadj-onexplayer_f1.lock.failures").write_text("3")
+        (run / "ryzenadj-onexplayer_x2_mini_pro.unreadable").write_text("{}")
+
+    mark()
+    assert len(factory.retry_degraded_routes(device, root=str(tmp_path))) == 3
+    assert sorted(path.name for path in run.iterdir()) == [
+        "route-retries-onexplayer_f1",
+        "ryzenadj-onexplayer_x2_mini_pro.unreadable",
+    ]
+    mark()
+    assert len(factory.retry_degraded_routes(device, root=str(tmp_path))) == 3
+    mark()
+    assert factory.retry_degraded_routes(device, root=str(tmp_path)) == []
+    assert (run / "ryzenadj-onexplayer_f1.unreadable").exists()
+
+
+def test_nothing_to_retry_spends_no_retry(tmp_path):
+    (tmp_path / "run/panel-de-control").mkdir(parents=True)
+
+    assert factory.retry_degraded_routes(_p("onexplayer_f1"), root=str(tmp_path)) == []
+    assert not (tmp_path / "run/panel-de-control/route-retries-onexplayer_f1").exists()
