@@ -300,3 +300,15 @@ def test_restore_accepts_zero_snapshot_after_capability_metadata_disappears(tmp_
     assert restored.ok is True
     assert open(os.path.join(directory, "power1_cap")).read().strip() == "0"
     assert open(os.path.join(directory, "power2_cap")).read().strip() == "0"
+
+
+def test_auto_capability_recovers_once_the_caps_become_readable(tmp_path):
+    directory = _mk_hwmon(str(tmp_path), 7)
+    _write(os.path.join(directory, "power2_cap"), "")
+    backend = _backend(tmp_path)
+    assert backend.auto_tdp_safe is False
+
+    _write(os.path.join(directory, "power2_cap"), 15_000_000)
+
+    assert backend.refresh_auto_tdp_safe() is True
+    assert backend.auto_tdp_safe is True

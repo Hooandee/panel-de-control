@@ -2886,3 +2886,21 @@ def test_guard_never_retries_hold_recovery_when_panel_does_not_own_tdp(plugin):
 
     assert attempts == []
     assert plugin._low_battery_hold_recovery_pending is True
+
+
+def test_guard_rechecks_a_lost_auto_capability_once_a_minute(plugin):
+    checks = []
+
+    def refresh():
+        checks.append(True)
+        plugin._tdp_backend.auto_tdp_safe = len(checks) >= 2
+        return plugin._tdp_backend.auto_tdp_safe
+
+    plugin._tdp_backend.auto_tdp_safe = False
+    plugin._tdp_backend.refresh_auto_tdp_safe = refresh
+
+    for now in (100.0, 130.0, 160.0, 161.0, 300.0):
+        plugin._tdp_guard_tick(now=now)
+
+    assert len(checks) == 2
+    assert plugin._tdp_backend.auto_tdp_safe is True

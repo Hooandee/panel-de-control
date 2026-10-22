@@ -39,7 +39,7 @@ class AsusNbWmiBackend(TDPBackend):
         self._rails = tuple(rail for rail, _node in _NODES if rail in self._paths)
         self.supported = "pl1" in self._paths
         self.supports_levels = len(self._rails) > 1
-        self.auto_tdp_safe = self._auto_tdp_rails_ready()
+        self.refresh_auto_tdp_safe()
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         payload = self._ownership_lock.load_payload()
         saved = payload.get("snapshot") if isinstance(payload, dict) else None
@@ -53,6 +53,10 @@ class AsusNbWmiBackend(TDPBackend):
         self._ownership_recovery_pending = payload is not None
         self._recovery_blocked = False
         self._selection_failure = {}
+
+    def refresh_auto_tdp_safe(self):
+        self.auto_tdp_safe = self._auto_tdp_rails_ready()
+        return self.auto_tdp_safe
 
     def _auto_tdp_rails_ready(self):
         return (

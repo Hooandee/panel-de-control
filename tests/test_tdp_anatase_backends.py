@@ -758,3 +758,27 @@ def test_msi_a8_attempts_all_restores_when_one_rollback_write_fails(
         rail: int(_read(_fw_path(root, "msi-wmi-platform", rail)))
         for rail in RAILS
     } == original
+
+
+def test_asus_legacy_auto_capability_recovers_once_rails_read(tmp_path):
+    root = str(tmp_path)
+    _mk_asus_legacy(root)
+    _write(_legacy_path(root, "pl3"), "")
+    backend = AsusNbWmiBackend(LIMITS, root=root)
+    assert backend.auto_tdp_safe is False
+
+    _write(_legacy_path(root, "pl3"), 25)
+
+    assert backend.refresh_auto_tdp_safe() is True
+
+
+def test_firmware_auto_capability_recovers_once_rails_read(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware(root, "asus-armoury")
+    _write(_fw_path(root, "asus-armoury", "pl2"), "")
+    backend = FirmwareAttrBackend("asus-armoury", LIMITS, root=root)
+    assert backend.auto_tdp_safe is False
+
+    _write(_fw_path(root, "asus-armoury", "pl2"), 20)
+
+    assert backend.refresh_auto_tdp_safe() is True

@@ -240,6 +240,7 @@ _MEASURED_EXTERNAL_HOLD_S = 60.0
 _PROFILE_REASSERT_BACKENDS = frozenset(("firmware-attr:asus-armoury",))
 _LOW_BATTERY_WATCH_S = 60.0
 _LOW_BATTERY_HOLD_RETRY_S = (2.0, 8.0, 30.0, 120.0)
+_AUTO_CAPABILITY_RECHECK_S = 60.0
 _AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
@@ -3311,6 +3312,26 @@ class Plugin:
             reason,
         )
         return False
+
+    def _recheck_auto_capability(self, now: float) -> None:
+        """A route whose rails were unreadable when it was built gets Auto-TDP back once they
+        read; a working route is never downgraded here (apply readback catches that)."""
+        backend = self._tdp_backend
+        if getattr(backend, "auto_tdp_safe", True):
+            return
+        if now < getattr(self, "_auto_capability_recheck_at", float("-inf")):
+            return
+        self._auto_capability_recheck_at = now + _AUTO_CAPABILITY_RECHECK_S
+        refresh = getattr(backend, "refresh_auto_tdp_safe", None)
+        if not callable(refresh):
+            return
+        try:
+            if refresh():
+                decky.logger.info("Auto-TDP capability restored on %s", backend.name)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Auto-TDP capability recheck failed: %s", type(error).__name__
+            )
 
     def _retry_low_battery_hold_recovery(self, now: float) -> bool:
         """Off-loop guard path: a hold left behind by a previous run is restored on its own,
@@ -7294,6 +7315,7 @@ class Plugin:
         )
         if self._tdp_shutdown:
             return
+        self._recheck_auto_capability(now)
         if (
             self._low_battery_hold_recovery_pending
             and not self._retry_low_battery_hold_recovery(now)

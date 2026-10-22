@@ -64,6 +64,10 @@ class TDPBackend(ABC):
     def auto_physical_levels(self, levels: dict) -> dict[str, int]:
         return self.physical_levels(levels)
 
+    def refresh_auto_tdp_safe(self) -> bool:
+        """Re-evaluate whether Auto-TDP writes can be confirmed on this route."""
+        return bool(self.auto_tdp_safe)
+
     def selection_ready(self) -> bool:
         """Whether this candidate is usable without performing a hardware write."""
         return bool(self.supported)

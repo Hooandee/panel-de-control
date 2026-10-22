@@ -50,7 +50,11 @@ class SteamDeckHwmonBackend(TDPBackend):
         surface = self._discover()
         self.supported = surface is not None
         self.supports_levels = bool(self.ppt_capability()["supported"])
+        self.refresh_auto_tdp_safe()
+
+    def refresh_auto_tdp_safe(self):
         self.auto_tdp_safe = self._auto_tdp_rails_ready()
+        return self.auto_tdp_safe
 
     def _auto_tdp_rails_ready(self):
         capability, _ = self._capability()
