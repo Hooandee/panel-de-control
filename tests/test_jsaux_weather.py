@@ -41,7 +41,7 @@ def test_search_failure_is_an_empty_list():
 
 def test_forecast_is_cached_for_half_an_hour():
     fetch = Fetch({"api.open-meteo.com": FORECAST})
-    source = weather.WeatherSource(fetch=fetch, clock=lambda: 1000.0)
+    source = weather.WeatherSource(fetch=fetch, clock=lambda: 1000.0, spawn=lambda fn: fn())
     first = source.current(SEVILLE)
     assert first == {"temp": 23.6, "code": 61, "day": True, "high": 27.2, "low": 15.8}
     source.current(SEVILLE)
@@ -51,7 +51,7 @@ def test_forecast_is_cached_for_half_an_hour():
 def test_offline_keeps_the_last_good_reading():
     clock = [1000.0]
     fetch = Fetch({"api.open-meteo.com": FORECAST})
-    source = weather.WeatherSource(fetch=fetch, clock=lambda: clock[0])
+    source = weather.WeatherSource(fetch=fetch, clock=lambda: clock[0], spawn=lambda fn: fn())
     source.current(SEVILLE)
     fetch.payloads = {}
     clock[0] += 3600
@@ -75,7 +75,7 @@ def test_every_weather_animation_loops_within_size(group, day):
 
 def test_scene_without_city_asks_for_one_without_network():
     fetch = Fetch({})
-    scene = weather.WeatherScene(source=weather.WeatherSource(fetch=fetch, clock=lambda: 0.0))
+    scene = weather.WeatherScene(source=weather.WeatherSource(fetch=fetch, clock=lambda: 0.0, spawn=lambda fn: fn()))
     ctx = SceneContext(now=0.0, tz=timezone.utc, options={})
     scene.key(ctx)
     assert scene.render(ctx).frames
@@ -93,3 +93,26 @@ def test_temperature_jitter_does_not_rewrite_the_panel():
     ctx = SceneContext(now=0.0, tz=timezone.utc, options={"city": SEVILLE})
     keys = [scene.key(ctx) for _ in range(5)]
     assert len(set(keys)) == 2
+
+
+def test_fetch_runs_in_the_background_and_never_blocks_the_caller():
+    started = []
+    fetch = Fetch({"api.open-meteo.com": FORECAST})
+    source = weather.WeatherSource(fetch=fetch, clock=lambda: 1000.0, spawn=started.append)
+    assert source.current(SEVILLE) is None
+    assert fetch.urls == [] and len(started) == 1
+    started[0]()
+    assert source.current(SEVILLE)["temp"] == 23.6
+
+
+def test_failures_back_off_instead_of_retrying_every_tick():
+    clock = [1000.0]
+    fetch = Fetch({})
+    source = weather.WeatherSource(fetch=fetch, clock=lambda: clock[0], spawn=lambda fn: fn())
+    for _ in range(100):
+        source.current(SEVILLE)
+        clock[0] += 1
+    assert len(fetch.urls) == 1
+    clock[0] += 300
+    source.current(SEVILLE)
+    assert len(fetch.urls) == 2

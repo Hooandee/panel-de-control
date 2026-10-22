@@ -105,6 +105,7 @@ def rig(tmp_path):
             log=lambda level, message, **fields: logs.append((level, message, fields)),
             scenes={s.id: s for s in (Steady(), Hourly(), Firmware())},
             context=lambda now: SceneContext(now=now, options={}),
+            handshake=kw.pop("handshake", lambda link: True),
             **kw,
         )
         return svc
@@ -248,9 +249,9 @@ def test_nothing_is_written_until_a_scene_is_chosen(rig):
     for _ in range(3):
         svc.tick()
         clock.t += 10
-    assert panel.uploads() == [] and panel.commands(codec.Cmd.ANIMATION) == []
+    assert panel.sent == []
     assert svc.state()["scene"] is None
-    assert svc.state()["present"] is True
+    assert svc.state()["present"] is False
 
 
 def test_commands_without_reply_get_the_official_settle_gap(rig):
@@ -315,6 +316,7 @@ def test_game_scene_takes_over_while_playing_and_returns_after(rig, tmp_path):
         port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None,
         scenes={s.id: s for s in (Steady(), Firmware())},
         context=lambda now: SceneContext(now=now, game={"appid": "1"} if game["on"] else None),
+        handshake=lambda link: True, sleep=lambda s: None,
     )
     svc.set_scene("steady", {})
     svc.set_game_scene("fw")
@@ -323,9 +325,13 @@ def test_game_scene_takes_over_while_playing_and_returns_after(rig, tmp_path):
     game["on"] = True
     clock.t += 30
     svc.tick()
+    clock.t += 30
+    svc.tick()
     assert panel.commands(codec.Cmd.ANIMATION)
     assert svc.state()["scene"] == "steady" and svc.state()["showing"] == "fw"
     game["on"] = False
+    clock.t += 30
+    svc.tick()
     clock.t += 30
     svc.tick()
     assert len(panel.commands(codec.Cmd.GIF_END)) == 2
@@ -348,7 +354,7 @@ def test_alert_interrupts_then_returns(rig, tmp_path):
         store_path=tmp_path / "alert.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
         port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None,
         scenes={s.id: s for s in (Steady(), Firmware())},
-        context=lambda now: SceneContext(now=now),
+        context=lambda now: SceneContext(now=now), handshake=lambda link: True, sleep=lambda s: None,
     )
     svc.set_scene("steady", {})
     svc.tick()

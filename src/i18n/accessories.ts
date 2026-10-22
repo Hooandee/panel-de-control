@@ -2,6 +2,9 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.busy.other.title": "Otro programa está usando la pantalla",
+  "accessories.busy.other.body": "Ciérralo para controlar la pantalla desde aquí: {name}.",
+  "accessories.compose.moving": "Moviendo · A para soltar",
   "accessories.alerts.achievements": "Avisos de logros",
   "accessories.alerts.achievements.desc": "Al desbloquear un logro aparece en la pantalla unos segundos.",
   "accessories.scene.game_download": "Descargas",
@@ -16,7 +19,7 @@ const es: Strings = {
   "accessories.busy.takeOver": "Usar Panel de Control",
   "accessories.busy.failed": "No se pudo detener la app de JSAUX.",
   "accessories.compose.title": "Componer",
-  "accessories.compose.move": "Mueve el bloque con la cruceta",
+  "accessories.compose.move": "Pulsa A para mover el bloque",
   "accessories.compose.remove": "Quitar bloque",
   "accessories.compose.size.s": "Pequeño",
   "accessories.compose.size.m": "Mediano",
@@ -95,7 +98,7 @@ const es: Strings = {
   "accessories.empty.title": "Conecta tu JSAUX PIXEL",
   "accessories.empty.body": "Coloca la carcasa en la Steam Machine y conecta su cable USB. La pantalla aparecerá aquí al momento.",
   "accessories.busy.title": "La app de JSAUX está usando la pantalla",
-  "accessories.busy.body": "Cierra la app oficial de JSAUX o deja que Panel de Control la detenga para controlar la pantalla desde aquí.",
+  "accessories.busy.body": "La app oficial de JSAUX está usando la pantalla. Panel de Control puede detenerla y evitar que vuelva a arrancar sola.",
   "accessories.brightness": "Brillo",
   "accessories.power": "Pantalla encendida",
   "accessories.power.off": "Pantalla apagada",
@@ -114,6 +117,9 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.busy.other.title": "Another program is using the display",
+  "accessories.busy.other.body": "Close it to control the display from here: {name}.",
+  "accessories.compose.moving": "Moving · A to drop",
   "accessories.alerts.achievements": "Achievement alerts",
   "accessories.alerts.achievements.desc": "When you unlock an achievement it shows on the display for a few seconds.",
   "accessories.scene.game_download": "Downloads",
@@ -128,7 +134,7 @@ const en: Strings = {
   "accessories.busy.takeOver": "Use Control Panel",
   "accessories.busy.failed": "The JSAUX app could not be stopped.",
   "accessories.compose.title": "Compose",
-  "accessories.compose.move": "Move the block with the D-pad",
+  "accessories.compose.move": "Press A to move the block",
   "accessories.compose.remove": "Remove block",
   "accessories.compose.size.s": "Small",
   "accessories.compose.size.m": "Medium",
@@ -207,7 +213,7 @@ const en: Strings = {
   "accessories.empty.title": "Connect your JSAUX PIXEL",
   "accessories.empty.body": "Fit the faceplate on the Steam Machine and plug in its USB cable. The display shows up here right away.",
   "accessories.busy.title": "The JSAUX app is using the display",
-  "accessories.busy.body": "Close the official JSAUX app, or let Control Panel stop it, to control the display from here.",
+  "accessories.busy.body": "The official JSAUX app is using the display. Control Panel can stop it and keep it from starting again by itself.",
   "accessories.brightness": "Brightness",
   "accessories.power": "Display on",
   "accessories.power.off": "Display off",
@@ -226,6 +232,9 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.busy.other.title": "Un altro programma sta usando lo schermo",
+  "accessories.busy.other.body": "Chiudilo per gestire lo schermo da qui: {name}.",
+  "accessories.compose.moving": "Spostamento · A per rilasciare",
   "accessories.alerts.achievements": "Avvisi obiettivi",
   "accessories.alerts.achievements.desc": "Quando sblocchi un obiettivo compare sullo schermo per qualche secondo.",
   "accessories.scene.game_download": "Download",
@@ -240,7 +249,7 @@ const it: Strings = {
   "accessories.busy.takeOver": "Usa il Pannello di controllo",
   "accessories.busy.failed": "Impossibile fermare l'app JSAUX.",
   "accessories.compose.title": "Componi",
-  "accessories.compose.move": "Sposta il blocco con la croce direzionale",
+  "accessories.compose.move": "Premi A per spostare il blocco",
   "accessories.compose.remove": "Rimuovi blocco",
   "accessories.compose.size.s": "Piccolo",
   "accessories.compose.size.m": "Medio",
@@ -319,7 +328,7 @@ const it: Strings = {
   "accessories.empty.title": "Collega il tuo JSAUX PIXEL",
   "accessories.empty.body": "Monta la cover sulla Steam Machine e collega il suo cavo USB. Lo schermo comparirà qui subito.",
   "accessories.busy.title": "L'app JSAUX sta usando lo schermo",
-  "accessories.busy.body": "Chiudi l'app ufficiale JSAUX o lascia che il Pannello di controllo la fermi per gestire lo schermo da qui.",
+  "accessories.busy.body": "L'app ufficiale JSAUX sta usando lo schermo. Il Pannello di controllo può fermarla e impedire che si riavvii da sola.",
   "accessories.brightness": "Luminosità",
   "accessories.power": "Schermo acceso",
   "accessories.power.off": "Schermo spento",
@@ -338,6 +347,9 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.busy.other.title": "Ein anderes Programm nutzt das Display",
+  "accessories.busy.other.body": "Zum Steuern hier schließen: {name}.",
+  "accessories.compose.moving": "Verschieben · A zum Ablegen",
   "accessories.alerts.achievements": "Erfolgshinweise",
   "accessories.alerts.achievements.desc": "Freigeschaltete Erfolge erscheinen ein paar Sekunden auf dem Display.",
   "accessories.scene.game_download": "Downloads",
@@ -352,7 +364,7 @@ const de: Strings = {
   "accessories.busy.takeOver": "Kontrollzentrum verwenden",
   "accessories.busy.failed": "Die JSAUX-App konnte nicht gestoppt werden.",
   "accessories.compose.title": "Gestalten",
-  "accessories.compose.move": "Block mit dem Steuerkreuz verschieben",
+  "accessories.compose.move": "A drücken, um den Block zu verschieben",
   "accessories.compose.remove": "Block entfernen",
   "accessories.compose.size.s": "Klein",
   "accessories.compose.size.m": "Mittel",
@@ -431,7 +443,7 @@ const de: Strings = {
   "accessories.empty.title": "JSAUX PIXEL anschließen",
   "accessories.empty.body": "Blende an der Steam Machine anbringen und das USB-Kabel einstecken. Das Display erscheint sofort hier.",
   "accessories.busy.title": "Die JSAUX-App nutzt das Display",
-  "accessories.busy.body": "Die offizielle JSAUX-App schließen oder vom Kontrollzentrum stoppen lassen, um das Display hier zu steuern.",
+  "accessories.busy.body": "Die offizielle JSAUX-App nutzt das Display. Das Kontrollzentrum kann sie stoppen und verhindern, dass sie von selbst wieder startet.",
   "accessories.brightness": "Helligkeit",
   "accessories.power": "Display an",
   "accessories.power.off": "Display aus",
@@ -450,6 +462,9 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.busy.other.title": "Outro programa está usando a tela",
+  "accessories.busy.other.body": "Feche-o para controlar a tela por aqui: {name}.",
+  "accessories.compose.moving": "Movendo · A para soltar",
   "accessories.alerts.achievements": "Avisos de conquistas",
   "accessories.alerts.achievements.desc": "Ao desbloquear uma conquista ela aparece na tela por alguns segundos.",
   "accessories.scene.game_download": "Downloads",
@@ -464,7 +479,7 @@ const ptBR: Strings = {
   "accessories.busy.takeOver": "Usar o Painel de Controle",
   "accessories.busy.failed": "Não foi possível parar o app da JSAUX.",
   "accessories.compose.title": "Compor",
-  "accessories.compose.move": "Mova o bloco com o direcional",
+  "accessories.compose.move": "Aperte A para mover o bloco",
   "accessories.compose.remove": "Remover bloco",
   "accessories.compose.size.s": "Pequeno",
   "accessories.compose.size.m": "Médio",
@@ -543,7 +558,7 @@ const ptBR: Strings = {
   "accessories.empty.title": "Conecte sua JSAUX PIXEL",
   "accessories.empty.body": "Encaixe a tampa na Steam Machine e conecte o cabo USB. A tela aparece aqui na hora.",
   "accessories.busy.title": "O app da JSAUX está usando a tela",
-  "accessories.busy.body": "Feche o app oficial da JSAUX ou deixe o Painel de Controle pará-lo para controlar a tela por aqui.",
+  "accessories.busy.body": "O app oficial da JSAUX está usando a tela. O Painel de Controle pode pará-lo e impedir que volte a abrir sozinho.",
   "accessories.brightness": "Brilho",
   "accessories.power": "Tela ligada",
   "accessories.power.off": "Tela desligada",
@@ -562,6 +577,9 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.busy.other.title": "Un autre programme utilise l'écran",
+  "accessories.busy.other.body": "Fermez-le pour piloter l'écran d'ici : {name}.",
+  "accessories.compose.moving": "Déplacement · A pour lâcher",
   "accessories.alerts.achievements": "Alertes de succès",
   "accessories.alerts.achievements.desc": "Quand vous débloquez un succès, il s'affiche quelques secondes sur l'écran.",
   "accessories.scene.game_download": "Téléchargements",
@@ -576,7 +594,7 @@ const fr: Strings = {
   "accessories.busy.takeOver": "Utiliser le Centre de contrôle",
   "accessories.busy.failed": "Impossible d'arrêter l'app JSAUX.",
   "accessories.compose.title": "Composer",
-  "accessories.compose.move": "Déplacez le bloc avec la croix",
+  "accessories.compose.move": "Appuyez sur A pour déplacer le bloc",
   "accessories.compose.remove": "Retirer le bloc",
   "accessories.compose.size.s": "Petit",
   "accessories.compose.size.m": "Moyen",
@@ -655,7 +673,7 @@ const fr: Strings = {
   "accessories.empty.title": "Branchez votre JSAUX PIXEL",
   "accessories.empty.body": "Fixez la façade sur la Steam Machine et branchez son câble USB. L'écran apparaît ici aussitôt.",
   "accessories.busy.title": "L'app JSAUX utilise l'écran",
-  "accessories.busy.body": "Fermez l'app officielle JSAUX, ou laissez le Centre de contrôle l'arrêter, pour piloter l'écran d'ici.",
+  "accessories.busy.body": "L'app officielle JSAUX utilise l'écran. Le Centre de contrôle peut l'arrêter et l'empêcher de redémarrer d'elle-même.",
   "accessories.brightness": "Luminosité",
   "accessories.power": "Écran allumé",
   "accessories.power.off": "Écran éteint",

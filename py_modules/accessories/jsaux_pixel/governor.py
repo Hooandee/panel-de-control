@@ -6,7 +6,7 @@ from enum import Enum
 
 _HOUR = 3600.0
 _DAY = 24 * _HOUR
-_MIN_GAP = {"scheduled": 20.0, "live": 60.0}
+_MIN_GAP = {"scheduled": 20.0, "live": 60.0, "alert": 0.0}
 _AUTOMATIC_PER_HOUR = 60
 _AUTOMATIC_PER_DAY = 600
 _USER_PER_HOUR = 120
@@ -34,7 +34,10 @@ class Governor:
         if kind == "user":
             recent = sum(1 for t, k, _ in self._uploads if k == "user" and now - t < _HOUR)
             return Decision.BUDGET if recent >= _USER_PER_HOUR else Decision.ALLOW
-        automatic = [(t, k, m) for t, k, m in self._uploads if k != "user"]
+        if kind == "boundary":
+            # A precomputed hour runs out: without this upload the clock would loop back.
+            return Decision.ALLOW
+        automatic = [(t, k, m) for t, k, m in self._uploads if k not in ("user", "boundary")]
         if sum(1 for t, _, _ in automatic if now - t < _HOUR) >= _AUTOMATIC_PER_HOUR:
             return Decision.BUDGET
         if len(automatic) >= _AUTOMATIC_PER_DAY:
@@ -44,6 +47,16 @@ class Governor:
         if relevant and now - max(relevant) < gap:
             return Decision.TOO_SOON
         return Decision.ALLOW
+
+    def retry_in(self, kind: str, metric: str | None = None, decision: "Decision | None" = None) -> float:
+        now = self._clock()
+        automatic = [(t, k, m) for t, k, m in self._uploads if k not in ("user", "boundary")]
+        gap = _MIN_GAP.get(kind, _MIN_GAP["scheduled"])
+        relevant = [t for t, k, m in automatic if kind != "live" or (k == "live" and m == metric)]
+        wait = gap - (now - max(relevant)) if relevant else 0.0
+        if decision is Decision.BUDGET or sum(1 for t, _, _ in automatic if now - t < _HOUR) >= _AUTOMATIC_PER_HOUR:
+            wait = max(wait, 60.0)
+        return max(1.0, wait)
 
     def record(self, content_hash: str, ok: bool, kind: str = "user", metric: str | None = None) -> None:
         if not ok:

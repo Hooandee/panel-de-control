@@ -67,9 +67,9 @@ def test_only_live_scenes_ask_for_frame_rate(tmp_path):
     rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
                          find_panel=lambda: None)
     rt.set_scene("clock_digital", {})
-    assert rt.wants_fps() is False
+    assert rt.wants_fps(playing=True) is False
     rt.set_scene("game_heart", {})
-    assert rt.wants_fps() is True
+    assert rt.wants_fps(playing=True) is True
 
 
 def test_catalog_declares_each_scene_options(tmp_path):
@@ -184,3 +184,87 @@ def test_download_event_feeds_the_download_scene(tmp_path):
     assert rt.notify("download", {"name": "Hades", "done": 50, "total": 100, "seconds": 120, "paused": False}) is True
     assert rt.preview("game_download", {})["frames"]
     assert rt.notify("download", None) is True
+
+
+def test_hand_over_uses_a_clean_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEIxyz")
+    monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+    calls = []
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, run=lambda argv, env: calls.append(env) or 0)
+    rt.pause_official_app()
+    assert "_MEI" not in calls[0].get("LD_LIBRARY_PATH", "")
+
+
+def test_official_app_activity_is_checked_and_cached(tmp_path):
+    calls = []
+    clock = [1000.0]
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, run=lambda argv, env: calls.append(argv) or 0,
+                         monotonic=lambda: clock[0])
+    assert rt.official_active() is True
+    assert rt.official_active() is True
+    assert len(calls) == 1 and calls[0][-2:] == ["is-active", "jsaux-matrix-hub.service"]
+    clock[0] += 61
+    rt.official_active()
+    assert len(calls) == 2
+
+
+def test_fps_is_wanted_only_while_a_game_runs(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    rt.set_game_scene("game_heart")
+    assert rt.wants_fps(playing=False) is False
+    assert rt.wants_fps(playing=True) is True
+    rt.set_game_scene(None)
+    rt.set_scene("composed", {"layout": {"blocks": [{"type": "metric", "x": 0, "y": 0, "metric": "fps"}]}})
+    assert rt.wants_fps(playing=True) is True
+
+
+def test_wants_fps_never_waits_for_the_service_lock(tmp_path):
+    import threading
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    rt.set_scene("game_heart", {})
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold():
+        with rt.service._lock:
+            held.set()
+            release.wait(2)
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    held.wait(1)
+    try:
+        assert rt.wants_fps(playing=True) is True
+    finally:
+        release.set()
+        thread.join()
+
+
+def test_big_drawings_are_shrunk_to_fit(tmp_path, monkeypatch):
+    import random
+    from accessories.jsaux_pixel import codec
+    monkeypatch.setattr(codec, "MAX_GIF_BYTES", 30_000)
+    rng = random.Random(1)
+    frames = [base64.b64encode(bytes(rng.randrange(256) for _ in range(64 * 54 * 3))).decode() for _ in range(8)]
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    saved = rt.save_drawing({"name": "noise", "frames": frames, "fps": 8})
+    from accessories.jsaux_pixel.scenes.custom import CustomScene
+    from accessories.jsaux_pixel.scenes.base import SceneContext
+    from accessories.jsaux_pixel.scenes.fit import encoded_size
+    scene = CustomScene(rt._library)
+    ctx = SceneContext(now=0.0, options={"drawing": saved["id"]})
+    scene.key(ctx)
+    assert encoded_size(scene.render(ctx)) <= 30_000
+
+
+def test_image_import_rejects_a_symlink_swapped_in(tmp_path):
+    home = tmp_path / "home"
+    (home / "Pictures").mkdir(parents=True)
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"secret")
+    (home / "Pictures" / "a.png").symlink_to(secret)
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, user_home=home)
+    assert rt.read_image(str(home / "Pictures" / "a.png"))["ok"] is False

@@ -42,6 +42,7 @@ async function panelPixels(liveAppid: number): Promise<string | null> {
 export function startAccessoryArtWatcher(): () => void {
   let alive = true;
   let sent: string | null = null;
+  const missing = new Set<string>();
   let supported: boolean | null = null;
   const tick = async () => {
     if (!alive) return;
@@ -54,9 +55,13 @@ export function startAccessoryArtWatcher(): () => void {
     }
     if (!supported) return;
     const game = readRunningGame();
-    if (!game || game.appid === sent || !Number.isFinite(game.liveAppid)) return;
+    if (!game || game.appid === sent || missing.has(game.appid) || !Number.isFinite(game.liveAppid)) return;
     const rgb = await panelPixels(game.liveAppid);
-    if (!alive || !rgb) return;
+    if (!alive) return;
+    if (!rgb) {
+      missing.add(game.appid);
+      return;
+    }
     try {
       if (await accessoryEvent("game_art", { appid: game.appid, rgb })) sent = game.appid;
     } catch {

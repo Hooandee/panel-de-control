@@ -2,6 +2,7 @@
 
 import json
 import math
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -18,6 +19,8 @@ from .scenes.base import Scene, SceneContext, Segment
 
 W, H = codec.WIDTH, codec.HEIGHT
 _TTL_S = 30 * 60
+_RETRY_S = 5 * 60
+_RETRY_MAX_S = 30 * 60
 _TIMEOUT_S = 6
 _GEOCODE = "https://geocoding-api.open-meteo.com/v1/search?"
 _FORECAST = "https://api.open-meteo.com/v1/forecast?"
@@ -62,17 +65,42 @@ def group_for(code: int) -> str:
     return "rain"
 
 
+def _spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="pdc-weather", daemon=True).start()
+
+
 class WeatherSource:
-    def __init__(self, fetch: Callable[[str], dict] = _http_json, clock: Callable[[], float] = time.time):
-        self._fetch, self._clock = fetch, clock
+    """Cached forecasts. Callers never wait on the network: a stale entry triggers a background
+    refresh, and failures back off from 5 to 30 minutes."""
+
+    def __init__(self, fetch: Callable[[str], dict] = _http_json, clock: Callable[[], float] = time.time,
+                 spawn: Callable[[Callable[[], None]], None] = _spawn):
+        self._fetch, self._clock, self._spawn = fetch, clock, spawn
         self._cache: dict[tuple, tuple[float, dict]] = {}
+        self._next_try: dict[tuple, float] = {}
+        self._failures: dict[tuple, int] = {}
+        self._busy: set[tuple] = set()
+        self._lock = threading.Lock()
 
     def current(self, city: dict) -> dict | None:
         key = (round(float(city["lat"]), 2), round(float(city["lon"]), 2))
-        cached = self._cache.get(key)
         now = self._clock()
-        if cached and now - cached[0] < _TTL_S:
-            return cached[1]
+        with self._lock:
+            cached = self._cache.get(key)
+            fresh = cached is not None and now - cached[0] < _TTL_S
+            due = now >= self._next_try.get(key, 0.0) and key not in self._busy
+            if not fresh and due:
+                self._busy.add(key)
+                start = True
+            else:
+                start = False
+        if start:
+            self._spawn(lambda: self._refresh(key))
+            with self._lock:
+                cached = self._cache.get(key)
+        return cached[1] if cached else None
+
+    def _refresh(self, key: tuple) -> None:
         params = urllib.parse.urlencode({
             "latitude": key[0], "longitude": key[1], "timezone": "auto", "forecast_days": 1,
             "current": "temperature_2m,weather_code,is_day",
@@ -89,9 +117,17 @@ class WeatherSource:
                 "low": float(daily["temperature_2m_min"][0]),
             }
         except (OSError, ValueError, KeyError, IndexError, TypeError):
-            return cached[1] if cached else None
-        self._cache[key] = (now, reading)
-        return reading
+            with self._lock:
+                failures = self._failures.get(key, 0)
+                self._failures[key] = failures + 1
+                self._next_try[key] = self._clock() + min(_RETRY_MAX_S, _RETRY_S * 2 ** failures)
+                self._busy.discard(key)
+            return
+        with self._lock:
+            self._cache[key] = (self._clock(), reading)
+            self._failures.pop(key, None)
+            self._next_try.pop(key, None)
+            self._busy.discard(key)
 
 
 def _city(options: dict) -> dict | None:

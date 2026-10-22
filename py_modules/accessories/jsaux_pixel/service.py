@@ -22,11 +22,15 @@ from .detect import PanelPort
 from .governor import Decision, Governor
 from .render.canvas import quantize
 from .scenes.base import Scene, SceneContext, Segment
-from .transport import TransportError
+from .transport import TransportError, handshake as panel_handshake
 
 _RECONNECT_S = 5.0
+_BUSY_RECHECK_S = 30.0
+_NOT_A_PANEL_RECHECK_S = 300.0
 _ACK_TIMEOUT_S = 2.0
-_END_TIMEOUT_S = 3.0
+_FAILURE_BACKOFF_S = (30.0, 120.0, 480.0, 1800.0)
+_NAKS_BEFORE_RECONNECT = 2
+_GAME_SETTLE_S = 10.0
 # The official daemon waits 20 ms after every command the firmware does not answer; sending the
 # next frame sooner can make the panel drop it.
 _SETTLE_S = 0.02
@@ -35,6 +39,11 @@ _DEFAULT_BRIGHTNESS = 60
 
 _DEFAULT_NIGHT = {"enabled": False, "from": "23:00", "to": "07:00"}
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def end_timeout(gif_bytes: int) -> float:
+    """The closing ack arrives once the GIF is in flash: about 21 ms per KB measured."""
+    return 1.0 + 0.03 * gif_bytes / 1024
 
 
 def _minutes(hhmm: str) -> int:
@@ -53,13 +62,23 @@ class PixelService:
                  scenes: dict[str, Scene], context: Callable[[float], SceneContext],
                  log: Callable[..., None], clock: Callable[[], float] = time.time, enabled: bool = True,
                  sleep: Callable[[float], None] = time.sleep,
-                 option_extras: Callable[[dict], dict] | None = None):
+                 option_extras: Callable[[dict], dict] | None = None,
+                 handshake: Callable[[object], bool] = panel_handshake,
+                 official_active: Callable[[], bool] = lambda: False):
         self._store_path = Path(store_path)
         self._find_panel, self._open_link, self._port_holders = find_panel, open_link, port_holders
         self._scenes, self._context, self._log, self._clock = scenes, context, log, clock
         self._enabled = enabled
         self._sleep = sleep
         self._option_extras = option_extras or (lambda options: {})
+        self._handshake, self._official_active = handshake, official_active
+        self._held_elsewhere = False
+        self._retry_at = 0.0
+        self._failures = 0
+        self._consecutive_naks = 0
+        self._refused: tuple | None = None
+        self._playing = False
+        self._playing_seen: tuple[bool, float] = (False, 0.0)
         self._lock = threading.RLock()
         self._port: PanelPort | None = None
         self._link = None
@@ -98,8 +117,21 @@ class PixelService:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._scene_id, self._options = scene_id, dict(options or {})
-            self._rendered_key, self._valid_until, self._pending_user = None, None, True
+            self._user_changed()
             self._save()
+
+    def _user_changed(self) -> None:
+        self._rendered_key, self._valid_until, self._pending_user = None, None, True
+        self._retry_at, self._failures, self._refused = 0.0, 0, None
+
+    def forget_shown(self) -> None:
+        with self._lock:
+            self._governor.forget_shown()
+            self._user_changed()
+
+    def wanted_scenes(self) -> tuple[str | None, str | None, str | None, dict]:
+        """Lock-free read for callers on the asyncio loop; plain attribute reads are atomic."""
+        return self._scene_id, self._showing, self._game_scene, self._options
 
     def set_brightness(self, percent: int) -> None:
         with self._lock:
@@ -116,7 +148,7 @@ class PixelService:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._game_scene = scene_id
-            self._rendered_key, self._valid_until, self._pending_user = None, None, True
+            self._user_changed()
             self._save()
 
     def set_alerts(self, prefs: dict) -> None:
@@ -184,7 +216,7 @@ class PixelService:
     # Worker ---------------------------------------------------------------------------------
 
     def tick(self) -> None:
-        if not self._enabled:
+        if not self._enabled or self._scene_id is None:
             return
         with self._lock:
             now = self._clock()
@@ -193,7 +225,8 @@ class PixelService:
             try:
                 self._sync_brightness()
                 self._sync_power(now)
-                self._sync_scene(now)
+                if self._power_sent:
+                    self._sync_scene(now)
             except TransportError as error:
                 self._log("WARNING", "upload_failed", error=str(error), scene=self._scene_id)
                 self._drop(now)
@@ -216,11 +249,12 @@ class PixelService:
             self._port = None
             return False
         holders = self._port_holders(port.dev)
-        if holders:
-            busy = holders[0][1] or str(holders[0][0])
+        busy = (holders[0][1] or str(holders[0][0])) if holders else ("jsaux" if self._official_active() else None)
+        if busy:
             if busy != self._busy_by:
-                self._log("INFO", "busy", holder=busy, pid=holders[0][0])
-            self._busy_by, self._port = busy, port
+                self._log("INFO", "busy", holder=busy)
+            self._busy_by, self._port, self._held_elsewhere = busy, port, True
+            self._next_probe = now + _BUSY_RECHECK_S
             return False
         self._busy_by = None
         link = self._open_link(port)
@@ -229,8 +263,20 @@ class PixelService:
         except TransportError as error:
             self._log("WARNING", "open_failed", error=str(error))
             return False
+        try:
+            is_panel = self._handshake(link)
+        except TransportError:
+            is_panel = False
+        if not is_panel:
+            link.close()
+            self._log("WARNING", "not_a_panel", port=port.dev, bus_port=port.bus_port)
+            self._next_probe = now + _NOT_A_PANEL_RECHECK_S
+            return False
         self._port, self._link, self._brightness_sent, self._power_sent = port, link, None, None
-        self._rendered_key, self._valid_until = None, None
+        self._rendered_key, self._valid_until, self._consecutive_naks = None, None, 0
+        if self._held_elsewhere:
+            self._governor.forget_shown()
+            self._held_elsewhere = False
         self._log("INFO", "connected", port=port.dev, bus_port=port.bus_port, strong=port.strong_supply)
         return True
 
@@ -255,25 +301,38 @@ class PixelService:
         wanted = self._power and not self._night_active(now)
         if wanted == self._power_sent:
             return
+        if now < self._retry_at and self._power_sent is not None:
+            return
         reply = self._request(codec.frame(1, codec.Cmd.POWER, b"\x01" if wanted else b"\x00"))
         if reply is not None and codec.is_ack(reply, 1, codec.Cmd.POWER):
+            if wanted and self._power_sent is False:
+                self._rendered_key, self._valid_until = None, None
             self._power_sent = wanted
             self._log("INFO", "power", on=wanted, night=self._night_active(now))
+        else:
+            self._log("WARNING", "power_failed", on=wanted)
+            self._back_off(now)
+
+    def _settled_playing(self, game_running: bool, now: float) -> bool:
+        seen, since = self._playing_seen
+        if game_running != seen:
+            self._playing_seen = (game_running, now)
+        elif now - since >= _GAME_SETTLE_S:
+            self._playing = game_running
+        return self._playing
 
     def _sync_scene(self, now: float) -> None:
-        if self._scene_id is None:
+        if now < self._retry_at:
             return
         base = self._context(now)
         if self._alert is not None and now >= self._alert[2]:
             self._alert = None
-        playing = bool(base.game) and self._game_scene is not None
+        playing = self._settled_playing(bool(base.game), now) and self._game_scene is not None
         if self._alert is not None:
             showing, chosen = self._alert[0], {"alert": self._alert[1]}
         else:
             showing = self._game_scene if playing else self._scene_id
             chosen = {} if playing else self._options
-        if showing != self._showing:
-            self._pending_user = True
         scene = self._scenes[showing]
         options = {**chosen, **self._option_extras(chosen)}
         ctx = dataclasses.replace(base, options=options)
@@ -281,15 +340,29 @@ class PixelService:
         expired = self._valid_until is not None and now >= self._valid_until
         if key == self._rendered_key and not expired:
             return
+        if self._refused is not None and self._refused == key:
+            return
         segment = scene.render(ctx)
-        kind = "user" if self._pending_user else segment.kind
+        if self._pending_user:
+            kind = "user"
+        elif self._alert is not None or showing != self._showing and self._showing == "alert":
+            kind = "alert"
+        elif expired and key[:2] == (self._rendered_key or (None, None))[:2]:
+            kind = "boundary"
+        else:
+            kind = segment.kind
         if segment.firmware_animation is not None:
             self._show_animation(segment.firmware_animation, kind)
-        else:
-            if not self._upload(segment, kind, showing):
-                return
+        elif not self._upload(segment, kind, showing, key, now):
+            return
         self._rendered_key, self._valid_until, self._pending_user = key, segment.valid_until, False
         self._showing = showing
+
+    def _back_off(self, now: float) -> None:
+        delay = _FAILURE_BACKOFF_S[min(self._failures, len(_FAILURE_BACKOFF_S) - 1)]
+        self._failures += 1
+        self._retry_at = now + delay
+        self._log("WARNING", "upload_failed_backoff", retry_in_s=delay, failures=self._failures)
 
     def _show_animation(self, animation: int, kind: str) -> None:
         content = f"firmware:{animation}"
@@ -300,17 +373,22 @@ class PixelService:
         self._governor.record(content, ok=ok, kind=kind)
         self._log("INFO", "animation", animation=animation, ok=ok)
 
-    def _upload(self, segment: Segment, kind: str, scene_id: str) -> bool:
+    def _upload(self, segment: Segment, kind: str, scene_id: str, key: tuple, now: float) -> bool:
         palette, indexed = quantize(segment.frames)
         frames = [gif.Frame(px, delay) for px, delay in zip(indexed, segment.delays_cs)]
         palette = power_guard.limit_palette(palette, frames)
-        data = gif.encode(frames, palette)
+        data = gif.encode(frames, palette, loop=True)
+        if len(data) > codec.MAX_GIF_BYTES:
+            self._refused = key
+            self._log("WARNING", "too_large", scene=scene_id, bytes=len(data))
+            return False
         content = hashlib.sha1(data).hexdigest()
         decision = self._governor.decide(content, kind, segment.metric)
         if decision is Decision.DUPLICATE:
             return True
         if decision is not Decision.ALLOW:
             self._log("INFO", "skipped", reason=decision.value, scene=scene_id)
+            self._retry_at = now + self._governor.retry_in(kind, segment.metric, decision)
             return False
         started = time.monotonic()
         ok = self._send_gif(data)
@@ -320,14 +398,22 @@ class PixelService:
         self._last_upload = {"at": self._clock(), "scene": scene_id, "bytes": len(data),
                              "frames": len(frames), "ok": ok, "ms": elapsed}
         self._log("INFO" if ok else "WARNING", "upload", **self._last_upload, kind=kind)
-        return ok
+        if ok:
+            self._failures, self._consecutive_naks = 0, 0
+            return True
+        self._consecutive_naks += 1
+        self._back_off(now)
+        if self._consecutive_naks >= _NAKS_BEFORE_RECONNECT:
+            self._consecutive_naks = 0
+            self._drop(now)
+        return False
 
     def _send_gif(self, data: bytes) -> bool:
         if not power_guard.allowed(codec.frame(1, codec.Cmd.TEST, b"\x00")):
             return False
         self._send_unanswered(codec.frame(1, codec.Cmd.TEST, b"\x00"))
         for frame in codec.gif_upload(data):
-            timeout = _END_TIMEOUT_S if frame[3] == codec.Cmd.GIF_END else _ACK_TIMEOUT_S
+            timeout = end_timeout(len(data)) if frame[3] == codec.Cmd.GIF_END else _ACK_TIMEOUT_S
             reply = self._request(frame, timeout)
             if reply is None or not codec.is_ack(reply, frame[2], frame[3]):
                 self._log("WARNING", "nak", command=frame[3], reply=(reply or b"").hex(),

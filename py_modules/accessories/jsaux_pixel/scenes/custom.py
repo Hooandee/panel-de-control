@@ -5,6 +5,7 @@ import base64
 from ..library import Library
 from ..render.canvas import Canvas
 from .base import Scene, SceneContext, Segment
+from .fit import fits
 
 
 class CustomScene(Scene):
@@ -38,4 +39,7 @@ class CustomScene(Scene):
                     canvas.px(index % 64, index // 64, (r, g, b))
             frames.append(canvas)
         delay = max(3, round(100 / int(drawing.get("fps") or 8)))
-        return Segment(frames, [delay] * len(frames))
+        segment = Segment(frames, [delay] * len(frames))
+        while len(segment.frames) > 1 and not fits(segment):
+            segment = Segment(segment.frames[::2], [d * 2 for d in segment.delays_cs[::2]])
+        return segment

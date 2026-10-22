@@ -66,19 +66,21 @@ const Hero: FC<{ status: Status; sceneId: string | null; options: Record<string,
   );
 };
 
-const EmptyState: FC<{ busy: boolean; onTakeOver: () => void }> = ({ busy, onTakeOver }) => {
+const EmptyState: FC<{ busyBy: string | null; onTakeOver: () => void }> = ({ busyBy, onTakeOver }) => {
   const { t } = useI18n();
+  const busy = !!busyBy;
+  const official = !!busyBy && busyBy.startsWith("jsaux");
   const [failed, setFailed] = useState(false);
   return (
     <div style={{ ...theme.card, padding: theme.space.lg, display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, textAlign: "center" }}>
       <LuPlug size={28} color={busy ? theme.color.warn : theme.color.accent} />
       <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-        {t(busy ? "accessories.busy.title" : "accessories.empty.title")}
+        {t(!busy ? "accessories.empty.title" : official ? "accessories.busy.title" : "accessories.busy.other.title")}
       </span>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.45 }}>
-        {t(busy ? "accessories.busy.body" : "accessories.empty.body")}
+        {!busy ? t("accessories.empty.body") : official ? t("accessories.busy.body") : t("accessories.busy.other.body", { name: busyBy ?? "" })}
       </span>
-      {busy && (
+      {official && (
         <DialogButton style={{ marginTop: theme.space.xs }}
           onClick={() => void pauseJsauxApp().then((r) => { setFailed(!r?.ok); if (r?.ok) onTakeOver(); }).catch(() => setFailed(true))}>
           {t("accessories.busy.takeOver")}
@@ -110,7 +112,7 @@ export const AccesoriosSection: FC = () => {
             <SceneOptions options={active.options} values={state.options}
               onChange={(values) => void chooseScene(active.id, values)} />
           )}
-          {!state.present && <EmptyState busy={!!state.busy_by} onTakeOver={() => void refresh()} />}
+          {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
         </div>
       </PanelSectionRow>
       {state.present && (

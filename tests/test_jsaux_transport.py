@@ -145,3 +145,18 @@ def test_is_reply_accepts_nak_but_not_corruption():
     assert codec.is_reply(codec.frame(1, codec.Cmd.ANIMATION, b"\x00"), 1, codec.Cmd.ANIMATION)
     assert not codec.is_reply(codec.frame(1, codec.Cmd.POWER, b"\x00"), 1, codec.Cmd.ANIMATION)
     assert not codec.is_reply(codec.frame(1, codec.Cmd.ANIMATION, b"\x00")[:-1] + b"\x00", 1, codec.Cmd.ANIMATION)
+
+
+def test_two_links_cannot_hold_the_panel_at_once(pty_panel, tmp_path):
+    master, path = pty_panel
+    _FakePanel(master)
+    first = transport.Transport(path, baud=BAUD, lock_path=tmp_path / "pixel.lock")
+    second = transport.Transport(path, baud=BAUD, lock_path=tmp_path / "pixel.lock")
+    first.open()
+    try:
+        with pytest.raises(transport.TransportError):
+            second.open()
+    finally:
+        first.close()
+    second.open()
+    second.close()

@@ -3,8 +3,10 @@
 import fcntl
 import os
 import select
+import tempfile
 import termios
 import time
+from pathlib import Path
 
 from . import codec
 
@@ -19,16 +21,47 @@ class TransportError(Exception):
     pass
 
 
+def _default_lock() -> Path:
+    base = Path("/run/lock")
+    return (base if base.is_dir() else Path(tempfile.gettempdir())) / "pdc-jsaux-pixel.lock"
+
+
 class Transport:
-    def __init__(self, dev: str, baud: int | None = None):
+    """Root ignores TIOCEXCL, so a lock file also keeps a second Panel instance off the port."""
+
+    def __init__(self, dev: str, baud: int | None = None, lock_path: Path | None = None):
         self.dev = dev
         self.baud = baud if baud is not None else termios.B1000000
+        self._lock_path = Path(lock_path) if lock_path else _default_lock()
         self._fd: int | None = None
+        self._lock_fd: int | None = None
+
+    def _acquire(self) -> None:
+        try:
+            fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o644)
+        except OSError as error:
+            raise TransportError(f"lock {self._lock_path}: {error.strerror}") from error
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            os.close(fd)
+            raise TransportError("panel already in use by another instance") from error
+        self._lock_fd = fd
+
+    def _release(self) -> None:
+        if self._lock_fd is not None:
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+                os.close(self._lock_fd)
+            finally:
+                self._lock_fd = None
 
     def open(self) -> None:
+        self._acquire()
         try:
             fd = os.open(self.dev, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         except OSError as error:
+            self._release()
             raise TransportError(f"open {self.dev}: {error.strerror}") from error
         try:
             fcntl.ioctl(fd, termios.TIOCEXCL)
@@ -43,15 +76,17 @@ class Transport:
             termios.tcsetattr(fd, termios.TCSANOW, attrs)
         except OSError as error:
             os.close(fd)
+            self._release()
             raise TransportError(f"configure {self.dev}: {error.strerror}") from error
         self._fd = fd
 
     def close(self) -> None:
-        if self._fd is not None:
-            try:
+        try:
+            if self._fd is not None:
                 os.close(self._fd)
-            finally:
-                self._fd = None
+        finally:
+            self._fd = None
+            self._release()
 
     @property
     def is_open(self) -> bool:

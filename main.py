@@ -9478,12 +9478,11 @@ class Plugin:
         appid = getattr(self, "_current_appid", None)
         game = None
         if appid:
-            since = getattr(self, "_current_appid_at", None)
-            started = time.time() - (time.monotonic() - since) if since is not None else None
-            game = {"appid": appid, "name": getattr(self, "_current_game_name", None), "started_at": started}
+            game = {"appid": appid, "name": getattr(self, "_current_game_name", None),
+                    "started_at": self._pixel_game_started(appid)}
         readings: dict = {}
         perf = getattr(self, "_gamescope_perf", None)
-        fps = perf.fps() if perf is not None and self._pixel_runtime().wants_fps() else None
+        fps = perf.fps() if perf is not None and self._pixel_runtime().wants_fps(playing=bool(appid)) else None
         if fps is not None:
             readings["fps"] = fps
         reader = getattr(self, "_fan_reader", None)
@@ -9517,15 +9516,30 @@ class Plugin:
     async def search_accessory_cities(self, query, language="es") -> dict:
         return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
 
+    def _pixel_game_started(self, appid) -> int | None:
+        cached = getattr(self, "_pixel_started", None)
+        if cached and cached[0] == appid:
+            return cached[1]
+        since = getattr(self, "_current_appid_at", None)
+        started = round(time.time() - (time.monotonic() - since)) if since is not None else None
+        self._pixel_started = (appid, started)
+        return started
+
     async def accessory_event(self, name, data=None) -> bool:
         return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data) if isinstance(data, dict) else None)
 
     def _start_pixel_fps_keeper(self) -> None:
         async def keep() -> None:
+            wanted = False
             while not getattr(self, "_shutting_down", False):
-                if self._pixel_runtime().wants_fps():
+                now_wanted = self._pixel_runtime().wants_fps(playing=bool(getattr(self, "_current_appid", None)))
+                if now_wanted:
                     self._pixel_fps_at = time.monotonic()
+                elif wanted:
+                    self._pixel_fps_at = None
+                if now_wanted or wanted:
                     await self._apply_stats_reader()
+                wanted = now_wanted
                 await asyncio.sleep(3)
 
         self._pixel_fps_task = asyncio.create_task(keep())

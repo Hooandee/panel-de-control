@@ -42,6 +42,7 @@ const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; cl
   const [selected, setSelected] = useState(0);
   const [preview, setPreview] = useState<DecodedFrames | null>(null);
   const [drawings, setDrawings] = useState<DrawingSummary[]>([]);
+  const [grabbing, setGrabbing] = useState(false);
 
   useEffect(() => {
     void listAccessoryDrawings().then((result) => setDrawings(result?.drawings ?? [])).catch(() => setDrawings([]));
@@ -77,7 +78,7 @@ const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; cl
       [GamepadButton.DIR_UP]: [0, -1], [GamepadButton.DIR_DOWN]: [0, 1],
     };
     const delta = step[event.detail.button];
-    if (!delta || !current) return;
+    if (!grabbing || !delta || !current) return;
     event.preventDefault();
     event.stopPropagation();
     update({ x: Math.max(-PANEL_W + 1, Math.min(PANEL_W - 1, current.x + delta[0])), y: Math.max(-PANEL_H + 1, Math.min(PANEL_H - 1, current.y + delta[1])) });
@@ -117,10 +118,12 @@ const ComposerBody: FC<{ initial: Block[]; onShow: (blocks: Block[]) => void; cl
         </Focusable>
         {current && (
           <>
-            <Focusable onGamepadDirection={move} onActivate={() => undefined} noFocusRing={false}
+            <Focusable onGamepadDirection={move} onActivate={() => setGrabbing(!grabbing)} onClick={() => setGrabbing(!grabbing)}
+              onGamepadBlur={() => setGrabbing(false)}
               style={{ ...theme.card, padding: theme.space.sm, display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
-                fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              <LuMove /> {t("accessories.compose.move")}
+                fontSize: theme.font.caption, color: grabbing ? theme.color.onAccent : theme.color.textMuted,
+                background: grabbing ? theme.color.accent : theme.card.background }}>
+              <LuMove /> {t(grabbing ? "accessories.compose.moving" : "accessories.compose.move")}
             </Focusable>
             <Focusable flow-children="row" style={{ display: "flex", gap: 6 }}>
               <DialogButton style={{ minWidth: 0, flex: 1 }} onClick={() => update({ size: next(SIZES, current.size) })}>

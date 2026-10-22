@@ -1,6 +1,7 @@
 """Glue between Panel de Control and the JSAUX PIXEL service."""
 
 import base64
+import time
 import json
 import os
 import pwd
@@ -8,6 +9,8 @@ import subprocess
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+
+from controllers.detect import clean_env
 
 from . import detect, metrics, transport, weather
 from .library import Library
@@ -23,6 +26,7 @@ _ART_BYTES = 64 * 54 * 3
 _IMAGE_TYPES = {".png": "image/png", ".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 _IMAGE_LIMIT = 8 * 1024 * 1024
 _OFFICIAL_SERVICE = "jsaux-matrix-hub.service"
+_OFFICIAL_RECHECK_S = 60.0
 
 
 def _uid_of(user: str) -> int:
@@ -46,7 +50,8 @@ class Runtime:
                  system_metrics: Callable[[], dict] | None = None,
                  user_home: Path | str = "/home/deck",
                  run: Callable[[list[str], dict], int] | None = None,
-                 user: str = "deck", uid: int | None = None):
+                 user: str = "deck", uid: int | None = None,
+                 monotonic: Callable[[], float] = time.monotonic):
         self.supported = device_key in SUPPORTED_DEVICES
         self._colores_state = Path(settings_dir).parent / "Colores" / "state.json"
         self._library = Library(Path(settings_dir) / "accessories" / "library")
@@ -54,6 +59,8 @@ class Runtime:
         self._entries = catalog.build(self._library)
         self._run = run or _run
         self._user, self._uid = user, uid if uid is not None else _uid_of(user)
+        self._monotonic = monotonic
+        self._official: tuple[float, bool] | None = None
         self._log = log
         self._context_source = context_source or (lambda: {})
         self._system_metrics = system_metrics or metrics.SystemMetrics().sample
@@ -68,6 +75,7 @@ class Runtime:
             log=log,
             enabled=self.supported,
             option_extras=self._option_extras,
+            official_active=self.official_active,
         )
         self.worker: Worker | None = None
 
@@ -135,14 +143,25 @@ class Runtime:
         colors = self.ledbar_colors()
         return {"ledbar": colors} if colors else {}
 
+    def _user_systemctl(self, *args: str) -> int:
+        env = {**clean_env(), "XDG_RUNTIME_DIR": f"/run/user/{self._uid}",
+               "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{self._uid}/bus"}
+        return self._run(["runuser", "-u", self._user, "--", "systemctl", "--user", *args], env)
+
+    def official_active(self) -> bool:
+        now = self._monotonic()
+        if self._official is None or now - self._official[0] >= _OFFICIAL_RECHECK_S:
+            self._official = (now, self._user_systemctl("is-active", _OFFICIAL_SERVICE) == 0)
+        return self._official[1]
+
     def pause_official_app(self) -> dict:
         if not self.supported:
             return {"ok": False}
-        env = {**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{self._uid}",
-               "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{self._uid}/bus"}
-        argv = ["runuser", "-u", self._user, "--", "systemctl", "--user", "disable", "--now", _OFFICIAL_SERVICE]
-        code = self._run(argv, env)
+        code = self._user_systemctl("disable", "--now", _OFFICIAL_SERVICE)
         self._log("INFO" if code == 0 else "WARNING", "official_app_paused", code=code)
+        if code == 0:
+            self._official = (self._monotonic(), False)
+            self.service.forget_shown()
         return {"ok": code == 0}
 
     def list_drawings(self) -> dict:
@@ -177,18 +196,34 @@ class Runtime:
         if mime is None or self._home not in target.parents:
             return {"ok": False, "error": "unsupported"}
         try:
-            if target.stat().st_size > _IMAGE_LIMIT:
-                return {"ok": False, "error": "too_large"}
-            return {"ok": True, "mime": mime, "data": base64.b64encode(target.read_bytes()).decode("ascii")}
+            fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
         except OSError:
             return {"ok": False, "error": "unreadable"}
+        try:
+            opened, checked = os.fstat(fd), os.stat(target, follow_symlinks=False)
+            if (opened.st_dev, opened.st_ino) != (checked.st_dev, checked.st_ino):
+                return {"ok": False, "error": "unsupported"}
+            if opened.st_size > _IMAGE_LIMIT:
+                return {"ok": False, "error": "too_large"}
+            with os.fdopen(os.dup(fd), "rb") as handle:
+                data = handle.read(_IMAGE_LIMIT + 1)
+            return {"ok": True, "mime": mime, "data": base64.b64encode(data).decode("ascii")}
+        except OSError:
+            return {"ok": False, "error": "unreadable"}
+        finally:
+            os.close(fd)
 
     def search_cities(self, query: str, language: str) -> dict:
         return {"cities": weather.search_cities(query, language) if query.strip() else []}
 
-    def wants_fps(self) -> bool:
-        state = self.service.state()
-        return bool({state["scene"], state["showing"], state["game_scene"]} & _FPS_SCENES)
+    def wants_fps(self, playing: bool) -> bool:
+        if not playing:
+            return False
+        scene, showing, game_scene, options = self.service.wanted_scenes()
+        if {scene, showing, game_scene} & _FPS_SCENES:
+            return True
+        blocks = ((options or {}).get("layout") or {}).get("blocks") if scene == "composed" else None
+        return any(isinstance(b, dict) and b.get("metric") == "fps" for b in blocks or [])
 
     def set_alerts(self, prefs: dict) -> dict:
         self.service.set_alerts(prefs)

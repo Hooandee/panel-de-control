@@ -82,6 +82,7 @@ class ComposedScene(Scene):
         return hour, tuple(values), repr(blocks)
 
     def render(self, ctx: SceneContext) -> Segment:
+        self._art_cache = {}
         blocks = self._blocks(ctx)
         live = any(block["type"] == "metric" for block in blocks)
         if any(block["type"] in ("clock", "date") for block in blocks):
@@ -96,6 +97,7 @@ class ComposedScene(Scene):
 
     def _draw(self, blocks: list[dict], t: datetime, options: dict) -> Canvas:
         canvas = Canvas()
+        self._art_cache: dict[str, bytes | None] = getattr(self, "_art_cache", {})
         for index, block in enumerate(blocks):
             theme = THEMES[block["color"]]
             size = _SIZES[block["size"]]
@@ -125,13 +127,16 @@ class ComposedScene(Scene):
         return canvas
 
     def _paste(self, canvas: Canvas, block: dict) -> None:
-        try:
-            drawing = self._library.load(str(block.get("drawing") or ""))
-        except ValueError:
-            drawing = None
-        if not drawing:
+        drawing_id = str(block.get("drawing") or "")
+        if drawing_id not in self._art_cache:
+            try:
+                drawing = self._library.load(drawing_id)
+            except ValueError:
+                drawing = None
+            self._art_cache[drawing_id] = base64.b64decode(drawing["frames"][0]) if drawing else None
+        raw = self._art_cache[drawing_id]
+        if raw is None:
             return
-        raw = base64.b64decode(drawing["frames"][0])
         shrink = (3, 2, 1)[_SIZES[block["size"]]]
         for y in range(0, H, shrink):
             for x in range(0, W, shrink):
