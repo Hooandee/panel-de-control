@@ -70,7 +70,7 @@ export const SceneGallery: FC<{
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       {categories.length > 1 && (
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        <Focusable flow-children="row" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {categories.map((id) => {
             const selected = id === category;
             return (
