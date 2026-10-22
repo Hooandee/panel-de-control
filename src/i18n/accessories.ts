@@ -2,6 +2,7 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hiperespacio",
   "accessories.scene.art_matrix": "Lluvia digital",
   "accessories.scene.art_lava": "Lámpara de lava",
@@ -40,6 +41,7 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperspace",
   "accessories.scene.art_matrix": "Digital rain",
   "accessories.scene.art_lava": "Lava lamp",
@@ -78,6 +80,7 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Iperspazio",
   "accessories.scene.art_matrix": "Pioggia digitale",
   "accessories.scene.art_lava": "Lampada lava",
@@ -116,6 +119,7 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperraum",
   "accessories.scene.art_matrix": "Digitaler Regen",
   "accessories.scene.art_lava": "Lavalampe",
@@ -154,6 +158,7 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hiperespaço",
   "accessories.scene.art_matrix": "Chuva digital",
   "accessories.scene.art_lava": "Lâmpada de lava",
@@ -192,6 +197,7 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.hooandee": "Hooandee",
   "accessories.scene.art_starfield": "Hyperespace",
   "accessories.scene.art_matrix": "Pluie numérique",
   "accessories.scene.art_lava": "Lampe à lave",
