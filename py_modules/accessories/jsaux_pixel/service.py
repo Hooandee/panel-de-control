@@ -79,6 +79,7 @@ class PixelService:
         self._refused: tuple | None = None
         self._playing = False
         self._playing_seen: tuple[bool, float] = (False, 0.0)
+        self._seen_key = None
         self._lock = threading.RLock()
         self._port: PanelPort | None = None
         self._link = None
@@ -342,7 +343,14 @@ class PixelService:
             return
         if self._refused is not None and self._refused == key:
             return
+        if scene.SETTLE and key != self._seen_key:
+            # Live readings settle a tick later (CPU load needs two samples); waiting one tick
+            # avoids writing a placeholder that is replaced a second later.
+            self._seen_key = key
+            return
         segment = scene.render(ctx)
+        if not segment.ready:
+            return
         if self._pending_user:
             kind = "user"
         elif self._alert is not None or showing != self._showing and self._showing == "alert":

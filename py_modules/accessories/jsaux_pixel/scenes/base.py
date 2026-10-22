@@ -25,6 +25,7 @@ class Segment:
     kind: str = "scheduled"
     metric: str | None = None
     firmware_animation: int | None = None
+    ready: bool = True
 
 
 class Scene:
@@ -37,6 +38,7 @@ class Scene:
     id: str = ""
     UPLOADS_PER_HOUR: float = 0
     OPTIONS: tuple[str, ...] = ()
+    SETTLE = False
 
     def key(self, ctx: SceneContext) -> Hashable:
         return None

@@ -56,6 +56,7 @@ def validate_layout(layout: dict) -> list[dict]:
 class ComposedScene(Scene):
     id = "composed"
     UPLOADS_PER_HOUR = 30
+    SETTLE = True
 
     def __init__(self, library: Library):
         self._library = library

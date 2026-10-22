@@ -116,3 +116,23 @@ def test_failures_back_off_instead_of_retrying_every_tick():
     clock[0] += 300
     source.current(SEVILLE)
     assert len(fetch.urls) == 2
+
+
+def test_weather_is_not_ready_while_its_first_fetch_is_in_flight():
+    pending = []
+    source = weather.WeatherSource(fetch=Fetch({"api.open-meteo.com": FORECAST}), clock=lambda: 0.0, spawn=pending.append)
+    scene = weather.WeatherScene(source=source)
+    ctx = SceneContext(now=0.0, tz=timezone.utc, options={"city": SEVILLE})
+    scene.key(ctx)
+    assert scene.render(ctx).ready is False
+    pending[0]()
+    scene.key(ctx)
+    assert scene.render(ctx).ready is True
+
+
+def test_weather_shows_its_placeholder_once_the_fetch_has_failed():
+    source = weather.WeatherSource(fetch=Fetch({}), clock=lambda: 0.0, spawn=lambda fn: fn())
+    scene = weather.WeatherScene(source=source)
+    ctx = SceneContext(now=0.0, tz=timezone.utc, options={"city": SEVILLE})
+    scene.key(ctx)
+    assert scene.render(ctx).ready is True

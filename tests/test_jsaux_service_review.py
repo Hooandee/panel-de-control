@@ -196,3 +196,64 @@ def test_hour_boundary_upload_is_not_blocked_by_the_live_budget():
         clock.t += 21
     assert gov.decide("next", "scheduled") is Decision.BUDGET
     assert gov.decide("boundary", "boundary") is Decision.ALLOW
+
+
+class WarmingUp(Steady):
+    id = "warming"
+    SETTLE = True
+
+    def __init__(self):
+        self.calls = 0
+
+    def key(self, ctx):
+        self.calls += 1
+        return "--" if self.calls == 1 else "42"
+
+
+class NotReady(Steady):
+    id = "notready"
+
+    def __init__(self):
+        self.ready = False
+
+    def key(self, ctx):
+        return self.ready
+
+    def render(self, ctx):
+        segment = super().render(ctx)
+        segment.ready = self.ready
+        return segment
+
+
+def test_a_reading_that_settles_after_one_tick_is_written_once(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    svc = service.PixelService(
+        store_path=tmp_path / "s.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None, scenes={"warming": WarmingUp()},
+        context=lambda now: SceneContext(now=now), handshake=lambda link: True, sleep=lambda s: None,
+    )
+    svc.set_scene("warming", {})
+    for _ in range(5):
+        svc.tick()
+        clock.t += 1
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 1
+
+
+def test_a_scene_that_is_not_ready_waits_without_writing(tmp_path):
+    panel, clock = FakePanel(), Clock()
+    scene = NotReady()
+    svc = service.PixelService(
+        store_path=tmp_path / "s.json", find_panel=panel.find, open_link=lambda port: FakeLink(panel),
+        port_holders=lambda dev: [], clock=clock, log=lambda *a, **k: None, scenes={"notready": scene},
+        context=lambda now: SceneContext(now=now), handshake=lambda link: True, sleep=lambda s: None,
+    )
+    svc.set_scene("notready", {})
+    for _ in range(4):
+        svc.tick()
+        clock.t += 1
+    assert panel.uploads() == []
+    scene.ready = True
+    for _ in range(3):
+        svc.tick()
+        clock.t += 1
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 1

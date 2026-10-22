@@ -100,6 +100,11 @@ class WeatherSource:
                 cached = self._cache.get(key)
         return cached[1] if cached else None
 
+    def pending(self, city: dict) -> bool:
+        key = (round(float(city["lat"]), 2), round(float(city["lon"]), 2))
+        with self._lock:
+            return key not in self._cache and (key in self._busy or key not in self._next_try)
+
     def _refresh(self, key: tuple) -> None:
         params = urllib.parse.urlencode({
             "latitude": key[0], "longitude": key[1], "timezone": "auto", "forecast_days": 1,
@@ -159,11 +164,13 @@ class WeatherScene(Scene):
     def render(self, ctx: SceneContext) -> Segment:
         if self._reading is None:
             canvas = Canvas()
-            if _city(ctx.options):
+            city = _city(ctx.options)
+            if city:
                 _degrees(canvas, "--", 16)
             else:
                 _pin(canvas)
-            return Segment([canvas], [100])
+            waiting = bool(city) and self._source is not None and self._source.pending(city)
+            return Segment([canvas], [100], ready=not waiting)
         reading = dict(self._reading, temp=self._temp.shown if self._temp.shown is not None else self._reading["temp"])
         return self.render_reading(reading, ctx.options)
 

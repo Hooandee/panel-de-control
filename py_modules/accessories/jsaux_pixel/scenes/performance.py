@@ -28,6 +28,7 @@ def _fmt(value, suffix: str = "") -> str:
 
 class LiveScene(Scene):
     METRIC = ""
+    SETTLE = True
     OPTIONS = ("theme",)
 
     def render(self, ctx: SceneContext) -> Segment:
