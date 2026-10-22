@@ -101,6 +101,8 @@ class Runtime:
     def state(self) -> dict:
         state = self.service.state()
         state["supported"] = self.supported
+        run = self._events.get("speedrun")
+        state["speedrun_paused"] = isinstance(run, dict) and run.get("paused_at") is not None
         state["catalog"] = [
             {"id": scene.id, "category": category, "labelKey": f"accessories.scene.{scene.id}",
              "options": list(scene.OPTIONS)}
@@ -291,6 +293,8 @@ class Runtime:
             return True
         if name == "game_info":
             return self._game_info(data)
+        if name == "speedrun":
+            return self._speedrun(data)
         if name != "game_art" or not isinstance(data, dict):
             return False
         try:
@@ -300,6 +304,30 @@ class Runtime:
         if not valid:
             return False
         self._events = {**self._events, "game_art": {"appid": str(data.get("appid")), "rgb": data["rgb"]}}
+        return True
+
+    def _speedrun(self, data) -> bool:
+        action = data.get("action") if isinstance(data, dict) else None
+        game = (self._context_source() or {}).get("game") or {}
+        now = time.time()
+        run = self._events.get("speedrun")
+        if not isinstance(run, dict) or run.get("appid") != str(game.get("appid")):
+            started = game.get("started_at")
+            run = {"appid": str(game.get("appid")), "origin": float(started) if isinstance(started, (int, float)) else now,
+                   "paused_at": None}
+        if action == "reset":
+            run = {**run, "origin": now, "paused_at": None}
+        elif action == "pause" and run["paused_at"] is None:
+            run = {**run, "paused_at": now}
+        elif action == "resume" and run["paused_at"] is not None:
+            run = {**run, "origin": run["origin"] + now - run["paused_at"], "paused_at": None}
+        elif action not in ("pause", "resume"):
+            return False
+        self._events = {**self._events, "speedrun": run}
+        scene, showing, game_scene, _options = self.service.wanted_scenes()
+        if "speedrun" in (scene, showing, game_scene):
+            self.service.forget_shown()
+        self._log("INFO", "speedrun", action=action)
         return True
 
     def _game_info(self, data) -> bool:
@@ -370,11 +398,16 @@ class Runtime:
         self.mind.observe(now, night=hour in _PET_BEDTIME, playing=bool(extra.get("game")))
         readings = {key: value for key, value in (self._system_metrics() or {}).items() if value is not None}
         readings.update({key: value for key, value in (extra.get("metrics") or {}).items() if value is not None})
+        events = self._events
+        run = events.get("speedrun")
+        if isinstance(run, dict) and run.get("appid") != str((extra.get("game") or {}).get("appid")):
+            events = {key: value for key, value in events.items() if key != "speedrun"}
+            self._events = events
         return SceneContext(
             now=now,
             tz=zone,
             game=extra.get("game"),
             metrics=readings,
-            events=self._events,
+            events=events,
         )
 

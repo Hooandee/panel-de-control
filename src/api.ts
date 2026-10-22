@@ -1249,6 +1249,7 @@ export interface AccessoriesState {
   showing: string | null;
   alerts: { achievements: boolean };
   on_suspend: "off" | "pet";
+  speedrun_paused?: boolean;
   suspended: boolean;
   catalog: AccessorySceneMeta[];
 }

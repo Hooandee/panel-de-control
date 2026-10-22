@@ -183,8 +183,8 @@ export const AccesoriosSection: FC = () => {
             layout={current?.id === "composed" ? ((current.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
             onPick={(id, options) => preview(id, options ?? {})} onSend={(id, options) => void send(id, options)}>
             {current && meta && meta.options.length > 0 && (
-              <SceneOptions options={meta.options} values={current.options}
-                onChange={(values) => preview(current.id, values)} />
+              <SceneOptions options={meta.options} values={current.options} speedrunPaused={state.speedrun_paused}
+                onRunChanged={() => void refresh()} onChange={(values) => preview(current.id, values)} />
             )}
           </SceneGallery>
         </div>

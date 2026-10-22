@@ -1,6 +1,6 @@
 """Every scene Panel offers for the panel, with its gallery category."""
 
-from . import alerts, art, clocks, firmware, game, performance, pet, signature
+from . import alerts, art, clocks, firmware, game, performance, pet, signature, speedrun
 from ..library import Library
 from .composed import ComposedScene
 from .custom import CustomScene
@@ -19,6 +19,7 @@ def build(library: Library, pet_mind: Mind | None = None) -> list[tuple[str, Sce
         *(("clocks", scene) for scene in clocks.SCENES),
         *(("game", scene) for scene in game.SCENES + performance.SCENES),
         ("game", alerts.DownloadScene()),
+        ("game", speedrun.SpeedrunScene()),
         *(("art", scene) for scene in art.SCENES),
         *(("firmware", scene) for scene in firmware.SCENES),
         ("custom", CustomScene(library)),

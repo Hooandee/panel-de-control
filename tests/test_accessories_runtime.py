@@ -360,3 +360,25 @@ def test_the_pet_sleeps_through_the_night_by_itself(tmp_path):
     night = datetime(2026, 10, 22, 23, 30).astimezone().timestamp()
     rt._context(night)
     assert rt.pet_state()["asleep"] is True
+
+
+def test_speedrun_controls_reset_pause_and_resume(tmp_path, monkeypatch):
+    clock = [5000.0]
+    monkeypatch.setattr(runtime.time, "time", lambda: clock[0])
+    rt = _rt(tmp_path, {"appid": "1", "name": "Celeste", "started_at": 4000.0})
+    assert rt.notify("speedrun", {"action": "reset"}) is True
+    assert rt._events["speedrun"] == {"appid": "1", "origin": 5000.0, "paused_at": None}
+    clock[0] = 5100.0
+    rt.notify("speedrun", {"action": "pause"})
+    clock[0] = 5400.0
+    rt.notify("speedrun", {"action": "resume"})
+    assert rt._events["speedrun"]["origin"] == 5300.0
+    assert rt.notify("speedrun", {"action": "explode"}) is False
+
+
+def test_a_new_game_drops_the_old_speedrun(tmp_path):
+    game = {"appid": "1", "name": "A", "started_at": 4000.0}
+    rt = _rt(tmp_path, game)
+    rt.notify("speedrun", {"action": "reset"})
+    game["appid"] = "2"
+    assert "speedrun" not in rt._context(6000.0).events

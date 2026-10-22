@@ -1,7 +1,8 @@
 import { DialogButton, Focusable, ToggleField } from "@decky/ui";
-import { LuMapPin } from "react-icons/lu";
+import { LuMapPin, LuPause, LuPlay, LuRotateCcw } from "react-icons/lu";
 import { FC, useState } from "react";
 
+import { accessoryEvent } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { openCityModal } from "./CityModal";
@@ -60,17 +61,36 @@ const Segmented: FC<{ values: string[]; current: string; labelPrefix: string; on
   );
 };
 
+const SpeedrunControls: FC<{ paused: boolean; onChanged?: () => void }> = ({ paused, onChanged }) => {
+  const { t } = useI18n();
+  const send = (action: string) => void accessoryEvent("speedrun", { action }).then(() => onChanged?.()).catch(() => undefined);
+  const button = { flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 700 } as const;
+  return (
+    <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>
+      <DialogButton style={button} onClick={() => send("reset")} onOKButton={() => send("reset")}>
+        <LuRotateCcw /> {t("accessories.speedrun.reset")}
+      </DialogButton>
+      <DialogButton style={button} onClick={() => send(paused ? "resume" : "pause")} onOKButton={() => send(paused ? "resume" : "pause")}>
+        {paused ? <LuPlay /> : <LuPause />} {t(paused ? "accessories.speedrun.resume" : "accessories.speedrun.pause")}
+      </DialogButton>
+    </Focusable>
+  );
+};
+
 export const SceneOptions: FC<{
   options: string[];
   values: Record<string, unknown>;
   onChange: (values: Record<string, unknown>) => void;
-}> = ({ options, values, onChange }) => {
+  speedrunPaused?: boolean;
+  onRunChanged?: () => void;
+}> = ({ options, values, onChange, speedrunPaused = false, onRunChanged }) => {
   const { t } = useI18n();
   if (!options.length) return null;
   const current = typeof values.theme === "string" ? values.theme : "aurora";
   return (
     <div style={{ ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       {options.includes("care") && <PetCare />}
+      {options.includes("run") && <SpeedrunControls paused={speedrunPaused} onChanged={onRunChanged} />}
       {options.includes("theme") && (
         <Focusable flow-children="row" style={{ display: "flex", gap: 4 }}>
           {SCENE_THEMES.map((swatch) => (
