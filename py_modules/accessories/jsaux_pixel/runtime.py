@@ -7,7 +7,8 @@ import os
 import pwd
 import subprocess
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 
 from controllers.detect import clean_env
@@ -24,7 +25,7 @@ PREVIEW_MAX_FRAMES = 64
 _FPS_SCENES = frozenset({"game_heart", "game_dashboard"})
 _ART_BYTES = 64 * 54 * 3
 _IMAGE_TYPES = {".png": "image/png", ".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
-_IMAGE_LIMIT = 8 * 1024 * 1024
+_IMAGE_LIMIT = 4 * 1024 * 1024
 _OFFICIAL_SERVICE = "jsaux-matrix-hub.service"
 _OFFICIAL_RECHECK_S = 60.0
 
@@ -51,7 +52,8 @@ class Runtime:
                  user_home: Path | str = "/home/deck",
                  run: Callable[[list[str], dict], int] | None = None,
                  user: str = "deck", uid: int | None = None,
-                 monotonic: Callable[[], float] = time.monotonic):
+                 monotonic: Callable[[], float] = time.monotonic,
+                 localtime: Path | str = "/etc/localtime"):
         self.supported = device_key in SUPPORTED_DEVICES
         self._colores_state = Path(settings_dir).parent / "Colores" / "state.json"
         self._library = Library(Path(settings_dir) / "accessories" / "library")
@@ -60,6 +62,8 @@ class Runtime:
         self._run = run or _run
         self._user, self._uid = user, uid if uid is not None else _uid_of(user)
         self._monotonic = monotonic
+        self._localtime = Path(localtime)
+        self._zone: tuple[str, tzinfo] | None = None
         self._official: tuple[float, bool] | None = None
         self._log = log
         self._context_source = context_source or (lambda: {})
@@ -271,13 +275,29 @@ class Runtime:
             "firmwareAnimation": None,
         }
 
+    def _local_zone(self) -> tzinfo:
+        """The zone Steam's clock uses right now; glibc caches it at start, so read the link."""
+        try:
+            target = os.readlink(self._localtime)
+        except OSError:
+            return datetime.now().astimezone().tzinfo
+        if self._zone and self._zone[0] == target:
+            return self._zone[1]
+        name = target.split("zoneinfo/", 1)[-1]
+        try:
+            zone: tzinfo = ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            zone = datetime.now().astimezone().tzinfo
+        self._zone = (target, zone)
+        return zone
+
     def _context(self, now: float) -> SceneContext:
         extra = self._context_source() or {}
         readings = {key: value for key, value in (self._system_metrics() or {}).items() if value is not None}
         readings.update({key: value for key, value in (extra.get("metrics") or {}).items() if value is not None})
         return SceneContext(
             now=now,
-            tz=datetime.now().astimezone().tzinfo,
+            tz=self._local_zone(),
             game=extra.get("game"),
             metrics=readings,
             events=self._events,

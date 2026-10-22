@@ -268,3 +268,19 @@ def test_image_import_rejects_a_symlink_swapped_in(tmp_path):
     rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
                          find_panel=lambda: None, user_home=home)
     assert rt.read_image(str(home / "Pictures" / "a.png"))["ok"] is False
+
+
+def test_clock_follows_a_time_zone_change_without_a_restart(tmp_path):
+    zoneinfo = tmp_path / "zoneinfo"
+    (zoneinfo / "Europe").mkdir(parents=True)
+    (zoneinfo / "Asia").mkdir(parents=True)
+    (zoneinfo / "Europe" / "Madrid").write_text("x")
+    (zoneinfo / "Asia" / "Tokyo").write_text("x")
+    link = tmp_path / "localtime"
+    link.symlink_to(zoneinfo / "Europe" / "Madrid")
+    rt = runtime.Runtime(settings_dir=tmp_path, device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None, localtime=link)
+    assert str(rt._context(0.0).tz) == "Europe/Madrid"
+    link.unlink()
+    link.symlink_to(zoneinfo / "Asia" / "Tokyo")
+    assert str(rt._context(0.0).tz) == "Asia/Tokyo"
