@@ -1,0 +1,240 @@
+import json
+
+import pytest
+
+from accessories.jsaux_pixel import codec, detect, service, transport
+from accessories.jsaux_pixel.render.canvas import Canvas
+from accessories.jsaux_pixel.scenes.base import Scene, SceneContext, Segment
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1_700_000_000.0
+
+    def __call__(self):
+        return self.t
+
+
+class FakeLink:
+    def __init__(self, panel):
+        self.panel = panel
+        self.is_open = False
+
+    def open(self):
+        if self.panel.unplugged:
+            raise transport.TransportError("gone")
+        self.is_open = True
+
+    def close(self):
+        self.is_open = False
+
+    def send(self, data):
+        self.panel.sent.append(data)
+
+    def request(self, data, timeout):
+        if self.panel.fail_after is not None and len(self.panel.sent) >= self.panel.fail_after:
+            self.panel.unplugged = True
+            raise transport.TransportError("unplugged")
+        self.panel.sent.append(data)
+        status = b"\x00" if data[3] == codec.Cmd.ANIMATION and data[6] > 3 else b"\x01"
+        return codec.frame(data[2], data[3], status)
+
+
+class FakePanel:
+    def __init__(self):
+        self.sent, self.unplugged, self.fail_after, self.holders = [], False, None, []
+
+    def find(self):
+        return None if self.unplugged else detect.PanelPort("/dev/ttyUSB0", "7-1", True)
+
+    def uploads(self):
+        return [f for f in self.sent if f[3] == codec.Cmd.GIF_BEGIN]
+
+    def commands(self, cmd):
+        return [f for f in self.sent if f[3] == cmd]
+
+
+class Steady(Scene):
+    id = "steady"
+    UPLOADS_PER_HOUR = 0
+
+    def key(self, ctx):
+        return ctx.options.get("colour", 1)
+
+    def render(self, ctx):
+        c = Canvas()
+        c.rect(0, 0, 8, 8, (200, 0, 0) if ctx.options.get("colour", 1) == 1 else (0, 200, 0))
+        return Segment([c], [100])
+
+
+class Hourly(Scene):
+    id = "hourly"
+    UPLOADS_PER_HOUR = 1
+
+    def key(self, ctx):
+        return int(ctx.now // 3600)
+
+    def render(self, ctx):
+        c = Canvas()
+        c.px(int(ctx.now // 3600) % 64, 0, (255, 255, 255))
+        return Segment([c], [100], valid_until=(int(ctx.now // 3600) + 1) * 3600)
+
+
+class Firmware(Scene):
+    id = "fw"
+    UPLOADS_PER_HOUR = 0
+
+    def key(self, ctx):
+        return "fw"
+
+    def render(self, ctx):
+        return Segment([], [], firmware_animation=2)
+
+
+@pytest.fixture
+def rig(tmp_path):
+    panel, clock, logs = FakePanel(), Clock(), []
+
+    def make(**kw):
+        svc = service.PixelService(
+            store_path=tmp_path / "pixel.json",
+            find_panel=panel.find,
+            open_link=lambda port: FakeLink(panel),
+            port_holders=lambda dev: panel.holders,
+            clock=clock,
+            log=lambda level, message, **fields: logs.append((level, message, fields)),
+            scenes={s.id: s for s in (Steady(), Hourly(), Firmware())},
+            context=lambda now: SceneContext(now=now, options={}),
+            **kw,
+        )
+        return svc
+
+    return panel, clock, logs, make
+
+
+def test_unchanged_scene_uploads_once(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    for _ in range(50):
+        svc.tick()
+        clock.t += 30
+    assert len(panel.uploads()) == 1
+    assert svc.state()["present"] is True
+
+
+def test_scene_expiry_triggers_exactly_one_new_upload(rig):
+    panel, clock, _, make = rig
+    clock.t = 3600 * 1000 + 10
+    svc = make()
+    svc.set_scene("hourly", {})
+    svc.tick()
+    clock.t += 1800
+    svc.tick()
+    clock.t += 1800
+    svc.tick()
+    svc.tick()
+    assert len(panel.uploads()) == 2
+
+
+def test_restart_does_not_resend_what_the_panel_already_shows(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    again = make()
+    again.tick()
+    assert len(panel.uploads()) == 1
+
+
+def test_brightness_is_sent_capped_to_the_supply(rig):
+    panel, _, _, make = rig
+    svc = make()
+    svc.tick()
+    svc.set_brightness(100)
+    svc.tick()
+    assert panel.commands(codec.Cmd.BRIGHTNESS)[-1] == codec.frame(1, codec.Cmd.BRIGHTNESS, bytes([80]))
+
+
+def test_firmware_animations_never_upload_a_gif(rig):
+    panel, _, _, make = rig
+    svc = make()
+    svc.set_scene("fw", {})
+    svc.tick()
+    svc.tick()
+    assert panel.uploads() == []
+    assert panel.commands(codec.Cmd.ANIMATION)[-1] == codec.frame(1, codec.Cmd.ANIMATION, b"\x02")
+    assert len([f for f in panel.commands(codec.Cmd.ANIMATION) if f[6] == 2]) == 1
+
+
+def test_unplug_mid_upload_logs_and_waits_for_the_panel_to_return(rig):
+    panel, clock, logs, make = rig
+    svc = make()
+    svc.tick()
+    panel.fail_after = len(panel.sent) + 2
+    svc.set_scene("steady", {"colour": 2})
+    svc.tick()
+    assert svc.state()["present"] is False
+    assert any(m == "upload_failed" for _, m, _ in logs)
+    sent = len(panel.sent)
+    for _ in range(5):
+        clock.t += 1
+        svc.tick()
+    assert len(panel.sent) == sent
+    panel.unplugged, panel.fail_after = False, None
+    clock.t += 10
+    svc.tick()
+    assert len(panel.commands(codec.Cmd.GIF_END)) == 2
+    assert svc.state()["present"] is True
+
+
+def test_port_held_by_another_app_is_left_alone(rig):
+    panel, _, _, make = rig
+    panel.holders = [(321, "jsaux-matrix-dae")]
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    assert panel.sent == []
+    assert svc.state()["busy_by"] == "jsaux-matrix-dae"
+
+
+def test_disabled_service_never_touches_hardware(rig):
+    panel, _, _, make = rig
+    svc = make(enabled=False)
+    svc.set_scene("steady", {})
+    svc.tick()
+    assert panel.sent == []
+    assert svc.state()["present"] is False
+
+
+def test_settings_persist(rig, tmp_path):
+    _, _, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {"colour": 2})
+    svc.set_brightness(40)
+    stored = json.loads((tmp_path / "pixel.json").read_text())
+    assert stored["scene"] == {"id": "steady", "options": {"colour": 2}}
+    assert stored["brightness"] == 40
+    assert make().state()["scene"] == "steady"
+
+
+def test_unknown_scene_is_rejected(rig):
+    _, _, _, make = rig
+    with pytest.raises(ValueError):
+        make().set_scene("nope", {})
+
+
+def test_worker_thread_ticks_until_stopped(rig):
+    panel, _, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    worker = service.Worker(svc, interval=0.01)
+    worker.start()
+    for _ in range(200):
+        if panel.uploads():
+            break
+        import time
+        time.sleep(0.01)
+    worker.stop()
+    assert not worker.is_alive()
+    assert len(panel.uploads()) == 1
