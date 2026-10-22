@@ -45,16 +45,15 @@
                             TextTrimming="CharacterEllipsis" />
                         <Border
                             x:Name="EarlyBadge"
-                            Padding="8,1,8,2"
+                            Padding="6,1,6,2"
                             VerticalAlignment="Center"
-                            BorderThickness="1"
-                            BorderBrush="{StaticResource PdcAccentBrush}"
-                            CornerRadius="{StaticResource PdcRadiusPill}">
+                            Background="{StaticResource PdcAccentBrush}"
+                            CornerRadius="5">
                             <TextBlock
                                 x:Name="EarlyBadgeText"
-                                FontSize="11"
+                                FontSize="10"
                                 FontWeight="SemiBold"
-                                Foreground="{StaticResource PdcAccentBrush}" />
+                                Foreground="{StaticResource PdcOnAccentBrush}" />
                         </Border>
                     </StackPanel>
                     <TextBlock x:Name="HeaderDetail" Margin="0,3,0,0" Style="{StaticResource PdcMutedStyle}" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
