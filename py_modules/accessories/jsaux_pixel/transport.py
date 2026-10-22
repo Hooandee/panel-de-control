@@ -74,10 +74,10 @@ class Transport:
             attrs[6][termios.VMIN] = 0
             attrs[6][termios.VTIME] = 0
             termios.tcsetattr(fd, termios.TCSANOW, attrs)
-        except OSError as error:
+        except (OSError, termios.error) as error:
             os.close(fd)
             self._release()
-            raise TransportError(f"configure {self.dev}: {error.strerror}") from error
+            raise TransportError(f"configure {self.dev}: {_reason(error)}") from error
         self._fd = fd
 
     def close(self) -> None:
@@ -101,9 +101,10 @@ class Transport:
                 select.select([], [fd], [], 1.0)
                 written = os.write(fd, view)
                 view = view[written:]
-        except OSError as error:
+        except (OSError, termios.error) as error:
+            # termios reports a vanished USB adapter as its own error type, not OSError.
             self.close()
-            raise TransportError(f"write {self.dev}: {error.strerror}") from error
+            raise TransportError(f"write {self.dev}: {_reason(error)}") from error
 
     def request(self, data: bytes, timeout: float) -> bytes | None:
         self.send(data)
@@ -121,15 +122,19 @@ class Transport:
                     if not chunk:
                         raise TransportError(f"{self.dev} closed")
                     reply += chunk
-        except OSError as error:
+        except (OSError, termios.error) as error:
             self.close()
-            raise TransportError(f"read {self.dev}: {error.strerror}") from error
+            raise TransportError(f"read {self.dev}: {_reason(error)}") from error
         return reply
 
     def _require(self) -> int:
         if self._fd is None:
             raise TransportError("link is not open")
         return self._fd
+
+
+def _reason(error: Exception) -> str:
+    return getattr(error, "strerror", None) or (str(error.args[-1]) if error.args else repr(error))
 
 
 def handshake(link: Transport, timeout: float = 1.5) -> bool:

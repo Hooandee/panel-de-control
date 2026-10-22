@@ -160,3 +160,19 @@ def test_two_links_cannot_hold_the_panel_at_once(pty_panel, tmp_path):
         first.close()
     second.open()
     second.close()
+
+
+def test_a_vanished_panel_is_a_transport_error_and_closes_the_link(pty_panel, monkeypatch):
+    import termios
+
+    _master, path = pty_panel
+    link = transport.Transport(path, baud=BAUD)
+    link.open()
+
+    def gone(*_args):
+        raise termios.error(5, "Input/output error")
+
+    monkeypatch.setattr(transport.termios, "tcflush", gone)
+    with pytest.raises(transport.TransportError):
+        link.send(b"DY")
+    assert link.is_open is False
