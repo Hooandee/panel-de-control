@@ -34,7 +34,7 @@ const persistentServices = vi.hoisted(() => {
   };
 });
 
-vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() } }));
+vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() }, routerHook: { addRoute: vi.fn(), removeRoute: vi.fn() } }));
 vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
 vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
@@ -82,6 +82,7 @@ vi.mock("./qam/pluginRuntime", () => ({ startPluginQamRuntime: qamRuntime.start 
 vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: persistentServices.startGameWatcher }));
 vi.mock("./accessories/gameArt", () => ({ startAccessoryArtWatcher: () => () => undefined }));
 vi.mock("./accessories/steamEvents", () => ({ startAccessorySteamEvents: () => () => undefined }));
+vi.mock("./accessories/editorRoute", () => ({ EDITOR_ROUTE: "/pdc-editor", EditorPage: () => null }));
 vi.mock("./system/ecoAmbient", () => ({ startEcoAmbient: () => () => {} }));
 vi.mock("./system/valueToast", () => ({
   refreshValueToast: vi.fn(),

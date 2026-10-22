@@ -2,6 +2,9 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.editor.draw": "Dibujo",
+  "accessories.editor.back": "Volver",
+  "accessories.editor.gone": "El editor se ha cerrado. Ábrelo de nuevo desde Accesorios.",
   "accessories.badge.onPanel": "En el panel",
   "accessories.badge.preview": "Vista previa",
   "accessories.show": "Mostrar en el panel",
@@ -128,6 +131,9 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.editor.draw": "Drawing",
+  "accessories.editor.back": "Back",
+  "accessories.editor.gone": "The editor closed. Open it again from Accessories.",
   "accessories.badge.onPanel": "On display",
   "accessories.badge.preview": "Preview",
   "accessories.show": "Show on the display",
@@ -254,6 +260,9 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.editor.draw": "Disegno",
+  "accessories.editor.back": "Indietro",
+  "accessories.editor.gone": "L'editor si è chiuso. Riaprilo da Accessori.",
   "accessories.badge.onPanel": "Sullo schermo",
   "accessories.badge.preview": "Anteprima",
   "accessories.show": "Mostra sullo schermo",
@@ -380,6 +389,9 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.editor.draw": "Zeichnung",
+  "accessories.editor.back": "Zurück",
+  "accessories.editor.gone": "Der Editor wurde geschlossen. Über Zubehör erneut öffnen.",
   "accessories.badge.onPanel": "Auf dem Display",
   "accessories.badge.preview": "Vorschau",
   "accessories.show": "Auf dem Display zeigen",
@@ -506,6 +518,9 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.editor.draw": "Desenho",
+  "accessories.editor.back": "Voltar",
+  "accessories.editor.gone": "O editor fechou. Abra de novo em Acessórios.",
   "accessories.badge.onPanel": "Na tela",
   "accessories.badge.preview": "Prévia",
   "accessories.show": "Mostrar na tela",
@@ -632,6 +647,9 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.editor.draw": "Dessin",
+  "accessories.editor.back": "Retour",
+  "accessories.editor.gone": "L'éditeur s'est fermé. Rouvrez-le depuis Accessoires.",
   "accessories.badge.onPanel": "À l'écran",
   "accessories.badge.preview": "Aperçu",
   "accessories.show": "Afficher sur l'écran",

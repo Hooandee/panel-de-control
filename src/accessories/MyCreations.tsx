@@ -8,8 +8,8 @@ import { confirmDestructive } from "./SafeConfirm";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { decodeFrame } from "./drawing";
-import { Block, openComposerModal } from "./ComposerModal";
-import { openDrawModal } from "./DrawModal";
+import type { Block } from "./ComposerModal";
+import { openEditor } from "./editorRoute";
 import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
@@ -95,7 +95,7 @@ export const MyCreations: FC<{
   const edit = async (summary: DrawingSummary) => {
     const full = await loadAccessoryDrawing(summary.id);
     if (!full?.ok || !full.frames) return;
-    openDrawModal({ id: full.id, name: full.name ?? "", frames: full.frames.map(decodeFrame), fps: full.fps ?? 8 }, sent);
+    openEditor({ kind: "draw", draft: { id: full.id, name: full.name ?? "", frames: full.frames.map(decodeFrame), fps: full.fps ?? 8 }, onSent: sent });
   };
   const remove = (summary: DrawingSummary) => {
     confirmDestructive({
@@ -124,14 +124,14 @@ export const MyCreations: FC<{
 
   return (
     <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
-      <Tile selected={false} label={t("accessories.draw.new")} onChoose={() => openDrawModal({ name: "", frames: [], fps: 8 }, sent)}>
+      <Tile selected={false} label={t("accessories.draw.new")} onChoose={() => openEditor({ kind: "draw", draft: { name: "", frames: [], fps: 8 }, onSent: sent })}>
         <ActionArt icon={<LuPencil size={30} />} />
       </Tile>
       <Tile selected={false} label={t("accessories.draw.import")} onChoose={() => void importFile()}>
         <ActionArt icon={<LuImagePlus size={30} />} />
       </Tile>
       <Tile selected={composing} onPanel={composedOnPanel} label={t("accessories.compose.title")}
-        onChoose={() => openComposerModal(layout, (blocks) => onSend("composed", { layout: { blocks } }))}>
+        onChoose={() => openEditor({ kind: "compose", blocks: layout, onShow: (blocks) => onSend("composed", { layout: { blocks } }) })}>
         <ActionArt icon={<LuBlocks size={30} />} />
       </Tile>
       {drawings.map((drawing) => (

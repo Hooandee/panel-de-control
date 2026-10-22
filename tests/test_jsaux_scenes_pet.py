@@ -57,7 +57,7 @@ def test_an_evening_of_play_changes_scene_only_a_few_times_per_hour():
 
 
 def test_pet_changes_pastime_by_the_hour_at_most():
-    keys = {pet.PetScene().key(_ctx(_at(12, m))) for m in range(60)}
+    keys = {pet.PetScene().key(_ctx(_at(12, m))) for m in range(30)}
     assert len(keys) == 1
     activities = {pet.activity_for(_at(h)) for h in range(24)}
     assert len(activities) >= 3
@@ -68,3 +68,35 @@ def test_every_pastime_moves_and_fits(activity):
     segment = pet.PetScene().render_state("idle", {}, activity)
     assert len({tuple(frame.pixels()) for frame in segment.frames}) >= 10
     assert encoded_size(segment) <= codec.MAX_GIF_BYTES
+
+
+def test_life_script_covers_exactly_until_the_next_half_hour():
+    scene = pet.PetScene()
+    ctx = _ctx(_at(12, 7))
+    scene.key(ctx)
+    segment = scene.render(ctx)
+    boundary = _at(12, 30)
+    assert segment.valid_until == boundary
+    assert sum(segment.delays_cs) == round((boundary - ctx.now) * 100)
+    assert encoded_size(segment) <= codec.MAX_GIF_BYTES
+
+
+def test_life_script_is_full_of_different_things():
+    scene = pet.PetScene()
+    ctx = _ctx(_at(12, 0))
+    scene.key(ctx)
+    assert len(scene.script(ctx)) >= 6
+    assert len({name for name, _ in scene.script(ctx)}) >= 4
+
+
+def test_every_episode_draws_frames_that_change():
+    for name in pet.EPISODES:
+        frames = pet.episode_frames(name, "idle", {})
+        assert len({tuple(c.pixels()) for c, _ in frames}) >= 4, name
+
+
+def test_each_half_hour_gets_a_new_life():
+    scene = pet.PetScene()
+    a = scene.script(_ctx(_at(12, 0)))
+    b = scene.script(_ctx(_at(12, 31)))
+    assert a != b

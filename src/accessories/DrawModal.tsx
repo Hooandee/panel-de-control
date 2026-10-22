@@ -11,7 +11,7 @@ import { confirmDestructive } from "./SafeConfirm";
 import { blankFrame, DRAW_PALETTE, encodeFrame, fill, getPixel, paint, Rgb } from "./drawing";
 import { PANEL_H, PANEL_W } from "./pixelFrames";
 
-const PITCH = 7;
+const DEFAULT_PITCH = 7;
 const MAX_FRAMES = 48;
 const SPEEDS = [4, 8, 12];
 type Tool = "pencil" | "eraser" | "fill";
@@ -23,7 +23,7 @@ export interface DrawingDraft {
   fps: number;
 }
 
-function drawCanvas(ctx: CanvasRenderingContext2D, frame: Uint8Array, onion: Uint8Array | null, cursor: [number, number] | null) {
+function drawCanvas(ctx: CanvasRenderingContext2D, frame: Uint8Array, onion: Uint8Array | null, cursor: [number, number] | null, PITCH: number) {
   ctx.fillStyle = "#0a090b";
   ctx.fillRect(0, 0, PANEL_W * PITCH, PANEL_H * PITCH);
   for (let y = 0; y < PANEL_H; y += 1) {
@@ -54,8 +54,9 @@ const ToolButton: FC<{ active: boolean; label: string; onPick: () => void; child
   </DialogButton>
 );
 
-const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal, onDirty }) => {
+export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: DrawingDraft; onSent: (id: string) => void; closeModal?: () => void }> = ({ initial, onSent, closeModal, onDirty, pitch = DEFAULT_PITCH }) => {
   const { t } = useI18n();
+  const PITCH = pitch;
   const [saveFailed, setSaveFailed] = useState(false);
   const [frames, setFrames] = useState<Uint8Array[]>(() => initial.frames.length ? initial.frames.map((f) => new Uint8Array(f)) : [blankFrame()]);
   const [index, setIndex] = useState(0);
@@ -76,8 +77,8 @@ const DrawBody: FC<{ onDirty?: () => void; initial: DrawingDraft; onSent: (id: s
   const frame = frames[index];
   const repaint = useCallback(() => {
     const ctx = canvas.current?.getContext("2d");
-    if (ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, canvasFocused ? cursor : null);
-  }, [frame, frames, index, onion, cursor, canvasFocused]);
+    if (ctx) drawCanvas(ctx, frame, onion && index > 0 ? frames[index - 1] : null, canvasFocused ? cursor : null, PITCH);
+  }, [frame, frames, index, onion, cursor, canvasFocused, PITCH]);
   useEffect(repaint, [repaint]);
 
   const apply = (x: number, y: number, chosen: Tool = tool) => {

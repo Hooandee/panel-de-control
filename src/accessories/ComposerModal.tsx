@@ -38,7 +38,7 @@ export const STARTER_LAYOUT: Block[] = [
 
 const next = <T,>(list: T[], value: T | undefined): T => list[(list.indexOf(value as T) + 1) % list.length];
 
-const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal, onDirty }) => {
+export const ComposerBody: FC<{ pitch?: number; onDirty?: () => void; initial: Block[]; onShow: (blocks: Block[]) => void; closeModal?: () => void }> = ({ initial, onShow, closeModal, onDirty, pitch = 6 }) => {
   const { t } = useI18n();
   const [blocks, setBlocks] = useState<Block[]>(initial.length ? initial : STARTER_LAYOUT);
   const [selected, setSelected] = useState(0);
@@ -99,8 +99,8 @@ const ComposerBody: FC<{ onDirty?: () => void; initial: Block[]; onShow: (blocks
   return (
     <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.lg, padding: theme.space.sm }}>
       <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, alignItems: "center" }}>
-        <PixelPreview decoded={preview} pitch={6} animate />
-        <Focusable flow-children="row" style={{ display: "flex", gap: 6, maxWidth: PANEL_W * 6 }}>
+        <PixelPreview decoded={preview} pitch={pitch} animate />
+        <Focusable flow-children="row" style={{ display: "flex", gap: 6, maxWidth: PANEL_W * pitch }}>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "clock", x: 4, y: 16, size: "m", color: "aurora" })}><LuClock3 /></DialogButton>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "date", x: 4, y: 4, size: "m", color: "aurora" })}><LuCalendar /></DialogButton>
           <DialogButton style={{ minWidth: 0, padding: "8px 10px" }} onClick={() => add({ type: "text", x: 4, y: 30, size: "m", text: "HOOANDEE", color: "aurora" })}><LuType /></DialogButton>
