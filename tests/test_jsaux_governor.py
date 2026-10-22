@@ -91,3 +91,13 @@ def test_showing_a_firmware_animation_makes_the_last_gif_uploadable_again():
     gov.record("a", ok=True)
     gov.forget_shown()
     assert gov.decide("a", "user") is Decision.ALLOW
+
+
+def test_live_gap_counts_the_users_own_upload_of_that_metric():
+    clock = Clock()
+    gov = Governor(clock)
+    gov.record("a", ok=True, kind="user", metric="dashboard")
+    clock.t += 5
+    assert gov.decide("b", "live", metric="dashboard") is Decision.TOO_SOON
+    clock.t += 56
+    assert gov.decide("b", "live", metric="dashboard") is Decision.ALLOW
