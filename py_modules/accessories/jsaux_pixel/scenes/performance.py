@@ -11,7 +11,7 @@ from ..render import fonts
 from ..render.canvas import Canvas
 from ..render.palettes import mix, scale, theme_for
 from .base import Scene, SceneContext, Segment
-from .clocks import _DAYS, _MONTHS, _centered, _hm, hour_segment
+from .clocks import _DAYS, _centered, _hm, hour_segment
 
 W, H = codec.WIDTH, codec.HEIGHT
 _DASH = "--"
