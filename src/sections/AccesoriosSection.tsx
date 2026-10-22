@@ -6,6 +6,7 @@ import { PixelPreview } from "../accessories/PixelPreview";
 import { DecodedFrames } from "../accessories/pixelFrames";
 import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
+import type { Block } from "../accessories/ComposerModal";
 import { loadPreview, useAccessories } from "../accessories/useAccessories";
 import { Loading } from "../components/Loading";
 import { ValueBar } from "../components/ValueBar";
@@ -111,6 +112,7 @@ export const AccesoriosSection: FC = () => {
           </span>
           <SceneGallery catalog={state.catalog} activeScene={state.scene ?? ""}
             activeDrawing={typeof state.options.drawing === "string" ? state.options.drawing : null}
+            layout={state.scene === "composed" ? ((state.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
             onChoose={(id, options) => void chooseScene(id, options ?? {})} />
         </div>
       </PanelSectionRow>

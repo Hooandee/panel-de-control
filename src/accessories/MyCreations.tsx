@@ -1,7 +1,7 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
 import { FC, useCallback, useEffect, useState } from "react";
-import { LuImagePlus, LuPencil } from "react-icons/lu";
+import { LuBlocks, LuImagePlus, LuPencil } from "react-icons/lu";
 
 import { deleteAccessoryDrawing, DrawingSummary, listAccessoryDrawings, loadAccessoryDrawing, readAccessoryImage, saveAccessoryDrawing } from "../api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -9,6 +9,7 @@ import { showModal } from "../navigation/showModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { decodeFrame } from "./drawing";
+import { Block, openComposerModal } from "./ComposerModal";
 import { openDrawModal } from "./DrawModal";
 import { importImage } from "./imageImport";
 import { decodeFrames, DecodedFrames } from "./pixelFrames";
@@ -64,7 +65,13 @@ const ActionArt: FC<{ icon: React.ReactNode }> = ({ icon }) => (
   </div>
 );
 
-export const MyCreations: FC<{ activeDrawing: string | null; onShow: (id: string) => void }> = ({ activeDrawing, onShow }) => {
+export const MyCreations: FC<{
+  activeDrawing: string | null;
+  composing: boolean;
+  layout: Block[];
+  onShow: (id: string) => void;
+  onCompose: (blocks: Block[]) => void;
+}> = ({ activeDrawing, composing, layout, onShow, onCompose }) => {
   const { t } = useI18n();
   const [drawings, setDrawings] = useState<DrawingSummary[]>([]);
   const refresh = useCallback(() => {
@@ -111,6 +118,9 @@ export const MyCreations: FC<{ activeDrawing: string | null; onShow: (id: string
       </Tile>
       <Tile active={false} label={t("accessories.draw.import")} onChoose={() => void importFile()}>
         <ActionArt icon={<LuImagePlus size={30} />} />
+      </Tile>
+      <Tile active={composing} label={t("accessories.compose.title")} onChoose={() => openComposerModal(layout, onCompose)}>
+        <ActionArt icon={<LuBlocks size={30} />} />
       </Tile>
       {drawings.map((drawing) => (
         <Tile key={drawing.id} active={drawing.id === activeDrawing} label={drawing.name || t("accessories.draw.untitled")}

@@ -2,6 +2,7 @@
 
 from . import art, clocks, firmware, game, performance, pet, signature
 from ..library import Library
+from .composed import ComposedScene
 from .custom import CustomScene
 from .. import weather
 from .base import Scene
@@ -19,4 +20,5 @@ def build(library: Library) -> list[tuple[str, Scene]]:
         *(("art", scene) for scene in art.SCENES),
         *(("firmware", scene) for scene in firmware.SCENES),
         ("custom", CustomScene(library)),
+        ("custom", ComposedScene(library)),
     ]

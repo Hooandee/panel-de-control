@@ -8,6 +8,7 @@ import { DecodedFrames } from "./pixelFrames";
 import { PixelPreview } from "./PixelPreview";
 import { loadPreview } from "./useAccessories";
 import { MyCreations } from "./MyCreations";
+import type { Block } from "./ComposerModal";
 
 const TILE_PITCH = 1.75;
 
@@ -59,7 +60,8 @@ export const SceneGallery: FC<{
   activeScene: string;
   onChoose: (sceneId: string, options?: Record<string, unknown>) => void;
   activeDrawing: string | null;
-}> = ({ catalog, activeScene, onChoose, activeDrawing }) => {
+  layout: Block[];
+}> = ({ catalog, activeScene, onChoose, activeDrawing, layout }) => {
   const { t } = useI18n();
   const categories = useMemo(() => Array.from(new Set(catalog.map((scene) => scene.category))), [catalog]);
   const activeCategory = catalog.find((scene) => scene.id === activeScene)?.category ?? categories[0];
@@ -84,7 +86,9 @@ export const SceneGallery: FC<{
       )}
       {(categories.includes(category) ? category : categories[0]) === "custom" ? (
         <MyCreations activeDrawing={activeScene === "custom" ? activeDrawing : null}
-          onShow={(id) => onChoose("custom", { drawing: id })} />
+          composing={activeScene === "composed"} layout={layout}
+          onShow={(id) => onChoose("custom", { drawing: id })}
+          onCompose={(blocks) => onChoose("composed", { layout: { blocks } })} />
       ) : (
       <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
         {shown.map((scene) => (
