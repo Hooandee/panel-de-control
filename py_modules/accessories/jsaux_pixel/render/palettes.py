@@ -24,7 +24,15 @@ DEFAULT_THEME = "aurora"
 
 
 def theme_for(options: dict) -> Theme:
+    stops = options.get("ledbar")
+    if options.get("theme") == "ledbar" and isinstance(stops, list) and stops:
+        return _from_stops([tuple(stop) for stop in stops])
     return THEMES.get(str(options.get("theme", DEFAULT_THEME)), THEMES[DEFAULT_THEME])
+
+
+def _from_stops(stops: list[Rgb]) -> Theme:
+    start, end, middle = stops[0], stops[-1], stops[len(stops) // 2]
+    return Theme(start, end, mix(middle, (255, 255, 255), 0.3), scale(start, 0.18), middle)
 
 
 def mix(a: Rgb, b: Rgb, t: float) -> Rgb:

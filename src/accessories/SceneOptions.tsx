@@ -11,6 +11,7 @@ export const SCENE_THEMES: { id: string; from: string; to: string }[] = [
   { id: "sunset", from: "#ff963c", to: "#ff4678" },
   { id: "mint", from: "#5af0aa", to: "#3caaff" },
   { id: "mono", from: "#ebe8fa", to: "#c8c4e1" },
+  { id: "ledbar", from: "#ff71ce", to: "#01cdfe" },
 ];
 
 const Swatch: FC<{ id: string; from: string; to: string; selected: boolean; onPick: () => void }> = ({ id, from, to, selected, onPick }) => {

@@ -130,3 +130,37 @@ def test_pausing_is_refused_off_the_steam_machine(tmp_path):
     rt = runtime.Runtime(settings_dir=tmp_path, device_key="rog_ally", log=lambda *a, **k: None,
                          run=lambda argv, env: calls.append(argv) or 0)
     assert rt.pause_official_app()["ok"] is False and calls == []
+
+
+def _colores(tmp_path, state):
+    path = tmp_path / "Colores" / "state.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(__import__("json").dumps(state))
+    return tmp_path / "Panel de Control"
+
+
+def test_ledbar_theme_reads_the_colores_gradient(tmp_path):
+    settings = _colores(tmp_path, {"mode": "effect", "color": [1, 2, 3], "effect": {"use_gradient": True},
+                                   "gradient": [[255, 113, 206], [120, 115, 245], [1, 205, 254]]})
+    rt = runtime.Runtime(settings_dir=settings, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    assert rt.ledbar_colors() == [[255, 113, 206], [120, 115, 245], [1, 205, 254]]
+
+
+def test_ledbar_theme_uses_the_solid_colour_in_colour_mode(tmp_path):
+    settings = _colores(tmp_path, {"mode": "color", "color": [10, 200, 30], "gradient": [[0, 0, 0], [1, 1, 1]]})
+    rt = runtime.Runtime(settings_dir=settings, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    assert rt.ledbar_colors() == [[10, 200, 30], [10, 200, 30]]
+
+
+def test_ledbar_theme_without_colores_falls_back(tmp_path):
+    rt = runtime.Runtime(settings_dir=tmp_path / "Panel de Control", device_key="steam_machine", log=lambda *a, **k: None,
+                         find_panel=lambda: None)
+    assert rt.ledbar_colors() is None
+    assert rt.preview("clock_digital", {"theme": "ledbar"})["frames"]
+
+
+def test_ledbar_colours_reach_the_scene_palette(tmp_path):
+    settings = _colores(tmp_path, {"mode": "color", "color": [10, 200, 30]})
+    rt = runtime.Runtime(settings_dir=settings, device_key="steam_machine", log=lambda *a, **k: None, find_panel=lambda: None)
+    palette = rt.preview("clock_digital", {"theme": "ledbar"})["palette"]
+    assert [10, 200, 30] in palette

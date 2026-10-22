@@ -52,12 +52,14 @@ class PixelService:
                  open_link: Callable[[PanelPort], object], port_holders: Callable[[str], list],
                  scenes: dict[str, Scene], context: Callable[[float], SceneContext],
                  log: Callable[..., None], clock: Callable[[], float] = time.time, enabled: bool = True,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep,
+                 option_extras: Callable[[dict], dict] | None = None):
         self._store_path = Path(store_path)
         self._find_panel, self._open_link, self._port_holders = find_panel, open_link, port_holders
         self._scenes, self._context, self._log, self._clock = scenes, context, log, clock
         self._enabled = enabled
         self._sleep = sleep
+        self._option_extras = option_extras or (lambda options: {})
         self._lock = threading.RLock()
         self._port: PanelPort | None = None
         self._link = None
@@ -138,7 +140,8 @@ class PixelService:
 
     def preview(self, scene_id: str, options: dict) -> Segment:
         scene = self._scenes[scene_id]
-        ctx = dataclasses.replace(self._context(self._clock()), options=dict(options or {}))
+        options = dict(options or {})
+        ctx = dataclasses.replace(self._context(self._clock()), options={**options, **self._option_extras(options)})
         with self._lock:
             scene.key(ctx)
             return scene.render(ctx)
@@ -226,8 +229,9 @@ class PixelService:
         if self._scene_id is None:
             return
         scene = self._scenes[self._scene_id]
-        ctx = dataclasses.replace(self._context(now), options=dict(self._options))
-        key = (self._scene_id, json.dumps(self._options, sort_keys=True), scene.key(ctx))
+        options = {**self._options, **self._option_extras(self._options)}
+        ctx = dataclasses.replace(self._context(now), options=options)
+        key = (self._scene_id, json.dumps(options, sort_keys=True), scene.key(ctx))
         expired = self._valid_until is not None and now >= self._valid_until
         if key == self._rendered_key and not expired:
             return

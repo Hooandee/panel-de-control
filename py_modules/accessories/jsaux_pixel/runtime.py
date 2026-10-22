@@ -1,6 +1,7 @@
 """Glue between Panel de Control and the JSAUX PIXEL service."""
 
 import base64
+import json
 import os
 import pwd
 import subprocess
@@ -47,6 +48,7 @@ class Runtime:
                  run: Callable[[list[str], dict], int] | None = None,
                  user: str = "deck", uid: int | None = None):
         self.supported = device_key in SUPPORTED_DEVICES
+        self._colores_state = Path(settings_dir).parent / "Colores" / "state.json"
         self._library = Library(Path(settings_dir) / "accessories" / "library")
         self._home = Path(user_home).resolve()
         self._entries = catalog.build(self._library)
@@ -65,6 +67,7 @@ class Runtime:
             context=self._context,
             log=log,
             enabled=self.supported,
+            option_extras=self._option_extras,
         )
         self.worker: Worker | None = None
 
@@ -103,6 +106,30 @@ class Runtime:
     def set_power(self, on: bool) -> dict:
         self.service.set_power(on)
         return self.state()
+
+    def ledbar_colors(self) -> list[list[int]] | None:
+        """Read-only view of the colours Colores is showing on the Steam Machine's LED bar."""
+        try:
+            state = json.loads(self._colores_state.read_text())
+        except (OSError, ValueError):
+            return None
+
+        def rgb(value) -> list[int] | None:
+            if isinstance(value, list) and len(value) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in value):
+                return list(value)
+            return None
+
+        gradient = [rgb(stop) for stop in state.get("gradient") or []] if isinstance(state, dict) else []
+        solid = rgb(state.get("color")) if isinstance(state, dict) else None
+        if state.get("mode") != "color" and len(gradient) >= 2 and all(gradient):
+            return gradient
+        return [solid, solid] if solid else None
+
+    def _option_extras(self, options: dict) -> dict:
+        if options.get("theme") != "ledbar":
+            return {}
+        colors = self.ledbar_colors()
+        return {"ledbar": colors} if colors else {}
 
     def pause_official_app(self) -> dict:
         if not self.supported:

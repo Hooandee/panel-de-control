@@ -2,6 +2,7 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.theme.ledbar": "Barra LED",
   "accessories.night": "Modo noche",
   "accessories.night.range": "Pantalla apagada de {from} a {to}",
   "accessories.night.from": "Apagar a las",
@@ -107,6 +108,7 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.theme.ledbar": "LED bar",
   "accessories.night": "Night mode",
   "accessories.night.range": "Display off from {from} to {to}",
   "accessories.night.from": "Turn off at",
@@ -212,6 +214,7 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.theme.ledbar": "Barra LED",
   "accessories.night": "Modalità notte",
   "accessories.night.range": "Schermo spento dalle {from} alle {to}",
   "accessories.night.from": "Spegni alle",
@@ -317,6 +320,7 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.theme.ledbar": "LED-Leiste",
   "accessories.night": "Nachtmodus",
   "accessories.night.range": "Display aus von {from} bis {to}",
   "accessories.night.from": "Ausschalten um",
@@ -422,6 +426,7 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.theme.ledbar": "Barra de LED",
   "accessories.night": "Modo noturno",
   "accessories.night.range": "Tela desligada das {from} às {to}",
   "accessories.night.from": "Desligar às",
@@ -527,6 +532,7 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.theme.ledbar": "Barre LED",
   "accessories.night": "Mode nuit",
   "accessories.night.range": "Écran éteint de {from} à {to}",
   "accessories.night.from": "Éteindre à",
