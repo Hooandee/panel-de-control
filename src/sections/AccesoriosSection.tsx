@@ -122,6 +122,21 @@ export const AccesoriosSection: FC = () => {
           <PanelSectionRow>
             <ToggleField label={t("accessories.power")} checked={state.power} onChange={(on) => void setPower(on)} />
           </PanelSectionRow>
+        </>
+      )}
+      <PanelSectionRow>
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, marginTop: theme.space.sm }}>
+          <span style={{ fontSize: theme.font.caption, fontWeight: 700, color: theme.color.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>
+            {t("accessories.gallery")}
+          </span>
+          <SceneGallery catalog={state.catalog} activeScene={state.scene ?? ""}
+            activeDrawing={typeof state.options.drawing === "string" ? state.options.drawing : null}
+            layout={state.scene === "composed" ? ((state.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
+            onChoose={(id, options) => void chooseScene(id, options ?? {})} />
+        </div>
+      </PanelSectionRow>
+      {state.present && (
+        <>
           <PanelSectionRow>
             <DropdownItem label={t("accessories.gameScene")} description={t("accessories.gameScene.desc")} rgOptions={gameOptions}
               selectedOption={state.game_scene ?? ""} onChange={(option) => void setGameScene(option.data ? String(option.data) : null)} />
@@ -144,17 +159,6 @@ export const AccesoriosSection: FC = () => {
           )}
         </>
       )}
-      <PanelSectionRow>
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, marginTop: theme.space.sm }}>
-          <span style={{ fontSize: theme.font.caption, fontWeight: 700, color: theme.color.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>
-            {t("accessories.gallery")}
-          </span>
-          <SceneGallery catalog={state.catalog} activeScene={state.scene ?? ""}
-            activeDrawing={typeof state.options.drawing === "string" ? state.options.drawing : null}
-            layout={state.scene === "composed" ? ((state.options.layout as { blocks?: Block[] } | undefined)?.blocks ?? []) : []}
-            onChoose={(id, options) => void chooseScene(id, options ?? {})} />
-        </div>
-      </PanelSectionRow>
     </>
   );
 };
