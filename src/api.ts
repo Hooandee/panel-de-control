@@ -1253,3 +1253,10 @@ export const setAccessoryBrightness = callable<[percent: number], AccessoriesSta
 export const setAccessoryPower = callable<[on: boolean], AccessoriesState>("set_accessory_power");
 export const previewAccessoryScene = callable<[sceneId: string, options: Record<string, unknown>], PixelFrames>("preview_accessory_scene");
 export const accessoryEvent = callable<[name: string, data: Record<string, unknown>], boolean>("accessory_event");
+export interface WeatherCity {
+  name: string;
+  detail: string;
+  lat: number;
+  lon: number;
+}
+export const searchAccessoryCities = callable<[query: string, language: string], { cities: WeatherCity[] }>("search_accessory_cities");

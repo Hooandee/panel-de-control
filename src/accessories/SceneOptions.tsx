@@ -1,8 +1,10 @@
-import { Focusable, ToggleField } from "@decky/ui";
+import { DialogButton, Focusable, ToggleField } from "@decky/ui";
+import { LuMapPin } from "react-icons/lu";
 import { FC, useState } from "react";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { openCityModal } from "./CityModal";
 
 export const SCENE_THEMES: { id: string; from: string; to: string }[] = [
   { id: "aurora", from: "#b078ff", to: "#40dcff" },
@@ -53,6 +55,15 @@ export const SceneOptions: FC<{
               onPick={() => onChange({ ...values, theme: swatch.id })} />
           ))}
         </Focusable>
+      )}
+      {options.includes("city") && (
+        <DialogButton onClick={() => openCityModal((city) => onChange({ ...values, city }))}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm }}>
+          <LuMapPin size={15} />
+          {typeof (values.city as { name?: string } | undefined)?.name === "string"
+            ? (values.city as { name: string }).name
+            : t("accessories.city.pick")}
+        </DialogButton>
       )}
       {options.includes("hour12") && (
         <ToggleField label={t("accessories.hour12")} checked={values.hour12 === true}

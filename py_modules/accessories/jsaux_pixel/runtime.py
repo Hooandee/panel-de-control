@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from . import detect, metrics, transport
+from . import detect, metrics, transport, weather
 from .render.canvas import quantize
 from .scenes import catalog
 from .scenes.base import SceneContext
@@ -70,6 +70,9 @@ class Runtime:
     def set_power(self, on: bool) -> dict:
         self.service.set_power(on)
         return self.state()
+
+    def search_cities(self, query: str, language: str) -> dict:
+        return {"cities": weather.search_cities(query, language) if query.strip() else []}
 
     def wants_fps(self) -> bool:
         return self.service.state()["scene"] in _FPS_SCENES

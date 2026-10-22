@@ -9494,6 +9494,9 @@ class Plugin:
                 readings["fan_rpm"] = max(rpms)
         return {"game": game, "metrics": readings}
 
+    async def search_accessory_cities(self, query, language="es") -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().search_cities, str(query or "")[:60], str(language or "es")[:5])
+
     async def accessory_event(self, name, data=None) -> bool:
         return await asyncio.to_thread(self._pixel_runtime().notify, str(name), dict(data or {}))
 

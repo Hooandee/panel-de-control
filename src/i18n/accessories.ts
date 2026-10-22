@@ -2,6 +2,10 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.weather": "El tiempo",
+  "accessories.city.title": "Buscar ciudad",
+  "accessories.city.pick": "Elige ciudad",
+  "accessories.city.none": "Sin resultados",
   "accessories.hour12": "12 horas",
   "accessories.theme.aurora": "Aurora",
   "accessories.theme.sunset": "Atardecer",
@@ -52,6 +56,10 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.weather": "Weather",
+  "accessories.city.title": "Find a city",
+  "accessories.city.pick": "Choose city",
+  "accessories.city.none": "No results",
   "accessories.hour12": "12-hour clock",
   "accessories.theme.aurora": "Aurora",
   "accessories.theme.sunset": "Sunset",
@@ -102,6 +110,10 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.weather": "Meteo",
+  "accessories.city.title": "Cerca una città",
+  "accessories.city.pick": "Scegli città",
+  "accessories.city.none": "Nessun risultato",
   "accessories.hour12": "Formato 12 ore",
   "accessories.theme.aurora": "Aurora",
   "accessories.theme.sunset": "Tramonto",
@@ -152,6 +164,10 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.weather": "Wetter",
+  "accessories.city.title": "Stadt suchen",
+  "accessories.city.pick": "Stadt wählen",
+  "accessories.city.none": "Keine Ergebnisse",
   "accessories.hour12": "12-Stunden-Format",
   "accessories.theme.aurora": "Aurora",
   "accessories.theme.sunset": "Abendrot",
@@ -202,6 +218,10 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.weather": "Clima",
+  "accessories.city.title": "Buscar cidade",
+  "accessories.city.pick": "Escolher cidade",
+  "accessories.city.none": "Nenhum resultado",
   "accessories.hour12": "Formato 12 horas",
   "accessories.theme.aurora": "Aurora",
   "accessories.theme.sunset": "Pôr do sol",
@@ -252,6 +272,10 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.weather": "Météo",
+  "accessories.city.title": "Rechercher une ville",
+  "accessories.city.pick": "Choisir une ville",
+  "accessories.city.none": "Aucun résultat",
   "accessories.hour12": "Format 12 heures",
   "accessories.theme.aurora": "Aurore",
   "accessories.theme.sunset": "Coucher de soleil",
