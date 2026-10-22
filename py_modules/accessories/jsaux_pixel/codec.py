@@ -13,6 +13,8 @@ from enum import IntEnum
 WIDTH = 64
 HEIGHT = 54
 CHUNK_BYTES = 498
+# Provisional until measured on hardware; scenes shrink their segment to stay under it.
+MAX_GIF_BYTES = 32768
 _MAGIC = b"DY"
 
 

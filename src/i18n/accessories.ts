@@ -2,6 +2,10 @@
 type Strings = Record<string, string>;
 
 const es: Strings = {
+  "accessories.scene.clock_digital": "Digital",
+  "accessories.scene.clock_analog": "Agujas",
+  "accessories.scene.clock_tetris": "Bloques",
+  "accessories.scene.clock_hourglass": "Reloj de arena",
   "accessories.pick": "Elige una escena",
   "nav.accessories": "Accesorios",
   "nav.accessories.desc": "Pantalla JSAUX PIXEL.",
@@ -31,6 +35,10 @@ const es: Strings = {
 };
 
 const en: Strings = {
+  "accessories.scene.clock_digital": "Digital",
+  "accessories.scene.clock_analog": "Analog",
+  "accessories.scene.clock_tetris": "Blocks",
+  "accessories.scene.clock_hourglass": "Hourglass",
   "accessories.pick": "Pick a scene",
   "nav.accessories": "Accessories",
   "nav.accessories.desc": "JSAUX PIXEL display.",
@@ -60,6 +68,10 @@ const en: Strings = {
 };
 
 const it: Strings = {
+  "accessories.scene.clock_digital": "Digitale",
+  "accessories.scene.clock_analog": "Lancette",
+  "accessories.scene.clock_tetris": "Blocchi",
+  "accessories.scene.clock_hourglass": "Clessidra",
   "accessories.pick": "Scegli una scena",
   "nav.accessories": "Accessori",
   "nav.accessories.desc": "Schermo JSAUX PIXEL.",
@@ -89,6 +101,10 @@ const it: Strings = {
 };
 
 const de: Strings = {
+  "accessories.scene.clock_digital": "Digital",
+  "accessories.scene.clock_analog": "Zeiger",
+  "accessories.scene.clock_tetris": "Blöcke",
+  "accessories.scene.clock_hourglass": "Sanduhr",
   "accessories.pick": "Szene auswählen",
   "nav.accessories": "Zubehör",
   "nav.accessories.desc": "JSAUX-PIXEL-Display.",
@@ -118,6 +134,10 @@ const de: Strings = {
 };
 
 const ptBR: Strings = {
+  "accessories.scene.clock_digital": "Digital",
+  "accessories.scene.clock_analog": "Ponteiros",
+  "accessories.scene.clock_tetris": "Blocos",
+  "accessories.scene.clock_hourglass": "Ampulheta",
   "accessories.pick": "Escolha uma cena",
   "nav.accessories": "Acessórios",
   "nav.accessories.desc": "Tela JSAUX PIXEL.",
@@ -147,6 +167,10 @@ const ptBR: Strings = {
 };
 
 const fr: Strings = {
+  "accessories.scene.clock_digital": "Numérique",
+  "accessories.scene.clock_analog": "Aiguilles",
+  "accessories.scene.clock_tetris": "Blocs",
+  "accessories.scene.clock_hourglass": "Sablier",
   "accessories.pick": "Choisissez une scène",
   "nav.accessories": "Accessoires",
   "nav.accessories.desc": "Écran JSAUX PIXEL.",
