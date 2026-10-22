@@ -191,6 +191,38 @@ public sealed class ThemePackageTests : IDisposable
     }
 
     [Fact]
+    public void EnablingARuntimeThemeTurnsOffAnotherRuntimeThemeOutsideTheCatalog()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var early = Path.Combine(root, "Hooandee Duo");
+        CopyDirectory(Path.Combine(root, Name), early);
+        File.WriteAllText(Path.Combine(early, "theme.json"), """{"name":"Hooandee Duo","version":"0.1.5","inject":{"tokens.css":["bigpicture"]}}""");
+        File.WriteAllText(
+            Path.Combine(early, "panel-theme.json"),
+            File.ReadAllText(Path.Combine(early, "panel-theme.json")).Replace("hooandee-eclipse", "hooandee-duo"));
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+        Assert.Equal(2, service.Library().Themes.Count);
+
+        service.SetEnabled(Name, true);
+        service.SetEnabled("Hooandee Duo", true);
+
+        Assert.Equal(new[] { "Hooandee Duo" }, service.Settings().Where(setting => setting.Enabled).Select(setting => setting.Name));
+    }
+
+    private static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var destination = Path.Combine(target, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination);
+        }
+    }
+
+    [Fact]
     public void UninstallRefusesAThemeThatIsNotInstalled()
     {
         var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
