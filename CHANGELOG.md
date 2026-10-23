@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.75.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.2...panel-de-control-v0.75.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* install Decky's socket guard under Python 3.11 ([#988](https://github.com/Hooandee/panel-de-control/issues/988)) ([8354da9](https://github.com/Hooandee/panel-de-control/commit/8354da93c662c8052ec45f73cf5bb6704ac6e766))
+* resolve Proton manifests and explain FSR 4 availability ([#997](https://github.com/Hooandee/panel-de-control/issues/997)) ([e687e7b](https://github.com/Hooandee/panel-de-control/commit/e687e7bb3174f805e9d158e612074612e3811f07))
+
 ## [0.75.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.1...panel-de-control-v0.75.2) (2026-10-21)
 
 
