@@ -113,3 +113,20 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
     </div>
   );
 };
+
+export const UnavailableFsrRow: FC<{ reason: string }> = ({ reason }) => {
+  const { t } = useI18n();
+  return (
+    <div style={{ ...theme.card, padding: "10px 11px", marginBottom: theme.space.sm }}>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("params.pill.fsr4")} <Badge text={t("params.fsr4.unavailable")} /></div>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>{reason}</div>
+        </div>
+        <div role="switch" aria-checked={false} aria-disabled="true" aria-label={t("params.pill.fsr4")}>
+          <RowSwitch label={t("params.pill.fsr4")} active={false} disabled onToggle={() => {}} />
+        </div>
+      </div>
+    </div>
+  );
+};
