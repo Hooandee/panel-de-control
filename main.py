@@ -151,7 +151,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
-from kiosk.rpc import plugin_dispatch, public_rpc_methods
+from kiosk.rpc import kiosk_rpc_methods, plugin_dispatch
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
 from kiosk.bridge import READS as kiosk_bridge_reads, BridgeError, SteamBridge
@@ -516,7 +516,7 @@ class Plugin:
         self._settings = self._store.load(DEFAULTS)
         self._kiosk = KioskController(
             plugin_dispatch(self),
-            public_rpc_methods(self),
+            kiosk_rpc_methods(self),
             journal=_kiosk_journal,
             enabled=bool(self._settings.get("kiosk_enabled")),
             art=lambda appid, kind: kiosk_steam_game.art_file(_user_home(), appid, kind),
