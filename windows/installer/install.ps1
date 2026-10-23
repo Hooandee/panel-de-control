@@ -1,5 +1,5 @@
-# Installs what Setup unpacked into -Payload: the package dependencies, the unsigned widget package and the
-# read-only service. Setup runs it elevated in the person's own session, so the package is added for them.
+# Installs what Setup unpacked into -Payload: the package dependencies, the widget package and the read-only
+# service. Setup runs it elevated in the person's own session, so the package is added for them.
 param(
     [Parameter(Mandatory)][string]$Payload,
     [Parameter(Mandatory)][string]$Log
@@ -53,9 +53,14 @@ try {
         Remove-AppxPackage -Package $_.PackageFullName
     }
 
+    # The package is signed with Panel's own certificate; Windows installs it once that certificate is
+    # among this machine's trusted people, which trusts it for app packages only.
+    $certificate = Import-Certificate -FilePath (Join-Path $Payload 'PanelDeControl.cer') -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople'
+    Write-Step "certificate $($certificate.Thumbprint) trusted"
+
     $msix = Get-ChildItem -Path $Payload -Filter '*.msix' -File | Select-Object -First 1
     if (-not $msix) { throw 'The widget package is missing from the installer.' }
-    Add-AppxPackage -Path $msix.FullName -AllowUnsigned -ForceApplicationShutdown
+    Add-AppxPackage -Path $msix.FullName -ForceApplicationShutdown
     $installed = Get-AppxPackage -Name $packageName
     if (-not $installed) { throw 'Windows did not register the widget package.' }
     Write-Step "package $($installed.PackageFullName) installed"

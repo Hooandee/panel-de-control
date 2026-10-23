@@ -165,6 +165,8 @@ if (Test-Path \$incoming) { Remove-Item -LiteralPath \$incoming -Recurse -Force 
 \$archive = Join-Path \$stage 'package.zip'
 Copy-Item -LiteralPath (Join-Path \$stage 'package.msix') -Destination \$archive -Force
 Expand-Archive -LiteralPath \$archive -DestinationPath \$incoming -Force
+# A registered development layout is not checked against a signature; a left-over one only gets in the way.
+Remove-Item -LiteralPath (Join-Path \$incoming 'AppxSignature.p7x') -Force -ErrorAction SilentlyContinue
 \$task = 'PanelDeControlDeploy'
 \$register = Join-Path \$stage 'register.ps1'
 \$done = Join-Path \$stage 'register.done'

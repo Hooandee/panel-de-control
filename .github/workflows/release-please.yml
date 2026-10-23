@@ -178,5 +178,6 @@ jobs:
     permissions:
       contents: write # attach the installer to the release
     uses: ./.github/workflows/windows-ci.yml
+    secrets: inherit # the package signing certificate
     with:
       release_tag: ${{ needs.release-please.outputs.tag_name }}

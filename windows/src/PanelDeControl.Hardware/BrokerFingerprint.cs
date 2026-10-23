@@ -4,9 +4,10 @@ using System.Text;
 namespace PanelDeControl.Hardware;
 
 /// <summary>
-/// One hash for every file of the companion folder. The package is unsigned, so its identity alone can
-/// be copied; the elevated installer records this hash and the service only trusts a companion whose
-/// folder still hashes the same. The apphost alone would not do: it loads whatever DLL sits next to it.
+/// One hash for every file of the companion folder. The package is self-signed and a development layout
+/// is not signed at all, so the elevated installer records this hash and the service only trusts a
+/// companion whose folder still hashes the same. The apphost alone would not do: it loads whatever DLL
+/// sits next to it.
 /// </summary>
 public static class BrokerFingerprint
 {

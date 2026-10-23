@@ -203,6 +203,31 @@ jobs:
           /property:AppxBundle=Never
           /property:UapAppxPackageBuildMode=SideloadOnly
           /property:AppxPackageDir=${{ github.workspace }}\artifacts\gamebar\
+      # Panel's own certificate (windows/installer/PanelDeControl.cer); the installer trusts it for app
+      # packages only. Pull requests from forks have no secret and keep an unsigned development package.
+      - name: Sign the widget package
+        shell: pwsh
+        env:
+          SIGNING_PFX: ${{ secrets.WINDOWS_SIGNING_PFX }}
+          SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+        run: |
+          if (-not $env:SIGNING_PFX) { 'No signing certificate: the package stays unsigned'; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX))
+          try {
+            $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
+              Sort-Object FullName -Descending | Select-Object -First 1
+            if (-not $signtool) { throw 'signtool.exe was not found' }
+            $packages = Get-ChildItem -Path artifacts/gamebar -Recurse -Filter '*.msix' -File |
+              Where-Object { $_.FullName -notmatch '[\\/]Dependencies[\\/]' }
+            if (-not $packages) { throw 'No widget package to sign' }
+            foreach ($package in $packages) {
+              & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:SIGNING_PASSWORD $package.FullName
+              if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($package.Name)" }
+            }
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: panel-de-control-gamebar-x64
@@ -237,6 +262,7 @@ jobs:
             Where-Object { $_.FullName -match '[\\/]Dependencies[\\/]x64[\\/]' -and $_.Extension -in '.appx', '.msix' } |
             Copy-Item -Destination (Join-Path $payload 'Dependencies')
           Copy-Item -Path artifacts/service/* -Destination (Join-Path $payload 'service') -Recurse
+          Copy-Item -Path windows/installer/PanelDeControl.cer -Destination $payload
           if (-not (Test-Path (Join-Path $payload 'service/PanelDeControl.Service.exe'))) { throw 'The service artifact has no PanelDeControl.Service.exe' }
           Get-ChildItem -Recurse $payload | Select-Object -ExpandProperty FullName
       - name: Build the installer

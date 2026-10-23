@@ -1,7 +1,8 @@
 # Removes what install.ps1 put in place. Themes, settings and logs under the person's LocalAppData stay,
 # so reinstalling keeps their choices.
 param(
-    [Parameter(Mandatory)][string]$Log
+    [Parameter(Mandatory)][string]$Log,
+    [Parameter(Mandatory)][string]$Certificate
 )
 
 $ProgressPreference = 'SilentlyContinue'
@@ -30,6 +31,12 @@ $deadline = (Get-Date).AddSeconds(15)
 while ((Test-Path $serviceDir) -and (Get-Date) -lt $deadline) {
     Remove-Item -LiteralPath $serviceDir -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path $serviceDir) { Start-Sleep -Milliseconds 500 }
+}
+
+if (Test-Path $Certificate) {
+    $thumbprint = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $Certificate).Thumbprint
+    Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$thumbprint" -ErrorAction SilentlyContinue
+    Write-Step "certificate $thumbprint removed"
 }
 
 Get-Process GameBar, GameBarFTServer, XboxGameBarWidgets -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue

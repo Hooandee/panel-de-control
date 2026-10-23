@@ -656,7 +656,7 @@ class GameBarProjectTests(unittest.TestCase):
         )
 
         self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
-        self.assertEqual("CN=Hooandee, OID.2.25.311729368913984317654407730594956997722=1", identity.attrib["Publisher"])
+        self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
 
     def test_brightness_timeouts_cover_full_verified_set(self):
         provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")

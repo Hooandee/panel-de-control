@@ -25,7 +25,6 @@ DisableReadyPage=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Unsigned MSIX packages install from Windows 10 2004 on.
 MinVersion=10.0.19041
 OutputDir=..\..\artifacts\installer
 OutputBaseFilename=PanelDeControl-Windows-Setup-{#AppVersion}
@@ -46,9 +45,10 @@ Source: "{#Payload}\*"; DestDir: "{tmp}\payload"; Flags: recursesubdirs createal
 Source: "install.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "uninstall.ps1"; DestDir: "{app}"
 Source: "PanelDeControl.ico"; DestDir: "{app}"
+Source: "PanelDeControl.cer"; DestDir: "{app}"
 
 [UninstallRun]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"" -Log ""{commonappdata}\PanelDeControl\uninstall.log"""; Flags: runhidden waituntilterminated; RunOnceId: "RemovePanelDeControl"
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"" -Log ""{commonappdata}\PanelDeControl\uninstall.log"" -Certificate ""{app}\PanelDeControl.cer"""; Flags: runhidden waituntilterminated; RunOnceId: "RemovePanelDeControl"
 
 [Messages]
 es.FinishedLabel=Panel de Control ya está instalado. Ábrelo con Xbox Game Bar (Win+G), en Widgets, o desde el menú Inicio.

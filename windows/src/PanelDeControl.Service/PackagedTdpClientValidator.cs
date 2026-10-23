@@ -13,8 +13,7 @@ public sealed class PackagedTdpClientValidator : IPipeClientValidator
     }
 
     private const string PackageName = "PanelDeControl.Windows";
-    // Unsigned MSIX: Windows only installs it unsigned when the publisher carries this OID.
-    private const string PackagePublisher = "CN=Hooandee, OID.2.25.311729368913984317654407730594956997722=1";
+    private const string PackagePublisher = "CN=Hooandee";
     public const string BrokerRelativePath =
         @"HardwareBroker\PanelDeControl.Hardware.exe";
 
