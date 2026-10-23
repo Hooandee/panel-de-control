@@ -31,6 +31,10 @@ _HABIT_MIN_TOTAL = 60.0
 _HABIT_FULL_WEEKLY = 40.0
 _HABIT_FULL_DAILY = 120.0
 _TICK_CAP_S = 10.0
+_ABSENT_S = 1800.0
+_SEEN_SAVE_S = 600.0
+# While asleep the belly empties at half speed, affection fades at three quarters and fun holds.
+_SLEEP_DRIFT = {"fed_at": 0.5, "fun_at": 1.0, "petted_at": 0.25}
 DEFAULT_NAME = "Pixi"
 
 # Steam store tag ids, matched in the order the store ranks a game's tags.
@@ -107,7 +111,7 @@ class Mind:
             "name": DEFAULT_NAME, "born_at": now, "fed_at": now, "fun_at": now, "petted_at": now,
             "woke_at": now, "energy_base": 1.0, "asleep_since": None, "genres": {}, "last_session": None,
             "achievements": 0, "proud_at": None, "interaction": None, "revision": 0,
-            "routine": [0.0] * _WEEK_HOURS, "routine_at": now,
+            "routine": [0.0] * _WEEK_HOURS, "routine_at": now, "seen_at": now,
         }
         for key, value in memory.items():
             if key in self.memory and (value is None or isinstance(value, type(self.memory[key])) or
@@ -118,6 +122,7 @@ class Mind:
             self.memory["routine"] = [0.0] * _WEEK_HOURS
         self._pending: dict[int, float] = {}
         self._play_tick: float | None = None
+        self._seen_saved = self.memory["seen_at"]
         if not stored:
             self._save()
 
@@ -193,6 +198,13 @@ class Mind:
         hours you play are learnt (saved together with the play refresh, every ten minutes)."""
         with self._lock:
             changed = False
+            if now - self.memory["seen_at"] > _ABSENT_S and not self.asleep():
+                # The console was off or suspended: the pet slept with it.
+                self.memory["asleep_since"] = self.memory["seen_at"]
+                changed = True
+            self.memory["seen_at"] = now
+            if now - self._seen_saved >= _SEEN_SAVE_S:
+                changed = True
             if playing and hour_of_week is not None and 0 <= hour_of_week < _WEEK_HOURS:
                 if self._play_tick is not None:
                     minutes = min(_TICK_CAP_S, max(0.0, now - self._play_tick)) / 60
@@ -217,6 +229,7 @@ class Mind:
                 self._learn(now)
                 changed = True
             if changed:
+                self._seen_saved = now
                 self._save()
 
     def _learn(self, now: float) -> None:
@@ -284,6 +297,11 @@ class Mind:
             self.memory["asleep_since"] = now
 
     def _wake(self, now: float) -> None:
+        asleep = self.memory["asleep_since"]
+        if asleep is not None:
+            slept = max(0.0, now - asleep)
+            for key, credit in _SLEEP_DRIFT.items():
+                self.memory[key] = min(now, self.memory[key] + slept * credit)
         self.memory["energy_base"] = self._energy(now)
         self.memory["woke_at"] = now
         self.memory["asleep_since"] = None

@@ -207,3 +207,32 @@ def test_at_the_usual_hour_it_waits_for_you(tmp_path):
     assert "await" in {name for name, _ in plan}
     calm = mind.plan(1_000_000.0 + 600, 600, situation="home", rng=random.Random(3), expect=0.0)
     assert "await" not in {name for name, _ in calm}
+
+
+def test_when_the_console_sleeps_the_pet_sleeps_too(tmp_path):
+    mind = _mind(tmp_path)
+    start = 1_000_000.0
+    mind.observe(start, night=False, playing=False)
+    mind.observe(start + 9 * HOUR, night=False, playing=False)
+    needs = mind.needs(start + 9 * HOUR)
+    assert needs["energy"] > 0.9
+    assert not mind.asleep()
+
+
+def test_needs_drop_slower_while_it_sleeps(tmp_path):
+    mind = _mind(tmp_path)
+    start = 1_000_000.0
+    mind.observe(start, night=True, playing=False)
+    mind.observe(start + 8 * HOUR, night=False, playing=False)
+    needs = mind.needs(start + 8 * HOUR)
+    assert needs["hunger"] >= 0.45
+    assert needs["fun"] > 0.9
+    assert needs["love"] > 0.6
+
+
+def test_a_restart_remembers_when_it_last_saw_the_console(tmp_path):
+    mind = _mind(tmp_path)
+    mind.observe(1_000_000.0, night=False, playing=False)
+    again = _mind(tmp_path)
+    again.observe(1_000_000.0 + 9 * HOUR, night=False, playing=False)
+    assert again.needs(1_000_000.0 + 9 * HOUR)["energy"] > 0.9
