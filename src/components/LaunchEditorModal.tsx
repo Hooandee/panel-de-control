@@ -11,19 +11,21 @@ import {
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
-import { LaunchRow } from "./LaunchRow";
+import { LaunchRow, UnavailableFsrRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
 import { GameCover } from "./GameCover";
 import { FocusableCard } from "./FocusableCard";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useHiddenGames } from "../launch/useHiddenGames";
 import { GameEntry } from "../launch/steamApi";
-import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
+import { getDevice, getLaunchTools, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
 import { useCustomVars } from "../launch/useCustomVars";
 import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible, selectionForPill } from "../launch/catalog";
 import { customPillVisible } from "../launch/customVars";
 import { GpuGen } from "../launch/proton";
+import { useProtonCapabilities } from "../launch/useProtonCapabilities";
+import { fsrUnavailableReason } from "../launch/fsrAvailability";
 
 // Icon per sub-group heading so each group is scannable at a glance.
 const SUBGROUP_ICONS: Record<string, ReactNode> = {
@@ -75,7 +77,7 @@ const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; c
 
 /** Rows for a subgroup within a section, filtered to what the game's Proton build
  *  supports + GPU. */
-const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen; catalog: Pill[] }> = ({ section, subgroup, ed, tools, envs, gpu, catalog }) => {
+const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen; catalog: Pill[]; fsrReason?: string }> = ({ section, subgroup, ed, tools, envs, gpu, catalog, fsrReason }) => {
   const { t } = useI18n();
   const pills = catalog.filter(
     (p) =>
@@ -84,10 +86,12 @@ const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: Laun
       pillVisible(p, envs, gpu) &&
       customPillVisible(p, ed.selections[p.id]),
   );
-  if (pills.length === 0) return null;
+  const unavailableFsr = section === "advanced" && subgroup === "params.sub.upscaling" ? fsrReason : undefined;
+  if (pills.length === 0 && !unavailableFsr) return null;
   return (
     <div>
       <Heading icon={SUBGROUP_ICONS[subgroup]}>{t(subgroup)}</Heading>
+      {unavailableFsr && <UnavailableFsrRow reason={t(unavailableFsr)} />}
       {pills.map((p) => (
         <LaunchRow
           key={p.id}
@@ -120,9 +124,8 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const ed = useLaunchEditor(game, catalog);
   const [tools, setTools] = useState<LaunchTools | null>(null);
   const [gpu, setGpu] = useState<GpuGen>("unknown");
-  // Launch-option vars the game's Proton build actually supports (null until loaded).
-  const [envs, setEnvs] = useState<string[] | null>(null);
-  const [versionLabel, setVersionLabel] = useState("");
+  const capabilities = useProtonCapabilities(ed.compatName, ed.loading);
+  const versionLabel = ed.compatDisplay || ed.compatName;
 
   useEffect(() => {
     let cancelled = false;
@@ -137,21 +140,8 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
     };
   }, []);
 
-  // Read the game's Proton capabilities from the compat tool the editor resolved
-  // (via the details callback). Empty/native → no Proton caps → only base pills show.
-  useEffect(() => {
-    if (ed.loading) return;
-    let cancelled = false;
-    setVersionLabel(ed.compatDisplay || ed.compatName);
-    getProtonCaps(ed.compatName)
-      .then((c) => !cancelled && setEnvs(c.envs))
-      .catch(() => !cancelled && setEnvs([]));
-    return () => {
-      cancelled = true;
-    };
-  }, [ed.loading, ed.compatName, ed.compatDisplay]);
-
-  const supportedEnvs = envs ?? [];
+  const supportedEnvs = capabilities.envs;
+  const fsrReason = fsrUnavailableReason(gpu, capabilities);
   const advancedCount = catalog.filter((p) =>
     p.section === "advanced" && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
   const owned = ownedTokens(ed.selections, catalog);
@@ -192,7 +182,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
           <LuTriangleAlert size={14} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{t("params.readError")}</span>
         </div>
-      ) : ed.loading || tools === null || envs === null || (custom.vars === null && !custom.error) ? (
+      ) : ed.loading || tools === null || (custom.vars === null && !custom.error) ? (
         <Loading />
       ) : ed.malformed ? (
         <div>
@@ -241,7 +231,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
 
           <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
             {SUBGROUP_ORDER.advanced.map((sg) => (
-              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
+              <Subgroup key={sg} section="advanced" subgroup={sg} fsrReason={fsrReason} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
             ))}
           </Fold>
 
