@@ -65,6 +65,10 @@ try {
     New-Item -ItemType Directory -Path $serviceDir -Force | Out-Null
     Copy-Item -Path (Join-Path $Payload 'service\*') -Destination $serviceDir -Recurse -Force
     $binary = Join-Path $serviceDir 'PanelDeControl.Service.exe'
+    # The package is unsigned: the service trusts only the companion files installed right now.
+    & $binary --trust-broker (Join-Path $installed.InstallLocation 'HardwareBroker') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The service could not record the companion fingerprint.' }
+    Write-Step 'companion fingerprint recorded'
     New-Service -Name $serviceName -BinaryPathName ('"' + $binary + '"') -DisplayName 'Panel de Control' -StartupType Automatic | Out-Null
     Start-Service -Name $serviceName
     Write-Step "service $((Get-Service -Name $serviceName).Status)"

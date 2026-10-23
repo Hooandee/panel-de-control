@@ -107,6 +107,9 @@ INSTALL_SERVICE_SCRIPT=$(cat <<POWERSHELL
 New-Item -ItemType Directory -Path \$serviceDir -Force | Out-Null
 Copy-Item -Path (Join-Path \$stage 'service\\*') -Destination \$serviceDir -Recurse -Force
 \$binary = Join-Path \$serviceDir 'PanelDeControl.Service.exe'
+\$layout = (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation
+& \$binary --trust-broker (Join-Path \$layout 'HardwareBroker')
+if (\$LASTEXITCODE -ne 0) { throw 'The service could not record the companion fingerprint.' }
 New-Service -Name '${SERVICE_NAME}' -BinaryPathName ('"' + \$binary + '"') -DisplayName 'Panel de Control' -StartupType Automatic | Out-Null
 Start-Service -Name '${SERVICE_NAME}'
 Get-Service -Name '${SERVICE_NAME}' | Select-Object Name, Status, StartType | Format-List
@@ -193,7 +196,14 @@ $REMOVE_SERVICE_SCRIPT
 $INSTALL_SERVICE_SCRIPT
 Remove-Item -LiteralPath \$stage -Recurse -Force"
 else
+  # A widget-only deploy changes the companion files; an installed service must learn their new
+  # fingerprint or it stops trusting the companion.
   REMOTE_SCRIPT="$WIDGET_SCRIPT
+\$serviceBinary = Join-Path \$env:ProgramFiles 'PanelDeControl\\Service\\PanelDeControl.Service.exe'
+if (Test-Path \$serviceBinary) {
+  & \$serviceBinary --trust-broker (Join-Path (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation 'HardwareBroker')
+  if (\$LASTEXITCODE -ne 0) { Write-Warning 'Run the deploy with --with-service from an administrator account so the service trusts the new companion.' }
+}
 Remove-Item -LiteralPath \$stage -Recurse -Force"
 fi
 encode_powershell() {

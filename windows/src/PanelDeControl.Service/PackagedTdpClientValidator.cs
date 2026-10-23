@@ -5,6 +5,13 @@ namespace PanelDeControl.Service;
 
 public sealed class PackagedTdpClientValidator : IPipeClientValidator
 {
+    private readonly TrustedBrokerStore trustedBroker;
+
+    public PackagedTdpClientValidator(TrustedBrokerStore trustedBroker)
+    {
+        this.trustedBroker = trustedBroker;
+    }
+
     private const string PackageName = "PanelDeControl.Windows";
     // Unsigned MSIX: Windows only installs it unsigned when the publisher carries this OID.
     private const string PackagePublisher = "CN=Hooandee, OID.2.25.311729368913984317654407730594956997722=1";
@@ -20,6 +27,8 @@ public sealed class PackagedTdpClientValidator : IPipeClientValidator
                 client.PackageFamilyName,
                 PackagedPipeClient.FamilyNameFromId(PackageName, PackagePublisher),
                 client.PackagePath,
-                BrokerRelativePath);
+                BrokerRelativePath) &&
+            client.PackagePath is { } packagePath &&
+            trustedBroker.Matches(Path.Combine(packagePath, Path.GetDirectoryName(BrokerRelativePath)!));
     }
 }

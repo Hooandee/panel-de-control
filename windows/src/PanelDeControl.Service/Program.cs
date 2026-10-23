@@ -16,6 +16,14 @@ public static class Program
             return 1;
         }
 
+        // The elevated installer calls this right after it installs the widget package.
+        if (args is ["--trust-broker", var brokerDirectory])
+        {
+            TrustedBrokerStore.Record(Path.Combine(AppContext.BaseDirectory, TrustedBrokerStore.FileName), brokerDirectory);
+            Console.WriteLine("trusted " + brokerDirectory);
+            return 0;
+        }
+
         var clock = new SystemClock();
         var identityReader = new DeviceIdentityReader(DeviceCatalogResource.TryLoad());
         var sensorAccess = new WindowsSensorAccessProbe();
@@ -50,7 +58,7 @@ public static class Program
             TdpServicePipeSecurity.PipeName,
             tdpControl,
             TdpServicePipeSecurity.Create,
-            new PackagedTdpClientValidator());
+            new PackagedTdpClientValidator(TrustedBrokerStore.NextToService()));
 
         Host.CreateDefaultBuilder(args)
             .UseWindowsService(options => options.ServiceName = ServiceName)
