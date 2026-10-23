@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.76.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.3...panel-de-control-v0.76.0) (2026-10-23)
+
+
+### Features
+
+* **windows:** Panel de Control for Windows in early access with Steam themes ([#987](https://github.com/Hooandee/panel-de-control/issues/987)) ([7e21b94](https://github.com/Hooandee/panel-de-control/commit/7e21b9403eaca87fa77472fd930d58122d4994a7))
+
 ## [0.75.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.2...panel-de-control-v0.75.3) (2026-10-23)
 
 
