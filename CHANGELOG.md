@@ -5,10 +5,35 @@
 ## [0.75.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.2...panel-de-control-v0.75.3) (2026-10-23)
 
 
-### Bug Fixes
+### Español
 
-* install Decky's socket guard under Python 3.11 ([#988](https://github.com/Hooandee/panel-de-control/issues/988)) ([8354da9](https://github.com/Hooandee/panel-de-control/commit/8354da93c662c8052ec45f73cf5bb6704ac6e766))
-* resolve Proton manifests and explain FSR 4 availability ([#997](https://github.com/Hooandee/panel-de-control/issues/997)) ([e687e7b](https://github.com/Hooandee/panel-de-control/commit/e687e7bb3174f805e9d158e612074612e3811f07))
+* **Actualizar Panel con más tranquilidad:** Corregimos un caso en el que, al actualizar Panel o perder la conexión con Decky, el proceso podía quedarse consumiendo CPU en lugar de cerrarse correctamente.
+* **FSR 4 en los ajustes de cada juego:** Panel reconoce mejor las versiones de Proton instaladas con un nombre de carpeta distinto. En equipos RDNA3 y RDNA4, si el Proton elegido no permite activar FSR 4 o no se puede comprobar su compatibilidad, la opción sigue visible y explica el motivo. Al cambiar de Proton, la información se actualiza para el que has elegido.
+
+### English
+
+* **Smoother Panel updates:** Fixed a case where updating Panel or losing the connection to Decky could leave the process using CPU instead of shutting down properly.
+* **FSR 4 in each game's settings:** Panel now recognises Proton builds installed under a different folder name more reliably. On RDNA3 and RDNA4 devices, if the selected Proton build does not support FSR 4 or its compatibility cannot be checked, the option stays visible and explains why. Switching Proton updates the information for your new selection.
+
+### Italiano
+
+* **Aggiornamenti di Panel più tranquilli:** Abbiamo corretto un caso in cui, aggiornando Panel o perdendo la connessione con Decky, il processo poteva continuare a consumare CPU invece di chiudersi correttamente.
+* **FSR 4 nelle impostazioni di ogni gioco:** Panel riconosce meglio le versioni di Proton installate in una cartella con un nome diverso. Sui dispositivi RDNA3 e RDNA4, se il Proton scelto non supporta FSR 4 o non è possibile verificarne la compatibilità, l'opzione rimane visibile e spiega il motivo. Cambiando Proton, le informazioni si aggiornano in base alla nuova scelta.
+
+### Deutsch
+
+* **Zuverlässigere Panel-Updates:** Ein Fehler wurde behoben, durch den der Prozess beim Aktualisieren von Panel oder nach einem Verbindungsabbruch zu Decky weiter CPU-Leistung verbrauchen konnte, statt sich ordnungsgemäß zu beenden.
+* **FSR 4 in den Einstellungen jedes Spiels:** Panel erkennt Proton-Versionen jetzt zuverlässiger, auch wenn ihr Ordner anders heißt. Auf RDNA3- und RDNA4-Geräten bleibt die Option sichtbar und erklärt den Grund, wenn die gewählte Proton-Version FSR 4 nicht unterstützt oder sich die Kompatibilität nicht prüfen lässt. Beim Wechsel von Proton werden die Angaben für die neue Auswahl aktualisiert.
+
+### Português (Brasil)
+
+* **Mais tranquilidade ao atualizar o Panel:** Corrigimos um caso em que, ao atualizar o Panel ou perder a conexão com o Decky, o processo podia continuar consumindo CPU em vez de encerrar corretamente.
+* **FSR 4 nas configurações de cada jogo:** O Panel reconhece melhor as versões do Proton instaladas em uma pasta com nome diferente. Em aparelhos RDNA3 e RDNA4, se o Proton escolhido não oferecer suporte ao FSR 4 ou não for possível verificar a compatibilidade, a opção continua visível e explica o motivo. Ao trocar de Proton, as informações são atualizadas para a nova escolha.
+
+### Français
+
+* **Des mises à jour de Panel plus sereines :** Nous avons corrigé un cas où, lors d'une mise à jour de Panel ou d'une perte de connexion avec Decky, le processus pouvait continuer à solliciter le processeur au lieu de se fermer correctement.
+* **FSR 4 dans les paramètres de chaque jeu :** Panel reconnaît mieux les versions de Proton installées dans un dossier portant un autre nom. Sur les appareils RDNA3 et RDNA4, si le Proton choisi ne prend pas en charge FSR 4 ou si sa compatibilité ne peut pas être vérifiée, l'option reste visible et en explique la raison. Quand vous changez de Proton, les informations sont actualisées pour votre nouveau choix.
 
 ## [0.75.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.1...panel-de-control-v0.75.2) (2026-10-21)
 
