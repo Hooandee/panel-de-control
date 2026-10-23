@@ -703,6 +703,11 @@ const es: Record<string, string> = {
   "params.advanced": "Avanzado",
   "params.showCommand": "Ver el comando",
   "params.off": "Desactivado",
+  "params.fsr4.loading": "Comprobando compatibilidad de Proton…",
+  "params.fsr4.missing": "No se ha podido identificar la instalación de Proton. Selecciona una versión compatible en las propiedades del juego.",
+  "params.fsr4.error": "No se pudo comprobar la compatibilidad de Proton. Vuelve a abrir el editor para intentarlo de nuevo.",
+  "params.fsr4.unsupported": "No se ha detectado soporte para FSR 4 en esta versión de Proton.",
+  "params.fsr4.unavailable": "No disponible",
   "params.notInstalled": "no instalado",
   // Subcategorías
   "params.sub.perf": "Rendimiento",
@@ -2143,6 +2148,11 @@ const en: Record<string, string> = {
   "params.advanced": "Advanced",
   "params.showCommand": "Show the command",
   "params.off": "Off",
+  "params.fsr4.loading": "Checking Proton compatibility…",
+  "params.fsr4.missing": "The Proton installation could not be identified. Select a compatible version in the game’s properties.",
+  "params.fsr4.error": "Proton compatibility could not be checked. Reopen the editor to try again.",
+  "params.fsr4.unsupported": "FSR 4 support was not detected in this version of Proton.",
+  "params.fsr4.unavailable": "Unavailable",
   "params.notInstalled": "not installed",
   // Subgroups
   "params.sub.perf": "Performance",

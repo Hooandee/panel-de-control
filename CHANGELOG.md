@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## [0.75.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.2...panel-de-control-v0.75.3) (2026-10-23)
+
+
+### Español
+
+* **Cierre de Panel:** A veces Panel seguía consumiendo CPU después de actualizarlo o de perder la conexión con Decky. He corregido el fallo para que se cierre correctamente.
+* **La opción de FSR 4:** Algunas versiones de Proton no se detectaban bien y la opción no aparecía. He corregido esa detección. Además, en equipos RDNA3 y RDNA4, si no puedes activar FSR 4, ahora verás el motivo en los ajustes del juego.
+
+### English
+
+* **Closing Panel:** Panel could sometimes keep using CPU after an update or after losing its connection to Decky. I've fixed this so it shuts down properly.
+* **The FSR 4 option:** Some Proton builds weren't detected correctly, leaving the option missing. I've fixed that detection. On RDNA3 and RDNA4 devices, the game settings now also explain why FSR 4 can't be enabled.
+
+### Italiano
+
+* **Chiusura di Panel:** A volte Panel continuava a consumare CPU dopo un aggiornamento o dopo aver perso la connessione con Decky. Ho corretto il problema perché si chiuda correttamente.
+* **L'opzione FSR 4:** Alcune versioni di Proton non venivano riconosciute e l'opzione non compariva. Ho corretto il rilevamento. Inoltre, sui dispositivi RDNA3 e RDNA4, se non puoi attivare FSR 4, ora trovi il motivo nelle impostazioni del gioco.
+
+### Deutsch
+
+* **Panel beenden:** Manchmal verbrauchte Panel nach einem Update oder einem Verbindungsabbruch zu Decky weiter CPU-Leistung. Ich habe den Fehler behoben, sodass Panel sich ordnungsgemäß beendet.
+* **Die Option für FSR 4:** Manche Proton-Versionen wurden nicht richtig erkannt, sodass die Option fehlte. Ich habe die Erkennung korrigiert. Auf RDNA3- und RDNA4-Geräten steht jetzt außerdem in den Spieleinstellungen, warum sich FSR 4 nicht aktivieren lässt.
+
+### Português (Brasil)
+
+* **Fechamento do Panel:** Às vezes, o Panel continuava consumindo CPU depois de uma atualização ou de perder a conexão com o Decky. Corrigi o problema para que ele feche corretamente.
+* **A opção de FSR 4:** Algumas versões do Proton não eram reconhecidas e a opção não aparecia. Corrigi essa detecção. Além disso, em aparelhos RDNA3 e RDNA4, se não for possível ativar o FSR 4, as configurações do jogo agora mostram o motivo.
+
+### Français
+
+* **Fermeture de Panel :** Parfois, Panel continuait à utiliser le processeur après une mise à jour ou une perte de connexion avec Decky. J’ai corrigé le problème pour qu'il se ferme correctement.
+* **L'option FSR 4 :** Certaines versions de Proton étaient mal détectées et l'option n'apparaissait pas. J’ai corrigé cette détection. Sur les appareils RDNA3 et RDNA4, si vous ne pouvez pas activer FSR 4, les paramètres du jeu en indiquent désormais la raison.
+
 ## [0.75.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.1...panel-de-control-v0.75.2) (2026-10-21)
 
 

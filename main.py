@@ -1356,7 +1356,13 @@ class Plugin:
         """Which launch-option vars the installed Proton build supports."""
         self._init()
         home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
-        return proton_caps.detect_capabilities(compat_name, home=home)
+        capabilities = proton_caps.detect_capabilities(compat_name, home=home)
+        fsr_envs = [env for env in capabilities["envs"] if "FSR4" in env]
+        decky.logger.info(
+            "Proton capabilities: tool=%r found=%s fsr4=%s",
+            compat_name, capabilities["found"], fsr_envs,
+        )
+        return capabilities
 
     async def get_launch_usage(self) -> dict:
         self._init()
