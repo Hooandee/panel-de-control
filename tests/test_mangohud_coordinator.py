@@ -33,7 +33,7 @@ def test_refreshes_keep_only_the_active_and_latest_pending_job():
     assert futures[-1].result(timeout=1) == 9
     assert executed == [0, 9]
     assert all(future.cancelled() for future in futures[1:-1])
-    coordinator.close(8, lambda: None)
+    coordinator.close(8, lambda: None, 1)
 
 
 def test_user_mutations_are_fifo_and_never_replaced():
@@ -49,7 +49,7 @@ def test_user_mutations_are_fifo_and_never_replaced():
 
     assert [future.result(timeout=1) for future in futures] == list(range(5))
     assert executed == list(range(5))
-    coordinator.close(4, lambda: None)
+    coordinator.close(4, lambda: None, 1)
 
 
 def test_generation_mismatch_never_executes_callable():
@@ -61,7 +61,7 @@ def test_generation_mismatch_never_executes_callable():
     with pytest.raises(HudStale):
         future.result(timeout=1)
     assert executed == []
-    coordinator.close(3, lambda: None)
+    coordinator.close(3, lambda: None, 1)
 
 
 def test_close_cancels_pending_waits_for_active_then_restores_once():
@@ -83,7 +83,7 @@ def test_close_cancels_pending_waits_for_active_then_restores_once():
 
     closer = threading.Thread(
         target=lambda: (
-            coordinator.close(1, lambda: events.append("restore")),
+            coordinator.close(1, lambda: events.append("restore"), 2),
             closed.set(),
         )
     )
@@ -102,7 +102,7 @@ def test_close_cancels_pending_waits_for_active_then_restores_once():
 
 def test_submission_after_close_fails_without_creating_executor():
     coordinator = HudCoordinator(generation=0)
-    coordinator.close(1, lambda: None)
+    coordinator.close(1, lambda: None, 1)
 
     future = coordinator.submit_latest(1, lambda: None)
 

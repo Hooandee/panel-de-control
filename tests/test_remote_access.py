@@ -191,3 +191,29 @@ def test_stale_server_from_a_killed_panel_is_stopped_but_strangers_are_not(tmp_p
 def test_suggests_the_console_user_when_running_as_root(tmp_path):
     service = RemoteAccess(str(tmp_path / "plugin"), str(tmp_path / "state"), lambda *a, **k: None, login_user="deck")
     assert service.state()["user"] == "deck"
+
+
+def test_terminate_now_signals_the_server_without_the_event_loop(tmp_path):
+    service, _ = _service(tmp_path)
+
+    async def start_and_terminate():
+        service._process = await asyncio.create_subprocess_exec(shutil.which("sleep"), "30")
+        process = service._process
+        service.terminate_now()
+        return await asyncio.wait_for(process.wait(), 3)
+
+    assert asyncio.run(start_and_terminate()) != 0
+
+
+def test_stop_supervisor_does_not_swallow_its_own_cancellation(tmp_path):
+    service, _ = _service(tmp_path)
+
+    async def scenario():
+        service._supervisor = asyncio.create_task(asyncio.sleep(30))
+        stopper = asyncio.create_task(service._stop_supervisor())
+        await asyncio.sleep(0)
+        stopper.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await stopper
+
+    asyncio.run(scenario())

@@ -1194,7 +1194,7 @@ def test_offered_refresh_records_worker_failure(tmp_path, monkeypatch):
 
     assert p._pdc_refresh_failed is True
     p._hud_generation += 1
-    p._hud_coordinator.close(p._hud_generation, lambda: None)
+    p._hud_coordinator.close(p._hud_generation, lambda: None, 1)
 
 
 def test_prepare_shutdown_invalidates_hud_ingress_synchronously(tmp_path, monkeypatch):
