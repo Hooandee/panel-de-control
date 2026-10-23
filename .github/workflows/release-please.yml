@@ -30,6 +30,9 @@ permissions: {}
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write # create the GitHub release + upload the asset
       pull-requests: write # maintain the release PR
@@ -167,3 +170,13 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: "Panel de Control.zip"
+
+  # Every published Panel release also ships the Windows installer, built from the same commit.
+  windows-installer:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write # attach the installer to the release
+    uses: ./.github/workflows/windows-ci.yml
+    with:
+      release_tag: ${{ needs.release-please.outputs.tag_name }}
