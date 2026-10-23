@@ -7,8 +7,10 @@ using System.Collections.Generic;
 using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Presentation;
+using PanelDeControl.Core.Reports;
 using PanelDeControl.Core.Telemetry;
 using Windows.Foundation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.Resources;
 using Windows.Storage;
 using Windows.System;
@@ -47,6 +49,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly TdpControlClient tdpClient = new();
     private readonly RefreshRateClient refreshClient = new();
     private readonly CpuControlClient cpuClient = new();
+    private readonly ThemesView themesView = new();
     private CancellationTokenSource? cpuDebounce;
     private bool cpuRefreshInProgress;
     private bool cpuWritePending;
@@ -92,15 +95,38 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
+    private readonly ReportClient reportClient = new();
+    private ReportKind reportKind = ReportKind.Bug;
+    private bool reportSending;
+    private string? reportCode;
 
     public ControlPanelWidget()
     {
         InitializeComponent();
+        ThemeLibraryHost.Content = themesView;
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
         CreateHeroGlow();
+        foreach (var line in new[]
+        {
+            PowerModeDetail, PowerDrawDetail, PowerStatus, CpuControlStatus, CpuControlNote, RefreshRateStatus,
+            VolumeStatus, MuteStatus, BrightnessStatus, ReportResultText,
+        })
+        {
+            CollapseWhenEmpty(line);
+        }
+
+        foreach (var toggle in new[] { ExperimentalTdpToggle, MuteToggle, CpuBoostToggle })
+        {
+            toggle.OnContent = string.Empty;
+            toggle.OffContent = string.Empty;
+            toggle.MinWidth = 0;
+            toggle.Width = 44;
+            toggle.HorizontalAlignment = HorizontalAlignment.Right;
+        }
+
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -316,7 +342,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
             ApplyTdpWhenReadyAsync(currentRefreshGeneration),
             ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration),
-            ApplyCpuWhenReadyAsync(currentRefreshGeneration));
+            ApplyCpuWhenReadyAsync(currentRefreshGeneration),
+            RefreshThemesWhenShownAsync());
+    }
+
+    private Task RefreshThemesWhenShownAsync()
+    {
+        var shown = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
+        return shown ? themesView.RefreshAsync() : Task.CompletedTask;
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -1009,7 +1042,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             }
 
             TdpControls.Visibility = Visibility.Visible;
-            PowerReadout.Visibility = Visibility.Visible;
+            PowerValue.Visibility = Visibility.Visible;
+            PowerLimits.Visibility = Visibility.Visible;
             PowerReadbackHint.Visibility = Visibility.Visible;
             UpdatePowerArc();
             UpdateTdpPresetButtons(response.PresetWatts);
@@ -1018,7 +1052,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             PowerValue.Text = "—";
             TdpControls.Visibility = Visibility.Collapsed;
-            PowerReadout.Visibility = Visibility.Collapsed;
+            PowerValue.Visibility = Visibility.Collapsed;
+            PowerLimits.Visibility = Visibility.Collapsed;
             PowerReadbackHint.Visibility = Visibility.Collapsed;
             HideTdpPresetButtons();
         }
@@ -1084,6 +1119,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             .Distinct()
             .Take(TdpPresetButtons.Count)
             .ToArray();
+        TdpPresetGrid.ColumnDefinitions.Clear();
+        for (var column = 0; column < Math.Max(available.Length, 1); column++)
+        {
+            TdpPresetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
         for (var index = 0; index < TdpPresetButtons.Count; index++)
         {
             var button = TdpPresetButtons[index];
@@ -1237,6 +1278,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         HeaderDetail.TextWrapping = TextWrapping.Wrap;
         HeaderDetail.TextTrimming = TextTrimming.None;
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
+        SectionHeaderBlock.Visibility = Visibility.Visible;
         SectionTitle.FontSize = 30;
         SectionDescription.FontSize = 14;
         DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
@@ -1268,6 +1310,56 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             {
                 stacks[split ? index % 2 : 0].Children.Add(view.Blocks[index]);
             }
+        }
+
+        if (sections.Count > selectedSection)
+        {
+            ScheduleDesktopBalance(sections[selectedSection]);
+        }
+    }
+
+    private void ScheduleDesktopBalance(SectionView view) =>
+        _ = Dispatcher.RunIdleAsync(_ => BalanceDesktopColumns(view));
+
+    // Heights are only known once a section has been laid out, so the first pass alternates and this one
+    // keeps the block order while sending each block to the shorter column.
+    private void BalanceDesktopColumns(SectionView view)
+    {
+        if (!desktopLayout || desktopColumns != 2 || view.Blocks.Count < 2 || view.Panel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var stacks = ((Grid)view.Panel).Children.OfType<StackPanel>().ToArray();
+        var heights = new double[2];
+        var targets = new int[view.Blocks.Count];
+        for (var index = 0; index < view.Blocks.Count; index++)
+        {
+            var height = view.Blocks[index].ActualHeight;
+            if (height <= 0 && view.Blocks[index].Visibility == Visibility.Visible)
+            {
+                return;
+            }
+
+            targets[index] = heights[0] <= heights[1] ? 0 : 1;
+            heights[targets[index]] += height;
+        }
+
+        var unchanged = Enumerable.Range(0, view.Blocks.Count)
+            .All(index => stacks[targets[index]].Children.Contains(view.Blocks[index]));
+        if (unchanged)
+        {
+            return;
+        }
+
+        foreach (var stack in stacks)
+        {
+            stack.Children.Clear();
+        }
+
+        for (var index = 0; index < view.Blocks.Count; index++)
+        {
+            stacks[targets[index]].Children.Add(view.Blocks[index]);
         }
     }
 
@@ -1304,7 +1396,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         EnergyTitle.Text = Localized("BlockEnergyTitle");
         SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
-        SystemBatteryPending.Text = Localized("ChargeLimitPending");
         BatteryHealthLabel.Text = Localized("BatteryHealthLabel");
         BatteryCapacityLabel.Text = Localized("BatteryCapacityLabel");
         BatteryCyclesLabel.Text = Localized("BatteryCyclesLabel");
@@ -1312,24 +1403,34 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         RefreshRateLabel.Text = Localized("RefreshRateLabel");
         CpuControlTitle.Text = Localized("BlockCpuTitle");
         CpuControlNote.Text = Localized("CpuWindowsNote");
-        PerformancePending.Text = Localized("PerformancePending");
         FanTitle.Text = Localized("BlockFanRpmTitle");
         FanOneLabel.Text = Localized("FanOne");
         FanTwoLabel.Text = Localized("FanTwo");
+        EarlyBadgeText.Text = Localized("EarlyBadge");
+        ReportTitle.Text = Localized("ReportTitle");
+        ReportKindLabel.Text = Localized("ReportKindLabel");
+        ReportKindBug.Content = Localized("ReportKindBug");
+        ReportKindFeature.Content = Localized("ReportKindFeature");
+        ReportAreaLabel.Text = Localized("ReportAreaLabel");
+        ReportAreaValue.Text = Localized("NavThemes");
+        ReportPrivacyPublic.Text = Localized("ReportPrivacyPublic");
+        ReportPrivacyPrivate.Text = Localized("ReportPrivacyPrivate");
+        ReportSendButton.Content = Localized("ReportSend");
+        UpdateReportForm();
         var library = BlockLibrary.Children
             .OfType<FrameworkElement>()
             .Where(element => element.Tag is string)
             .ToDictionary(element => (string)element.Tag);
-        foreach (var section in SectionCatalog.All)
+        foreach (var section in WindowsPreview.VisibleSections(SectionCatalog.All))
         {
             var panel = CreateSectionPanel();
             var blocks = new List<FrameworkElement>();
-            foreach (var block in section.Blocks)
+            foreach (var block in WindowsPreview.VisibleBlocks(section))
             {
                 if (library.TryGetValue(section.Id + "." + block.Id, out var element))
                 {
                     BlockLibrary.Children.Remove(element);
-                    blocks.Add(element);
+                    blocks.Add(WindowsPreview.IsReadOnly(section, block) ? ReadOnlyBlock(element) : element);
                 }
                 else
                 {
@@ -1362,7 +1463,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var tab = new Button
             {
                 Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
-                HorizontalAlignment = desktopLayout ? HorizontalAlignment.Stretch : HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = desktopLayout ? HorizontalAlignment.Left : HorizontalAlignment.Center,
                 Padding = desktopLayout ? new Thickness(14, 11, 14, 11) : new Thickness(11, 8, 11, 8),
                 Content = content,
@@ -1371,12 +1472,28 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
             tab.Click += SectionTab_Click;
             var tabHost = !desktopLayout
-                ? SectionTabs
+                ? (Panel)SectionTabs
                 : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
+            if (!desktopLayout)
+            {
+                SectionTabs.ColumnDefinitions.Add(new ColumnDefinition());
+                Grid.SetColumn(tab, SectionTabs.ColumnDefinitions.Count - 1);
+            }
+
             tabHost.Children.Add(tab);
             sections.Add(new SectionView(section, tab, label, panel, blocks));
         }
     }
+
+    // A disabled host disables every control inside it, including ones the readings later re-enable.
+    private static FrameworkElement ReadOnlyBlock(FrameworkElement block) => new ContentControl
+    {
+        Content = block,
+        IsEnabled = false,
+        IsTabStop = false,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        VerticalContentAlignment = VerticalAlignment.Stretch,
+    };
 
     private static Border CreatePendingBlock(SectionDefinition section, BlockDefinition block)
     {
@@ -1442,9 +1559,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    // Fills the bar when the tabs fit; when they do not, the grid grows past it and the bar scrolls.
+    private void SectionTabsScroller_SizeChanged(object sender, SizeChangedEventArgs args) =>
+        SectionTabs.MinWidth = args.NewSize.Width;
+
     private void SelectSection(int index)
     {
+        var wasThemes = sections.Count > selectedSection && sections[selectedSection].Definition.Id == "themes";
         selectedSection = index;
+        if (!wasThemes && sections[index].Definition.Id == "themes")
+        {
+            _ = themesView.RefreshAsync();
+        }
+
         var current = sections[index].Definition;
         var accent = ToColor(current.AccentArgb);
         for (var position = 0; position < sections.Count; position++)
@@ -1455,11 +1582,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
             view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
             view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+            if (!desktopLayout)
+            {
+                SectionTabs.ColumnDefinitions[position].Width = selected ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+            }
         }
 
         if (!desktopLayout)
         {
             sections[index].Tab.StartBringIntoView();
+        }
+
+        if (desktopLayout)
+        {
+            ScheduleDesktopBalance(sections[index]);
         }
 
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
@@ -1832,8 +1968,124 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private void ReportKind_Click(object sender, RoutedEventArgs args)
+    {
+        if (reportSending)
+        {
+            return;
+        }
+
+        reportKind = ReferenceEquals(sender, ReportKindFeature) ? ReportKind.Feature : ReportKind.Bug;
+        UpdateReportForm();
+    }
+
+    private void ReportText_TextChanged(object sender, TextChangedEventArgs args) => UpdateReportForm();
+
+    private void UpdateReportForm()
+    {
+        var feature = reportKind == ReportKind.Feature;
+        ReportIntro.Text = Localized(feature ? "ReportIntroFeature" : "ReportIntro");
+        ReportTextLabel.Text = Localized(feature ? "ReportDescribeFeature" : "ReportDescribe");
+        ReportText.PlaceholderText = Localized(feature ? "ReportDescribeHintFeature" : "ReportDescribeHint");
+        foreach (var (chip, active) in new[] { (ReportKindBug, !feature), (ReportKindFeature, feature) })
+        {
+            chip.Background = active
+                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
+                : new SolidColorBrush(Colors.Transparent);
+            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
+            chip.IsEnabled = !reportSending;
+        }
+
+        ReportText.IsEnabled = !reportSending;
+        ReportSendButton.IsEnabled = !reportSending && !string.IsNullOrWhiteSpace(ReportText.Text);
+    }
+
+    private async void ReportSend_Click(object sender, RoutedEventArgs args)
+    {
+        if (disposed || reportSending || string.IsNullOrWhiteSpace(ReportText.Text))
+        {
+            return;
+        }
+
+        reportSending = true;
+        reportCode = null;
+        ReportCopyButton.Visibility = Visibility.Collapsed;
+        ReportResultText.Text = string.Empty;
+        ReportSendButton.Content = Localized("ReportSending");
+        UpdateReportForm();
+
+        ReportResponse response;
+        try
+        {
+            response = await reportClient.SendAsync(
+                new ReportRequest(reportKind, ReportRequest.AvailableCategories, ReportText.Text.Trim()));
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("report", exception);
+            response = ReportResponse.Rejected("report_failed");
+        }
+
+        if (disposed)
+        {
+            return;
+        }
+
+        reportSending = false;
+        ReportSendButton.Content = Localized("ReportSend");
+        switch (response.Status)
+        {
+            case ReportStatus.Sent:
+                reportCode = response.Code;
+                ReportResultText.Text = string.Format(Localized("ReportSent"), response.Code);
+                ReportCopyButton.Content = Localized("ReportCopy");
+                ReportCopyButton.Visibility = Visibility.Visible;
+                ReportText.Text = string.Empty;
+                break;
+            case ReportStatus.Saved when response.SavedPath is not null:
+                ReportResultText.Text = string.Format(Localized("ReportSaved"), response.SavedPath);
+                break;
+            default:
+                ReportResultText.Text = Localized("ReportFailed");
+                break;
+        }
+
+        UpdateReportForm();
+    }
+
+    private void ReportCopy_Click(object sender, RoutedEventArgs args)
+    {
+        if (reportCode is null)
+        {
+            return;
+        }
+
+        var data = new DataPackage();
+        data.SetText(reportCode);
+        Clipboard.SetContent(data);
+        ReportCopyButton.Content = Localized("ReportCopied");
+    }
+
+    private static void CollapseWhenEmpty(TextBlock line)
+    {
+        void Update() => line.Visibility = string.IsNullOrEmpty(line.Text) ? Visibility.Collapsed : Visibility.Visible;
+        line.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => Update());
+        Update();
+    }
+
     private void BuildAccentSwatches()
     {
+        const int SwatchesPerRow = 8;
+        for (var column = 0; column < SwatchesPerRow; column++)
+        {
+            AccentSwatches.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var row = 0; row < (AccentPalette.All.Count + SwatchesPerRow - 1) / SwatchesPerRow; row++)
+        {
+            AccentSwatches.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
         var index = 0;
         foreach (var accent in AccentPalette.All)
         {
@@ -1844,7 +2096,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 Width = 36,
                 Height = 36,
                 Padding = new Thickness(0),
-                Margin = new Thickness(3),
+                HorizontalAlignment = HorizontalAlignment.Center,
                 CornerRadius = new CornerRadius(18),
                 Background = new SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0),
@@ -1860,6 +2112,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 swatch,
                 string.Format(Localized("AccentSwatchAutomation"), index, AccentPalette.All.Count));
             swatch.Click += AccentSwatch_Click;
+            Grid.SetRow(swatch, (index - 1) / SwatchesPerRow);
+            Grid.SetColumn(swatch, (index - 1) % SwatchesPerRow);
             AccentSwatches.Children.Add(swatch);
         }
 

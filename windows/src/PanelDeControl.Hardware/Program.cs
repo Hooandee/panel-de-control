@@ -1,13 +1,25 @@
+using PanelDeControl.Hardware.Reports;
+using PanelDeControl.Hardware.Themes;
+
 namespace PanelDeControl.Hardware;
 
 public static class Program
 {
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
         if (!OperatingSystem.IsWindows())
         {
             return 1;
         }
+
+        // The companion starts both at sign-in (themes) and from the widget; one copy owns the pipes.
+        using var singleInstance = new Mutex(initiallyOwned: true, @"Local\PanelDeControl.Companion", out var ownsInstance);
+        if (!ownsInstance)
+        {
+            return 0;
+        }
+
+        CompanionLog.Write("start", string.Join(' ', args));
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
@@ -54,38 +66,95 @@ public static class Program
                 new PackagedWidgetClientValidator(),
                 PackageNamedPipeServerFactory.CreateControl);
 
+            using var steamDevTools = new SteamDevTools();
+            using var themeChannel = new OfficialThemeCatalogSource();
+            using var classTable = new ClassTableSource(ThemeLibrary.DefaultRoot);
+            var steam = new SteamInstallation();
+            var gameMixer = new CoreAudioGameMixer();
+            var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam, PackageTempFolder.ResolveOrUnavailable());
+            var themeEngine = new SteamThemeEngine(
+                steamDevTools,
+                steam,
+                themeService.EngineInputs,
+                SteamThemeHostBundle.Read,
+                classTable);
+            var themesServer = new ThemesPipeServer(
+                ThemesPipeServer.PackagedPipeName,
+                new ThemesController(themeService, themeEngine),
+                PackageNamedPipeServerFactory.CreateControl);
+
+            using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            var reportServer = new ReportPipeServer(
+                ReportPipeServer.PackagedPipeName,
+                new ReportController(
+                    () => ThemesResponseBuilder.Build(themeService.Catalog, themeService.Library(), themeService.Settings(), themeEngine.Status),
+                    () => serviceClient.ReadInventory(clock),
+                    new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
+                    new ReportSender(
+                        reportHttp,
+                        new Uri(Environment.GetEnvironmentVariable("PDC_REPORT_URL") ?? ReportSender.DefaultServiceUrl),
+                        ReportSender.DefaultOfflineFolder),
+                    ReportController.DefaultLogs),
+                PackageNamedPipeServerFactory.CreateControl);
+
             using var brokerLifetime = new CancellationTokenSource();
-            var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
-            var volumeTask = volumeServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var brightnessTask = brightnessServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var tdpTask = tdpServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var refreshTask = refreshServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            var cpuTask = cpuServer.RunUntilCancelledAsync(
-                brokerLifetime.Token);
-            try
-            {
-                var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask)
-                    .ConfigureAwait(false);
-                await completedTask.ConfigureAwait(false);
-            }
-            finally
-            {
-                brokerLifetime.Cancel();
-                await Task
-                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask, refreshTask, cpuTask)
-                    .ConfigureAwait(false);
-            }
+            var token = brokerLifetime.Token;
+            await Task.WhenAll(
+                SuperviseAsync("snapshot", () => snapshotServer.RunAsync(token), token),
+                SuperviseAsync("volume", () => volumeServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("brightness", () => brightnessServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("tdp", () => tdpServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("refresh", () => refreshServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("cpu", () => cpuServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("reports", () => reportServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("themes.engine", () => themeEngine.RunAsync(token), token),
+                SuperviseAsync("themes.pipe", () => themesServer.RunUntilCancelledAsync(token), token),
+                SuperviseAsync("themes.focus", () => new GameBarFocusReturner(themeEngine).RunAsync(token), token),
+                SuperviseAsync("themes.game_audio", () => new GameAudioSilencer(
+                    steamDevTools,
+                    gameMixer,
+                    new GameAudioPolicy(GameAudioSilencer.DefaultStatePath),
+                    GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token))
+                .ConfigureAwait(false);
             return 0;
         }
         catch (Exception exception)
         {
             CompanionLog.Write("fatal", exception);
             return 1;
+        }
+    }
+
+    // One broken pipe or idle snapshot server must not take the whole companion down: it also keeps
+    // Steam themed while Game Bar is closed, so every server restarts on its own.
+    private static async Task SuperviseAsync(string name, Func<Task> run, CancellationToken cancellationToken)
+    {
+        var failures = 0;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await run().ConfigureAwait(false);
+                failures = 0;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                CompanionLog.Write($"server.{name}", exception);
+                failures = Math.Min(failures + 1, 6);
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250 << failures), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
 }

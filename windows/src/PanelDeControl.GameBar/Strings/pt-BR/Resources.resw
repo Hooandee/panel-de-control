@@ -144,12 +144,6 @@
   <data name="MuteStatus.Text" xml:space="preserve">
     <value>Verificando o estado do silêncio…</value>
   </data>
-  <data name="MuteToggle.OffContent" xml:space="preserve">
-    <value>Com som</value>
-  </data>
-  <data name="MuteToggle.OnContent" xml:space="preserve">
-    <value>Silenciado</value>
-  </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
     <value>Ativa ou desativa o silêncio do dispositivo de áudio padrão e verifica o estado lido</value>
   </data>
@@ -223,8 +217,6 @@
     <value>Verificando o dispositivo de áudio padrão…</value>
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>Controle experimental</value></data>
-  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve"><value>Desligado</value></data>
-  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve"><value>Ativado</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Ativa explicitamente as gravações experimentais de TDP nesta sessão do serviço</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Permissão de gravação experimental de TDP</value></data>
   <data name="ManufacturerRecoveryHint.Text" xml:space="preserve"><value>Recuperação do fabricante não verificada: reinicie o Windows ou reabra o Armoury Crate para devolver o controle.</value></data>
@@ -383,21 +375,92 @@
   <data name="RefreshRateLabel" xml:space="preserve"><value>Taxa de atualização</value></data>
   <data name="RefreshRateUnavailable" xml:space="preserve"><value>Não foi possível ler a taxa de atualização</value></data>
   <data name="RefreshRateAutomation" xml:space="preserve"><value>Mudar a tela para {0} Hz</value></data>
-  <data name="PerformancePending" xml:space="preserve"><value>Limite de FPS e escala: em breve no Windows</value></data>
   <data name="FanOne" xml:space="preserve"><value>Ventoinha 1</value></data>
   <data name="FanTwo" xml:space="preserve"><value>Ventoinha 2</value></data>
   <data name="CpuBoostLabel.Text" xml:space="preserve"><value>Boost do processador</value></data>
-  <data name="CpuBoostToggle.OnContent" xml:space="preserve"><value>Ativado</value></data>
-  <data name="CpuBoostToggle.OffContent" xml:space="preserve"><value>Desativado</value></data>
   <data name="CpuBoostToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Boost do processador</value></data>
   <data name="CpuMaximumStateLabel.Text" xml:space="preserve"><value>Desempenho máximo</value></data>
   <data name="CpuMaximumStateSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Estado máximo do processador</value></data>
   <data name="CpuWindowsNote" xml:space="preserve"><value>SMT e núcleos ativos só mudam pela BIOS no Windows.</value></data>
   <data name="CpuPermissionRequired" xml:space="preserve"><value>O Windows não permite mudar o plano de energia</value></data>
   <data name="CpuUnavailable" xml:space="preserve"><value>Não foi possível ler o plano de energia</value></data>
-  <data name="ChargeLimitPending" xml:space="preserve"><value>Limite de carga: em breve no Windows</value></data>
   <data name="BatteryHealthLabel" xml:space="preserve"><value>Saúde</value></data>
   <data name="BatteryCapacityLabel" xml:space="preserve"><value>Capacidade</value></data>
   <data name="BatteryCyclesLabel" xml:space="preserve"><value>Ciclos</value></data>
   <data name="BatteryCapacityFormat" xml:space="preserve"><value>{0:0.0} / {1:0.0} Wh</value></data>
+  <data name="BlockThemeLibraryTitle" xml:space="preserve"><value>Temas do Steam</value></data>
+  <data name="BlockThemeLibraryDesc" xml:space="preserve"><value>Os temas do Panel de Control para o Steam no modo Big Picture.</value></data>
+  <data name="ThemesCompanionTitle" xml:space="preserve"><value>O serviço de temas não responde</value></data>
+  <data name="ThemesCompanionDetail" xml:space="preserve"><value>Uma nova tentativa será feita em alguns segundos.</value></data>
+  <data name="ThemesSteamMissingTitle" xml:space="preserve"><value>O Steam não está instalado</value></data>
+  <data name="ThemesSteamMissingDetail" xml:space="preserve"><value>Os temas são aplicados ao Steam no modo Big Picture.</value></data>
+  <data name="ThemesRestartTitle" xml:space="preserve"><value>É preciso reiniciar o Steam</value></data>
+  <data name="ThemesRestartDetail" xml:space="preserve"><value>Para aplicar temas, o Steam precisa iniciar com a depuração remota ativada. Ela é ativada e o Steam reinicia no Big Picture; só é preciso uma vez.</value></data>
+  <data name="ThemesRestartAction" xml:space="preserve"><value>Ativar e reiniciar o Steam</value></data>
+  <data name="ThemesSteamClosedTitle" xml:space="preserve"><value>O Steam está fechado</value></data>
+  <data name="ThemesSteamClosedDetail" xml:space="preserve"><value>O tema ativo será aplicado assim que o Steam abrir no Big Picture.</value></data>
+  <data name="ThemesWaitingTitle" xml:space="preserve"><value>Aguardando o Big Picture</value></data>
+  <data name="ThemesWaitingDetail" xml:space="preserve"><value>O Steam está aberto no modo área de trabalho. O tema será aplicado ao mudar para o Big Picture.</value></data>
+  <data name="ThemesConnectedTitle" xml:space="preserve"><value>Conectado ao Steam</value></data>
+  <data name="ThemesConnectedDetail" xml:space="preserve"><value>As mudanças aparecem na hora no Big Picture.</value></data>
+  <data name="ThemesOperationFailed" xml:space="preserve"><value>Não foi possível concluir: {0}</value></data>
+  <data name="ThemesCatalogLoading" xml:space="preserve"><value>Carregando o catálogo de temas…</value></data>
+  <data name="ThemesCatalogUnavailable" xml:space="preserve"><value>Não foi possível carregar o catálogo. É preciso conexão com a internet.</value></data>
+  <data name="ThemesInstallAction" xml:space="preserve"><value>Instalar · {0}</value></data>
+  <data name="ThemesUpdateAction" xml:space="preserve"><value>Atualizar para {0}</value></data>
+  <data name="ThemesInstalling" xml:space="preserve"><value>Instalando…</value></data>
+  <data name="ThemesOptions" xml:space="preserve"><value>Opções</value></data>
+  <data name="ThemesStateBroken" xml:space="preserve"><value>A cópia instalada está danificada e precisa ser instalada de novo.</value></data>
+  <data name="ThemesStateNotInstalled" xml:space="preserve"><value>Não instalado</value></data>
+  <data name="ThemesVersion" xml:space="preserve"><value>Versão {0}</value></data>
+  <data name="ThemesStateApplied" xml:space="preserve"><value>aplicado em {0} telas</value></data>
+  <data name="ThemesStatePending" xml:space="preserve"><value>será aplicado ao abrir o Big Picture</value></data>
+  <data name="ThemesStatePartial" xml:space="preserve"><value>aplicado em {0} de {1} telas</value></data>
+  <data name="ThemesStateRuntimeMissing" xml:space="preserve"><value>o estilo está ativo, faltam as animações</value></data>
+  <data name="ThemesErrorPackage" xml:space="preserve"><value>o pacote baixado não passou na verificação</value></data>
+  <data name="ThemesErrorCatalog" xml:space="preserve"><value>o catálogo não está disponível ou mudou</value></data>
+  <data name="ThemesErrorTimeout" xml:space="preserve"><value>o Steam demorou demais para responder</value></data>
+  <data name="ThemesErrorGeneric" xml:space="preserve"><value>erro inesperado; ficou anotado no registro</value></data>
+  <data name="ThemesEarlyTag" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesInstallFromFile" xml:space="preserve"><value>Instalar de arquivo</value></data>
+  <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
+  <data name="ThemesPickerUnavailable" xml:space="preserve"><value>não foi possível abrir o seletor de arquivos; ele também abre pelo Panel de Control no Iniciar</value></data>
+  <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>com outro tema ativo não há animações; é preciso desligar um</value></data>
+  <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>esse zip não é uma early publicada deste tema</value></data>
+  <data name="ThemesGroup_appearance" xml:space="preserve"><value>Aparência</value></data>
+  <data name="ThemesGroup_grid" xml:space="preserve"><value>Grade</value></data>
+  <data name="ThemesGroup_animations" xml:space="preserve"><value>Animações</value></data>
+  <data name="ThemesGroup_performance" xml:space="preserve"><value>Desempenho</value></data>
+  <data name="ThemesGroup_compatibility" xml:space="preserve"><value>Compatibilidade</value></data>
+  <data name="ThemesGroup_sections" xml:space="preserve"><value>Seções do tema</value></data>
+  <data name="ThemesGroup_extra" xml:space="preserve"><value>Extra</value></data>
+  <data name="ThemesGroup_sections_Desc" xml:space="preserve"><value>Escolha em quais partes do Steam o tema será aplicado.</value></data>
+  <data name="ThemesGroup_extra_Desc" xml:space="preserve"><value>Ajustes que fogem do design original do tema.</value></data>
+  <data name="ReportTitle" xml:space="preserve"><value>Enviar um relatório</value></data>
+  <data name="ReportIntro" xml:space="preserve"><value>Me conte o que você viu. Eu coleto as informações técnicas automaticamente.</value></data>
+  <data name="ReportIntroFeature" xml:space="preserve"><value>Isto não é um relatório de erro. Conte-me o que você gostaria de adicionar ou melhorar; também vou coletar o contexto técnico do seu dispositivo.</value></data>
+  <data name="ReportKindLabel" xml:space="preserve"><value>O que você gostaria de enviar?</value></data>
+  <data name="ReportKindBug" xml:space="preserve"><value>Um problema</value></data>
+  <data name="ReportKindFeature" xml:space="preserve"><value>Um pedido ou uma ideia</value></data>
+  <data name="ReportAreaLabel" xml:space="preserve"><value>Sobre qual área é?</value></data>
+  <data name="ReportDescribe" xml:space="preserve"><value>Me diga o que aconteceu (obrigatório)</value></data>
+  <data name="ReportDescribeFeature" xml:space="preserve"><value>Me diga o que você gostaria (obrigatório)</value></data>
+  <data name="ReportDescribeHint" xml:space="preserve"><value>Diga o que você esperava e o que realmente aconteceu.</value></data>
+  <data name="ReportDescribeHintFeature" xml:space="preserve"><value>Explique o que você quer alcançar e inclua um exemplo, se puder.</value></data>
+  <data name="ReportPrivacyPublic" xml:space="preserve"><value>Público: o relatório mostrará apenas um resumo (modelo, versão, categorias e seu texto).</value></data>
+  <data name="ReportPrivacyPrivate" xml:space="preserve"><value>Privado: os logs e o estado completos NÃO são públicos; eles são criptografados e só Hooandee pode lê-los.</value></data>
+  <data name="ReportSend" xml:space="preserve"><value>Criar e enviar relatório</value></data>
+  <data name="ReportSending" xml:space="preserve"><value>Enviando…</value></data>
+  <data name="ReportSent" xml:space="preserve"><value>Relatório enviado! Código do seu relatório: {0}</value></data>
+  <data name="ReportSaved" xml:space="preserve"><value>Não foi possível enviar (sem conexão?). Eu salvei o relatório em {0}. Você pode enviá-lo para mim manualmente.</value></data>
+  <data name="ReportFailed" xml:space="preserve"><value>Não foi possível enviar (sem conexão?).</value></data>
+  <data name="ReportCopy" xml:space="preserve"><value>Copiar código</value></data>
+  <data name="ReportCopied" xml:space="preserve"><value>Copiado!</value></data>
+  <data name="EarlyBadge" xml:space="preserve"><value>Early</value></data>
+  <data name="ThemesRemove" xml:space="preserve"><value>Remover tema</value></data>
+  <data name="ThemesRemoving" xml:space="preserve"><value>Removendo…</value></data>
+  <data name="ThemesRemoveTitle" xml:space="preserve"><value>Remover {0}?</value></data>
+  <data name="ThemesRemoveDescription" xml:space="preserve"><value>Seus arquivos e configurações serão excluídos. Ele pode ser instalado novamente depois.</value></data>
+  <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Remover</value></data>
+  <data name="ThemesRemoveCancel" xml:space="preserve"><value>Cancelar</value></data>
 </root>

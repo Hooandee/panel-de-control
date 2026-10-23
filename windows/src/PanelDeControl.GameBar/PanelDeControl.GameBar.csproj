@@ -54,12 +54,15 @@
     </Compile>
     <Compile Include="BrightnessControlClient.cs" />
     <Compile Include="RefreshRateClient.cs" />
+    <Compile Include="ReportClient.cs" />
     <Compile Include="CpuControlClient.cs" />
     <Compile Include="CrashLog.cs" />
     <Compile Include="HardwareBrokerLauncher.cs" />
     <Compile Include="InventoryClient.cs" />
     <Compile Include="TelemetryClient.cs" />
     <Compile Include="TdpControlClient.cs" />
+    <Compile Include="ThemesClient.cs" />
+    <Compile Include="ThemesView.cs" />
     <Compile Include="VolumeControlClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -100,6 +103,18 @@
     <Content Include="Assets\SplashScreen.png" />
     <Content Include="Assets\WidgetIcon.png" />
     <Content Include="Properties\Default.rd.xml" />
+    <Content Include="..\..\..\src\assets\duo-cover.jpg">
+      <Link>Assets\ThemeCovers\duo-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\eclipse-cover.jpg">
+      <Link>Assets\ThemeCovers\eclipse-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\hooandee-cover.jpg">
+      <Link>Assets\ThemeCovers\hooandee-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\luminous-atlas-cover.jpg">
+      <Link>Assets\ThemeCovers\luminous-atlas-cover.jpg</Link>
+    </Content>
     <Content Include="Assets\WidgetIcon.png">
       <Link>GameBar\PanelDeControl\WidgetIcon.png</Link>
     </Content>

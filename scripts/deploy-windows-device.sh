@@ -60,6 +60,9 @@ SERVICE_ARTIFACT="panel-de-control-service-x64"
 SERVICE_NAME="PanelDeControlService"
 REMOTE_STAGE="pdc-deploy"
 
+# Wi-Fi handhelds drop for a few seconds; without keepalives a copy hangs on the dead connection.
+SSH_OPTS="-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o ConnectTimeout=10"
+
 run() {
   printf '+'
   printf ' %q' "$@"
@@ -104,6 +107,9 @@ INSTALL_SERVICE_SCRIPT=$(cat <<POWERSHELL
 New-Item -ItemType Directory -Path \$serviceDir -Force | Out-Null
 Copy-Item -Path (Join-Path \$stage 'service\\*') -Destination \$serviceDir -Recurse -Force
 \$binary = Join-Path \$serviceDir 'PanelDeControl.Service.exe'
+\$layout = (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation
+& \$binary --trust-broker (Join-Path \$layout 'HardwareBroker') --development
+if (\$LASTEXITCODE -ne 0) { throw 'The service could not record the companion fingerprint.' }
 New-Service -Name '${SERVICE_NAME}' -BinaryPathName ('"' + \$binary + '"') -DisplayName 'Panel de Control' -StartupType Automatic | Out-Null
 Start-Service -Name '${SERVICE_NAME}'
 Get-Service -Name '${SERVICE_NAME}' | Select-Object Name, Status, StartType | Format-List
@@ -132,7 +138,9 @@ try {
   Get-AppxPackage -Name '${PACKAGE_NAME}' | Remove-AppxPackage
   if (Test-Path \$layout) { Remove-Item -LiteralPath \$layout -Recurse -Force }
   Move-Item -LiteralPath \$incoming -Destination \$layout
-  Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml')
+  Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml') -ForceApplicationShutdown
+  # Game Bar keeps the widget list it read at start; a restart makes it list the new registration.
+  Get-Process GameBar, GameBarFTServer, XboxGameBarWidgets -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   Get-AppxPackage -Name '${PACKAGE_NAME}' | Select-Object Name, Version, InstallLocation | Format-List | Out-String | Out-File -Append \$log
   \$code = 0
 } catch {
@@ -157,6 +165,8 @@ if (Test-Path \$incoming) { Remove-Item -LiteralPath \$incoming -Recurse -Force 
 \$archive = Join-Path \$stage 'package.zip'
 Copy-Item -LiteralPath (Join-Path \$stage 'package.msix') -Destination \$archive -Force
 Expand-Archive -LiteralPath \$archive -DestinationPath \$incoming -Force
+# A registered development layout is not checked against a signature; a left-over one only gets in the way.
+Remove-Item -LiteralPath (Join-Path \$incoming 'AppxSignature.p7x') -Force -ErrorAction SilentlyContinue
 \$task = 'PanelDeControlDeploy'
 \$register = Join-Path \$stage 'register.ps1'
 \$done = Join-Path \$stage 'register.done'
@@ -188,7 +198,14 @@ $REMOVE_SERVICE_SCRIPT
 $INSTALL_SERVICE_SCRIPT
 Remove-Item -LiteralPath \$stage -Recurse -Force"
 else
+  # A widget-only deploy changes the companion files; an installed service must learn their new
+  # fingerprint or it stops trusting the companion.
   REMOTE_SCRIPT="$WIDGET_SCRIPT
+\$serviceBinary = Join-Path \$env:ProgramFiles 'PanelDeControl\\Service\\PanelDeControl.Service.exe'
+if (Test-Path \$serviceBinary) {
+  & \$serviceBinary --trust-broker (Join-Path (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation 'HardwareBroker') --development
+  if (\$LASTEXITCODE -ne 0) { Write-Warning 'Run the deploy with --with-service from an administrator account so the service trusts the new companion.' }
+}
 Remove-Item -LiteralPath \$stage -Recurse -Force"
 fi
 encode_powershell() {
@@ -200,7 +217,7 @@ ENCODED_CLEAN="$(encode_powershell "\$ProgressPreference = 'SilentlyContinue'; R
 if [ "$REMOVE_SERVICE" -eq 1 ]; then
   echo "==> Removing $SERVICE_NAME from $HOST"
   [ "$DRY_RUN" -eq 0 ] || printf '%s\n' "$REMOTE_SCRIPT"
-  run ssh "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_SCRIPT"
+  run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_SCRIPT"
   echo "==> Done."
   exit 0
 fi
@@ -257,11 +274,11 @@ printf '%s\n' "$REGISTER_SCRIPT" > "$STAGE/register.ps1"
 [ "$DRY_RUN" -eq 0 ] || { echo "+ write $STAGE/deploy.ps1:"; printf '%s\n' "$REMOTE_SCRIPT"; }
 
 echo "==> Copying package to $HOST"
-run ssh "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_CLEAN"
-run scp -q -r "$STAGE" "$HOST:$REMOTE_STAGE"
+run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -EncodedCommand "$ENCODED_CLEAN"
+run scp $SSH_OPTS -q -r "$STAGE" "$HOST:$REMOTE_STAGE"
 
 echo "==> Registering $PACKAGE_NAME on $HOST"
 [ "$WITH_SERVICE" -eq 0 ] || echo "==> Installing $SERVICE_NAME on $HOST"
-run ssh "$HOST" powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$REMOTE_STAGE/deploy.ps1"
+run ssh $SSH_OPTS "$HOST" powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$REMOTE_STAGE/deploy.ps1"
 
 echo "==> Done. Open Xbox Game Bar (Win+G) > Widgets > Panel de Control on $HOST"

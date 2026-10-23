@@ -49,16 +49,17 @@ def test_dry_run_prints_every_step_without_touching_the_device():
 
     assert result.returncode == 0, result.stderr
     assert "+ gh run download 42 --name panel-de-control-gamebar-x64" in result.stdout
-    assert "+ scp -q " in result.stdout
+    keepalive = "-o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o ConnectTimeout=10"
+    assert f"+ scp {keepalive} -q " in result.stdout
     assert "me@handheld:pdc-deploy" in result.stdout
-    assert "+ ssh me@handheld powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File pdc-deploy/deploy.ps1" in result.stdout
+    assert f"+ ssh {keepalive} me@handheld powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File pdc-deploy/deploy.ps1" in result.stdout
 
 
 def test_host_can_come_from_the_environment():
     result = _run("--dry-run", "--run-id", "7", env={"PDC_WINDOWS_HOST": "me@ally"})
 
     assert result.returncode == 0, result.stderr
-    assert "+ ssh me@ally powershell" in result.stdout
+    assert "me@ally powershell" in result.stdout
 
 
 def test_remote_script_requires_developer_mode_and_registers_the_layout():

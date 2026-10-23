@@ -1,0 +1,416 @@
+using System.IO.Compression;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using PanelDeControl.Hardware.Themes;
+using Xunit;
+
+namespace PanelDeControl.Hardware.Tests;
+
+public sealed class ThemePackageTests : IDisposable
+{
+    private const string Name = "Hooandee Eclipse";
+    private const string Extension = "module.exports = Object.freeze({abiVersion: 2, mount: () => () => {}});";
+
+    private readonly string root = Path.Combine(Path.GetTempPath(), $"pdc-themes-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ParsesTheOfficialCatalogShape()
+    {
+        var releases = ThemeCatalog.Parse(Encoding.UTF8.GetBytes(Catalog("0.2.5", 62848, new string('c', 64))));
+
+        var eclipse = Assert.Single(releases);
+        Assert.Equal("hooandee-eclipse", eclipse.CatalogId);
+        Assert.Equal(Name, eclipse.CssLoaderName);
+        Assert.Equal("Eclipse", eclipse.DisplayName["es"]);
+        Assert.Equal(62848, eclipse.Artifact.Size);
+    }
+
+    [Theory]
+    [InlineData("https://evil.example/themes/v1/hooandee-eclipse/0.2.5/theme.zip")]
+    [InlineData("http://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.5/theme.zip")]
+    [InlineData("https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.4/theme.zip")]
+    public void RejectsArtifactsOutsideTheOfficialChannel(string url)
+    {
+        var json = Catalog("0.2.5", 10, new string('c', 64)).Replace(
+            "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.2.5/theme.zip",
+            url);
+
+        Assert.Throws<FormatException>(() => ThemeCatalog.Parse(Encoding.UTF8.GetBytes(json)));
+    }
+
+    [Fact]
+    public void ComparesVersionsNumerically()
+    {
+        Assert.True(ThemeCatalog.CompareVersions("0.10.0", "0.9.55") > 0);
+        Assert.Equal(0, ThemeCatalog.CompareVersions("1.1.2", "1.1.2"));
+    }
+
+    [Fact]
+    public void InstallsAVerifiedPackageAndReplacesThePreviousVersion()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var first = Package("0.2.4");
+        installer.Install(Release("0.2.4", first), first);
+        var second = Package("0.2.5");
+
+        var installed = installer.Install(Release("0.2.5", second), second);
+
+        Assert.Equal("0.2.5", installed.Manifest.Version);
+        Assert.Equal("hooandee-eclipse", installed.Marker!.CatalogIdentity);
+        Assert.Equal(Extension, ThemeLibrary.ReadExtension(installed));
+        Assert.True(File.Exists(Path.Combine(root, Name, "icons", "chat.png")));
+        Assert.Equal(new[] { Name }, Directory.GetDirectories(root).Select(Path.GetFileName));
+        Assert.Equal("0.2.5", ThemeLibrary.Scan(root).Themes.Single().Manifest.Version);
+    }
+
+    [Fact]
+    public void RejectsATamperedDownloadAndKeepsTheInstalledVersion()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var good = Package("0.2.4");
+        installer.Install(Release("0.2.4", good), good);
+        var update = Package("0.2.5");
+        var release = Release("0.2.5", update);
+        update[^10] ^= 0xFF;
+
+        var error = Assert.Throws<ThemeInstallException>(() => installer.Install(release, update));
+
+        Assert.Equal("artifact_hash_mismatch", error.Code);
+        Assert.Equal("0.2.4", ThemeLibrary.Scan(root).Themes.Single().Manifest.Version);
+    }
+
+    [Theory]
+    [InlineData("Other/theme.json", "unsafe_archive")]
+    [InlineData("Hooandee Eclipse/../escape.css", "unsafe_archive")]
+    [InlineData("/Hooandee Eclipse/abs.css", "unsafe_archive")]
+    public void RejectsEntriesOutsideTheThemeRoot(string entry, string code)
+    {
+        var archive = Package("0.2.5", (entry, "x"));
+        var installer = new ThemePackageInstaller(root);
+
+        var error = Assert.Throws<ThemeInstallException>(() => installer.Install(Release("0.2.5", archive), archive));
+
+        Assert.Equal(code, error.Code);
+        Assert.False(Directory.Exists(Path.Combine(root, Name)));
+    }
+
+    [Fact]
+    public void RejectsAPackageWhoseIdentityDiffersFromTheCatalog()
+    {
+        var archive = Package("0.2.6");
+        var installer = new ThemePackageInstaller(root);
+
+        var error = Assert.Throws<ThemeInstallException>(() => installer.Install(Release("0.2.5", archive), archive));
+
+        Assert.Equal("identity_mismatch", error.Code);
+    }
+
+    [Fact]
+    public void RejectsAnUndeclaredOrAlteredExtension()
+    {
+        var archive = Package("0.2.5", ($"{Name}/panel-extension.js", Extension + "//changed"));
+        var installer = new ThemePackageInstaller(root);
+
+        var error = Assert.Throws<ThemeInstallException>(() => installer.Install(Release("0.2.5", archive), archive));
+
+        Assert.Equal("invalid_package", error.Code);
+    }
+
+    [Fact]
+    public void RecoversThePreviousVersionAfterAnInterruptedSwap()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var good = Package("0.2.4");
+        installer.Install(Release("0.2.4", good), good);
+        var transaction = Path.Combine(root, ".install-interrupted");
+        Directory.CreateDirectory(transaction);
+        Directory.Move(Path.Combine(root, Name), Path.Combine(transaction, ".previous"));
+
+        ThemePackageInstaller.RecoverInterruptedInstalls(root);
+
+        Assert.Equal("0.2.4", ThemeLibrary.Scan(root).Themes.Single().Manifest.Version);
+        Assert.False(Directory.Exists(transaction));
+    }
+
+    [Fact]
+    public void ScanReportsBrokenFoldersWithoutFailing()
+    {
+        Directory.CreateDirectory(Path.Combine(root, "Broken"));
+        File.WriteAllText(Path.Combine(root, "Broken", "theme.json"), "{");
+        Directory.CreateDirectory(Path.Combine(root, "Renamed"));
+        File.WriteAllText(Path.Combine(root, "Renamed", "theme.json"), """{"name":"Other","version":"1.0.0"}""");
+
+        var snapshot = ThemeLibrary.Scan(root);
+
+        Assert.Empty(snapshot.Themes);
+        Assert.Equal(new[] { "invalid_manifest", "identity_mismatch" }, snapshot.Broken.Select(broken => broken.Reason));
+    }
+
+    [Fact]
+    public void EngineInputsOfferEveryInstalledExtensionNotOnlyEnabledOnes()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+
+        var disabled = service.EngineInputs();
+        service.SetEnabled(Name, true);
+        var enabled = service.EngineInputs();
+
+        Assert.Empty(disabled.Enabled);
+        Assert.Equal("hooandee-eclipse", Assert.Single(disabled.Extensions).CatalogId);
+        Assert.Single(enabled.Enabled);
+        Assert.Equal(disabled.Extensions.Single().Sha256, enabled.Extensions.Single().Sha256);
+    }
+
+    [Fact]
+    public void UninstallRemovesTheThemeAndItsSettingsSoTheEngineDropsIt()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+        service.SetEnabled(Name, true);
+
+        service.Uninstall(Name);
+
+        Assert.Empty(service.Library().Themes);
+        Assert.Empty(service.Settings());
+        Assert.Empty(service.EngineInputs().Enabled);
+        Assert.Empty(service.EngineInputs().Extensions);
+    }
+
+    [Fact]
+    public void EnablingARuntimeThemeTurnsOffAnotherRuntimeThemeOutsideTheCatalog()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        var early = Path.Combine(root, "Hooandee Duo");
+        CopyDirectory(Path.Combine(root, Name), early);
+        File.WriteAllText(Path.Combine(early, "theme.json"), """{"name":"Hooandee Duo","version":"0.1.5","inject":{"tokens.css":["bigpicture"]}}""");
+        File.WriteAllText(
+            Path.Combine(early, "panel-theme.json"),
+            File.ReadAllText(Path.Combine(early, "panel-theme.json")).Replace("hooandee-eclipse", "hooandee-duo"));
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+        Assert.Equal(2, service.Library().Themes.Count);
+
+        service.SetEnabled(Name, true);
+        service.SetEnabled("Hooandee Duo", true);
+
+        Assert.Equal(new[] { "Hooandee Duo" }, service.Settings().Where(setting => setting.Enabled).Select(setting => setting.Name));
+    }
+
+    private static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var destination = Path.Combine(target, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination);
+        }
+    }
+
+    [Fact]
+    public void UninstallRefusesAThemeThatIsNotInstalled()
+    {
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+
+        Assert.Equal("not_installed", Assert.Throws<ThemeInstallException>(() => service.Uninstall(Name)).Code);
+    }
+
+    [Fact]
+    public void ParsesTheEarlyListAndRejectsAVersionWithoutArtifact()
+    {
+        var early = ThemeCatalog.ParseEarly(Encoding.UTF8.GetBytes(EarlyList("0.2.5", 10, new string('a', 64))));
+
+        Assert.Equal("0.2.5", Assert.Single(early).Version);
+        Assert.Throws<FormatException>(() => ThemeCatalog.ParseEarly(Encoding.UTF8.GetBytes(
+            EarlyList("0.2.5", 10, new string('a', 64)).Replace("\"version\":\"0.2.5\",\"artifacts\"", "\"version\":\"0.9.9\",\"artifacts\""))));
+    }
+
+    [Fact]
+    public async Task InstallsAPickedEarlyArchiveOnlyWhenItsHashIsPublished()
+    {
+        var imports = Path.Combine(root, "imports");
+        Directory.CreateDirectory(imports);
+        var archive = Package("0.2.5");
+        var sha = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+        var picked = Path.Combine(imports, "early-picked.zip");
+        File.WriteAllBytes(picked, archive);
+        var library = Path.Combine(root, "library");
+        var service = new ThemeService(library, new EarlyChannel(EarlyList("0.2.5", archive.Length, sha)), new NoSteam(), imports);
+
+        await service.InstallEarlyFileAsync("hooandee-eclipse", picked, default);
+
+        var installed = ThemeLibrary.Scan(library).Themes.Single();
+        Assert.Equal("0.2.5", installed.Manifest.Version);
+        Assert.False(service.Settings().Single().Enabled);
+        Assert.False(File.Exists(picked));
+        var entry = ThemesResponseBuilder.Build(service.Catalog, service.Library(), service.Settings(), ThemeEngineStatus.Initial).Themes.Single();
+        Assert.Equal("0.2.5", entry.EarlyVersion);
+    }
+
+    [Fact]
+    public async Task RefusesAPickedArchiveThatIsNotAPublishedEarly()
+    {
+        var imports = Path.Combine(root, "imports");
+        Directory.CreateDirectory(imports);
+        var archive = Package("0.2.5");
+        var picked = Path.Combine(imports, "early-other.zip");
+        File.WriteAllBytes(picked, archive);
+        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", archive.Length, new string('a', 64))), new NoSteam(), imports);
+
+        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyFileAsync("hooandee-eclipse", picked, default));
+
+        Assert.Equal("early_archive_unpublished", error.Code);
+        Assert.False(Directory.Exists(Path.Combine(root, "library", Name)));
+    }
+
+    [Fact]
+    public async Task RefusesAnArchiveOutsideTheImportFolder()
+    {
+        var outside = Path.Combine(root, "elsewhere.zip");
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(outside, Package("0.2.5"));
+        var service = new ThemeService(Path.Combine(root, "library"), new EarlyChannel(EarlyList("0.2.5", 10, new string('a', 64))), new NoSteam(), Path.Combine(root, "imports"));
+
+        var error = await Assert.ThrowsAsync<ThemeInstallException>(() => service.InstallEarlyFileAsync("hooandee-eclipse", outside, default));
+
+        Assert.Equal("early_archive_outside_import", error.Code);
+        Assert.True(File.Exists(outside));
+    }
+
+    [Fact]
+    public void SettingsRoundTripInOrder()
+    {
+        var store = new ThemeSettingsStore(root);
+        store.Write(new[]
+        {
+            new ThemeSetting(Name, true, new Dictionary<string, string> { ["Acento"] = "Marte" }),
+            new ThemeSetting("Hooandee Gallery", false, new Dictionary<string, string>()),
+        });
+
+        var settings = new ThemeSettingsStore(root).Read();
+
+        Assert.Equal(new[] { Name, "Hooandee Gallery" }, settings.Select(setting => setting.Name));
+        Assert.True(settings[0].Enabled);
+        Assert.Equal("Marte", settings[0].Patches["Acento"]);
+    }
+
+    [Fact]
+    public void CorruptSettingsReadAsEmpty()
+    {
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, ThemeSettingsStore.FileName), "{ nope");
+
+        Assert.Empty(new ThemeSettingsStore(root).Read());
+    }
+
+    private static string Catalog(string version, long size, string sha) => $$"""
+        {"schemaVersion":1,"themes":[{
+          "schemaVersion":1,"catalogId":"hooandee-eclipse","cssLoaderName":"{{Name}}","version":"{{version}}",
+          "displayName":{"es":"Eclipse","en":"Eclipse","it":"Eclipse"},
+          "description":{"es":"Espacio","en":"Space","it":"Spazio"},
+          "author":"Hooandee","tags":[],
+          "artifact":{"url":"https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/{{version}}/theme.zip","size":{{size}},"sha256":"{{sha}}"},
+          "minimumVersions":{"panel":"0.56.0","cssLoader":"2.1.2","cssLoaderBackend":9}
+        }]}
+        """;
+
+    private static ThemeRelease Release(string version, byte[] archive)
+    {
+        var sha = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+        return ThemeCatalog.Parse(Encoding.UTF8.GetBytes(Catalog(version, archive.Length, sha))).Single();
+    }
+
+    private static byte[] Package(string version, params (string Path, string Content)[] extra)
+    {
+        var extension = Encoding.UTF8.GetBytes(Extension);
+        var sha = Convert.ToHexString(SHA256.HashData(extension)).ToLowerInvariant();
+        var files = new List<(string Path, string Content)>
+        {
+            ($"{Name}/theme.json", $$$"""{"name":"{{{Name}}}","version":"{{{version}}}","inject":{"tokens.css":["bigpicture"]}}"""),
+            ($"{Name}/panel-theme.json", $$$"""{"schemaVersion":2,"catalogId":"hooandee-eclipse","extension":{"abiVersion":2,"entrypoint":"panel-extension.js","size":{{{extension.Length}}},"sha256":"{{{sha}}}"}}"""),
+            ($"{Name}/tokens.css", ":root{--x:1}"),
+            ($"{Name}/icons/chat.png", "png"),
+        };
+        if (!extra.Any(file => file.Path.EndsWith("panel-extension.js", StringComparison.Ordinal)))
+        {
+            files.Add(($"{Name}/panel-extension.js", Extension));
+        }
+
+        files.AddRange(extra);
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (path, content) in files)
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(path).Open());
+                writer.Write(content);
+            }
+        }
+
+        return buffer.ToArray();
+    }
+
+    private static string EarlyList(string version, long size, string sha) => $$"""
+        {"schemaVersion":1,"themes":[{
+          "schemaVersion":1,"catalogId":"hooandee-eclipse","cssLoaderName":"{{Name}}",
+          "displayName":{"es":"Eclipse","en":"Eclipse"},"description":{"es":"Espacio","en":"Space"},
+          "author":"Hooandee","tags":[],"minimumVersions":{"panel":"0.73.0"},
+          "early":{"version":"{{version}}","artifacts":[{"version":"{{version}}","size":{{size}},"sha256":"{{sha}}"}]}
+        }]}
+        """;
+
+    private sealed class EarlyChannel : IThemeCatalogSource
+    {
+        private readonly string early;
+
+        public EarlyChannel(string early) => this.early = early;
+
+        public Task<byte[]> CatalogAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Encoding.UTF8.GetBytes("""{"schemaVersion":1,"themes":[]}"""));
+
+        public Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken) => Task.FromResult(Encoding.UTF8.GetBytes(early));
+
+        public Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) => throw new HttpRequestException("no artifacts");
+    }
+
+    private sealed class NoChannel : IThemeCatalogSource
+    {
+        public Task<byte[]> CatalogAsync(CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+
+        public Task<byte[]> EarlyCatalogAsync(CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+
+        public Task<byte[]> ArtifactAsync(ThemeRelease release, CancellationToken cancellationToken) => throw new HttpRequestException("offline");
+    }
+
+    private sealed class NoSteam : ISteamInstallation
+    {
+        public string? SteamPath => null;
+
+        public bool DebuggingEnabled => false;
+
+        public bool BetaClient => false;
+
+        public bool IsRunning => false;
+
+        public void EnableDebugging()
+        {
+        }
+
+        public Task RestartInBigPictureAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+}

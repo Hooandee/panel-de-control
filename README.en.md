@@ -85,6 +85,13 @@ the CPU and keep the GPU high.
 And if you have an AYN Thor, Panel can use the bottom screen as a touch panel while you play on the
 top one.
 
+## 🪟 Also on Windows
+
+Panel is coming to Windows in early access, as an Xbox Game Bar widget and as an app. Themes already
+work in Steam Big Picture just like on Linux, with no CSS Loader: install, enable and tweak them from
+Panel itself. The other sections show what your device reports and will open up over time. If
+something doesn't work as you expected, you can send me a report from Settings.
+
 ## 🕹️ Devices
 
 I test everything on the machines I have at home: **Steam Deck LCD and OLED, ROG Ally, ROG Ally X,
