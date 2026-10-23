@@ -17,9 +17,15 @@ public static class Program
         }
 
         // The elevated installer calls this right after it installs the widget package.
-        if (args is ["--trust-broker", var brokerDirectory])
+        if (args is ["--trust-broker", var brokerDirectory, ..] && args.Length <= 3)
         {
-            TrustedBrokerStore.Record(Path.Combine(AppContext.BaseDirectory, TrustedBrokerStore.FileName), brokerDirectory);
+            var development = args.Length == 3 && args[2] == "--development";
+            if (args.Length == 3 && !development)
+            {
+                return 2;
+            }
+
+            TrustedBrokerStore.Record(Path.Combine(AppContext.BaseDirectory, TrustedBrokerStore.FileName), brokerDirectory, development);
             Console.WriteLine("trusted " + brokerDirectory);
             return 0;
         }

@@ -108,7 +108,7 @@ New-Item -ItemType Directory -Path \$serviceDir -Force | Out-Null
 Copy-Item -Path (Join-Path \$stage 'service\\*') -Destination \$serviceDir -Recurse -Force
 \$binary = Join-Path \$serviceDir 'PanelDeControl.Service.exe'
 \$layout = (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation
-& \$binary --trust-broker (Join-Path \$layout 'HardwareBroker')
+& \$binary --trust-broker (Join-Path \$layout 'HardwareBroker') --development
 if (\$LASTEXITCODE -ne 0) { throw 'The service could not record the companion fingerprint.' }
 New-Service -Name '${SERVICE_NAME}' -BinaryPathName ('"' + \$binary + '"') -DisplayName 'Panel de Control' -StartupType Automatic | Out-Null
 Start-Service -Name '${SERVICE_NAME}'
@@ -201,7 +201,7 @@ else
   REMOTE_SCRIPT="$WIDGET_SCRIPT
 \$serviceBinary = Join-Path \$env:ProgramFiles 'PanelDeControl\\Service\\PanelDeControl.Service.exe'
 if (Test-Path \$serviceBinary) {
-  & \$serviceBinary --trust-broker (Join-Path (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation 'HardwareBroker')
+  & \$serviceBinary --trust-broker (Join-Path (Get-AppxPackage -Name '${PACKAGE_NAME}').InstallLocation 'HardwareBroker') --development
   if (\$LASTEXITCODE -ne 0) { Write-Warning 'Run the deploy with --with-service from an administrator account so the service trusts the new companion.' }
 }
 Remove-Item -LiteralPath \$stage -Recurse -Force"

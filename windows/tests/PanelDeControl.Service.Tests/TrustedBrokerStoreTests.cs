@@ -25,7 +25,7 @@ public sealed class TrustedBrokerStoreTests : IDisposable
     [Fact]
     public void TrustsTheCompanionTheInstallerRecorded()
     {
-        TrustedBrokerStore.Record(record, broker);
+        TrustedBrokerStore.Record(record, broker, development: true);
 
         Assert.True(new TrustedBrokerStore(record).Matches(broker));
     }
@@ -39,7 +39,7 @@ public sealed class TrustedBrokerStoreTests : IDisposable
     [Fact]
     public void RejectsACompanionWhoseLibraryWasSwapped()
     {
-        TrustedBrokerStore.Record(record, broker);
+        TrustedBrokerStore.Record(record, broker, development: true);
         var store = new TrustedBrokerStore(record);
         Assert.True(store.Matches(broker));
 
@@ -51,7 +51,7 @@ public sealed class TrustedBrokerStoreTests : IDisposable
     [Fact]
     public void RejectsAnExtraFileNextToTheCompanion()
     {
-        TrustedBrokerStore.Record(record, broker);
+        TrustedBrokerStore.Record(record, broker, development: true);
 
         File.WriteAllText(Path.Combine(broker, "version.dll"), "proxy");
 
@@ -59,9 +59,31 @@ public sealed class TrustedBrokerStoreTests : IDisposable
     }
 
     [Fact]
+    public void RefusesToRecordAFolderOutsideThePackageStoreUnlessItIsDevelopment()
+    {
+        Assert.Throws<InvalidOperationException>(() => TrustedBrokerStore.Record(record, broker, development: false));
+        Assert.False(File.Exists(record));
+    }
+
+    [Fact]
+    public void RejectsAnIdenticalCopyInAnotherFolder()
+    {
+        TrustedBrokerStore.Record(record, broker, development: true);
+        var copy = CopyBroker(Path.Combine(root, "impostor", "HardwareBroker"));
+
+        Assert.False(new TrustedBrokerStore(record).Matches(copy));
+    }
+
+    [Fact]
     public void FingerprintDoesNotDependOnWhereTheFolderLives()
     {
-        var copy = Path.Combine(root, "elsewhere", "HardwareBroker");
+        var copy = CopyBroker(Path.Combine(root, "elsewhere", "HardwareBroker"));
+
+        Assert.Equal(BrokerFingerprint.Compute(broker), BrokerFingerprint.Compute(copy));
+    }
+
+    private string CopyBroker(string copy)
+    {
         foreach (var file in Directory.GetFiles(broker, "*", SearchOption.AllDirectories))
         {
             var target = Path.Combine(copy, Path.GetRelativePath(broker, file));
@@ -69,6 +91,6 @@ public sealed class TrustedBrokerStoreTests : IDisposable
             File.Copy(file, target);
         }
 
-        Assert.Equal(BrokerFingerprint.Compute(broker), BrokerFingerprint.Compute(copy));
+        return copy;
     }
 }
