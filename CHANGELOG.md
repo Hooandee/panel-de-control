@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Español
+
+* **Panel en Windows (early access):** Panel ya funciona en Windows como widget de Xbox Game Bar, con instalador propio. Por ahora muestra la información de la máquina e instala temas de Steam sin CSS Loader. Si algo no funciona como esperabas, puedes enviar un reporte desde los ajustes.
+
+### English
+
+* **Panel on Windows (early access):** Panel now runs on Windows as an Xbox Game Bar widget, with its own installer. For now it shows your device's info and installs Steam themes without CSS Loader. If something doesn't work as expected, you can send a report from the settings.
+
+### Italiano
+
+* **Panel su Windows (early access):** Panel ora funziona su Windows come widget di Xbox Game Bar, con un proprio programma di installazione. Per ora mostra le informazioni del dispositivo e installa temi di Steam senza CSS Loader. Se qualcosa non funziona come previsto, puoi inviare una segnalazione dalle impostazioni.
+
+### Deutsch
+
+* **Panel unter Windows (Early Access):** Panel läuft jetzt unter Windows als Widget der Xbox Game Bar, mit eigenem Installationsprogramm. Vorerst zeigt es die Infos deines Geräts und installiert Steam-Themes ohne CSS Loader. Wenn etwas nicht wie erwartet funktioniert, kannst du in den Einstellungen einen Bericht senden.
+
+### Português (Brasil)
+
+* **Panel no Windows (acesso antecipado):** O Panel agora funciona no Windows como widget da Xbox Game Bar, com instalador próprio. Por enquanto, ele mostra as informações do aparelho e instala temas do Steam sem o CSS Loader. Se algo não funcionar como esperado, você pode enviar um relatório pelas configurações.
+
+### Français
+
+* **Panel sur Windows (accès anticipé) :** Panel fonctionne désormais sur Windows comme widget de la Xbox Game Bar, avec son propre programme d'installation. Pour l'instant, il affiche les informations de l'appareil et installe des thèmes Steam sans CSS Loader. Si quelque chose ne fonctionne pas comme prévu, vous pouvez envoyer un rapport depuis les paramètres.
+
 ## [0.75.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.2...panel-de-control-v0.75.3) (2026-10-23)
 
 
