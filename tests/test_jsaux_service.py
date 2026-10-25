@@ -1,3 +1,4 @@
+import dataclasses
 import json
 
 import pytest
@@ -532,3 +533,36 @@ def test_a_plugin_restart_on_the_same_plug_in_writes_nothing(rig):
     again = make()
     again.tick()
     assert len(panel.uploads()) == 1
+
+
+def _playing(svc, game):
+    base = svc._context
+    svc._context = lambda now: dataclasses.replace(base(now), game=game[0])
+
+
+def test_a_scene_chosen_during_a_game_wins_over_the_game_scene_until_the_game_ends(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    game = [{"appid": "1", "name": "X", "started_at": clock.t}]
+    _playing(svc, game)
+    svc.set_scene("steady", {})
+    svc.set_game_scene("hourly")
+    for _ in range(3):
+        svc.tick()
+        clock.t += 11
+    assert svc.state()["showing"] == "hourly"
+    svc.set_scene("steady", {"colour": 2})
+    svc.tick()
+    assert svc.state()["showing"] == "steady"
+    clock.t += 3600
+    svc.tick()
+    assert svc.state()["showing"] == "steady"
+    game[0] = None
+    for _ in range(3):
+        svc.tick()
+        clock.t += 11
+    game[0] = {"appid": "2", "name": "Y", "started_at": clock.t}
+    for _ in range(3):
+        svc.tick()
+        clock.t += 11
+    assert svc.state()["showing"] == "hourly"

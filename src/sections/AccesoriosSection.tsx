@@ -143,7 +143,8 @@ export const AccesoriosSection: FC = () => {
   const status: Status = state.present ? "connected" : state.busy_by ? "busy" : "searching";
   const current: Draft | null = draft ?? (state.scene ? { id: state.scene, options: state.options } : null);
   const meta = state.catalog.find((scene) => scene.id === current?.id);
-  const onPanel = !!current && current.id === state.scene && sameOptions(current.options, state.options);
+  const onPanel = !!current && current.id === state.scene && sameOptions(current.options, state.options)
+    && (!state.showing || state.showing === state.scene);
   const gameScenes = state.catalog.filter((scene) => scene.category === "game" || scene.id === "pet");
   const gameOptions = [{ data: "", label: t("accessories.gameScene.none") },
     ...gameScenes.flatMap((scene) => scene.id === "game_cover"

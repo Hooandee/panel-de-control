@@ -119,6 +119,7 @@ class PixelService:
         self._suspended = False
         self._suspended_at = 0.0
         self._demo = False
+        self._chosen_in_game = False
         session = stored.get("panel_session")
         self._panel_session: str | None = session if isinstance(session, str) else None
         self._restoring = False
@@ -134,6 +135,7 @@ class PixelService:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._scene_id, self._options = scene_id, dict(options or {})
+            self._chosen_in_game = self._playing
             self._user_changed()
             self._save()
 
@@ -187,6 +189,7 @@ class PixelService:
             raise ValueError(f"unknown scene {scene_id!r}")
         with self._lock:
             self._game_scene = scene_id
+            self._chosen_in_game = False
             self._game_options = dict(options or {}) if scene_id else {}
             self._user_changed()
             self._save()
@@ -415,7 +418,11 @@ class PixelService:
         base = self._context(now)
         if self._alert is not None and now >= self._alert[2]:
             self._alert = None
-        playing = self._settled_playing(bool(base.game), now) and self._game_scene is not None
+        in_game = self._settled_playing(bool(base.game), now)
+        if not in_game:
+            self._chosen_in_game = False
+        # A scene picked during the game wins over the game scene until that game ends.
+        playing = in_game and self._game_scene is not None and not self._chosen_in_game
         if self._alert is not None:
             showing, chosen = self._alert[0], {"alert": self._alert[1]}
         else:
