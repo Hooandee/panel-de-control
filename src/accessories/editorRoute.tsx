@@ -1,10 +1,9 @@
-import { Focusable, ModalRoot } from "@decky/ui";
+import { Focusable, ModalRoot, Navigation, showModal } from "@decky/ui";
 import { FC, useLayoutEffect, useRef, useState } from "react";
 import { LuBlocks, LuPencil } from "react-icons/lu";
 
 import { FocusRoot } from "../components/FocusRoot";
 import { useI18n } from "../i18n";
-import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
 import { Block, ComposerBody } from "./ComposerEditor";
 import { DrawBody, DrawingDraft } from "./DrawEditor";
@@ -83,7 +82,17 @@ const EditorModal: FC<{ session: Session; closeModal?: () => void }> = ({ sessio
   );
 };
 
+interface SteamWindows {
+  SteamUIStore?: { WindowStore?: { SteamUIWindows?: { m_BrowserWindow?: Window }[] } };
+}
+
+/** Steam's main window: the quick access menu's own window is too narrow for the canvas. */
+function mainWindow(): Window {
+  return (window as unknown as SteamWindows).SteamUIStore?.WindowStore?.SteamUIWindows?.[0]?.m_BrowserWindow ?? window;
+}
+
 /** Opens an editor over Steam as a stretched modal: Decky's full-page routes do not render here. */
 export function openEditor(session: Session): void {
-  showModal(<EditorModal session={session} />, window);
+  Navigation.CloseSideMenus();
+  showModal(<EditorModal session={session} />, mainWindow());
 }
