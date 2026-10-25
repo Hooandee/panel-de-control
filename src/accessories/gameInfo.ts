@@ -32,7 +32,7 @@ export function gameInfoFrom(appid: string, overview: StoreOverview | null, achi
   };
 }
 
-function overviewOf(liveAppid: number): StoreOverview | null {
+export function overviewOf(liveAppid: number): StoreOverview | null {
   try {
     const store = (window as unknown as { appStore?: { GetAppOverviewByAppID(id: number): StoreOverview | null } }).appStore;
     return store?.GetAppOverviewByAppID(liveAppid) ?? null;
@@ -41,7 +41,7 @@ function overviewOf(liveAppid: number): StoreOverview | null {
   }
 }
 
-async function achievementsOf(liveAppid: number): Promise<Achievement[] | null> {
+export async function achievementsOf(liveAppid: number): Promise<Achievement[] | null> {
   try {
     const result = await SteamClient.Apps.GetMyAchievementsForApp(String(liveAppid));
     const list = (result as { data?: { rgAchievements?: Achievement[] } } | null)?.data?.rgAchievements;

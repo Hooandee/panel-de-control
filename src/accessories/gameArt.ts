@@ -5,7 +5,7 @@ import { coverCrop, PANEL_H, PANEL_W } from "./pixelFrames";
 
 const POLL_MS = 3000;
 const ART_FILES = ["library_hero.jpg", "header.jpg", "library_600x900.jpg"];
-const PORTRAIT_FILES = ["library_600x900.jpg", "library_capsule.jpg"];
+export const PORTRAIT_FILES = ["library_600x900.jpg", "library_capsule.jpg"];
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -16,7 +16,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-async function panelPixels(liveAppid: number, files = ART_FILES, width = PANEL_W): Promise<string | null> {
+export async function panelPixels(liveAppid: number, files = ART_FILES, width = PANEL_W): Promise<string | null> {
   for (const file of files) {
     try {
       const img = await loadImage(`/assets/${liveAppid}/${file}`);

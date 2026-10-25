@@ -9587,6 +9587,12 @@ class Plugin:
     async def get_accessory_stickers(self) -> dict:
         return await asyncio.to_thread(self._pixel_runtime().sticker_book)
 
+    async def accessory_demo(self, art=None) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().demo, dict(art) if isinstance(art, dict) else None)
+
+    async def stop_accessory_demo(self) -> dict:
+        return await asyncio.to_thread(self._pixel_runtime().stop_demo)
+
     async def get_accessory_pet(self) -> dict:
         return await asyncio.to_thread(self._pixel_runtime().pet_state)
 

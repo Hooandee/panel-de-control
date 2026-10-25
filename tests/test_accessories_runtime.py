@@ -414,3 +414,20 @@ def test_a_burst_of_care_rewrites_the_panel_once(tmp_path, monkeypatch):
     clock[0] += 60
     rt.pet_action("pet")
     assert refreshed == [5000.0, 5075.0]
+
+
+def test_the_demo_button_walks_the_reel_and_stops(tmp_path, monkeypatch):
+    rt = _rt(tmp_path)
+    shown = []
+    monkeypatch.setattr(rt.service, "show_demo", lambda segment: shown.append(segment) or True)
+    first = rt.demo(None)
+    second = rt.demo(None)
+    assert (first["shot"], second["shot"]) == ("hooandee", "pet_happy")
+    assert first["frames"] and second["index"] == 1 and second["total"] >= 10
+    art = {"appid": "1", "name": "X", "rgb": base64.b64encode(bytes(64 * 54 * 3)).decode()}
+    assert rt.demo(art)["total"] == second["total"] + 2
+    assert rt.demo({"appid": "1", "rgb": "short"})["total"] == second["total"]
+    refreshed = []
+    monkeypatch.setattr(rt.service, "refresh", lambda: refreshed.append(1))
+    rt.stop_demo()
+    assert refreshed and rt.demo(None)["shot"] == "hooandee"

@@ -4,6 +4,7 @@ import { LuCheck, LuPlug, LuSend, LuSun } from "react-icons/lu";
 
 import { PixelPreview } from "../accessories/PixelPreview";
 import { DecodedFrames } from "../accessories/pixelFrames";
+import { clearDemo, DemoBar, useDemo } from "../accessories/DemoBar";
 import { SceneGallery } from "../accessories/SceneGallery";
 import { SceneOptions } from "../accessories/SceneOptions";
 import type { Block } from "../accessories/ComposerEditor";
@@ -48,6 +49,7 @@ const Hero: FC<{
   const [decoded, setDecoded] = useState<DecodedFrames | null>(null);
   const [sending, setSending] = useState(false);
   const epoch = usePreviewEpoch();
+  const demo = useDemo();
   useEffect(() => {
     let live = true;
     if (!sceneId) {
@@ -58,7 +60,7 @@ const Hero: FC<{
     return () => { live = false; };
   }, [sceneId, JSON.stringify(options), epoch]);
   const title = labelKey ? t(labelKey) : t("accessories.pick");
-  const badge = !sceneId ? null : onPanel ? t("accessories.badge.onPanel") : t("accessories.badge.preview");
+  const badge = demo ? "DEMO" : !sceneId ? null : onPanel ? t("accessories.badge.onPanel") : t("accessories.badge.preview");
   const show = () => {
     if (onPanel || !canShow || sending) return;
     setSending(true);
@@ -75,7 +77,7 @@ const Hero: FC<{
         <StatusPill status={status} />
       </div>
       <div style={{ position: "relative", marginTop: theme.space.xs }}>
-        <PixelPreview decoded={decoded} pitch={HERO_PITCH} animate label={title}
+        <PixelPreview decoded={demo?.frames ?? decoded} pitch={HERO_PITCH} animate label={title}
           style={{ opacity: power || !onPanel ? 1 : 0.45, transition: "opacity 240ms ease" }} />
         {badge && (
           <span style={{ position: "absolute", top: 8, left: 8, padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 750,
@@ -158,9 +160,11 @@ export const AccesoriosSection: FC = () => {
   const preview = (id: string, options: Record<string, unknown> = {}) => setDraft({ id, options });
   const show = async () => {
     if (!current) return;
+    clearDemo();
     if (await chooseScene(current.id, current.options)) setDraft(null);
   };
   const send = async (id: string, options: Record<string, unknown>) => {
+    clearDemo();
     if (await chooseScene(id, options)) setDraft(null);
   };
   return (
@@ -169,6 +173,7 @@ export const AccesoriosSection: FC = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.sm }}>
           <Hero status={status} sceneId={current?.id ?? null} options={current?.options ?? {}} labelKey={meta?.labelKey}
             power={state.power && !state.night_active} onPanel={onPanel} canShow={state.present} onShow={show} />
+          {state.present && <DemoBar active={state.demo === true} onStopped={() => void refresh()} />}
           {!state.present && <EmptyState busyBy={state.busy_by} onTakeOver={() => void refresh()} />}
         </div>
       </PanelSectionRow>

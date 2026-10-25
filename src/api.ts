@@ -1251,6 +1251,7 @@ export interface AccessoriesState {
   on_suspend: "off" | "pet";
   speedrun_paused?: boolean;
   suspended: boolean;
+  demo?: boolean;
   catalog: AccessorySceneMeta[];
 }
 export interface PixelFrames {
@@ -1315,6 +1316,14 @@ export interface PetState {
   usual_hours: [number, number] | null;
 }
 export type PetAction = "feed" | "play" | "pet" | "sleep" | "wake";
+export interface DemoShot extends PixelFrames {
+  shot: string;
+  index: number;
+  total: number;
+  shown: boolean;
+}
+export const accessoryDemo = callable<[art: Record<string, unknown> | null], DemoShot>("accessory_demo");
+export const stopAccessoryDemo = callable<[], AccessoriesState>("stop_accessory_demo");
 export const getAccessoryPet = callable<[], PetState>("get_accessory_pet");
 export const accessoryPetAction = callable<[kind: PetAction], { ok: boolean; reaction?: string; pet?: PetState; error?: string }>("accessory_pet_action");
 export const renameAccessoryPet = callable<[name: string], PetState>("rename_accessory_pet");

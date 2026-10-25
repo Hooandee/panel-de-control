@@ -118,6 +118,7 @@ class PixelService:
         self._on_suspend = stored.get("on_suspend") if stored.get("on_suspend") in SUSPEND_MODES else "off"
         self._suspended = False
         self._suspended_at = 0.0
+        self._demo = False
         self._restoring = False
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
@@ -134,7 +135,24 @@ class PixelService:
             self._user_changed()
             self._save()
 
+    def show_demo(self, segment: Segment) -> bool:
+        """Writes one demo shot and holds it: no scene renders until the user picks one."""
+        with self._lock:
+            if self._link is None and not self._connect(self._clock()):
+                return False
+            try:
+                ok = self._upload(segment, "user", "demo", ("demo",), self._clock())
+            except TransportError as error:
+                self._log("WARNING", "upload_failed", error=str(error), scene="demo")
+                self._drop(self._clock())
+                return False
+            if ok:
+                self._demo = True
+                self._showing = "demo"
+            return ok
+
     def _user_changed(self) -> None:
+        self._demo = False
         self._rendered_key, self._valid_until, self._pending_user = None, None, True
         self._retry_at, self._failures, self._refused = 0.0, 0, None
 
@@ -260,6 +278,7 @@ class PixelService:
                 "night": dict(self._night),
                 "on_suspend": self._on_suspend,
                 "suspended": self._suspended,
+                "demo": self._demo,
                 "night_active": self._night_active(self._clock()),
                 "last_upload": self._last_upload,
                 "writes": self._governor.stats(),
@@ -289,7 +308,7 @@ class PixelService:
             try:
                 self._sync_brightness()
                 self._sync_power(now)
-                if self._power_sent:
+                if self._power_sent and not self._demo:
                     self._sync_scene(now)
             except TransportError as error:
                 self._log("WARNING", "upload_failed", error=str(error), scene=self._scene_id)

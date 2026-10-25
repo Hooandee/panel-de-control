@@ -483,3 +483,28 @@ def test_refresh_rewrites_without_forgetting_what_is_shown(rig):
     clock.t += 1
     svc.tick()
     assert len(panel.uploads()) == 1
+
+
+def test_a_demo_shot_is_one_upload_and_holds_until_a_scene_is_chosen(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("hourly", {})
+    svc.tick()
+    assert svc.show_demo(_asleep()) is True
+    assert len(panel.uploads()) == 2
+    for _ in range(5):
+        clock.t += 3600
+        svc.tick()
+    assert len(panel.uploads()) == 2
+    assert svc.state()["demo"] is True
+    svc.set_scene("steady", {})
+    svc.tick()
+    assert svc.state()["demo"] is False
+    assert len(panel.uploads()) == 3
+
+
+def test_a_demo_needs_the_panel(rig):
+    panel, _, _, make = rig
+    panel.unplugged = True
+    svc = make()
+    assert svc.show_demo(_asleep()) is False
