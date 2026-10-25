@@ -39,7 +39,7 @@ const CATEGORIES: Category[] = ["text", "pills", "stickers", "drawings", "data"]
 const MAX_BLOCKS = 30;
 const COMPOSE_DELAY_MS = 160;
 const GUIDE_MS = 700;
-const ROW = 5;
+const ROW = 3;
 
 export const STARTER_LAYOUT: Block[] = [
   { type: "date", x: 4, y: 3, size: "m", color: "aurora" },
@@ -371,7 +371,7 @@ export const ComposerBody: FC<{ pitch?: number; onDirty?: () => void; initial: B
         </Focusable>
       </Focusable>
 
-      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 380 }}>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: 220 }}>
         <Focusable flow-children="row" style={{ display: "flex", gap: 6 }}>
           {(["pieces", "edit"] as const).map((name) => (
             <DialogButton key={name} onClick={() => setTab(name)} onOKButton={() => setTab(name)}
@@ -394,7 +394,7 @@ export const ComposerBody: FC<{ pitch?: number; onDirty?: () => void; initial: B
                 </DialogButton>
               ))}
             </Focusable>
-            <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 330, overflowY: "auto", padding: 4 }}>
+            <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 210, overflowY: "auto", padding: 4 }}>
               {chunk(tiles, ROW).map((row, r) => (
                 <Focusable key={r} flow-children="row" style={{ display: "flex", gap: 6 }}>
                   {row}
