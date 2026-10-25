@@ -1,5 +1,5 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
-import { definePlugin, openFilePicker, routerHook, toaster } from "@decky/api";
+import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
 import { LuSlidersVertical } from "react-icons/lu";
 
