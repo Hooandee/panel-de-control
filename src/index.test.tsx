@@ -82,7 +82,6 @@ vi.mock("./qam/pluginRuntime", () => ({ startPluginQamRuntime: qamRuntime.start 
 vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: persistentServices.startGameWatcher }));
 vi.mock("./accessories/gameArt", () => ({ startAccessoryArtWatcher: () => () => undefined }));
 vi.mock("./accessories/steamEvents", () => ({ startAccessorySteamEvents: () => () => undefined }));
-vi.mock("./accessories/editorRoute", () => ({ EDITOR_ROUTE: "/pdc-editor", EditorPage: () => null }));
 vi.mock("./system/ecoAmbient", () => ({ startEcoAmbient: () => () => {} }));
 vi.mock("./system/valueToast", () => ({
   refreshValueToast: vi.fn(),
