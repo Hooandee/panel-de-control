@@ -324,6 +324,7 @@ export const ComposerBody: FC<{ pitch?: number; onDirty?: () => void; initial: B
           onGamepadDirection={move} onButtonDown={onStageButton} onGamepadBlur={() => setGrabbing(false)}
           onSecondaryButton={() => { if (current) rotate(); }} onSecondaryActionDescription={t("accessories.compose.rotate")}
           onOptionsButton={duplicate} onOptionsActionDescription={t("accessories.compose.duplicate")}
+          onMenuButton={() => { onShow(blocks); closeModal?.(); }} onMenuActionDescription={t("accessories.draw.send")}
           onCancelButton={grabbing ? stopGrab : undefined}
           onOKActionDescription={t(grabbing ? "accessories.compose.drop" : "accessories.compose.grab")}
           style={{ position: "relative", borderRadius: theme.radius.md }}>

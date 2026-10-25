@@ -162,6 +162,7 @@ export const DrawBody: FC<{ pitch?: number; onDirty?: () => void; initial: Drawi
           onSecondaryButton={() => apply(cursor[0], cursor[1], "eraser")} onOptionsButton={() => apply(cursor[0], cursor[1], "fill")}
           onOKActionDescription={t(`accessories.draw.tool.${tool}`)} onSecondaryActionDescription={t("accessories.draw.tool.eraser")}
           onOptionsActionDescription={t("accessories.draw.tool.fill")}
+          onMenuButton={() => void send()} onMenuActionDescription={t("accessories.draw.send")}
           onGamepadFocus={() => setCanvasFocused(true)} onGamepadBlur={() => setCanvasFocused(false)}
           style={{ borderRadius: theme.radius.md, overflow: "hidden", transition: "box-shadow 120ms ease",
             boxShadow: canvasFocused ? `0 0 0 3px ${theme.color.accent}, 0 12px 40px rgba(0,0,0,0.5)` : `0 0 0 1px ${theme.color.outline}, 0 12px 40px rgba(0,0,0,0.5)` }}>
