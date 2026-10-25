@@ -16,6 +16,9 @@ class PanelPort:
     dev: str
     bus_port: str
     strong_supply: bool
+    # Bus and device number change on every plug-in or power loss, when the panel restarts on its
+    # firmware animation instead of the last GIF.
+    session: str | None = None
 
 
 def find_panel(sys_root: Path = Path("/sys")) -> PanelPort | None:
@@ -33,8 +36,17 @@ def find_panel(sys_root: Path = Path("/sys")) -> PanelPort | None:
             continue
         if (vendor, product) == (_VENDOR, _PRODUCT):
             bus_port = usb_device.name
-            return PanelPort(f"/dev/{link.name}", bus_port, bus_port in STRONG_SUPPLY_PORTS)
+            return PanelPort(f"/dev/{link.name}", bus_port, bus_port in STRONG_SUPPLY_PORTS, _session(usb_device))
     return None
+
+
+def _session(usb_device: Path) -> str | None:
+    try:
+        bus = (usb_device / "busnum").read_text().strip()
+        number = (usb_device / "devnum").read_text().strip()
+    except OSError:
+        return None
+    return f"{usb_device.name}:{bus}:{number}"
 
 
 def port_holders(dev: str, proc_root: Path = Path("/proc"), own_pid: int | None = None) -> list[tuple[int, str]]:

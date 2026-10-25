@@ -176,3 +176,11 @@ def test_a_vanished_panel_is_a_transport_error_and_closes_the_link(pty_panel, mo
     with pytest.raises(transport.TransportError):
         link.send(b"DY")
     assert link.is_open is False
+
+
+def test_each_plug_in_gets_its_own_usb_session(tmp_path):
+    root = _fake_usb_serial(tmp_path)
+    device = root / "devices/pci0000:00/0000:09:00.4/usb7/7-1"
+    (device / "busnum").write_text("7\n")
+    (device / "devnum").write_text("5\n")
+    assert detect.find_panel(root).session == "7-1:7:5"

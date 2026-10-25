@@ -119,6 +119,8 @@ class PixelService:
         self._suspended = False
         self._suspended_at = 0.0
         self._demo = False
+        session = stored.get("panel_session")
+        self._panel_session: str | None = session if isinstance(session, str) else None
         self._restoring = False
         night = stored.get("night")
         self._night = night if isinstance(night, dict) and _valid_night(night) else dict(_DEFAULT_NIGHT)
@@ -357,9 +359,12 @@ class PixelService:
             return False
         self._port, self._link, self._brightness_sent, self._power_sent = port, link, None, None
         self._rendered_key, self._valid_until, self._consecutive_naks = None, None, 0
-        if self._held_elsewhere:
+        if self._held_elsewhere or port.session is None or port.session != self._panel_session:
             self._governor.forget_shown()
-            self._held_elsewhere = False
+            self._held_elsewhere, self._demo = False, False
+        if port.session != self._panel_session:
+            self._panel_session = port.session
+            self._save()
         self._log("INFO", "connected", port=port.dev, bus_port=port.bus_port, strong=port.strong_supply)
         return True
 
@@ -541,6 +546,7 @@ class PixelService:
                 "game_options": self._game_options,
                 "alerts": self._alerts,
                 "on_suspend": self._on_suspend,
+                "panel_session": self._panel_session,
                 "governor": self._governor.snapshot(),
             })
         except OSError as error:

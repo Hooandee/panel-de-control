@@ -43,9 +43,10 @@ class FakeLink:
 class FakePanel:
     def __init__(self):
         self.sent, self.unplugged, self.fail_after, self.holders = [], False, None, []
+        self.session = "7-1:7:4"
 
     def find(self):
-        return None if self.unplugged else detect.PanelPort("/dev/ttyUSB0", "7-1", True)
+        return None if self.unplugged else detect.PanelPort("/dev/ttyUSB0", "7-1", True, self.session)
 
     def uploads(self):
         return [f for f in self.sent if f[3] == codec.Cmd.GIF_BEGIN]
@@ -508,3 +509,26 @@ def test_a_demo_needs_the_panel(rig):
     panel.unplugged = True
     svc = make()
     assert svc.show_demo(_asleep()) is False
+
+
+def test_a_panel_plugged_in_again_gets_its_scene_back_once(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    svc._drop(clock.t)
+    panel.session = "7-1:7:5"
+    clock.t += 60
+    svc.tick()
+    svc.tick()
+    assert len(panel.uploads()) == 2
+
+
+def test_a_plugin_restart_on_the_same_plug_in_writes_nothing(rig):
+    panel, clock, _, make = rig
+    svc = make()
+    svc.set_scene("steady", {})
+    svc.tick()
+    again = make()
+    again.tick()
+    assert len(panel.uploads()) == 1
