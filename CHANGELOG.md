@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## [0.79.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.1...panel-de-control-v0.79.0) (2026-10-26)
+
+
+### Español
+
+* **Luz de la PS5:** Elige el efecto de la luz de la consola desde Sistema, con su color de muestra. Los animados se repiten solos y la luz se mantiene al reiniciar.
+* **Temperaturas y protección en la PS5:** Sistema enseña la temperatura del chip y del SSD con su gráfica. Si el chip se calienta demasiado, el ventilador se pone al máximo hasta que baja, y si quieres la consola pita para avisarte.
+* **PS5 más fiable:** La temperatura del ventilador que elijas se recupera sola al arrancar, y Frecuencia de GPU avisa cuando el Turbo boost no deja respetar su límite.
+* **Foco al abrir Panel:** Si lo abres directamente en una sección, el mando ya entra en ella.
+
+### English
+
+* **PS5 light:** Pick the console light effect from System, with a colour preview. Animated ones keep repeating and the light stays after a restart.
+* **PS5 temperatures and protection:** System shows the chip and SSD temperature with a chart. If the chip gets too hot, the fan goes to maximum until it cools down, and the console can beep to let you know.
+* **More reliable PS5:** The fan temperature you pick comes back on its own at startup, and GPU frequency warns when Turbo boost keeps its limit from holding.
+* **Focus when opening Panel:** If you open it straight into a section, the controller lands inside it.
+
+### Italiano
+
+* **Luce della PS5:** Scegli l'effetto della luce della console da Sistema, con l'anteprima del colore. Quelli animati si ripetono da soli e la luce resta dopo un riavvio.
+* **Temperature e protezione sulla PS5:** Sistema mostra la temperatura del chip e dell'SSD con il grafico. Se il chip si scalda troppo, la ventola va al massimo finché non scende, e se vuoi la console emette un bip per avvisarti.
+* **PS5 più affidabile:** La temperatura della ventola che scegli torna da sola all'avvio, e Frequenza GPU avvisa quando il Turbo boost non lascia rispettare il suo limite.
+* **Focus all'apertura di Panel:** Se lo apri direttamente in una sezione, il controller entra già lì.
+
+### Deutsch
+
+* **PS5-Licht:** Wähle den Lichteffekt der Konsole unter System, mit Farbvorschau. Animierte Effekte wiederholen sich von selbst, und das Licht bleibt nach einem Neustart.
+* **Temperaturen und Schutz auf der PS5:** System zeigt die Temperatur von Chip und SSD mit Verlauf. Wird der Chip zu heiß, läuft der Lüfter auf Maximum, bis er abkühlt, und auf Wunsch piept die Konsole zur Warnung.
+* **Zuverlässigere PS5:** Die gewählte Lüftertemperatur wird beim Start von selbst wiederhergestellt, und GPU-Takt weist darauf hin, wenn Turbo-Boost das Limit aushebelt.
+* **Fokus beim Öffnen von Panel:** Öffnest du es direkt in einem Bereich, landet der Controller gleich darin.
+
+### Português (Brasil)
+
+* **Luz do PS5:** Escolha o efeito da luz do console em Sistema, com a cor de amostra. Os animados se repetem sozinhos e a luz continua depois de reiniciar.
+* **Temperaturas e proteção no PS5:** Sistema mostra a temperatura do chip e do SSD com gráfico. Se o chip esquentar demais, a ventoinha vai ao máximo até baixar, e se você quiser o console apita para avisar.
+* **PS5 mais confiável:** A temperatura da ventoinha que você escolher volta sozinha ao iniciar, e Frequência da GPU avisa quando o Turbo boost impede que o limite seja respeitado.
+* **Foco ao abrir o Panel:** Se você abrir direto em uma seção, o controle já entra nela.
+
+### Français
+
+* **Lumière de la PS5 :** Choisissez l'effet de la lumière de la console depuis Système, avec un aperçu de la couleur. Les effets animés se répètent tout seuls et la lumière reste après un redémarrage.
+* **Températures et protection sur la PS5 :** Système affiche la température de la puce et du SSD avec un graphique. Si la puce chauffe trop, le ventilateur passe au maximum jusqu'à ce qu'elle refroidisse, et la console peut émettre un bip pour vous prévenir.
+* **PS5 plus fiable :** La température du ventilateur que vous choisissez revient d'elle-même au démarrage, et Fréquence du GPU prévient quand le Turbo Boost empêche de respecter sa limite.
+* **Focus à l'ouverture de Panel :** Si vous l'ouvrez directement dans une section, la manette arrive dedans.
+
 ## [0.78.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.0...panel-de-control-v0.78.1) (2026-10-26)
 
 
