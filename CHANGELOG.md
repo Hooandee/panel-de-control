@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.79.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.1...panel-de-control-v0.79.0) (2026-10-26)
+
+
+### Features
+
+* PS5 console light, thermal protection and safer controls ([#1025](https://github.com/Hooandee/panel-de-control/issues/1025)) ([a12a8e2](https://github.com/Hooandee/panel-de-control/commit/a12a8e2fd8eb63b78c3332d65c8f9aa81fa7269c))
+
 ## [0.78.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.0...panel-de-control-v0.78.1) (2026-10-26)
 
 
