@@ -1000,6 +1000,8 @@ export const ptBR: Record<string, string> = {
   "console.light.animated": "Efeitos animados",
   "console.light.note": "A luz escolhida continua após reiniciar. Os efeitos animados se repetem sozinhos.",
   "console.light.failed": "O console não aceitou a mudança de luz.",
+  "console.light.pendingShort": "Pendente",
+  "console.light.pending": "O console ainda não está pronto para mudar a luz. Ela será aplicada sozinha assim que estiver.",
   "console.light.off": "Desligada",
   "console.light.and": "{a} e {b}",
   "console.light.color.blue": "azul",

@@ -4316,13 +4316,19 @@ class Plugin:
         if result["detail"] == "not_ready":
             return False
         if result["detail"] == "unknown_preset":
+            # The driver may still be registering its presets: forget only on a second miss.
+            self._ps5_led_missing = getattr(self, "_ps5_led_missing", 0) + 1
+            if self._ps5_led_missing < 2:
+                return False
+            self._ps5_led_missing = 0
             self._forget_ps5_led_preset()
             return True
+        self._ps5_led_missing = 0
         return result["ok"]
 
     def _log_ps5_led_change(self, event: str, result: dict) -> None:
         # Retries repeat the same outcome; log only when it changes.
-        key = (event, result["ok"], result["detail"])
+        key = (event, result["ok"], result["detail"], result.get("preset"))
         if key != getattr(self, "_ps5_led_logged", None):
             self._ps5_led_logged = key
             self._log_ps5_console(event, result)
@@ -4349,6 +4355,7 @@ class Plugin:
                     for preset in console.led.presets()
                 ],
                 "active": self._settings.get("ps5_led_preset"),
+                "pending": getattr(self, "_ps5_led_pending", False),
                 "last": getattr(self, "_ps5_led_user_result", None),
             },
             "guard": {
@@ -4510,6 +4517,7 @@ class Plugin:
         )
         if step.engage:
             self._set_ps5_guard_holding(True)
+            self._ps5_rehold_logged = None
             result = fan.apply(PS5_FAN_MIN_C)
             self._log_ps5_console("guard_engaged", {
                 "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
@@ -4529,6 +4537,7 @@ class Plugin:
                     "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
                 })
             self._ps5_guard_release_pending = not result["ok"]
+            self._ps5_rehold_logged = None
             if result["ok"]:
                 self._set_ps5_guard_holding(False)
         system_on = self._module_enabled("system")
@@ -4551,8 +4560,8 @@ class Plugin:
             if result["detail"] == "not_ready":
                 pass
             elif result["detail"] == "unknown_preset":
-                self._log_ps5_console("led_replay", result)
-                self._forget_ps5_led_preset()
+                self._log_ps5_led_change("led_replay", result)
+                self._ps5_led_pending = True
             else:
                 self._log_ps5_led_change("led_replay", result)
 

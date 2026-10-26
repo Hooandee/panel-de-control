@@ -735,6 +735,7 @@ export interface ConsoleState {
     supported: boolean;
     presets: ConsoleLightPreset[];
     active: string | null;
+    pending: boolean;
     last: { ok: boolean; preset: string; detail: string } | null;
   };
   guard?: {

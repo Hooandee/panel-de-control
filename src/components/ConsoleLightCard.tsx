@@ -62,6 +62,7 @@ export const ConsoleLightCard: FC<{ state: ConsoleState; onPick: (id: string) =>
   const fixed = led.presets.filter((preset) => !preset.animated);
   const animated = led.presets.filter((preset) => preset.animated);
   const failed = led.last && !led.last.ok;
+  const shownActive = led.pending ? null : led.active;
   const heading = (key: string) => (
     <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, letterSpacing: 0.2 }}>{t(key)}</span>
   );
@@ -70,15 +71,15 @@ export const ConsoleLightCard: FC<{ state: ConsoleState; onPick: (id: string) =>
       id="console-light"
       icon={<LuLamp size={16} />}
       title={t("console.light.title")}
-      summary={led.active ? presetLabel(led.active, t) : t("console.light.untouched")}
+      summary={led.pending ? t("console.light.pendingShort") : led.active ? presetLabel(led.active, t) : t("console.light.untouched")}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {heading("console.light.fixed")}
-        <Grid presets={fixed} active={led.active} onPick={onPick} />
+        <Grid presets={fixed} active={shownActive} onPick={onPick} />
         {animated.length > 0 && heading("console.light.animated")}
-        {animated.length > 0 && <Grid presets={animated} active={led.active} onPick={onPick} />}
+        {animated.length > 0 && <Grid presets={animated} active={shownActive} onPick={onPick} />}
         <span style={{ fontSize: theme.font.caption, color: failed ? theme.color.warn : theme.color.textMuted, lineHeight: 1.4 }}>
-          {t(failed ? "console.light.failed" : "console.light.note")}
+          {t(failed ? "console.light.failed" : led.pending ? "console.light.pending" : "console.light.note")}
         </span>
       </div>
     </Collapsible>

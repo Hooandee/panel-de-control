@@ -24,6 +24,7 @@ const state = (overrides: Partial<ConsoleState> = {}): ConsoleState => ({
     supported: true,
     presets: [{ id: "off", animated: false }, { id: "blue_rich", animated: false }, { id: "pink_breathe", animated: true }],
     active: "blue_rich",
+    pending: false,
     last: null,
   },
   guard: { enabled: true, threshold: 95, effective_threshold: 95, blocked: null, alarm: false, alarm_supported: true, active: false, fan_held: false, fan_supported: true, last_beep: null },
@@ -89,5 +90,14 @@ describe("Thermal protection summary", () => {
     render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, enabled: false, alarm: true } })} onChange={vi.fn()} />);
     expect(screen.queryByText("system.off")).toBeNull();
     expect(screen.getByText("console.guard.at")).toBeTruthy();
+  });
+});
+
+describe("Console light waiting for the console", () => {
+  afterEach(cleanup);
+  it("says the light is pending instead of marking it as shown", () => {
+    render(<ConsoleLightCard state={state({ led: { ...state().led!, pending: true } })} onPick={vi.fn()} />);
+    expect(screen.getByText("console.light.pending")).toBeTruthy();
+    expect(screen.getByText("console.light.pendingShort")).toBeTruthy();
   });
 });

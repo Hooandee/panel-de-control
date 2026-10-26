@@ -1403,7 +1403,7 @@ def test_sysfs_snapshot_ps5_fan_and_gpufreq(tmp_path):
     _mk(os.path.join(gpu, "available_frequencies"), "400000000 2230000000\n")
     _mk(os.path.join(gpu, "cur_freq"), "400000000\n")
     snap = sysfs_snapshot(root=root)
-    assert snap["ps5"] == {"fan_node": True, "fan_target_c": "80", "buzzer": False}
+    assert snap["ps5"] == {"fan_node": True, "buzzer": False}
     assert snap["cpu_gpu_power"]["devfreq"][0]["name"] == "ps5-gpufreq"
     assert snap["cpu_gpu_power"]["devfreq"][0]["cur_hz"] == "400000000"
 

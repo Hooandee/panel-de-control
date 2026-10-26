@@ -924,8 +924,8 @@ def _snap_ps5(root: str) -> dict:
     if not (os.path.isdir(fan) or os.path.isdir(buzzer)):
         return {}
     return {
+        # target_temp is a firmware round trip that can stall; the fan state carries it.
         "fan_node": os.path.isdir(fan),
-        "fan_target_c": read_str(os.path.join(fan, "target_temp")),
         "buzzer": os.path.isdir(buzzer),
     }
 

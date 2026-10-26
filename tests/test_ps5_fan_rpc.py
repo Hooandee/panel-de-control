@@ -372,11 +372,14 @@ def test_light_animation_pauses_while_the_guard_is_cooling(tmp_path):
     assert _read(brightness) == "0"
 
 
-def test_a_preset_missing_from_this_kernel_does_not_keep_retrying(tmp_path):
+def test_a_preset_missing_from_this_kernel_is_forgotten_on_the_second_miss(tmp_path):
     plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
     plugin._settings["ps5_led_preset"] = "sunrise"
     plugin._reapply_ps5_fan_sync()
-    assert plugin._ps5_fan_pending is False
+    assert plugin._ps5_fan_pending is False and plugin._ps5_led_pending is True
+    assert plugin._settings["ps5_led_preset"] == "sunrise"
+    plugin._reapply_ps5_fan_sync()
+    assert plugin._ps5_led_pending is False and plugin._settings["ps5_led_preset"] is None
 
 
 def test_guard_state_says_when_the_fan_module_is_off(tmp_path):
@@ -404,11 +407,15 @@ def test_state_says_when_the_guard_could_not_hold_the_fan(tmp_path, monkeypatch)
     assert guard["active"] is True and guard["fan_held"] is False
 
 
-def test_a_renamed_animated_preset_is_forgotten_instead_of_retried(tmp_path):
+def test_a_renamed_animated_preset_is_forgotten_after_a_second_check(tmp_path, monkeypatch):
     plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
     plugin._settings["ps5_led_preset"] = "sunrise_breathe"
     plugin._ps5_led_replayed_at = -100.0
-    plugin._ps5_console_tick()
+    now = [100.0]
+    monkeypatch.setattr(main, "_monotonic", lambda: now[0])
+    for _ in range(6):
+        plugin._ps5_console_tick()
+        now[0] += 30.0
     assert plugin._settings["ps5_led_preset"] is None
 
 
@@ -578,3 +585,30 @@ def test_guard_logs_when_something_else_moved_the_held_fan(tmp_path, monkeypatch
     plugin._ps5_console_tick()
     assert any("guard_rehold" in line and '"found_c":80' in line for line in lines)
     assert _read(fan_path) == "50"
+
+
+def test_each_guard_episode_logs_its_own_rehold(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    lines = []
+    monkeypatch.setattr(main.decky.logger, "info", lambda fmt, *args: lines.append(fmt % args))
+    for _ in range(2):
+        temp[0] = 97.0
+        plugin._ps5_console_tick()
+        with open(fan_path, "w") as handle:
+            handle.write("80")
+        plugin._ps5_fan._read_at = None
+        plugin._ps5_console_tick()
+        temp[0] = 70.0
+        plugin._ps5_console_tick()
+    assert sum("guard_rehold" in line for line in lines) == 2
+
+
+def test_a_preset_registered_late_is_not_forgotten_on_the_first_miss(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._settings["ps5_led_preset"] = "purple"
+    assert plugin._reapply_ps5_led_sync() is False
+    os.makedirs(os.path.join(str(tmp_path), "sys/class/leds/ps5:purple:indicator"))
+    open(os.path.join(str(tmp_path), "sys/class/leds/ps5:purple:indicator/brightness"), "w").close()
+    assert plugin._reapply_ps5_led_sync() is True
+    assert plugin._settings["ps5_led_preset"] == "purple"

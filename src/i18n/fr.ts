@@ -1000,6 +1000,8 @@ export const fr: Record<string, string> = {
   "console.light.animated": "Effets animés",
   "console.light.note": "La lumière choisie reste après un redémarrage. Les effets animés se répètent tout seuls.",
   "console.light.failed": "La console n'a pas accepté le changement de lumière.",
+  "console.light.pendingShort": "En attente",
+  "console.light.pending": "La console n'est pas encore prête à changer la lumière. Elle s'appliquera d'elle-même dès qu'elle le sera.",
   "console.light.off": "Éteinte",
   "console.light.and": "{a} et {b}",
   "console.light.color.blue": "bleu",
