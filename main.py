@@ -3548,7 +3548,7 @@ class Plugin:
         if appid is None or str(appid) != self._current_appid:
             return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
         try:
-            state = self._power_ownership.set_steam_setting(
+            self._power_ownership.set_steam_setting(
                 appid, expected_revision, control_id, value
             )
         except (OwnershipConflict, OSError, ValueError) as error:

@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from test_tdp_control_rpc import Plugin  # noqa: F401
+import test_tdp_control_rpc
 from device_profiles import DEVICE_TABLE
+
+Plugin = test_tdp_control_rpc.Plugin
 
 
 def owned_plugin(Plugin):
