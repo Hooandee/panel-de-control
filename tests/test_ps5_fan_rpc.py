@@ -236,6 +236,8 @@ def _console_plugin(tmp_path, temp):
     plugin._ps5_console = Ps5Console(root=root, io=io)
     plugin._ps5_led_replayed_at = 0.0
     plugin._ps5_guard_release_pending = False
+    plugin._ps5_led_retry_at = 0.0
+    plugin._ps5_led_attempts = 0
     plugin._ps5_gpu_sampled_at = 0.0
     plugin._ps5_gpu_logged_at = -600.0
     plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
@@ -518,3 +520,34 @@ def test_a_light_waiting_for_its_driver_is_sent_once_the_leds_appear(tmp_path):
     plugin._ps5_console_tick()
     assert plugin._ps5_led_pending is False
     assert _read(os.path.join(leds, "ps5:blue_rich:indicator/brightness")) == "1"
+
+
+def test_a_light_the_console_keeps_refusing_backs_off_and_logs_once(tmp_path, monkeypatch):
+    from ps5.firmware_io import FirmwareIo
+
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._settings["ps5_led_preset"] = "blue_rich"
+    plugin._ps5_led_pending = True
+    warnings = []
+    monkeypatch.setattr(main.decky.logger, "warning", lambda fmt, *args: warnings.append(fmt % args))
+    monkeypatch.setattr(FirmwareIo, "write", lambda self, path, value: "errno_5")
+    now = [0.0]
+    monkeypatch.setattr(main, "_monotonic", lambda: now[0])
+    attempts = 0
+    for _ in range(40):
+        before = plugin._ps5_led_attempts
+        plugin._ps5_console_tick()
+        attempts += plugin._ps5_led_attempts != before
+        now[0] += 3.0
+    assert plugin._ps5_led_pending is True
+    assert attempts < 10
+    assert sum("led_reapply" in line for line in warnings) == 1
+
+
+def test_a_user_target_racing_the_guard_keeps_the_crash_marker(tmp_path):
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    state = asyncio.run(plugin.set_fan_target_temp(70))
+    assert state["detail"] == "deferred_guard"
+    assert plugin._settings["ps5_guard_holding"] is True and _read(fan_path) == "50"

@@ -269,6 +269,7 @@ _PS5_RIVAL_RECHECK_S = 60.0
 _PS5_CONSOLE_TICK_S = 3.0
 # Firmware light animations play once; replay them so they keep moving.
 _PS5_LED_REPLAY_S = 6.0
+_PS5_LED_RETRY_MAX_S = 300.0
 _PS5_GPU_SAMPLE_S = 30.0
 _PS5_GPU_LOG_GAP_S = 600.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
@@ -742,6 +743,8 @@ class Plugin:
         self._ps5_led_replayed_at = 0.0
         self._ps5_gpu_sampled_at = 0.0
         self._ps5_guard_release_pending = False
+        self._ps5_led_retry_at = 0.0
+        self._ps5_led_attempts = 0
         self._ps5_gpu_logged_at = -_PS5_GPU_LOG_GAP_S
         self._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
         # True only on a device with an opt-in experimental EC fan channel (Legion
@@ -4280,6 +4283,24 @@ class Plugin:
             if result["ok"]:
                 self._set_ps5_guard_holding(False)
 
+    def _apply_user_ps5_fan_target_sync(self, target) -> dict:
+        # Runs on the executor after any queued console tick, so the guard state it
+        # sees is the one the fan write races against.
+        console = getattr(self, "_ps5_console", None)
+        if console is not None and console.guard.active:
+            self._settings["ps5_fan_target_c"] = target
+            self._save()
+            result = {"ok": True, "detail": "deferred_guard"}
+            self._log_ps5_fan("user_deferred", target, result)
+            return result
+        result = self._ps5_fan.release() if target is None else self._ps5_fan.apply(target)
+        self._log_ps5_fan("user", target, result)
+        if result["ok"]:
+            self._settings["ps5_fan_target_c"] = target
+            self._settings["ps5_guard_holding"] = False
+            self._save()
+        return result
+
     def _set_ps5_guard_holding(self, holding: bool) -> None:
         if self._settings.get("ps5_guard_holding") is not holding:
             self._settings["ps5_guard_holding"] = holding
@@ -4291,13 +4312,20 @@ class Plugin:
         if console is None or preset is None or not self._module_enabled("system"):
             return True
         result = console.led.apply(preset)
-        self._log_ps5_console("led_reapply", result)
+        self._log_ps5_led_change("led_reapply", result)
         if result["detail"] == "not_ready":
             return False
         if result["detail"] == "unknown_preset":
             self._forget_ps5_led_preset()
             return True
         return result["ok"]
+
+    def _log_ps5_led_change(self, event: str, result: dict) -> None:
+        # Retries repeat the same outcome; log only when it changes.
+        key = (event, result["ok"], result["detail"])
+        if key != getattr(self, "_ps5_led_logged", None):
+            self._ps5_led_logged = key
+            self._log_ps5_console(event, result)
 
     def _forget_ps5_led_preset(self) -> None:
         # A kernel update can rename or drop presets; keep the light as it is.
@@ -4487,6 +4515,7 @@ class Plugin:
                 "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
             })
         elif console.guard.active and fan.read() != PS5_FAN_MIN_C:
+            self._set_ps5_guard_holding(True)
             fan.apply(PS5_FAN_MIN_C)
         if step.release or (self._ps5_guard_release_pending and not console.guard.active):
             target = settings.get("ps5_fan_target_c")
@@ -4507,8 +4536,10 @@ class Plugin:
         if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
             self._ps5_gpu_sampled_at = now
             self._sample_ps5_gpu_limit(now)
-        if system_on and getattr(self, "_ps5_led_pending", False):
+        if system_on and getattr(self, "_ps5_led_pending", False) and now >= self._ps5_led_retry_at:
             self._ps5_led_pending = not self._reapply_ps5_led_sync()
+            self._ps5_led_attempts = 0 if not self._ps5_led_pending else self._ps5_led_attempts + 1
+            self._ps5_led_retry_at = now + min(_PS5_LED_RETRY_MAX_S, _PS5_CONSOLE_TICK_S * 2 ** self._ps5_led_attempts)
         preset = settings.get("ps5_led_preset")
         if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
@@ -4518,8 +4549,8 @@ class Plugin:
             elif result["detail"] == "unknown_preset":
                 self._log_ps5_console("led_replay", result)
                 self._forget_ps5_led_preset()
-            elif not result["ok"]:
-                self._log_ps5_console("led_replay", result)
+            else:
+                self._log_ps5_led_change("led_replay", result)
 
     def _schedule_ps5_fan_retry(self) -> None:
         # The ICC link may not be up when Panel starts or resumes, and the driver probe
@@ -4549,20 +4580,9 @@ class Plugin:
             result = {"ok": False, "detail": "invalid_value"}
         elif not self._module_enabled("fanControl"):
             result = {"ok": False, "detail": "module_disabled"}
-        elif getattr(self, "_ps5_console", None) is not None and self._ps5_console.guard.active:
-            self._settings["ps5_fan_target_c"] = None if celsius is None else clamp_target(celsius)
-            self._save()
-            result = {"ok": True, "detail": "deferred_guard"}
-            self._log_ps5_fan("user_deferred", self._settings["ps5_fan_target_c"], result)
         else:
             target = None if celsius is None else clamp_target(celsius)
-            result = await self._offload_call(
-                lambda: fan.release() if target is None else fan.apply(target))
-            self._log_ps5_fan("user", target, result)
-            if result["ok"]:
-                self._settings["ps5_fan_target_c"] = target
-                self._settings["ps5_guard_holding"] = False
-                self._save()
+            result = await self._offload_call(lambda: self._apply_user_ps5_fan_target_sync(target))
         return {
             **await self._offload_call(self._ps5_fan_state),
             "ok": result["ok"],
