@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## [0.77.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.76.0...panel-de-control-v0.77.0) (2026-10-26)
+
+
+### Español
+
+* **Editor de portadas para Duo:** Elige la imagen de cada juego en el Inicio, su encuadre y si muestra logo y título, para todos los juegos o solo para uno. Está en las opciones del juego y en los detalles de Duo.
+* **Perfiles de Steam:** Abrir los controles de rendimiento ya no cambia el perfil activo del juego en Steam. Cada juego usa los ajustes de Steam hasta que elijas «Gestionar desde PDC».
+* **Ajustes de rendimiento:** FPS y frecuencia en un solo control. «Restablecer ajustes» también restablece el TDP y la GPU.
+* **Otros gestores de potencia:** Si SteamOS Manager u otro gestor también controla el TDP, Panel de Control te avisa y te deja cederle el control.
+
+### English
+
+* **Cover editor for Duo:** Choose each game's image on the Home screen, its framing and whether it shows the logo and title, for every game or just one. It's in the game's options and in Duo's details.
+* **Steam profiles:** Opening the performance controls no longer switches the game's active profile in Steam. Each game uses Steam's settings until you choose "Manage with PDC".
+* **Performance settings:** FPS and refresh rate in a single control. "Reset settings" also resets TDP and GPU.
+* **Other power managers:** If SteamOS Manager or another manager also controls TDP, Panel de Control tells you and lets you hand control over to it.
+
+### Italiano
+
+* **Editor delle copertine per Duo:** Scegli l'immagine di ogni gioco nella Home, la sua inquadratura e se mostra logo e titolo, per tutti i giochi o solo per uno. Lo trovi nelle opzioni del gioco e nei dettagli di Duo.
+* **Profili di Steam:** Aprire i controlli delle prestazioni non cambia più il profilo attivo del gioco in Steam. Ogni gioco usa le impostazioni di Steam finché non scegli «Gestisci con PDC».
+* **Impostazioni delle prestazioni:** FPS e frequenza in un solo controllo. «Ripristina impostazioni» ripristina anche TDP e GPU.
+* **Altri gestori di potenza:** Se SteamOS Manager o un altro gestore controlla anche il TDP, Panel de Control ti avvisa e ti permette di lasciargli il controllo.
+
+### Deutsch
+
+* **Cover-Editor für Duo:** Wähle für jedes Spiel auf dem Startbildschirm das Bild, den Ausschnitt und ob Logo und Titel angezeigt werden, für alle Spiele oder nur eines. Du findest ihn in den Spieloptionen und in den Details von Duo.
+* **Steam-Profile:** Das Öffnen der Leistungseinstellungen wechselt nicht mehr das aktive Spielprofil in Steam. Jedes Spiel nutzt die Steam-Einstellungen, bis du „Mit PDC verwalten“ wählst.
+* **Leistungseinstellungen:** FPS und Bildwiederholrate in einem Regler. „Einstellungen zurücksetzen“ setzt auch TDP und GPU zurück.
+* **Andere Energieverwaltungen:** Wenn SteamOS Manager oder eine andere Verwaltung ebenfalls die TDP steuert, weist Panel de Control darauf hin und lässt dich die Steuerung abgeben.
+
+### Português (Brasil)
+
+* **Editor de capas para o Duo:** Escolha a imagem de cada jogo no Início, o enquadramento e se ela mostra o logo e o título, para todos os jogos ou só para um. Fica nas opções do jogo e nos detalhes do Duo.
+* **Perfis do Steam:** Abrir os controles de desempenho não troca mais o perfil ativo do jogo no Steam. Cada jogo usa as configurações do Steam até você escolher «Gerenciar pelo PDC».
+* **Configurações de desempenho:** FPS e taxa de atualização em um só controle. «Redefinir ajustes» também redefine o TDP e a GPU.
+* **Outros gerenciadores de energia:** Se o SteamOS Manager ou outro gerenciador também controla o TDP, o Panel de Control avisa e deixa você passar o controle para ele.
+
+### Français
+
+* **Éditeur de jaquettes pour Duo :** Choisissez l'image de chaque jeu sur l'accueil, son cadrage et si elle affiche le logo et le titre, pour tous les jeux ou un seul. Il se trouve dans les options du jeu et dans les détails de Duo.
+* **Profils Steam :** Ouvrir les réglages de performances ne change plus le profil actif du jeu dans Steam. Chaque jeu utilise les réglages de Steam jusqu'à ce que vous choisissiez « Gérer avec PDC ».
+* **Réglages de performances :** FPS et fréquence dans un seul contrôle. « Réinitialiser les réglages » réinitialise aussi le TDP et le GPU.
+* **Autres gestionnaires d'énergie :** Si SteamOS Manager ou un autre gestionnaire contrôle aussi le TDP, Panel de Control vous prévient et vous laisse lui céder le contrôle.
+
 ## [0.76.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.3...panel-de-control-v0.76.0) (2026-10-23)
 
 
