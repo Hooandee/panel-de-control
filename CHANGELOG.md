@@ -7,45 +7,45 @@
 
 ### Español
 
-* **Editor de portadas para Duo:** Si usas el tema Duo, ahora puedes elegir qué imagen muestra cada juego en el Inicio (automática, cápsula, cabecera o fondo), encuadrarla y decidir si lleva logo y título. Puedes hacerlo para todos los juegos a la vez o solo para uno. Lo encontrarás en el menú de opciones de cada juego y en los detalles de Duo, en Temas Hooandee.
-* **Perfiles de Steam por juego:** Abrir los controles de rendimiento podía cambiar el perfil de juego activo en Steam. He corregido el fallo: ahora Panel de Control solo lo consulta y cada juego sigue con los ajustes de Steam hasta que eliges «Gestionar desde PDC». Puedes devolverlo a Steam cuando quieras.
-* **Ajustes de rendimiento de Steam:** La tarjeta de rendimiento es más directa: FPS y frecuencia en un solo control, respuesta inmediata al elegir una opción y el foco vuelve a donde estabas al cerrar un desplegable. «Restablecer ajustes» ahora también restablece el TDP y la GPU.
-* **Varios gestores de potencia a la vez:** Si otro gestor de potencia, como SteamOS Manager en la ROG Ally, está activo a la vez que Panel de Control, ahora lo verás indicado y podrás hacer que Panel de Control deje de controlar el TDP desde ese mismo aviso, para que no se pisen los ajustes.
+* **Editor de portadas para Duo:** Elige la imagen de cada juego en el Inicio, su encuadre y si muestra logo y título, para todos los juegos o solo para uno. Está en las opciones del juego y en los detalles de Duo.
+* **Perfiles de Steam:** Abrir los controles de rendimiento ya no cambia el perfil activo del juego en Steam. Cada juego usa los ajustes de Steam hasta que elijas «Gestionar desde PDC».
+* **Ajustes de rendimiento:** FPS y frecuencia en un solo control. «Restablecer ajustes» también restablece el TDP y la GPU.
+* **Otros gestores de potencia:** Si SteamOS Manager u otro gestor también controla el TDP, Panel de Control te avisa y te deja cederle el control.
 
 ### English
 
-* **Cover editor for Duo:** If you use the Duo theme, you can now choose which image each game shows on the Home screen (automatic, capsule, header or background), frame it and decide whether it shows the logo and title. You can do it for every game at once or just for one. You'll find it in each game's options menu and in Duo's details, under Hooandee Themes.
-* **Steam game profiles:** Opening the performance controls could switch Steam's active game profile. I've fixed it: Panel de Control now only reads it, and each game keeps Steam's settings until you choose "Manage with PDC". You can hand it back to Steam at any time.
-* **Steam performance settings:** The performance card is more direct: FPS and refresh rate in a single control, instant feedback when you pick an option, and focus returns to where you were after closing a dropdown. "Reset settings" now also resets TDP and GPU.
-* **Several power managers at once:** If another power manager, such as SteamOS Manager on the ROG Ally, is active alongside Panel de Control, you'll now see it flagged and can stop Panel de Control from controlling TDP right from that notice, so they don't overwrite each other.
+* **Cover editor for Duo:** Choose each game's image on the Home screen, its framing and whether it shows the logo and title, for every game or just one. It's in the game's options and in Duo's details.
+* **Steam profiles:** Opening the performance controls no longer switches the game's active profile in Steam. Each game uses Steam's settings until you choose "Manage with PDC".
+* **Performance settings:** FPS and refresh rate in a single control. "Reset settings" also resets TDP and GPU.
+* **Other power managers:** If SteamOS Manager or another manager also controls TDP, Panel de Control tells you and lets you hand control over to it.
 
 ### Italiano
 
-* **Editor delle copertine per Duo:** Se usi il tema Duo, ora puoi scegliere quale immagine mostra ogni gioco nella Home (automatica, capsula, intestazione o sfondo), inquadrarla e decidere se mostrare logo e titolo. Puoi farlo per tutti i giochi insieme o solo per uno. Lo trovi nel menu delle opzioni di ogni gioco e nei dettagli di Duo, in Temi Hooandee.
-* **Profili di Steam per gioco:** Aprire i controlli delle prestazioni poteva cambiare il profilo di gioco attivo in Steam. Ho corretto il problema: ora Panel de Control si limita a leggerlo e ogni gioco mantiene le impostazioni di Steam finché non scegli «Gestisci con PDC». Puoi restituirlo a Steam quando vuoi.
-* **Impostazioni prestazioni di Steam:** La scheda delle prestazioni è più diretta: FPS e frequenza in un solo controllo, risposta immediata quando scegli un'opzione e il focus torna dov'eri dopo aver chiuso un menu a tendina. «Ripristina impostazioni» ora ripristina anche TDP e GPU.
-* **Più gestori di potenza insieme:** Se un altro gestore di potenza, come SteamOS Manager sulla ROG Ally, è attivo insieme a Panel de Control, ora lo vedrai segnalato e potrai far smettere a Panel de Control di controllare il TDP direttamente da quell'avviso, così le impostazioni non si sovrascrivono.
+* **Editor delle copertine per Duo:** Scegli l'immagine di ogni gioco nella Home, la sua inquadratura e se mostra logo e titolo, per tutti i giochi o solo per uno. Lo trovi nelle opzioni del gioco e nei dettagli di Duo.
+* **Profili di Steam:** Aprire i controlli delle prestazioni non cambia più il profilo attivo del gioco in Steam. Ogni gioco usa le impostazioni di Steam finché non scegli «Gestisci con PDC».
+* **Impostazioni delle prestazioni:** FPS e frequenza in un solo controllo. «Ripristina impostazioni» ripristina anche TDP e GPU.
+* **Altri gestori di potenza:** Se SteamOS Manager o un altro gestore controlla anche il TDP, Panel de Control ti avvisa e ti permette di lasciargli il controllo.
 
 ### Deutsch
 
-* **Cover-Editor für Duo:** Wenn du das Theme Duo verwendest, kannst du jetzt auswählen, welches Bild jedes Spiel auf dem Startbildschirm zeigt (automatisch, Kapsel, Kopfzeile oder Hintergrund), den Ausschnitt festlegen und entscheiden, ob Logo und Titel angezeigt werden. Das geht für alle Spiele auf einmal oder nur für eines. Du findest ihn im Optionsmenü jedes Spiels und in den Details von Duo unter Hooandee Themes.
-* **Steam-Spielprofile:** Beim Öffnen der Leistungseinstellungen konnte sich das aktive Spielprofil in Steam ändern. Ich habe den Fehler behoben: Panel de Control liest es jetzt nur noch, und jedes Spiel behält die Steam-Einstellungen, bis du „Mit PDC verwalten“ wählst. Du kannst es jederzeit an Steam zurückgeben.
-* **Steam-Leistungseinstellungen:** Die Leistungskarte ist direkter: FPS und Bildwiederholrate in einem einzigen Regler, sofortige Rückmeldung bei der Auswahl, und der Fokus kehrt nach dem Schließen eines Auswahlmenüs an seine Stelle zurück. „Einstellungen zurücksetzen“ setzt jetzt auch TDP und GPU zurück.
-* **Mehrere Energieverwaltungen gleichzeitig:** Wenn eine andere Energieverwaltung, etwa SteamOS Manager auf dem ROG Ally, neben Panel de Control aktiv ist, wird das jetzt angezeigt, und du kannst die TDP-Steuerung durch Panel de Control direkt in diesem Hinweis beenden, damit sich die Einstellungen nicht gegenseitig überschreiben.
+* **Cover-Editor für Duo:** Wähle für jedes Spiel auf dem Startbildschirm das Bild, den Ausschnitt und ob Logo und Titel angezeigt werden, für alle Spiele oder nur eines. Du findest ihn in den Spieloptionen und in den Details von Duo.
+* **Steam-Profile:** Das Öffnen der Leistungseinstellungen wechselt nicht mehr das aktive Spielprofil in Steam. Jedes Spiel nutzt die Steam-Einstellungen, bis du „Mit PDC verwalten“ wählst.
+* **Leistungseinstellungen:** FPS und Bildwiederholrate in einem Regler. „Einstellungen zurücksetzen“ setzt auch TDP und GPU zurück.
+* **Andere Energieverwaltungen:** Wenn SteamOS Manager oder eine andere Verwaltung ebenfalls die TDP steuert, weist Panel de Control darauf hin und lässt dich die Steuerung abgeben.
 
 ### Português (Brasil)
 
-* **Editor de capas para o Duo:** Se você usa o tema Duo, agora pode escolher qual imagem cada jogo mostra no Início (automática, cápsula, cabeçalho ou fundo), enquadrá-la e decidir se ela mostra o logo e o título. Dá para fazer isso para todos os jogos de uma vez ou só para um. Você encontra o editor no menu de opções de cada jogo e nos detalhes do Duo, em Temas Hooandee.
-* **Perfis do Steam por jogo:** Abrir os controles de desempenho podia trocar o perfil de jogo ativo no Steam. Corrigi o problema: agora o Panel de Control só consulta o perfil, e cada jogo mantém as configurações do Steam até você escolher «Gerenciar pelo PDC». Você pode devolvê-lo ao Steam quando quiser.
-* **Configurações de desempenho do Steam:** O cartão de desempenho ficou mais direto: FPS e taxa de atualização em um único controle, resposta imediata ao escolher uma opção e o foco volta para onde você estava ao fechar um menu suspenso. «Redefinir ajustes» agora também redefine o TDP e a GPU.
-* **Vários gerenciadores de energia ao mesmo tempo:** Se outro gerenciador de energia, como o SteamOS Manager no ROG Ally, estiver ativo junto com o Panel de Control, agora isso aparece indicado e você pode fazer o Panel de Control parar de controlar o TDP direto nesse aviso, para que um não sobrescreva as configurações do outro.
+* **Editor de capas para o Duo:** Escolha a imagem de cada jogo no Início, o enquadramento e se ela mostra o logo e o título, para todos os jogos ou só para um. Fica nas opções do jogo e nos detalhes do Duo.
+* **Perfis do Steam:** Abrir os controles de desempenho não troca mais o perfil ativo do jogo no Steam. Cada jogo usa as configurações do Steam até você escolher «Gerenciar pelo PDC».
+* **Configurações de desempenho:** FPS e taxa de atualização em um só controle. «Redefinir ajustes» também redefine o TDP e a GPU.
+* **Outros gerenciadores de energia:** Se o SteamOS Manager ou outro gerenciador também controla o TDP, o Panel de Control avisa e deixa você passar o controle para ele.
 
 ### Français
 
-* **Éditeur de jaquettes pour Duo :** Si vous utilisez le thème Duo, vous pouvez désormais choisir l'image affichée par chaque jeu sur l'accueil (automatique, capsule, en-tête ou arrière-plan), la cadrer et décider si elle affiche le logo et le titre. Vous pouvez le faire pour tous les jeux à la fois ou pour un seul. Vous le trouverez dans le menu des options de chaque jeu et dans les détails de Duo, dans Thèmes Hooandee.
-* **Profils Steam par jeu :** Ouvrir les réglages de performances pouvait changer le profil de jeu actif dans Steam. J'ai corrigé le problème : Panel de Control se contente maintenant de le lire, et chaque jeu garde les réglages de Steam jusqu'à ce que vous choisissiez « Gérer avec PDC ». Vous pouvez le rendre à Steam à tout moment.
-* **Réglages de performances de Steam :** La carte des performances est plus directe : FPS et fréquence dans un seul contrôle, réponse immédiate quand vous choisissez une option, et le focus revient là où vous étiez après la fermeture d'un menu déroulant. « Réinitialiser les réglages » réinitialise maintenant aussi le TDP et le GPU.
-* **Plusieurs gestionnaires d'énergie à la fois :** Si un autre gestionnaire d'énergie, comme SteamOS Manager sur la ROG Ally, est actif en même temps que Panel de Control, vous le verrez désormais signalé et pourrez arrêter le contrôle du TDP par Panel de Control directement depuis cet avis, pour que leurs réglages ne s'écrasent plus.
+* **Éditeur de jaquettes pour Duo :** Choisissez l'image de chaque jeu sur l'accueil, son cadrage et si elle affiche le logo et le titre, pour tous les jeux ou un seul. Il se trouve dans les options du jeu et dans les détails de Duo.
+* **Profils Steam :** Ouvrir les réglages de performances ne change plus le profil actif du jeu dans Steam. Chaque jeu utilise les réglages de Steam jusqu'à ce que vous choisissiez « Gérer avec PDC ».
+* **Réglages de performances :** FPS et fréquence dans un seul contrôle. « Réinitialiser les réglages » réinitialise aussi le TDP et le GPU.
+* **Autres gestionnaires d'énergie :** Si SteamOS Manager ou un autre gestionnaire contrôle aussi le TDP, Panel de Control vous prévient et vous laisse lui céder le contrôle.
 
 ## [0.76.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.3...panel-de-control-v0.76.0) (2026-10-23)
 
