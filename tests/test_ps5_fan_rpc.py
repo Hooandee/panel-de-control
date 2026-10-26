@@ -100,7 +100,7 @@ def test_reapply_restores_the_saved_target(tmp_path):
     path = _node(str(tmp_path), "80")
     plugin = _plugin(str(tmp_path))
     plugin._settings["ps5_fan_target_c"] = 70
-    assert plugin._apply_ps5_fan_target_sync("reapply")["ok"] is True
+    plugin._reapply_ps5_fan_sync()
     assert _read(path) == "70"
 
 
@@ -108,7 +108,7 @@ def test_disabled_fan_module_never_writes(tmp_path):
     path = _node(str(tmp_path), "80")
     plugin = _plugin(str(tmp_path), enabled=False)
     plugin._settings["ps5_fan_target_c"] = 70
-    assert plugin._apply_ps5_fan_target_sync("reapply") is None
+    plugin._reapply_ps5_fan_sync()
     assert _read(path) == "80"
     assert asyncio.run(plugin.set_fan_target_temp(60))["ok"] is False
 

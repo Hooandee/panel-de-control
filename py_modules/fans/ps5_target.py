@@ -19,8 +19,6 @@ def clamp_target(celsius) -> int:
 
 
 class Ps5FanTarget:
-    name = "ps5_fan"
-
     def __init__(self, root: str = "/") -> None:
         self._path = os.path.join(root, NODE)
 

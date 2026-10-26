@@ -9,6 +9,10 @@ import { activePreset } from "./FanTargetCard";
 const state: FanTargetState = {
   supported: true,
   celsius: 80,
+  target: null,
+  min: 50,
+  max: 90,
+  default: 80,
   presets: [
     { id: "quiet", celsius: 85 },
     { id: "balanced", celsius: 80 },

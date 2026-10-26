@@ -654,12 +654,12 @@ export interface FanCurveState {
 // PlayStation 5: the firmware drives the fan to hold a target temperature.
 export interface FanTargetState {
   supported: boolean;
-  celsius?: number | null;
-  target?: number | null;
-  min?: number;
-  max?: number;
-  default?: number;
-  presets?: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
+  celsius: number | null;
+  target: number | null;
+  min: number;
+  max: number;
+  default: number;
+  presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
   ok?: boolean;
   detail?: string;
 }

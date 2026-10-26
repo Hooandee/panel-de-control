@@ -8,23 +8,23 @@ import { theme } from "../theme";
 import { ContainedSlider } from "./ContainedSlider";
 import { SegmentedTabs } from "./SegmentedTabs";
 
-type PresetId = NonNullable<FanTargetState["presets"]>[number]["id"] | "custom";
+type PresetId = FanTargetState["presets"][number]["id"] | "custom";
 
 const SLIDER_SETTLE_MS = 400;
 
 export function activePreset(state: FanTargetState, celsius: number | null): PresetId {
-  return state.presets?.find((preset) => preset.celsius === celsius)?.id ?? "custom";
+  return state.presets.find((preset) => preset.celsius === celsius)?.id ?? "custom";
 }
 
 export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> = ({ state, onChange }) => {
   const { t } = useI18n();
-  const [celsius, setCelsius] = useState<number | null>(state.celsius ?? null);
+  const [celsius, setCelsius] = useState(state.celsius);
   const [failed, setFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<number | null>(null);
   const sequence = useRef(0);
 
-  useEffect(() => setCelsius(state.celsius ?? null), [state.celsius]);
+  useEffect(() => setCelsius(state.celsius), [state.celsius]);
 
   const commit = (value: number | null) => {
     if (timer.current) clearTimeout(timer.current);
@@ -53,10 +53,7 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
     timer.current = setTimeout(() => commit(value), SLIDER_SETTLE_MS);
   };
 
-  const min = state.min ?? 50;
-  const max = state.max ?? 90;
-  const preset = activePreset(state, celsius);
-  const tabs = (state.presets ?? []).map((item) => ({
+  const tabs = state.presets.map((item) => ({
     value: item.id as PresetId,
     label: t(`fans.target.preset.${item.id}`),
   }));
@@ -68,30 +65,28 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
           <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
             <LuFan size={16} color={theme.color.accent} /> {t("fans.target.title")}
           </span>
-          <span data-testid="fan-target-value" style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+          <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
             {celsius === null ? "—" : `${celsius} °C`}
           </span>
         </div>
-        {tabs.length > 0 && (
-          <SegmentedTabs
-            label={t("fans.target.title")}
-            tabs={tabs}
-            value={preset}
-            onChange={(id) => {
-              const value = state.presets?.find((item) => item.id === id)?.celsius;
-              if (value === undefined) return;
-              setCelsius(value);
-              commit(value);
-            }}
-          />
-        )}
-        <ContainedSlider value={celsius ?? state.default ?? max} min={min} max={max} step={1} onChange={onSlide} />
+        <SegmentedTabs
+          label={t("fans.target.title")}
+          tabs={tabs}
+          value={activePreset(state, celsius)}
+          onChange={(id) => {
+            const value = state.presets.find((item) => item.id === id)?.celsius;
+            if (value === undefined) return;
+            setCelsius(value);
+            commit(value);
+          }}
+        />
+        <ContainedSlider value={celsius ?? state.default} min={state.min} max={state.max} step={1} onChange={onSlide} />
         <span style={{ fontSize: theme.font.caption, color: failed ? theme.color.warn : theme.color.textMuted, lineHeight: 1.4 }}>
           {t(failed ? "fans.target.failed" : "fans.target.note")}
         </span>
         {state.target != null && (
           <DialogButton style={{ minWidth: 0, padding: "6px 10px", fontSize: theme.font.caption }} onClick={() => commit(null)}>
-            {t("fans.target.reset", { c: state.default ?? 80 })}
+            {t("fans.target.reset", { c: state.default })}
           </DialogButton>
         )}
       </div>

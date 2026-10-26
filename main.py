@@ -4202,46 +4202,42 @@ class Plugin:
         self._ensure_fan_loop()
         return await self._offload_call(self._board_fan_state)
 
-    def _apply_ps5_fan_target_sync(self, reason: str) -> dict | None:
-        fan = getattr(self, "_ps5_fan", None)
-        target = self._settings.get("ps5_fan_target_c")
-        if fan is None or target is None or not self._module_enabled("fanControl"):
-            return None
-        result = fan.apply(target)
-        event = {"reason": reason, "target": target, **result}
+    def _ps5_fan_state(self) -> dict:
+        return {**self._ps5_fan.state(), "target": self._settings.get("ps5_fan_target_c")}
+
+    def _log_ps5_fan(self, reason: str, target, result: dict) -> None:
         log = decky.logger.info if result["ok"] else decky.logger.warning
-        log("PS5 fan target %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
-        return result
+        log("PS5 fan target %s", json.dumps(
+            {"reason": reason, "target": target, **result}, sort_keys=True, separators=(",", ":")))
+
+    def _reapply_ps5_fan_sync(self) -> None:
+        target = self._settings.get("ps5_fan_target_c")
+        if getattr(self, "_ps5_fan", None) is None or target is None:
+            return
+        if self._module_enabled("fanControl"):
+            self._log_ps5_fan("reapply", target, self._ps5_fan.apply(target))
 
     async def set_fan_target_temp(self, celsius) -> dict:
         """PlayStation 5: firmware autoservo target (°C); None returns the firmware default."""
         self._init()
-        if getattr(self, "_ps5_fan", None) is None:
+        fan = getattr(self, "_ps5_fan", None)
+        if fan is None:
             return {"supported": False}
-        previous = self._settings.get("ps5_fan_target_c")
-        if celsius is None:
-            result = await self._offload_call(self._ps5_fan.release)
-            log = decky.logger.info if result["ok"] else decky.logger.warning
-            log("PS5 fan target %s", json.dumps(
-                {"reason": "reset", **result}, sort_keys=True, separators=(",", ":")))
-            if result["ok"]:
-                self._settings["ps5_fan_target_c"] = None
-        elif isinstance(celsius, bool) or not isinstance(celsius, (int, float)):
-            return {**await self._offload_call(self._ps5_fan.state),
-                    "target": previous, "ok": False, "detail": "invalid_value"}
+        if celsius is not None and (isinstance(celsius, bool) or not isinstance(celsius, (int, float))):
+            result = {"ok": False, "detail": "invalid_value"}
+        elif not self._module_enabled("fanControl"):
+            result = {"ok": False, "detail": "module_disabled"}
         else:
-            self._settings["ps5_fan_target_c"] = clamp_target(celsius)
+            target = None if celsius is None else clamp_target(celsius)
             result = await self._offload_call(
-                lambda: self._apply_ps5_fan_target_sync("user"))
-            if result is None:
-                result = {"ok": False, "detail": "module_disabled"}
-            if not result["ok"]:
-                self._settings["ps5_fan_target_c"] = previous
-        self._save()
+                lambda: fan.release() if target is None else fan.apply(target))
+            self._log_ps5_fan("user", target, result)
+            if result["ok"]:
+                self._settings["ps5_fan_target_c"] = target
+                self._save()
         return {
-            **await self._offload_call(self._ps5_fan.state),
-            "target": self._settings.get("ps5_fan_target_c"),
-            "ok": bool(result["ok"]),
+            **await self._offload_call(self._ps5_fan_state),
+            "ok": result["ok"],
             "detail": result["detail"],
         }
 
@@ -4291,7 +4287,7 @@ class Plugin:
         Guarded: a bad fan apply must never brick load.
         """
         try:
-            self._apply_ps5_fan_target_sync("reapply")
+            self._reapply_ps5_fan_sync()
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("PS5 fan target reapply error=%s", type(error).__name__)
         if not self._module_enabled("fanControl"):
@@ -4435,10 +4431,7 @@ class Plugin:
         if getattr(self, "_board_fans", None) is not None:
             state["board_fans"] = self._board_fan_state()
         if getattr(self, "_ps5_fan", None) is not None:
-            state["target_temp"] = {
-                **self._ps5_fan.state(),
-                "target": self._settings.get("ps5_fan_target_c"),
-            }
+            state["target_temp"] = self._ps5_fan_state()
         if self._desktop_mode_on() and hw_state.get("independent"):
             profile = self._desktop_fans.effective(self._current_appid)
             hardware = {fan.get("key"): fan for fan in hw_state.get("fans", [])}
