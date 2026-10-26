@@ -389,6 +389,8 @@ class DevfreqGpuClock(_GpuDiagnostics):
 
     backend = "devfreq"
     _AUTO_GOVERNOR = "simple_ondemand"
+    # A full window under these still holds one clock, so it is not automatic.
+    _PINNED_GOVERNORS = frozenset(("performance", "powersave", "userspace"))
 
     def __init__(self, root="/", pattern="*.gpu"):
         self._last_operation = None
@@ -503,12 +505,18 @@ class DevfreqGpuClock(_GpuDiagnostics):
         if not rng:
             self._record("auto", None, False, "range_unavailable")
             return False
-        if self._governor() != self._AUTO_GOVERNOR:
+        offered = (read_str(self._node("available_governors")) or "").split()
+        if self._governor() != self._AUTO_GOVERNOR and (
+            not offered or self._AUTO_GOVERNOR in offered
+        ):
             write_str(self._node("governor"), self._AUTO_GOVERNOR)
         ok = self.set(*rng)
         operation = getattr(self, "_last_operation", None)
         if operation is not None:
             operation["action"] = "auto"
+        if ok and self._governor() in self._PINNED_GOVERNORS:
+            self._record("auto", None, False, "governor_pinned")
+            return False
         return ok
 
 

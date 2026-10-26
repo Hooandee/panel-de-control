@@ -881,6 +881,7 @@ def _snap_devfreq(root: str) -> list:
         {
             "name": os.path.basename(device),
             "governor": read_str(os.path.join(device, "governor")),
+            "available_governors": read_str(os.path.join(device, "available_governors")),
             "min_hz": read_str(os.path.join(device, "min_freq")),
             "max_hz": read_str(os.path.join(device, "max_freq")),
             "cur_hz": read_str(os.path.join(device, "cur_freq")),
@@ -1200,6 +1201,9 @@ def sysfs_snapshot(
     try:
         if not device_tree.is_arm(root):
             snap["cpu_gpu_power"]["devfreq"] = _snap_devfreq(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         snap["ps5"] = _snap_ps5(root)
     except Exception:  # noqa: BLE001
         pass

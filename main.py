@@ -114,7 +114,7 @@ from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
-from fans.ps5_target import Ps5FanTarget
+from fans.ps5_target import Ps5FanTarget, clamp_target
 from battery.reader import BatteryReader
 from battery.charge_limit import (
     NullChargeLimit,
@@ -4220,12 +4220,17 @@ class Plugin:
             return {"supported": False}
         previous = self._settings.get("ps5_fan_target_c")
         if celsius is None:
-            self._settings["ps5_fan_target_c"] = None
             result = await self._offload_call(self._ps5_fan.release)
-            decky.logger.info("PS5 fan target %s", json.dumps(
+            log = decky.logger.info if result["ok"] else decky.logger.warning
+            log("PS5 fan target %s", json.dumps(
                 {"reason": "reset", **result}, sort_keys=True, separators=(",", ":")))
+            if result["ok"]:
+                self._settings["ps5_fan_target_c"] = None
+        elif isinstance(celsius, bool) or not isinstance(celsius, (int, float)):
+            return {**await self._offload_call(self._ps5_fan.state),
+                    "target": previous, "ok": False, "detail": "invalid_value"}
         else:
-            self._settings["ps5_fan_target_c"] = int(celsius)
+            self._settings["ps5_fan_target_c"] = clamp_target(celsius)
             result = await self._offload_call(
                 lambda: self._apply_ps5_fan_target_sync("user"))
             if result is None:

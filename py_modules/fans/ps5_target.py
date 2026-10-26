@@ -14,6 +14,10 @@ MAX_C = 90
 PRESETS = (("quiet", 85), ("balanced", FIRMWARE_DEFAULT_C), ("cool", 70), ("max", MIN_C))
 
 
+def clamp_target(celsius) -> int:
+    return max(MIN_C, min(MAX_C, int(celsius)))
+
+
 class Ps5FanTarget:
     name = "ps5_fan"
 
@@ -42,7 +46,7 @@ class Ps5FanTarget:
     def apply(self, celsius: int) -> dict:
         if not self.supported:
             return {"ok": False, "celsius": None, "detail": "unsupported"}
-        target = max(MIN_C, min(MAX_C, int(celsius)))
+        target = clamp_target(celsius)
         if not write_str(self._path, target):
             return {"ok": False, "celsius": self.read(), "detail": "write_failed"}
         held = self.read()

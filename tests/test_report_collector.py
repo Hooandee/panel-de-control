@@ -1290,6 +1290,7 @@ def test_sysfs_snapshot_records_arm_identity_and_emulation(tmp_path):
     assert arm["devfreq"] == [{
         "name": "3d00000.gpu",
         "governor": "simple_ondemand",
+        "available_governors": None,
         "min_hz": "220000000",
         "max_hz": "680000000",
         "cur_hz": "475000000",

@@ -21,22 +21,34 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
   const [celsius, setCelsius] = useState<number | null>(state.celsius ?? null);
   const [failed, setFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<number | null>(null);
+  const sequence = useRef(0);
 
   useEffect(() => setCelsius(state.celsius ?? null), [state.celsius]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const commit = (value: number | null) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    pending.current = null;
+    const request = ++sequence.current;
     setFanTargetTemp(value)
       .then((result) => {
+        if (request !== sequence.current) return;
         setFailed(!result.ok);
         setCelsius(result.celsius ?? null);
       })
-      .catch(() => setFailed(true))
+      .catch(() => { if (request === sequence.current) setFailed(true); })
       .finally(onChange);
   };
 
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (pending.current !== null) void setFanTargetTemp(pending.current).catch(() => null);
+  }, []);
+
   const onSlide = (value: number) => {
     setCelsius(value);
+    pending.current = value;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => commit(value), SLIDER_SETTLE_MS);
   };

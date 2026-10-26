@@ -117,3 +117,23 @@ def test_other_devices_report_unsupported(tmp_path):
     plugin = _plugin(str(tmp_path))
     plugin._ps5_fan = None
     assert asyncio.run(plugin.set_fan_target_temp(60)) == {"supported": False}
+
+
+def test_out_of_range_target_is_saved_as_written(tmp_path):
+    path = _node(str(tmp_path))
+    plugin = _plugin(str(tmp_path))
+    state = asyncio.run(plugin.set_fan_target_temp(95))
+    assert _read(path) == "90"
+    assert plugin._settings["ps5_fan_target_c"] == 90 and state["target"] == 90
+    assert asyncio.run(plugin.set_fan_target_temp(True))["detail"] == "invalid_value"
+    assert plugin._settings["ps5_fan_target_c"] == 90
+
+
+def test_failed_reset_keeps_the_target_for_unload(tmp_path, monkeypatch):
+    _node(str(tmp_path), "60")
+    plugin = _plugin(str(tmp_path))
+    plugin._settings["ps5_fan_target_c"] = 60
+    monkeypatch.setattr("fans.ps5_target.write_str", lambda path, value: False)
+    state = asyncio.run(plugin.set_fan_target_temp(None))
+    assert state["ok"] is False
+    assert plugin._settings["ps5_fan_target_c"] == 60
