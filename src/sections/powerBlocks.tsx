@@ -9,10 +9,12 @@ import { desktopUiActive } from "../desktop/presentation";
 import { resolveAutoView } from "../tdp/autoView";
 import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
 import { SteamPerformanceCard } from "../components/SteamPerformanceCard";
+import { useDevice } from "../system/useDevice";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
   const desktop = useDesktopState();
+  const consoleManaged = useDevice()?.key === "playstation_5";
   if (desktop.error) return <DesktopPowerRecoveryCard kind="unavailable" onRetry={desktop.refresh} />;
   if (desktopUiActive(desktop.state)) return <DesktopPowerCard />;
   const autoView = c.tdp
@@ -41,6 +43,7 @@ const TdpCoreBlock: FC = () => {
       presets={c.presets}
       refreshPresets={c.refreshPresets}
       onApplyPreset={c.onApplyPreset}
+      consoleManaged={consoleManaged}
     />
   );
 };

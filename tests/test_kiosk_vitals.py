@@ -35,3 +35,8 @@ def test_missing_sources_stay_unknown(tmp_path):
         "ram_used_gb": None,
         "ram_total_gb": None,
     }
+
+
+def test_ps5_gpufreq_reports_the_gpu_clock(tmp_path):
+    _write(tmp_path, "sys/class/devfreq/ps5-gpufreq/cur_freq", "2230000000\n")
+    assert vitals.gpu_mhz(str(tmp_path)) == 2230

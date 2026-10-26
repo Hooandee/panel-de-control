@@ -99,6 +99,9 @@ def curate_fans(fans: list[dict]) -> list[dict]:
 
 def _rank_temp(t: dict, desktop: bool = False, device_key: str | None = None) -> tuple[str, int]:
     chip = t["chip"]
+    # The PS5 Tctl is the whole APU and the console has no separate GPU sensor.
+    if device_key == "playstation_5" and chip == "k10temp":
+        return "APU", 0
     raw_label = str(t.get("label", "")).lower()
     if desktop:
         if device_key == "steam_machine" and chip == "acpitz":

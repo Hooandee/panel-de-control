@@ -44,11 +44,13 @@ export interface TdpSectionProps {
   presets: PowerPresetState | null;
   refreshPresets: () => void;
   onApplyPreset: (item: PresetItem) => void;
+  /** The console firmware owns the power budget (PS5): explain it instead of a bare notice. */
+  consoleManaged?: boolean;
 }
 
 const STEAM_DECK_NOMINAL_MAX_W = 15;
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onGpuLevel, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset, consoleManaged }) => {
   const { t } = useI18n();
   const [target, setTarget] = useState<PowerTarget>("cpu");
   const targetContext = `${scope}:${tdp?.appid ?? ""}`;
@@ -91,6 +93,21 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   }, [tdp, scope, refreshPresets, t, target, storedGpu]);
 
   if (!tdp) return <Loading />;
+
+  if (!tdp.supported && consoleManaged) {
+    return (
+      <PanelSectionRow>
+        <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+            {t("tdp.console.title")}
+          </span>
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+            {t("tdp.console.body")}
+          </span>
+        </div>
+      </PanelSectionRow>
+    );
+  }
 
   if (!tdp.supported) {
     return (

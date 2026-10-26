@@ -114,6 +114,7 @@ from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
+from fans.ps5_target import Ps5FanTarget, clamp_target
 from battery.reader import BatteryReader
 from battery.charge_limit import (
     NullChargeLimit,
@@ -205,6 +206,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
+            "target_temp.target",
         )),
     ),
     "audio": (
@@ -480,6 +482,8 @@ DEFAULTS = {
     "fan_experimental": False,
     "board_fan_driver": False,
     "board_fan_module": None,
+    # PlayStation 5 fan target (°C) for the firmware autoservo; None = untouched.
+    "ps5_fan_target_c": None,
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
@@ -711,6 +715,9 @@ class Plugin:
         self._board_fans = (
             BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
             if self._device.key == "desktop_pc" else None
+        )
+        self._ps5_fan = (
+            Ps5FanTarget() if self._device.key == "playstation_5" else None
         )
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
@@ -4195,6 +4202,45 @@ class Plugin:
         self._ensure_fan_loop()
         return await self._offload_call(self._board_fan_state)
 
+    def _ps5_fan_state(self) -> dict:
+        return {**self._ps5_fan.state(), "target": self._settings.get("ps5_fan_target_c")}
+
+    def _log_ps5_fan(self, reason: str, target, result: dict) -> None:
+        log = decky.logger.info if result["ok"] else decky.logger.warning
+        log("PS5 fan target %s", json.dumps(
+            {"reason": reason, "target": target, **result}, sort_keys=True, separators=(",", ":")))
+
+    def _reapply_ps5_fan_sync(self) -> None:
+        target = self._settings.get("ps5_fan_target_c")
+        if getattr(self, "_ps5_fan", None) is None or target is None:
+            return
+        if self._module_enabled("fanControl"):
+            self._log_ps5_fan("reapply", target, self._ps5_fan.apply(target))
+
+    async def set_fan_target_temp(self, celsius) -> dict:
+        """PlayStation 5: firmware autoservo target (°C); None returns the firmware default."""
+        self._init()
+        fan = getattr(self, "_ps5_fan", None)
+        if fan is None:
+            return {"supported": False}
+        if celsius is not None and (isinstance(celsius, bool) or not isinstance(celsius, (int, float))):
+            result = {"ok": False, "detail": "invalid_value"}
+        elif not self._module_enabled("fanControl"):
+            result = {"ok": False, "detail": "module_disabled"}
+        else:
+            target = None if celsius is None else clamp_target(celsius)
+            result = await self._offload_call(
+                lambda: fan.release() if target is None else fan.apply(target))
+            self._log_ps5_fan("user", target, result)
+            if result["ok"]:
+                self._settings["ps5_fan_target_c"] = target
+                self._save()
+        return {
+            **await self._offload_call(self._ps5_fan_state),
+            "ok": result["ok"],
+            "detail": result["detail"],
+        }
+
     def _restore_board_fans(self) -> None:
         if (getattr(self, "_board_fans", None) is None
                 or self._settings.get("board_fan_driver") is not True):
@@ -4240,6 +4286,10 @@ class Plugin:
 
         Guarded: a bad fan apply must never brick load.
         """
+        try:
+            self._reapply_ps5_fan_sync()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("PS5 fan target reapply error=%s", type(error).__name__)
         if not self._module_enabled("fanControl"):
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             released = self._restore_fans_safe()
@@ -4380,6 +4430,8 @@ class Plugin:
         }
         if getattr(self, "_board_fans", None) is not None:
             state["board_fans"] = self._board_fan_state()
+        if getattr(self, "_ps5_fan", None) is not None:
+            state["target_temp"] = self._ps5_fan_state()
         if self._desktop_mode_on() and hw_state.get("independent"):
             profile = self._desktop_fans.effective(self._current_appid)
             hardware = {fan.get("key"): fan for fan in hw_state.get("fans", [])}
@@ -13166,9 +13218,17 @@ class Plugin:
             return self._recover_fremont_fan_handoff()
         released = True
         try:
+            if (
+                getattr(self, "_ps5_fan", None) is not None
+                and self._settings.get("ps5_fan_target_c") is not None
+            ):
+                released = bool(self._ps5_fan.release()["ok"])
+        except Exception:  # noqa: BLE001
+            released = False
+        try:
             if getattr(self, "_fan_ctrl", None) is not None:
                 result = self._fan_ctrl.restore_auto()
-                released = bool(
+                released = released and bool(
                     isinstance(result, dict) and result.get("ok")
                 )
         except Exception:  # noqa: BLE001

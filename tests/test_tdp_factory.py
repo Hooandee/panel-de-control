@@ -2527,3 +2527,13 @@ def test_lock_with_changed_surfaces_and_no_handoff_profile_stays_locked(tmp_path
     assert recovered["ok"] is False
     assert "surfaces changed" in recovered["detail"]
     assert os.path.exists(lock_path)
+
+
+def test_playstation_5_does_not_claim_ryzenadj_from_binary_presence(tmp_path):
+    # PDC-25J6: ryzenadj on the PS5 APU answers "Fam17h: unsupported model 72"
+    # with exit 255, so a bundled binary must not become a TDP capability.
+    backend = select_backend(
+        _p("playstation_5"), root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert backend.supported is False
+    assert list(backend.probe_trace) == []

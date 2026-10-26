@@ -99,8 +99,8 @@ ROG Xbox Ally X, Legion Go, Legion Go S, Legion Go 2 and MSI Claw 8 AI+**, and o
 AYN Odin 3, AYN Odin 2 Portal, Retroid Pocket 5, Retroid Pocket Nova and Anbernic RG Cube**.
 
 Many more have received support too: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8,
-OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs and the Steam Machine. If your
-device isn't on the list, Panel looks at what it can control on it and shows you that.
+OneXPlayer X2 Mini Pro and quite a few others, even desktop PCs, the Steam Machine and the PS5 running Linux. If
+your device isn't on the list, Panel looks at what it can control on it and shows you that.
 
 ## 📦 Installation
 

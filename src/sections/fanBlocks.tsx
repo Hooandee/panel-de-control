@@ -15,6 +15,7 @@ import { FanCurveEditor } from "../components/FanCurveEditor";
 import { FanCurveGraph } from "../components/FanCurveGraph";
 import { ExperimentalFanCard } from "../components/ExperimentalFanCard";
 import { BoardFanCard } from "../components/BoardFanCard";
+import { FanTargetCard } from "../components/FanTargetCard";
 import { FanResetButton } from "../components/FanResetButton";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { Point, percentToPwm } from "../fans/curve";
@@ -108,6 +109,8 @@ const FanRpmBlock: FC = () => {
       </PanelSectionRow>
     );
   }
+  // The PS5 fan has no speed readout; its target temperature card stands in for it.
+  if (state.device_key === "playstation_5") return null;
   return (
     <PanelSectionRow>
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -155,6 +158,9 @@ const CurveBlock: FC = () => {
     <>
       {curveState?.board_fans?.supported && canControl && (
         <BoardFanCard state={curveState.board_fans} onChange={curve.refresh} />
+      )}
+      {curveState?.target_temp?.supported && canControl && (
+        <FanTargetCard state={curveState.target_temp} onChange={curve.refresh} />
       )}
       {curveState?.experimental_available && canControl && (
         <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />

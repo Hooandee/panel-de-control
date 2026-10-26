@@ -472,3 +472,16 @@ def test_known_profiles_win_over_desktop_detection(tmp_path):
         (dmi / field).write_text(value)
     (tmp_path / "sys/class/power_supply").mkdir(parents=True)
     assert detect(root=str(tmp_path)).key == "steam_machine"
+
+
+def test_playstation_5_is_detected_by_exact_dmi(tmp_path):
+    prof = _detect_dmi(tmp_path, "PlayStation 5", "Sony Interactive Entertainment")
+    assert prof.key == "playstation_5"
+    assert prof.display_name == "PlayStation 5"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.tdp_presets == ()
+
+
+def test_playstation_5_name_from_another_vendor_stays_generic(tmp_path):
+    assert _detect_dmi(tmp_path, "PlayStation 5", "OTHER").key == "generic"
