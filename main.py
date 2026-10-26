@@ -145,7 +145,7 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
-from sysfs import read_str
+from sysfs import read_int, read_str
 from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
 from mangohud import config as mangohud_config
@@ -269,6 +269,9 @@ _PS5_RIVAL_RECHECK_S = 60.0
 _PS5_CONSOLE_TICK_S = 3.0
 # Firmware light animations play once; replay them so they keep moving.
 _PS5_LED_REPLAY_S = 6.0
+# How often the console tick checks whether a manual GPU limit actually holds.
+_PS5_GPU_SAMPLE_S = 30.0
+_PS5_GPU_LOG_GAP_S = 600.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
 _FULL_CHARGE_ONCE_POLL_S = 30.0
@@ -736,6 +739,9 @@ class Plugin:
         self._ps5_console = Ps5Console(io=ps5_io) if ps5_io else None
         self._ps5_console_task = None
         self._ps5_led_replayed_at = 0.0
+        self._ps5_gpu_sampled_at = 0.0
+        self._ps5_gpu_logged_at = -_PS5_GPU_LOG_GAP_S
+        self._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
         # experimental toggle.
@@ -2558,6 +2564,7 @@ class Plugin:
                 self._offload_call(lambda: self._display_diagnostics(context))
             ),
             "gpu": await _safe(self.get_gpu_clock()),
+            "console": await _safe(self.get_console_state()),
             "cpu_gpu_diagnostics": self._cpu_gpu_diagnostics(),
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
@@ -4295,6 +4302,14 @@ class Plugin:
                 "last_beep": console.last_beep,
             },
             "io": console.io.diagnostics(),
+            "diagnostics": {
+                "guard_episodes": list(console.guard.episodes),
+                "peak_c": console.guard.peak_celsius,
+                "gpu_limit": dict(self._ps5_gpu_limit),
+                "fan_retries": getattr(self, "_ps5_fan_retries", 0),
+                "fan_pending": getattr(self, "_ps5_fan_pending", False),
+                "other_controller": self._ps5_rival_plugin(),
+            },
         }
 
     def _ps5_console_temps(self) -> dict:
@@ -4373,6 +4388,32 @@ class Plugin:
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("PS5 console loop stopped error=%s", type(error).__name__)
 
+    def _sample_ps5_gpu_limit(self, now: float) -> None:
+        """With a manual GPU limit on, record whether the live clock stays under it
+        and what the CPU was doing, so a report shows if the boost override happens."""
+        if not getattr(self._gpu_clock, "supported", False):
+            return
+        diagnostics = self._gpu_clock.diagnostics()
+        applied, hardware = diagnostics.get("applied") or {}, diagnostics.get("range") or {}
+        limit, ceiling = applied.get("max_mhz"), hardware.get("max_mhz")
+        current = diagnostics.get("current_mhz")
+        if limit is None or ceiling is None or current is None or limit >= ceiling:
+            return
+        stats = self._ps5_gpu_limit
+        stats["samples"] += 1
+        if current <= limit:
+            return
+        stats["over_limit"] += 1
+        stats["last_over"] = {
+            "gpu_mhz": current,
+            "limit_mhz": limit,
+            "cpu_khz": read_int("/sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq"),
+            "boost": self._gpu_limit_overridden_by_boost(),
+        }
+        if now - self._ps5_gpu_logged_at >= _PS5_GPU_LOG_GAP_S:
+            self._ps5_gpu_logged_at = now
+            self._log_ps5_console("gpu_over_limit", {"ok": False, **stats["last_over"]})
+
     def _ps5_console_tick(self) -> None:
         console = self._ps5_console
         fan = self._ps5_fan
@@ -4399,8 +4440,11 @@ class Plugin:
             self._log_ps5_console("overheat_beep", {
                 "ok": console.beep(), "celsius": console.guard.last_celsius, "threshold": threshold,
             })
-        preset = settings.get("ps5_led_preset")
         now = _monotonic()
+        if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
+            self._ps5_gpu_sampled_at = now
+            self._sample_ps5_gpu_limit(now)
+        preset = settings.get("ps5_led_preset")
         if preset and ps5_led_animated(preset) and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
             result = console.led.replay(preset)
@@ -13989,6 +14033,10 @@ class Plugin:
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
+        if getattr(self, "_ps5_console", None) is not None:
+            rival = await self._offload_call(self._ps5_rival_plugin)
+            if rival:
+                self._log_ps5_console("other_controller", {"ok": False, "plugin": rival})
         self._start_ps5_console_loop()
         self._restore_board_fans()
         if getattr(self, "_fan_reader", None) is not None:

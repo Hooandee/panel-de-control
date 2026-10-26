@@ -926,7 +926,7 @@ export const ptBR: Record<string, string> = {
   "fans.curve.kernel_pending": "Nenhum driver de ventoinha está disponível para este modelo no kernel atual do SteamOS. Enquanto isso, você pode ativar abaixo o controle experimental.",
   "fans.armadaHandoff": "O Armada OS controla a ventoinha. Ao escolher uma curva, o Panel de Control assume, e Auto devolve ao Armada.",
   "fans.target.title": "Temperatura alvo",
-  "fans.target.note": "O PS5 não informa a velocidade da ventoinha. O firmware acelera o quanto for preciso para manter esta temperatura: mais baixa, mais fresca e mais barulhenta.",
+  "fans.target.note": "O PS5 não informa a velocidade da ventoinha. O console acelera o quanto for preciso para manter esta temperatura: mais baixa, mais fresca e mais barulhenta.",
   "fans.target.failed": "O console não aceitou a mudança. A temperatura anterior foi mantida.",
   "fans.target.otherController": "{name} também muda a temperatura alvo e a frequência da placa de vídeo. Para que um não sobrescreva o outro, use só um dos dois.",
   "fans.target.reset": "Valor de fábrica ({c} °C)",

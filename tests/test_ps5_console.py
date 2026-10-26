@@ -102,3 +102,15 @@ def test_unknown_temperature_changes_nothing():
 
 def test_threshold_is_clamped():
     assert clamp_threshold(50) == 80 and clamp_threshold(120) == 100
+
+
+def test_guard_keeps_each_episode_with_its_peak_and_duration():
+    now = [1000.0]
+    guard = ThermalGuard(clock=lambda: now[0])
+    guard.step(96, threshold=95, guard=True, alarm=False)
+    now[0] = 1030.0
+    guard.step(98, threshold=95, guard=True, alarm=False)
+    now[0] = 1090.0
+    guard.step(84, threshold=95, guard=True, alarm=False)
+    assert list(guard.episodes) == [{"start": 1000, "start_c": 96, "peak_c": 98, "seconds": 90, "ended_by": "cooled"}]
+    assert guard.peak_celsius == 98

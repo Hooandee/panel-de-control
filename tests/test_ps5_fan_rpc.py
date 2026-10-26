@@ -235,6 +235,11 @@ def _console_plugin(tmp_path, temp):
     plugin._ps5_fan = Ps5FanTarget(root=root, io=io, clock=lambda: 0.0)
     plugin._ps5_console = Ps5Console(root=root, io=io)
     plugin._ps5_led_replayed_at = 0.0
+    plugin._ps5_gpu_sampled_at = 0.0
+    plugin._ps5_gpu_logged_at = -600.0
+    plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
+    plugin._gpu_clock = _GpuClock(current=None, limit=None)
+    plugin._decky_plugins_root = lambda: tmp_path / "plugins"
     plugin._settings.update({"ps5_led_preset": None, "ps5_guard_enabled": True,
                              "ps5_guard_threshold": 95, "ps5_alarm_enabled": True})
     plugin._driving_temp = lambda: temp[0]
@@ -298,3 +303,36 @@ def test_guard_settings_are_clamped_and_saved(tmp_path):
     assert (plugin._settings["ps5_guard_enabled"], plugin._settings["ps5_guard_threshold"],
             plugin._settings["ps5_alarm_enabled"]) == (False, 100, False)
     assert state["temps"] == {"apu": 50.0, "ssd": None}
+
+
+class _GpuClock:
+    supported = True
+
+    def __init__(self, current, limit, ceiling=2230):
+        self._diag = {"applied": {"min_mhz": 400, "max_mhz": limit}, "range": {"min_mhz": 400, "max_mhz": ceiling},
+                      "current_mhz": current}
+
+    def diagnostics(self):
+        return self._diag
+
+
+def test_gpu_limit_samples_record_when_the_console_exceeds_it(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._boost = _Boost(True)
+    plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
+    plugin._ps5_gpu_logged_at = -1000.0
+    plugin._gpu_clock = _GpuClock(current=2230, limit=1200)
+    plugin._sample_ps5_gpu_limit(0.0)
+    plugin._gpu_clock = _GpuClock(current=1200, limit=1200)
+    plugin._sample_ps5_gpu_limit(30.0)
+    stats = plugin._ps5_gpu_limit
+    assert (stats["samples"], stats["over_limit"]) == (2, 1)
+    assert stats["last_over"]["gpu_mhz"] == 2230 and stats["last_over"]["boost"] is True
+
+
+def test_no_manual_limit_means_no_gpu_samples(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
+    plugin._gpu_clock = _GpuClock(current=2230, limit=2230)
+    plugin._sample_ps5_gpu_limit(0.0)
+    assert plugin._ps5_gpu_limit["samples"] == 0

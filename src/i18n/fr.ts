@@ -926,7 +926,7 @@ export const fr: Record<string, string> = {
   "fans.curve.kernel_pending": "Aucun pilote de ventilateur n'est disponible pour ce modèle dans le kernel actuel de SteamOS. En attendant, vous pouvez activer le contrôle expérimental ci-dessous.",
   "fans.armadaHandoff": "Armada OS gère le ventilateur. Si vous choisissez une courbe, le Centre de contrôle prend la main ; repasser en automatique la rend à Armada.",
   "fans.target.title": "Température cible",
-  "fans.target.note": "La PS5 n'indique pas la vitesse du ventilateur. Son firmware l'accélère autant que nécessaire pour tenir cette température : plus basse, plus fraîche et plus bruyante.",
+  "fans.target.note": "La PS5 n'indique pas la vitesse du ventilateur. La console l'accélère autant que nécessaire pour tenir cette température : plus basse, plus fraîche et plus bruyante.",
   "fans.target.failed": "La console n'a pas accepté le changement. La température précédente est conservée.",
   "fans.target.otherController": "{name} modifie aussi la température cible et la fréquence de la carte graphique. Pour éviter qu'ils s'écrasent, n'en utilisez qu'un des deux.",
   "fans.target.reset": "Valeur d'usine ({c} °C)",

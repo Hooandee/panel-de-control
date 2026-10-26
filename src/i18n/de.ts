@@ -926,7 +926,7 @@ export const de: Record<string, string> = {
   "fans.curve.kernel_pending": "Für dieses Modell ist im aktuellen SteamOS-Kernel kein Lüftertreiber verfügbar. Bis dahin kannst du weiter unten die experimentelle Steuerung aktivieren.",
   "fans.armadaHandoff": "Armada OS steuert den Lüfter. Mit einer Kurve übernimmt Panel de Control, Auto gibt ihn an Armada zurück.",
   "fans.target.title": "Zieltemperatur",
-  "fans.target.note": "Die PS5 meldet keine Lüfterdrehzahl. Die Firmware dreht den Lüfter so weit hoch, wie nötig ist, um diese Temperatur zu halten: niedriger heißt kühler und lauter.",
+  "fans.target.note": "Die PS5 meldet keine Lüfterdrehzahl. Die Konsole dreht den Lüfter so weit hoch, wie nötig ist, um diese Temperatur zu halten: niedriger heißt kühler und lauter.",
   "fans.target.failed": "Die Konsole hat die Änderung nicht übernommen. Die vorherige Temperatur bleibt.",
   "fans.target.otherController": "{name} ändert ebenfalls die Zieltemperatur und den Grafiktakt. Damit sie sich nicht gegenseitig überschreiben, nutze nur eines der beiden.",
   "fans.target.reset": "Werkswert ({c} °C)",

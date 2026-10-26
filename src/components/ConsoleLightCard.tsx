@@ -30,14 +30,14 @@ const Tile: FC<{ preset: ConsoleLightPreset; active: boolean; onPick: () => void
         {presetLabel(preset.id, t)}
       </span>
       {detail && (
-        <span style={{ fontSize: 10, color: theme.color.textMuted, textAlign: "center", lineHeight: 1.2 }}>{detail}</span>
+        <span style={{ fontSize: theme.font.caption - 1, color: theme.color.textMuted, textAlign: "center", lineHeight: 1.2 }}>{detail}</span>
       )}
     </Focusable>
   );
 };
 
 const Grid: FC<{ presets: ConsoleLightPreset[]; active: string | null; onPick: (id: string) => void }> = ({ presets, active, onPick }) => (
-  <Focusable flow-children="row" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+  <Focusable flow-children="grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
     {presets.map((preset) => (
       <Tile key={preset.id} preset={preset} active={preset.id === active} onPick={() => onPick(preset.id)} />
     ))}

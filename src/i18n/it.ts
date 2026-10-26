@@ -810,7 +810,7 @@ export const it: Record<string, string> = {
   "fans.curve.kernel_pending": "Nel kernel SteamOS attuale non è disponibile un driver della ventola per questo modello. Nel frattempo puoi attivare qui sotto il controllo sperimentale.",
   "fans.armadaHandoff": "Armada OS controlla la ventola. Scegliendo una curva passa a Panel de Control, e Auto la restituisce ad Armada.",
   "fans.target.title": "Temperatura obiettivo",
-  "fans.target.note": "La PS5 non riporta la velocità della ventola. Il firmware la accelera quanto serve per mantenere questa temperatura: più bassa, più fresca e più rumorosa.",
+  "fans.target.note": "La PS5 non riporta la velocità della ventola. La console la accelera quanto serve per mantenere questa temperatura: più bassa, più fresca e più rumorosa.",
   "fans.target.failed": "La console non ha accettato la modifica. Resta la temperatura precedente.",
   "fans.target.otherController": "{name} cambia anche la temperatura obiettivo e la frequenza della grafica. Perché non si sovrascrivano, usane solo uno.",
   "fans.target.reset": "Valore di fabbrica ({c} °C)",
