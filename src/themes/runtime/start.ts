@@ -1,3 +1,4 @@
+import type { ThemeArtworkAccess } from "../artwork";
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
@@ -142,6 +143,7 @@ interface ThemesRuntimeClient {
 }
 
 interface ThemesRuntimeOptions {
+  artwork?: ThemeArtworkAccess;
   client: ThemesRuntimeClient;
   getSteamDocument(): Document | null;
   getQamDocument?(): Document | null;
@@ -162,6 +164,7 @@ interface ThemesRuntimeOptions {
 }
 
 export function startThemesRuntime({
+  artwork,
   client,
   getSteamDocument,
   getQamDocument,
@@ -186,6 +189,7 @@ export function startThemesRuntime({
       doc,
       qam,
       library,
+      artwork,
       navigation,
       evaluate,
       log,

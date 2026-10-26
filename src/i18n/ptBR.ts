@@ -660,6 +660,7 @@ export const ptBR: Record<string, string> = {
   "customVars.err.duplicate": "Esse nome ou argumento já está em uso",
   "customVars.err.unsafe": "Sem espaços ou caracteres especiais",
   "params.contextMenu": "Opções de inicialização",
+  "artwork.contextMenu": "Editor de capas",
   "params.reassure": "As opções que você tinha não foram alteradas",
   "params.frequent": "Seus favoritos",
   "params.advanced": "Avançado",

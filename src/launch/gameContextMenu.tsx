@@ -1,3 +1,4 @@
+import { artworkAccess, artworkThemeActive } from "../themes/artworkClient";
 import {
   afterPatch,
   fakeRenderComponent,
@@ -72,6 +73,7 @@ const patchMenuItems = (menuItems: unknown) => {
       if (foundApp) appid = foundApp.app.appid;
     }
     spliceLaunchItem(menuItems, appid);
+    if (appid && artworkThemeActive()) replaceMenuItem<any>(menuItems, "pdc-duo-artwork", <MenuItem key="pdc-duo-artwork" onSelected={() => artworkAccess.edit(appid)}>{translate("artwork.contextMenu")}</MenuItem>, () => false);
   } catch {
     /* Steam changed the internal menu shape. */
   }

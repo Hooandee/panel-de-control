@@ -1,3 +1,8 @@
+import { artworkImages, artworkGameTitle } from "./themes/artworkImages";
+import { listInstalledGames } from "./launch/steamApi";
+import { artworkAccess, configureArtworkHost, startArtworkHydration, registerArtworkEditor, getGeneralArtwork, getCustomArtwork, saveArtwork } from "./themes/artworkClient";
+import { openGameArtworkEditor } from "./components/GameArtworkEditor";
+import { getDuoArtwork, setDuoArtwork } from "./api";
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
@@ -192,7 +197,21 @@ export default definePlugin(() => {
     onClick: () => openThemeHealthModal(),
   }));
   const standardLifecycle = new AbortController();
+  const releaseArtworkHost = configureArtworkHost({ read: getDuoArtwork, write: setDuoArtwork });
+  const releaseArtworkEditor = registerArtworkEditor(openGameArtworkEditor);
+  const stopArtworkHydration = startArtworkHydration();
   const stopThemesRuntime = startThemesRuntime({
+    artwork: {
+      ...artworkAccess,
+      editor: {
+        getGeneral: getGeneralArtwork,
+        getCustom: getCustomArtwork,
+        save: saveArtwork,
+        images: artworkImages,
+        title: artworkGameTitle,
+        games: () => listInstalledGames().map(game => ({ appId: game.liveAppid, name: game.name })),
+      },
+    },
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
@@ -227,6 +246,9 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      stopArtworkHydration();
+      releaseArtworkEditor();
+      releaseArtworkHost();
       stopQamCoverWatch();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();

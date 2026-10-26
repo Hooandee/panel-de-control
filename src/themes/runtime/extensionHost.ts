@@ -1,3 +1,4 @@
+import type { ThemeArtworkAccess } from "../artwork";
 import type { CssLoaderPatch, CssLoaderSnapshot, CssLoaderTheme } from "../cssLoaderTypes";
 import type {
   ThemeExtensionClient,
@@ -18,6 +19,7 @@ export interface ThemeExtensionQamAccess {
 }
 
 export interface ThemeExtensionMountContextV1 {
+  artwork?: Readonly<ThemeArtworkAccess>;
   theme: Readonly<CssLoaderTheme>;
   document: Document;
   host: Readonly<ThemeExtensionHostDescriptor>;
@@ -26,6 +28,7 @@ export interface ThemeExtensionMountContextV1 {
 }
 
 export interface ThemeExtensionMountContextV2 {
+  artwork?: Readonly<ThemeArtworkAccess>;
   theme: Readonly<CssLoaderTheme>;
   document: Document;
   host: Readonly<ThemeExtensionHostDescriptor>;
@@ -65,6 +68,7 @@ type ExtensionLogCode =
   | "extension_release_failed";
 
 interface ThemeExtensionRuntimeHostOptions {
+  artwork?: ThemeArtworkAccess;
   client: ThemeExtensionClient;
   doc: Document;
   qam?: ThemeExtensionQamAccess;
@@ -208,6 +212,7 @@ function payloadMatches(
 }
 
 export class ThemeExtensionRuntimeHost {
+  private readonly artwork: ThemeArtworkAccess | undefined;
   private readonly client: ThemeExtensionClient;
   private readonly doc: Document;
   private readonly qam: Readonly<ThemeExtensionQamAccess> | undefined;
@@ -229,6 +234,7 @@ export class ThemeExtensionRuntimeHost {
   private disposed = false;
 
   constructor({
+    artwork,
     client,
     doc,
     qam,
@@ -237,6 +243,7 @@ export class ThemeExtensionRuntimeHost {
     evaluate = evaluateThemeExtensionBundle,
     log = (code) => console.warn(`[themes:${code}]`),
   }: ThemeExtensionRuntimeHostOptions) {
+    this.artwork = artwork;
     this.client = client;
     this.doc = doc;
     this.qam = qam ? Object.freeze({
@@ -429,6 +436,14 @@ export class ThemeExtensionRuntimeHost {
         theme: freezeTheme(selection.theme),
         document: this.doc,
         host: HOST_DESCRIPTOR,
+        ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
+          artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
+            get: this.artwork.get,
+            edit: this.artwork.edit,
+            ...(this.artwork.editor ? { editor: Object.freeze({ ...this.artwork.editor }) } : {}),
+            subscribe: (listener: () => void) => scope.track(this.artwork!.subscribe(listener)),
+          })),
+        } : {}),
       };
       let stop: () => void;
       if (extension.abiVersion === 1) {
@@ -475,6 +490,8 @@ export class ThemeExtensionRuntimeHost {
         this.abandon(selection.fingerprint, generation);
         return;
       }
+      const release = stop;
+      stop = () => { try { release(); } finally { scope.releaseAll(); } };
       this.active.set(selection.fingerprint, { stop });
       this.pending.delete(selection.fingerprint);
     } catch {
