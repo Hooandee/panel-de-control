@@ -660,6 +660,7 @@ export const de: Record<string, string> = {
   "customVars.err.duplicate": "Dieser Name oder dieses Argument wird bereits verwendet",
   "customVars.err.unsafe": "Keine Leer- oder Sonderzeichen",
   "params.contextMenu": "Startoptionen",
+  "artwork.contextMenu": "Cover-Editor",
   "params.reassure": "Vorhandene Startoptionen bleiben unverändert",
   "params.frequent": "Deine Favoriten",
   "params.advanced": "Erweitert",

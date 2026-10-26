@@ -1277,3 +1277,6 @@ export const openRemoteAccessPairing = callable<[], RemoteAccessState>("open_rem
 export const closeRemoteAccessPairing = callable<[], RemoteAccessState>("close_remote_access_pairing");
 export const answerRemoteAccessPairing = callable<[accept: boolean], RemoteAccessState>("answer_remote_access_pairing");
 export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_remote_access_keys");
+
+export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
+export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");

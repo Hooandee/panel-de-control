@@ -38,6 +38,8 @@ vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, open
 vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));
 vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
+  getDuoArtwork: vi.fn(async () => ({})),
+  setDuoArtwork: vi.fn(async () => ({ ok: true })),
   checkThemeEarly: vi.fn(),
   earlyThemeArchiveFolder: vi.fn(),
   prepareEarlyThemeInstall: vi.fn(),

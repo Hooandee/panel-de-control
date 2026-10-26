@@ -43,6 +43,7 @@ import theme_transport
 from version import read_version
 from json_store import atomic_json_save
 from settings_store import SettingsStore
+import theme_artwork
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
 from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
@@ -227,6 +228,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
+        ("_support_duo_artwork", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -395,6 +397,7 @@ DEFAULTS = {
     "tdp_unit": "W",
     "kiosk_enabled": False,
     "kiosk_brightness": None,
+    "duo_artwork": {},
     "developer_options": False,
     "remote_access_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -1298,6 +1301,39 @@ class Plugin:
 
     def _developer_options_on(self) -> bool:
         return bool(self._settings.get("developer_options"))
+
+    def _support_duo_artwork(self) -> dict:
+        records = theme_artwork.records(self._settings.get("duo_artwork"))
+        return {"configured_games": sum(key != "0" for key in records), "general_configured": "0" in records}
+
+    async def get_duo_artwork(self) -> dict:
+        self._init()
+        return theme_artwork.records(self._settings.get("duo_artwork"))
+
+    async def set_duo_artwork(self, app_id: int, artwork: dict | None) -> dict:
+        self._init()
+        if isinstance(app_id, bool) or not isinstance(app_id, int) or not 0 <= app_id < 2**32:
+            return {"ok": False, "error": "invalid_app"}
+        try:
+            value = theme_artwork.normalize(artwork, general=app_id == 0) if artwork is not None else None
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+        previous = self._settings.get("duo_artwork", {})
+        updated = theme_artwork.records(previous)
+        if value is None:
+            updated.pop(str(app_id), None)
+        else:
+            if str(app_id) not in updated and len(updated) >= 4096:
+                return {"ok": False, "error": "limit_reached"}
+            updated[str(app_id)] = value
+        self._settings["duo_artwork"] = updated
+        try:
+            self._save()
+        except Exception:
+            self._settings["duo_artwork"] = previous
+            decky.logger.exception("DUO artwork persistence failed")
+            return {"ok": False, "error": "save_failed"}
+        return {"ok": True}
 
     async def get_developer_options(self) -> bool:
         self._init()

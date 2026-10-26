@@ -769,3 +769,40 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(logs.join(" ")).not.toContain("example-theme");
   });
 });
+
+describe("DUO artwork bridge", () => {
+  it.each([1, 2] as const)("exposes the optional bridge only to DUO ABI %s and disposes subscriptions", async (abiVersion) => {
+    const unsubscribe = vi.fn();
+    const artwork = { get: vi.fn(() => null), edit: vi.fn(() => true), subscribe: vi.fn(() => unsubscribe) };
+    const descriptor = { ...DESCRIPTOR, catalogId: "hooandee-duo", abiVersion };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([descriptor]), doc: document, artwork,
+      qam: { getDocument: () => null, subscribe: () => () => {} },
+      evaluate: () => ({ abiVersion, mount: (context: ThemeExtensionMountContext) => {
+        expect(context.artwork).toBeDefined();
+        context.artwork!.subscribe(() => {});
+        return () => {};
+      } }) as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle(); await settle();
+    expect(artwork.subscribe).toHaveBeenCalledOnce();
+    host.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+  it("holds the bridge while DUO is mounted and lets it go when DUO stops", async () => {
+    const detach = vi.fn();
+    const artwork = { get: vi.fn(() => null), edit: vi.fn(() => true), subscribe: vi.fn(() => () => {}), attach: vi.fn(() => detach) };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, catalogId: "hooandee-duo", abiVersion: 2 }]), doc: document, artwork,
+      qam: { getDocument: () => null, subscribe: () => () => {} },
+      evaluate: () => ({ abiVersion: 2, mount: () => () => {} }) as ThemeExtensionExport,
+    });
+    host.reconcile(snapshot());
+    await settle(); await settle();
+    expect(artwork.attach).toHaveBeenCalledOnce();
+    expect(detach).not.toHaveBeenCalled();
+    host.dispose();
+    expect(detach).toHaveBeenCalledOnce();
+  });
+});

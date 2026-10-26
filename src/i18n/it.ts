@@ -546,6 +546,7 @@ export const it: Record<string, string> = {
   "customVars.err.duplicate": "Questo nome o argomento è già in uso",
   "customVars.err.unsafe": "Non usare spazi o caratteri speciali",
   "params.contextMenu": "Opzioni di avvio",
+  "artwork.contextMenu": "Editor copertine",
   "params.reassure": "Le opzioni di avvio già presenti non verranno modificate",
   "params.frequent": "I tuoi preferiti",
   "params.advanced": "Avanzate",
