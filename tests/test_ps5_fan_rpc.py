@@ -612,3 +612,12 @@ def test_a_preset_registered_late_is_not_forgotten_on_the_first_miss(tmp_path):
     open(os.path.join(str(tmp_path), "sys/class/leds/ps5:purple:indicator/brightness"), "w").close()
     assert plugin._reapply_ps5_led_sync() is True
     assert plugin._settings["ps5_led_preset"] == "purple"
+
+
+def test_a_light_the_user_applies_clears_an_older_pending_retry(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._ps5_led_pending = True
+    plugin._ps5_led_attempts = 5
+    state = asyncio.run(plugin.set_console_led("off"))
+    assert state["ok"] is True and state["led"]["pending"] is False
+    assert plugin._ps5_led_attempts == 0

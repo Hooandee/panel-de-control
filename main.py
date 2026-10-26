@@ -4408,6 +4408,9 @@ class Plugin:
             outcome = console.led.apply(preset)
             self._ps5_led_user_result = outcome
             if outcome["ok"]:
+                self._ps5_led_pending = False
+                self._ps5_led_attempts = 0
+                self._ps5_led_missing = 0
                 self._settings["ps5_led_preset"] = preset
                 self._ps5_led_replayed_at = _monotonic()
             return outcome
