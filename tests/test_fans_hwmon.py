@@ -310,7 +310,7 @@ def test_ps5_tctl_is_the_whole_apu():
 
 
 def test_ps5_shows_one_apu_temperature_with_amdgpu_and_k10temp():
-    # PDC-NMKG: kernel 7.3 exposes both k10temp Tctl and an amdgpu edge sensor.
+    # Kernel 7.3 on the PS5 exposes both k10temp Tctl and an amdgpu edge sensor.
     temps = [
         {"chip": "amdgpu", "label": "edge", "celsius": 54.0},
         {"chip": "k10temp", "label": "Tctl", "celsius": 54.5},

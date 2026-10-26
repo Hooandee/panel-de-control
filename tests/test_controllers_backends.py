@@ -250,7 +250,7 @@ def test_ip_other_models_never_read_the_target(tmp_path):
 
 
 def test_ip_get_config_console_says_it_has_no_builtin_controls(tmp_path):
-    # PDC-NMKG: the PS5 has no composite device; every pad is external.
+    # The PS5 has no composite device; every pad is external.
     cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(caps=[]), "playstation_5")
     assert cfg["builtin_controls"] is False
     assert cfg["device_known"] is True

@@ -142,7 +142,7 @@ def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | Non
     chosen = known if known else decorated
 
     # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
-    # amdgpu, no k10temp) — label it "APU" rather than implying discrete graphics.
+    # amdgpu, no k10temp): label it "APU" rather than implying discrete graphics.
     labels = {row["label"] for _prio, _i, row in chosen}
     if not desktop and "GPU" in labels and "CPU" not in labels:
         for _prio, _i, row in chosen:
@@ -151,7 +151,7 @@ def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | Non
 
     # Collapse rows sharing a friendly label (e.g. Intel coretemp's Package + every
     # core all map to "CPU", or the PS5's Tctl and amdgpu edge both read the APU)
-    # into one, keeping the hottest — no wall of duplicates.
+    # into one, keeping the hottest, so there is no wall of duplicates.
     collapsed: dict[str, dict] = {}
     for _prio, _i, row in chosen:
         label = row["label"]
