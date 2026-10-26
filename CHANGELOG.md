@@ -5,9 +5,29 @@
 ## [0.78.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.77.0...panel-de-control-v0.78.0) (2026-10-26)
 
 
-### Features
+### Español
 
-* support PlayStation 5 running Linux ([#1019](https://github.com/Hooandee/panel-de-control/issues/1019)) ([e05a6de](https://github.com/Hooandee/panel-de-control/commit/e05a6de0413d14551bdde1d3256430ff334e89fe))
+* **PlayStation 5 con Linux:** Panel reconoce la PS5 y le da su propia experiencia. Controla la velocidad de la gráfica, muestra la temperatura del chip y permite elegir la temperatura que el ventilador mantiene, con cuatro modos o a mano. Potencia ya no ofrece un TDP que la consola no admite y explica cómo gastar menos desde Sistema.
+
+### English
+
+* **PlayStation 5 running Linux:** Panel recognizes the PS5 and gives it its own experience. It controls the graphics speed, shows the chip temperature and lets you choose the temperature the fan holds, with four modes or by hand. Power no longer offers a TDP the console doesn't support and explains how to use less power from System.
+
+### Italiano
+
+* **PlayStation 5 con Linux:** Panel riconosce la PS5 e le offre un'esperienza su misura. Controlla la velocità della grafica, mostra la temperatura del chip e ti permette di scegliere la temperatura che la ventola mantiene, con quattro modalità o a mano. Potenza non offre più un TDP che la console non supporta e spiega come consumare meno da Sistema.
+
+### Deutsch
+
+* **PlayStation 5 mit Linux:** Panel erkennt die PS5 und bietet ihr eine eigene Oberfläche. Es steuert die Grafikgeschwindigkeit, zeigt die Chiptemperatur und lässt dich die Temperatur wählen, die der Lüfter hält, mit vier Modi oder von Hand. Leistung bietet keine TDP mehr an, die die Konsole nicht unterstützt, und erklärt, wie du unter System Strom sparst.
+
+### Português (Brasil)
+
+* **PlayStation 5 com Linux:** O Panel reconhece o PS5 e oferece uma experiência própria para ele. Controla a velocidade da placa de vídeo, mostra a temperatura do chip e deixa você escolher a temperatura que a ventoinha mantém, com quatro modos ou à mão. Potência não oferece mais um TDP que o console não aceita e explica como gastar menos em Sistema.
+
+### Français
+
+* **PlayStation 5 sous Linux :** Panel reconnaît la PS5 et lui offre sa propre expérience. Il contrôle la vitesse de la carte graphique, affiche la température de la puce et vous laisse choisir la température que le ventilateur maintient, avec quatre modes ou à la main. Puissance ne propose plus un TDP que la console ne prend pas en charge et explique comment consommer moins depuis Système.
 
 ## [0.77.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.76.0...panel-de-control-v0.77.0) (2026-10-26)
 
