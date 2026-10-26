@@ -7,6 +7,8 @@ MANIFEST = REPO / "src" / "customize" / "manifest.tsx"
 CATALOG = REPO / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "SectionCatalog.cs"
 WINDOWS_ONLY_BLOCKS = {"energy"}
 LINUX_ONLY_SECTIONS = {"ambient"}
+# The PlayStation 5 only runs Linux; its console cards have no Windows counterpart.
+LINUX_ONLY_BLOCKS = {"consoleLight", "consoleTemps", "consoleThermal"}
 
 
 def linux_tabs():
@@ -21,7 +23,7 @@ def linux_blocks():
     for section, entries in re.findall(r"\n  ([a-z]+): \[(.*?)\n  \],", body, re.S):
         blocks[section] = [
             block for block in re.findall(r'id: "([A-Za-z]+)"', entries)
-            if block != "desktopPower"
+            if block != "desktopPower" and block not in LINUX_ONLY_BLOCKS
         ]
     blocks["power"] = ["tdp", *blocks["power"]]
     return blocks

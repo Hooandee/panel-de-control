@@ -57,6 +57,7 @@ function resetNearestVerticalScroller(element: HTMLElement | null): void {
 }
 
 const gamepadNavigation = createThemeNavigationAccess();
+const ENTRY_FOCUS_FALLBACK_MS = 400;
 
 function focusShellDestination(surface: HTMLElement, mode: ShellMode, activeId: string | null): void {
   const controls = 'button,input,select,textarea,[role="button"],[tabindex="0"]';
@@ -143,9 +144,16 @@ export function ControlCenterShell({
       if (currentFocus && currentFocus !== request.previousFocus && !surface.contains(currentFocus)) return;
       focusShellDestination(surface, resolved.mode, dashboardOrigin);
     });
+    // Steam assigns entry focus itself; opening straight into a remembered section can
+    // leave it with none, and then the section takes it.
+    const fallback = request ? undefined : view.setTimeout(() => {
+      if (cancelled || !surface.isConnected || doc.visibilityState === "hidden") return;
+      if (!doc.querySelector(".gpfocus")) focusShellDestination(surface, resolved.mode, dashboardOrigin);
+    }, ENTRY_FOCUS_FALLBACK_MS);
     return () => {
       cancelled = true;
       view.cancelAnimationFrame(frame);
+      if (fallback !== undefined) view.clearTimeout(fallback);
     };
   }, [sectionViewKey, resolved.mode, resolved.activeId]);
 

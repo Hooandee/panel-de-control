@@ -114,7 +114,11 @@ from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
-from fans.ps5_target import Ps5FanTarget, clamp_target
+from fans.ps5_target import FIRMWARE_DEFAULT_C as PS5_FAN_DEFAULT_C, MIN_C as PS5_FAN_MIN_C, Ps5FanTarget, clamp_target
+from ps5.console import Ps5Console
+from ps5.firmware_io import FirmwareIo
+from ps5.led import is_animated as ps5_led_animated
+from ps5.thermal import THRESHOLD_DEFAULT_C as PS5_GUARD_DEFAULT_C, clamp_threshold
 from battery.reader import BatteryReader
 from battery.charge_limit import (
     NullChargeLimit,
@@ -141,7 +145,7 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
-from sysfs import read_str
+from sysfs import read_int, read_str
 from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
 from mangohud import config as mangohud_config
@@ -196,6 +200,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile", "game_power_owner")),
         ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
+        ("get_console_state", ("led.active", "guard.enabled", "guard.threshold", "guard.alarm", "guard.active")),
     ),
     "display": (
         ("get_color_state", (
@@ -206,7 +211,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
-            "target_temp.target",
+            "target_temp.target", "target_temp.other_controller",
         )),
     ),
     "audio": (
@@ -259,6 +264,14 @@ _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _AUTO_APPLY_RETRY_DELAYS_S = (2.0, 8.0, 30.0)
+_PS5_RIVAL_PLUGINS = ("PS5 Hardware Control",)
+_PS5_RIVAL_RECHECK_S = 60.0
+_PS5_CONSOLE_TICK_S = 3.0
+# Firmware light animations play once; replay them so they keep moving.
+_PS5_LED_REPLAY_S = 6.0
+_PS5_LED_RETRY_MAX_S = 300.0
+_PS5_GPU_SAMPLE_S = 30.0
+_PS5_GPU_LOG_GAP_S = 600.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
 _FULL_CHARGE_ONCE_POLL_S = 30.0
@@ -484,6 +497,13 @@ DEFAULTS = {
     "board_fan_module": None,
     # PlayStation 5 fan target (°C) for the firmware autoservo; None = untouched.
     "ps5_fan_target_c": None,
+    # PlayStation 5 light preset (None = untouched) and thermal guard / overheat beep.
+    "ps5_led_preset": None,
+    "ps5_guard_enabled": True,
+    "ps5_guard_threshold": PS5_GUARD_DEFAULT_C,
+    "ps5_alarm_enabled": False,
+    # Set while the thermal guard holds the fan, so a crash cannot leave it pinned.
+    "ps5_guard_holding": False,
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
@@ -716,9 +736,17 @@ class Plugin:
             BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
             if self._device.key == "desktop_pc" else None
         )
-        self._ps5_fan = (
-            Ps5FanTarget() if self._device.key == "playstation_5" else None
-        )
+        ps5_io = FirmwareIo() if self._device.key == "playstation_5" else None
+        self._ps5_fan = Ps5FanTarget(io=ps5_io) if ps5_io else None
+        self._ps5_console = Ps5Console(io=ps5_io) if ps5_io else None
+        self._ps5_console_task = None
+        self._ps5_led_replayed_at = 0.0
+        self._ps5_gpu_sampled_at = 0.0
+        self._ps5_guard_release_pending = False
+        self._ps5_led_retry_at = 0.0
+        self._ps5_led_attempts = 0
+        self._ps5_gpu_logged_at = -_PS5_GPU_LOG_GAP_S
+        self._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
         # True only on a device with an opt-in experimental EC fan channel (Legion
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
         # experimental toggle.
@@ -2541,6 +2569,7 @@ class Plugin:
                 self._offload_call(lambda: self._display_diagnostics(context))
             ),
             "gpu": await _safe(self.get_gpu_clock()),
+            "console": await _safe(self.get_console_state()),
             "cpu_gpu_diagnostics": self._cpu_gpu_diagnostics(),
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
@@ -4203,7 +4232,27 @@ class Plugin:
         return await self._offload_call(self._board_fan_state)
 
     def _ps5_fan_state(self) -> dict:
-        return {**self._ps5_fan.state(), "target": self._settings.get("ps5_fan_target_c")}
+        return {
+            **self._ps5_fan.state(),
+            "target": self._settings.get("ps5_fan_target_c"),
+            "other_controller": self._ps5_rival_plugin(),
+            "guard_active": bool(getattr(self, "_ps5_console", None) and self._ps5_console.guard.active),
+            "diagnostics": self._ps5_fan.diagnostics(),
+        }
+
+    def _ps5_rival_plugin(self) -> str | None:
+        """Another Decky plugin that also writes the PS5 fan target and GPU clock."""
+        now = _monotonic()
+        cached = getattr(self, "_ps5_rival_cache", None)
+        if cached is not None and now - cached[0] < _PS5_RIVAL_RECHECK_S:
+            return cached[1]
+        names = {
+            plugin["name"]
+            for plugin in report_collector.decky_plugins(str(self._decky_plugins_root()))["plugins"]
+        }
+        rival = next((name for name in _PS5_RIVAL_PLUGINS if name in names), None)
+        self._ps5_rival_cache = (now, rival)
+        return rival
 
     def _log_ps5_fan(self, reason: str, target, result: dict) -> None:
         log = decky.logger.info if result["ok"] else decky.logger.warning
@@ -4212,10 +4261,330 @@ class Plugin:
 
     def _reapply_ps5_fan_sync(self) -> None:
         target = self._settings.get("ps5_fan_target_c")
-        if getattr(self, "_ps5_fan", None) is None or target is None:
+        self._ps5_fan_pending = False
+        self._ps5_led_pending = not self._reapply_ps5_led_sync()
+        if getattr(self, "_ps5_fan", None) is None:
             return
-        if self._module_enabled("fanControl"):
-            self._log_ps5_fan("reapply", target, self._ps5_fan.apply(target))
+        console = getattr(self, "_ps5_console", None)
+        guarding = bool(console and console.guard.active)
+        if target is None and self._settings.get("ps5_guard_holding") is True and not guarding:
+            result = self._ps5_fan.release()
+            self._log_ps5_console("guard_recovered", {"ok": result["ok"], "fan": result})
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+            self._ps5_fan_pending = not result["ok"]
+            return
+        if target is None:
+            return
+        if self._module_enabled("fanControl") and not guarding:
+            result = self._ps5_fan.apply(target)
+            self._log_ps5_fan("reapply", target, result)
+            self._ps5_fan_pending = not result["ok"]
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+
+    def _apply_user_ps5_fan_target_sync(self, target) -> dict:
+        # Runs on the executor after any queued console tick, so the guard state it
+        # sees is the one the fan write races against.
+        console = getattr(self, "_ps5_console", None)
+        if console is not None and console.guard.active:
+            self._settings["ps5_fan_target_c"] = target
+            self._save()
+            result = {"ok": True, "detail": "deferred_guard"}
+            self._log_ps5_fan("user_deferred", target, result)
+            return result
+        result = self._ps5_fan.release() if target is None else self._ps5_fan.apply(target)
+        self._log_ps5_fan("user", target, result)
+        if result["ok"]:
+            self._settings["ps5_fan_target_c"] = target
+            self._settings["ps5_guard_holding"] = False
+            self._save()
+        return result
+
+    def _set_ps5_guard_holding(self, holding: bool) -> None:
+        if self._settings.get("ps5_guard_holding") is not holding:
+            self._settings["ps5_guard_holding"] = holding
+            self._save()
+
+    def _reapply_ps5_led_sync(self) -> bool:
+        console = getattr(self, "_ps5_console", None)
+        preset = self._settings.get("ps5_led_preset")
+        if console is None or preset is None or not self._module_enabled("system"):
+            return True
+        result = console.led.apply(preset)
+        self._log_ps5_led_change("led_reapply", result)
+        if result["detail"] == "not_ready":
+            return False
+        if result["detail"] == "unknown_preset":
+            # The driver may still be registering its presets: forget only on a second miss.
+            self._ps5_led_missing = getattr(self, "_ps5_led_missing", 0) + 1
+            if self._ps5_led_missing < 2:
+                return False
+            self._ps5_led_missing = 0
+            self._forget_ps5_led_preset()
+            return True
+        self._ps5_led_missing = 0
+        return result["ok"]
+
+    def _log_ps5_led_change(self, event: str, result: dict) -> None:
+        # Retries repeat the same outcome; log only when it changes.
+        key = (event, result["ok"], result["detail"], result.get("preset"))
+        if key != getattr(self, "_ps5_led_logged", None):
+            self._ps5_led_logged = key
+            self._log_ps5_console(event, result)
+
+    def _forget_ps5_led_preset(self) -> None:
+        # A kernel update can rename or drop presets; keep the light as it is.
+        self._settings["ps5_led_preset"] = None
+        self._save()
+
+    def _log_ps5_console(self, event: str, fields: dict) -> None:
+        log = decky.logger.info if fields.get("ok", True) else decky.logger.warning
+        log("PS5 console %s %s", event, json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str))
+
+    def _ps5_console_state(self) -> dict:
+        console = self._ps5_console
+        temps = self._ps5_console_temps()
+        return {
+            "supported": True,
+            "temps": temps,
+            "led": {
+                "supported": console.led.supported,
+                "presets": [
+                    {"id": preset, "animated": ps5_led_animated(preset)}
+                    for preset in console.led.presets()
+                ],
+                "active": self._settings.get("ps5_led_preset"),
+                "pending": getattr(self, "_ps5_led_pending", False),
+                "last": getattr(self, "_ps5_led_user_result", None),
+            },
+            "guard": {
+                "enabled": self._settings.get("ps5_guard_enabled") is True,
+                "threshold": self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C),
+                "effective_threshold": self._ps5_guard_threshold(),
+                "blocked": None if self._module_enabled("fanControl") else "fan_module_off",
+                "alarm": self._settings.get("ps5_alarm_enabled") is True,
+                "alarm_supported": console.buzzer_supported,
+                "active": console.guard.active,
+                "fan_held": bool(console.guard.active and self._ps5_fan and self._ps5_fan.read() == PS5_FAN_MIN_C),
+                "fan_supported": bool(self._ps5_fan and self._ps5_fan.supported),
+                "last_beep": console.last_beep,
+            },
+            "io": console.io.diagnostics(),
+            "diagnostics": {
+                "guard_episodes": list(console.guard.episodes),
+                "peak_c": console.guard.peak_celsius,
+                "gpu_limit": dict(self._ps5_gpu_limit),
+                "fan_retries": getattr(self, "_ps5_fan_retries", 0),
+                "fan_pending": getattr(self, "_ps5_fan_pending", False),
+                "guard_release_pending": getattr(self, "_ps5_guard_release_pending", False),
+                "light_pending": getattr(self, "_ps5_led_pending", False),
+                "other_controller": self._ps5_rival_plugin(),
+            },
+        }
+
+    def _ps5_console_temps(self) -> dict:
+        try:
+            apu = self._driving_temp()
+        except Exception:  # noqa: BLE001
+            apu = None
+        return {"apu": apu, "ssd": self._ps5_console.ssd_celsius()}
+
+    async def get_console_state(self) -> dict:
+        """PlayStation 5 extras for Sistema: light, temperatures and thermal guard."""
+        self._init()
+        if getattr(self, "_ps5_console", None) is None:
+            return {"supported": False}
+        return await self._offload_call(self._ps5_console_state)
+
+    async def set_console_led(self, preset) -> dict:
+        self._init()
+        console = getattr(self, "_ps5_console", None)
+        if console is None:
+            return {"supported": False}
+        if not isinstance(preset, str):
+            return {**await self._offload_call(self._ps5_console_state), "ok": False, "detail": "invalid_value"}
+        def apply():
+            outcome = console.led.apply(preset)
+            self._ps5_led_user_result = outcome
+            if outcome["ok"]:
+                self._ps5_led_pending = False
+                self._ps5_led_attempts = 0
+                self._ps5_led_missing = 0
+                self._settings["ps5_led_preset"] = preset
+                self._ps5_led_replayed_at = _monotonic()
+            return outcome
+
+        result = await self._offload_call(apply)
+        self._log_ps5_console("led", result)
+        if result["ok"]:
+            self._save()
+        return {**await self._offload_call(self._ps5_console_state), "ok": result["ok"], "detail": result["detail"]}
+
+    async def set_thermal_guard(self, enabled=None, threshold=None, alarm=None) -> dict:
+        self._init()
+        if getattr(self, "_ps5_console", None) is None:
+            return {"supported": False}
+        if isinstance(enabled, bool):
+            self._settings["ps5_guard_enabled"] = enabled
+        if isinstance(threshold, (int, float)) and not isinstance(threshold, bool):
+            self._settings["ps5_guard_threshold"] = clamp_threshold(threshold)
+        if isinstance(alarm, bool):
+            self._settings["ps5_alarm_enabled"] = alarm
+        self._save()
+        self._log_ps5_console("guard_settings", {
+            "enabled": self._settings["ps5_guard_enabled"],
+            "threshold": self._settings["ps5_guard_threshold"],
+            "alarm": self._settings["ps5_alarm_enabled"],
+        })
+        self._start_ps5_console_loop()
+        return await self._offload_call(self._ps5_console_state)
+
+    def _start_ps5_console_loop(self) -> None:
+        if getattr(self, "_ps5_console", None) is None or getattr(self, "_shutting_down", False):
+            return
+        task = getattr(self, "_ps5_console_task", None)
+        if task is not None and not task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._ps5_console_task = asyncio.create_task(self._ps5_console_loop())
+
+    def _stop_ps5_console_loop(self) -> None:
+        task = getattr(self, "_ps5_console_task", None)
+        self._ps5_console_task = None
+        if task is not None:
+            task.cancel()
+
+    async def _ps5_console_loop(self) -> None:
+        failures = 0
+        while True:
+            await asyncio.sleep(_PS5_CONSOLE_TICK_S)
+            try:
+                await self._offload_call(self._ps5_console_tick)
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                failures += 1
+                if failures in (1, 10, 100):
+                    decky.logger.warning(
+                        "PS5 console tick failed error=%s count=%d", type(error).__name__, failures)
+
+    def _ps5_guard_threshold(self) -> int:
+        # A fan target at or above the guard limit would keep the APU there, so the
+        # guard would engage and release forever: it starts above the target instead.
+        threshold = self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C)
+        target = self._settings.get("ps5_fan_target_c") or PS5_FAN_DEFAULT_C
+        return max(threshold, target + 5)
+
+    def _sample_ps5_gpu_limit(self, now: float) -> None:
+        """With a manual GPU limit on, record whether the live clock stays under it
+        and what the CPU was doing, so a report shows if the boost override happens."""
+        if not getattr(self._gpu_clock, "supported", False):
+            return
+        diagnostics = self._gpu_clock.diagnostics()
+        applied, hardware = diagnostics.get("applied") or {}, diagnostics.get("range") or {}
+        limit, ceiling = applied.get("max_mhz"), hardware.get("max_mhz")
+        current = diagnostics.get("current_mhz")
+        if limit is None or ceiling is None or current is None or limit >= ceiling:
+            return
+        stats = self._ps5_gpu_limit
+        stats["samples"] += 1
+        if current <= limit:
+            return
+        stats["over_limit"] += 1
+        stats["last_over"] = {
+            "gpu_mhz": current,
+            "limit_mhz": limit,
+            "cpu_khz": read_int("/sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq"),
+            "boost": self._gpu_limit_overridden_by_boost(),
+        }
+        if now - self._ps5_gpu_logged_at >= _PS5_GPU_LOG_GAP_S:
+            self._ps5_gpu_logged_at = now
+            self._log_ps5_console("gpu_over_limit", {"ok": False, **stats["last_over"]})
+
+    def _ps5_console_tick(self) -> None:
+        console = self._ps5_console
+        fan = self._ps5_fan
+        settings = self._settings
+        fan_ready = bool(fan and fan.supported and self._module_enabled("fanControl"))
+        threshold = self._ps5_guard_threshold()
+        step = console.guard.step(
+            self._ps5_console_temps()["apu"],
+            threshold=threshold,
+            guard=fan_ready and settings.get("ps5_guard_enabled") is True,
+            alarm=settings.get("ps5_alarm_enabled") is True,
+        )
+        if step.engage:
+            self._set_ps5_guard_holding(True)
+            self._ps5_rehold_logged = None
+            result = fan.apply(PS5_FAN_MIN_C)
+            self._log_ps5_console("guard_engaged", {
+                "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
+            })
+        elif console.guard.active and (held := fan.read()) != PS5_FAN_MIN_C:
+            self._set_ps5_guard_holding(True)
+            result = fan.apply(PS5_FAN_MIN_C)
+            key = ("guard_rehold", result["ok"], result["detail"], held)
+            if key != getattr(self, "_ps5_rehold_logged", None):
+                self._ps5_rehold_logged = key
+                self._log_ps5_console("guard_rehold", {"ok": result["ok"], "found_c": held, "fan": result})
+        if step.release or (self._ps5_guard_release_pending and not console.guard.active):
+            target = settings.get("ps5_fan_target_c")
+            result = fan.apply(target) if target is not None and fan_ready else fan.release()
+            if step.release or result["ok"]:
+                self._log_ps5_console("guard_released", {
+                    "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
+                })
+            self._ps5_guard_release_pending = not result["ok"]
+            self._ps5_rehold_logged = None
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+        system_on = self._module_enabled("system")
+        if step.beep and system_on:
+            self._log_ps5_console("overheat_beep", {
+                "ok": console.beep(), "apu_c": console.guard.last_celsius, "threshold": threshold,
+            })
+        now = _monotonic()
+        if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
+            self._ps5_gpu_sampled_at = now
+            self._sample_ps5_gpu_limit(now)
+        if system_on and getattr(self, "_ps5_led_pending", False) and now >= self._ps5_led_retry_at:
+            self._ps5_led_pending = not self._reapply_ps5_led_sync()
+            self._ps5_led_attempts = 0 if not self._ps5_led_pending else min(self._ps5_led_attempts + 1, 8)
+            self._ps5_led_retry_at = now + min(_PS5_LED_RETRY_MAX_S, _PS5_CONSOLE_TICK_S * 2 ** self._ps5_led_attempts)
+        preset = settings.get("ps5_led_preset")
+        if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
+            self._ps5_led_replayed_at = now
+            result = console.led.replay(preset)
+            if result["detail"] == "not_ready":
+                pass
+            elif result["detail"] == "unknown_preset":
+                self._log_ps5_led_change("led_replay", result)
+                self._ps5_led_pending = True
+            else:
+                self._log_ps5_led_change("led_replay", result)
+
+    def _schedule_ps5_fan_retry(self) -> None:
+        # The ICC link may not be up when Panel starts or resumes, and the driver probe
+        # resets the target to 80 °C: retry until the console confirms the saved one.
+        if not getattr(self, "_ps5_fan_pending", False):
+            self._ps5_fan_retries = 0
+            return
+        attempt = getattr(self, "_ps5_fan_retries", 0)
+        if attempt >= len(_AUTO_APPLY_RETRY_DELAYS_S):
+            return
+        self._ps5_fan_retries = attempt + 1
+        previous = getattr(self, "_ps5_fan_retry_handle", None)
+        if previous is not None:
+            previous.cancel()
+        self._ps5_fan_retry_handle = asyncio.get_running_loop().call_later(
+            _AUTO_APPLY_RETRY_DELAYS_S[attempt],
+            lambda: self._offload(self._reapply_ps5_fan_sync, done=self._schedule_ps5_fan_retry),
+        )
 
     async def set_fan_target_temp(self, celsius) -> dict:
         """PlayStation 5: firmware autoservo target (°C); None returns the firmware default."""
@@ -4229,12 +4598,7 @@ class Plugin:
             result = {"ok": False, "detail": "module_disabled"}
         else:
             target = None if celsius is None else clamp_target(celsius)
-            result = await self._offload_call(
-                lambda: fan.release() if target is None else fan.apply(target))
-            self._log_ps5_fan("user", target, result)
-            if result["ok"]:
-                self._settings["ps5_fan_target_c"] = target
-                self._save()
+            result = await self._offload_call(lambda: self._apply_user_ps5_fan_target_sync(target))
         return {
             **await self._offload_call(self._ps5_fan_state),
             "ok": result["ok"],
@@ -4255,7 +4619,12 @@ class Plugin:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
         backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
         event loop after the apply took ownership — race-free (see _ensure_fan_loop)."""
-        self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
+        self._offload(self._reapply_fans_sync, done=self._after_fan_reapply)
+
+    def _after_fan_reapply(self) -> None:
+        self._ensure_fan_loop()
+        self._ps5_fan_retries = 0
+        self._schedule_ps5_fan_retry()
 
     def _ensure_fan_loop(self) -> None:
         """Start a software-loop backend's periodic curve loop ON the event loop.
@@ -10596,6 +10965,16 @@ class Plugin:
         self._gpu_requested = requested
         self._record_gpu_clock_transition(failure, trigger, scope)
 
+    def _gpu_limit_overridden_by_boost(self) -> bool:
+        # ps5-gpufreq: while ps5-cpufreq runs a boost clock the SMU takes the GPU clock
+        # back to its 2230 MHz ceiling, ignoring the devfreq window.
+        if getattr(self._device, "key", None) != "playstation_5":
+            return False
+        try:
+            return bool(self._boost.supported and self._boost.enabled())
+        except Exception:  # noqa: BLE001
+            return False
+
     def _gpu_clock_state(self) -> dict:
         g = self._gpu_profiles.clock(self._current_appid)
         global_clock = self._gpu_profiles.clock(None)
@@ -10640,6 +11019,7 @@ class Plugin:
                 managed and getattr(self._tdp_backend, "applied_split_gpu_level", None) is not None
             ),
             "manual": bool(g.get("manual")),
+            "cpu_boost_overrides": self._gpu_limit_overridden_by_boost(),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
             "levels": (
@@ -13218,11 +13598,17 @@ class Plugin:
             return self._recover_fremont_fan_handoff()
         released = True
         try:
-            if (
-                getattr(self, "_ps5_fan", None) is not None
-                and self._settings.get("ps5_fan_target_c") is not None
+            console = getattr(self, "_ps5_console", None)
+            if getattr(self, "_ps5_fan", None) is not None and (
+                self._settings.get("ps5_fan_target_c") is not None
+                or getattr(self, "_ps5_guard_release_pending", False)
+                or (console is not None and console.guard.active)
             ):
                 released = bool(self._ps5_fan.release()["ok"])
+                if console is not None and released:
+                    console.guard.force_release("handoff")
+                    self._ps5_guard_release_pending = False
+                    self._set_ps5_guard_holding(False)
         except Exception:  # noqa: BLE001
             released = False
         try:
@@ -13710,6 +14096,15 @@ class Plugin:
         log("Lifecycle transition %s", encoded)
 
     async def _main(self) -> None:
+        try:
+            await self._startup()
+        except RuntimeError as error:
+            # Decky can stop a second instance while it is still starting.
+            if str(error) != "plugin_shutting_down" or not getattr(self, "_shutting_down", False):
+                raise
+            decky.logger.info("Startup stopped: plugin is shutting down")
+
+    async def _startup(self) -> None:
         self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
@@ -13765,6 +14160,11 @@ class Plugin:
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
+        if getattr(self, "_ps5_console", None) is not None:
+            rival = await self._offload_call(self._ps5_rival_plugin)
+            if rival:
+                self._log_ps5_console("other_controller", {"ok": False, "plugin": rival})
+        self._start_ps5_console_loop()
         self._restore_board_fans()
         if getattr(self, "_fan_reader", None) is not None:
             self._fan_reader.invalidate()
@@ -14096,6 +14496,7 @@ class Plugin:
             wait_task.cancel()
             self._display_wait_task = None
         self._stop_night_loop()
+        self._stop_ps5_console_loop()
         self._audio_shutdown = True
         audio_task = getattr(self, "_audio_task", None)
         self._audio_task = None

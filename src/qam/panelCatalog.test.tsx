@@ -32,7 +32,7 @@ describe("Panel QAM catalog", () => {
         blocks: {
           system: {
             order: [],
-            hidden: ["eco", "battery", "cpu", "gpu", "brightness", "volume", "colores"],
+            hidden: ["eco", "battery", "cpu", "gpu", "brightness", "volume", "colores", "consoleLight", "consoleTemps", "consoleThermal"],
           },
         },
       },

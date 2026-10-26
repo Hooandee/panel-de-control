@@ -660,6 +660,8 @@ export interface FanTargetState {
   max: number;
   default: number;
   presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
+  other_controller?: string | null;
+  guard_active?: boolean;
   ok?: boolean;
   detail?: string;
 }
@@ -721,6 +723,41 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
+export interface ConsoleLightPreset {
+  id: string;
+  animated: boolean;
+}
+
+export interface ConsoleState {
+  supported: boolean;
+  temps?: { apu: number | null; ssd: number | null };
+  led?: {
+    supported: boolean;
+    presets: ConsoleLightPreset[];
+    active: string | null;
+    pending: boolean;
+    last: { ok: boolean; preset: string; detail: string } | null;
+  };
+  guard?: {
+    enabled: boolean;
+    threshold: number;
+    effective_threshold: number;
+    blocked: "fan_module_off" | null;
+    alarm: boolean;
+    alarm_supported: boolean;
+    active: boolean;
+    fan_held: boolean;
+    fan_supported: boolean;
+    last_beep: string | null;
+  };
+  ok?: boolean;
+  detail?: string;
+}
+
+export const getConsoleState = callable<[], ConsoleState>("get_console_state");
+export const setConsoleLed = callable<[preset: string], ConsoleState>("set_console_led");
+export const setThermalGuard =
+  callable<[enabled: boolean | null, threshold: number | null, alarm: boolean | null], ConsoleState>("set_thermal_guard");
 export const setFanTargetTemp =
   callable<[celsius: number | null], FanTargetState>("set_fan_target_temp");
 export const setBoardFanEnabled =
@@ -978,6 +1015,8 @@ export interface GpuClockState {
   power_level?: number | null;
   power_level_split?: boolean;
   manual: boolean;
+  // PS5: the CPU boost makes the firmware ignore the GPU limit.
+  cpu_boost_overrides?: boolean;
   range_min: number | null;
   range_max: number | null;
   // Discrete frequencies (MHz) on table-driven GPUs; null when any MHz value is valid.
