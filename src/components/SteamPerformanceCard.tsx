@@ -1,428 +1,210 @@
-import {
-  Component,
-  type FC,
-  type ReactNode,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  LuCircleAlert,
-  LuCircleCheck,
-  LuLoaderCircle,
-  LuMonitorCog,
-} from "react-icons/lu";
-
+import { useEffect, useRef, useState, type FC } from "react";
+import { DialogButton } from "@decky/ui";
+import { LuMonitorCog } from "react-icons/lu";
+import { getGamePowerOwner, setGamePowerOwner, updateGameSteamSetting, type GamePowerOwnerState } from "../api";
 import { useI18n } from "../i18n";
-import type {
-  SteamPerformanceComponent,
-  SteamPerformanceComponentId,
-  SteamPerformanceRow,
-} from "../steam/performanceSurface";
-import { useSteamPerformanceSurface } from "../steam/useSteamPerformanceSurface";
-import {
-  recordSteamPerformanceDiagnostic,
-  steamPerformanceError,
-} from "../steam/performanceDiagnostics";
+import { showModal } from "../navigation/showModal";
+import { readPerformanceSettings, writePerformanceSetting, type PerformanceSettingControl } from "../steam/performanceSettings";
+import { createPerformanceSettingsDeps } from "../steam/performanceSettingsRuntime";
+import { readSteamPerformanceProfile, subscribeSteamPerformanceState } from "../steam/performanceRuntime";
+import { recordSteamPerformanceDiagnostic } from "../steam/performanceDiagnostics";
+import { subscribePowerOwnershipChanged } from "../tdp/powerOwnershipInvalidation";
+import { readRunningGame } from "../tdp/runningGame";
+import { reapplySteamPowerSettings, runSteamPerformanceTransaction } from "../steam/performanceOwnership";
+import { resetManagedGamePerformance } from "../steam/performanceReset";
 import { theme } from "../theme";
 import { Collapsible } from "./Collapsible";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { SteamPerformanceControls } from "./SteamPerformanceControls";
 
-const LONG_AUTO_LABELS = new Set([
-  "automatic",
-  "automatisch",
-  "automatico",
-  "automático",
-]);
-const SCALING_SLIDER_SCALE = 0.86;
-const RESET_SEPARATOR_CSS = `
-  [data-pdc-steam-reset] .Panel.Focusable::after {
-    display: none !important;
-  }
-`;
-const SCALING_CONTROL_IDS = new Set<SteamPerformanceComponentId>([
-  "combinedScaling",
-  "splitScalingFilter",
-  "scalingMode",
-  "sharpness",
-  "fsrSharpness",
-  "nisSharpness",
-]);
-const FRAME_RATE_SLIDER_CONTROL_IDS = new Set<SteamPerformanceComponentId>([
-  "legacyFrameRate",
-  "appFrameRate",
-  "refreshRate",
-]);
-
-const shortenAutoLabel = (root: HTMLElement): void => {
-  const walker = root.ownerDocument.createTreeWalker(root, 4);
-  let node = walker.nextNode();
-  while (node) {
-    const value = node.textContent ?? "";
-    const label = value.trim().toLocaleLowerCase();
-    if (LONG_AUTO_LABELS.has(label)) {
-      node.textContent = value.replace(value.trim(), "Auto");
-    }
-    node = walker.nextNode();
-  }
-};
-
-const forEachNativeSliderLabel = (
-  root: HTMLElement,
-  visit: (label: HTMLElement) => void,
-): void => {
-  root.querySelectorAll<HTMLElement>('[role="slider"][aria-labelledby]').forEach((slider) => {
-    const labelIds = slider.getAttribute("aria-labelledby")?.split(/\s+/) ?? [];
-    labelIds.forEach((labelId) => {
-      const label = root.ownerDocument.getElementById(labelId);
-      if (!label || !root.contains(label)) return;
-      visit(label);
-    });
-  });
-};
-
-const insetNativeSliderTitles = (root: HTMLElement): void => {
-  forEachNativeSliderLabel(root, (label) => {
-    label.style.paddingInline = `${theme.space.sm}px`;
-    label.style.boxSizing = "border-box";
-  });
-};
-
-const scaleNativeSliderRows = (root: HTMLElement): void => {
-  root.querySelectorAll<HTMLElement>('[role="slider"]').forEach((slider) => {
-    const row = slider.closest<HTMLElement>('[role="button"]');
-    if (!row || !root.contains(row)) return;
-    row.style.transform = `scale(${SCALING_SLIDER_SCALE})`;
-    row.style.transformOrigin = "left top";
-  });
-};
-
-const keepNativeSliderValuesInline = (root: HTMLElement): void => {
-  forEachNativeSliderLabel(root, (label) => {
-    const value = Array.from(label.children).find((child) => (
-      child.getAttribute("aria-hidden") === "true"
-    ));
-    const ElementType = root.ownerDocument.defaultView?.HTMLElement;
-    if (!ElementType || !(value instanceof ElementType)) return;
-    if (value.style.whiteSpace !== "nowrap") value.style.whiteSpace = "nowrap";
-    if (value.style.flexShrink !== "0") value.style.flexShrink = "0";
-  });
-};
-
-const NativeSliderLayout: FC<{
-  children: ReactNode;
-  compact: boolean;
-  compactAuto: boolean;
-}> = ({
-  children,
-  compact,
-  compactAuto,
-}) => {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const reconcile = () => {
-      keepNativeSliderValuesInline(root);
-      if (compact) {
-        scaleNativeSliderRows(root);
-        insetNativeSliderTitles(root);
-        if (compactAuto) shortenAutoLabel(root);
-      }
-    };
-    reconcile();
-    const Observer = root.ownerDocument.defaultView?.MutationObserver;
-    if (!Observer) return;
-    const observer = new Observer(reconcile);
-    observer.observe(root, { childList: true, characterData: true, subtree: true });
-    return () => observer.disconnect();
-  }, [compact, compactAuto]);
-
-  return (
-    <div
-      ref={rootRef}
-      data-testid={compact ? "steam-scaling-slider-viewport" : undefined}
-      style={compact ? {
-        width: `calc(100% - ${theme.space.sm}px)`,
-        minWidth: 0,
-        marginInline: "auto",
-        overflow: "visible",
-        contain: "layout",
-      } : { display: "contents" }}
-    >
-      {children}
-    </div>
-  );
-};
-
-interface NativeControlBoundaryProps {
-  id: SteamPerformanceComponentId;
-  Control: SteamPerformanceComponent;
-  onError: (id: SteamPerformanceComponentId, control: SteamPerformanceComponent) => void;
-  onRecovery: (id: SteamPerformanceComponentId, control: SteamPerformanceComponent) => void;
-}
-
-interface NativeControlBoundaryState {
-  failed: boolean;
-}
-
-class NativeControlBoundary extends Component<
-  NativeControlBoundaryProps,
-  NativeControlBoundaryState
-> {
-  private retryCount = 0;
-  private retryTimer: ReturnType<typeof setTimeout> | null = null;
-  private replacementRecoveryPending = false;
-
-  state: NativeControlBoundaryState = { failed: false };
-
-  static getDerivedStateFromError(): NativeControlBoundaryState {
-    return { failed: true };
-  }
-
-  componentDidCatch(error: unknown): void {
-    this.replacementRecoveryPending = false;
-    recordSteamPerformanceDiagnostic("control", {
-      status: "render_failed",
-      control_id: this.props.id,
-      error: steamPerformanceError(error),
-    });
-    this.props.onError(this.props.id, this.props.Control);
-    if (this.retryCount >= 1) return;
-
-    this.retryCount += 1;
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null;
-      this.setState({ failed: false });
-    }, 2000);
-  }
-
-  componentDidUpdate(
-    previousProps: NativeControlBoundaryProps,
-    previousState: NativeControlBoundaryState,
-  ): void {
-    if (previousProps.Control !== this.props.Control) {
-      this.clearRetry();
-      this.retryCount = 0;
-      if (this.state.failed) {
-        this.replacementRecoveryPending = true;
-      }
-      this.props.onRecovery(this.props.id, previousProps.Control);
-      if (this.state.failed) this.setState({ failed: false });
-      return;
-    }
-
-    if (previousState.failed && !this.state.failed) {
-      if (this.replacementRecoveryPending) {
-        this.replacementRecoveryPending = false;
-        recordSteamPerformanceDiagnostic("control", {
-          status: "recovered",
-          control_id: this.props.id,
-          reason: "control_replaced",
-        });
-        return;
-      }
-      this.retryCount = 0;
-      recordSteamPerformanceDiagnostic("control", {
-        status: "recovered",
-        control_id: this.props.id,
-        reason: "retry_succeeded",
-      });
-      this.props.onRecovery(this.props.id, this.props.Control);
-    }
-  }
-
-  componentWillUnmount(): void {
-    this.clearRetry();
-  }
-
-  private clearRetry(): void {
-    if (this.retryTimer === null) return;
-    clearTimeout(this.retryTimer);
-    this.retryTimer = null;
-  }
-
-  render() {
-    if (this.state.failed) return null;
-    const { Control, id } = this.props;
-    const compact = SCALING_CONTROL_IDS.has(id);
-    if (!compact && !FRAME_RATE_SLIDER_CONTROL_IDS.has(id)) return <Control />;
-    return (
-      <NativeSliderLayout compact={compact} compactAuto={id === "scalingMode"}>
-        <Control />
-      </NativeSliderLayout>
-    );
-  }
-}
-
-const GROUPS: ReadonlyArray<{
-  label: string;
-  ids: ReadonlySet<SteamPerformanceComponentId>;
-}> = [
-  {
-    label: "steam.performance.group.display",
-    ids: new Set(["legacyFrameRate", "appFrameRate", "disableFrameLimit", "refreshRate"]),
-  },
-  {
-    label: "steam.performance.group.fluidity",
-    ids: new Set(["variableResolution", "vrr", "allowTearing"]),
-  },
-  {
-    label: "steam.performance.group.scaling",
-    ids: SCALING_CONTROL_IDS,
-  },
-];
-
-interface PerformanceGroupProps {
-  label: string;
-  rows: SteamPerformanceRow[];
-  hidden: boolean;
-  renderRow: (row: SteamPerformanceRow) => ReactNode;
-}
-
-const PerformanceGroup: FC<PerformanceGroupProps> = ({ label, rows, hidden, renderRow }) => (
-  <section
-    role="group"
-    aria-label={label}
-    hidden={hidden}
-    style={{
-      display: hidden ? "none" : "flex",
-      flexDirection: "column",
-      gap: theme.space.sm,
-    }}
-  >
-    <div style={{ ...theme.sectionLabel, paddingLeft: 2 }}>{label}</div>
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      {rows.map(renderRow)}
-    </div>
-  </section>
+const deps = createPerformanceSettingsDeps();
+const valuesOf = (controls: PerformanceSettingControl[]) => Object.fromEntries(
+  controls.flatMap((control) => control.kind === "action" ? [] : [[control.id, control.value]]),
 );
 
-interface SteamPerformanceCardProps {
+type PendingSelection = { failed?: boolean; id: PerformanceSettingControl["id"]; value: number | boolean; deadline: number | null; stableAppid: string | null; runningGameId: number | null; scope: "global" | "game" };
+// Steam remounts QAM while a context menu is open; the selection belongs to the profile, not that mount.
+const pendingSelections = new Map<string, PendingSelection>();
+
+export const SteamPerformanceCard: FC<{
   profileScope?: "global" | "game";
   runningGameId?: number | null;
-}
-
-export const SteamPerformanceCard: FC<SteamPerformanceCardProps> = ({
-  profileScope = "global",
-  runningGameId = null,
-}) => {
+}> = ({ profileScope = "global", runningGameId = null }) => {
   const { t } = useI18n();
-  const surface = useSteamPerformanceSurface(profileScope, runningGameId);
-  const [failures, setFailures] = useState(() => (
-    new Map<SteamPerformanceComponentId, SteamPerformanceComponent>()
-  ));
-  const reportFailure = useCallback((
-    id: SteamPerformanceComponentId,
-    control: SteamPerformanceComponent,
-  ) => {
-    setFailures((previous) => {
-      if (previous.get(id) === control) return previous;
-      const next = new Map(previous);
-      next.set(id, control);
-      return next;
-    });
-  }, []);
-  const clearFailure = useCallback((
-    id: SteamPerformanceComponentId,
-    control: SteamPerformanceComponent,
-  ) => {
-    setFailures((previous) => {
-      if (previous.get(id) !== control) return previous;
-      const next = new Map(previous);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-  const available = surface.status === "ready";
-  const partial = surface.rows.some(({ id, Component: Control }) => failures.get(id) === Control);
-  const statusKey = !available
-    ? surface.status === "loading"
-      ? "steam.performance.loading"
-      : "steam.performance.unavailable"
-    : partial
-      ? "steam.performance.partial"
-      : "steam.performance.synced";
-  const statusColor = partial
-    ? theme.color.warn
-    : available
-      ? theme.color.ok
-      : theme.color.textMuted;
-  const renderRow = ({ id, Component: NativeControl }: SteamPerformanceRow) => (
-    <NativeControlBoundary
-      key={id}
-      id={id}
-      Control={NativeControl}
-      onError={reportFailure}
-      onRecovery={clearFailure}
-    />
-  );
-  const reset = surface.rows.find(({ id }) => id === "reset");
-  const resetFailed = Boolean(reset && failures.get(reset.id) === reset.Component);
-
-  return (
-    <Collapsible
-      id="steam-performance"
-      icon={<LuMonitorCog size={16} />}
-      title={t("steam.performance.title")}
-      summary={t(statusKey)}
-    >
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg }}>
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: theme.space.xs,
-            color: statusColor,
-            fontSize: theme.font.caption,
-            lineHeight: 1.3,
-          }}
-        >
-          {partial ? (
-            <LuCircleAlert aria-hidden size={13} />
-          ) : surface.status === "ready" ? (
-            <LuCircleCheck aria-hidden size={13} />
-          ) : surface.status === "loading" ? (
-            <LuLoaderCircle aria-hidden size={13} />
-          ) : (
-            <LuCircleAlert aria-hidden size={13} />
-          )}
-          <span>{t(statusKey)}</span>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg }}>
-          {GROUPS.map((group) => {
-            const rows = surface.rows.filter(({ id }) => group.ids.has(id));
-            return rows.length > 0 ? (
-              <PerformanceGroup
-                key={group.label}
-                label={t(group.label)}
-                rows={rows}
-                hidden={rows.every(({ id, Component }) => failures.get(id) === Component)}
-                renderRow={renderRow}
-              />
-            ) : null;
-          })}
-
-          {reset ? (
-            <div
-              data-pdc-steam-reset
-              hidden={resetFailed}
-              style={{
-                display: resetFailed ? "none" : "block",
-                paddingTop: theme.space.md,
-                borderTop: `1px solid ${theme.color.hairline}`,
-              }}
-            >
-              <style>{RESET_SEPARATOR_CSS}</style>
-              {renderRow(reset)}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </Collapsible>
-  );
+  const liveGame = readRunningGame();
+  const stableAppid = liveGame?.liveAppid === runningGameId ? liveGame.appid : null;
+  const activeContext = useRef({ profileScope, runningGameId });
+  activeContext.current = { profileScope, runningGameId };
+  const mutation = useRef(false);
+  const selectionKey = JSON.stringify([stableAppid, runningGameId, profileScope]);
+  const pending = {
+    get current(): PendingSelection | null { return pendingSelections.get(selectionKey) ?? null; },
+    set current(value: PendingSelection | null) {
+      if (value) pendingSelections.set(selectionKey, value);
+      else pendingSelections.delete(selectionKey);
+    },
+  };
+  const refreshControls = () => {
+    const observed = readPerformanceSettings(deps);
+    const intent = pending.current;
+    if (!intent) { setControls(observed); return; }
+    if ((readRunningGame()?.appid ?? null) !== intent.stableAppid
+      || deps.runningGameId() !== intent.runningGameId
+      || readSteamPerformanceProfile(intent.runningGameId) !== intent.scope) {
+      pending.current = null;
+      setControls(observed);
+      return;
+    }
+    if (intent.failed) {
+      pending.current = null;
+      setFailed(true);
+      setControls(observed);
+      return;
+    }
+    const control = observed.find((item) => item.id === intent.id);
+    if (intent.deadline !== null && control && control.kind !== "action" && control.value === intent.value) {
+      pending.current = null;
+      setControls(observed);
+    } else if (intent.deadline !== null && Date.now() >= intent.deadline) {
+      pending.current = null;
+      setFailed(true);
+      setControls(observed);
+      recordSteamPerformanceDiagnostic("control", { status: "readback_timeout", control_id: intent.id });
+    } else {
+      setControls(observed.map((item) => {
+        if (item.id !== intent.id) return item;
+        if (item.kind === "toggle" && typeof intent.value === "boolean") return { ...item, value: intent.value };
+        if ((item.kind === "options" || item.kind === "slider") && typeof intent.value === "number") return { ...item, value: intent.value };
+        return item;
+      }));
+    }
+  };
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [controls, setControls] = useState<PerformanceSettingControl[]>([]);
+  const [owner, setOwner] = useState<GamePowerOwnerState | null>(null);
+  const [profile, setProfile] = useState(() => readSteamPerformanceProfile(runningGameId));
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let latest = 0;
+    const refresh = () => {
+      if (!alive) return;
+      refreshControls();
+      setProfile(readSteamPerformanceProfile(runningGameId));
+      const request = ++latest;
+      void getGamePowerOwner().then((next) => { if (alive && request === latest && !mutation.current) setOwner(next); }).catch(() => { if (alive && request === latest && !mutation.current) setOwner(null); });
+    };
+    setOwner(null);
+    refresh();
+    const unsubscribe = subscribeSteamPerformanceState(refresh);
+    const unsubscribeOwnership = subscribePowerOwnershipChanged(refresh);
+    const timer = setInterval(refresh, 2000);
+    const pendingTimer = setInterval(() => { if (pending.current) refreshControls(); }, 100);
+    return () => { alive = false; clearInterval(timer); clearInterval(pendingTimer); unsubscribe(); unsubscribeOwnership(); };
+  }, [runningGameId, profileScope]);
+  const context = { scope: profileScope, runningGameId };
+  const game = profileScope === "game" && runningGameId !== null;
+  const currentOwner = owner?.context_appid === stableAppid ? owner : null;
+  const matching = profile === profileScope;
+  const readable = (matching || profile === "unknown") && controls.some((control) => control.kind !== "action");
+  const ready = matching && readable;
+  const managedGame = game && currentOwner?.supported === true;
+  const ownershipLost = currentOwner?.reason === "ownership_capability_lost";
+  const ownershipPending = ownershipLost || game && (!currentOwner || currentOwner.supported === undefined || currentOwner.reset_pending === true);
+  const own = managedGame && currentOwner?.explicit_owner === "pdc";
+  const execute = (id: PerformanceSettingControl["id"], value: number | boolean | undefined, expected?: GamePowerOwnerState) => runSteamPerformanceTransaction(async () => {
+    if (mutation.current) return;
+    const validContext = () => activeContext.current.runningGameId === runningGameId
+      && activeContext.current.profileScope === profileScope
+      && (readRunningGame()?.appid ?? null) === stableAppid
+      && deps.runningGameId() === runningGameId
+      && readSteamPerformanceProfile(runningGameId) === profileScope;
+    if (!validContext()) return;
+    mutation.current = true;
+    setBusy(true);
+    setFailed(false);
+    if (value !== undefined) {
+      pending.current = { id, value, deadline: null, stableAppid, runningGameId, scope: profileScope };
+      refreshControls();
+    }
+    try {
+      if (deps.runningGameId() !== runningGameId || readSteamPerformanceProfile(runningGameId) !== profileScope) throw new Error("stale_context");
+      if (id === "reset") {
+        const state = await getGamePowerOwner();
+        if (!validContext() || state.context_appid !== stableAppid) throw new Error("stale_context");
+        if (state.reason === "ownership_capability_lost") throw new Error("ownership_capability_lost");
+        if (state.supported === true && (game || runningGameId === null)) {
+          setOwner(await resetManagedGamePerformance(deps, context, state, validContext));
+          recordSteamPerformanceDiagnostic("control", { status: "reset_confirmed", control_id: id });
+          return;
+        }
+      }
+      if (managedGame) {
+        let state = await getGamePowerOwner();
+        if (!validContext() || state.context_appid !== stableAppid) throw new Error("stale_context");
+        if (state.reason === "ownership_capability_lost") throw new Error("ownership_capability_lost");
+        if (expected && state.revision !== expected.revision) throw new Error("stale_revision");
+        if (state.explicit_owner !== "pdc") {
+          const claimed = await setGamePowerOwner(stableAppid!, "pdc", state.revision, valuesOf(readPerformanceSettings(deps)));
+          if (!claimed.ok) throw new Error(claimed.detail ?? "claim_failed");
+          state = claimed;
+          if (!validContext()) throw new Error("stale_context");
+        }
+        if (value === undefined) throw new Error("reset_requires_snapshot");
+        const saved = await updateGameSteamSetting(stableAppid!, state.revision, id, value);
+        if (!saved.ok) throw new Error(saved.detail ?? "save_failed");
+        if (!validContext()) throw new Error("stale_context");
+        setOwner(saved);
+      }
+      if (!validContext()) throw new Error("stale_context");
+      const result = await writePerformanceSetting(deps, context, id, value);
+      if (result.status !== "request_sent" && result.status !== "unchanged") throw new Error(result.status);
+      if (pending.current?.id === id) pending.current.deadline = Date.now() + 4000;
+      recordSteamPerformanceDiagnostic("control", { status: result.status, control_id: id });
+    } catch {
+      if (pending.current) pending.current.failed = true;
+      if (mounted.current) setFailed(true);
+      recordSteamPerformanceDiagnostic("control", { status: "write_failed", control_id: id });
+    } finally { mutation.current = false; if (mounted.current) { setBusy(false); refreshControls(); } }
+  });
+  const change = (id: PerformanceSettingControl["id"], value?: number | boolean) => {
+    if (!ready || busy || ownershipPending) return;
+    if (managedGame && !own && id !== "reset") {
+      let confirmed = false;
+      showModal(<ConfirmDialog title={t("steam.performance.profile.game")} desc={t("steam.performance.claim.desc")}
+        confirmLabel={t("steam.performance.claim")} cancelLabel={t("steam.performance.cancel")}
+        onConfirm={() => { if (confirmed) return; confirmed = true; void execute(id, value, currentOwner!); }} />);
+    } else { void execute(id, value); }
+  };
+  const release = () => runSteamPerformanceTransaction(async () => {
+    if (!currentOwner || !own || mutation.current || !mounted.current
+      || activeContext.current.runningGameId !== runningGameId
+      || activeContext.current.profileScope !== profileScope
+      || deps.runningGameId() !== runningGameId) return;
+    mutation.current = true;
+    setBusy(true);
+    try {
+      const result = await setGamePowerOwner(stableAppid!, "steam", currentOwner.revision);
+      if (!result.ok) throw new Error("release_failed");
+      if (readRunningGame()?.appid !== stableAppid || deps.runningGameId() !== runningGameId) throw new Error("stale_context");
+      setOwner(result);
+      if (!await reapplySteamPowerSettings(stableAppid!, runningGameId!)) throw new Error("reapply_failed");
+      recordSteamPerformanceDiagnostic("control", { status: "steam_power_reapply_requested" });
+    } catch { setFailed(true); }
+    finally { mutation.current = false; if (mounted.current) setBusy(false); }
+  });
+  const status = failed ? "steam.performance.writeFailed" : own ? "steam.performance.owner.pdc"
+    : ownershipLost || profile === "unknown" ? "steam.performance.profile.unknown"
+      : profile === "game" ? matching ? "steam.performance.profile.game" : "steam.performance.profile.openGame"
+        : matching ? "steam.performance.profile.global" : "steam.performance.profile.inactiveGame";
+  return <Collapsible id="steam-performance" icon={<LuMonitorCog size={16} />} title={t("steam.performance.title")} summary={own ? "PDC" : profile === "game" ? "Steam" : t("tdp.scope.global")}>
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
+      <div role="status" style={{ fontSize: theme.font.caption, color: failed ? theme.color.danger : theme.color.textMuted, lineHeight: 1.4 }}>{t(status)}</div>
+      {readable && <SteamPerformanceControls controls={controls}
+        disabled={!ready || busy || ownershipPending} onChange={change} />}
+      {own && <DialogButton disabled={busy} onClick={() => { void release(); }}>{t("steam.performance.release")}</DialogButton>}
+    </div>
+  </Collapsible>;
 };

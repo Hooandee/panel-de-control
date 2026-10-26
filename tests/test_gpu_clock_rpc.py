@@ -152,6 +152,43 @@ def test_get_gpu_clock_shape(tmp_path, monkeypatch):
     assert st["has_game_profile"] is False
 
 
+def test_global_gpu_manual_edit_preserves_current_own_game_hardware(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._set_current_appid("42")
+    plugin._gpu_profiles.set_clock("game", True, 500, 900, "42")
+    gpu.set(500, 900)
+    result = asyncio.run(plugin.set_gpu_clock(300, 700, "global", None, "42"))
+    assert gpu.get() == (500, 900)
+    assert plugin._gpu_profiles.clock("42") == {"manual": True, "min": 500, "max": 900}
+    assert plugin._gpu_profiles.clock(None) == {"manual": True, "min": 300, "max": 700}
+    assert result["global_min"] == 300
+
+
+def test_global_gpu_auto_edit_preserves_current_own_game_hardware(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._set_current_appid("42")
+    plugin._gpu_profiles.set_clock("global", True, 300, 700)
+    plugin._gpu_profiles.set_clock("game", True, 500, 900, "42")
+    gpu.set(500, 900)
+    asyncio.run(plugin.set_gpu_clock_auto("global", None, "42"))
+    assert gpu.get() == (500, 900)
+    assert gpu._auto is False
+    assert plugin._gpu_profiles.clock(None)["manual"] is False
+    assert plugin._gpu_profiles.clock("42")["manual"] is True
+
+
+def test_global_gpu_edit_still_applies_when_current_game_follows_global(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._set_current_appid("42")
+    asyncio.run(plugin.set_gpu_clock(300, 700, "global", None, "42"))
+    assert gpu.get() == (300, 700)
+    asyncio.run(plugin.set_gpu_clock_auto("global", None, "42"))
+    assert gpu._auto is True
+
+
 def test_legacy_power_gpu_profiles_migrate_without_losing_game_windows(
     tmp_path, monkeypatch
 ):

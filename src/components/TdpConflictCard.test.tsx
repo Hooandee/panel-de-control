@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { HTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@decky/ui", () => ({
   Focusable: ({
@@ -85,6 +85,17 @@ describe("TdpConflictCard conflict explanation", () => {
 
     expect(screen.getByText(powerstationDescription)).toBeTruthy();
     expect(screen.queryByText(legacyDescription)).toBeNull();
+  });
+
+  it("releases Panel de Control through the existing action without taking over SteamOS Manager", () => {
+    const release = vi.fn();
+    const takeover = vi.fn();
+    render(<TdpConflictCard rivals={{ sdtdp: false, hhd: false, powerstation: false, steamOsManager: true }} onDisableSdtdp={takeover} onTakeHhd={takeover} onDisablePdcTdp={release} />);
+    expect(screen.getByText("copy:tdp.conflict.steamos.desc")).toBeTruthy();
+    expect(screen.queryByText(legacyDescription)).toBeNull();
+    fireEvent.click(screen.getByText("copy:tdp.conflict.steamos.release"));
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(takeover).not.toHaveBeenCalled();
   });
 
   it("stacks the takeover action below its copy and lets long labels wrap", () => {

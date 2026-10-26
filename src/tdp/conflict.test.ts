@@ -36,6 +36,15 @@ describe("tdpConflict", () => {
     expect(result.rivals.powerstation).toBe(true);
     expect(result.takeoverAvailable).toBe(false);
   });
+  it("offers release, not daemon takeover, for SteamOS Manager", () => {
+    const result = tdpConflict({ ...base, steamOsManagerActive: true });
+    expect(result.conflict).toBe(true);
+    expect(result.rivals.steamOsManager).toBe(true);
+    expect(result.takeoverAvailable).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, weControl: false }).conflict).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, tdpSupported: false }).conflict).toBe(false);
+    expect(tdpConflict({ ...base, steamOsManagerActive: true, hhdManaging: true }).takeoverAvailable).toBe(false);
+  });
   it("we don't control (toggle off) -> false", () => {
     expect(tdpConflict({ ...base, sdtdp: true, weControl: false }).conflict).toBe(false);
   });

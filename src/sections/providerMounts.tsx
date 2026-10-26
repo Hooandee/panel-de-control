@@ -145,7 +145,8 @@ export const PotenciaProviderMount: FC<{
             gameName={tdpCtl.game?.name ?? null}
             hasGameProfile={tdp.has_game_profile}
             globalLabel={t("tdp.scope.global")}
-            inheritHint={t("tdp.inherit")}
+            inheritHint={t(tdp.game_power_owner?.supported === true && tdp.game_power_owner.owner === "steam"
+              ? "steam.performance.profile.game" : "tdp.inherit")}
             onScope={tdpCtl.onScope}
           />
         </PanelSectionRow>

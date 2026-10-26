@@ -45,7 +45,8 @@ export const GpuClockCard: FC = () => {
           gameName={game.name}
           hasGameProfile={state.has_game_profile}
           globalLabel={t("tdp.scope.global")}
-          inheritHint={t("tdp.inherit")}
+          inheritHint={t(state.game_power_owner?.supported === true && state.game_power_owner.owner === "steam"
+              ? "steam.performance.profile.game" : "tdp.inherit")}
           onScope={onScope}
         />
       )}
