@@ -12,6 +12,7 @@ export interface ConflictInput {
   sdtdp: boolean;
   hhdManaging: boolean;
   powerstationActive: boolean;
+  steamOsManagerActive?: boolean;
   // Only a conflict when we actually manage TDP (supported + master switch on).
   weControl: boolean;
   tdpSupported: boolean;
@@ -19,7 +20,7 @@ export interface ConflictInput {
 
 export interface ConflictResult {
   conflict: boolean;
-  rivals: { sdtdp: boolean; hhd: boolean; powerstation: boolean };
+  rivals: { sdtdp: boolean; hhd: boolean; powerstation: boolean; steamOsManager?: boolean };
   takeoverAvailable: boolean;
 }
 
@@ -28,12 +29,13 @@ export function tdpConflict(i: ConflictInput): ConflictResult {
     sdtdp: i.sdtdp,
     hhd: i.hhdManaging,
     powerstation: i.powerstationActive,
+    ...(i.steamOsManagerActive ? { steamOsManager: true } : {}),
   };
   const conflict =
     i.weControl &&
     i.tdpSupported &&
-    (i.sdtdp || i.hhdManaging || i.powerstationActive);
-  const takeoverAvailable = conflict && !i.powerstationActive;
+    (i.sdtdp || i.hhdManaging || i.powerstationActive || i.steamOsManagerActive === true);
+  const takeoverAvailable = conflict && !i.powerstationActive && !i.steamOsManagerActive;
   return { conflict, rivals, takeoverAvailable };
 }
 

@@ -29,6 +29,7 @@ export interface TdpConflictHook {
 export function useTdpConflict(supported: boolean, weControl: boolean): TdpConflictHook {
   const [hhdManaging, setHhdManaging] = useState(false);
   const [powerstationActive, setPowerstationActive] = useState(false);
+  const [steamOsManagerActive, setSteamOsManagerActive] = useState(false);
   const [sdtdp, setSdtdp] = useState(false);
   const alive = useRef(true);
 
@@ -38,6 +39,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
     if (res) {
       setHhdManaging(!!res.hhd_managing);
       setPowerstationActive(!!res.powerstation_active);
+      setSteamOsManagerActive(res.steamos_manager_active === true);
     }
     setSdtdp(sdtdpActive(installedPlugins(), disabledPlugins()));
   }, []);
@@ -56,6 +58,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
     sdtdp,
     hhdManaging,
     powerstationActive,
+    steamOsManagerActive,
     weControl,
     tdpSupported: supported,
   });

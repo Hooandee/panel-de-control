@@ -8,7 +8,8 @@ import {
 import {
   discoverSteamPerformanceComponents,
   resolveSteamPerformanceStore,
-  syncSteamPerformanceProfile,
+  readSteamPerformanceProfile,
+  SteamPerformanceProfile,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
 import { recordSteamPerformanceDiagnostic } from "./performanceDiagnostics";
@@ -16,10 +17,14 @@ import { recordSteamPerformanceDiagnostic } from "./performanceDiagnostics";
 export interface SteamPerformanceSurfaceState {
   status: "loading" | "ready" | "unavailable";
   rows: SteamPerformanceRow[];
+  profile: SteamPerformanceProfile;
 }
 
-const LOADING: SteamPerformanceSurfaceState = { status: "loading", rows: [] };
-const EMPTY: SteamPerformanceSurfaceState = { status: "unavailable", rows: [] };
+interface ObservedSurface extends SteamPerformanceSurfaceState {
+  runningGameId: number | null;
+}
+
+const LOADING: ObservedSurface = { status: "loading", rows: [], profile: "unknown", runningGameId: null };
 const RETRY_MS = 2000;
 
 const sameRows = (left: SteamPerformanceRow[], right: SteamPerformanceRow[]): boolean => (
@@ -29,7 +34,8 @@ const sameRows = (left: SteamPerformanceRow[], right: SteamPerformanceRow[]): bo
   ))
 );
 
-const readSurface = (): SteamPerformanceSurfaceState => {
+const readSurface = (runningGameId: number | null): ObservedSurface => {
+  const profile = readSteamPerformanceProfile(runningGameId);
   const components = discoverSteamPerformanceComponents();
   const store = resolveSteamPerformanceStore();
   const layout = store ? performanceLayoutFromStore(store) : null;
@@ -39,38 +45,42 @@ const readSurface = (): SteamPerformanceSurfaceState => {
   const ready = rows.some(({ id }) => id !== "reset");
   recordSteamPerformanceDiagnostic("surface", {
     status: ready ? "ready" : "unavailable",
+    profile,
+    running_game_id: runningGameId === null ? null : String(runningGameId),
     store_available: store !== null,
     layout_available: layout !== null,
     frame_rate_path: layout?.frameRate ?? null,
     split_scaling: layout?.splitScaling ?? null,
     row_ids: ready ? rows.map(({ id }) => id) : [],
   });
-  return ready ? { status: "ready", rows } : EMPTY;
+  return ready
+    ? { status: "ready", rows, profile, runningGameId }
+    : { status: "unavailable", rows: [], profile, runningGameId };
 };
 
 export function useSteamPerformanceSurface(
-  profileScope: "global" | "game" = "global",
+  _profileScope: "global" | "game" = "global",
   runningGameId: number | null = null,
 ): SteamPerformanceSurfaceState {
-  const [surface, setSurface] = useState<SteamPerformanceSurfaceState>(LOADING);
+  const [surface, setSurface] = useState<ObservedSurface>(LOADING);
   const aliveRef = useRef(false);
 
-  const sync = useCallback((forceProfileSync = false) => {
+  const sync = useCallback(() => {
     if (!aliveRef.current) return;
-    syncSteamPerformanceProfile(profileScope, runningGameId, forceProfileSync);
-    const next = readSurface();
+    const next = readSurface(runningGameId);
     setSurface((previous) => (
-      previous.status === next.status && sameRows(previous.rows, next.rows)
+      previous.runningGameId === next.runningGameId
+      && previous.status === next.status && previous.profile === next.profile && sameRows(previous.rows, next.rows)
         ? previous
         : next
     ));
-  }, [profileScope, runningGameId]);
+  }, [runningGameId]);
 
   useEffect(() => {
     aliveRef.current = true;
-    const refresh = () => sync(false);
+    const refresh = () => sync();
     const unsubscribe = subscribeSteamPerformanceState(refresh);
-    sync(true);
+    sync();
     const timer = setInterval(refresh, RETRY_MS);
     return () => {
       aliveRef.current = false;
@@ -79,5 +89,9 @@ export function useSteamPerformanceSurface(
     };
   }, [sync]);
 
-  return surface;
+  return {
+    status: surface.status,
+    rows: surface.rows,
+    profile: surface.runningGameId === runningGameId ? surface.profile : "unknown",
+  };
 }

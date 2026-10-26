@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -48,6 +49,7 @@ from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
+from tdp import steamos_manager as steamos_manager_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
     CONFIRM_S,
@@ -72,6 +74,7 @@ from tdp.types import (
     TdpResult,
 )
 from tdp_profiles import AUTO_RANGE_UNSET, ProfileStore
+from power_ownership import OwnershipConflict, PowerOwnershipStore, validate_steam_settings
 from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
@@ -182,12 +185,13 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
-            "gpu_level", "global_gpu_level",
+            "gpu_level", "global_gpu_level", "game_power_owner",
         )),
+        ("get_tdp_conflict", ("hhd_present", "hhd_managing", "powerstation_active", "steamos_manager_active")),
     ),
     "system": (
         ("get_cpu_state", ("smt", "boost", "active_cores", "has_game_profile")),
-        ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile")),
+        ("get_gpu_clock", ("manual", "configured_min", "configured_max", "status", "has_game_profile", "game_power_owner")),
         ("get_eco_state", ("enabled", "tdp_min_w", "screen_off", "screen_asleep")),
         ("get_battery_state", ("charge_limit",)),
     ),
@@ -563,6 +567,9 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
         )
+        self._power_ownership = PowerOwnershipStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_ownership.json")
+        )
         self._auto_learning = AutoTdpLearningStore(
             os.path.join(
                 decky.DECKY_PLUGIN_SETTINGS_DIR,
@@ -661,6 +668,7 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
+        self._steamos_manager_detector = steamos_manager_conflict.Detector(self._run_capture)
         self._tdp_profile_sanitize_pending = False
         self._tdp_profile_sanitize_max = None
         self._tdp_storage_migration_retry_at = 0.0
@@ -3238,10 +3246,323 @@ class Plugin:
         )
 
     # ---- TDP conflict + master switch --------------------------------------
+    def _game_power_ownership_supported(self):
+        return (
+            getattr(getattr(self, "_device", None), "key", None)
+            in ("steam_deck_lcd", "steam_deck_oled")
+            and getattr(getattr(self, "_tdp_backend", None), "name", None) == "steamdeck-hwmon"
+            and getattr(getattr(self, "_gpu_clock", None), "backend", None) == "amdgpu"
+            and bool(getattr(getattr(self, "_gpu_clock", None), "supported", False))
+        )
+
+    def _game_power_ownership_has_context(self):
+        store = getattr(self, "_power_ownership", None)
+        if store is None or getattr(getattr(self, "_device", None), "key", None) not in (
+            "steam_deck_lcd", "steam_deck_oled",
+        ):
+            return False
+        state = store.state()
+        return state["observed"] or state["explicit_owner"] is not None
+
+    def _game_power_owner_state(self):
+        store = getattr(self, "_power_ownership", None)
+        state = store.state() if store is not None else {
+            "context_appid": getattr(self, "_current_appid", None),
+            "revision": 0, "observed": False, "steam_profile": None,
+            "explicit_owner": None, "owner": "pdc",
+            "write_allowed": True, "reason": "unobserved_legacy",
+        }
+        supported = self._game_power_ownership_supported()
+        if not supported:
+            if self._game_power_ownership_has_context():
+                state.update(write_allowed=False, reason="ownership_capability_lost")
+            else:
+                state.update(owner="pdc", write_allowed=True, reason="unsupported_ownership")
+        return {**state, "supported": supported,
+                "reset_pending": getattr(self, "_game_power_reset", None) is not None}
+
+    def _game_power_write_allowed(self):
+        return (
+            not getattr(self, "_game_power_context_transition", False)
+            and getattr(self, "_game_power_reset", None) is None
+            and self._game_power_owner_state()["write_allowed"]
+        )
+
+    def _game_power_owned_by_steam(self):
+        state = self._game_power_owner_state()
+        return (
+            self._current_appid is not None
+            and state["supported"] and state["owner"] == "steam"
+        )
+
+    async def get_game_power_owner(self):
+        self._init()
+        return self._game_power_owner_state()
+
+    def _clear_game_power_reset(self):
+        pending = getattr(self, "_game_power_reset", None)
+        self._game_power_reset = None
+        if pending is not None:
+            pending["timer"].cancel()
+        return pending
+
+    async def abort_game_power_reset(self, token):
+        self._init()
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is None or pending["token"] != token:
+            return {**self._game_power_owner_state(), "ok": True, "detail": "reset_inactive"}
+        self._clear_game_power_reset()
+        if pending["appid"] == self._current_appid and self._game_power_write_allowed():
+            try:
+                tdp_result = await self._apply_tdp_now("game-power-reset-abort")
+                if pending["appid"] != self._current_appid:
+                    return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+                profile = (
+                    self._gpu_profiles.clock(self._current_appid)
+                    if self._module_enabled("system") and not self._frequency_managed_by_power()
+                    else {"manual": False, "min": None, "max": None}
+                )
+                manual = bool(profile.get("manual"))
+                requested = {"mode": "manual" if manual else "auto",
+                             "min_mhz": profile.get("min"), "max_mhz": profile.get("max")}
+                generation = self._next_gpu_generation()
+                gpu_result = await self._offload_call(
+                    lambda: self._run_gpu_clock(requested, auto=not manual, generation=generation)
+                )
+                self._record_gpu_clock_transition(gpu_result, "reset_abort")
+                if not getattr(tdp_result, "ok", False) or not gpu_result.get("ok"):
+                    return {**self._game_power_owner_state(), "ok": False, "detail": "reset_restore_failed"}
+            except Exception as error:
+                decky.logger.warning("Game power reset restoration failed: %s", type(error).__name__)
+                return {**self._game_power_owner_state(), "ok": False, "detail": "reset_restore_failed"}
+        self._record_tdp_transition("game-power-reset-abort", action="reset_abort")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    async def _expire_game_power_reset(self, token):
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is not None and pending["token"] == token:
+            decky.logger.warning("Game power reset timed out appid=%s", pending["appid"])
+            await self.abort_game_power_reset(token)
+
+    async def begin_game_power_reset(self, appid, expected_revision):
+        self._init()
+        appid = str(appid) if appid is not None else None
+        state = self._game_power_owner_state()
+        detail = (
+            "reset_in_progress" if state["reset_pending"] or getattr(self, "_game_power_context_transition", False) else
+            "unsupported_ownership" if not state["supported"] else
+            "stale_context" if appid != self._current_appid else
+            "stale_revision" if type(expected_revision) is not int or expected_revision != state["revision"] else
+            "unresolved_owner" if state["owner"] not in ("pdc", "steam") else ""
+        )
+        if detail:
+            return {**state, "ok": False, "detail": detail}
+        token = secrets.token_urlsafe(24)
+        timer = asyncio.get_running_loop().call_later(
+            15, lambda: asyncio.create_task(self._expire_game_power_reset(token))
+        )
+        pending = {"token": token, "timer": timer, "appid": appid,
+                   "revision": expected_revision, "owner": state["owner"],
+                   "explicit_owner": state["explicit_owner"], "deadline": time.monotonic() + 15}
+        self._game_power_reset = pending
+        self._advance_tdp_generation()
+        self._next_gpu_generation()
+        self._reset_auto_session("power_reset")
+        try:
+            await self._drain_offloaded()
+        except Exception:
+            await self.abort_game_power_reset(token)
+            raise
+        if getattr(self, "_game_power_reset", None) is not pending:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+        self._record_tdp_transition("game-power-reset-begin", action="reset_begin")
+        return {**self._game_power_owner_state(), "ok": True, "detail": "", "token": token}
+
+    async def finish_game_power_reset(self, token, steam_settings):
+        self._init()
+        pending = getattr(self, "_game_power_reset", None)
+        if pending is None or pending["token"] != token:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "reset_inactive"}
+        snapshots = []
+        try:
+            snapshot = validate_steam_settings(steam_settings)
+            baseline = await self._offload_call(self._capture_game_power_baseline)
+            current = self._game_power_owner_state()
+            if (
+                getattr(self, "_game_power_reset", None) is not pending
+                or self._current_appid != pending["appid"]
+                or current["revision"] != pending["revision"]
+                or time.monotonic() >= pending["deadline"]
+            ):
+                raise OwnershipConflict("stale_context")
+            if baseline is None or not current["supported"]:
+                raise ValueError("baseline-required")
+            if pending["owner"] == "pdc":
+                snapshots = [(store, copy.deepcopy(store._data))
+                             for store in (self._tdp_profiles, self._gpu_profiles)]
+                self._save_game_power_baseline(pending["appid"], baseline)
+                if pending["explicit_owner"] == "pdc":
+                    self._power_ownership.set_owner(
+                        pending["appid"], "pdc", pending["revision"], steam_settings=snapshot
+                    )
+        except Exception as error:  # Hardware readback failures must release the reset gate.
+            rollback_ok = self._restore_game_power_profiles(snapshots)
+            restored = await self.abort_game_power_reset(token)
+            decky.logger.warning("Game power reset failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", str(error)), "rollback_ok": rollback_ok,
+                    "restore_ok": restored["ok"]}
+        self._clear_game_power_reset()
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._record_tdp_transition("game-power-reset-finish", action="reset_finish")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    def _capture_game_power_baseline(self):
+        if (
+            self._device.key not in ("steam_deck_lcd", "steam_deck_oled")
+            or self._tdp_backend.name != "steamdeck-hwmon"
+            or getattr(self._gpu_clock, "backend", None) != "amdgpu"
+            or self._settings.get("eco_enabled")
+        ):
+            return None
+        ppt = self._tdp_backend.capture_ppt()
+        gpu = self._gpu_clock.capture_state()
+        if not isinstance(ppt, dict) or not isinstance(gpu, dict):
+            return None
+        slow, fast = ppt.get("slow"), ppt.get("fast")
+        window = gpu.get("window")
+        if (
+            type(slow) is not int or type(fast) is not int
+            or not 3 <= slow <= 29 or not slow <= fast <= 30
+            or gpu.get("level") not in ("auto", "manual")
+            or not isinstance(window, (tuple, list)) or len(window) != 2
+            or any(type(value) is not int for value in window)
+            or not 0 < window[0] <= window[1]
+        ):
+            return None
+        return {"slow": slow, "fast": fast, "gpu": dict(gpu)}
+
+    def _save_game_power_baseline(self, appid, baseline):
+        scope = "global" if appid is None else "game"
+        profile = copy.deepcopy(
+            (self._tdp_profiles.game_profile(appid) if appid is not None else None)
+            or self._tdp_profiles._data["global"]
+        )
+        profile.update(
+            pl1=baseline["slow"], mode="custom", off2=0,
+            off3=baseline["fast"] - baseline["slow"], auto_tdp=False,
+        )
+        profile.pop("follow_global", None)
+        self._tdp_profiles._set_profile(scope, appid, profile)
+        gpu = baseline["gpu"]
+        self._gpu_profiles.set_clock(
+            scope, gpu["level"] == "manual", *gpu["window"], appid=appid
+        )
+
+    def _restore_game_power_profiles(self, snapshots):
+        restored = True
+        for store, snapshot in snapshots:
+            store._data = snapshot
+            try:
+                store._save()
+            except OSError:
+                restored = False
+                decky.logger.warning("Power ownership baseline rollback failed")
+        return restored
+
+    async def set_game_power_owner(self, appid, owner, expected_revision, steam_settings=None):
+        self._init()
+        state = self._game_power_owner_state()
+        if state["reset_pending"]:
+            return {**state, "ok": False, "detail": "reset_in_progress"}
+        if not state["supported"]:
+            return {**state, "ok": False, "detail": "unsupported_ownership"}
+        if appid is None or str(appid) != self._current_appid:
+            return {**state, "ok": False, "detail": "stale_context"}
+        if type(expected_revision) is not int or expected_revision != state["revision"]:
+            return {**state, "ok": False, "detail": "stale_revision"}
+        if owner not in ("steam", "pdc"):
+            return {**state, "ok": False, "detail": "invalid_owner"}
+        if steam_settings is not None:
+            try:
+                steam_settings = validate_steam_settings(steam_settings)
+            except ValueError:
+                return {**state, "ok": False, "detail": "invalid_steam_settings"}
+        capture_baseline = owner == "pdc" and state["explicit_owner"] != "pdc"
+        self._game_power_context_transition = True
+        self._advance_tdp_generation()
+        self._next_gpu_generation()
+        self._reset_auto_session("power_owner_changed")
+        snapshots = []
+        try:
+            await self._drain_offloaded()
+            if capture_baseline:
+                baseline = await self._offload_call(self._capture_game_power_baseline)
+                if baseline is None:
+                    return {**self._game_power_owner_state(), "ok": False,
+                            "detail": "baseline-required"}
+                current = self._game_power_owner_state()
+                if current["context_appid"] != str(appid) or current["revision"] != expected_revision:
+                    return {**current, "ok": False, "detail": "stale_context"}
+                snapshots = [
+                    (store, copy.deepcopy(store._data))
+                    for store in (self._tdp_profiles, self._gpu_profiles)
+                ]
+                self._save_game_power_baseline(str(appid), baseline)
+            if steam_settings is None:
+                state = self._power_ownership.set_owner(appid, owner, expected_revision)
+            else:
+                state = self._power_ownership.set_owner(
+                    appid, owner, expected_revision, steam_settings=steam_settings
+                )
+            if owner == "steam" and self._gpu_release_required():
+                previous_marker = self._settings.get("gpu_handoff_pending", False)
+                self._settings["gpu_handoff_pending"] = False
+                try:
+                    self._save()
+                except OSError:
+                    self._settings["gpu_handoff_pending"] = previous_marker
+                    raise
+                self._gpu_owned = False
+        except (OwnershipConflict, OSError, ValueError) as error:
+            rollback_ok = self._restore_game_power_profiles(snapshots)
+            decky.logger.warning("Power ownership change failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", "ownership_save_failed"),
+                    "rollback_ok": rollback_ok}
+        finally:
+            self._game_power_context_transition = False
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._tdp_status, self._tdp_reason = "unverifiable", "game_power_owner"
+        self._record_tdp_transition("game-power-owner", action="ownership")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
+    async def update_game_steam_setting(self, appid, expected_revision, control_id, value):
+        self._init()
+        if getattr(self, "_game_power_reset", None) is not None:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "reset_in_progress"}
+        if not self._game_power_ownership_supported():
+            return {**self._game_power_owner_state(), "ok": False, "detail": "unsupported_ownership"}
+        if appid is None or str(appid) != self._current_appid:
+            return {**self._game_power_owner_state(), "ok": False, "detail": "stale_context"}
+        try:
+            self._power_ownership.set_steam_setting(
+                appid, expected_revision, control_id, value
+            )
+        except (OwnershipConflict, OSError, ValueError) as error:
+            decky.logger.warning("Steam setting intent save failed: %s", type(error).__name__)
+            return {**self._game_power_owner_state(), "ok": False,
+                    "detail": getattr(error, "reason", "steam_setting_save_failed")}
+        self._record_tdp_transition("game-steam-setting", action="intent_saved")
+        return {**self._game_power_owner_state(), "ok": True, "detail": ""}
+
     def _tdp_write_authorized(self) -> bool:
         return (
-            getattr(self, "_os_id", None) != "anatase"
-            or self._tdp_external_owner is False
+            self._game_power_write_allowed()
+            and (getattr(self, "_os_id", None) != "anatase"
+                 or self._tdp_external_owner is False)
         )
 
     async def _prime_tdp_ownership(self) -> bool | None:
@@ -3339,7 +3660,7 @@ class Plugin:
         return ok
 
     async def get_tdp_conflict(self) -> dict:
-        """Which external managers can currently write the power rails."""
+        """External managers and observed service presence, not exclusive ownership."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
         hhd_call = (
@@ -3347,9 +3668,12 @@ class Plugin:
             if hhd_present
             else asyncio.sleep(0, result=False)
         )
-        managing, powerstation = await asyncio.gather(
+        managing, powerstation, steamos_manager = await asyncio.gather(
             hhd_call,
             self._offload_call(self._powerstation_detector.tdp_active),
+            self._offload_call(self._steamos_manager_detector.active)
+            if self._device.key == "rog_ally"
+            else asyncio.sleep(0, result=False),
         )
         if self._os_id == "anatase":
             self._tdp_external_owner = (
@@ -3359,6 +3683,7 @@ class Plugin:
             "hhd_present": hhd_present,
             "hhd_managing": bool(managing),
             "powerstation_active": bool(powerstation),
+            "steamos_manager_active": steamos_manager,
         }
 
     async def take_tdp_control(self) -> dict:
@@ -5410,6 +5735,10 @@ class Plugin:
             return {"auto_tdp": False}
         if not self._tdp_control_on():
             return {"auto_tdp": auto_tdp}
+        if not self._game_power_write_allowed():
+            if scope == "global":
+                self._tdp_profiles.set_auto_tdp("global", bool(enabled))
+            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         before = self._tdp_profiles.auto_tdp(self._current_appid)
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
@@ -5447,6 +5776,8 @@ class Plugin:
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
             return self._tdp_state(await self._read_tdp_observation())
+        if scope == "game" and not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return self._tdp_state(await self._read_tdp_observation())
@@ -5507,7 +5838,7 @@ class Plugin:
             and appid is not None
             and str(appid) == self._current_appid
         )
-        if applies_to_current:
+        if applies_to_current and self._game_power_write_allowed():
             self._reset_auto_session("config_changed")
             if (
                 self._current_appid is not None
@@ -6438,6 +6769,8 @@ class Plugin:
         return observation
 
     def _apply_tdp_targets(self, target, on_ac, auto_tdp):
+        if not self._game_power_write_allowed():
+            return TdpResult(target.get("pl1", 0), None, False, "game-power-owner")
         self._tdp_backend_used = True
         apply_targets = getattr(
             self._tdp_backend,
@@ -6492,6 +6825,8 @@ class Plugin:
 
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
+        if not self._game_power_write_allowed():
+            return TdpResult(logical_watts, None, False, "game-power-owner")
         if self._tdp_shutdown:
             return TdpResult(
                 logical_watts,
@@ -7270,6 +7605,10 @@ class Plugin:
         )
 
     def _tdp_guard_tick(self, now=None):
+        if not self._game_power_write_allowed():
+            self._tdp_status, self._tdp_reason = "unverifiable", "game_power_owner"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
         now = time.monotonic() if now is None else float(now)
         self._tdp_overshoot_clock = now
         profile_reassert_due = (
@@ -9663,9 +10002,18 @@ class Plugin:
         current = str(appid) if appid is not None else None
         if current == getattr(self, "_current_appid", None):
             return
+        self._clear_game_power_reset()
         stats = getattr(self, "_gamescope_stats", None)
         if stats is not None:
             stats.clear()
+        ownership = getattr(self, "_power_ownership", None)
+        if ownership is not None:
+            was_observed = ownership.state()["observed"]
+            if was_observed:
+                ownership.observe(current, "unknown")
+            else:
+                ownership.set_context(current)
+            self._advance_tdp_generation()
         self._current_appid = current
         self._current_appid_at = time.monotonic()
         if getattr(self, "_auto_controller", None) is not None:
@@ -9846,7 +10194,10 @@ class Plugin:
         marker_acquired = False
         previous_applied = None
         try:
-            if generation != self._gpu_generation:
+            if not self._game_power_write_allowed():
+                ok = False
+                error_code = "game_power_owner"
+            elif generation != self._gpu_generation:
                 ok = False
                 error_code = "stale_context"
             elif not self._gpu_clock.supported:
@@ -9951,6 +10302,8 @@ class Plugin:
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        if not self._game_power_write_allowed():
+            return
         if getattr(self, "_gpu_shutdown", False):
             return
         if getattr(self, "_gpu_rpc_pending", 0) > 0:
@@ -10157,14 +10510,41 @@ class Plugin:
 
     def _gpu_clock_state(self) -> dict:
         g = self._gpu_profiles.clock(self._current_appid)
+        global_clock = self._gpu_profiles.clock(None)
         rng = self._gpu_clock.get_range()
         cur = self._gpu_clock.get()
+        steam_owned = self._game_power_owned_by_steam()
+        steam_readback_available = False
+        if steam_owned:
+            snapshot = self._capture_gpu_hardware_state()
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            window = snapshot.get("window")
+            valid_window = (
+                isinstance(window, (tuple, list)) and len(window) == 2
+                and all(type(value) is int for value in window)
+                and 0 < window[0] <= window[1]
+            )
+            level = snapshot.get("level")
+            steam_readback_available = valid_window and level in ("auto", "manual")
+            if steam_readback_available:
+                cur = tuple(window)
+                g = {"manual": level == "manual", "min": cur[0], "max": cur[1]}
         gmin, gmax = g.get("min"), g.get("max")
         requested = getattr(self, "_gpu_requested", None)
         last = getattr(self, "_gpu_last_result", None)
+        if steam_owned:
+            requested = None
+            last = {"status": "unverifiable", "error_code": "steam_owned"}
         applied_min, applied_max = cur if cur else (None, None)
         managed = self._frequency_managed_by_power()
         return {
+            "game_power_owner": self._game_power_owner_state(),
+            "display_source": "steam_live" if steam_readback_available else "saved",
+            "steam_readback_available": steam_readback_available,
+            "appid": self._current_appid,
+            "global_manual": bool(global_clock.get("manual")),
+            "global_min": global_clock.get("min"),
+            "global_max": global_clock.get("max"),
             "supported": self._gpu_clock.supported,
             "managed_by_power": managed,
             "power_level": self._power_gpu_level() if managed else None,
@@ -10191,7 +10571,9 @@ class Plugin:
                 "auto" if self._gpu_clock.supported else "unsupported"
             ),
             "reason": last.get("error_code") if last else None,
-            "follows_global": self._gpu_profiles.is_following_global(self._current_appid),
+            "follows_global": (
+                False if steam_owned else self._gpu_profiles.is_following_global(self._current_appid)
+            ),
             "has_game_profile": (
                 self._current_appid is not None
                 and self._gpu_profiles.has_game(self._current_appid)
@@ -10375,8 +10757,17 @@ class Plugin:
         self._init()
         return self._gpu_clock_state()
 
+    def _gpu_global_profile_is_inactive(self, scope):
+        return (
+            scope == "global"
+            and self._current_appid is not None
+            and not self._gpu_profiles.is_following_global(self._current_appid)
+        )
+
     async def set_gpu_follow_global(self, follow: bool, appid) -> dict:
         self._init()
+        if not self._game_power_write_allowed():
+            return self._gpu_clock_state()
         if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
@@ -10469,6 +10860,12 @@ class Plugin:
                 return self._gpu_clock_state()
             if not self._scope_context_is_current(scope, appid, context_appid):
                 return self._gpu_clock_state()
+            if getattr(self, "_game_power_reset", None) is not None:
+                return self._gpu_clock_state()
+            if not self._game_power_write_allowed() or self._gpu_global_profile_is_inactive(scope):
+                if scope == "global":
+                    self._gpu_profiles.set_clock("global", True, min_mhz, max_mhz)
+                return self._gpu_clock_state()
             return await self._set_gpu_clock_unlocked(min_mhz, max_mhz, scope, appid)
 
     async def _set_gpu_clock_unlocked(
@@ -10531,6 +10928,12 @@ class Plugin:
             if self._gpu_shutdown or not self._module_enabled("system"):
                 return self._gpu_clock_state()
             if not self._scope_context_is_current(scope, appid, context_appid):
+                return self._gpu_clock_state()
+            if getattr(self, "_game_power_reset", None) is not None:
+                return self._gpu_clock_state()
+            if not self._game_power_write_allowed() or self._gpu_global_profile_is_inactive(scope):
+                if scope == "global":
+                    self._gpu_profiles.set_clock("global", False, 0, 0)
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_auto_unlocked(scope, appid)
 
@@ -11236,6 +11639,16 @@ class Plugin:
         primary_rail = getattr(observation_backend, "primary_rail", "pl1")
         primary_reading = primary.get(primary_rail)
         applied_w = primary_reading.applied_w if primary_reading is not None else None
+        steam_owned = self._game_power_owned_by_steam()
+        steam_readback_available = steam_owned and applied_w is not None
+        if steam_owned:
+            slow, fast = primary.get("pl2"), primary.get("pl3")
+            live_slow = slow.applied_w if slow is not None else None
+            live_fast = fast.applied_w if fast is not None else None
+            if live_slow is not None and live_fast is not None:
+                levels = {"pl1": live_slow, "pl2": live_slow, "pl3": live_fast}
+                requested_levels = dict(levels)
+                eff = {**eff, "mode": "estable" if live_slow == live_fast else "custom"}
         ppt_capability = getattr(self._tdp_backend, "ppt_capability", None)
         ppt = ppt_capability() if callable(ppt_capability) else None
         if ppt is not None:
@@ -11310,8 +11723,12 @@ class Plugin:
                                  and self._tdp_profiles.has_game(self._current_appid)),
             # Whether this game is applying the global profile (no own value, or its own
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
-            "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
-            "watts": self._clamp_tdp_request(eff["watts"], active),
+            "follows_global": (
+                False if steam_owned else self._tdp_profiles.is_following_global(self._current_appid)
+            ),
+            "watts": applied_w if steam_readback_available else self._clamp_tdp_request(eff["watts"], active),
+            "display_source": "steam_live" if steam_readback_available else "saved",
+            "steam_readback_available": steam_readback_available,
             "global_watts": self._clamp_tdp_request(
                 geff["watts"],
                 active,
@@ -11374,6 +11791,7 @@ class Plugin:
             "ownership": self._tdp_ownership_state(observation),
             # Master switch + one-time-notice flags (durable across reboot; the
             # frontend gates monitor-only mode + the first-run modals off these).
+            "game_power_owner": self._game_power_owner_state(),
             "tdp_control_enabled": self._tdp_control_on(),
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
@@ -11406,6 +11824,7 @@ class Plugin:
             "surfaces": observation.as_dict()["surfaces"],
             "conflict_persistent": self._tdp_conflict_persistent,
             "failures": self._tdp_reconcile_memory.failures,
+            "game_owner": self._game_power_owner_state(),
             "handoff_required": self._os_id == "anatase",
             "external_owner": self._tdp_external_owner,
             "overshoot": self._overshoot_view(),
@@ -12344,12 +12763,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": watts, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
-        self._exit_firmware_mode()  # moving the slider means "I want custom"
+        if self._game_power_write_allowed():
+            self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()  # moving the slider means "I want custom"
         limits = self._limits()
         active = self._active_max(limits, read_on_ac())
         clamped = self._clamp_tdp_request(watts, active)
@@ -12375,12 +12798,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": level, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": level, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": level, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         clamped = None
         if level is not None:
             active = self._active_max(self._limits(), read_on_ac())
@@ -12400,6 +12827,8 @@ class Plugin:
         """Toggle a game between its own TDP profile and following the global one,
         keeping its stored values (never deletes). Re-applies and returns full state."""
         self._init()
+        if not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         if (
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(
@@ -12435,6 +12864,8 @@ class Plugin:
         'balanced' / 'performance' hand power + fan + LED to the firmware; 'custom'
         returns control to our TDP slider. Device-global. Returns the fresh TDP state."""
         self._init()
+        if not self._game_power_write_allowed():
+            return await self.get_tdp_state()
         if not self._device.firmware_modes:
             return await self.get_tdp_state()
         valid = set(self._firmware_choices()) | {_CUSTOM_MODE}
@@ -12467,12 +12898,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": 0, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._apply_tdp_now("manual-levels")
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
@@ -12492,9 +12927,12 @@ class Plugin:
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
             return await self._read_tdp_state()
+        if scope == "game" and not self._game_power_write_allowed():
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
-            self._clear_eco()
+            if self._game_power_write_allowed():
+                self._clear_eco()
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._apply_tdp_now("boost-mode")
         return await self._read_tdp_state()
@@ -12559,12 +12997,16 @@ class Plugin:
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
+        if scope == "game" and not self._game_power_write_allowed():
+            return {"requested_w": watts, "applied_w": None, "ok": False, "detail": "game-power-owner"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        self._clear_eco()
-        self._exit_firmware_mode()
+        if self._game_power_write_allowed():
+            self._clear_eco()
+        if self._game_power_write_allowed():
+            self._exit_firmware_mode()
         limits = self._automatic_limits()
         active = self._active_max(limits, read_on_ac())
         requested = self._clamp_tdp_request(watts, active)
@@ -12577,19 +13019,38 @@ class Plugin:
         self._tdp_profiles.create_game_from_global(appid)
         self._set_current_appid(appid)
 
-    async def set_current_game(self, appid, name=None) -> dict:
+    async def set_current_game(
+        self, appid, name=None, steam_profile=_RPC_CONTEXT_UNSET
+    ) -> dict:
         self._init()
         next_appid = str(appid) if appid is not None else None
         next_name = str(name) if (appid is not None and name) else None
+        leaving_game = self._current_appid is not None and next_appid is None
+        if not self._game_power_ownership_supported() and not self._game_power_ownership_has_context():
+            steam_profile = _RPC_CONTEXT_UNSET
+        if steam_profile is not _RPC_CONTEXT_UNSET:
+            if steam_profile not in ("active", "inactive", "unknown"):
+                raise ValueError("invalid_steam_profile")
+            before = self._power_ownership.state()
+            self._game_power_context_transition = True
+            try:
+                self._set_current_appid(next_appid)
+                after = self._power_ownership.observe(next_appid, steam_profile)
+                if before != after:
+                    self._advance_tdp_generation()
+                    self._next_gpu_generation()
+                    self._reset_auto_session("power_observation_changed")
+            finally:
+                self._game_power_context_transition = False
         if (
             next_appid is not None
             and next_appid == self._current_appid
             and next_name != self._current_game_name
+            and steam_profile is _RPC_CONTEXT_UNSET
         ):
             self._current_game_name = next_name
             await self._refresh_pdc_metrics()
             return await self.get_tdp_state()
-        leaving_game = self._current_appid is not None and next_appid is None
         self._set_current_appid(next_appid)
         self._current_game_name = next_name
         self._reset_auto_session("context_changed")
