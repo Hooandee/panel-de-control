@@ -40,10 +40,10 @@ export const ConsoleThermalCard: FC<{
   };
 
   const working = guard.fan_supported && guard.blocked === null;
-  const armed = guard.fan_supported ? guard.enabled : guard.alarm;
+  const guarding = guard.enabled && working;
   const summary = guard.active ? t("console.guard.activeShort")
-    : armed && (working || !guard.fan_supported) ? t("console.guard.at", { c: guard.effective_threshold })
-      : armed ? t("console.guard.pausedShort") : t("system.off");
+    : guarding || guard.alarm ? t("console.guard.at", { c: guard.effective_threshold })
+      : guard.enabled && guard.fan_supported ? t("console.guard.pausedShort") : t("system.off");
   return (
     <Collapsible id="console-guard" icon={<LuShieldAlert size={16} />} title={t("console.guard.title")} summary={summary}>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>

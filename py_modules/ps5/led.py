@@ -46,15 +46,24 @@ class Ps5Led:
     def _brightness(self, preset: str) -> str:
         return os.path.join(self._dir, f"{PREFIX}{preset}{SUFFIX}", "brightness")
 
+    def _missing(self, preset: str) -> str | None:
+        # No ps5:* LED at all means the driver has not registered yet, not a renamed preset.
+        presets = self.presets()
+        if not presets:
+            return "not_ready"
+        return None if preset in presets else "unknown_preset"
+
     def apply(self, preset: str) -> dict:
-        if preset not in self.presets():
-            return self._result(False, preset, "unknown_preset")
+        missing = self._missing(preset)
+        if missing:
+            return self._result(False, preset, missing)
         error = self._io.write(self._brightness(preset), 1)
         return self._result(error is None, preset, error or "sent")
 
     def replay(self, preset: str) -> dict:
-        if preset not in self.presets():
-            return self._result(False, preset, "unknown_preset")
+        missing = self._missing(preset)
+        if missing:
+            return self._result(False, preset, missing)
         path = self._brightness(preset)
         error = self._io.write(path, 0) or self._io.write(path, 1)
         return self._result(error is None, preset, error or "replayed")

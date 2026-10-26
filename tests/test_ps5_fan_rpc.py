@@ -235,6 +235,7 @@ def _console_plugin(tmp_path, temp):
     plugin._ps5_fan = Ps5FanTarget(root=root, io=io, clock=lambda: 0.0)
     plugin._ps5_console = Ps5Console(root=root, io=io)
     plugin._ps5_led_replayed_at = 0.0
+    plugin._ps5_guard_release_pending = False
     plugin._ps5_gpu_sampled_at = 0.0
     plugin._ps5_gpu_logged_at = -600.0
     plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
@@ -461,3 +462,31 @@ def test_fan_state_says_when_the_guard_holds_the_fan(tmp_path):
     plugin, _fan, _buzzer = _console_plugin(tmp_path, [97.0])
     plugin._ps5_console_tick()
     assert plugin._ps5_fan_state()["guard_active"] is True
+
+
+def test_a_failed_guard_release_is_retried_until_the_fan_is_back(tmp_path, monkeypatch):
+    from ps5.firmware_io import FirmwareIo
+
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._settings["ps5_fan_target_c"] = 70
+    plugin._ps5_console_tick()
+    real_write = FirmwareIo.write
+    monkeypatch.setattr(FirmwareIo, "write", lambda self, path, value: "timeout")
+    temp[0] = 80.0
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "50" and plugin._ps5_guard_release_pending is True
+    monkeypatch.setattr(FirmwareIo, "write", real_write)
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "70" and plugin._ps5_guard_release_pending is False
+
+
+def test_light_is_kept_while_the_led_driver_has_not_registered(tmp_path):
+    import shutil
+
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    shutil.rmtree(os.path.join(str(tmp_path), "sys/class/leds"))
+    os.makedirs(os.path.join(str(tmp_path), "sys/class/leds"))
+    plugin._settings["ps5_led_preset"] = "blue_rich"
+    assert plugin._reapply_ps5_led_sync() is False
+    assert plugin._settings["ps5_led_preset"] == "blue_rich"

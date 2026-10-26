@@ -11,7 +11,7 @@ vi.mock("@decky/ui", () => ({
   ),
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock("./Collapsible", () => ({ Collapsible: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock("./Collapsible", () => ({ Collapsible: ({ children, summary }: { children: ReactNode; summary: ReactNode }) => <div><span>{summary}</span>{children}</div> }));
 vi.mock("./ContainedSlider", () => ({ ContainedSlider: () => null }));
 
 import { ConsoleLightCard } from "./ConsoleLightCard";
@@ -80,5 +80,14 @@ describe("Thermal protection notices", () => {
   it("explains a limit raised above the fan target", () => {
     render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, threshold: 80, effective_threshold: 90 } })} onChange={vi.fn()} />);
     expect(screen.getByText("console.guard.aboveTarget")).toBeTruthy();
+  });
+});
+
+describe("Thermal protection summary", () => {
+  afterEach(cleanup);
+  it("is not shown as off while only the beep is armed", () => {
+    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, enabled: false, alarm: true } })} onChange={vi.fn()} />);
+    expect(screen.queryByText("system.off")).toBeNull();
+    expect(screen.getByText("console.guard.at")).toBeTruthy();
   });
 });

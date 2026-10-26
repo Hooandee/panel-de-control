@@ -739,6 +739,7 @@ class Plugin:
         self._ps5_console_task = None
         self._ps5_led_replayed_at = 0.0
         self._ps5_gpu_sampled_at = 0.0
+        self._ps5_guard_release_pending = False
         self._ps5_gpu_logged_at = -_PS5_GPU_LOG_GAP_S
         self._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
         # True only on a device with an opt-in experimental EC fan channel (Legion
@@ -4271,6 +4272,8 @@ class Plugin:
             return True
         result = console.led.apply(preset)
         self._log_ps5_console("led_reapply", result)
+        if result["detail"] == "not_ready":
+            return False
         if result["detail"] == "unknown_preset":
             self._forget_ps5_led_preset()
             return True
@@ -4319,6 +4322,7 @@ class Plugin:
                 "gpu_limit": dict(self._ps5_gpu_limit),
                 "fan_retries": getattr(self, "_ps5_fan_retries", 0),
                 "fan_pending": getattr(self, "_ps5_fan_pending", False),
+                "guard_release_pending": getattr(self, "_ps5_guard_release_pending", False),
                 "other_controller": self._ps5_rival_plugin(),
             },
         }
@@ -4462,12 +4466,14 @@ class Plugin:
             })
         elif console.guard.active and fan.read() != PS5_FAN_MIN_C:
             fan.apply(PS5_FAN_MIN_C)
-        if step.release:
+        if step.release or (self._ps5_guard_release_pending and not console.guard.active):
             target = settings.get("ps5_fan_target_c")
             result = fan.apply(target) if target is not None and fan_ready else fan.release()
-            self._log_ps5_console("guard_released", {
-                "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
-            })
+            if step.release or result["ok"]:
+                self._log_ps5_console("guard_released", {
+                    "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
+                })
+            self._ps5_guard_release_pending = not result["ok"]
         system_on = self._module_enabled("system")
         if step.beep and system_on:
             self._log_ps5_console("overheat_beep", {
@@ -4481,7 +4487,9 @@ class Plugin:
         if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
             result = console.led.replay(preset)
-            if result["detail"] == "unknown_preset":
+            if result["detail"] == "not_ready":
+                pass
+            elif result["detail"] == "unknown_preset":
                 self._log_ps5_console("led_replay", result)
                 self._forget_ps5_led_preset()
             elif not result["ok"]:
@@ -13530,11 +13538,13 @@ class Plugin:
             console = getattr(self, "_ps5_console", None)
             if getattr(self, "_ps5_fan", None) is not None and (
                 self._settings.get("ps5_fan_target_c") is not None
+                or getattr(self, "_ps5_guard_release_pending", False)
                 or (console is not None and console.guard.active)
             ):
                 released = bool(self._ps5_fan.release()["ok"])
                 if console is not None and released:
                     console.guard.force_release("handoff")
+                    self._ps5_guard_release_pending = False
         except Exception:  # noqa: BLE001
             released = False
         try:
