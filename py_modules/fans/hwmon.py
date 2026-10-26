@@ -141,24 +141,23 @@ def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | Non
     known = [d for d in decorated if d[0] <= 1]
     chosen = known if known else decorated
 
+    # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
+    # amdgpu, no k10temp): label it "APU" rather than implying discrete graphics.
+    labels = {row["label"] for _prio, _i, row in chosen}
+    if not desktop and "GPU" in labels and "CPU" not in labels:
+        for _prio, _i, row in chosen:
+            if row["label"] == "GPU":
+                row["label"] = "APU"
+
     # Collapse rows sharing a friendly label (e.g. Intel coretemp's Package + every
-    # core all map to "CPU") into one, keeping the hottest — no wall of duplicates.
-    # (dict preserves first-seen order, so no separate order list is needed.)
+    # core all map to "CPU", or the PS5's Tctl and amdgpu edge both read the APU)
+    # into one, keeping the hottest, so there is no wall of duplicates.
     collapsed: dict[str, dict] = {}
     for _prio, _i, row in chosen:
         label = row["label"]
         if label not in collapsed or row["celsius"] > collapsed[label]["celsius"]:
             collapsed[label] = row
-    result = list(collapsed.values())
-
-    # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
-    # amdgpu, no k10temp) — label it "APU" rather than implying discrete graphics.
-    labels = {r["label"] for r in result}
-    if not desktop and "GPU" in labels and "CPU" not in labels:
-        for r in result:
-            if r["label"] == "GPU":
-                r["label"] = "APU"
-    return result
+    return list(collapsed.values())
 
 
 def extract_cpu_gpu_temps(fan_state: dict) -> tuple:

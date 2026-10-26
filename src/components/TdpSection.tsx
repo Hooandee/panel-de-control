@@ -104,6 +104,12 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
             {t("tdp.console.body")}
           </span>
+          {power?.gpu_busy != null && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: theme.space.xs }}>
+              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.console.gpuBusy")}</span>
+              <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>{power.gpu_busy} %</span>
+            </div>
+          )}
         </div>
       </PanelSectionRow>
     );

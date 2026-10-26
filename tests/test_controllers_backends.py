@@ -247,3 +247,12 @@ def test_ip_odin3_paddles_are_fine_when_remapped_or_carried(tmp_path):
 def test_ip_other_models_never_read_the_target(tmp_path):
     cfg = inputplumber.get_config(_store(tmp_path), OdinDbus([]), "legion_go_s")
     assert "unmapped_dropped" not in cfg
+
+
+def test_ip_get_config_console_says_it_has_no_builtin_controls(tmp_path):
+    # The PS5 has no composite device; every pad is external.
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(caps=[]), "playstation_5")
+    assert cfg["builtin_controls"] is False
+    assert cfg["device_known"] is True
+    assert cfg["buttons"] == []
+    assert inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)["builtin_controls"] is True

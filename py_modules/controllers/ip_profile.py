@@ -69,6 +69,8 @@ CAPABILITY_MAPPED_BUTTONS = {
 # Recognised models whose controller has no extra button beyond the standard
 # layout and the system buttons (AYN Thor: Back and AYN keys map to QuickAccess).
 DEVICES_WITHOUT_EXTRA_BUTTONS = frozenset({"ayn_thor"})
+# Consoles have no built-in controls; every pad is external and set up in Steam Input.
+DEVICES_WITHOUT_BUILTIN_CONTROLS = frozenset({"playstation_5"})
 
 # InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
 # versions. Pick the generation that best matches the live daemon; ties prefer the
@@ -145,11 +147,16 @@ def is_known_device(device_key) -> bool:
         device_key in DEVICE_BUTTONS
         or device_key in DEVICE_BUTTON_VARIANTS
         or device_key in DEVICES_WITHOUT_EXTRA_BUTTONS
+        or device_key in DEVICES_WITHOUT_BUILTIN_CONTROLS
     )
 
 
 def has_extra_buttons(device_key) -> bool:
     return device_key not in DEVICES_WITHOUT_EXTRA_BUTTONS
+
+
+def has_builtin_controls(device_key) -> bool:
+    return device_key not in DEVICES_WITHOUT_BUILTIN_CONTROLS
 
 
 def sanitize_target(target: dict):
