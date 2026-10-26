@@ -300,3 +300,10 @@ def test_tachless_pwm_on_other_chips_is_not_a_fan(tmp_path):
     root = str(tmp_path)
     _mk_chip(root, 3, "nct6798", {"pwm1": "128", "pwm1_enable": "2"})
     assert FanReader(root=root).read()["fans"] == []
+
+
+def test_ps5_tctl_is_the_whole_apu():
+    out = curate_temps([{"chip": "k10temp", "label": "Tctl", "celsius": 47.0}],
+                       device_key="playstation_5")
+    assert out == [{"label": "APU", "celsius": 47.0}]
+    assert curate_temps([{"chip": "k10temp", "label": "Tctl", "celsius": 47.0}])[0]["label"] == "CPU"

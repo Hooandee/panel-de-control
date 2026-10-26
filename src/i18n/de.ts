@@ -1062,6 +1062,8 @@ export const de: Record<string, string> = {
   "valueToast.volume": "Lautstärke",
   "valueToast.brightness": "Helligkeit",
   "tdp.unsupported": "Die TDP-Steuerung ist auf diesem Gerät nicht verfügbar.",
+  "tdp.console.title": "Verbrauch wird von der Konsole gesteuert",
+  "tdp.console.body": "Die PS5 regelt ihren Verbrauch selbst. Für weniger Verbrauch und weniger Lärm lässt sich die maximale Geschwindigkeit von Prozessor und Grafik unter System senken.",
   "tdp.scope.global": "Global",
   "tdp.scope.game": "Spiel",
   "tdp.inherit": "Vom globalen Profil übernommen",

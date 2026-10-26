@@ -109,6 +109,8 @@ const FanRpmBlock: FC = () => {
       </PanelSectionRow>
     );
   }
+  // The PS5 fan has no speed readout; its target temperature card stands in for it.
+  if (state.device_key === "playstation_5") return null;
   return (
     <PanelSectionRow>
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>

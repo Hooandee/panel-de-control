@@ -1062,6 +1062,8 @@ export const ptBR: Record<string, string> = {
   "valueToast.volume": "Volume",
   "valueToast.brightness": "Brilho",
   "tdp.unsupported": "Controle de TDP não está disponível neste dispositivo.",
+  "tdp.console.title": "Consumo gerenciado pelo console",
+  "tdp.console.body": "O PS5 decide sozinho quanto consome. Para gastar menos e fazer menos barulho, dá para baixar a velocidade máxima do processador e da placa de vídeo em Sistema.",
   "tdp.scope.global": "Global",
   "tdp.scope.game": "Jogo",
   "tdp.inherit": "Usando a configuração global",
