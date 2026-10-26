@@ -1,6 +1,6 @@
 """PlayStation 5 console extras: the indicator light, the chassis buzzer, the SSD
 temperature and the thermal guard state. Firmware nodes share one FirmwareIo with the
-fan so a stalled ICC link cools down for all of them at once."""
+fan, which tracks each node separately."""
 import glob
 import os
 

@@ -660,7 +660,6 @@ export interface FanTargetState {
   max: number;
   default: number;
   presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
-  // Another Decky plugin that also writes the target, by its name.
   other_controller?: string | null;
   ok?: boolean;
   detail?: string;
@@ -723,7 +722,6 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
-// PlayStation 5 extras shown in Sistema.
 export interface ConsoleLightPreset {
   id: string;
   animated: boolean;
@@ -746,6 +744,7 @@ export interface ConsoleState {
     alarm: boolean;
     alarm_supported: boolean;
     active: boolean;
+    fan_held: boolean;
     fan_supported: boolean;
     last_beep: string | null;
   };

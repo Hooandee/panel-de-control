@@ -17,6 +17,8 @@ export const SWATCH: Record<LightColor, string> = {
   purple: "#9a5cff", salmon: "#ff8e78", violet: "#b56cff",
 };
 
+const UNKNOWN_SWATCH = "linear-gradient(135deg, #5b6472, #9aa3af)";
+
 export interface LightLook {
   off: boolean;
   colors: LightColor[];
@@ -35,13 +37,17 @@ export function describePreset(id: string): LightLook {
   }
   if (words.includes("to")) styles.push("fade");
   if (styles.includes("sunrise") && colors.length === 0) colors.push("orange", "pink");
-  return { off: id === "off", colors: colors.length ? colors : ["white"], styles };
+  return { off: id === "off", colors, styles };
 }
 
 export function presetLabel(id: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const look = describePreset(id);
   if (look.off) return t("console.light.off");
   if (look.styles.includes("sunrise")) return t("console.light.style.sunrise");
+  if (look.colors.length === 0) {
+    const raw = id.replace(/_/g, " ");
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
   const names = look.colors.map((color) => t(`console.light.color.${color}`));
   const joined = names.length > 1
     ? t("console.light.and", { a: names.slice(0, -1).join(", "), b: names[names.length - 1] })
@@ -59,6 +65,7 @@ export function presetDetail(id: string, t: (key: string) => string): string {
 export function swatchBackground(id: string): string {
   const look = describePreset(id);
   if (look.off) return "transparent";
+  if (look.colors.length === 0) return UNKNOWN_SWATCH;
   const stops = look.colors.map((color) => SWATCH[color]);
   return stops.length === 1 ? stops[0] : `linear-gradient(135deg, ${stops.join(", ")})`;
 }

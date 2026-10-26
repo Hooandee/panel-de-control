@@ -897,6 +897,10 @@ def _snap_devfreq(root: str) -> list:
     ]
 
 
+_PLATFORM_MAX_DRIVERS = 64
+_PLATFORM_MAX_DEVICES = 8
+
+
 def _snap_platform_drivers(root: str) -> dict:
     """Platform drivers with a bound device and misc devices. Vendor kernels (PS5,
     handheld EC drivers) surface their own controls here before any class does."""
@@ -907,10 +911,10 @@ def _snap_platform_drivers(root: str) -> dict:
             if os.path.islink(os.path.join(driver, name)) and name not in ("module", "subsystem")
         )
         if bound:
-            drivers.append({"name": os.path.basename(driver), "devices": bound[:_SNAP_MAX_NAMES]})
+            drivers.append({"name": os.path.basename(driver), "devices": bound[:_PLATFORM_MAX_DEVICES]})
     return {
-        "drivers": drivers[:_SNAP_MAX_CHIPS * 4],
-        "misc": sorted(os.path.basename(path) for path in _glob(root, "sys/class/misc/*"))[:_SNAP_MAX_CHIPS * 4],
+        "drivers": drivers[:_PLATFORM_MAX_DRIVERS],
+        "misc": sorted(os.path.basename(path) for path in _glob(root, "sys/class/misc/*"))[:_PLATFORM_MAX_DRIVERS],
     }
 
 

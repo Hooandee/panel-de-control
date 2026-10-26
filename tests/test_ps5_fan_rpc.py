@@ -380,3 +380,48 @@ def test_guard_state_says_when_the_fan_module_is_off(tmp_path):
     plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
     plugin._module_enabled = lambda name: False
     assert plugin._ps5_console_state()["guard"]["blocked"] == "fan_module_off"
+
+
+def test_guard_logs_the_apu_temperature_not_the_fan_target(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    lines = []
+    monkeypatch.setattr(main.decky.logger, "info", lambda fmt, *args: lines.append(fmt % args))
+    plugin._ps5_console_tick()
+    engaged = next(line for line in lines if "guard_engaged" in line)
+    assert '"apu_c":97.0' in engaged and '"fan":{' in engaged
+
+
+def test_state_says_when_the_guard_could_not_hold_the_fan(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    monkeypatch.setattr("ps5.firmware_io.FirmwareIo.write", lambda self, path, value: "timeout")
+    plugin._ps5_console_tick()
+    guard = plugin._ps5_console_state()["guard"]
+    assert guard["active"] is True and guard["fan_held"] is False
+
+
+def test_a_renamed_animated_preset_is_forgotten_instead_of_retried(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._settings["ps5_led_preset"] = "sunrise_breathe"
+    plugin._ps5_led_replayed_at = -100.0
+    plugin._ps5_console_tick()
+    assert plugin._settings["ps5_led_preset"] is None
+
+
+def test_unload_keeps_the_guard_when_the_fan_could_not_be_released(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    monkeypatch.setattr("ps5.firmware_io.FirmwareIo.write", lambda self, path, value: "timeout")
+    assert plugin._restore_fans_safe() is False
+    assert plugin._ps5_console.guard.active is True
+
+
+def test_unload_closes_the_guard_episode(tmp_path):
+    temp = [97.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    plugin._restore_fans_safe()
+    episode = list(plugin._ps5_console.guard.episodes)[-1]
+    assert episode["ended_by"] == "handoff" and plugin._ps5_console.guard.active is False

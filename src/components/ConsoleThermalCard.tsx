@@ -39,13 +39,17 @@ export const ConsoleThermalCard: FC<{
     }, SLIDER_SETTLE_MS);
   };
 
+  const working = guard.fan_supported && guard.blocked === null;
   const summary = guard.active ? t("console.guard.activeShort")
-    : guard.enabled ? t("console.guard.at", { c: guard.threshold }) : t("system.off");
+    : guard.enabled && working ? t("console.guard.at", { c: guard.effective_threshold })
+      : guard.enabled ? t("console.guard.pausedShort") : t("system.off");
   return (
     <Collapsible id="console-guard" icon={<LuShieldAlert size={16} />} title={t("console.guard.title")} summary={summary}>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
         {guard.active && (
-          <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>{t("console.guard.active")}</span>
+          <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>
+            {t(guard.fan_held ? "console.guard.active" : "console.guard.retrying")}
+          </span>
         )}
         {guard.enabled && guard.blocked === "fan_module_off" && (
           <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>{t("console.guard.fanModuleOff")}</span>

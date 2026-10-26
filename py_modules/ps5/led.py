@@ -53,6 +53,8 @@ class Ps5Led:
         return self._result(error is None, preset, error or "sent")
 
     def replay(self, preset: str) -> dict:
+        if preset not in self.presets():
+            return self._result(False, preset, "unknown_preset")
         path = self._brightness(preset)
         error = self._io.write(path, 0) or self._io.write(path, 1)
         return self._result(error is None, preset, error or "replayed")

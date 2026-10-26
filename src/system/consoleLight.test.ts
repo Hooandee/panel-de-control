@@ -18,6 +18,12 @@ describe("PS5 light presets", () => {
     expect(presetLabel("sunrise", t)).toBe("console.light.style.sunrise");
   });
 
+  it("shows a colour it does not know by its kernel name instead of guessing", () => {
+    expect(describePreset("red_rich").colors).toEqual([]);
+    expect(presetLabel("red_rich", t)).toBe("Red rich");
+    expect(swatchBackground("red_rich")).toContain("#5b6472");
+  });
+
   it("lists the styles as details", () => {
     expect(presetDetail("pink_breathe_fast", t)).toBe("console.light.style.breathe · console.light.style.fast");
     expect(presetDetail("purple", t)).toBe("");

@@ -26,7 +26,7 @@ const state = (overrides: Partial<ConsoleState> = {}): ConsoleState => ({
     active: "blue_rich",
     last: null,
   },
-  guard: { enabled: true, threshold: 95, effective_threshold: 95, blocked: null, alarm: false, alarm_supported: true, active: false, fan_supported: true, last_beep: null },
+  guard: { enabled: true, threshold: 95, effective_threshold: 95, blocked: null, alarm: false, alarm_supported: true, active: false, fan_held: false, fan_supported: true, last_beep: null },
   ...overrides,
 });
 
@@ -57,8 +57,13 @@ describe("Thermal protection card", () => {
     expect(onChange).toHaveBeenNthCalledWith(2, null, null, true);
   });
   it("shows when the protection is cooling the console", () => {
-    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, active: true } })} onChange={vi.fn()} />);
+    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, active: true, fan_held: true } })} onChange={vi.fn()} />);
     expect(screen.getByText("console.guard.active")).toBeTruthy();
+  });
+  it("does not claim the fan is at maximum when the console has not accepted it", () => {
+    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, active: true, fan_held: false } })} onChange={vi.fn()} />);
+    expect(screen.getByText("console.guard.retrying")).toBeTruthy();
+    expect(screen.queryByText("console.guard.active")).toBeNull();
   });
   it("hides the beep where the console has no buzzer", () => {
     render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, alarm_supported: false } })} onChange={vi.fn()} />);

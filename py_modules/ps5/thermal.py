@@ -60,6 +60,10 @@ class ThermalGuard:
             self.alarmed = False
         return out
 
+    def force_release(self, reason: str) -> None:
+        if self.active:
+            self._close(reason)
+
     def _close(self, reason: str) -> None:
         self.active = False
         if self._episode is not None:

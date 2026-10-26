@@ -269,7 +269,6 @@ _PS5_RIVAL_RECHECK_S = 60.0
 _PS5_CONSOLE_TICK_S = 3.0
 # Firmware light animations play once; replay them so they keep moving.
 _PS5_LED_REPLAY_S = 6.0
-# How often the console tick checks whether a manual GPU limit actually holds.
 _PS5_GPU_SAMPLE_S = 30.0
 _PS5_GPU_LOG_GAP_S = 600.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
@@ -4271,7 +4270,15 @@ class Plugin:
             return True
         result = console.led.apply(preset)
         self._log_ps5_console("led_reapply", result)
-        return result["ok"] or result["detail"] == "unknown_preset"
+        if result["detail"] == "unknown_preset":
+            self._forget_ps5_led_preset()
+            return True
+        return result["ok"]
+
+    def _forget_ps5_led_preset(self) -> None:
+        # A kernel update can rename or drop presets; keep the light as it is.
+        self._settings["ps5_led_preset"] = None
+        self._save()
 
     def _log_ps5_console(self, event: str, fields: dict) -> None:
         log = decky.logger.info if fields.get("ok", True) else decky.logger.warning
@@ -4300,6 +4307,7 @@ class Plugin:
                 "alarm": self._settings.get("ps5_alarm_enabled") is True,
                 "alarm_supported": console.buzzer_supported,
                 "active": console.guard.active,
+                "fan_held": bool(console.guard.active and self._ps5_fan and self._ps5_fan.read() == PS5_FAN_MIN_C),
                 "fan_supported": bool(self._ps5_fan and self._ps5_fan.supported),
                 "last_beep": console.last_beep,
             },
@@ -4446,18 +4454,21 @@ class Plugin:
             alarm=settings.get("ps5_alarm_enabled") is True,
         )
         if step.engage:
+            result = fan.apply(PS5_FAN_MIN_C)
             self._log_ps5_console("guard_engaged", {
-                "celsius": console.guard.last_celsius, "threshold": threshold, **fan.apply(PS5_FAN_MIN_C),
+                "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
             })
         elif console.guard.active and fan.read() != PS5_FAN_MIN_C:
             fan.apply(PS5_FAN_MIN_C)
         if step.release:
             target = settings.get("ps5_fan_target_c")
             result = fan.apply(target) if target is not None else fan.release()
-            self._log_ps5_console("guard_released", {"celsius": console.guard.last_celsius, **result})
+            self._log_ps5_console("guard_released", {
+                "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
+            })
         if step.beep:
             self._log_ps5_console("overheat_beep", {
-                "ok": console.beep(), "celsius": console.guard.last_celsius, "threshold": threshold,
+                "ok": console.beep(), "apu_c": console.guard.last_celsius, "threshold": threshold,
             })
         now = _monotonic()
         if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
@@ -4467,7 +4478,10 @@ class Plugin:
         if preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
             result = console.led.replay(preset)
-            if not result["ok"]:
+            if result["detail"] == "unknown_preset":
+                self._log_ps5_console("led_replay", result)
+                self._forget_ps5_led_preset()
+            elif not result["ok"]:
                 self._log_ps5_console("led_replay", result)
 
     def _schedule_ps5_fan_retry(self) -> None:
@@ -13516,8 +13530,8 @@ class Plugin:
                 or (console is not None and console.guard.active)
             ):
                 released = bool(self._ps5_fan.release()["ok"])
-                if console is not None:
-                    console.guard.active = False
+                if console is not None and released:
+                    console.guard.force_release("handoff")
         except Exception:  # noqa: BLE001
             released = False
         try:
