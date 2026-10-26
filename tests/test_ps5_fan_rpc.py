@@ -71,7 +71,7 @@ def test_failed_write_keeps_the_previous_target(tmp_path, monkeypatch):
     _node(str(tmp_path))
     plugin = _plugin(str(tmp_path))
     plugin._settings["ps5_fan_target_c"] = 70
-    monkeypatch.setattr("fans.ps5_target.write_str", lambda path, value: False)
+    monkeypatch.setattr("ps5.firmware_io.FirmwareIo.write", lambda self, path, value: "errno_5")
     state = asyncio.run(plugin.set_fan_target_temp(55))
     assert state["ok"] is False
     assert plugin._settings["ps5_fan_target_c"] == 70
@@ -133,7 +133,68 @@ def test_failed_reset_keeps_the_target_for_unload(tmp_path, monkeypatch):
     _node(str(tmp_path), "60")
     plugin = _plugin(str(tmp_path))
     plugin._settings["ps5_fan_target_c"] = 60
-    monkeypatch.setattr("fans.ps5_target.write_str", lambda path, value: False)
+    monkeypatch.setattr("ps5.firmware_io.FirmwareIo.write", lambda self, path, value: "errno_5")
     state = asyncio.run(plugin.set_fan_target_temp(None))
     assert state["ok"] is False
     assert plugin._settings["ps5_fan_target_c"] == 60
+
+
+class _Boost:
+    def __init__(self, on):
+        self.supported = True
+        self._on = on
+
+    def enabled(self):
+        return self._on
+
+
+def test_gpu_limit_is_flagged_only_on_the_ps5_with_boost_on(tmp_path):
+    plugin = _plugin(str(tmp_path))
+    plugin._boost = _Boost(True)
+    assert plugin._gpu_limit_overridden_by_boost() is True
+    plugin._boost = _Boost(False)
+    assert plugin._gpu_limit_overridden_by_boost() is False
+    plugin._device = DeviceProfile("generic", "Generic", "AMD", "amd", 4, 10, 30, 30)
+    plugin._boost = _Boost(True)
+    assert plugin._gpu_limit_overridden_by_boost() is False
+
+
+def test_failed_startup_apply_is_retried_until_confirmed(tmp_path, monkeypatch):
+    path = _node(str(tmp_path), "80")
+    plugin = _plugin(str(tmp_path))
+    plugin._settings["ps5_fan_target_c"] = 70
+    monkeypatch.setattr(main, "_AUTO_APPLY_RETRY_DELAYS_S", (0.01, 0.01, 0.01))
+    failures = iter(["errno_19", None])
+    from ps5.firmware_io import FirmwareIo
+    real_write = FirmwareIo.write
+
+    def flaky(self, node, value):
+        error = next(failures, None)
+        return error if error else real_write(self, node, value)
+
+    monkeypatch.setattr("ps5.firmware_io.FirmwareIo.write", flaky)
+
+    def offload(fn, done=None):
+        fn()
+        if done:
+            done()
+
+    plugin._offload = offload
+
+    async def run():
+        plugin._reapply_ps5_fan_sync()
+        plugin._schedule_ps5_fan_retry()
+        await asyncio.sleep(0.1)
+
+    asyncio.run(run())
+    assert _read(path) == "70"
+    assert plugin._ps5_fan_pending is False
+
+
+def test_other_ps5_plugin_is_detected_by_name(tmp_path):
+    plugin = _plugin(str(tmp_path))
+    plugins = tmp_path / "plugins"
+    (plugins / "ps5-hardware-control").mkdir(parents=True)
+    (plugins / "ps5-hardware-control" / "plugin.json").write_text('{"name": "PS5 Hardware Control"}')
+    plugin._decky_plugins_root = lambda: plugins
+    assert plugin._ps5_rival_plugin() == "PS5 Hardware Control"

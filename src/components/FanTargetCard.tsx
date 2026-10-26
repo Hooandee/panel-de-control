@@ -84,6 +84,11 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
         <span style={{ fontSize: theme.font.caption, color: failed ? theme.color.warn : theme.color.textMuted, lineHeight: 1.4 }}>
           {t(failed ? "fans.target.failed" : "fans.target.note")}
         </span>
+        {state.other_controller && (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>
+            {t("fans.target.otherController", { name: state.other_controller })}
+          </span>
+        )}
         {state.target != null && (
           <DialogButton style={{ minWidth: 0, padding: "6px 10px", fontSize: theme.font.caption }} onClick={() => commit(null)}>
             {t("fans.target.reset", { c: state.default })}

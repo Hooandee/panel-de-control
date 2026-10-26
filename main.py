@@ -206,7 +206,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
-            "target_temp.target",
+            "target_temp.target", "target_temp.other_controller",
         )),
     ),
     "audio": (
@@ -259,6 +259,8 @@ _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _AUTO_APPLY_RETRY_DELAYS_S = (2.0, 8.0, 30.0)
+_PS5_RIVAL_PLUGINS = ("PS5 Hardware Control",)
+_PS5_RIVAL_RECHECK_S = 60.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
 _FULL_CHARGE_ONCE_POLL_S = 30.0
@@ -4203,7 +4205,26 @@ class Plugin:
         return await self._offload_call(self._board_fan_state)
 
     def _ps5_fan_state(self) -> dict:
-        return {**self._ps5_fan.state(), "target": self._settings.get("ps5_fan_target_c")}
+        return {
+            **self._ps5_fan.state(),
+            "target": self._settings.get("ps5_fan_target_c"),
+            "other_controller": self._ps5_rival_plugin(),
+            "diagnostics": self._ps5_fan.diagnostics(),
+        }
+
+    def _ps5_rival_plugin(self) -> str | None:
+        """Another Decky plugin that also writes the PS5 fan target and GPU clock."""
+        now = _monotonic()
+        cached = getattr(self, "_ps5_rival_cache", None)
+        if cached is not None and now - cached[0] < _PS5_RIVAL_RECHECK_S:
+            return cached[1]
+        names = {
+            plugin["name"]
+            for plugin in report_collector.decky_plugins(str(self._decky_plugins_root()))["plugins"]
+        }
+        rival = next((name for name in _PS5_RIVAL_PLUGINS if name in names), None)
+        self._ps5_rival_cache = (now, rival)
+        return rival
 
     def _log_ps5_fan(self, reason: str, target, result: dict) -> None:
         log = decky.logger.info if result["ok"] else decky.logger.warning
@@ -4212,10 +4233,28 @@ class Plugin:
 
     def _reapply_ps5_fan_sync(self) -> None:
         target = self._settings.get("ps5_fan_target_c")
+        self._ps5_fan_pending = False
         if getattr(self, "_ps5_fan", None) is None or target is None:
             return
         if self._module_enabled("fanControl"):
-            self._log_ps5_fan("reapply", target, self._ps5_fan.apply(target))
+            result = self._ps5_fan.apply(target)
+            self._log_ps5_fan("reapply", target, result)
+            self._ps5_fan_pending = not result["ok"]
+
+    def _schedule_ps5_fan_retry(self) -> None:
+        # The ICC link may not be up when Panel starts or resumes, and the driver probe
+        # resets the target to 80 °C: retry until the console confirms the saved one.
+        if not getattr(self, "_ps5_fan_pending", False):
+            self._ps5_fan_retries = 0
+            return
+        attempt = getattr(self, "_ps5_fan_retries", 0)
+        if attempt >= len(_AUTO_APPLY_RETRY_DELAYS_S):
+            return
+        self._ps5_fan_retries = attempt + 1
+        asyncio.get_running_loop().call_later(
+            _AUTO_APPLY_RETRY_DELAYS_S[attempt],
+            lambda: self._offload(self._reapply_ps5_fan_sync, done=self._schedule_ps5_fan_retry),
+        )
 
     async def set_fan_target_temp(self, celsius) -> dict:
         """PlayStation 5: firmware autoservo target (°C); None returns the firmware default."""
@@ -4255,7 +4294,11 @@ class Plugin:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
         backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
         event loop after the apply took ownership — race-free (see _ensure_fan_loop)."""
-        self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
+        self._offload(self._reapply_fans_sync, done=self._after_fan_reapply)
+
+    def _after_fan_reapply(self) -> None:
+        self._ensure_fan_loop()
+        self._schedule_ps5_fan_retry()
 
     def _ensure_fan_loop(self) -> None:
         """Start a software-loop backend's periodic curve loop ON the event loop.
@@ -10596,6 +10639,16 @@ class Plugin:
         self._gpu_requested = requested
         self._record_gpu_clock_transition(failure, trigger, scope)
 
+    def _gpu_limit_overridden_by_boost(self) -> bool:
+        # ps5-gpufreq: while ps5-cpufreq runs a boost clock the SMU takes the GPU clock
+        # back to its 2230 MHz ceiling, ignoring the devfreq window.
+        if getattr(self._device, "key", None) != "playstation_5":
+            return False
+        try:
+            return bool(self._boost.supported and self._boost.enabled())
+        except Exception:  # noqa: BLE001
+            return False
+
     def _gpu_clock_state(self) -> dict:
         g = self._gpu_profiles.clock(self._current_appid)
         global_clock = self._gpu_profiles.clock(None)
@@ -10640,6 +10693,7 @@ class Plugin:
                 managed and getattr(self._tdp_backend, "applied_split_gpu_level", None) is not None
             ),
             "manual": bool(g.get("manual")),
+            "cpu_boost_overrides": self._gpu_limit_overridden_by_boost(),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
             "levels": (

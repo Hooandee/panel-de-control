@@ -855,6 +855,7 @@ def test_sysfs_snapshot_captures_cpu_gpu_and_rapl_selection_surfaces(tmp_path):
         "hardware_max_khz": "4800000",
         "applied_min_khz": "1200000",
         "applied_max_khz": "3000000",
+        "current_khz": None, "governor": None, "available_khz": None, "boost_khz": None,
     }]
     assert surfaces["gpu"] == [{
         "backend": "xe",
@@ -910,7 +911,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "leds": [],
         "pstore": [],
         "pstore_archive": [],
-        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": [], "devfreq": []},
+        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": [], "boost": None, "devfreq": []},
         "desktop": {
             "board_fans": {"available": [], "loaded": [], "channels": 0},
             "power_supplies": [],
@@ -930,6 +931,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         },
         "arm": {"arch": "x86"},
         "ps5": {},
+        "platform": {"drivers": [], "misc": []},
         "connected_devices": {
             "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
             "bluetooth_adapters": [],
@@ -1294,6 +1296,7 @@ def test_sysfs_snapshot_records_arm_identity_and_emulation(tmp_path):
         "min_hz": "220000000",
         "max_hz": "680000000",
         "cur_hz": "475000000",
+        "target_hz": None,
         "available_hz": "220000000 475000000 680000000",
     }]
     assert arm["backlight"] == [
@@ -1403,3 +1406,23 @@ def test_sysfs_snapshot_ps5_fan_and_gpufreq(tmp_path):
     assert snap["ps5"] == {"fan_node": True, "fan_target_c": "80", "buzzer": False}
     assert snap["cpu_gpu_power"]["devfreq"][0]["name"] == "ps5-gpufreq"
     assert snap["cpu_gpu_power"]["devfreq"][0]["cur_hz"] == "400000000"
+
+
+def test_sysfs_snapshot_shows_cpu_boost_and_vendor_platform_drivers(tmp_path):
+    root = str(tmp_path)
+    policy = os.path.join(root, "sys/devices/system/cpu/cpufreq/policy0")
+    _mk(os.path.join(policy, "scaling_driver"), "ps5-cpufreq\n")
+    _mk(os.path.join(policy, "scaling_cur_freq"), "3500000\n")
+    _mk(os.path.join(policy, "scaling_boost_frequencies"), "3500000 3400000 3300000\n")
+    _mk(os.path.join(root, "sys/devices/system/cpu/cpufreq/boost"), "1\n")
+    driver = os.path.join(root, "sys/bus/platform/drivers/ps5-fan")
+    os.makedirs(driver)
+    os.symlink("/nonexistent", os.path.join(driver, "ps5-fan"))
+    _mk(os.path.join(driver, "uevent"), "")
+    os.makedirs(os.path.join(root, "sys/class/misc/ps5_buzzer"))
+    snap = sysfs_snapshot(root=root)
+    cpu = snap["cpu_gpu_power"]
+    assert cpu["boost"] == "1"
+    assert cpu["cpufreq"][0]["current_khz"] == "3500000"
+    assert cpu["cpufreq"][0]["boost_khz"] == "3500000 3400000 3300000"
+    assert snap["platform"] == {"drivers": [{"name": "ps5-fan", "devices": ["ps5-fan"]}], "misc": ["ps5_buzzer"]}

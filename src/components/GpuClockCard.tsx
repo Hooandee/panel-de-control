@@ -145,6 +145,11 @@ export const GpuClockCard: FC = () => {
               onChange={(v) => setWindow(lo, clamp(v, lo, state.range_max ?? v))}
             />
           )}
+          {state.cpu_boost_overrides && (
+            <div style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>
+              {t("gpu.clock.boostOverrides")}
+            </div>
+          )}
         </div>
       )}
     </Collapsible>

@@ -803,7 +803,12 @@ def _snap_cpu_gpu_power(root: str) -> dict:
             "hardware_max_khz": read_str(os.path.join(policy, "cpuinfo_max_freq")),
             "applied_min_khz": read_str(os.path.join(policy, "scaling_min_freq")),
             "applied_max_khz": read_str(os.path.join(policy, "scaling_max_freq")),
+            "current_khz": read_str(os.path.join(policy, "scaling_cur_freq")),
+            "governor": read_str(os.path.join(policy, "scaling_governor")),
+            "available_khz": read_str(os.path.join(policy, "scaling_available_frequencies")),
+            "boost_khz": read_str(os.path.join(policy, "scaling_boost_frequencies")),
         })
+    out["boost"] = read_str(os.path.join(root, "sys/devices/system/cpu/cpufreq/boost"))
 
     for maximum in sorted(
         _glob(root, "sys/class/drm/card*/device/tile*/gt*/freq0/max_freq")
@@ -885,10 +890,28 @@ def _snap_devfreq(root: str) -> list:
             "min_hz": read_str(os.path.join(device, "min_freq")),
             "max_hz": read_str(os.path.join(device, "max_freq")),
             "cur_hz": read_str(os.path.join(device, "cur_freq")),
+            "target_hz": read_str(os.path.join(device, "target_freq")),
             "available_hz": read_str(os.path.join(device, "available_frequencies")),
         }
         for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]
     ]
+
+
+def _snap_platform_drivers(root: str) -> dict:
+    """Platform drivers with a bound device and misc devices. Vendor kernels (PS5,
+    handheld EC drivers) surface their own controls here before any class does."""
+    drivers = []
+    for driver in sorted(_glob(root, "sys/bus/platform/drivers/*")):
+        bound = sorted(
+            name for name in _listdir(driver)
+            if os.path.islink(os.path.join(driver, name)) and name not in ("module", "subsystem")
+        )
+        if bound:
+            drivers.append({"name": os.path.basename(driver), "devices": bound[:_SNAP_MAX_NAMES]})
+    return {
+        "drivers": drivers[:_SNAP_MAX_CHIPS * 4],
+        "misc": sorted(os.path.basename(path) for path in _glob(root, "sys/class/misc/*"))[:_SNAP_MAX_CHIPS * 4],
+    }
 
 
 def _snap_ps5(root: str) -> dict:
@@ -1145,7 +1168,7 @@ def sysfs_snapshot(
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
                   "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
-                  "arm": {}, "ps5": {}, "connected_devices": {}}
+                  "arm": {}, "ps5": {}, "platform": {}, "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1205,6 +1228,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["ps5"] = _snap_ps5(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["platform"] = _snap_platform_drivers(root)
     except Exception:  # noqa: BLE001
         pass
     try:

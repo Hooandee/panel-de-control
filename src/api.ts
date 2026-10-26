@@ -660,6 +660,8 @@ export interface FanTargetState {
   max: number;
   default: number;
   presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
+  // Another Decky plugin that also writes the target, by its name.
+  other_controller?: string | null;
   ok?: boolean;
   detail?: string;
 }
@@ -978,6 +980,8 @@ export interface GpuClockState {
   power_level?: number | null;
   power_level_split?: boolean;
   manual: boolean;
+  // PS5: the CPU boost makes the firmware ignore the GPU limit.
+  cpu_boost_overrides?: boolean;
   range_min: number | null;
   range_max: number | null;
   // Discrete frequencies (MHz) on table-driven GPUs; null when any MHz value is valid.

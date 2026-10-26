@@ -455,6 +455,16 @@ class DevfreqGpuClock(_GpuDiagnostics):
         )
         return all(write_str(self._node(name), value) for name, value in writes)
 
+    def diagnostics(self):
+        # The live clock shows whether the firmware honours the window (the PS5 SMU
+        # ignores it during a CPU boost).
+        current = read_int(self._node("cur_freq")) if self._dir is not None else None
+        return {
+            **super().diagnostics(),
+            "current_mhz": current // 1_000_000 if current else None,
+            "governor": self._governor() if self._dir is not None else None,
+        }
+
     def _governor(self):
         return read_str(self._node("governor"))
 
