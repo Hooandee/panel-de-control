@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## [0.78.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.0...panel-de-control-v0.78.1) (2026-10-26)
+
+
+### Español
+
+* **PlayStation 5:** La temperatura del chip aparece una sola vez en Ventiladores. Mandos explica que la consola no tiene controles integrados y que los mandos conectados se configuran en Steam Input. Potencia muestra el uso de la gráfica en directo.
+
+### English
+
+* **PlayStation 5:** The chip temperature appears only once in Fans. Controllers explains that the console has no built-in controls and that connected controllers are set up in Steam Input. Power shows the live graphics usage.
+
+### Italiano
+
+* **PlayStation 5:** La temperatura del chip compare una sola volta in Ventole. Controller spiega che la console non ha comandi integrati e che i controller collegati si configurano in Steam Input. Potenza mostra l'uso della grafica in tempo reale.
+
+### Deutsch
+
+* **PlayStation 5:** Die Chiptemperatur erscheint unter Lüfter nur noch einmal. Controller erklärt, dass die Konsole keine eingebauten Bedienelemente hat und angeschlossene Controller in Steam Input eingerichtet werden. Leistung zeigt die Grafikauslastung live.
+
+### Português (Brasil)
+
+* **PlayStation 5:** A temperatura do chip aparece uma só vez em Ventoinhas. Controles explica que o console não tem controles integrados e que os controles conectados são configurados no Steam Input. Potência mostra o uso da placa de vídeo em tempo real.
+
+### Français
+
+* **PlayStation 5 :** La température de la puce n'apparaît plus qu'une fois dans Ventilateurs. Manettes explique que la console n'a pas de commandes intégrées et que les manettes connectées se configurent dans Steam Input. Puissance affiche l'utilisation de la carte graphique en direct.
+
 ## [0.78.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.77.0...panel-de-control-v0.78.0) (2026-10-26)
 
 
