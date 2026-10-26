@@ -241,7 +241,7 @@ def _console_plugin(tmp_path, temp):
     plugin._ps5_gpu_limit = {"samples": 0, "over_limit": 0, "last_over": None}
     plugin._gpu_clock = _GpuClock(current=None, limit=None)
     plugin._decky_plugins_root = lambda: tmp_path / "plugins"
-    plugin._settings.update({"ps5_led_preset": None, "ps5_guard_enabled": True,
+    plugin._settings.update({"ps5_led_preset": None, "ps5_guard_enabled": True, "ps5_guard_holding": False,
                              "ps5_guard_threshold": 95, "ps5_alarm_enabled": True})
     plugin._driving_temp = lambda: temp[0]
     return plugin, fan_path, buzzer
@@ -490,3 +490,31 @@ def test_light_is_kept_while_the_led_driver_has_not_registered(tmp_path):
     plugin._settings["ps5_led_preset"] = "blue_rich"
     assert plugin._reapply_ps5_led_sync() is False
     assert plugin._settings["ps5_led_preset"] == "blue_rich"
+
+
+def test_a_guard_hold_left_by_a_crash_is_released_on_the_next_start(tmp_path):
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    assert plugin._settings["ps5_guard_holding"] is True and _read(fan_path) == "50"
+    plugin._ps5_console.guard.active = False
+    plugin._reapply_ps5_fan_sync()
+    assert _read(fan_path) == "80"
+    assert plugin._settings["ps5_guard_holding"] is False
+
+
+def test_a_light_waiting_for_its_driver_is_sent_once_the_leds_appear(tmp_path):
+    import shutil
+
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    leds = os.path.join(str(tmp_path), "sys/class/leds")
+    shutil.move(leds, leds + ".later")
+    os.makedirs(leds)
+    plugin._settings["ps5_led_preset"] = "blue_rich"
+    plugin._reapply_ps5_fan_sync()
+    assert plugin._ps5_led_pending is True and plugin._ps5_fan_pending is False
+    shutil.rmtree(leds)
+    shutil.move(leds + ".later", leds)
+    plugin._ps5_console_tick()
+    assert plugin._ps5_led_pending is False
+    assert _read(os.path.join(leds, "ps5:blue_rich:indicator/brightness")) == "1"

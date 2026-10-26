@@ -501,6 +501,8 @@ DEFAULTS = {
     "ps5_guard_enabled": True,
     "ps5_guard_threshold": PS5_GUARD_DEFAULT_C,
     "ps5_alarm_enabled": False,
+    # Set while the thermal guard holds the fan, so a crash cannot leave it pinned.
+    "ps5_guard_holding": False,
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
@@ -4256,14 +4258,32 @@ class Plugin:
 
     def _reapply_ps5_fan_sync(self) -> None:
         target = self._settings.get("ps5_fan_target_c")
-        self._ps5_fan_pending = not self._reapply_ps5_led_sync()
-        if getattr(self, "_ps5_fan", None) is None or target is None:
+        self._ps5_fan_pending = False
+        self._ps5_led_pending = not self._reapply_ps5_led_sync()
+        if getattr(self, "_ps5_fan", None) is None:
             return
         console = getattr(self, "_ps5_console", None)
-        if self._module_enabled("fanControl") and not (console and console.guard.active):
+        guarding = bool(console and console.guard.active)
+        if target is None and self._settings.get("ps5_guard_holding") is True and not guarding:
+            result = self._ps5_fan.release()
+            self._log_ps5_console("guard_recovered", {"ok": result["ok"], "fan": result})
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+            self._ps5_fan_pending = not result["ok"]
+            return
+        if target is None:
+            return
+        if self._module_enabled("fanControl") and not guarding:
             result = self._ps5_fan.apply(target)
             self._log_ps5_fan("reapply", target, result)
-            self._ps5_fan_pending = self._ps5_fan_pending or not result["ok"]
+            self._ps5_fan_pending = not result["ok"]
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
+
+    def _set_ps5_guard_holding(self, holding: bool) -> None:
+        if self._settings.get("ps5_guard_holding") is not holding:
+            self._settings["ps5_guard_holding"] = holding
+            self._save()
 
     def _reapply_ps5_led_sync(self) -> bool:
         console = getattr(self, "_ps5_console", None)
@@ -4323,6 +4343,7 @@ class Plugin:
                 "fan_retries": getattr(self, "_ps5_fan_retries", 0),
                 "fan_pending": getattr(self, "_ps5_fan_pending", False),
                 "guard_release_pending": getattr(self, "_ps5_guard_release_pending", False),
+                "light_pending": getattr(self, "_ps5_led_pending", False),
                 "other_controller": self._ps5_rival_plugin(),
             },
         }
@@ -4460,6 +4481,7 @@ class Plugin:
             alarm=settings.get("ps5_alarm_enabled") is True,
         )
         if step.engage:
+            self._set_ps5_guard_holding(True)
             result = fan.apply(PS5_FAN_MIN_C)
             self._log_ps5_console("guard_engaged", {
                 "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
@@ -4474,6 +4496,8 @@ class Plugin:
                     "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
                 })
             self._ps5_guard_release_pending = not result["ok"]
+            if result["ok"]:
+                self._set_ps5_guard_holding(False)
         system_on = self._module_enabled("system")
         if step.beep and system_on:
             self._log_ps5_console("overheat_beep", {
@@ -4483,6 +4507,8 @@ class Plugin:
         if now - self._ps5_gpu_sampled_at >= _PS5_GPU_SAMPLE_S:
             self._ps5_gpu_sampled_at = now
             self._sample_ps5_gpu_limit(now)
+        if system_on and getattr(self, "_ps5_led_pending", False):
+            self._ps5_led_pending = not self._reapply_ps5_led_sync()
         preset = settings.get("ps5_led_preset")
         if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
@@ -4535,6 +4561,7 @@ class Plugin:
             self._log_ps5_fan("user", target, result)
             if result["ok"]:
                 self._settings["ps5_fan_target_c"] = target
+                self._settings["ps5_guard_holding"] = False
                 self._save()
         return {
             **await self._offload_call(self._ps5_fan_state),
@@ -13545,6 +13572,7 @@ class Plugin:
                 if console is not None and released:
                     console.guard.force_release("handoff")
                     self._ps5_guard_release_pending = False
+                    self._set_ps5_guard_holding(False)
         except Exception:  # noqa: BLE001
             released = False
         try:
