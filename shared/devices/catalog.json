@@ -47,6 +47,31 @@
       "vendor": "amd"
     },
     {
+      "chip": "AMD Oberon",
+      "display_name": "PlayStation 5",
+      "dmi_matches": [
+        {
+          "board_names": [],
+          "product_name": "PlayStation 5",
+          "sys_vendor": "Sony Interactive Entertainment"
+        }
+      ],
+      "experimental": true,
+      "key": "playstation_5",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 10,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 4,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
       "chip": "AMD Van Gogh",
       "display_name": "Steam Deck",
       "dmi_matches": [],

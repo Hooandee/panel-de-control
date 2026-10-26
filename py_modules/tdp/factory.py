@@ -245,6 +245,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         # binary is therefore not a capability. Keep future firmware-attribute
         # paths discoverable, but never fall into write-only generic AMD methods.
         return [asus, lenovo, msi]
+    if key == "playstation_5":
+        # ryzenadj answers "unsupported model 72" (PDC-25J6) and the console has no
+        # firmware power attributes: the APU power budget belongs to its firmware.
+        return []
     if key.startswith("steam_deck"):
         return [deck]
     if os_id != "anatase":

@@ -876,22 +876,39 @@ def _snap_cpu_gpu_power(root: str) -> dict:
     return out
 
 
-def _snap_arm(root: str) -> dict:
-    if not device_tree.is_arm(root):
-        return {"arch": "x86"}
-    tree = device_tree.read_device_tree(root)
-    soc = os.path.join(root, "sys/devices/soc0")
-    cpuinfo = read_str(os.path.join(root, "proc/cpuinfo"))
-    devfreq = []
-    for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]:
-        devfreq.append({
+def _snap_devfreq(root: str) -> list:
+    return [
+        {
             "name": os.path.basename(device),
             "governor": read_str(os.path.join(device, "governor")),
             "min_hz": read_str(os.path.join(device, "min_freq")),
             "max_hz": read_str(os.path.join(device, "max_freq")),
             "cur_hz": read_str(os.path.join(device, "cur_freq")),
             "available_hz": read_str(os.path.join(device, "available_frequencies")),
-        })
+        }
+        for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]
+    ]
+
+
+def _snap_ps5(root: str) -> dict:
+    fan = os.path.join(root, "sys/bus/platform/devices/ps5-fan")
+    buzzer = os.path.join(root, "sys/class/misc/ps5_buzzer")
+    if not (os.path.isdir(fan) or os.path.isdir(buzzer)):
+        return {}
+    return {
+        "fan_node": os.path.isdir(fan),
+        "fan_target_c": read_str(os.path.join(fan, "target_temp")),
+        "buzzer": os.path.isdir(buzzer),
+    }
+
+
+def _snap_arm(root: str) -> dict:
+    if not device_tree.is_arm(root):
+        return {"arch": "x86"}
+    tree = device_tree.read_device_tree(root)
+    soc = os.path.join(root, "sys/devices/soc0")
+    cpuinfo = read_str(os.path.join(root, "proc/cpuinfo"))
+    devfreq = _snap_devfreq(root)
     backlight = [
         {
             "name": os.path.basename(device),
@@ -1012,6 +1029,7 @@ def _snap_desktop(root: str) -> dict:
                 os.path.join(hwmon, "power1_cap")),
             "overdrive": os.path.exists(os.path.join(device, "pp_od_clk_voltage")),
             "fan_ctrl": sorted(_listdir(os.path.join(device, "gpu_od/fan_ctrl"))),
+            "gpu_busy_percent": read_str(os.path.join(device, "gpu_busy_percent")),
         })
     out["ppfeaturemask"] = read_str(
         os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"))
@@ -1126,7 +1144,7 @@ def sysfs_snapshot(
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
                   "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
-                  "arm": {}, "connected_devices": {}}
+                  "arm": {}, "ps5": {}, "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1177,6 +1195,12 @@ def sysfs_snapshot(
         pass
     try:
         snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if not device_tree.is_arm(root):
+            snap["cpu_gpu_power"]["devfreq"] = _snap_devfreq(root)
+        snap["ps5"] = _snap_ps5(root)
     except Exception:  # noqa: BLE001
         pass
     try:

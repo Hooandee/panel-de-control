@@ -390,10 +390,10 @@ class DevfreqGpuClock(_GpuDiagnostics):
     backend = "devfreq"
     _AUTO_GOVERNOR = "simple_ondemand"
 
-    def __init__(self, root="/"):
+    def __init__(self, root="/", pattern="*.gpu"):
         self._last_operation = None
         self._dir = None
-        for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq", "*.gpu"))):
+        for path in sorted(glob.glob(os.path.join(root, "sys/class/devfreq", pattern))):
             if self._table_at(path):
                 self._dir = path
                 break
@@ -512,10 +512,20 @@ class DevfreqGpuClock(_GpuDiagnostics):
         return ok
 
 
+class Ps5GpuClock(DevfreqGpuClock):
+    """PlayStation 5 (ps5-linux kernel): amdgpu has no OverDrive there; the GPU
+    clock is the ps5-gpufreq devfreq device, frequencies in Hz."""
+
+    def __init__(self, root="/"):
+        super().__init__(root, pattern="ps5-gpufreq")
+
+
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
     if getattr(device, "arch", "x86") == "arm":
         order = (DevfreqGpuClock,)
+    elif getattr(device, "key", None) == "playstation_5":
+        order = (Ps5GpuClock, AmdGpuClock)
     elif getattr(device, "vendor", "amd") == "intel":
         order = (XeGpuClock, IntelGpuClock)
     else:

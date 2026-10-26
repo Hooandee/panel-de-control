@@ -910,7 +910,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "leds": [],
         "pstore": [],
         "pstore_archive": [],
-        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": [], "devfreq": []},
         "desktop": {
             "board_fans": {"available": [], "loaded": [], "channels": 0},
             "power_supplies": [],
@@ -929,6 +929,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
             "dump": None,
         },
         "arm": {"arch": "x86"},
+        "ps5": {},
         "connected_devices": {
             "usb": [], "hid": [], "input": [], "pci": [], "thunderbolt": [],
             "bluetooth_adapters": [],
@@ -1389,3 +1390,15 @@ def test_kernel_logs_keep_decky_stop_and_earlyoom_evidence_across_a_forced_reboo
     assert "Sending SIGKILL" in out["previous_boot_loader"]
     assert "PluginLoader" in out["previous_boot_earlyoom"]
 
+
+
+def test_sysfs_snapshot_ps5_fan_and_gpufreq(tmp_path):
+    root = str(tmp_path)
+    _mk(os.path.join(root, "sys/bus/platform/devices/ps5-fan/target_temp"), "80\n")
+    gpu = os.path.join(root, "sys/class/devfreq/ps5-gpufreq")
+    _mk(os.path.join(gpu, "available_frequencies"), "400000000 2230000000\n")
+    _mk(os.path.join(gpu, "cur_freq"), "400000000\n")
+    snap = sysfs_snapshot(root=root)
+    assert snap["ps5"] == {"fan_node": True, "fan_target_c": "80", "buzzer": False}
+    assert snap["cpu_gpu_power"]["devfreq"][0]["name"] == "ps5-gpufreq"
+    assert snap["cpu_gpu_power"]["devfreq"][0]["cur_hz"] == "400000000"

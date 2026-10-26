@@ -3,6 +3,7 @@ import os
 import gpu.clock as clock_module
 
 from gpu.clock import (
+    DevfreqGpuClock,
     AmdGpuClock,
     IntelGpuClock,
     NullGpuClock,
@@ -526,3 +527,43 @@ def test_null_diagnostics_are_honest():
         "last_operation": None,
         "selection": [],
     }
+
+
+def _ps5_gpufreq(root, table=(400_000_000, 1_200_000_000, 2_230_000_000)):
+    node = os.path.join(root, "sys/class/devfreq/ps5-gpufreq")
+    os.makedirs(node, exist_ok=True)
+    files = {
+        "available_frequencies": " ".join(str(value) for value in table),
+        "min_freq": str(table[0]),
+        "max_freq": str(table[-1]),
+        "governor": "simple_ondemand",
+    }
+    for name, value in files.items():
+        with open(os.path.join(node, name), "w") as handle:
+            handle.write(value)
+    return node
+
+
+def test_playstation_5_selects_its_devfreq_gpu(tmp_path):
+    root = str(tmp_path)
+    _ps5_gpufreq(root)
+
+    class Ps5:
+        key = "playstation_5"
+        vendor = "amd"
+
+    backend = select_gpu_clock(Ps5(), root=root)
+    assert isinstance(backend, DevfreqGpuClock)
+    assert backend.get_range() == (400, 2230)
+    assert backend.set(1000, 1200) is True
+    assert backend.get() == (1200, 1200)
+
+
+def test_ps5_gpufreq_is_ignored_on_other_amd_devices(tmp_path):
+    root = str(tmp_path)
+    _ps5_gpufreq(root)
+
+    class Dev:
+        vendor = "amd"
+
+    assert isinstance(select_gpu_clock(Dev(), root=root), NullGpuClock)
