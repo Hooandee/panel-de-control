@@ -14096,6 +14096,15 @@ class Plugin:
         log("Lifecycle transition %s", encoded)
 
     async def _main(self) -> None:
+        try:
+            await self._startup()
+        except RuntimeError as error:
+            # Decky can stop a second instance while it is still starting.
+            if str(error) != "plugin_shutting_down" or not getattr(self, "_shutting_down", False):
+                raise
+            decky.logger.info("Startup stopped: plugin is shutting down")
+
+    async def _startup(self) -> None:
         self._start_journal()
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
