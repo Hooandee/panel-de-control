@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TdpState } from "../api";
+import type { PowerDraw, TdpState } from "../api";
 
 vi.mock("@decky/ui", () => ({
   Focusable: ({ children }: any) => <div>{children}</div>,
@@ -28,8 +28,8 @@ const unsupported = {
   levels, requested_levels: levels, global_levels: levels, global_requested_levels: levels,
   watts: 10, global_watts: 10, unit: "W", presets: { quiet: 4, balanced: 10, turbo: 30, turbo_ac: 30 }, firmware_modes: [], boost_mode: "estable", global_boost_mode: "estable",
 } as unknown as TdpState;
-const render_ = (consoleManaged: boolean) => render(
-  <TdpSection tdp={unsupported} scope="global" power={null}
+const render_ = (consoleManaged: boolean, gpuBusy: number | null = null) => render(
+  <TdpSection tdp={unsupported} scope="global" power={gpuBusy === null ? null : ({ gpu_busy: gpuBusy } as PowerDraw)}
     onWatts={noop} onGpuLevel={noop} onSetLevels={noop} onSetMode={noop} onApplySuggestion={noop}
     onFirmwareMode={noop} onLowBatteryHold={noop} monitorOnly={false} onReactivate={noop}
     presets={null} refreshPresets={noop} onApplyPreset={noop} consoleManaged={consoleManaged} />,
@@ -43,6 +43,17 @@ describe("TdpSection without a TDP route", () => {
     expect(screen.getByText("tdp.console.title")).toBeTruthy();
     expect(screen.getByText("tdp.console.body")).toBeTruthy();
     expect(screen.queryByText("tdp.unsupported")).toBeNull();
+  });
+
+  it("shows the live graphics usage on the PS5 when the kernel reports it", () => {
+    render_(true, 27);
+    expect(screen.getByText("tdp.console.gpuBusy")).toBeTruthy();
+    expect(screen.getByText("27 %")).toBeTruthy();
+  });
+
+  it("hides the graphics usage row when it is unknown", () => {
+    render_(true);
+    expect(screen.queryByText("tdp.console.gpuBusy")).toBeNull();
   });
 
   it("keeps the generic notice elsewhere", () => {

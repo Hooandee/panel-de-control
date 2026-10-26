@@ -75,11 +75,13 @@ const RemapBlock: FC = () => {
       {buttons.length === 0 ? (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
           {t(
-            config.device_known === false
-              ? "mandos.remap.uncalibrated"
-              : config.extra_buttons === false
-                ? "mandos.remap.noextra"
-                : "mandos.remap.nobuttons",
+            config.builtin_controls === false
+              ? "mandos.remap.external"
+              : config.device_known === false
+                ? "mandos.remap.uncalibrated"
+                : config.extra_buttons === false
+                  ? "mandos.remap.noextra"
+                  : "mandos.remap.nobuttons",
           )}
         </div>
       ) : (
