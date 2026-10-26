@@ -425,3 +425,39 @@ def test_unload_closes_the_guard_episode(tmp_path):
     plugin._restore_fans_safe()
     episode = list(plugin._ps5_console.guard.episodes)[-1]
     assert episode["ended_by"] == "handoff" and plugin._ps5_console.guard.active is False
+
+
+def test_system_module_off_stops_light_replays_and_beeps(tmp_path):
+    temp = [97.0]
+    plugin, _fan, buzzer = _console_plugin(tmp_path, temp)
+    plugin._module_enabled = lambda name: name != "system"
+    plugin._settings["ps5_led_preset"] = "pink_breathe"
+    plugin._ps5_led_replayed_at = -100.0
+    plugin._ps5_console_tick()
+    brightness = os.path.join(str(tmp_path), "sys/class/leds/ps5:pink_breathe:indicator/brightness")
+    assert _read(brightness) == "0"
+    assert _read(os.path.join(buzzer, "beep")) == ""
+    assert plugin._ps5_console.guard.active is True
+
+
+def test_guard_release_with_fan_control_off_goes_to_the_default(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._settings["ps5_fan_target_c"] = 70
+    plugin._ps5_console_tick()
+    plugin._module_enabled = lambda name: name != "fanControl"
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "80"
+
+
+def test_background_light_failures_are_not_shown_as_the_users(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._settings["ps5_led_preset"] = "missing_breathe"
+    plugin._reapply_ps5_led_sync()
+    assert plugin._ps5_console_state()["led"]["last"] is None
+
+
+def test_fan_state_says_when_the_guard_holds_the_fan(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [97.0])
+    plugin._ps5_console_tick()
+    assert plugin._ps5_fan_state()["guard_active"] is True

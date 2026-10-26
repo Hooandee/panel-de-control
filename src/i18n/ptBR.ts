@@ -1033,7 +1033,7 @@ export const ptBR: Record<string, string> = {
   "console.guard.pausedShort": "Em pausa",
   "console.guard.retrying": "O console está muito quente e o Panel está tentando colocar a ventoinha no máximo.",
   "console.guard.aboveTarget": "Com a temperatura alvo atual, a proteção começa em {c} °C.",
-  "console.guard.fanModuleOff": "Para a proteção funcionar, ative “Curva da ventoinha” em Personalizar.",
+  "console.guard.fanModuleOff": "Para a proteção funcionar, ative Ventoinhas e “Curva da ventoinha” em Personalizar.",
   "console.guard.activeShort": "Ativa",
   "console.guard.at": "Em {c} °C",
   "system.rgb.desc.installed": "Controle os LEDs RGB do seu dispositivo com Colores.",

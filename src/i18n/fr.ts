@@ -1033,7 +1033,7 @@ export const fr: Record<string, string> = {
   "console.guard.pausedShort": "En pause",
   "console.guard.retrying": "La console est très chaude et Panel essaie de mettre le ventilateur au maximum.",
   "console.guard.aboveTarget": "Avec la température cible actuelle, la protection démarre à {c} °C.",
-  "console.guard.fanModuleOff": "Pour que la protection fonctionne, activez « Courbe de ventilation » dans Personnaliser.",
+  "console.guard.fanModuleOff": "Pour que la protection fonctionne, activez Ventilateurs et « Courbe de ventilation » dans Personnaliser.",
   "console.guard.activeShort": "Active",
   "console.guard.at": "À {c} °C",
   "system.rgb.desc.installed": "Contrôlez les LED RGB de votre appareil avec Colores.",

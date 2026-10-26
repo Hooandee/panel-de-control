@@ -661,6 +661,7 @@ export interface FanTargetState {
   default: number;
   presets: { id: "quiet" | "balanced" | "cool" | "max"; celsius: number }[];
   other_controller?: string | null;
+  guard_active?: boolean;
   ok?: boolean;
   detail?: string;
 }

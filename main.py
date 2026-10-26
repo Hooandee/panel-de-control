@@ -4230,6 +4230,7 @@ class Plugin:
             **self._ps5_fan.state(),
             "target": self._settings.get("ps5_fan_target_c"),
             "other_controller": self._ps5_rival_plugin(),
+            "guard_active": bool(getattr(self, "_ps5_console", None) and self._ps5_console.guard.active),
             "diagnostics": self._ps5_fan.diagnostics(),
         }
 
@@ -4266,7 +4267,7 @@ class Plugin:
     def _reapply_ps5_led_sync(self) -> bool:
         console = getattr(self, "_ps5_console", None)
         preset = self._settings.get("ps5_led_preset")
-        if console is None or preset is None:
+        if console is None or preset is None or not self._module_enabled("system"):
             return True
         result = console.led.apply(preset)
         self._log_ps5_console("led_reapply", result)
@@ -4297,7 +4298,7 @@ class Plugin:
                     for preset in console.led.presets()
                 ],
                 "active": self._settings.get("ps5_led_preset"),
-                "last": console.led.last_result,
+                "last": getattr(self, "_ps5_led_user_result", None),
             },
             "guard": {
                 "enabled": self._settings.get("ps5_guard_enabled") is True,
@@ -4345,6 +4346,7 @@ class Plugin:
             return {**await self._offload_call(self._ps5_console_state), "ok": False, "detail": "invalid_value"}
         def apply():
             outcome = console.led.apply(preset)
+            self._ps5_led_user_result = outcome
             if outcome["ok"]:
                 self._settings["ps5_led_preset"] = preset
                 self._ps5_led_replayed_at = _monotonic()
@@ -4462,11 +4464,12 @@ class Plugin:
             fan.apply(PS5_FAN_MIN_C)
         if step.release:
             target = settings.get("ps5_fan_target_c")
-            result = fan.apply(target) if target is not None else fan.release()
+            result = fan.apply(target) if target is not None and fan_ready else fan.release()
             self._log_ps5_console("guard_released", {
                 "ok": result["ok"], "apu_c": console.guard.last_celsius, "fan": result,
             })
-        if step.beep:
+        system_on = self._module_enabled("system")
+        if step.beep and system_on:
             self._log_ps5_console("overheat_beep", {
                 "ok": console.beep(), "apu_c": console.guard.last_celsius, "threshold": threshold,
             })
@@ -4475,7 +4478,7 @@ class Plugin:
             self._ps5_gpu_sampled_at = now
             self._sample_ps5_gpu_limit(now)
         preset = settings.get("ps5_led_preset")
-        if preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
+        if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
             result = console.led.replay(preset)
             if result["detail"] == "unknown_preset":

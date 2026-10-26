@@ -18,14 +18,15 @@ export function activePreset(state: FanTargetState, celsius: number | null): Pre
 
 export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> = ({ state, onChange }) => {
   const { t } = useI18n();
-  const [celsius, setCelsius] = useState(state.celsius);
+  // While the thermal guard holds the fan, the card shows the user's own target.
+  const shown = state.guard_active ? state.target ?? state.default : state.celsius;
+  const [celsius, setCelsius] = useState(shown);
   const [failed, setFailed] = useState(false);
-  const [deferred, setDeferred] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<number | null>(null);
   const sequence = useRef(0);
 
-  useEffect(() => setCelsius(state.celsius), [state.celsius]);
+  useEffect(() => setCelsius(shown), [shown]);
 
   const commit = (value: number | null) => {
     if (timer.current) clearTimeout(timer.current);
@@ -36,8 +37,7 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
       .then((result) => {
         if (request !== sequence.current) return;
         setFailed(!result.ok);
-        setDeferred(result.detail === "deferred_guard");
-        setCelsius(result.detail === "deferred_guard" ? value : result.celsius ?? null);
+        setCelsius(result.detail === "deferred_guard" ? value ?? state.default : result.celsius ?? null);
       })
       .catch(() => { if (request === sequence.current) setFailed(true); })
       .finally(onChange);
@@ -84,7 +84,7 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
         />
         <ContainedSlider value={celsius ?? state.default} min={state.min} max={state.max} step={1} onChange={onSlide} />
         <span style={{ fontSize: theme.font.caption, color: failed ? theme.color.warn : theme.color.textMuted, lineHeight: 1.4 }}>
-          {t(failed ? "fans.target.failed" : deferred ? "fans.target.deferred" : "fans.target.note")}
+          {t(failed ? "fans.target.failed" : state.guard_active ? "fans.target.deferred" : "fans.target.note")}
         </span>
         {state.other_controller && (
           <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>

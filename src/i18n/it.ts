@@ -917,7 +917,7 @@ export const it: Record<string, string> = {
   "console.guard.pausedShort": "In pausa",
   "console.guard.retrying": "La console è molto calda e Panel sta provando a portare la ventola al massimo.",
   "console.guard.aboveTarget": "Con la temperatura obiettivo attuale, la protezione parte a {c} °C.",
-  "console.guard.fanModuleOff": "Perché la protezione funzioni, attiva «Curva della ventola» in Personalizza.",
+  "console.guard.fanModuleOff": "Perché la protezione funzioni, attiva Ventole e «Curva della ventola» in Personalizza.",
   "console.guard.activeShort": "Attiva",
   "console.guard.at": "A {c} °C",
   "system.rgb.desc.installed": "Controlla i LED RGB del dispositivo con Colores.",
