@@ -1,6 +1,6 @@
 import { FC } from "react";
 import { Focusable } from "@decky/ui";
-import { LuLamp } from "react-icons/lu";
+import { LuCheck, LuLamp } from "react-icons/lu";
 
 import { ConsoleLightPreset, ConsoleState } from "../api";
 import { useI18n } from "../i18n";
@@ -19,13 +19,25 @@ const Tile: FC<{ preset: ConsoleLightPreset; active: boolean; onPick: () => void
         display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0,
         padding: `${theme.space.sm}px ${theme.space.xs}px`, borderRadius: theme.radius.sm, cursor: "pointer",
         background: active ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
-        boxShadow: active ? `inset 0 0 0 1px ${theme.color.accent}` : `inset 0 0 0 1px ${theme.color.hairline}`,
+        boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
       }}
     >
       <span style={{
-        width: 26, height: 26, borderRadius: "50%", background: swatchBackground(preset.id),
+        position: "relative", width: 26, height: 26, borderRadius: "50%", background: swatchBackground(preset.id),
         boxShadow: preset.id === "off" ? `inset 0 0 0 2px ${theme.color.textMuted}` : "0 0 10px rgba(255,255,255,0.15)",
-      }} />
+      }}>
+        {active && (
+          <span
+            style={{
+              position: "absolute", right: -5, bottom: -5, width: 15, height: 15, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: theme.color.ok, color: theme.color.onAccent,
+            }}
+          >
+            <LuCheck size={11} strokeWidth={3} />
+          </span>
+        )}
+      </span>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textPrimary, textAlign: "center", lineHeight: 1.2 }}>
         {presetLabel(preset.id, t)}
       </span>
