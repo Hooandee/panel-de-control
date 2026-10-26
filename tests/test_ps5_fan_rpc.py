@@ -214,3 +214,87 @@ def test_each_fresh_reapply_gets_its_own_retries(tmp_path, monkeypatch):
     monkeypatch.setattr(main.asyncio, "get_running_loop", lambda: Loop())
     plugin._after_fan_reapply()
     assert scheduled == [main._AUTO_APPLY_RETRY_DELAYS_S[0]]
+
+
+def _console_plugin(tmp_path, temp):
+    from ps5.console import Ps5Console
+    from ps5.firmware_io import FirmwareIo
+
+    root = str(tmp_path)
+    fan_path = _node(root, "80")
+    for name in ("off", "blue_rich", "pink_breathe"):
+        led = os.path.join(root, "sys/class/leds", f"ps5:{name}:indicator")
+        os.makedirs(led)
+        with open(os.path.join(led, "brightness"), "w") as handle:
+            handle.write("0")
+    buzzer = os.path.join(root, "sys/class/misc/ps5_buzzer")
+    os.makedirs(buzzer)
+    open(os.path.join(buzzer, "beep"), "w").close()
+    plugin = _plugin(root)
+    io = FirmwareIo()
+    plugin._ps5_fan = Ps5FanTarget(root=root, io=io, clock=lambda: 0.0)
+    plugin._ps5_console = Ps5Console(root=root, io=io)
+    plugin._ps5_led_replayed_at = 0.0
+    plugin._settings.update({"ps5_led_preset": None, "ps5_guard_enabled": True,
+                             "ps5_guard_threshold": 95, "ps5_alarm_enabled": True})
+    plugin._driving_temp = lambda: temp[0]
+    return plugin, fan_path, buzzer
+
+
+def test_guard_cools_the_console_and_gives_the_target_back(tmp_path):
+    temp = [60.0]
+    plugin, fan_path, buzzer = _console_plugin(tmp_path, temp)
+    plugin._settings["ps5_fan_target_c"] = 75
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "80"
+    temp[0] = 96.0
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "50"
+    assert _read(os.path.join(buzzer, "beep")) == "2"
+    temp[0] = 85.0
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "75"
+    assert plugin._ps5_console.guard.active is False
+
+
+def test_guard_respects_a_disabled_fan_module(tmp_path):
+    temp = [99.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._module_enabled = lambda name: False
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "80"
+
+
+def test_unload_hands_a_guarded_fan_back_to_the_firmware_default(tmp_path):
+    temp = [99.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "50"
+    plugin._restore_fans_safe()
+    assert _read(fan_path) == "80"
+
+
+def test_light_preset_is_saved_and_animations_replay(tmp_path):
+    temp = [50.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    state = asyncio.run(plugin.set_console_led("pink_breathe"))
+    assert state["ok"] is True and plugin._settings["ps5_led_preset"] == "pink_breathe"
+    assert [p["id"] for p in state["led"]["presets"]] == ["off", "blue_rich", "pink_breathe"]
+    brightness = os.path.join(str(tmp_path), "sys/class/leds/ps5:pink_breathe:indicator/brightness")
+    with open(brightness, "w") as handle:
+        handle.write("x")
+    plugin._ps5_led_replayed_at = -100.0
+    plugin._ps5_console_tick()
+    assert _read(brightness) == "1"
+    assert asyncio.run(plugin.set_console_led("sunrise"))["detail"] == "unknown_preset"
+    assert plugin._settings["ps5_led_preset"] == "pink_breathe"
+
+
+def test_guard_settings_are_clamped_and_saved(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._start_ps5_console_loop = lambda: None
+    state = asyncio.run(plugin.set_thermal_guard(enabled=False, threshold=120, alarm=False))
+    assert (state["guard"]["enabled"], state["guard"]["threshold"], state["guard"]["alarm"]) == (False, 100, False)
+    assert (plugin._settings["ps5_guard_enabled"], plugin._settings["ps5_guard_threshold"],
+            plugin._settings["ps5_alarm_enabled"]) == (False, 100, False)
+    assert state["temps"] == {"apu": 50.0, "ssd": None}

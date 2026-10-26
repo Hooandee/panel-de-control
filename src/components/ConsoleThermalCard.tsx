@@ -1,0 +1,70 @@
+import { FC, useEffect, useRef, useState } from "react";
+import { ToggleField } from "@decky/ui";
+import { LuShieldAlert } from "react-icons/lu";
+
+import { ConsoleState } from "../api";
+import { useI18n } from "../i18n";
+import { theme } from "../theme";
+import { Collapsible } from "./Collapsible";
+import { ContainedSlider } from "./ContainedSlider";
+
+const THRESHOLD_MIN = 80;
+const THRESHOLD_MAX = 100;
+const SLIDER_SETTLE_MS = 400;
+
+export const ConsoleThermalCard: FC<{
+  state: ConsoleState;
+  onChange: (enabled: boolean | null, threshold: number | null, alarm: boolean | null) => void;
+}> = ({ state, onChange }) => {
+  const { t } = useI18n();
+  const guard = state.guard!;
+  const [threshold, setThreshold] = useState(guard.threshold);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => setThreshold(guard.threshold), [guard.threshold]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const onSlide = (value: number) => {
+    setThreshold(value);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => onChange(null, value, null), SLIDER_SETTLE_MS);
+  };
+
+  const summary = guard.active ? t("console.guard.activeShort")
+    : guard.enabled ? t("console.guard.at", { c: guard.threshold }) : t("system.off");
+  return (
+    <Collapsible id="console-guard" icon={<LuShieldAlert size={16} />} title={t("console.guard.title")} summary={summary}>
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+        {guard.active && (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>{t("console.guard.active")}</span>
+        )}
+        {guard.fan_supported && (
+          <ToggleField
+            label={t("console.guard.toggle")}
+            description={t("console.guard.desc")}
+            checked={guard.enabled}
+            onChange={(next: boolean) => onChange(next, null, null)}
+            bottomSeparator="none"
+          />
+        )}
+        {(guard.enabled || guard.alarm) && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <span>{t("console.guard.threshold")}</span>
+              <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>{threshold} °C</span>
+            </div>
+            <ContainedSlider value={threshold} min={THRESHOLD_MIN} max={THRESHOLD_MAX} step={1} onChange={onSlide} />
+          </>
+        )}
+        {guard.alarm_supported && (
+          <ToggleField
+            label={t("console.guard.alarm")}
+            description={t("console.guard.alarm.desc")}
+            checked={guard.alarm}
+            onChange={(next: boolean) => onChange(null, null, next)}
+            bottomSeparator="none"
+          />
+        )}
+      </div>
+    </Collapsible>
+  );
+};

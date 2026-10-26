@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
+  LuLightbulb, LuLamp, LuShieldAlert, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive,
   LuMonitorCog, LuImage,
 } from "react-icons/lu";
@@ -79,6 +79,9 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "brightness", labelKey: "system.brightness", icon: <LuSun size={ICON} /> },
     { id: "volume", labelKey: "system.volume", icon: <LuVolume2 size={ICON} /> },
     { id: "colores", labelKey: "system.rgb.title", icon: <LuLightbulb size={ICON} /> },
+    { id: "consoleLight", labelKey: "console.light.title", icon: <LuLamp size={ICON} /> },
+    { id: "consoleTemps", labelKey: "console.temps.title", icon: <LuThermometer size={ICON} /> },
+    { id: "consoleThermal", labelKey: "console.guard.title", icon: <LuShieldAlert size={ICON} /> },
   ],
   fans: [
     { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} />, learningTags: ["fans"] },

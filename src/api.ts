@@ -723,6 +723,38 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
+// PlayStation 5 extras shown in Sistema.
+export interface ConsoleLightPreset {
+  id: string;
+  animated: boolean;
+}
+
+export interface ConsoleState {
+  supported: boolean;
+  temps?: { apu: number | null; ssd: number | null };
+  led?: {
+    supported: boolean;
+    presets: ConsoleLightPreset[];
+    active: string | null;
+    last: { ok: boolean; preset: string; detail: string } | null;
+  };
+  guard?: {
+    enabled: boolean;
+    threshold: number;
+    alarm: boolean;
+    alarm_supported: boolean;
+    active: boolean;
+    fan_supported: boolean;
+    last_beep: string | null;
+  };
+  ok?: boolean;
+  detail?: string;
+}
+
+export const getConsoleState = callable<[], ConsoleState>("get_console_state");
+export const setConsoleLed = callable<[preset: string], ConsoleState>("set_console_led");
+export const setThermalGuard =
+  callable<[enabled: boolean | null, threshold: number | null, alarm: boolean | null], ConsoleState>("set_thermal_guard");
 export const setFanTargetTemp =
   callable<[celsius: number | null], FanTargetState>("set_fan_target_temp");
 export const setBoardFanEnabled =

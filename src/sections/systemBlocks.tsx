@@ -9,6 +9,10 @@ import { CpuCard } from "../components/CpuCard";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { EcoCard } from "../components/EcoCard";
 import { ColoresCard } from "../components/ColoresCard";
+import { ConsoleLightCard } from "../components/ConsoleLightCard";
+import { ConsoleTempsCard } from "../components/ConsoleTempsCard";
+import { ConsoleThermalCard } from "../components/ConsoleThermalCard";
+import { useConsole } from "../system/useConsole";
 import { Collapsible } from "../components/Collapsible";
 import { batteryStatusKey } from "../system/battery";
 import { deviceHasRgb } from "../system/colores";
@@ -130,6 +134,26 @@ const ColoresBlock: FC = () => {
   );
 };
 
+const ConsoleLightBlock: FC = () => {
+  const ps5 = useConsole();
+  if (!ps5.state?.led?.supported) return null;
+  return <ConsoleLightCard state={ps5.state} onPick={ps5.setLight} />;
+};
+
+const ConsoleTempsBlock: FC = () => {
+  const ps5 = useConsole();
+  const temps = ps5.state?.temps;
+  if (!ps5.state?.supported || !temps) return null;
+  return <ConsoleTempsCard apu={temps.apu} ssd={temps.ssd} apuHistory={ps5.apu} ssdHistory={ps5.ssd} />;
+};
+
+const ConsoleThermalBlock: FC = () => {
+  const ps5 = useConsole();
+  const guard = ps5.state?.guard;
+  if (!ps5.state?.supported || !guard || !(guard.fan_supported || guard.alarm_supported)) return null;
+  return <ConsoleThermalCard state={ps5.state} onChange={ps5.setGuard} />;
+};
+
 export function registerSystemBlocks(): void {
   registerBlock("eco", { sectionId: "system", Component: EcoBlock });
   registerBlock("battery", { sectionId: "system", Component: BatteryBlock });
@@ -142,4 +166,8 @@ export function registerSystemBlocks(): void {
     Component: ColoresBlock,
     useAvailable: () => deviceHasRgb(useDevice()),
   });
+  const isPs5 = () => useDevice()?.key === "playstation_5";
+  registerBlock("consoleLight", { sectionId: "system", Component: ConsoleLightBlock, useAvailable: isPs5 });
+  registerBlock("consoleTemps", { sectionId: "system", Component: ConsoleTempsBlock, useAvailable: isPs5 });
+  registerBlock("consoleThermal", { sectionId: "system", Component: ConsoleThermalBlock, useAvailable: isPs5 });
 }
