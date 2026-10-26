@@ -4298,6 +4298,7 @@ class Plugin:
 
     def _after_fan_reapply(self) -> None:
         self._ensure_fan_loop()
+        self._ps5_fan_retries = 0
         self._schedule_ps5_fan_retry()
 
     def _ensure_fan_loop(self) -> None:

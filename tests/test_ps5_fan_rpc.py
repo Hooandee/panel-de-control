@@ -198,3 +198,19 @@ def test_other_ps5_plugin_is_detected_by_name(tmp_path):
     (plugins / "ps5-hardware-control" / "plugin.json").write_text('{"name": "PS5 Hardware Control"}')
     plugin._decky_plugins_root = lambda: plugins
     assert plugin._ps5_rival_plugin() == "PS5 Hardware Control"
+
+
+def test_each_fresh_reapply_gets_its_own_retries(tmp_path, monkeypatch):
+    plugin = _plugin(str(tmp_path))
+    plugin._ensure_fan_loop = lambda: None
+    plugin._ps5_fan_pending = True
+    plugin._ps5_fan_retries = 3
+    scheduled = []
+
+    class Loop:
+        def call_later(self, delay, fn):
+            scheduled.append(delay)
+
+    monkeypatch.setattr(main.asyncio, "get_running_loop", lambda: Loop())
+    plugin._after_fan_reapply()
+    assert scheduled == [main._AUTO_APPLY_RETRY_DELAYS_S[0]]
