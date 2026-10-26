@@ -4514,9 +4514,13 @@ class Plugin:
             self._log_ps5_console("guard_engaged", {
                 "ok": result["ok"], "apu_c": console.guard.last_celsius, "threshold": threshold, "fan": result,
             })
-        elif console.guard.active and fan.read() != PS5_FAN_MIN_C:
+        elif console.guard.active and (held := fan.read()) != PS5_FAN_MIN_C:
             self._set_ps5_guard_holding(True)
-            fan.apply(PS5_FAN_MIN_C)
+            result = fan.apply(PS5_FAN_MIN_C)
+            key = ("guard_rehold", result["ok"], result["detail"], held)
+            if key != getattr(self, "_ps5_rehold_logged", None):
+                self._ps5_rehold_logged = key
+                self._log_ps5_console("guard_rehold", {"ok": result["ok"], "found_c": held, "fan": result})
         if step.release or (self._ps5_guard_release_pending and not console.guard.active):
             target = settings.get("ps5_fan_target_c")
             result = fan.apply(target) if target is not None and fan_ready else fan.release()
@@ -4538,7 +4542,7 @@ class Plugin:
             self._sample_ps5_gpu_limit(now)
         if system_on and getattr(self, "_ps5_led_pending", False) and now >= self._ps5_led_retry_at:
             self._ps5_led_pending = not self._reapply_ps5_led_sync()
-            self._ps5_led_attempts = 0 if not self._ps5_led_pending else self._ps5_led_attempts + 1
+            self._ps5_led_attempts = 0 if not self._ps5_led_pending else min(self._ps5_led_attempts + 1, 8)
             self._ps5_led_retry_at = now + min(_PS5_LED_RETRY_MAX_S, _PS5_CONSOLE_TICK_S * 2 ** self._ps5_led_attempts)
         preset = settings.get("ps5_led_preset")
         if system_on and preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:

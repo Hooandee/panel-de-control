@@ -551,3 +551,30 @@ def test_a_user_target_racing_the_guard_keeps_the_crash_marker(tmp_path):
     state = asyncio.run(plugin.set_fan_target_temp(70))
     assert state["detail"] == "deferred_guard"
     assert plugin._settings["ps5_guard_holding"] is True and _read(fan_path) == "50"
+
+
+def test_light_retry_back_off_stays_bounded_after_days_of_failure(tmp_path):
+    import shutil
+
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    shutil.rmtree(os.path.join(str(tmp_path), "sys/class/leds"))
+    plugin._settings["ps5_led_preset"] = "blue_rich"
+    plugin._ps5_led_pending = True
+    plugin._ps5_led_attempts = 1023
+    plugin._ps5_led_retry_at = 0.0
+    plugin._ps5_console_tick()
+    assert plugin._ps5_led_attempts == 8
+
+
+def test_guard_logs_when_something_else_moved_the_held_fan(tmp_path, monkeypatch):
+    temp = [97.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    lines = []
+    monkeypatch.setattr(main.decky.logger, "info", lambda fmt, *args: lines.append(fmt % args))
+    plugin._ps5_console_tick()
+    with open(fan_path, "w") as handle:
+        handle.write("80")
+    plugin._ps5_fan._read_at = None
+    plugin._ps5_console_tick()
+    assert any("guard_rehold" in line and '"found_c":80' in line for line in lines)
+    assert _read(fan_path) == "50"
