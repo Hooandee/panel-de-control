@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.78.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.0...panel-de-control-v0.78.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* polish the PlayStation 5 experience from new reports ([#1022](https://github.com/Hooandee/panel-de-control/issues/1022)) ([47958e1](https://github.com/Hooandee/panel-de-control/commit/47958e109e3c98ae42e1678556e333832c6224ec))
+
 ## [0.78.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.77.0...panel-de-control-v0.78.0) (2026-10-26)
 
 
