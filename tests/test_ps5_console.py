@@ -114,3 +114,10 @@ def test_guard_keeps_each_episode_with_its_peak_and_duration():
     guard.step(84, threshold=95, guard=True, alarm=False)
     assert list(guard.episodes) == [{"start": 1000, "start_c": 96, "peak_c": 98, "seconds": 90, "ended_by": "cooled"}]
     assert guard.peak_celsius == 98
+
+
+def test_turning_the_guard_off_releases_it_even_without_a_reading():
+    guard = ThermalGuard()
+    guard.step(99, threshold=95, guard=True, alarm=False)
+    assert guard.step(None, threshold=95, guard=False, alarm=False).release is True
+    assert guard.active is False

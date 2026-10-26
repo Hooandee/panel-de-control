@@ -336,3 +336,47 @@ def test_no_manual_limit_means_no_gpu_samples(tmp_path):
     plugin._gpu_clock = _GpuClock(current=2230, limit=2230)
     plugin._sample_ps5_gpu_limit(0.0)
     assert plugin._ps5_gpu_limit["samples"] == 0
+
+
+def test_guard_never_starts_below_the_fan_target(tmp_path):
+    temp = [86.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._settings.update({"ps5_guard_threshold": 80, "ps5_fan_target_c": 85})
+    assert plugin._ps5_guard_threshold() == 90
+    plugin._ps5_console_tick()
+    assert plugin._ps5_console.guard.active is False
+
+
+def test_fan_target_chosen_while_the_guard_cools_is_kept_for_later(tmp_path):
+    temp = [99.0]
+    plugin, fan_path, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._ps5_console_tick()
+    state = asyncio.run(plugin.set_fan_target_temp(70))
+    assert state["detail"] == "deferred_guard" and plugin._settings["ps5_fan_target_c"] == 70
+    assert _read(fan_path) == "50"
+    temp[0] = 70.0
+    plugin._ps5_console_tick()
+    assert _read(fan_path) == "70"
+
+
+def test_light_animation_pauses_while_the_guard_is_cooling(tmp_path):
+    temp = [99.0]
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, temp)
+    plugin._settings["ps5_led_preset"] = "pink_breathe"
+    plugin._ps5_led_replayed_at = -100.0
+    brightness = os.path.join(str(tmp_path), "sys/class/leds/ps5:pink_breathe:indicator/brightness")
+    plugin._ps5_console_tick()
+    assert _read(brightness) == "0"
+
+
+def test_a_preset_missing_from_this_kernel_does_not_keep_retrying(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._settings["ps5_led_preset"] = "sunrise"
+    plugin._reapply_ps5_fan_sync()
+    assert plugin._ps5_fan_pending is False
+
+
+def test_guard_state_says_when_the_fan_module_is_off(tmp_path):
+    plugin, _fan, _buzzer = _console_plugin(tmp_path, [50.0])
+    plugin._module_enabled = lambda name: False
+    assert plugin._ps5_console_state()["guard"]["blocked"] == "fan_module_off"

@@ -20,6 +20,7 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
   const { t } = useI18n();
   const [celsius, setCelsius] = useState(state.celsius);
   const [failed, setFailed] = useState(false);
+  const [deferred, setDeferred] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<number | null>(null);
   const sequence = useRef(0);
@@ -35,7 +36,8 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
       .then((result) => {
         if (request !== sequence.current) return;
         setFailed(!result.ok);
-        setCelsius(result.celsius ?? null);
+        setDeferred(result.detail === "deferred_guard");
+        setCelsius(result.detail === "deferred_guard" ? value : result.celsius ?? null);
       })
       .catch(() => { if (request === sequence.current) setFailed(true); })
       .finally(onChange);
@@ -82,7 +84,7 @@ export const FanTargetCard: FC<{ state: FanTargetState; onChange: () => void }> 
         />
         <ContainedSlider value={celsius ?? state.default} min={state.min} max={state.max} step={1} onChange={onSlide} />
         <span style={{ fontSize: theme.font.caption, color: failed ? theme.color.warn : theme.color.textMuted, lineHeight: 1.4 }}>
-          {t(failed ? "fans.target.failed" : "fans.target.note")}
+          {t(failed ? "fans.target.failed" : deferred ? "fans.target.deferred" : "fans.target.note")}
         </span>
         {state.other_controller && (
           <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>

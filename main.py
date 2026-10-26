@@ -114,7 +114,7 @@ from desktop.power import DesktopPowerCoordinator, handoff_cpu_ceiling_w
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
 from desktop.board_fans import BoardFanDriver
-from fans.ps5_target import MIN_C as PS5_FAN_MIN_C, Ps5FanTarget, clamp_target
+from fans.ps5_target import FIRMWARE_DEFAULT_C as PS5_FAN_DEFAULT_C, MIN_C as PS5_FAN_MIN_C, Ps5FanTarget, clamp_target
 from ps5.console import Ps5Console
 from ps5.firmware_io import FirmwareIo
 from ps5.led import is_animated as ps5_led_animated
@@ -4271,7 +4271,7 @@ class Plugin:
             return True
         result = console.led.apply(preset)
         self._log_ps5_console("led_reapply", result)
-        return result["ok"]
+        return result["ok"] or result["detail"] == "unknown_preset"
 
     def _log_ps5_console(self, event: str, fields: dict) -> None:
         log = decky.logger.info if fields.get("ok", True) else decky.logger.warning
@@ -4295,6 +4295,8 @@ class Plugin:
             "guard": {
                 "enabled": self._settings.get("ps5_guard_enabled") is True,
                 "threshold": self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C),
+                "effective_threshold": self._ps5_guard_threshold(),
+                "blocked": None if self._module_enabled("fanControl") else "fan_module_off",
                 "alarm": self._settings.get("ps5_alarm_enabled") is True,
                 "alarm_supported": console.buzzer_supported,
                 "active": console.guard.active,
@@ -4333,11 +4335,16 @@ class Plugin:
             return {"supported": False}
         if not isinstance(preset, str):
             return {**await self._offload_call(self._ps5_console_state), "ok": False, "detail": "invalid_value"}
-        result = await self._offload_call(lambda: console.led.apply(preset))
+        def apply():
+            outcome = console.led.apply(preset)
+            if outcome["ok"]:
+                self._settings["ps5_led_preset"] = preset
+                self._ps5_led_replayed_at = _monotonic()
+            return outcome
+
+        result = await self._offload_call(apply)
         self._log_ps5_console("led", result)
         if result["ok"]:
-            self._settings["ps5_led_preset"] = preset
-            self._ps5_led_replayed_at = _monotonic()
             self._save()
         return {**await self._offload_call(self._ps5_console_state), "ok": result["ok"], "detail": result["detail"]}
 
@@ -4379,14 +4386,26 @@ class Plugin:
             task.cancel()
 
     async def _ps5_console_loop(self) -> None:
-        try:
-            while True:
-                await asyncio.sleep(_PS5_CONSOLE_TICK_S)
+        failures = 0
+        while True:
+            await asyncio.sleep(_PS5_CONSOLE_TICK_S)
+            try:
                 await self._offload_call(self._ps5_console_tick)
-        except asyncio.CancelledError:
-            raise
-        except Exception as error:  # noqa: BLE001
-            decky.logger.warning("PS5 console loop stopped error=%s", type(error).__name__)
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                failures += 1
+                if failures in (1, 10, 100):
+                    decky.logger.warning(
+                        "PS5 console tick failed error=%s count=%d", type(error).__name__, failures)
+
+    def _ps5_guard_threshold(self) -> int:
+        # A fan target at or above the guard limit would keep the APU there, so the
+        # guard would engage and release forever: it starts above the target instead.
+        threshold = self._settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C)
+        target = self._settings.get("ps5_fan_target_c") or PS5_FAN_DEFAULT_C
+        return max(threshold, target + 5)
 
     def _sample_ps5_gpu_limit(self, now: float) -> None:
         """With a manual GPU limit on, record whether the live clock stays under it
@@ -4419,7 +4438,7 @@ class Plugin:
         fan = self._ps5_fan
         settings = self._settings
         fan_ready = bool(fan and fan.supported and self._module_enabled("fanControl"))
-        threshold = settings.get("ps5_guard_threshold", PS5_GUARD_DEFAULT_C)
+        threshold = self._ps5_guard_threshold()
         step = console.guard.step(
             self._ps5_console_temps()["apu"],
             threshold=threshold,
@@ -4445,7 +4464,7 @@ class Plugin:
             self._ps5_gpu_sampled_at = now
             self._sample_ps5_gpu_limit(now)
         preset = settings.get("ps5_led_preset")
-        if preset and ps5_led_animated(preset) and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
+        if preset and ps5_led_animated(preset) and not console.guard.active and now - self._ps5_led_replayed_at >= _PS5_LED_REPLAY_S:
             self._ps5_led_replayed_at = now
             result = console.led.replay(preset)
             if not result["ok"]:
@@ -4461,7 +4480,10 @@ class Plugin:
         if attempt >= len(_AUTO_APPLY_RETRY_DELAYS_S):
             return
         self._ps5_fan_retries = attempt + 1
-        asyncio.get_running_loop().call_later(
+        previous = getattr(self, "_ps5_fan_retry_handle", None)
+        if previous is not None:
+            previous.cancel()
+        self._ps5_fan_retry_handle = asyncio.get_running_loop().call_later(
             _AUTO_APPLY_RETRY_DELAYS_S[attempt],
             lambda: self._offload(self._reapply_ps5_fan_sync, done=self._schedule_ps5_fan_retry),
         )
@@ -4476,6 +4498,11 @@ class Plugin:
             result = {"ok": False, "detail": "invalid_value"}
         elif not self._module_enabled("fanControl"):
             result = {"ok": False, "detail": "module_disabled"}
+        elif getattr(self, "_ps5_console", None) is not None and self._ps5_console.guard.active:
+            self._settings["ps5_fan_target_c"] = None if celsius is None else clamp_target(celsius)
+            self._save()
+            result = {"ok": True, "detail": "deferred_guard"}
+            self._log_ps5_fan("user_deferred", self._settings["ps5_fan_target_c"], result)
         else:
             target = None if celsius is None else clamp_target(celsius)
             result = await self._offload_call(

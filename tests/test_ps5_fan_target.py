@@ -1,3 +1,4 @@
+import time
 import os
 
 from fans.ps5_target import Ps5FanTarget, FIRMWARE_DEFAULT_C, MAX_C, MIN_C
@@ -116,11 +117,14 @@ def test_stalled_firmware_link_times_out_and_cools_down(tmp_path):
     io = FirmwareIo(timeout_s=0.05, cooldown_s=30.0, clock=lambda: now[0])
     value, error = io._call("read", "node", lambda: gate.wait(5))
     assert (value, error) == (None, "timeout")
+    assert io._call("read", "node", lambda: "80") == (None, "busy")
+    assert io._call("read", "other", lambda: "70") == ("70", None)
+    gate.set()
+    time.sleep(0.05)
     assert io._call("read", "node", lambda: "80") == (None, "cooldown")
     now[0] = 31.0
     assert io._call("read", "node", lambda: "80") == ("80", None)
     assert io.diagnostics()["timeouts"] == 1
-    gate.set()
 
 
 def test_firmware_not_ready_reports_its_errno(tmp_path):

@@ -741,6 +741,8 @@ export interface ConsoleState {
   guard?: {
     enabled: boolean;
     threshold: number;
+    effective_threshold: number;
+    blocked: "fan_module_off" | null;
     alarm: boolean;
     alarm_supported: boolean;
     active: boolean;

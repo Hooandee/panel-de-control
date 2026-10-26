@@ -38,6 +38,9 @@ class ThermalGuard:
         self.last_celsius = celsius
         out = GuardStep()
         if celsius is None:
+            if self.active and not guard:
+                self._close("disabled")
+                out.release = True
             return out
         self.peak_celsius = celsius if self.peak_celsius is None else max(self.peak_celsius, celsius)
         if self._episode is not None:
@@ -49,14 +52,17 @@ class ThermalGuard:
             self._episode = {"start": round(self._clock()), "start_c": celsius, "peak_c": celsius}
             self.episodes.append(self._episode)
         elif self.active and (cooled or not guard):
-            self.active = False
+            self._close("cooled" if cooled else "disabled")
             out.release = True
-            if self._episode is not None:
-                self._episode["seconds"] = round(self._clock()) - self._episode["start"]
-                self._episode["ended_by"] = "cooled" if cooled else "disabled"
-                self._episode = None
         if alarm and hot and not self.alarmed:
             self.alarmed = out.beep = True
         elif self.alarmed and (cooled or not alarm):
             self.alarmed = False
         return out
+
+    def _close(self, reason: str) -> None:
+        self.active = False
+        if self._episode is not None:
+            self._episode["seconds"] = round(self._clock()) - self._episode["start"]
+            self._episode["ended_by"] = reason
+            self._episode = None

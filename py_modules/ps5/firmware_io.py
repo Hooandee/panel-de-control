@@ -2,8 +2,10 @@
 
 A read or write of these nodes is a firmware round trip: it fails with ENODEV while
 the link is not up yet (early boot) and can stall. Each call runs in its own daemon
-thread with a deadline so a stalled link never holds Panel's shared executor; after a
-timeout the node is left alone for a cool-down instead of piling up stuck threads."""
+thread with a deadline so a stalled link never holds Panel's shared executor. A node
+whose call timed out is left alone for a cool-down, and while that stuck thread is
+still in the kernel no second one is started for it. Nodes are tracked separately, so
+a stalled light never blocks the fan."""
 import threading
 import time
 
@@ -17,12 +19,18 @@ class FirmwareIo:
         self._timeout_s = timeout_s
         self._cooldown_s = cooldown_s
         self._clock = clock
-        self._blocked_until = 0.0
+        self._blocked_until: dict[str, float] = {}
+        self._stuck: dict[str, threading.Thread] = {}
         self.timeouts = 0
         self.last_error: dict | None = None
 
     def _call(self, op: str, path: str, fn):
-        if self._clock() < self._blocked_until:
+        stuck = self._stuck.get(path)
+        if stuck is not None:
+            if stuck.is_alive():
+                return None, "busy"
+            del self._stuck[path]
+        if self._clock() < self._blocked_until.get(path, 0.0):
             return None, "cooldown"
         outcome: dict = {}
 
@@ -37,7 +45,8 @@ class FirmwareIo:
         worker.join(self._timeout_s)
         if worker.is_alive():
             self.timeouts += 1
-            self._blocked_until = self._clock() + self._cooldown_s
+            self._stuck[path] = worker
+            self._blocked_until[path] = self._clock() + self._cooldown_s
             return self._fail(op, path, "timeout")
         if "errno" in outcome:
             return self._fail(op, path, f"errno_{outcome['errno']}")
@@ -60,5 +69,10 @@ class FirmwareIo:
         return self._call("write", path, fn)[1]
 
     def diagnostics(self) -> dict:
-        return {"timeouts": self.timeouts, "last_error": self.last_error,
-                "cooling_down": self._clock() < self._blocked_until}
+        now = self._clock()
+        return {
+            "timeouts": self.timeouts,
+            "last_error": self.last_error,
+            "cooling_down": sorted(path for path, until in self._blocked_until.items() if now < until),
+            "stuck": sorted(path for path, worker in self._stuck.items() if worker.is_alive()),
+        }

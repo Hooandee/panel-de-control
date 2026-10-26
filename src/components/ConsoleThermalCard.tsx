@@ -20,13 +20,23 @@ export const ConsoleThermalCard: FC<{
   const guard = state.guard!;
   const [threshold, setThreshold] = useState(guard.threshold);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<number | null>(null);
+  const send = useRef(onChange);
+  send.current = onChange;
   useEffect(() => setThreshold(guard.threshold), [guard.threshold]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (pending.current !== null) send.current(null, pending.current, null);
+  }, []);
 
   const onSlide = (value: number) => {
     setThreshold(value);
+    pending.current = value;
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => onChange(null, value, null), SLIDER_SETTLE_MS);
+    timer.current = setTimeout(() => {
+      pending.current = null;
+      onChange(null, value, null);
+    }, SLIDER_SETTLE_MS);
   };
 
   const summary = guard.active ? t("console.guard.activeShort")
@@ -36,6 +46,14 @@ export const ConsoleThermalCard: FC<{
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
         {guard.active && (
           <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>{t("console.guard.active")}</span>
+        )}
+        {guard.enabled && guard.blocked === "fan_module_off" && (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.warn, lineHeight: 1.4 }}>{t("console.guard.fanModuleOff")}</span>
+        )}
+        {guard.enabled && guard.effective_threshold > threshold && (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+            {t("console.guard.aboveTarget", { c: guard.effective_threshold })}
+          </span>
         )}
         {guard.fan_supported && (
           <ToggleField

@@ -26,7 +26,7 @@ const state = (overrides: Partial<ConsoleState> = {}): ConsoleState => ({
     active: "blue_rich",
     last: null,
   },
-  guard: { enabled: true, threshold: 95, alarm: false, alarm_supported: true, active: false, fan_supported: true, last_beep: null },
+  guard: { enabled: true, threshold: 95, effective_threshold: 95, blocked: null, alarm: false, alarm_supported: true, active: false, fan_supported: true, last_beep: null },
   ...overrides,
 });
 
@@ -63,5 +63,17 @@ describe("Thermal protection card", () => {
   it("hides the beep where the console has no buzzer", () => {
     render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, alarm_supported: false } })} onChange={vi.fn()} />);
     expect(screen.queryByText("console.guard.alarm")).toBeNull();
+  });
+});
+
+describe("Thermal protection notices", () => {
+  afterEach(cleanup);
+  it("asks to turn the fan module on when it is off", () => {
+    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, blocked: "fan_module_off" } })} onChange={vi.fn()} />);
+    expect(screen.getByText("console.guard.fanModuleOff")).toBeTruthy();
+  });
+  it("explains a limit raised above the fan target", () => {
+    render(<ConsoleThermalCard state={state({ guard: { ...state().guard!, threshold: 80, effective_threshold: 90 } })} onChange={vi.fn()} />);
+    expect(screen.getByText("console.guard.aboveTarget")).toBeTruthy();
   });
 });
