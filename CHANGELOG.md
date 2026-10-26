@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Español
+
+* **Editor de portadas para Duo:** Si usas el tema Duo, ahora puedes elegir qué imagen muestra cada juego en el Inicio (automática, cápsula, cabecera o fondo), encuadrarla y decidir si lleva logo y título. Puedes hacerlo para todos los juegos a la vez o solo para uno. Lo encontrarás en el menú de opciones de cada juego y en los detalles de Duo, en Temas Hooandee.
+
+### English
+
+* **Cover editor for Duo:** If you use the Duo theme, you can now choose which image each game shows on the Home screen (automatic, capsule, header or background), frame it and decide whether it shows the logo and title. You can do it for every game at once or just for one. You'll find it in each game's options menu and in Duo's details, under Hooandee Themes.
+
+### Italiano
+
+* **Editor delle copertine per Duo:** Se usi il tema Duo, ora puoi scegliere quale immagine mostra ogni gioco nella Home (automatica, capsula, intestazione o sfondo), inquadrarla e decidere se mostrare logo e titolo. Puoi farlo per tutti i giochi insieme o solo per uno. Lo trovi nel menu delle opzioni di ogni gioco e nei dettagli di Duo, in Temi Hooandee.
+
+### Deutsch
+
+* **Cover-Editor für Duo:** Wenn du das Theme Duo verwendest, kannst du jetzt auswählen, welches Bild jedes Spiel auf dem Startbildschirm zeigt (automatisch, Kapsel, Kopfzeile oder Hintergrund), den Ausschnitt festlegen und entscheiden, ob Logo und Titel angezeigt werden. Das geht für alle Spiele auf einmal oder nur für eines. Du findest ihn im Optionsmenü jedes Spiels und in den Details von Duo unter Hooandee Themes.
+
+### Português (Brasil)
+
+* **Editor de capas para o Duo:** Se você usa o tema Duo, agora pode escolher qual imagem cada jogo mostra no Início (automática, cápsula, cabeçalho ou fundo), enquadrá-la e decidir se ela mostra o logo e o título. Dá para fazer isso para todos os jogos de uma vez ou só para um. Você encontra o editor no menu de opções de cada jogo e nos detalhes do Duo, em Temas Hooandee.
+
+### Français
+
+* **Éditeur de jaquettes pour Duo :** Si vous utilisez le thème Duo, vous pouvez désormais choisir l'image affichée par chaque jeu sur l'accueil (automatique, capsule, en-tête ou arrière-plan), la cadrer et décider si elle affiche le logo et le titre. Vous pouvez le faire pour tous les jeux à la fois ou pour un seul. Vous le trouverez dans le menu des options de chaque jeu et dans les détails de Duo, dans Thèmes Hooandee.
+
 ## [0.76.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.3...panel-de-control-v0.76.0) (2026-10-23)
 
 
