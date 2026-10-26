@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.77.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.76.0...panel-de-control-v0.77.0) (2026-10-26)
+
+
+### Features
+
+* **themes:** add a cover editor for Duo ([#1015](https://github.com/Hooandee/panel-de-control/issues/1015)) ([786fb02](https://github.com/Hooandee/panel-de-control/commit/786fb0289b14d2c04a9801073bb4b79bd0d2d26d))
+
 ## [0.76.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.75.3...panel-de-control-v0.76.0) (2026-10-23)
 
 
