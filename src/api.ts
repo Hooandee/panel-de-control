@@ -1,3 +1,4 @@
+import { notifyPowerOwnershipChanged } from "./tdp/powerOwnershipInvalidation";
 import type { LevelFrequencies, PowerUnit } from "./tdp/unit";
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
@@ -314,6 +315,9 @@ export interface LowBatteryTdpHoldState {
 }
 
 export interface TdpState {
+  display_source?: "steam_live" | "saved";
+  steam_readback_available?: boolean;
+  game_power_owner?: GamePowerOwnerState;
   supported: boolean;
   // "level" on ARM: values are performance levels, never watts.
   unit?: PowerUnit;
@@ -452,7 +456,57 @@ export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
 export const setGpuLevel = callable<[level: number | null, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_gpu_level");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
-export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
+export type SteamPowerProfile = "active" | "inactive" | "unknown";
+export type GamePowerOwner = "steam" | "pdc";
+export interface GamePowerOwnerState {
+  supported?: boolean;
+  reset_pending?: boolean;
+  context_appid: string | null;
+  revision: number;
+  observed: boolean;
+  steam_profile: SteamPowerProfile | null;
+  explicit_owner: GamePowerOwner | null;
+  owner: GamePowerOwner | "unresolved";
+  write_allowed: boolean;
+  reason: string;
+  steam_settings?: Record<string, number | boolean>;
+}
+export interface GamePowerOwnerResult extends GamePowerOwnerState {
+  ok: boolean;
+  detail?: string | null;
+}
+export const getGamePowerOwner = callable<[], GamePowerOwnerState>("get_game_power_owner");
+const requestGamePowerOwner = callable<[appid: string, owner: GamePowerOwner, expected_revision: number, steam_settings?: Record<string, number | boolean>], GamePowerOwnerResult>("set_game_power_owner");
+const requestGameSteamSetting = callable<[appid: string, expected_revision: number, id: string, value: number | boolean], GamePowerOwnerResult>("update_game_steam_setting");
+export async function setGamePowerOwner(...args: Parameters<typeof requestGamePowerOwner>): Promise<GamePowerOwnerResult> {
+  const result = await requestGamePowerOwner(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function updateGameSteamSetting(...args: Parameters<typeof requestGameSteamSetting>): Promise<GamePowerOwnerResult> {
+  const result = await requestGameSteamSetting(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+const requestBeginGamePowerReset = callable<[appid: string | null, expected_revision: number], GamePowerOwnerResult & { token?: string }>("begin_game_power_reset");
+const requestFinishGamePowerReset = callable<[token: string, steam_settings: Record<string, number | boolean>], GamePowerOwnerResult>("finish_game_power_reset");
+const requestAbortGamePowerReset = callable<[token: string], GamePowerOwnerResult>("abort_game_power_reset");
+export async function beginGamePowerReset(...args: Parameters<typeof requestBeginGamePowerReset>) {
+  const result = await requestBeginGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function abortGamePowerReset(...args: Parameters<typeof requestAbortGamePowerReset>) {
+  const result = await requestAbortGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export async function finishGamePowerReset(...args: Parameters<typeof requestFinishGamePowerReset>): Promise<GamePowerOwnerResult> {
+  const result = await requestFinishGamePowerReset(...args);
+  if (result.ok) notifyPowerOwnershipChanged(result);
+  return result;
+}
+export const setCurrentGame = callable<[appid: string | null, name?: string | null, steam_profile?: SteamPowerProfile], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_levels");
 // Sets the boost mode; returns the full new TDP state so the UI updates the segmented
 // control + rails in one round-trip.
@@ -523,6 +577,7 @@ export const getTdpConflict =
     hhd_present: boolean;
     hhd_managing: boolean;
     powerstation_active: boolean;
+    steamos_manager_active?: boolean | null;
   }>("get_tdp_conflict");
 // Hand HHD's TDP module over to us (reversible; saves its previous value).
 export const takeTdpControl =
@@ -894,6 +949,13 @@ export interface ColorState extends ColorPreset {
 }
 
 export interface GpuClockState {
+  display_source?: "steam_live" | "saved";
+  steam_readback_available?: boolean;
+  game_power_owner?: GamePowerOwnerState;
+  appid?: string | null;
+  global_manual?: boolean;
+  global_min?: number | null;
+  global_max?: number | null;
   supported: boolean;
   managed_by_power?: boolean;
   // ARM: the Power level capping the GPU while Power owns its clock.

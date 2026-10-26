@@ -7,6 +7,7 @@ const runtime = vi.hoisted(() => ({
   discover: vi.fn(),
   resolve: vi.fn(),
   syncProfile: vi.fn(),
+  readProfile: vi.fn(),
   subscribe: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock("./performanceRuntime", () => ({
   discoverSteamPerformanceComponents: runtime.discover,
   resolveSteamPerformanceStore: runtime.resolve,
   syncSteamPerformanceProfile: runtime.syncProfile,
+  readSteamPerformanceProfile: runtime.readProfile,
   subscribeSteamPerformanceState: runtime.subscribe,
 }));
 
@@ -32,6 +34,7 @@ describe("useSteamPerformanceSurface", () => {
     runtime.discover.mockReset();
     runtime.resolve.mockReset();
     runtime.syncProfile.mockReset();
+    runtime.readProfile.mockReset().mockReturnValue("unknown");
     runtime.subscribe.mockReset();
     runtime.subscribe.mockReturnValue(vi.fn());
   });
@@ -71,13 +74,53 @@ describe("useSteamPerformanceSurface", () => {
     });
   });
 
-  it("keeps Steam on the profile selected by the shared power scope", () => {
+  it("reads Steam without syncing the shared power scope", () => {
     runtime.discover.mockReturnValue({ legacyFrameRate: Native });
     runtime.resolve.mockReturnValue({ msgLimits: {} });
 
     renderHook(() => useSteamPerformanceSurface("game", 42));
 
-    expect(runtime.syncProfile).toHaveBeenCalledWith("game", 42, true);
+    expect(runtime.readProfile).toHaveBeenCalledWith(42);
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect(runtime.syncProfile).not.toHaveBeenCalled();
+  });
+
+  it("publishes external profile changes while rows stay identical", () => {
+    runtime.discover.mockReturnValue({ legacyFrameRate: Native });
+    runtime.resolve.mockReturnValue({ msgLimits: {} });
+    runtime.readProfile.mockReturnValue("game");
+    const { result, rerender } = renderHook(({ scope }) => useSteamPerformanceSurface(scope, 42), {
+      initialProps: { scope: "global" as "global" | "game" },
+    });
+    expect(result.current.profile).toBe("game");
+    runtime.readProfile.mockReturnValue("global");
+    act(() => { runtime.subscribe.mock.calls[0][0](); });
+    expect(result.current.profile).toBe("global");
+    runtime.readProfile.mockReturnValue("unknown");
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(result.current.profile).toBe("unknown");
+    rerender({ scope: "game" });
+    expect(runtime.syncProfile).not.toHaveBeenCalled();
+  });
+
+  it("does not expose the previous game's profile during the next game's first render", () => {
+    runtime.discover.mockReturnValue({ legacyFrameRate: Native });
+    runtime.resolve.mockReturnValue({ msgLimits: {} });
+    runtime.readProfile.mockReturnValue("game");
+    const frames: Array<{ gameId: number; profile: string }> = [];
+    const { rerender } = renderHook(({ gameId }) => {
+      const surface = useSteamPerformanceSurface("game", gameId);
+      frames.push({ gameId, profile: surface.profile });
+      return surface;
+    }, { initialProps: { gameId: 42 } });
+    expect(frames[frames.length - 1]).toEqual({ gameId: 42, profile: "game" });
+    frames.length = 0;
+    rerender({ gameId: 43 });
+    expect(frames[0]).toEqual({ gameId: 43, profile: "unknown" });
+    expect(frames[frames.length - 1]).toEqual({ gameId: 43, profile: "game" });
+    expect(steamPerformanceDiagnostics()?.current.surface).toMatchObject({
+      profile: "game", running_game_id: "43",
+    });
   });
 
   it("reports loading before the first effect without touching Steam during render", () => {
@@ -130,7 +173,7 @@ describe("useSteamPerformanceSurface", () => {
 
     const { result } = renderHook(() => useSteamPerformanceSurface());
 
-    expect(result.current).toEqual({ status: "unavailable", rows: [] });
+    expect(result.current).toEqual({ status: "unavailable", rows: [], profile: "unknown" });
   });
 
   it("retries discovery after resolving only reset chrome", () => {

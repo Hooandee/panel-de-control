@@ -1,6 +1,7 @@
-import { setCurrentGame } from "../api";
+import { setCurrentGame, SteamPowerProfile } from "../api";
 import { GameReport, isSameGameReport } from "./gameReport";
 import { readRunningGame } from "./runningGame";
+import { readSteamPerformanceProfile, subscribeSteamPerformanceState } from "../steam/performanceRuntime";
 
 /**
  * Persistent "current game" watcher, started once at plugin load (definePlugin)
@@ -24,9 +25,17 @@ const GAME_POLL_MS = 2000;
 const GAME_REPORT_TIMEOUT_MS = 30000;
 const MAX_PENDING_GAME_REPORTS = 2;
 
+interface OwnershipGameReport extends GameReport {
+  steamProfile: SteamPowerProfile;
+}
+
+const isSameOwnershipReport = (a: OwnershipGameReport, b: OwnershipGameReport): boolean => (
+  isSameGameReport(a, b) && a.steamProfile === b.steamProfile
+);
+
 interface PendingGameReport {
   id: number;
-  target: GameReport;
+  target: OwnershipGameReport;
   timeout: ReturnType<typeof setTimeout> | null;
 }
 
@@ -34,8 +43,8 @@ export function startGameWatcher(): () => void {
   let alive = true;
   let unregister: (() => void) | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let committed: GameReport | undefined;
-  let desired: GameReport = { appid: null, name: null };
+  let committed: OwnershipGameReport | undefined;
+  let desired: OwnershipGameReport = { appid: null, name: null, steamProfile: "unknown" };
   let inFlight: PendingGameReport | undefined;
   let nextRequestId = 0;
   const pendingRequestIds = new Set<number>();
@@ -52,7 +61,7 @@ export function startGameWatcher(): () => void {
       !alive
       || inFlight
       || pendingRequestIds.size >= MAX_PENDING_GAME_REPORTS
-      || (committed && isSameGameReport(desired, committed))
+      || (committed && isSameOwnershipReport(desired, committed))
     ) return;
     const request: PendingGameReport = {
       id: ++nextRequestId,
@@ -66,7 +75,7 @@ export function startGameWatcher(): () => void {
       sendDesired();
     }, GAME_REPORT_TIMEOUT_MS);
     try {
-      Promise.resolve(setCurrentGame(request.target.appid, request.target.name))
+      Promise.resolve(setCurrentGame(request.target.appid, request.target.name, request.target.steamProfile))
         .then(() => {
           pendingRequestIds.delete(request.id);
           if (!alive) return;
@@ -88,14 +97,17 @@ export function startGameWatcher(): () => void {
   const report = (confirmIdle = false): void => {
     if (!alive) return;
     const next = readRunningGame();
+    const profile = readSteamPerformanceProfile(next?.liveAppid ?? null);
     desired = {
       appid: next ? next.appid : null,
       name: next ? next.name : null,
+      steamProfile: profile === "game" ? "active" : profile === "global" ? "inactive" : "unknown",
     };
     if (desired.appid === null && committed === undefined && !inFlight && !confirmIdle) return;
     sendDesired();
   };
 
+  const unsubscribePerformance = subscribeSteamPerformanceState(() => report());
   report();
   pollTimer = setInterval(() => report(true), GAME_POLL_MS);
 
@@ -118,6 +130,7 @@ export function startGameWatcher(): () => void {
   return () => {
     alive = false;
     if (unregister) unregister();
+    unsubscribePerformance();
     if (pollTimer !== null) clearInterval(pollTimer);
     if (inFlight?.timeout != null) clearTimeout(inFlight.timeout);
     pendingRequestIds.clear();
