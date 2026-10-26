@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.78.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.77.0...panel-de-control-v0.78.0) (2026-10-26)
+
+
+### Features
+
+* support PlayStation 5 running Linux ([#1019](https://github.com/Hooandee/panel-de-control/issues/1019)) ([e05a6de](https://github.com/Hooandee/panel-de-control/commit/e05a6de0413d14551bdde1d3256430ff334e89fe))
+
 ## [0.77.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.76.0...panel-de-control-v0.77.0) (2026-10-26)
 
 
