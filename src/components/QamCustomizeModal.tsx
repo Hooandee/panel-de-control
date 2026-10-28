@@ -30,7 +30,7 @@ const QamCustomizeBody: FC = () => {
 
   return (
     <div ref={focusVisibilityRef} style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
-      <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>
+      <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, color: theme.color.textPrimary }}>
         {t("settings.qamShortcut")}
       </div>
       <QamLayoutEditor catalog={catalog} />
@@ -40,7 +40,7 @@ const QamCustomizeBody: FC = () => {
 
 const QamCustomizeModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
+    <FocusRoot settingsModal="qam">
       <QamCustomizeBody />
     </FocusRoot>
   </ModalRoot>

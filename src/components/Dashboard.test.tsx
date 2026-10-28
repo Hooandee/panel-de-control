@@ -183,17 +183,32 @@ describe("Dashboard", () => {
     expect(grid).toBeTruthy();
   });
 
+  it("emits one open cue despite duplicate activation and click, and keeps custom icons", () => {
+    const events: string[] = [];
+    const listener = (e: Event) => events.push((e as CustomEvent).detail.kind);
+    document.addEventListener("pdc-section-feedback", listener);
+    const defs = sections(); defs.push({ ...defs[0], id: "custom", label: "Custom" });
+    const open = vi.fn();
+    render(<Dashboard sections={defs} activeId="power" onOpenSection={open} />);
+    const card = screen.getAllByTestId("dashboard-card")[0];
+    fireEvent.focus(card); fireEvent.click(card);
+    expect(events).toEqual(["move", "open"]);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByTestId("dashboard-test-icon")).toHaveLength(1);
+    document.removeEventListener("pdc-section-feedback", listener);
+  });
+
   it("uses flat launcher cells with white glyphs and compact descriptions", () => {
     render(<Dashboard sections={sections()} activeId="power" onOpenSection={vi.fn()} />);
 
     const card = screen.getAllByTestId("dashboard-card")[0];
     const surface = card.firstElementChild as HTMLElement;
-    const glyph = screen.getAllByTestId("dashboard-test-icon")[0];
+    const glyph = card.querySelector("svg.pdc-section-glyph")!;
     const description = screen.getByText("Rendimiento y consumo del dispositivo.");
 
     expect(surface.style.background).toBe("transparent");
     expect(glyph.parentElement?.style.color).toBe("white");
-    expect(description.style.maxHeight).toBe("30px");
+    expect(description.style.maxHeight).toBe("var(--pdc-dashboard-description-height, 30px)");
   });
 
   it("gives each launcher cell a section-coloured focus surface", () => {

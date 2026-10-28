@@ -204,8 +204,8 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div data-pdc-part="power-presets-dialog" style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
+      <div data-pdc-part="presets-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("tdp.presets.manage.title")}</div>
         <Focusable
           style={{
@@ -222,7 +222,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
 
       <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {items.map((it, i) => (
-          <div key={it.id} style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          <div data-pdc-part="preset-entry" key={it.id} style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
             <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={{ display: "flex", color: it.hidden ? theme.color.textMuted : theme.color.accent }}>{presetIconNode(it.icon, 16)}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, opacity: it.hidden ? 0.5 : 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -241,11 +241,11 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
             {it.editable && editing === it.id && (() => {
               const d = draft ?? entryOf(it);
               return (
-                <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+                <div data-pdc-part="preset-editor" style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
                   <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.presets.name")}</span>
                   <TextField value={d.name} bShowClearAction onChange={(e) => commitDebounced(it.id, { ...d, name: e.target.value })} />
                   <ContainedSlider value={d.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { ...d, watts: w })} />
-                  <IconPickerGrid keys={PRESET_ICON_KEYS} value={d.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { ...d, icon: k })} />
+                  <div data-pdc-part="preset-icons"><IconPickerGrid keys={PRESET_ICON_KEYS} value={d.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { ...d, icon: k })} /></div>
                   {supportsAdvanced && (
                     <BoostEditor
                       boost={d.boost}

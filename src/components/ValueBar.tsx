@@ -51,7 +51,7 @@ export const ValueBar: FC<ValueBarProps> = ({
           gap: theme.space.sm,
         }}
       >
-        <span
+        <span data-pdc-part="value-label"
           style={{
             display: "inline-flex",
             alignItems: "center",

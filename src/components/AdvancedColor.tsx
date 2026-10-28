@@ -30,15 +30,15 @@ export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
     const value = state[key];
     const shown = min < 0 && value > 0 ? `+${value}` : `${value}`;
     return (
-      <div style={{ marginTop: theme.space.sm }} key={key}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+      <div data-pdc-part="color-slider" style={{ marginTop: theme.space.sm }} key={key}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--pdc-display-caption, 11px)", color: theme.color.textMuted }}>
           {icon}
           <span>{label}</span>
           <span style={{ marginLeft: "auto", color: theme.color.textPrimary, fontWeight: 700 }}>{shown}</span>
         </div>
         <ContainedSlider value={value} min={min} max={max} step={min < 0 ? 5 : 1} scale={0.75}
           onChange={(v) => onChange({ [key]: v })} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: theme.color.textMuted, marginTop: -2 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--pdc-display-caption, 10px)", color: theme.color.textMuted, marginTop: -2 }}>
           <span>{ends[0]}</span>
           <span>{ends[1]}</span>
         </div>
@@ -47,7 +47,7 @@ export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
   };
 
   const groupHeading = (label: string): ReactNode => (
-    <div style={{ ...theme.sectionLabel, marginTop: theme.space.md, fontWeight: 700 }}>
+    <div style={{ ...theme.sectionLabel, fontSize: "var(--pdc-display-caption, 11px)", marginTop: theme.space.md, fontWeight: 700 }}>
       {label}
     </div>
   );
@@ -76,7 +76,7 @@ export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
         style={{
           display: "flex", alignItems: "center", gap: 6, marginTop: theme.space.sm,
           padding: "6px 2px", cursor: "pointer",
-          fontSize: theme.font.caption, color: theme.color.textPrimary,
+          fontSize: "var(--pdc-display-caption, 11px)", color: theme.color.textPrimary,
         }}
         onActivate={toggleRgb} onClick={toggleRgb}
       >

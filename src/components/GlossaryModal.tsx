@@ -13,8 +13,8 @@ const GlossaryBody: FC = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg, padding: theme.space.sm, maxWidth: 720, width: "100%", margin: "0 auto" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-        <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("glossary.title")}</div>
-        <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>{t("glossary.intro")}</div>
+        <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, color: theme.color.textPrimary }}>{t("glossary.title")}</div>
+        <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>{t("glossary.intro")}</div>
       </div>
 
       {CATEGORIES.map((cat) => (
@@ -31,8 +31,8 @@ const GlossaryBody: FC = () => {
               noFocusRing
               style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}
             >
-              <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.accent }}>{pickTerm(term, lang)}</div>
-              <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45 }}>{pick(term, lang)}</div>
+              <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, fontWeight: 600, color: theme.color.accent }}>{pickTerm(term, lang)}</div>
+              <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textPrimary, lineHeight: 1.45 }}>{pick(term, lang)}</div>
             </Focusable>
           ))}
         </div>
@@ -43,7 +43,7 @@ const GlossaryBody: FC = () => {
 
 const GlossaryModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
+    <FocusRoot settingsModal="glossary">
       <GlossaryBody />
     </FocusRoot>
   </ModalRoot>

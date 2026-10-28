@@ -7,7 +7,7 @@ import { buildQamViewCatalog, type QamViewSource } from "./viewCatalog";
 
 export function buildPanelQamCatalog(
   views: readonly CustomView[],
-  availability?: SectionAvailability & { presentationKeySuffix?: string },
+  availability?: SectionAvailability,
 ) {
   const customSources: QamViewSource[] = views.map((view) => ({
     id: viewTabId(view.id),
@@ -21,10 +21,5 @@ export function buildPanelQamCatalog(
   const tabs = availability
     ? TABS.filter((tab) => sectionAvailable(tab.id, availability))
     : TABS;
-  const catalog = buildQamViewCatalog([...tabs, ...customSources]);
-  if (!availability?.presentationKeySuffix) return catalog;
-  return catalog.map((entry) => ({
-    ...entry,
-    presentationKey: `${entry.presentationKey ?? ""}\u0000${availability.presentationKeySuffix}`,
-  }));
+  return buildQamViewCatalog([...tabs, ...customSources]);
 }

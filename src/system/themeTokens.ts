@@ -21,6 +21,9 @@ export const THEME_RADIUS_TOKENS = {
 
 export const THEME_SIZE_TOKENS = {
   stroke: "--pdc-theme-stroke",
+  fontCaption: "--pdc-theme-font-caption",
+  fontBody: "--pdc-theme-font-body",
+  fontValue: "--pdc-theme-font-value",
 } as const;
 
 export const THEME_LABEL_TRANSFORM = "--pdc-theme-label-transform";
@@ -50,6 +53,33 @@ export function parseThemeRadius(value: string | null | undefined): number | nul
   return m ? Number(m[1]) : null;
 }
 
+/** Resolve only typography lengths; other size tokens retain their plain-pixel contract. */
+function readFontSize(doc: Document, value: string): number | null {
+  const input = value.trim();
+  const plain = /^(\d+(?:\.\d+)?)(?:px)?$/.exec(input);
+  if (plain) {
+    const size = Number(plain[1]);
+    return Number.isFinite(size) && size > 0 ? size : null;
+  }
+  // Reject CSS keywords (inherit/initial/etc.): they are not a published length.
+  if (!/^(?:calc|min|max|clamp)\(/.test(input) && !/^(?:\d*\.)?\d+[a-z%]+$/i.test(input)) return null;
+  const parent = doc.createElement("span");
+  parent.style.cssText = "all:initial!important;position:absolute!important;visibility:hidden!important;pointer-events:none!important;font-size:0!important;";
+  const probe = doc.createElement("span");
+  probe.style.setProperty("font-size", input, "important");
+  if (!probe.style.fontSize) return null;
+  parent.appendChild(probe);
+  doc.documentElement.appendChild(parent);
+  try {
+    const resolved = doc.defaultView?.getComputedStyle(probe).fontSize ?? "";
+    const pixels = /^(\d+(?:\.\d+)?)px$/.exec(resolved);
+    const size = pixels ? Number(pixels[1]) : NaN;
+    return Number.isFinite(size) && size > 0 ? size : null;
+  } finally {
+    parent.remove();
+  }
+}
+
 export function readThemeTokens(doc: Document): ThemeTokens {
   const tokens: ThemeTokens = { color: {}, radius: {}, size: {} };
   const root = doc.documentElement;
@@ -67,7 +97,8 @@ export function readThemeTokens(doc: Document): ThemeTokens {
   const transform = style.getPropertyValue(THEME_LABEL_TRANSFORM).trim() as ThemeLabelTransform;
   if (LABEL_TRANSFORMS.includes(transform)) tokens.labelTransform = transform;
   for (const [name, property] of Object.entries(THEME_SIZE_TOKENS) as [ThemeSizeToken, string][]) {
-    const size = parseThemeRadius(style.getPropertyValue(property));
+    const value = style.getPropertyValue(property);
+    const size = name === "stroke" ? parseThemeRadius(value) : readFontSize(doc, value);
     if (size !== null) tokens.size![name] = size;
   }
   return tokens;

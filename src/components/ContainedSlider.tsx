@@ -24,7 +24,7 @@ interface Props {
  * that containment so call sites don't re-hand-roll it.
  */
 export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, onChange }) => (
-  <div style={{ overflow: "hidden", width: "100%" }}>
+  <div data-pdc-part="contained-slider" style={{ overflow: "hidden", width: "100%" }}>
     <div style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
       <SliderField
         value={value}

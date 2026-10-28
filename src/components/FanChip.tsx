@@ -42,7 +42,7 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, maxRpm, dutyPercent, layou
     : rpm == null ? 0 : rpmFraction(rpm, observedMax, maxRpm ?? NOMINAL_MAX_RPM);
 
   const ring = (
-    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink: 0 }}>
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink: 0, width: `var(--pdc-fan-gauge-size, ${SIZE}px)`, height: `var(--pdc-fan-gauge-size, ${SIZE}px)` }}>
       <circle cx={SIZE / 2} cy={SIZE / 2} r={r} fill="none" stroke={theme.color.hairline} strokeWidth={STROKE} />
       <circle
         cx={SIZE / 2}
@@ -58,7 +58,7 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, maxRpm, dutyPercent, layou
       <text x="50%" y="46%" textAnchor="middle" fill={theme.color.textPrimary} fontSize={17} fontWeight={700} style={{ fontVariantNumeric: "tabular-nums" }}>
         {duty != null ? duty : rpm == null ? "—" : rpm}
       </text>
-      <text x="50%" y="64%" textAnchor="middle" fill={theme.color.textMuted} fontSize={9}>
+      <text x="50%" y="64%" textAnchor="middle" fill={theme.color.textMuted} fontSize="var(--pdc-graph-font-small, 9px)">
         {duty != null ? "%" : "RPM"}
       </text>
     </svg>

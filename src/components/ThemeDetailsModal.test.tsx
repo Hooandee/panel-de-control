@@ -105,6 +105,18 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
 describe("ThemeDetailsModal", () => {
   afterEach(() => { cleanup(); mocks.controller = null; mocks.patchLabels = {}; vi.clearAllMocks(); });
 
+  it.each([
+    ["hooandee-duo", true, true, true],
+    ["hooandee-duo", true, false, false],
+    ["hooandee-duo", false, true, false],
+    ["example-theme", true, true, false],
+  ])("limits Dock entry to active installed DUO (%s, %s, %s)", (id, installed, active, visible) => {
+    const base = controller();
+    mocks.controller = controller({ cards: [{ ...base.cards[0], id, installed, active }] });
+    render(<ThemeDetailsModal themeId={id} />);
+    expect(Boolean(screen.queryByRole("button", { name: "Customize Dock" }))).toBe(visible);
+  });
+
   it("offers an early access build only from a file, and names a rejected one", () => {
     const base = controller();
     const installEarly = vi.fn(async () => true);

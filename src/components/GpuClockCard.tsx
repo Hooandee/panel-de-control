@@ -35,6 +35,7 @@ export const GpuClockCard: FC = () => {
   return (
     <Collapsible
       id="gpu-clock"
+      summaryBelow
       icon={<LuMemoryStick size={16} />}
       title={t("gpu.clock.title")}
       summary={summary}

@@ -4,6 +4,7 @@ import type { ComponentProps, FC, ReactNode } from "react";
 import { LuAtom, LuGamepad2, LuImages, LuRefreshCw } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { CleanerButton, cleanerCaption, cleanerColumn } from "./CleanerControls";
 import { formatBytes } from "./model";
 import { MediaCleanerView } from "./MediaCleanerView";
@@ -33,6 +34,8 @@ export const CleanupHubView: FC<{
   refreshing: boolean;
 }> = ({ games, media, proton, onRefresh, refreshing }) => {
   const { t, lang } = useI18n();
+  const themedCaption = themeSizeOverride("fontCaption");
+  const themedBody = themeSizeOverride("fontBody");
   const [tab, setTab] = useState<CleanupTab>("games");
   const summaries = [
     { tab: "games" as const, bytes: (games.state?.totals.shadercache ?? 0) + (games.state?.totals.compatdata ?? 0), loading: games.loading || games.pending === "scan", icon: LuGamepad2 },
@@ -45,15 +48,15 @@ export const CleanupHubView: FC<{
       <div style={{ ...theme.card, padding: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 650 }}>{t("cleaner.title")}</div>
+            <div style={{ fontSize: themedBody ?? 15, fontWeight: 650 }}>{t("cleaner.title")}</div>
             <div style={cleanerCaption}>{t("cleaner.subtitle")}</div>
           </div>
           <div style={{ width: 34 }}><CleanerButton label={t("cleaner.scanAgain")} disabled={refreshing} onActivate={onRefresh} style={{ minHeight: 32, padding: 7, background: "transparent", boxShadow: "none" }}><LuRefreshCw size={15} /></CleanerButton></div>
         </div>
-        <Focusable flow-children="grid" role="tablist" aria-label={t("cleaner.categories")} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 7, marginTop: 12 }}>
+        <Focusable data-pdc-part="cleanup-summary" flow-children="grid" role="tablist" aria-label={t("cleaner.categories")} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 7, marginTop: 12 }}>
           {summaries.map(({ tab: category, bytes, loading, icon: Icon }) => <CleanerButton key={category} role="tab" label={t(`cleaner.tab.${category}`)} selected={tab === category} onActivate={() => setTab(category)} style={{ ...theme.tile, minHeight: 58, padding: "9px 8px", alignItems: "stretch", justifyContent: "center", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, ...cleanerCaption }}><Icon size={13} color={theme.color.accent} /><span>{t(`cleaner.tab.${category}`)}</span></div>
-            <div style={{ fontSize: loading ? 12 : 14, fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>{loading ? t("cleaner.calculating") : formatBytes(bytes, lang)}</div>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: themedCaption === undefined ? undefined : "wrap", gap: 5, ...cleanerCaption }}><Icon size={13} color={theme.color.accent} /><span>{t(`cleaner.tab.${category}`)}</span></div>
+            <div style={{ fontSize: loading ? (themedCaption ?? 12) : (themedBody ?? 14), fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: themedBody === undefined ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", overflowWrap: themedBody === undefined ? undefined : "anywhere", textAlign: "left" }}>{loading ? t("cleaner.calculating") : formatBytes(bytes, lang)}</div>
           </CleanerButton>)}
         </Focusable>
       </div>

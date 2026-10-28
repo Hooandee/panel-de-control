@@ -4,6 +4,7 @@ import { LuChevronRight, LuPlay, LuInfo, LuSearch, LuArrowDownUp, LuSlidersHoriz
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { Loading } from "../components/Loading";
 import { GameCover } from "../components/GameCover";
 import { FocusableCard } from "../components/FocusableCard";
@@ -30,11 +31,11 @@ const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }>
         </div>
       </div>
       {game.activeCount === null ? (
-        <span style={{ fontSize: 10, color: theme.color.textMuted, flexShrink: 0 }}>
+        <span style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.textMuted, flexShrink: 0 }}>
           {t("params.activeLoading")}
         </span>
       ) : game.activeCount > 0 ? (
-        <span style={{ fontSize: 10, color: theme.color.onAccent, background: theme.color.accent, borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>
+        <span style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.onAccent, background: theme.color.accent, borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>
           {t("params.activeCount", { n: game.activeCount })}
         </span>
       ) : null}

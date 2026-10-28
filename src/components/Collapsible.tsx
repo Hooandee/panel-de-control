@@ -13,6 +13,8 @@ interface Props {
   title: string;
   /** Shown only when collapsed — a one-line at-a-glance summary. */
   summary: ReactNode;
+  /** Reserve a second line and focus padding for compact headers with long summaries. */
+  summaryBelow?: boolean;
   /** Optional header accessory shown beside the chevron (e.g. a full-screen button).
    *  Rendered outside the toggle so activating it doesn't collapse the card. */
   action?: ReactNode;
@@ -33,6 +35,7 @@ export const Collapsible: FC<Props> = ({
   icon,
   title,
   summary,
+  summaryBelow = false,
   action,
   defaultOpen = true,
   children,
@@ -51,20 +54,22 @@ export const Collapsible: FC<Props> = ({
         <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
           <Focusable
             data-pdc-part="card-title"
-            style={{ flex: 1, display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
+            data-pdc-layout={summaryBelow ? "summary-below" : undefined}
+            style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer", ...(summaryBelow ? { padding: "var(--pdc-stacked-header-padding, 8px)", boxSizing: "border-box", height: "auto" } as const : {}) }}
             onActivate={toggle}
             onClick={toggle}
           >
             <span style={{ display: "inline-flex", color: theme.color.accent }}>{icon}</span>
             <div style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
               <MarqueeText key={open ? "open" : "closed"} text={title} />
+              {summaryBelow && !open && <div data-pdc-part="card-summary" style={{ marginTop: 4, fontSize: theme.font.caption, fontWeight: 400, color: theme.color.textMuted, lineHeight: 1.3 }}>{summary}</div>}
             </div>
-            {!open && (
+            {!summaryBelow && !open && (
               <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, whiteSpace: "nowrap" }}>
                 {summary}
               </span>
             )}
-            <Chevron size={16} color={theme.color.textMuted} />
+            <Chevron size={16} style={{ flexShrink: 0 }} color={theme.color.textMuted} />
           </Focusable>
           {action}
         </Focusable>

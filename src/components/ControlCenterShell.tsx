@@ -197,6 +197,7 @@ export function ControlCenterShell({
         <Focusable
           ref={shellSurface}
           data-testid="shell-surface"
+          data-pdc-view={resolved.mode === "home" ? "home" : active?.id}
           onCancel={resolved.mode === "detail" || (showHome && resolved.mode === "tabs") ? (event) => {
             event.stopPropagation();
             leaveDetail();

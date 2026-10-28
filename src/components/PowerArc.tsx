@@ -175,7 +175,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [gx, gy] = ghostFraction === null ? [0, 0] : polarAt(START + ghostFraction * SWEEP, GHOST_R);
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "2px auto 0" }}>
+    <div style={{ position: "relative", width: "100%", maxWidth: "var(--pdc-power-arc-width, 240px)", margin: "2px auto 0" }}>
       {/* viewBox cropped to ~180 tall: the 270° arc + its W labels bottom out near
           y172, so the lower ~20px of a square box was dead space that pushed the
           next control away. Overflow stays visible for the round stroke caps. */}
@@ -249,7 +249,7 @@ export const PowerArc: FC<PowerArcProps> = ({
         {[lowBound, highBound].map((bound, i) => bound && (
           <g key={i} data-testid={i === 0 ? "tdp-safe-min" : "tdp-safe-max"}>
             <line x1={bound.x1} y1={bound.y1} x2={bound.x2} y2={bound.y2} stroke="rgba(255,255,255,0.35)" strokeWidth={1.2} />
-            <text x={bound.lx} y={bound.ly + 3} fill={theme.color.textMuted} fontSize="8" textAnchor="middle">
+            <text x={bound.lx} y={bound.ly + 3} fill={theme.color.textMuted} fontSize="var(--pdc-graph-font-small, 8px)" textAnchor="middle">
               {i === 0 ? safeMin : safeScaleMax}
             </text>
           </g>
@@ -276,14 +276,14 @@ export const PowerArc: FC<PowerArcProps> = ({
           />
         )}
         {showTargetLabel && (
-          <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
+          <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="var(--pdc-graph-font-small, 9px)" fontWeight={700} textAnchor="middle">
             {Math.round(markerWatts)}{suffix}
           </text>
         )}
         {!auto && slowMarkerWatts !== null && (
           <>
             <line x1={slx1} y1={sly1} x2={slx2} y2={sly2} stroke={theme.color.accent} strokeWidth={2.5} strokeLinecap="round" />
-            <text x={sllx} y={slly + 3} fill={theme.color.accent} fontSize="9" fontWeight={700} textAnchor="middle">
+            <text x={sllx} y={slly + 3} fill={theme.color.accent} fontSize="var(--pdc-graph-font-small, 9px)" fontWeight={700} textAnchor="middle">
               Slow ≤ {Math.round(slowMarkerWatts)} W
             </text>
           </>
@@ -291,13 +291,13 @@ export const PowerArc: FC<PowerArcProps> = ({
         {!auto && fastMarkerWatts !== null && (
           <>
             <line x1={fx1} y1={fy1} x2={fx2} y2={fy2} stroke={theme.color.boost} strokeWidth={2.5} strokeLinecap="round" />
-            <text x={flx} y={fly + 3} fill={theme.color.boost} fontSize="9" fontWeight={700} textAnchor="middle">
+            <text x={flx} y={fly + 3} fill={theme.color.boost} fontSize="var(--pdc-graph-font-small, 9px)" fontWeight={700} textAnchor="middle">
               Fast ≤ {Math.round(fastMarkerWatts)} W
             </text>
           </>
         )}
         {!targetLabelAtMinimum && (
-          <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}{suffix}</text>
+          <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="var(--pdc-graph-font-small, 10px)" textAnchor="middle">{limits.min}{suffix}</text>
         )}
         {ghostFraction !== null && ghostColor !== null && (
           <g data-testid="power-arc-ghost">
@@ -318,36 +318,36 @@ export const PowerArc: FC<PowerArcProps> = ({
             <circle cx={gx} cy={gy} r={4.2} fill={theme.color.surfaceRaised} stroke={ghostColor} strokeWidth={2} />
           </g>
         )}
-        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}{suffix}{chargerHeadroom ? " ⚡" : ""}</text>
+        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="var(--pdc-graph-font-small, 10px)" textAnchor="middle">{scaleMax}{suffix}{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
         {heroLabel ? (
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: auto ? theme.color.accent : color }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 10px)", fontWeight: 700, letterSpacing: "0.14em", color: auto ? theme.color.accent : color }}>
             {heroLabel}
           </div>
         ) : !auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={extra === null ? color : extraColor} /></div>}
-        <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
+        <div style={{ fontSize: "var(--pdc-power-value, 32px)", fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
-          <span style={{ fontSize: 16, color: theme.color.textMuted }}>{levels ? `/${limits.max}` : " W"}</span>
+          <span style={{ fontSize: "var(--pdc-power-unit, 16px)", color: theme.color.textMuted }}>{levels ? `/${limits.max}` : " W"}</span>
         </div>
         {extra !== null && targetDiverged && (
-          <div style={{ fontSize: 10, color: extraColor, marginTop: 1 }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 10px)", color: extraColor, marginTop: 1 }}>
             {t("tdp.extra.requested", { w: Math.round(markerWatts) })}
           </div>
         )}
         {targetOnly && (
-          <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 1, letterSpacing: "0.08em" }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 9px)", color: theme.color.textMuted, marginTop: 1, letterSpacing: "0.08em" }}>
             {t("tdp.arc.target")}
           </div>
         )}
         {hasBoost && (
-          <div style={{ fontSize: 10, color: theme.color.boost, marginTop: 2, letterSpacing: "0.02em", fontWeight: 700 }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 10px)", color: theme.color.boost, marginTop: 2, letterSpacing: "0.02em", fontWeight: 700 }}>
             +{boost} W · {t("tdp.arc.boostHw")}
           </div>
         )}
         {overclocked && (
           <div style={{
-            fontSize: 8,
+            fontSize: "var(--pdc-power-caption, 8px)",
             fontWeight: 700,
             lineHeight: 1.4,
             letterSpacing: "0.08em",
@@ -363,7 +363,7 @@ export const PowerArc: FC<PowerArcProps> = ({
         )}
         {auto ? (
           <div style={{
-            fontSize: 9,
+            fontSize: "var(--pdc-power-caption, 9px)",
             fontWeight: 700,
             letterSpacing: "0.14em",
             color: theme.color.accent,
@@ -375,12 +375,12 @@ export const PowerArc: FC<PowerArcProps> = ({
             {t("tdp.arc.auto")}
           </div>
         ) : (
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: extra === null ? color : extraColor, marginTop: overclocked ? 3 : undefined }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 10px)", letterSpacing: "0.14em", textTransform: "uppercase", color: extra === null ? color : extraColor, marginTop: overclocked ? 3 : undefined }}>
             {extra === null ? t(`tdp.zone.${zone.key}`) : t("tdp.extra.label")}
           </div>
         )}
         {ghost !== null && ghostColor !== null && (
-          <div style={{ fontSize: 10, color: theme.color.textMuted, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
+          <div style={{ fontSize: "var(--pdc-power-caption, 10px)", color: theme.color.textMuted, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
             {ghost.label} <b style={{ color: ghostColor }}>{Math.round(ghost.value)}</b>
           </div>
         )}

@@ -69,7 +69,7 @@ export const SteamPerformanceControls: FC<SteamPerformanceControlsProps> = ({ co
         const label = t(`steam.performance.group.${group.name}`);
         return (
           <section key={group.name} role="group" aria-label={label} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-            <div style={theme.sectionLabel}>{label}</div>
+            <div style={{ ...theme.sectionLabel, fontSize: "var(--pdc-power-caption, 11px)" }}>{label}</div>
             {rows.map(renderControl)}
           </section>
         );

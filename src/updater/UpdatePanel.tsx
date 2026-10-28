@@ -1,3 +1,4 @@
+import { themeSizeOverride } from "../system/themeTokens";
 import { DialogButton, Focusable } from "@decky/ui";
 import { showModal } from "../navigation/showModal";
 import { useUpdate } from "./useUpdate";
@@ -36,7 +37,7 @@ export function UpdatePanel({ lang, version, onVersionActivate }: { lang: Lang; 
         onActivate={onVersionActivate}
         onClick={onVersionActivate}
         noFocusRing={!onVersionActivate}
-        style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}
+        style={{ fontSize: themeSizeOverride("fontCaption") ?? 12, color: "rgba(255,255,255,0.7)" }}
       >
         {t.version} {current || "…"}
         {suffix}
