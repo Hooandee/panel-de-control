@@ -1984,6 +1984,7 @@ def test_transition_records_action_scope_and_write_result(plugin):
         "ok": True,
         "applied": event["target"]["pl1"],
         "detail": "",
+        "failure_kind": None,
     }
     assert event["target_reasons"]["pl2"] == "live_min"
     assert "appid" not in json.dumps(event).lower()
@@ -2832,3 +2833,39 @@ def test_guard_rewrites_the_level_once_after_armada_powerd_restarts(plugin):
     plugin._tdp_guard_tick(now=13.0)
     assert plugin._tdp_backend.set_levels_calls == 1
     assert plugin._tdp_history[-1]["action"] == "powerd-restart-reassert"
+
+
+@pytest.mark.parametrize("auto_tdp", [False, True])
+def test_backend_operation_logs_apply_without_extra_hardware_reads(plugin, monkeypatch, auto_tdp):
+    import journal
+    events = []
+    monkeypatch.setattr(journal, "active", types.SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    cached = plugin._tdp_observation.as_dict()
+    def unexpected_read():
+        raise AssertionError("diagnostic hardware probe")
+    monkeypatch.setattr(plugin._tdp_backend, "observe", unexpected_read)
+    monkeypatch.setattr(plugin._tdp_backend, "read_profile", unexpected_read)
+    result = plugin._apply_tdp_targets({"pl1": 20, "pl2": 20, "pl3": 20}, True, auto_tdp)
+    assert result.ok
+    event = events[-1][1]
+    assert event["operation"] == "apply"
+    assert event["auto_tdp"] is auto_tdp
+    assert event["before_cached"] == cached
+    assert event["result"]["applied_w"] == 20
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_backend_operation_logs_failed_recovery(plugin, monkeypatch):
+    import journal
+    events = []
+    monkeypatch.setattr(journal, "active", types.SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    plugin._tdp_backend.safety_locked = True
+    plugin._tdp_backend.recover_runtime_transaction = lambda: {"ok": False, "detail": "pending"}
+    assert not plugin._recover_tdp_runtime_transaction()
+    assert events[-1][0] == ("WARNING", "tdp", "backend_operation")
+    assert events[-1][1]["operation"] == "recover"
+    assert events[-1][1]["result"]["ok"] is False

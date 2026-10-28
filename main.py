@@ -46,6 +46,7 @@ from settings_store import SettingsStore
 import theme_artwork
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
+from tdp.diagnostics import run_operation as trace_tdp_operation
 from tdp.extra_range import extra_tdp_max_ac, is_strix_halo, with_extra
 from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
@@ -3296,7 +3297,9 @@ class Plugin:
             return None
         release = getattr(backend, "release", None)
         try:
-            backend_released = bool(release()) if callable(release) else True
+            backend_released = bool(trace_tdp_operation(
+                backend, "release", release,
+            )) if callable(release) else True
         except Exception:  # noqa: BLE001
             backend_released = False
         if not backend_released:
@@ -3682,7 +3685,11 @@ class Plugin:
             relinquish = getattr(self._tdp_backend, "relinquish_ownership", None)
             if callable(relinquish):
                 try:
-                    result = await self._offload_call(relinquish)
+                    result = await self._offload_call(
+                        lambda: trace_tdp_operation(
+                            self._tdp_backend, "relinquish", relinquish,
+                        )
+                    )
                 except Exception as error:  # noqa: BLE001
                     decky.logger.warning(
                         "Interrupted TDP ownership relinquish failed: %s",
@@ -3718,7 +3725,7 @@ class Plugin:
         if not callable(recover):
             return False
         try:
-            result = recover()
+            result = trace_tdp_operation(backend, "recover_hold", recover)
         except Exception as error:  # noqa: BLE001
             decky.logger.error(
                 "Interrupted low-battery TDP hold recovery failed: %s",
@@ -7236,15 +7243,22 @@ class Plugin:
         )
         if auto_tdp and not callable(apply_targets):
             apply_targets = getattr(self._tdp_backend, "apply_targets", None)
-        if callable(apply_targets):
-            return apply_targets(target, on_ac)
-        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
-        primary = target[primary_rail]
-        return self._tdp_backend.set_levels(
-            target.get("pl1", primary),
-            target.get("pl2", primary),
-            target.get("pl3", target.get("pl2", primary)),
-            on_ac,
+        def apply():
+            if callable(apply_targets):
+                return apply_targets(target, on_ac)
+            primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+            primary = target[primary_rail]
+            return self._tdp_backend.set_levels(
+                target.get("pl1", primary),
+                target.get("pl2", primary),
+                target.get("pl3", target.get("pl2", primary)),
+                on_ac,
+            )
+
+        return trace_tdp_operation(
+            self._tdp_backend, "apply", apply,
+            target=target, on_ac=on_ac, auto_tdp=auto_tdp,
+            observation_before=self._tdp_observation.as_dict(),
         )
 
     @staticmethod
@@ -7395,7 +7409,10 @@ class Plugin:
                     "low-battery-hold-restore-failed",
                 )
             self._tdp_backend_used = True
-            if not self._tdp_backend.set_profile(mode):
+            if not trace_tdp_operation(
+                self._tdp_backend, "set_profile",
+                lambda: self._tdp_backend.set_profile(mode), target={"profile": mode},
+            ):
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
                 self._tdp_targets = None
@@ -7800,7 +7817,9 @@ class Plugin:
             return False
         release = getattr(backend, "release_hold", None)
         try:
-            restored = bool(release()) if callable(release) else False
+            restored = bool(trace_tdp_operation(
+                backend, "release_hold", release,
+            )) if callable(release) else False
         except Exception:  # noqa: BLE001
             restored = False
         if restored:
@@ -7874,7 +7893,10 @@ class Plugin:
             bounds,
             TdpObservation(readable=False),
         )
-        result = sidecar.hold_levels(targets.target)
+        result = trace_tdp_operation(
+            sidecar, "hold", lambda: sidecar.hold_levels(targets.target),
+            target=targets.target, on_ac=command.on_ac,
+        )
         self._tdp_targets = targets
         if result.ok:
             observe_hold = getattr(sidecar, "observe_hold", None)
@@ -8400,6 +8422,7 @@ class Plugin:
                     "ok": bool(result.ok),
                     "applied": result.applied_w,
                     "detail": result.detail,
+                    "failure_kind": getattr(result, "failure_kind", None),
                 }
             ),
         }
@@ -12723,7 +12746,7 @@ class Plugin:
         release_error = None
         if callable(release):
             try:
-                released = bool(release())
+                released = bool(trace_tdp_operation(previous, "release_replace", release))
             except Exception as error:  # noqa: BLE001
                 released = False
                 release_error = type(error).__name__
@@ -12885,7 +12908,9 @@ class Plugin:
         if not callable(recover):
             return True
         try:
-            result = recover()
+            result = trace_tdp_operation(
+                self._tdp_backend, "recover", recover,
+            )
         except Exception as error:  # noqa: BLE001
             decky.logger.error(
                 "Interrupted TDP transaction recovery failed: %s",

@@ -598,6 +598,7 @@ def test_exact_legion_go_2_83n0_hands_off_to_balanced_when_rearm_fails(
     assert "transaction_lock" not in backend.diagnostics()
     assert backend.diagnostics()["firmware_handoff"] == {
         "profile": "balanced",
+        "observed_profile": "balanced",
         "attempts": 0,
         "retry_in_s": 30,
     }
@@ -631,6 +632,7 @@ def test_exact_legion_go_2_83n0_handoff_retries_with_backoff_until_firmware_answ
     assert "rollback confirmed" in still_stuck.detail
     assert backend.read_profile() == "balanced"
     assert not os.path.exists(lock_path)
+
     assert backend.diagnostics()["firmware_handoff"]["attempts"] == 1
     assert backend.diagnostics()["firmware_handoff"]["retry_in_s"] == 60
 
@@ -2537,3 +2539,100 @@ def test_playstation_5_does_not_claim_ryzenadj_from_binary_presence(tmp_path):
         ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert backend.supported is False
     assert list(backend.probe_trace) == []
+
+
+def test_go2_handoff_reconfirms_fallback_after_profile_changes(tmp_path, monkeypatch):
+    backend, firmware, _lock, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    waiting = backend.set_levels(18, 18, 18, ac=True)
+    assert "handed off to balanced" not in waiting.detail
+    assert backend.diagnostics()["firmware_handoff"]["observed_profile"] == "custom"
+    clock["now"] += 31
+    failed = backend.set_levels(18, 18, 18, ac=True)
+    assert not failed.ok
+    assert failed.failure_kind is None
+    assert backend.read_profile() == "balanced"
+    assert backend.diagnostics()["firmware_handoff"]["retry_in_s"] == 60
+    firmware["arms"] = True
+    clock["now"] += 61
+    assert backend.set_levels(18, 18, 18, ac=True).ok
+    assert backend.read_applied() == 18
+    assert "firmware_handoff" not in backend.diagnostics()
+
+
+@pytest.mark.parametrize("failure", ["write", "readback"])
+def test_go2_failed_fallback_stays_locked_until_confirmed(tmp_path, monkeypatch, failure):
+    backend, _firmware, lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    model_write = backend._write
+
+    def reject_fallback(path, value):
+        if path.endswith("/profile") and value == "balanced":
+            return failure == "readback"
+        return model_write(path, value)
+
+    backend._write = reject_fallback
+    clock["now"] += 31
+    assert not backend.set_levels(18, 18, 18, ac=True).ok
+    assert backend.safety_locked
+    assert os.path.exists(lock_path)
+    assert backend.diagnostics()["transaction_lock"]["state"] == "handoff_pending"
+    assert not backend.recover_runtime_transaction()["ok"]
+    assert backend.safety_locked
+    backend._write = model_write
+    assert backend.recover_runtime_transaction()["ok"]
+    assert backend.read_profile() == "balanced"
+    assert not backend.safety_locked
+    assert not os.path.exists(lock_path)
+
+
+def test_go2_pending_handoff_recovers_after_plugin_restart(tmp_path, monkeypatch):
+    backend, _firmware, lock_path, clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    backend.recover_runtime_transaction()
+    backend.set_profile("custom")
+    model_write = backend._write
+    backend._write = lambda path, value: (
+        False if path.endswith("/profile") and value == "balanced"
+        else model_write(path, value)
+    )
+    clock["now"] += 31
+    backend.set_levels(18, 18, 18, ac=True)
+    assert backend.safety_locked
+    restarted = select_backend(
+        _p("legion_go_2"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    assert restarted.safety_locked
+    assert restarted.recover_runtime_transaction()["ok"]
+    assert restarted.read_profile() == "balanced"
+    assert not restarted.safety_locked
+    assert not os.path.exists(lock_path)
+
+
+@pytest.mark.parametrize("failure,stage", [
+    ("write", "profile_write"), ("readback", "profile_readback"),
+    ("clear", "lock_clear"), (None, "confirmed"),
+])
+def test_go2_handoff_journal_identifies_failure_stage(tmp_path, monkeypatch, failure, stage):
+    import journal
+    from types import SimpleNamespace
+    backend, _firmware, _lock, _clock = _stuck_go_2_lock(tmp_path, monkeypatch)
+    events = []
+    monkeypatch.setattr(journal, "active", SimpleNamespace(
+        write=lambda *args, **data: events.append((args, data)),
+    ))
+    original_write = backend._write
+    if failure in ("write", "readback"):
+        backend._write = lambda path, value: (
+            failure == "readback" if path.endswith("/profile")
+            else original_write(path, value)
+        )
+    if failure == "clear":
+        monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+    assert backend._hand_off_to_firmware() is (failure is None)
+    event = events[-1][1]
+    assert event["operation"] == "firmware_handoff"
+    assert event["result"]["stage"] == stage
+    if failure == "readback":
+        assert event["result"]["observed_profile"] == "custom"
