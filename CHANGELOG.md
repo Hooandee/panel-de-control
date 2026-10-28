@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.80.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.0...panel-de-control-v0.80.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **tdp:** confirm firmware recovery and trace backend operations ([#1041](https://github.com/Hooandee/panel-de-control/issues/1041)) ([e889c1a](https://github.com/Hooandee/panel-de-control/commit/e889c1a6e8d20460d46bdd46be1dfea576d4b302))
+
 ## [0.80.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.79.0...panel-de-control-v0.80.0) (2026-10-28)
 
 ### Español
