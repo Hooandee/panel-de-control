@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## [0.80.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.0...panel-de-control-v0.80.1) (2026-10-28)
+
+### Español
+
+* **TDP en Legion Go 2:** Mejoramos la recuperación cuando no se aplica el límite de potencia y evitamos dar por confirmado un cambio de perfil que no se ha realizado.
+* **Reportes de TDP más útiles:** Los reportes incluyen más información sobre los fallos del control de potencia para facilitar su diagnóstico en todos los equipos.
+
+### English
+
+* **TDP on Legion Go 2:** Improved recovery when a power limit does not apply, and prevented Panel from confirming a profile change that did not take effect.
+* **More useful TDP reports:** Reports include more information about power control failures to help diagnose problems across devices.
+
+### Italiano
+
+* **TDP su Legion Go 2:** Migliorato il recupero quando il limite di potenza non viene applicato. Panel non indica più come confermato un cambio di profilo che non è avvenuto.
+* **Segnalazioni TDP più utili:** Le segnalazioni includono più informazioni sui problemi del controllo della potenza, per facilitarne la diagnosi su tutti i dispositivi.
+
+### Deutsch
+
+* **TDP auf Legion Go 2:** Die Wiederherstellung wurde verbessert, wenn ein Leistungslimit nicht übernommen wird. Panel bestätigt keinen Profilwechsel mehr, der nicht stattgefunden hat.
+* **Aussagekräftigere TDP-Berichte:** Berichte enthalten mehr Informationen zu Fehlern bei der Leistungssteuerung, um die Diagnose auf allen Geräten zu erleichtern.
+
+### Português (Brasil)
+
+* **TDP no Legion Go 2:** Melhoramos a recuperação quando o limite de potência não é aplicado e evitamos confirmar uma mudança de perfil que não aconteceu.
+* **Relatórios de TDP mais úteis:** Os relatórios incluem mais informações sobre falhas no controle de potência para facilitar o diagnóstico em todos os dispositivos.
+
+### Français
+
+* **TDP sur Legion Go 2 :** La récupération est améliorée lorsqu'une limite de puissance n'est pas appliquée. Panel ne confirme plus un changement de profil qui n'a pas eu lieu.
+* **Des rapports TDP plus utiles :** Les rapports contiennent davantage d'informations sur les échecs du contrôle de puissance pour faciliter le diagnostic sur tous les appareils.
+
 ## [0.80.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.79.0...panel-de-control-v0.80.0) (2026-10-28)
 
 ### Español
