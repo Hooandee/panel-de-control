@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { theme, themed } from "../theme";
 import { applyThemeTokens, parseThemeColor, parseThemeRadius, readThemeTokens } from "./themeTokens";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   applyThemeTokens({ color: {}, radius: {} });
   document.documentElement.removeAttribute("style");
 });
@@ -43,3 +44,42 @@ describe("theme tokens", () => {
     expect(theme.sectionLabel).toMatchObject({ textTransform: "none", letterSpacing: 0 });
   });
 });
+
+ it("keeps numeric fonts live, including arithmetic and section headings", () => {
+  expect({ ...theme.font }).toEqual({ caption: 11, body: 13, value: 28 });
+  const cached = themed(() => ({ fontSize: theme.font.caption - 1 }));
+  applyThemeTokens({ color: {}, radius: {}, size: { fontCaption: 18, fontBody: 23, fontValue: 43 } });
+  expect({ ...theme.font }).toEqual({ caption: 18, body: 23, value: 43 });
+  expect(theme.sectionLabel.fontSize).toBe(18);
+  expect(cached.fontSize).toBe(17);
+  applyThemeTokens({ color: {}, radius: {} });
+  expect(theme.sectionLabel.fontSize).toBe(11);
+  expect(cached.fontSize).toBe(10);
+ });
+
+ it("reads positive font pixels and ignores missing or invalid typography", () => {
+  const root = document.documentElement;
+  root.style.setProperty("--pdc-theme-font-caption", "18.5px");
+  root.style.setProperty("--pdc-theme-font-body", "23");
+  root.style.setProperty("--pdc-theme-font-value", "0px");
+  expect(readThemeTokens(document).size).toEqual({ fontCaption: 18.5, fontBody: 23 });
+  for (const invalid of ["-1px", "inherit", "initial", "nonsense", "NaN", "Infinity"]) {
+    root.style.setProperty("--pdc-theme-font-caption", invalid);
+    expect(readThemeTokens(document).size?.fontCaption).toBeUndefined();
+  }
+ });
+
+ it("uses the browser's resolved font pixels for viewport expressions and removes probes", () => {
+  document.documentElement.style.setProperty("--pdc-theme-font-caption", "calc(100vh / 50)");
+  document.documentElement.style.setProperty("--pdc-theme-font-body", "2vh");
+  const computed = window.getComputedStyle.bind(window);
+  const before = document.documentElement.children.length;
+  // happy-dom does not resolve viewport calc(); model the browser's computed readback.
+  vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+    if (element instanceof HTMLElement && element.style.fontSize === "calc(100vh / 50)") return { fontSize: "18px" } as CSSStyleDeclaration;
+    if (element instanceof HTMLElement && element.style.fontSize === "2vh") return { fontSize: "18px" } as CSSStyleDeclaration;
+    return computed(element, pseudo);
+  });
+  expect(readThemeTokens(document).size).toEqual({ fontCaption: 18, fontBody: 18 });
+  expect(document.documentElement.children.length).toBe(before);
+ });

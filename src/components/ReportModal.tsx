@@ -106,7 +106,7 @@ const SelectionChip: FC<{
       borderRadius: theme.radius.sm,
       boxShadow: `inset 0 0 0 1px ${on ? theme.color.accent : theme.color.hairline}`,
       background: on ? `rgba(${theme.color.accentRgb},0.12)` : "transparent",
-      fontSize: theme.font.body,
+      fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`,
       color: theme.color.textPrimary,
       flex: "1 1 45%",
       minWidth: 0,
@@ -207,7 +207,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
       }}
     >
       {device && (
-        <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>
+        <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, color: theme.color.textPrimary }}>
           {device.display_name}
         </div>
       )}
@@ -230,7 +230,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
 
   if (phase === "sending") {
     return wrap(
-      <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
+      <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>
         {t("report.sending")}
       </div>,
     );
@@ -240,10 +240,10 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
     return wrap(
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, alignItems: "center", textAlign: "center" }}>
         <div style={{ fontSize: 40 }}>✅</div>
-        <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>
+        <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, color: theme.color.textPrimary }}>
           {t("report.done.title")}
         </div>
-        <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
+        <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>
           {t(copyKey("report.done.thanks"))}
         </div>
         <div style={{ ...theme.card, padding: theme.space.md, minWidth: 220 }}>
@@ -252,7 +252,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
             {result?.code}
           </div>
         </div>
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, maxWidth: 340 }}>
+        <div style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted, maxWidth: 340 }}>
           {t(copyKey("report.code.hint"))}
         </div>
         <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.sm }}>
@@ -268,11 +268,11 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
   if (phase === "error") {
     return wrap(
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-        <div style={{ fontSize: theme.font.body, color: theme.color.danger }}>
+        <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.danger }}>
           {t("report.error.title")}
         </div>
         {result?.saved_path && (
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          <div style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted }}>
             {t("report.error.saved", { path: result.saved_path })}
           </div>
         )}
@@ -287,11 +287,11 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
   if (choosingKind || kind === null) {
     return wrap(
       <>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
+        <div data-pdc-modal-header style={{ textAlign: "center" }}>
+          <div style={{ fontSize: `var(--pdc-modal-title, ${theme.font.value}px)`, fontWeight: 700, color: theme.color.textPrimary }}>
             {t("report.title")}
           </div>
-          <div style={{ marginTop: theme.space.xs, fontSize: theme.font.body, color: theme.color.textMuted }}>
+          <div style={{ marginTop: theme.space.xs, fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>
             {t("report.section.kind")}
           </div>
         </div>
@@ -340,7 +340,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
           {kind === "bug"
             ? <LuBug size={22} color={theme.color.danger} aria-hidden="true" />
             : <LuLightbulb size={22} color={theme.color.accent} aria-hidden="true" />}
-          <span style={{ fontSize: theme.font.body, fontWeight: 700 }}>{t(`report.kind.${kind}`)}</span>
+          <span style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, fontWeight: 700 }}>{t(`report.kind.${kind}`)}</span>
         </div>
         <DialogButton
           style={{ width: 112, minWidth: 112, flex: "0 0 auto" }}
@@ -350,7 +350,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
         </DialogButton>
       </div>
 
-      <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
+      <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>
         {t(copyKey("report.intro"))}
       </div>
 
@@ -375,7 +375,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
           onChange={(e) => setText(e.target.value)}
         />
         {text.trim().length === 0 && (
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          <div style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted }}>
             {t(copyKey("report.describe.hint"))}
           </div>
         )}
@@ -388,7 +388,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
           display: "flex",
           flexDirection: "column",
           gap: theme.space.xs,
-          fontSize: theme.font.caption,
+          fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`,
           color: theme.color.textMuted,
           lineHeight: 1.5,
         }}
@@ -410,7 +410,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
 
 const ReportModal: FC<ReportModalProps> = ({ closeModal, initialCategories }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
+    <FocusRoot settingsModal="report">
       <ReportBody closeModal={closeModal} initialCategories={initialCategories} />
     </FocusRoot>
   </ModalRoot>

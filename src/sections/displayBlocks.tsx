@@ -29,14 +29,14 @@ const ColorBlock: FC = () => {
   const state = color.state;
   if (!state?.supported) return null;
   const active = !isNativeColor(state);
-  const chip = (on: boolean) => ({ ...segmentItemStyle(on), flex: "1 1 0", minWidth: 0, padding: "6px 0", fontSize: theme.font.caption });
+  const chip = (on: boolean) => ({ ...segmentItemStyle(on), flex: "1 1 0", minWidth: 0, padding: "6px 0", fontSize: "var(--pdc-display-caption, 11px)" });
   return (
     <>
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+        <div style={{ ...theme.card, padding: "var(--pdc-display-padding, 12px)", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <LuSparkles size={16} color={theme.color.accent} />
-            <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+            <span style={{ fontSize: "var(--pdc-display-label, 13px)", fontWeight: 600, color: theme.color.textPrimary }}>
               {t("display.look")}
             </span>
           </div>
@@ -51,13 +51,13 @@ const ColorBlock: FC = () => {
         </div>
       </PanelSectionRow>
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+        <div style={{ ...theme.card, padding: "var(--pdc-display-padding, 12px)", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
             <LuPalette size={16} color={theme.color.accent} />
-            <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+            <span style={{ fontSize: "var(--pdc-display-label, 13px)", fontWeight: 600, color: theme.color.textPrimary }}>
               {t("display.saturation")}
             </span>
-            <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
+            <span style={{ marginLeft: "auto", fontSize: "var(--pdc-display-value, 28px)", fontWeight: 700, color: theme.color.textPrimary }}>
               {state.saturation}%
             </span>
           </div>
@@ -78,7 +78,7 @@ const ColorBlock: FC = () => {
             display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
             borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
             boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-            color: theme.color.textPrimary, fontSize: theme.font.body,
+            color: theme.color.textPrimary, fontSize: "var(--pdc-display-label, 13px)",
             cursor: active ? "pointer" : "default", opacity: active ? 1 : 0.45,
           }}
           onActivate={() => { if (active) color.onReset(); }} onClick={() => { if (active) color.onReset(); }}
@@ -109,7 +109,7 @@ const NightBlock: FC = () => {
       <PanelSectionRow>
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: `${theme.space.md}px 0 ${theme.space.xs}px`, color: theme.color.textMuted }}>
           <LuGlobe size={13} />
-          <span style={{ fontSize: theme.font.caption }}>{t("display.general")}</span>
+          <span style={{ fontSize: "var(--pdc-display-caption, 11px)" }}>{t("display.general")}</span>
           <div style={{ flex: 1, height: 1, background: theme.color.hairline }} />
         </div>
       </PanelSectionRow>

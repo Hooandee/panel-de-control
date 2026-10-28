@@ -57,18 +57,18 @@ const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = (
     <div ref={card} style={{ ...theme.card, padding: theme.space.md, marginBottom: theme.space.sm, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, marginBottom: theme.space.xs }}>
         <LuGamepad2 size={16} color={theme.color.accent} style={{ flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, fontWeight: 700, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {name}
         </span>
         {!installed && (
-          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, fontStyle: "italic", flexShrink: 0 }}>
+          <span style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted, fontStyle: "italic", flexShrink: 0 }}>
             {t("gameProfiles.uninstalled")}
           </span>
         )}
       </div>
 
       {lines.map((l) => (
-        <div key={l.label} style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5, opacity: l.dim ? 0.5 : 1 }}>
+        <div key={l.label} style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted, lineHeight: 1.5, opacity: l.dim ? 0.5 : 1 }}>
           <span style={{ color: theme.color.textPrimary, fontWeight: 600 }}>{l.label}</span> {l.text}
           {l.dim && <span> · {t("gameProfiles.followsGlobal")}</span>}
         </div>
@@ -80,7 +80,7 @@ const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = (
           marginTop: theme.space.sm, padding: "6px 12px", borderRadius: theme.radius.sm,
           background: confirm ? theme.color.danger : theme.color.surfaceRaised,
           boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-          color: confirm ? "#ffffff" : theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
+          color: confirm ? "#ffffff" : theme.color.textPrimary, fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, cursor: "pointer",
         }}
         onActivate={press}
         onClick={press}
@@ -105,16 +105,16 @@ const GameProfilesBody: FC = () => {
 
   return (
     <div style={{ padding: theme.space.md }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: theme.color.textPrimary, marginBottom: theme.space.xs }}>
+      <div style={{ fontSize: "var(--pdc-modal-title, 16px)", fontWeight: 700, color: theme.color.textPrimary, marginBottom: theme.space.xs }}>
         {t("gameProfiles.title")}
       </div>
-      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginBottom: theme.space.md, lineHeight: 1.4 }}>
+      <div style={{ fontSize: `var(--pdc-modal-caption, ${theme.font.caption}px)`, color: theme.color.textMuted, marginBottom: theme.space.md, lineHeight: 1.4 }}>
         {t("gameProfiles.desc")}
       </div>
       {rows === null ? (
         <Loading />
       ) : rows.length === 0 ? (
-        <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>{t("gameProfiles.empty")}</div>
+        <div style={{ fontSize: `var(--pdc-modal-body, ${theme.font.body}px)`, color: theme.color.textMuted }}>{t("gameProfiles.empty")}</div>
       ) : (
         rows.map((row) => <GameRow key={row.appid} row={row} onReset={onReset} />)
       )}
@@ -124,7 +124,7 @@ const GameProfilesBody: FC = () => {
 
 const GameProfilesModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
+    <FocusRoot settingsModal="profiles">
       <GameProfilesBody />
     </FocusRoot>
   </ModalRoot>

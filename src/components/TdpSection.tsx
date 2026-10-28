@@ -98,16 +98,16 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
     return (
       <PanelSectionRow>
         <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-          <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+          <span style={{ fontSize: "var(--pdc-power-label, 13px)", fontWeight: 700, color: theme.color.textPrimary }}>
             {t("tdp.console.title")}
           </span>
-          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+          <span style={{ fontSize: "var(--pdc-power-caption, 11px)", color: theme.color.textMuted, lineHeight: 1.4 }}>
             {t("tdp.console.body")}
           </span>
           {power?.gpu_busy != null && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: theme.space.xs }}>
-              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.console.gpuBusy")}</span>
-              <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>{power.gpu_busy} %</span>
+              <span style={{ fontSize: "var(--pdc-power-caption, 11px)", color: theme.color.textMuted }}>{t("tdp.console.gpuBusy")}</span>
+              <span style={{ fontSize: "var(--pdc-power-label, 13px)", fontWeight: 700, color: theme.color.textPrimary }}>{power.gpu_busy} %</span>
             </div>
           )}
         </div>
@@ -287,7 +287,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
               <div style={{
                 textAlign: "center",
                 color: theme.color.textMuted,
-                fontSize: theme.font.caption,
+                fontSize: "var(--pdc-power-caption, 11px)",
                 fontVariantNumeric: "tabular-nums",
               }}>
                 {levelSummary}
@@ -317,7 +317,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                 alignItems: "flex-start",
                 gap: theme.space.xs,
                 color: theme.color.textMuted,
-                fontSize: theme.font.caption,
+                fontSize: "var(--pdc-power-caption, 11px)",
               }}>
                 <span aria-hidden style={{
                   flexShrink: 0,
@@ -333,7 +333,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
           )}
           {atCeiling && !levelUnit && (
             <PanelSectionRow>
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <div style={{ fontSize: "var(--pdc-power-caption, 11px)", color: theme.color.textMuted }}>
                 {tdp.on_ac
                   ? t("tdp.ceiling.charger", { max: activeMax })
                   : t("tdp.ceiling.battery", { max: activeMax })}
@@ -355,7 +355,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                 />
               </PanelSectionRow>
               <PanelSectionRow>
-                <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: 8 }}>
+                <div style={{ fontSize: "var(--pdc-power-caption, 11px)", color: theme.color.textMuted, marginTop: 8 }}>
                   {inFwMode ? t("tdp.fwmode.active") : t("tdp.fwmode.custom")}
                 </div>
               </PanelSectionRow>
@@ -392,7 +392,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                       padding: "4px 0",
                       marginTop: 4,
                       color: theme.color.textMuted,
-                      fontSize: theme.font.caption,
+                      fontSize: "var(--pdc-power-caption, 11px)",
                       cursor: "pointer",
                     }}
                     onActivate={() => (editingGpu ? onGpuLevel?.(null) : onWatts(resetTarget))}

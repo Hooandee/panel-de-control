@@ -201,7 +201,7 @@ export const SteamPerformanceCard: FC<{
         : matching ? "steam.performance.profile.global" : "steam.performance.profile.inactiveGame";
   return <Collapsible id="steam-performance" icon={<LuMonitorCog size={16} />} title={t("steam.performance.title")} summary={own ? "PDC" : profile === "game" ? "Steam" : t("tdp.scope.global")}>
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-      <div role="status" style={{ fontSize: theme.font.caption, color: failed ? theme.color.danger : theme.color.textMuted, lineHeight: 1.4 }}>{t(status)}</div>
+      <div role="status" style={{ fontSize: "var(--pdc-power-caption, 11px)", color: failed ? theme.color.danger : theme.color.textMuted, lineHeight: 1.4 }}>{t(status)}</div>
       {readable && <SteamPerformanceControls controls={controls}
         disabled={!ready || busy || ownershipPending} onChange={change} />}
       {own && <DialogButton disabled={busy} onClick={() => { void release(); }}>{t("steam.performance.release")}</DialogButton>}

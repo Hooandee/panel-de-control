@@ -25,7 +25,7 @@ export const FirmwareModes: FC<FirmwareModesProps> = ({ modes, active, labels, o
       {items.map((m) => {
         const Icon = ICONS[m] ?? LuGauge;
         return (
-          <Focusable key={m} style={iconChipStyle(active === m)} onActivate={() => onPick(m)} onClick={() => onPick(m)}>
+          <Focusable key={m} data-pdc-part="power-mode" style={{ ...iconChipStyle(active === m), fontSize: "var(--pdc-power-caption, 11px)", minHeight: "var(--pdc-power-mode-height, auto)", gap: "var(--pdc-power-mode-gap, 2px)", padding: "var(--pdc-power-mode-padding, 6px 4px)" }} onActivate={() => onPick(m)} onClick={() => onPick(m)}>
             <Icon size={16} />
             <span>{labels[m] ?? m}</span>
           </Focusable>

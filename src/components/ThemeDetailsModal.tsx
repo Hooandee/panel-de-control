@@ -1,3 +1,4 @@
+import { DuoDockEditorButton } from "./DuoDockEditorButton";
 import { GameArtworkEditorButton } from "./GameArtworkEditor";
 import { ButtonItem, DialogButton, Focusable, ModalRoot, Navigation } from "@decky/ui";
 import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
@@ -516,6 +517,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
 
             {card.id === "hooandee-duo" && card.installed ? (
               <GameArtworkEditorButton disabled={actionsBlocked || !card.active} onOpen={closeModal} />
+            ) : null}
+            {card.id === "hooandee-duo" && card.installed && card.active ? (
+              <DuoDockEditorButton disabled={actionsBlocked} onOpen={closeModal} />
             ) : null}
             {card.installed && groups.length === 0 ? (
               <div data-pdc-theme-status-surface="true" style={STATUS_SURFACE}><span data-pdc-theme-muted>{t("themes.patches.empty")}</span></div>

@@ -83,7 +83,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle,
           return (
             <g key={`db${db}`}>
               <line x1={0} y1={y} x2={PLOT.w} y2={y} stroke={theme.color.hairline} strokeWidth={1} />
-              <text x={-6} y={y + 3} textAnchor="end" fontSize={9} fill={muted}>
+              <text x={-6} y={y + 3} textAnchor="end" fontSize="var(--pdc-graph-font-small, 9px)" fill={muted}>
                 {db > 0 ? `+${db}` : db}
               </text>
             </g>
@@ -97,7 +97,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle,
             x={-24}
             y={PLOT.h / 2}
             textAnchor="middle"
-            fontSize={8}
+            fontSize="var(--pdc-graph-font-small, 8px)"
             fill={muted}
           >
             {yTitle}
@@ -141,7 +141,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle,
                 onPointerDown={editable ? startDrag(i) : undefined}
                 style={editable ? { cursor: "ns-resize" } : undefined}
               />
-              <text x={x} y={PLOT.h + 14} textAnchor="middle" fontSize={8} fill={muted}>
+              <text x={x} y={PLOT.h + 14} textAnchor="middle" fontSize="var(--pdc-graph-font-small, 8px)" fill={muted}>
                 {formatHz(BAND_FREQS[i])}
               </text>
             </g>
@@ -155,7 +155,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle,
             x={bandX(z.band, n)}
             y={PLOT.h + 27}
             textAnchor="middle"
-            fontSize={9}
+            fontSize="var(--pdc-graph-font-small, 9px)"
             fill={theme.color.accent}
           >
             {z.label}
@@ -168,7 +168,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle,
             x={Math.min(PLOT.w - 2, Math.max(0, bandX(active, n)))}
             y={Math.max(10, gainToY(gains[active]) - 10)}
             textAnchor="middle"
-            fontSize={10}
+            fontSize="var(--pdc-graph-font-small, 10px)"
             fill={theme.color.textPrimary}
           >
             {gains[active] > 0 ? `+${gains[active]}` : gains[active]} dB

@@ -33,7 +33,7 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
   });
 
   return (
-    <div>
+    <div data-pdc-part="profile-selector">
       <Focusable style={segmentGroupStyle}>
         <Focusable style={seg(scope === "global")} onActivate={() => onScope("global")} onClick={() => onScope("global")}>
           {globalLabel}

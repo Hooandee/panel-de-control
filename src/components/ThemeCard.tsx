@@ -4,6 +4,7 @@ import { LuDownload, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme, themed } from "../theme";
+import { themeSizeOverride } from "../system/themeTokens";
 import { localizePublishedText } from "../themes/remotePublication";
 import type { ThemeCardModel } from "../themes/state";
 import { themeCoverFor, themeTaglineFor } from "../themes/themePresentation";
@@ -72,7 +73,7 @@ export function EarlyBadge() {
     <span
       data-pdc-early-badge="true"
       style={{
-        fontSize: 9,
+        fontSize: themeSizeOverride("fontCaption") ?? 9,
         lineHeight: 1.2,
         padding: "2px 6px",
         borderRadius: 999,

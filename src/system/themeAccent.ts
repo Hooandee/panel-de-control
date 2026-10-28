@@ -23,12 +23,15 @@ export function watchThemeAccent(doc: Document): () => void {
     applyThemeTokens(readThemeTokens(doc));
   };
   sync();
-  const observer = new view.MutationObserver(() => {
+  const schedule = () => {
     if (!frame) frame = view.requestAnimationFrame(sync);
-  });
+  };
+  const observer = new view.MutationObserver(schedule);
+  view.addEventListener("resize", schedule);
   observer.observe(head, { childList: true, subtree: true, characterData: true });
   return () => {
     observer.disconnect();
+    view.removeEventListener("resize", schedule);
     if (frame) view.cancelAnimationFrame(frame);
   };
 }
