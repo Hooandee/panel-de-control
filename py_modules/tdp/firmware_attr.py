@@ -5,6 +5,7 @@ import time
 
 from sysfs import read_str
 from tdp.backend import TDPBackend
+from tdp.diagnostics import trace_operation
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 import journal
@@ -384,6 +385,13 @@ class FirmwareAttrBackend(TDPBackend):
         payload = self._runtime_lock_payload
         if purpose == "ownership":
             payload = self._owned_payload
+        if (
+            purpose == "transaction"
+            and isinstance(payload, dict)
+            and payload.get("state") == "handoff_pending"
+            and self._handoff_profile is not None
+        ):
+            return self._retry_firmware_handoff(payload)
         saved = payload.get("snapshot") if isinstance(payload, dict) else None
         if not isinstance(saved, dict) or not saved:
             return self._unrestorable(purpose, f"firmware {purpose} snapshot unavailable")
@@ -462,24 +470,46 @@ class FirmwareAttrBackend(TDPBackend):
         self._write_circuit_open = None
         return {"ok": True, "detail": f"firmware {purpose} recovered"}
 
+    def _retry_firmware_handoff(self, payload):
+        detail = "firmware handoff not confirmed"
+        pending = {**payload, "state": "handoff_pending", "detail": detail}
+        self._runtime_lock_payload = pending
+        self._write_circuit_open = detail
+        if not self._safety_lock.persist_payload(pending):
+            self._write_circuit_open += "; runtime lock persistence failed"
+        elif self._hand_off_to_firmware():
+            return {"ok": True, "detail": f"firmware handed off to {self._handoff_profile}"}
+        return {"ok": False, "detail": self._write_circuit_open}
+
     def _hand_off_to_firmware(self):
         profile = self._handoff_profile
-        if not self._pp_dir or profile not in self.profile_choices():
-            return False
-        self._write(os.path.join(self._pp_dir, "profile"), profile)
-        if self.read_profile() != profile:
-            return False
-        surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
-        if any(self._read_int(path) is None for _surface, _rail, path in surfaces):
-            return False
-        if not self._safety_lock.clear():
-            return False
-        self._runtime_lock_payload = None
-        self._recovery_failures = 0
-        self._write_circuit_open = None
-        self._custom_return_pending = False
-        self._schedule_handoff_retry()
-        return True
+        with trace_operation(self, "firmware_handoff", target={"profile": profile}) as trace:
+            trace.update(ok=False, stage="profile_choices")
+            if not self._pp_dir or profile not in self.profile_choices():
+                return False
+            trace["stage"] = "profile_write"
+            if not self._write(os.path.join(self._pp_dir, "profile"), profile):
+                return False
+            trace["stage"] = "profile_readback"
+            observed = self.read_profile()
+            trace["observed_profile"] = observed
+            if observed != profile:
+                return False
+            trace["stage"] = "rail_readback"
+            surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
+            for _surface, _rail, path in surfaces:
+                if self._read_int(path) is None:
+                    return False
+            trace["stage"] = "lock_clear"
+            if not self._safety_lock.clear():
+                return False
+            self._runtime_lock_payload = None
+            self._recovery_failures = 0
+            self._write_circuit_open = None
+            self._custom_return_pending = False
+            self._schedule_handoff_retry()
+            trace.update(ok=True, stage="confirmed")
+            return True
 
     def _schedule_handoff_retry(self):
         attempts = 0 if self._handoff is None else self._handoff["attempts"] + 1
@@ -898,7 +928,8 @@ class FirmwareAttrBackend(TDPBackend):
                 pl1,
                 self.read_applied(),
                 False,
-                f"firmware handed off to {self._handoff_profile}; retry pending",
+                "firmware recovery retry pending; "
+                f"fallback={self._handoff_profile}; observed={self.read_profile()}",
             )
         if self._custom_return_pending and not self._return_to_custom():
             return TdpResult(
@@ -1061,6 +1092,19 @@ class FirmwareAttrBackend(TDPBackend):
                 ),
             )
             rollback_detail = "rollback confirmed"
+            if self._handoff is not None or (
+                self._handoff_profile is not None
+                and previous_profile == self._handoff_profile
+            ):
+                handoff = self._retry_firmware_handoff(lock_payload)
+                return TdpResult(
+                    pl1,
+                    self.read_applied(),
+                    False,
+                    "write not confirmed: " + ", ".join(problems)
+                    + "; " + (rollback_detail if rollback_ok else "rollback failed")
+                    + "; " + handoff["detail"],
+                )
             if not rollback_ok:
                 rollback_detail = "rollback failed: " + ", ".join(rollback_problems)
                 self._write_circuit_open = rollback_detail
@@ -1091,11 +1135,6 @@ class FirmwareAttrBackend(TDPBackend):
                 if applied_w is not None
                 else None
             )
-            if self._handoff is not None or (
-                self._handoff_profile is not None
-                and previous_profile == self._handoff_profile
-            ):
-                self._schedule_handoff_retry()
             failure_kind = (
                 "target_not_applied"
                 if not failed
@@ -1195,6 +1234,7 @@ class FirmwareAttrBackend(TDPBackend):
         if self._handoff is not None:
             diagnostics["firmware_handoff"] = {
                 "profile": self._handoff_profile,
+                "observed_profile": self.read_profile(),
                 "attempts": self._handoff["attempts"],
                 "retry_in_s": max(0, round(self._handoff["retry_at"] - time.monotonic())),
             }
