@@ -18,11 +18,16 @@
       "author": "Hooandee",
       "tags": [],
       "minimumVersions": {
-        "panel": "0.73.0"
+        "panel": "0.80.0"
       },
       "early": {
-        "version": "0.1.7",
+        "version": "0.2.0",
         "artifacts": [
+          {
+            "version": "0.2.0",
+            "size": 340958,
+            "sha256": "ab7a7293e24224dcfb4fd5d7dcb4bf4697fa53cd35f978a01c0f96f31f3684d0"
+          },
           {
             "version": "0.1.7",
             "size": 311966,
@@ -57,11 +62,6 @@
             "version": "0.1.1",
             "size": 239219,
             "sha256": "0fe13d0eb5c512c9ad78cd6e030aad63b27f226a2890e53d0666597b9c70d16b"
-          },
-          {
-            "version": "0.1.0",
-            "size": 238493,
-            "sha256": "b5ec2625622ccaa90be75f60e7d4526b24d307e5be1c92b110d69773ad2e2b71"
           }
         ]
       }
