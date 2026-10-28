@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## [0.80.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.79.0...panel-de-control-v0.80.0) (2026-10-28)
+
+### Español
+
+* **Más posibilidades para los temas:** Ampliamos el soporte de personalización para que los temas puedan adaptar mejor los textos, controles y diálogos de Panel, además de ofrecer sus propias herramientas de edición.
+* **Iconos con más vida:** Las secciones de Inicio estrenan iconos que se animan al seleccionarlos con el mando o pasar el cursor.
+* **Cambio de idioma:** Puedes cambiar el idioma y seguir usando Panel con el mando sin tener que cerrarlo y volver a abrirlo.
+
+### English
+
+* **More room for theme customization:** Expanded theme support lets themes better adapt Panel's text, controls and dialogs, and offer their own editing tools.
+* **Livelier icons:** Home sections have new icons that animate when selected with a controller or hovered over.
+* **Language switching:** Change the language and keep using Panel with your controller without having to close and reopen it.
+
+### Italiano
+
+* **Più possibilità per i temi:** Il supporto alla personalizzazione si amplia: i temi possono adattare meglio testi, controlli e finestre di dialogo di Panel e offrire i propri strumenti di modifica.
+* **Icone più vivaci:** Le sezioni della Home hanno nuove icone che si animano quando le selezioni con il controller o ci passi sopra con il cursore.
+* **Cambio di lingua:** Puoi cambiare lingua e continuare a usare Panel con il controller senza doverlo chiudere e riaprire.
+
+### Deutsch
+
+* **Mehr Möglichkeiten für Themes:** Die erweiterte Theme-Unterstützung erlaubt eine bessere Anpassung von Texten, Bedienelementen und Dialogen in Panel sowie eigene Bearbeitungswerkzeuge.
+* **Lebendigere Symbole:** Die Bereiche auf der Startseite haben neue Symbole, die sich bei Auswahl mit dem Controller oder beim Darüberfahren mit dem Mauszeiger bewegen.
+* **Sprache wechseln:** Nach einem Sprachwechsel kannst du Panel direkt mit dem Controller weiter bedienen, ohne es schließen und erneut öffnen zu müssen.
+
+### Português (Brasil)
+
+* **Mais possibilidades para os temas:** Ampliamos o suporte à personalização para que os temas possam adaptar melhor os textos, controles e caixas de diálogo do Panel, além de oferecer suas próprias ferramentas de edição.
+* **Ícones com mais vida:** As seções da tela inicial têm novos ícones que se animam ao selecioná-los com o controle ou passar o cursor sobre eles.
+* **Troca de idioma:** Você pode mudar o idioma e continuar usando o Panel com o controle, sem precisar fechar e abrir de novo.
+
+### Français
+
+* **Plus de possibilités pour les thèmes :** La prise en charge de la personnalisation s'enrichit pour permettre aux thèmes de mieux adapter les textes, les commandes et les boîtes de dialogue de Panel, et de proposer leurs propres outils d'édition.
+* **Des icônes plus vivantes :** Les sections de l'accueil ont de nouvelles icônes qui s'animent lorsque vous les sélectionnez à la manette ou les survolez avec le curseur.
+* **Changement de langue :** Vous pouvez changer de langue et continuer à utiliser Panel à la manette sans devoir le fermer puis le rouvrir.
+
 ## [0.79.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.1...panel-de-control-v0.79.0) (2026-10-26)
 
 
