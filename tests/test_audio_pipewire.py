@@ -893,11 +893,14 @@ def test_secure_write_refuses_to_publish_with_the_wrong_owner(tmp_path, monkeypa
     class WrongOwner:
         st_uid = os.getuid() + 1
 
-    monkeypatch.setattr(os, "fchown", reject_chown)
-    monkeypatch.setattr(os, "fstat", lambda _fd: WrongOwner())
-
     target = tmp_path / "wrong-owner"
-    assert eq._write_entry(str(target), "data") is False
+    # Restore fstat before pytest inspects its output-capture file descriptors.
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "fchown", reject_chown)
+        patch.setattr(os, "fstat", lambda _fd: WrongOwner())
+        written = eq._write_entry(str(target), "data")
+
+    assert written is False
     assert not target.exists()
 
 
