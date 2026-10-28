@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ find: vi.fn(), close: vi.fn(), modal: vi.fn(), log: vi.fn() }));
-vi.mock('@decky/ui', () => ({ findSP: mocks.find, Navigation: { CloseSideMenus: mocks.close }, ButtonItem: ({children, ...props}: {children?: ReactNode}) => <button {...props}>{children}</button>, DialogButton: ({children}: {children?: ReactNode}) => <button>{children}</button>, ModalRoot: ({children}: {children?: ReactNode}) => <div>{children}</div> }));
+vi.mock('@decky/ui', () => ({ findSP: mocks.find, Navigation: { CloseSideMenus: mocks.close }, ButtonItem: ({children, ...props}: {children?: ReactNode}) => <button {...props}>{children}</button>, DialogButton: ({children, ...props}: {children?: ReactNode}) => <button {...props}>{children}</button>, ModalRoot: ({children}: {children?: ReactNode}) => <div>{children}</div> }));
 vi.mock('../navigation/showModal', () => ({showModal: mocks.modal}));
 vi.mock('../system/uiEvents', () => ({recordUiEvent: mocks.log}));
 vi.mock('../i18n', () => ({useI18n: () => ({lang:'es'})}));

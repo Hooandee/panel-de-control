@@ -1,4 +1,4 @@
-import { ButtonItem, DialogButton, ModalRoot, Navigation, findSP } from '@decky/ui';
+import { DialogButton, ModalRoot, Navigation, findSP } from '@decky/ui';
 import { useI18n } from '../i18n';
 import { showModal } from '../navigation/showModal';
 import { recordUiEvent } from '../system/uiEvents';
@@ -39,7 +39,7 @@ export function openDuoDockEditor(es: boolean): boolean {
 export function DuoDockEditorButton({ onOpen, disabled = false }: { onOpen?: () => void; disabled?: boolean }) {
   const { lang } = useI18n();
   const es = lang === 'es';
-  return <ButtonItem disabled={disabled} onClick={() => {
+  return <DialogButton style={{ width: "100%", minHeight: 48 }} disabled={disabled} onClick={() => {
     if (!onOpen) { openDuoDockEditor(es); return; }
     onOpen();
     const deadline = Date.now() + 1000;
@@ -50,5 +50,5 @@ export function DuoDockEditorButton({ onOpen, disabled = false }: { onOpen?: () 
       else requestAnimationFrame(afterModalReturn);
     };
     requestAnimationFrame(afterModalReturn);
-  }}>{es ? 'Personalizar Dock' : 'Customize Dock'}</ButtonItem>;
+  }}>{es ? 'Personalizar Dock' : 'Customize Dock'}</DialogButton>;
 }

@@ -1,4 +1,4 @@
-import { ButtonItem, DialogButton, DropdownItem, ModalRoot, SliderField, ToggleField, findSP, Navigation } from "@decky/ui";
+import { DialogButton, DropdownItem, ModalRoot, SliderField, ToggleField, findSP, Navigation } from "@decky/ui";
 import { useEffect, useMemo, useState } from "react";
 import { showModal } from "../navigation/showModal";
 import { listInstalledGames } from "../launch/steamApi";
@@ -84,7 +84,7 @@ export function openGameArtworkEditor(appId?: number): boolean {
 }
 export function GameArtworkEditorButton({ onOpen, disabled = false }: { onOpen?: () => void; disabled?: boolean }) {
   const { t } = useI18n();
-  return <ButtonItem disabled={disabled} onClick={() => {
+  return <DialogButton style={{ width: "100%", minHeight: 48 }} disabled={disabled} onClick={() => {
     if (onOpen) {
       onOpen();
       const deadline = Date.now() + 1000;
@@ -96,5 +96,5 @@ export function GameArtworkEditorButton({ onOpen, disabled = false }: { onOpen?:
       };
       requestAnimationFrame(afterModalReturn);
     } else openGameArtworkEditor();
-  }}>{t("artwork.contextMenu")}</ButtonItem>;
+  }}>{t("artwork.contextMenu")}</DialogButton>;
 }
