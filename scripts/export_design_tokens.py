@@ -38,6 +38,21 @@ def _numbers(source, name):
     return {key: int(value) for key, value in re.findall(r"(\w+):\s*(\d+)", match.group(1))}
 
 
+def _font_defaults(source):
+    body = _object_body(source, "font")
+    defaults = {
+        key: int(value)
+        for key, value in re.findall(
+            r'get\s+(\w+)\(\):\s*number\s*\{\s*return\s+'
+            r'themeSizeOverride\("\w+"\)\s*\?\?\s*(\d+)\s*;',
+            body,
+        )
+    }
+    if set(defaults) != {"caption", "body", "value"}:
+        raise SystemExit("font defaults not found in src/theme.ts")
+    return defaults
+
+
 def _argb(value):
     value = value.strip()
     hex_match = re.fullmatch(r"#([0-9a-fA-F]{6})", value)
@@ -72,7 +87,7 @@ def build_tokens():
         "default_accent": accents[0]["id"],
         "radius": _numbers(theme, "radius"),
         "space": _numbers(theme, "space"),
-        "font": _numbers(theme, "font"),
+        "font": _font_defaults(theme),
         "windows": WINDOWS,
     }
 

@@ -1,6 +1,8 @@
 import json
 import re
 import sys
+
+import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -25,3 +27,16 @@ def test_tokens_mirror_the_linux_theme_and_accents():
     ]
     assert tokens["default_accent"] == "blue"
     assert tokens["font"] == {"caption": 11, "body": 13, "value": 28}
+
+
+def test_font_export_uses_unmodified_defaults_from_dynamic_theme():
+    assert export_design_tokens.build_tokens()["font"] == {
+        "caption": 11, "body": 13, "value": 28,
+    }
+
+
+def test_font_export_rejects_missing_defaults():
+    source = export_design_tokens.THEME.read_text(encoding="utf-8")
+    source = source.replace('themeSizeOverride("fontBody") ?? 13', 'themeSizeOverride("fontBody")')
+    with pytest.raises(SystemExit, match="font defaults not found"):
+        export_design_tokens._font_defaults(source)
