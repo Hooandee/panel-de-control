@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [0.80.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.79.0...panel-de-control-v0.80.0) (2026-10-28)
+
+
+### Features
+
+* **qam:** integrate Duo editors and refine themed controls ([#1032](https://github.com/Hooandee/panel-de-control/issues/1032)) ([b91831d](https://github.com/Hooandee/panel-de-control/commit/b91831df87a561c9d41ea746674da6016f0a437b))
+
+
+### Bug Fixes
+
+* preserve exported font defaults and isolate audio test mocks ([#1035](https://github.com/Hooandee/panel-de-control/issues/1035)) ([dc58263](https://github.com/Hooandee/panel-de-control/commit/dc58263bac46c045dd62b5fd4102907988c62294))
+
 ## [0.79.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.78.1...panel-de-control-v0.79.0) (2026-10-26)
 
 
