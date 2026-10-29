@@ -119,3 +119,26 @@ def test_kernel_tails_skip_split_lock_noise_and_cover_earlier_boots():
         assert cmds[key][cmds[key].index("-b") + 1] == boot
         assert report_collector._KERNEL_NOISE_FREE in cmds[key]
     assert "--list-boots" in cmds["boots"]
+
+
+def test_the_box_never_grows_past_its_cap_whatever_the_context_holds(tmp_path):
+    beat = _pulse(tmp_path, keep=500, context=lambda: {"blob": "x" * 3000, "odd": object()})
+    for _ in range(40):
+        beat.tick()
+    saved = (tmp_path / "pulse.json").read_text()
+    assert len(saved) <= pulse._MAX_FILE_BYTES
+    assert json.loads(saved)["samples"][-1]["ctx"]["blob"] == "x" * 3000
+    assert beat.write_failures == 0
+
+
+def test_the_default_window_is_the_last_two_minutes(tmp_path):
+    beat = _pulse(tmp_path)
+    for _ in range(20):
+        beat.tick()
+    assert len(json.loads((tmp_path / "pulse.json").read_text())["samples"]) == 12
+
+
+def test_latest_records_are_short_even_for_long_messages(tmp_path):
+    diary = Journal(str(tmp_path))
+    diary.write("ERROR", "log", "boom " * 2000)
+    assert len(diary.latest()[-1]["m"]) == 160

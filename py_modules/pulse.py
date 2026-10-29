@@ -20,6 +20,7 @@ from typing import Any, Callable
 _FILE = "pulse.json"
 _UNCLEAN_PREFIX = "pulse-unclean-"
 _KEEP_UNCLEAN = 4
+_MAX_FILE_BYTES = 24_000
 _WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader")
 
 
@@ -121,10 +122,22 @@ def system_sample(root: str = "/") -> dict:
     }
 
 
+def _encode(payload: dict) -> str:
+    """Oldest samples go first until the file fits: it is rewritten and synced every few
+    seconds for as long as Panel runs."""
+    samples = list(payload.get("samples") or [])
+    while True:
+        text = json.dumps({**payload, "samples": samples}, separators=(",", ":"), default=str)
+        if len(text) <= _MAX_FILE_BYTES or not samples:
+            return text
+        samples = samples[1:]
+
+
 def _write_synced(path: str, payload: dict) -> None:
     temporary = f"{path}.tmp"
+    text = _encode(payload)
     with open(temporary, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, separators=(",", ":"))
+        handle.write(text)
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temporary, path)
@@ -145,7 +158,7 @@ class Pulse:
         on_unclean: Callable[[dict], None] | None = None,
         sample: Callable[[], dict] = system_sample,
         interval_s: float = 10.0,
-        keep: int = 30,
+        keep: int = 12,
         clock: Callable[[], float] = time.time,
         current_boot: Callable[[], str | None] = boot_id,
     ) -> None:
@@ -161,6 +174,7 @@ class Pulse:
         self._started = clock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._write_lock = threading.Lock()
         self.write_failures = 0
 
     @property
@@ -178,7 +192,7 @@ class Pulse:
         try:
             _write_synced(os.path.join(self.directory, name), {**previous, "end": end})
             os.remove(self.path)
-        except OSError:
+        except Exception:  # noqa: BLE001
             self.write_failures += 1
             return None
         _prune(self.directory)
@@ -226,9 +240,10 @@ class Pulse:
             except Exception:  # noqa: BLE001
                 pass
         try:
-            os.makedirs(self.directory, exist_ok=True)
-            _write_synced(self.path, payload)
-        except OSError:
+            with self._write_lock:
+                os.makedirs(self.directory, exist_ok=True)
+                _write_synced(self.path, payload)
+        except Exception:  # noqa: BLE001
             self.write_failures += 1
 
     def _run(self) -> None:

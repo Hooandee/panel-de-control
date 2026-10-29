@@ -111,7 +111,7 @@ class Journal:
             }
             record.update({key: value for key, value in fields.items() if key not in record})
             self._latest.append({
-                **{key: record[key] for key in ("t", "l", "s", "m")},
+                "t": record["t"], "l": record["l"], "s": record["s"], "m": record["m"][:160],
                 **({"a": str(record["a"])[:160]} if "a" in record else {}),
             })
             self._queue.put_nowait(record)
