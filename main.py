@@ -34,6 +34,7 @@ import osinfo
 import pdc_platform as platform_support
 import journal
 import journal_context
+import pulse
 import self_updater
 import theme_activation
 import theme_health
@@ -14332,6 +14333,21 @@ class Plugin:
             version=read_version(),
             decky=os.environ.get("DECKY_VERSION"),
         )
+        self._pulse = pulse.Pulse(
+            diary.directory,
+            context=self._pulse_context,
+            recent=diary.latest,
+            on_unclean=lambda end: diary.write("WARNING", "session", "previous_unclean_end", **end),
+        )
+        self._pulse.start()
+
+    def _pulse_context(self) -> dict:
+        sample = getattr(self, "_support_last_sample", None) or {}
+        return {
+            "game": self._current_appid,
+            "themes": getattr(self, "_support_active_themes", None),
+            **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
+        }
 
     @staticmethod
     def _journal_report() -> dict | None:
@@ -14344,6 +14360,10 @@ class Plugin:
             return {"schema": 1, "error": type(error).__name__}
         report["dropped"] = diary.dropped
         report["write_failures"] = diary.write_failures
+        try:
+            report["pulse"] = pulse.report(diary.directory)
+        except Exception as error:  # noqa: BLE001
+            report["pulse"] = {"schema": 1, "error": type(error).__name__}
         return report
 
     def _start_support_watch(self) -> None:
@@ -14425,6 +14445,7 @@ class Plugin:
                         diary.write("INFO", "context", "snapshot", **context, **({"changes": changes} if changes else {}))
                         last_context = {"t": time.time(), **context}
                     sections = await self._support_section_states()
+                    self._support_active_themes = journal_context.active_themes(sections)
                     if journal_context.needs_snapshot(last_sections, {}, (), now=time.time()):
                         diary.write("INFO", "sections", "snapshot", sections=sections)
                         last_sections = {"t": time.time(), "sections": sections}
@@ -14439,6 +14460,7 @@ class Plugin:
                             diary.write("INFO", "sections", "changed", sections=changed)
                             last_sections = {"t": time.time(), "sections": {**last_sections["sections"], **changed}}
                 sample = await self._support_sample()
+                self._support_last_sample = sample
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
                     diary.write("INFO", "state", reason, **sample)
@@ -14533,6 +14555,9 @@ class Plugin:
         if diary is None:
             return
         journal.active = None
+        beat = getattr(self, "_pulse", None)
+        if beat is not None:
+            beat.stop()
         watchdog = getattr(self, "_loop_watchdog", None)
         if watchdog is not None:
             watchdog.stop()

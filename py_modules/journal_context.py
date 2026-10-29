@@ -174,6 +174,18 @@ def bounded(summary: dict) -> dict:
     return {"truncated": text[:_MAX_SECTION_JSON]}
 
 
+def active_themes(sections: dict) -> list[str] | None:
+    themes = (sections.get("themes") or {}).get("theme_report_diagnostics")
+    installed = themes.get("installed") if isinstance(themes, dict) else None
+    if not isinstance(installed, list):
+        return None
+    return [
+        f"{theme.get('name')} {theme.get('version')}"
+        for theme in installed
+        if isinstance(theme, dict) and theme.get("active")
+    ]
+
+
 def canonical(value: object) -> str:
     """A value read back from the diary went through JSON (tuples became lists)."""
     return json.dumps(value, sort_keys=True, default=str)

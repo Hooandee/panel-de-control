@@ -478,6 +478,9 @@ _LOADER_LIFECYCLE_GREP = (
     "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
 )
 
+# Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels.
+_KERNEL_NOISE_FREE = "^(?!.*(split lock detection|handle_bus_lock))"
+
 _SLEEP_KERNEL_GREP = (
     "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
     "ACPI: PM:|amd_pmc|Last suspend"
@@ -500,8 +503,19 @@ _KERNEL_CMDS = {
     # neither. The plugin's own log cannot tell these apart.
     "previous_boot_kernel": [
         "/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning",
-        "-n", "150", "--no-pager",
+        "--grep", _KERNEL_NOISE_FREE, "-n", "150", "--no-pager",
     ],
+    # The last lines of the previous boots from every source, not only kernel warnings:
+    # a hard freeze stops the machine mid-sentence and these show what was running.
+    "previous_boot_tail": [
+        "/usr/bin/journalctl", "-b", "-1", "--grep", _KERNEL_NOISE_FREE,
+        "-n", "120", "--no-pager",
+    ],
+    "boot_minus_2_tail": [
+        "/usr/bin/journalctl", "-b", "-2", "--grep", _KERNEL_NOISE_FREE,
+        "-n", "60", "--no-pager",
+    ],
+    "boots": ["/usr/bin/journalctl", "--list-boots", "-n", "8", "--no-pager"],
     "previous_boot_end": [
         "/usr/bin/journalctl", "-b", "-1",
         "-t", "systemd", "-t", "systemd-logind", "-t", "systemd-shutdown",
