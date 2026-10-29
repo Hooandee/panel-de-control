@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-gallery",
+  "cssLoaderName": "Hooandee Gallery",
+  "version": "0.9.56",
+  "displayName": {
+    "es": "Hooandee",
+    "en": "Hooandee",
+    "it": "Hooandee"
+  },
+  "description": {
+    "es": "Mi primer tema. Una versión más elegante de Steam inspirada en el cristal y las transparencias, con capas translúcidas y detalles sutiles que aportan profundidad sin perder claridad.",
+    "en": "My first theme. A more elegant take on Steam inspired by glass and transparency, with translucent layers and subtle details that add depth without sacrificing clarity.",
+    "it": "Il mio primo tema. Una versione più elegante di Steam ispirata al vetro e alle trasparenze, con strati traslucidi e dettagli discreti che aggiungono profondità senza rinunciare alla chiarezza."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.56/theme.zip",
+    "size": 153353,
+    "sha256": "cfab9b2125f36a27564c0f93f85bf96ead2e1377f19494265c8283abf74bfd4c"
+  },
+  "minimumVersions": {
+    "panel": "0.38.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "Volver a Inicio desde la ficha de un juego va más fluido y sin tirón, y las portadas aparecen al momento, también las de los juegos con arte personalizado. Cambiar el arte desde Inicio edita el juego seleccionado, «Ver más en la biblioteca» ya no se monta encima de la última portada y la batería y el reloj vuelven a verse bien con las versiones nuevas de Steam. Las opciones del tema ya están traducidas.",
+    "en": "Coming back to Home from a game page is smoother, with no jump, and covers show up right away, custom artwork included. Changing artwork from Home edits the selected game, “See more in the library” no longer sits on top of the last cover, and the battery and clock look right again on newer Steam versions. The theme options are now translated.",
+    "it": "Tornare alla Home dalla scheda di un gioco è più fluido e senza scatti, e le copertine compaiono subito, anche quelle personalizzate. Cambiare l'artwork dalla Home modifica il gioco selezionato, «Mostra altro nella libreria» non copre più l'ultima copertina e batteria e orologio tornano a vedersi bene con le versioni recenti di Steam. Le opzioni del tema ora sono tradotte."
+  }
+}
