@@ -742,6 +742,14 @@ def test_sysfs_snapshot_asus_ppt_captures_both_interfaces_with_values(tmp_path):
     assert ppt["asus_nb_wmi"]["ppt_fppt"] == "49"
 
 
+def test_sysfs_snapshot_asus_ppt_captures_the_legacy_thermal_policy(tmp_path):
+    legacy = tmp_path / "sys/devices/platform/asus-nb-wmi"
+    legacy.mkdir(parents=True)
+    (legacy / "throttle_thermal_policy").write_text("0\n")
+    ppt = sysfs_snapshot(root=str(tmp_path))["asus_ppt"]
+    assert ppt["asus_nb_wmi"]["throttle_thermal_policy"] == "0"
+
+
 def test_sysfs_snapshot_asus_ppt_absent_is_empty(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap["asus_ppt"] == {"asus_armoury": {}, "asus_nb_wmi": {}}

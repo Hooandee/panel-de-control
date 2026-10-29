@@ -1,4 +1,5 @@
 import os
+import time
 
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
@@ -12,6 +13,10 @@ _NODES = (
     ("pl2", "ppt_pl2_sppt"),
     ("pl3", "ppt_fppt"),
 )
+_ARMOURY_PL1 = "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl"
+_THERMAL_POLICY = "throttle_thermal_policy"
+# HHD waits this long between the policy and the rails on ASUS handhelds.
+_POLICY_SETTLE_S = 0.1
 
 
 class AsusNbWmiBackend(TDPBackend):
@@ -27,8 +32,15 @@ class AsusNbWmiBackend(TDPBackend):
         root: str = "/",
         ownership_lock_path: str | None = None,
         write_max_ac: int | None = None,
+        rail_floors: dict[str, int] | None = None,
     ) -> None:
         self._fallback = fallback
+        self._rail_floors = dict(rail_floors or {})
+        self.hidden_overshoot_guard = bool(self._rail_floors)
+        self._thermal_policy_path = os.path.join(root, _BASE, _THERMAL_POLICY)
+        self.thermal_policy_reassert = self.hidden_overshoot_guard and os.path.isfile(
+            self._thermal_policy_path
+        )
         self.manual_write_max_ac = max(fallback.max_ac_w, write_max_ac or 0)
         base = os.path.join(root, _BASE)
         self._paths = {
@@ -38,6 +50,10 @@ class AsusNbWmiBackend(TDPBackend):
         }
         self._rails = tuple(rail for rail, _node in _NODES if rail in self._paths)
         self.supported = "pl1" in self._paths
+        armoury_pl1 = os.path.join(root, _ARMOURY_PL1)
+        self.kernel_power_limits_missing = os.path.isdir(armoury_pl1) and (
+            self._read_int(os.path.join(armoury_pl1, "current_value")) is None
+        )
         self.supports_levels = len(self._rails) > 1
         self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
@@ -74,7 +90,7 @@ class AsusNbWmiBackend(TDPBackend):
     def level_limits(self) -> dict:
         return {
             rail: {
-                "min": self._fallback.min_w,
+                "min": self._rail_min(rail),
                 "max": self._rail_max(rail),
             }
             for rail in self._rails
@@ -94,7 +110,7 @@ class AsusNbWmiBackend(TDPBackend):
         requested = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         targets = {
             rail: max(
-                self._fallback.min_w,
+                self._rail_min(rail),
                 min(int(requested[rail]), max(self._rail_max(rail), self.manual_write_max_ac)),
             )
             for rail in self._rails
@@ -136,6 +152,19 @@ class AsusNbWmiBackend(TDPBackend):
             return TdpResult(pl1, self.read_applied(), False, detail)
 
         return TdpResult(pl1, targets["pl1"], True, "")
+
+    def reassert_thermal_policy(self) -> dict:
+        policy = self._read_int(self._thermal_policy_path)
+        if policy is None:
+            return {"ok": False, "policy": None, "detail": "policy unreadable"}
+        if not self._write(self._thermal_policy_path, policy):
+            return {"ok": False, "policy": policy, "detail": "policy write failed"}
+        time.sleep(_POLICY_SETTLE_S)
+        readback = self._read_int(self._thermal_policy_path)
+        return {"ok": readback == policy, "policy": policy, "readback": readback}
+
+    def read_thermal_policy(self) -> int | None:
+        return self._read_int(self._thermal_policy_path)
 
     def read_applied(self) -> int | None:
         return self._read_int(self._paths.get("pl1"))
@@ -241,10 +270,18 @@ class AsusNbWmiBackend(TDPBackend):
             "transactional": True,
             "owns_state": self._owned_snapshot is not None,
             "recovery_blocked": self.safety_locked,
+            "kernel_power_limits_missing": self.kernel_power_limits_missing,
         }
+        if self._rail_floors:
+            diagnostics["rail_floors"] = dict(self._rail_floors)
+        if self.thermal_policy_reassert:
+            diagnostics["thermal_policy"] = self.read_thermal_policy()
         if self._selection_failure:
             diagnostics["selection_failure"] = dict(self._selection_failure)
         return diagnostics
+
+    def _rail_min(self, rail: str) -> int:
+        return max(self._fallback.min_w, self._rail_floors.get(rail, 0))
 
     def _rail_max(self, rail: str) -> int:
         if rail == "pl2":

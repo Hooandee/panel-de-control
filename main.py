@@ -64,9 +64,11 @@ from tdp.reconcile import (
 )
 from tdp.overshoot import (
     NUDGE,
+    POLICY,
     HiddenOvershootMonitor,
     PlatformProfileWatch,
     nudged_target,
+    read_platform_profiles,
 )
 from tdp.types import (
     TDP_REQUEST_MIN_W,
@@ -192,6 +194,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "tdp_control_enabled", "backend", "firmware_mode", "boost_mode", "watts",
             "global_watts", "has_game_profile", "follows_global", "auto_config",
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
+            "kernel_support.visible",
             "gpu_level", "global_gpu_level", "game_power_owner",
         )),
         ("get_tdp_conflict", ("hhd_present", "hhd_managing", "powerstation_active", "steamos_manager_active")),
@@ -458,6 +461,7 @@ DEFAULTS = {
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
     "charger_notice_dismissed_at": None,
+    "kernel_support_notice_dismissed": False,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # Unload hands TDP back to HHD, so the player's choice of Panel is kept apart.
@@ -4046,6 +4050,19 @@ class Plugin:
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def dismiss_kernel_support_notice(self) -> bool:
+        self._init()
+        self._settings["kernel_support_notice_dismissed"] = True
+        self._save()
+        return True
+
+    def _kernel_support_state(self) -> dict | None:
+        if not getattr(self._tdp_backend, "kernel_power_limits_missing", False):
+            return None
+        return {
+            "visible": not self._settings.get("kernel_support_notice_dismissed", False),
+        }
 
     async def dismiss_charger_notice(self) -> bool:
         self._init()
@@ -8023,12 +8040,39 @@ class Plugin:
             and not hold.active
             and not self._device.is_generic
             and self._device.key not in ("desktop_pc", "steam_machine")
-            and getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
+            and (
+                getattr(backend, "name", None) in _OVERSHOOT_BACKENDS
+                or getattr(backend, "hidden_overshoot_guard", False)
+            )
             and getattr(backend, "readback", True)
             and not getattr(backend, "rearms_on_ignored_writes", False)
         )
 
+    def _overshoot_context(self, observation):
+        backend = self._tdp_backend
+        read_policy = getattr(backend, "read_thermal_policy", None)
+        return {
+            "applied": {
+                surface: {rail: reading.applied_w for rail, reading in rails.items()}
+                for surface, rails in observation.surfaces.items()
+            },
+            "thermal_policy": read_policy() if callable(read_policy) else None,
+            "platform_profiles": [value for _path, value in read_platform_profiles() or ()],
+            "kernel_power_limits_missing": bool(
+                getattr(backend, "kernel_power_limits_missing", False)
+            ),
+        }
+
     def _apply_overshoot_correction(self, method, command, targets, observation):
+        if method == POLICY:
+            decky.logger.info(
+                "TDP overshoot policy %s",
+                json.dumps(
+                    self._tdp_backend.reassert_thermal_policy(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
         if method == NUDGE:
             nudged = nudged_target(
                 targets.target,
@@ -8056,6 +8100,9 @@ class Plugin:
             watts,
             targets.target,
             eligible,
+            policy_capable=bool(
+                getattr(self._tdp_backend, "thermal_policy_reassert", False)
+            ),
         )
         if monitor.last != before and monitor.last is not None:
             decky.logger.info(
@@ -8067,6 +8114,7 @@ class Plugin:
                         "measured_w": watts,
                         "backend": getattr(self._tdp_backend, "name", None),
                         "on_ac": command.on_ac,
+                        **self._overshoot_context(observation),
                     },
                     sort_keys=True,
                     separators=(",", ":"),
@@ -12288,6 +12336,7 @@ class Plugin:
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
             "charger_unstable": self._charger_unstable_state(),
+            "kernel_support": self._kernel_support_state(),
         }
 
     def _tdp_ownership_state(self, observation):

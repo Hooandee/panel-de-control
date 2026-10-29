@@ -23,6 +23,10 @@ PROFILE_SETTLE_S = (1.0, 4.0, 10.0)
 
 REWRITE = "rewrite"
 NUDGE = "nudge"
+# Re-send the firmware thermal policy before the rails, as HHD does on ASUS. Only
+# backends that declare it reach this step, after a rewrite and a nudge failed;
+# once it restores the limits it becomes the first correction of the session.
+POLICY = "policy"
 
 
 def read_platform_profiles(root="/"):
@@ -134,7 +138,7 @@ class HiddenOvershootMonitor:
             self._context = context
             self._reset_session()
 
-    def observe(self, now, context, watts, target, eligible):
+    def observe(self, now, context, watts, target, eligible, policy_capable=False):
         self._enter(context)
         ceiling = sustained_ceiling(target or {})
         if (
@@ -171,6 +175,11 @@ class HiddenOvershootMonitor:
                 episode.verify_until = now + VERIFY_S
                 self._note("correcting", now, target, episode.peak_w, NUDGE)
                 return NUDGE
+            if episode.method == NUDGE and policy_capable:
+                episode.method = POLICY
+                episode.verify_until = now + VERIFY_S
+                self._note("correcting", now, target, episode.peak_w, POLICY)
+                return POLICY
             self._give_up(now, episode, target)
             return None
         if not over:

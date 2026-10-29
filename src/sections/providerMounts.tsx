@@ -1,7 +1,12 @@
 import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
+import { LuCpu, LuPlugZap } from "react-icons/lu";
 
-import { dismissChargerNotice, setSeenTdpConflictTakeover } from "../api";
+import {
+  dismissChargerNotice,
+  dismissKernelSupportNotice,
+  setSeenTdpConflictTakeover,
+} from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useColor } from "../display/useColor";
@@ -17,7 +22,7 @@ import { PotenciaProvider } from "../tdp/potenciaContext";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
-import { ChargerUnstableCard } from "../components/ChargerUnstableCard";
+import { NoticeCard } from "../components/NoticeCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { ColorPreviewConfirm } from "../components/ColorPreviewConfirm";
 import { ProfileSelector } from "../components/ProfileSelector";
@@ -101,6 +106,10 @@ export const PotenciaProviderMount: FC<{
     () => dismissChargerNotice().then(() => refresh()).catch(() => {}),
     [refresh],
   );
+  const onDismissKernelSupport = useCallback(
+    () => dismissKernelSupportNotice().then(() => refresh()).catch(() => {}),
+    [refresh],
+  );
 
   const shownTakeover = useRef(false);
   const conflictRef = useRef(conflict);
@@ -130,10 +139,26 @@ export const PotenciaProviderMount: FC<{
           />
         </PanelSectionRow>
       )}
+      {tdp?.kernel_support?.visible && (
+        <PanelSectionRow>
+          <NoticeCard
+            icon={<LuCpu size={16} color={theme.color.accent} />}
+            tone={theme.color.accent}
+            title={t("tdp.kernelSupport.title")}
+            description={t("tdp.kernelSupport.desc")}
+            dismissLabel={t("tdp.kernelSupport.dismiss")}
+            onDismiss={() => void onDismissKernelSupport()}
+          />
+        </PanelSectionRow>
+      )}
       {tdp?.charger_unstable?.visible && (
         <PanelSectionRow>
-          <ChargerUnstableCard
-            transitions={tdp.charger_unstable.transitions}
+          <NoticeCard
+            icon={<LuPlugZap size={16} color={theme.color.warn} />}
+            tone={theme.color.warn}
+            title={t("tdp.charger.title")}
+            description={t("tdp.charger.desc", { n: tdp.charger_unstable.transitions })}
+            dismissLabel={t("tdp.charger.dismiss")}
             onDismiss={() => void onDismissCharger()}
           />
         </PanelSectionRow>
