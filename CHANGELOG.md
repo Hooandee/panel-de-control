@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## [0.80.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.1...panel-de-control-v0.80.2) (2026-10-29)
+
+### Español
+
+* **TDP en la ROG Xbox Ally X 20:** Panel controla el TDP de este modelo aunque tu kernel todavía no lo reconozca, respetando los mínimos de potencia del fabricante. Si el consumo supera el límite elegido, Panel intenta corregirlo y te avisa si no lo consigue.
+* **Aviso de kernel sin soporte:** Potencia muestra un aviso, que puedes descartar, cuando el kernel aún no incluye los límites de potencia de tu máquina. Al actualizar a un kernel compatible, Panel pasa solo al método nuevo.
+
+### English
+
+* **TDP on the ROG Xbox Ally X 20:** Panel controls TDP on this model even when your kernel doesn't recognise it yet, keeping to the manufacturer's minimum power limits. If power draw goes above the chosen limit, Panel tries to correct it and lets you know if it can't.
+* **Kernel support notice:** Power shows a dismissible notice when your kernel doesn't include your device's power limits yet. Once you update to a supported kernel, Panel switches to the new method on its own.
+
+### Italiano
+
+* **TDP sulla ROG Xbox Ally X 20:** Panel controlla il TDP di questo modello anche quando il tuo kernel non lo riconosce ancora, rispettando i limiti minimi di potenza del produttore. Se il consumo supera il limite scelto, Panel prova a correggerlo e ti avvisa se non ci riesce.
+* **Avviso di kernel non supportato:** Potenza mostra un avviso, che puoi chiudere, quando il kernel non include ancora i limiti di potenza del tuo dispositivo. Quando aggiorni a un kernel compatibile, Panel passa da solo al nuovo metodo.
+
+### Deutsch
+
+* **TDP auf dem ROG Xbox Ally X 20:** Panel steuert die TDP dieses Modells, auch wenn dein Kernel es noch nicht erkennt, und hält dabei die Mindestleistungsgrenzen des Herstellers ein. Liegt der Verbrauch über dem gewählten Limit, versucht Panel das zu korrigieren und sagt dir Bescheid, wenn es nicht gelingt.
+* **Hinweis zur Kernel-Unterstützung:** Leistung zeigt einen ausblendbaren Hinweis, solange dein Kernel die Leistungsgrenzen deines Geräts noch nicht enthält. Nach dem Update auf einen unterstützten Kernel wechselt Panel von selbst zur neuen Methode.
+
+### Português (Brasil)
+
+* **TDP no ROG Xbox Ally X 20:** O Panel controla o TDP deste modelo mesmo quando o seu kernel ainda não o reconhece, respeitando os limites mínimos de potência do fabricante. Se o consumo passar do limite escolhido, o Panel tenta corrigir e avisa se não conseguir.
+* **Aviso de kernel sem suporte:** Potência mostra um aviso, que você pode dispensar, quando o kernel ainda não inclui os limites de potência do seu dispositivo. Ao atualizar para um kernel compatível, o Panel passa sozinho para o método novo.
+
+### Français
+
+* **TDP sur la ROG Xbox Ally X 20 :** Panel contrôle le TDP de ce modèle même lorsque votre noyau ne le reconnaît pas encore, en respectant les limites de puissance minimales du fabricant. Si la consommation dépasse la limite choisie, Panel tente de la corriger et vous prévient s'il n'y parvient pas.
+* **Avis de noyau non pris en charge :** Puissance affiche un avis, que vous pouvez masquer, lorsque le noyau n'inclut pas encore les limites de puissance de votre appareil. Après la mise à jour vers un noyau compatible, Panel passe tout seul à la nouvelle méthode.
+
 ## [0.80.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.0...panel-de-control-v0.80.1) (2026-10-28)
 
 ### Español
