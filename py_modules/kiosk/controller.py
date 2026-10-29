@@ -1,6 +1,7 @@
 """Kiosk lifecycle: detect the secondary display, serve its RPCs, keep the bottom screen alive."""
 
 import asyncio
+import threading
 import time
 from typing import Any, Awaitable, Callable, Iterable
 
@@ -52,6 +53,7 @@ class KioskController:
         self._screen_off = False
         self._armada_bottom_yielded = False
         self._lock = asyncio.Lock()
+        self._release_lock = threading.Lock()
 
     def state(self) -> dict:
         reason = self._detection.reason
@@ -173,19 +175,28 @@ class KioskController:
         return applied
 
     async def _stop(self) -> None:
-        if self._screen_off and self._detection.display is not None:
-            await asyncio.to_thread(displays.set_backlight_power, self._detection.display.backlight, True)
-            self._screen_off = False
-        if self._launcher is not None:
-            launcher, self._launcher = self._launcher, None
-            ok, detail = await asyncio.to_thread(launcher.stop)
-            self._journal("INFO" if ok else "WARNING", "stopped", ok=ok, detail=detail or None)
-            if self._armada_bottom_yielded:
-                self._armada_bottom_yielded = False
-                restored = await asyncio.to_thread(launcher.restore_armada_bottom)
-                self._journal("INFO" if restored else "WARNING", "armada_bottom_restored", ok=restored)
+        await asyncio.to_thread(self.release_hardware)
         self._running = False
         await self._server.stop()
+
+    def release_hardware(self) -> None:
+        """Blocking: backlight on, launcher stopped, Armada bottom screen back. Idempotent and
+        safe from a shutdown thread while the event loop is blocked."""
+        with self._release_lock:
+            screen_off, self._screen_off = self._screen_off, False
+            launcher, self._launcher = self._launcher, None
+            yielded = launcher is not None and self._armada_bottom_yielded
+            if launcher is not None:
+                self._armada_bottom_yielded = False
+        if screen_off and self._detection.display is not None:
+            displays.set_backlight_power(self._detection.display.backlight, True)
+        if launcher is None:
+            return
+        ok, detail = launcher.stop()
+        self._journal("INFO" if ok else "WARNING", "stopped", ok=ok, detail=detail or None)
+        if yielded:
+            restored = launcher.restore_armada_bottom()
+            self._journal("INFO" if restored else "WARNING", "armada_bottom_restored", ok=restored)
 
     async def supervise(self) -> None:
         while True:

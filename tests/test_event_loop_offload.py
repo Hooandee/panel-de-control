@@ -236,14 +236,14 @@ def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     assert rec.count == 1  # went THROUGH the executor, not the inline branch
 
 
-def test_theme_executor_shutdown_waits_for_completed_work(tmp_path, monkeypatch):
+def test_theme_executor_shutdown_never_blocks(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     executor = _ShutdownRecordingExecutor()
     p._theme_executor = executor
 
     p._shutdown_theme_executor()
 
-    assert executor.shutdown_wait is True
+    assert executor.shutdown_wait is False
     assert p._theme_executor is None
 
 
@@ -338,7 +338,7 @@ def test_shared_apply_worker_progresses_while_hud_worker_is_blocked(
     finally:
         release.set()
         p._hud_generation += 1
-        p._hud_coordinator.close(p._hud_generation, lambda: None)
+        p._hud_coordinator.close(p._hud_generation, lambda: None, 1)
         p._shutdown_apply_executor()
 
     assert result == "tdp-progress"
@@ -536,28 +536,28 @@ def test_unload_deadline_handoffs_now_and_again_behind_a_blocked_worker(
     assert elapsed < 0.15
     assert events == [
         "fans-handoff",
-        "color-handoff",
-        "audio-handoff",
         "cpu-handoff",
         "gpu-handoff",
         "power-handoff",
+        "color-handoff",
+        "audio-handoff",
     ]
     release.set()
     executor.shutdown(wait=True)
     assert events == [
         "fans-handoff",
-        "color-handoff",
-        "audio-handoff",
         "cpu-handoff",
         "gpu-handoff",
         "power-handoff",
+        "color-handoff",
+        "audio-handoff",
         "late-write",
         "fans-handoff",
-        "color-handoff",
-        "audio-handoff",
         "cpu-handoff",
         "gpu-handoff",
         "power-handoff",
+        "color-handoff",
+        "audio-handoff",
     ]
     p._offload(lambda: events.append("post-unload-write"))
     assert "post-unload-write" not in events
@@ -581,7 +581,7 @@ def test_unload_attempts_emergency_handoff_when_worker_never_completes(
 
     asyncio.run(p._unload())
 
-    assert events == ["fans", "color", "audio", "cpu", "gpu", "power"]
+    assert events == ["fans", "cpu", "gpu", "power", "color", "audio"]
     assert executor.submissions == 2
     assert executor.shutdown_calls == [(False, False)]
 
@@ -692,11 +692,11 @@ def test_unload_cancels_queued_mutation_and_handoffs_before_return(
 
     assert events == [
         "fans-handoff",
-        "color-handoff",
-        "audio-handoff",
         "cpu-handoff",
         "gpu-handoff",
         "power-handoff",
+        "color-handoff",
+        "audio-handoff",
     ]
 
 

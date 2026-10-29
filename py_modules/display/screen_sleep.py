@@ -6,6 +6,7 @@ import glob
 import os
 import re
 import subprocess
+import threading
 import time
 
 CONVAR = "drm_sleep_internal_screen"
@@ -43,6 +44,8 @@ class ScreenSleep:
         self.asleep = False
         self.detail = "not probed"
         self.version = None
+        self._lock = threading.Lock()
+        self._closed = False
 
     def _dpms(self):
         states = []
@@ -71,6 +74,26 @@ class ScreenSleep:
 
     def set(self, asleep):
         """True only once every internal connector reads back the requested state."""
+        with self._lock:
+            if asleep and self._closed:
+                self.detail = "closed"
+                return False
+            return self._set(asleep)
+
+    def close(self):
+        """Final wake, without waiting for a sleep request already in flight: that request
+        sees the flag after its command and wakes the panel again."""
+        self._closed = True
+        if not self.asleep:
+            return True
+        rc, _ = self._ctl(CONVAR, "0")
+        if rc != 0:
+            self.detail = f"gamescopectl rc={rc}"
+            return False
+        self.asleep = False
+        return True
+
+    def _set(self, asleep):
         if not self.supported:
             return False
         if asleep:
@@ -80,6 +103,11 @@ class ScreenSleep:
             # A failed or timed-out command may still reach gamescope: every wake must reset it.
             self.asleep = True
         rc, _ = self._ctl(CONVAR, "1" if asleep else "0")
+        if asleep and self._closed:
+            self._ctl(CONVAR, "0")
+            self.asleep = False
+            self.detail = "closed"
+            return False
         if rc != 0:
             self.detail = f"gamescopectl rc={rc}"
             return False
@@ -93,5 +121,10 @@ class ScreenSleep:
                 return True
             if self._clock() >= deadline:
                 self.detail = f"readback {states} != {want}"
+                return False
+            if asleep and self._closed:
+                self._ctl(CONVAR, "0")
+                self.asleep = False
+                self.detail = "closed"
                 return False
             self._sleep(0.1)

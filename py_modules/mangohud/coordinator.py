@@ -96,7 +96,7 @@ class HudCoordinator:
             else:
                 work.future.set_result(result)
 
-    def close(self, generation, restore):
+    def close(self, generation, restore, timeout_s):
         with self._lock:
             if self._closed:
                 return
@@ -112,9 +112,9 @@ class HudCoordinator:
             return
         restore_future = executor.submit(restore)
         try:
-            restore_future.result()
+            restore_future.result(timeout=timeout_s)
         finally:
-            executor.shutdown(wait=True, cancel_futures=True)
+            executor.shutdown(wait=False, cancel_futures=True)
             with self._lock:
                 self._executor = None
                 self._runner = None

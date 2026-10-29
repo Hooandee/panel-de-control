@@ -80,3 +80,42 @@ def test_unsupported_or_unlit_panel_is_never_slept(tmp_path):
     docked = gs.screen()
     gs.panel.write_text("Off\n")
     assert not docked.set(True) and not docked.asleep
+
+
+def test_close_wakes_the_panel_and_rejects_a_late_sleep(tmp_path):
+    gs = FakeGamescope(tmp_path)
+    screen = gs.screen()
+    assert screen.set(True)
+
+    assert screen.close() and gs.panel.read_text().strip() == "On"
+    assert not screen.set(True)
+    assert gs.panel.read_text().strip() == "On" and screen.detail == "closed"
+
+
+def test_close_on_a_lit_panel_sends_nothing(tmp_path):
+    gs = FakeGamescope(tmp_path)
+    screen = gs.screen()
+    sent = len(gs.calls)
+
+    assert screen.close()
+    assert len(gs.calls) == sent
+
+
+def test_close_during_an_in_flight_sleep_leaves_the_panel_lit(tmp_path):
+    gs = FakeGamescope(tmp_path, lag=3)
+    screen = gs.screen()
+    original_ctl = gs.ctl
+
+    def ctl_then_close(*args):
+        result = original_ctl(*args)
+        if args == (CONVAR, "1"):
+            screen.close()
+        return result
+
+    screen._ctl = ctl_then_close
+
+    assert not screen.set(True)
+    for _ in range(5):
+        gs.advance()
+    assert gs.calls[-1] == (CONVAR, "0")
+    assert gs.panel.read_text().strip() == "On" and not screen.asleep
