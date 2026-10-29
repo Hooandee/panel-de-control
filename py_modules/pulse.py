@@ -93,7 +93,7 @@ def _gpu(root: str) -> dict | None:
 
 
 def _processes(root: str) -> dict:
-    page_kb = os.sysconf("SC_PAGE_SIZE") // 1024 if hasattr(os, "sysconf") else 4
+    page_kb = os.sysconf("SC_PAGE_SIZE") // 1024
     usage: dict[str, dict] = {}
     for entry in glob.glob(os.path.join(root, "proc/[0-9]*")):
         name = (_read(os.path.join(entry, "comm")) or "").strip()
@@ -205,7 +205,7 @@ class Pulse:
         except ProcessLookupError:
             return False
         except OSError:
-            return True
+            pass
         return True
 
     def start(self) -> None:

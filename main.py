@@ -14561,7 +14561,6 @@ class Plugin:
         if diary is None:
             return
         journal.active = None
-        self._stop_pulse()
         watchdog = getattr(self, "_loop_watchdog", None)
         if watchdog is not None:
             watchdog.stop()

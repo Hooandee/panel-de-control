@@ -506,8 +506,8 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning",
         "--grep", _KERNEL_NOISE_FREE, "-n", "150", "--no-pager",
     ],
-    # The last lines of the previous boots from every source, not only kernel warnings:
-    # a hard freeze stops the machine mid-sentence and these show what was running.
+    # The previous boot's last lines from every source, not only kernel warnings: a hard
+    # freeze stops the machine mid-sentence and these show what was running.
     "previous_boot_tail": [
         "/usr/bin/journalctl", "-b", "-1", "--grep", _KERNEL_NOISE_FREE,
         "-n", "120", "--no-pager",
