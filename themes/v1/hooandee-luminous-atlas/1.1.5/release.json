@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-luminous-atlas",
+  "cssLoaderName": "Hooandee Luminous Atlas",
+  "version": "1.1.5",
+  "displayName": {
+    "es": "Luminous Atlas",
+    "en": "Luminous Atlas",
+    "it": "Luminous Atlas"
+  },
+  "description": {
+    "es": "Un tema táctico inspirado en los menús de atlas y mapas de los RPG de estrategia. Pergamino verde oscuro, tinta marfil y marcos de latón, con portadas personalizables, menú de acceso rápido y elementos dinámicos.",
+    "en": "A tactical theme inspired by the atlas and map menus of strategy RPGs. Dark green parchment, ivory ink and brass frames, with customizable covers, a quick access menu and dynamic elements.",
+    "it": "Un tema tattico ispirato ai menu da atlante e mappa dei giochi di ruolo strategici. Pergamena verde scura, inchiostro avorio e cornici d'ottone, con copertine personalizzabili, menu di accesso rapido ed elementi dinamici."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.1.5/theme.zip",
+    "size": 386487,
+    "sha256": "ff964423bf32c47decf309019998e3e139b166c67248af3ca74ec4d1069c74f4"
+  },
+  "minimumVersions": {
+    "panel": "0.56.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "La primera portada de Inicio vuelve a ser vertical en más juegos, también en los que no son de Steam, y ya no se recorta ni sale con franjas negras al salir de suspensión. Decky se ve bien desde el arranque, sin tener que abrir antes Panel de Control, y «Solo hora» oculta de verdad la batería. Además, el tema va más ligero.",
+    "en": "The first Home cover is vertical again for more games, non-Steam ones included, and no longer gets cropped or letterboxed after sleep. Decky looks right from boot, without opening Panel de Control first, and “Time only” really hides the battery. The theme is also lighter.",
+    "it": "La prima copertina della Home torna verticale in più giochi, anche in quelli non Steam, e non viene più tagliata né mostrata con bande nere dopo la sospensione. Decky si vede bene fin dall'avvio, senza aprire prima Panel de Control, e «Solo ora» nasconde davvero la batteria. Inoltre il tema è più leggero."
+  }
+}

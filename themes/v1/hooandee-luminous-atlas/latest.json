@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-luminous-atlas",
   "cssLoaderName": "Hooandee Luminous Atlas",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "displayName": {
     "es": "Luminous Atlas",
     "en": "Luminous Atlas",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.1.4/theme.zip",
-    "size": 383524,
-    "sha256": "b688bf8015f7f8b115edc519b4cba5593f8b161c698ef98bb778ea49ca1be27e"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.1.5/theme.zip",
+    "size": 386487,
+    "sha256": "ff964423bf32c47decf309019998e3e139b166c67248af3ca74ec4d1069c74f4"
   },
   "minimumVersions": {
     "panel": "0.56.0",
@@ -26,8 +26,8 @@
     "cssLoaderBackend": 9
   },
   "notes": {
-    "es": "Luminous Atlas añade seis paletas de color y cuatro motivos de fondo. Puedes ajustar la sombra inferior y elegir entre tres niveles de desenfoque. El fondo de Inicio llega hasta el borde inferior, el menú de Steam sigue el motivo elegido y las opciones cuentan con textos revisados en seis idiomas.",
-    "en": "Luminous Atlas adds six color palettes and four background patterns, adjustable bottom shading and three blur levels. Home backgrounds extend to the bottom edge, the Steam menu follows your selected pattern, and settings have revised labels in six languages.",
-    "it": "Luminous Atlas aggiunge sei palette di colori e quattro motivi per lo sfondo, ombreggiatura inferiore regolabile e tre livelli di sfocatura. Lo sfondo della Home arriva fino al bordo inferiore, il menu di Steam segue il motivo scelto e le opzioni hanno testi rivisti in sei lingue."
+    "es": "La primera portada de Inicio vuelve a ser vertical en más juegos, también en los que no son de Steam, y ya no se recorta ni sale con franjas negras al salir de suspensión. Decky se ve bien desde el arranque, sin tener que abrir antes Panel de Control, y «Solo hora» oculta de verdad la batería. Además, el tema va más ligero.",
+    "en": "The first Home cover is vertical again for more games, non-Steam ones included, and no longer gets cropped or letterboxed after sleep. Decky looks right from boot, without opening Panel de Control first, and “Time only” really hides the battery. The theme is also lighter.",
+    "it": "La prima copertina della Home torna verticale in più giochi, anche in quelli non Steam, e non viene più tagliata né mostrata con bande nere dopo la sospensione. Decky si vede bene fin dall'avvio, senza aprire prima Panel de Control, e «Solo ora» nasconde davvero la batteria. Inoltre il tema è più leggero."
   }
 }
