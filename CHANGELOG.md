@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.80.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.1...panel-de-control-v0.80.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* **tdp:** drive the ROG Xbox Ally X 20 until the kernel knows it ([#1044](https://github.com/Hooandee/panel-de-control/issues/1044)) ([bac0a40](https://github.com/Hooandee/panel-de-control/commit/bac0a4047fe76b3c6c5bf175a296fd6f53b07154))
+
 ## [0.80.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.0...panel-de-control-v0.80.1) (2026-10-28)
 
 ### Español
