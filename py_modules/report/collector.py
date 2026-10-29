@@ -733,7 +733,7 @@ def _snap_platform_profile(root: str) -> dict:
     return out
 
 
-_LEGACY_PPT = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt")
+_LEGACY_ASUS_NODES = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt", "throttle_thermal_policy")
 
 
 def _snap_asus_ppt(root: str) -> dict:
@@ -752,7 +752,7 @@ def _snap_asus_ppt(root: str) -> dict:
                 "max": read_str(os.path.join(d, "max_value")),
             }
     legacy = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
-    for a in _LEGACY_PPT:
+    for a in _LEGACY_ASUS_NODES:
         v = read_str(os.path.join(legacy, a))
         if v is not None:
             out["asus_nb_wmi"][a] = v

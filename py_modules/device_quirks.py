@@ -47,6 +47,18 @@ def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
     return None
 
 
+def xbox_ally_x_20_legacy_rail_floors(device, root: str = "/") -> dict[str, int]:
+    # asus-nb-wmi does not enforce the firmware minimums that asus-armoury publishes
+    # for this board (kernel power_limits: 7/13/19 W). Below them the firmware
+    # keeps its own profile limits while the legacy node echoes the write.
+    if (
+        getattr(device, "key", None) == "rog_xbox_ally_x"
+        and _read_dmi(root, "board_name").casefold() == "rc74xa"
+    ):
+        return {"pl2": 13, "pl3": 19}
+    return {}
+
+
 def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
     if (
         getattr(device, "key", None) != "legion_go_2"

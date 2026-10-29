@@ -1455,6 +1455,23 @@ def test_unstable_charger_notice_shows_and_dismiss_snoozes_it(Plugin, monkeypatc
     assert p._charger_unstable_state(now=later + 1)["visible"] is True
 
 
+def test_kernel_support_notice_follows_the_backend_and_stays_dismissed(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.kernel_power_limits_missing = False
+    assert p._kernel_support_state() is None
+
+    p._tdp_backend.kernel_power_limits_missing = True
+    assert p._kernel_support_state() == {"visible": True}
+    assert asyncio.run(p.dismiss_kernel_support_notice()) is True
+    assert p._kernel_support_state() == {"visible": False}
+
+    p2 = Plugin()
+    p2._init()
+    p2._tdp_backend.kernel_power_limits_missing = True
+    assert p2._kernel_support_state() == {"visible": False}
+
+
 def test_unstable_charger_notice_expires_after_a_quiet_day(Plugin):
     p = Plugin()
     p._init()

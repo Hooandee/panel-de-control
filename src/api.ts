@@ -383,6 +383,13 @@ export interface TdpState {
   seen_tdp_conflict_takeover: boolean;
   // AC kept dropping and coming back; null while power has been steady.
   charger_unstable: ChargerUnstable | null;
+  // The kernel has asus-armoury but no power limits for this board yet, so TDP runs
+  // through the legacy path; null once the kernel supports it.
+  kernel_support: KernelSupport | null;
+}
+
+export interface KernelSupport {
+  visible: boolean;
 }
 
 export interface ChargerUnstable {
@@ -590,6 +597,7 @@ export const setSeenAutotdpNotice =
 export const setSeenTdpConflictTakeover =
   callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
 export const dismissChargerNotice = callable<[], boolean>("dismiss_charger_notice");
+export const dismissKernelSupportNotice = callable<[], boolean>("dismiss_kernel_support_notice");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS

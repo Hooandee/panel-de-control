@@ -2620,6 +2620,80 @@ def test_backends_without_physical_evidence_are_left_alone(plugin, variant):
     assert overshoot_logs(plugin) == []
 
 
+@pytest.mark.parametrize(("guarded", "expected_writes"), [(True, 1), (False, 0)])
+def test_legacy_asus_fallback_is_watched_only_where_it_is_guarded(
+    plugin, guarded, expected_writes
+):
+    backend = HiddenLimitBackend()
+    backend.name = "asus-nb-wmi"
+    backend.hidden_overshoot_guard = guarded
+    start_game(plugin, backend)
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, SUSTAIN_S + 6.0)
+    assert len(backend.writes) == expected_writes
+    assert bool(overshoot_logs(plugin)) is guarded
+
+
+class PolicyBoundBackend(HiddenLimitBackend):
+    """Xbox Ally X RC74XA on a kernel without its power limits (#1012): the
+    legacy rails echo every write while the firmware ignores them; only a
+    thermal policy write before the rails brings them back, as HHD does."""
+
+    name = "asus-nb-wmi"
+    hidden_overshoot_guard = True
+    thermal_policy_reassert = True
+    kernel_power_limits_missing = True
+
+    def __init__(self, policy_ok=True):
+        super().__init__(restore_on="never")
+        self.policy_ok = policy_ok
+        self.policy_writes = 0
+
+    def reassert_thermal_policy(self):
+        self.policy_writes += 1
+        if not self.policy_ok:
+            return {"ok": False, "policy": 0, "detail": "policy write failed"}
+        self.restore_on = "any"
+        return {"ok": True, "policy": 0, "readback": 0}
+
+    def read_thermal_policy(self):
+        return 0
+
+
+def test_legacy_asus_fallback_reasserts_the_thermal_policy_as_last_step(plugin):
+    backend = PolicyBoundBackend()
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 3 * VERIFY_S + 10.0)
+    assert backend.policy_writes == 1
+    assert backend.hidden is False
+    logs = overshoot_logs(plugin)
+    assert [(entry["state"], entry["method"]) for entry in logs][-2:] == [
+        ("correcting", "policy"),
+        ("restored", "policy"),
+    ]
+    assert logs[0]["thermal_policy"] == 0
+    assert logs[0]["kernel_power_limits_missing"] is True
+    assert logs[0]["applied"] == {"asus-nb-wmi": {"pl1": 20, "pl2": 20, "pl3": 20}}
+    policy_logs = [
+        args for args in plugin._test_logs["info"]
+        if args and args[0] == "TDP overshoot policy %s"
+    ]
+    assert len(policy_logs) == 1
+
+
+def test_failed_thermal_policy_write_still_rewrites_and_never_blocks(plugin):
+    backend = PolicyBoundBackend(policy_ok=False)
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 3 * VERIFY_S + 10.0)
+    assert backend.policy_writes == 1
+    assert len(backend.writes) == 4
+    assert overshoot_logs(plugin)[-1]["state"] == "unresolved"
+    assert plugin._tdp_status == "in_sync"
+
+
 class Profiles:
     def __init__(self, value):
         self.value = value
