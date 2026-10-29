@@ -21,6 +21,7 @@ _FILE = "pulse.json"
 _UNCLEAN_PREFIX = "pulse-unclean-"
 _KEEP_UNCLEAN = 4
 _MAX_FILE_BYTES = 24_000
+_STOP_WAIT_S = 0.5
 _WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader")
 
 
@@ -141,11 +142,6 @@ def _write_synced(path: str, payload: dict) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temporary, path)
-    directory = os.open(os.path.dirname(path) or ".", os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
 
 
 class Pulse:
@@ -185,11 +181,11 @@ class Pulse:
         """Keeps the previous run's file when it ended without a clean stop and
         returns how it ended."""
         previous = _load(self.path)
-        if previous is None or previous.get("stopped"):
+        if previous is None or previous.get("stopped") or self._still_running(previous):
             return None
-        end = summarize_unclean(previous, self._boot)
-        name = f"{_UNCLEAN_PREFIX}{int(end['last_t'] or previous.get('started') or self._clock())}.json"
         try:
+            end = summarize_unclean(previous, self._boot)
+            name = f"{_UNCLEAN_PREFIX}{int(end['last_t'] or previous.get('started') or self._clock())}.json"
             _write_synced(os.path.join(self.directory, name), {**previous, "end": end})
             os.remove(self.path)
         except Exception:  # noqa: BLE001
@@ -197,6 +193,20 @@ class Pulse:
             return None
         _prune(self.directory)
         return end
+
+    def _still_running(self, previous: dict) -> bool:
+        """Decky can start a second instance while the first is still alive: its live
+        file is not an unclean end."""
+        pid = previous.get("pid")
+        if previous.get("boot") != self._boot or not isinstance(pid, int) or pid == os.getpid():
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return True
+        return True
 
     def start(self) -> None:
         if self._thread is not None:
@@ -206,12 +216,14 @@ class Pulse:
         self._thread.start()
 
     def stop(self) -> None:
+        """Called from the event loop while Decky unloads: waits briefly, never on a
+        slow disk."""
         self._stop.set()
         thread = self._thread
         self._thread = None
         if thread is not None:
-            thread.join(1.0)
-        self._persist(stopped=True)
+            thread.join(_STOP_WAIT_S)
+        self._persist(stopped=True, wait_s=_STOP_WAIT_S)
 
     def tick(self) -> None:
         try:
@@ -226,9 +238,10 @@ class Pulse:
         self._samples.append(sample)
         self._persist(stopped=False)
 
-    def _persist(self, *, stopped: bool) -> None:
+    def _persist(self, *, stopped: bool, wait_s: float = -1) -> None:
         payload: dict[str, Any] = {
             "boot": self._boot,
+            "pid": os.getpid(),
             "started": round(self._started, 1),
             "interval_s": self._interval_s,
             "stopped": stopped,
@@ -239,12 +252,18 @@ class Pulse:
                 payload["recent"] = self._recent()
             except Exception:  # noqa: BLE001
                 pass
+        if not self._write_lock.acquire(timeout=wait_s):
+            self.write_failures += 1
+            return
         try:
-            with self._write_lock:
-                os.makedirs(self.directory, exist_ok=True)
-                _write_synced(self.path, payload)
+            if not stopped and self._stop.is_set():
+                return
+            os.makedirs(self.directory, exist_ok=True)
+            _write_synced(self.path, payload)
         except Exception:  # noqa: BLE001
             self.write_failures += 1
+        finally:
+            self._write_lock.release()
 
     def _run(self) -> None:
         end = self.set_aside_previous()

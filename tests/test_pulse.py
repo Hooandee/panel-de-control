@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import time
 
 import pulse
 from journal import Journal
@@ -110,15 +112,31 @@ def test_active_themes_reads_the_theme_section():
     assert active_themes({"themes": {"truncated": "…"}}) is None
 
 
-def test_kernel_tails_skip_split_lock_noise_and_cover_earlier_boots():
+def test_kernel_tails_skip_split_lock_noise():
     cmds = report_collector._KERNEL_CMDS
     noise = re.compile(report_collector._KERNEL_NOISE_FREE)
     assert not noise.search("kernel: x86/split lock detection: #DB: CHTTPClientThre/3387 took a bus_lock trap")
     assert noise.search("kernel: amdgpu 0000:c4:00.0: amdgpu: ring gfx_0.0.0 timeout")
-    for key, boot in (("previous_boot_kernel", "-1"), ("previous_boot_tail", "-1"), ("boot_minus_2_tail", "-2")):
-        assert cmds[key][cmds[key].index("-b") + 1] == boot
+    for key in ("previous_boot_kernel", "previous_boot_tail"):
+        assert cmds[key][cmds[key].index("-b") + 1] == "-1"
         assert report_collector._KERNEL_NOISE_FREE in cmds[key]
-    assert "--list-boots" in cmds["boots"]
+
+
+def test_kernel_tails_run_unfiltered_where_journalctl_lacks_pattern_matching():
+    calls = []
+
+    def run(cmd):
+        calls.append(cmd)
+        if "--grep" in cmd and report_collector._KERNEL_NOISE_FREE in cmd:
+            return "[exit 1] Compiled without pattern matching support"
+        if cmd[:3] == ["/usr/bin/journalctl", "-b", "-1"] and "-k" in cmd:
+            return "kernel: amdgpu: ring gfx timeout"
+        return None
+
+    out = report_collector.kernel_logs(run)
+    assert out["previous_boot_kernel"] == "kernel: amdgpu: ring gfx timeout"
+    retried = [cmd for cmd in calls if cmd[:3] == ["/usr/bin/journalctl", "-b", "-1"] and "-k" in cmd and "-p" in cmd]
+    assert retried[-1] == ["/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning", "-n", "150", "--no-pager"]
 
 
 def test_the_box_never_grows_past_its_cap_whatever_the_context_holds(tmp_path):
@@ -142,3 +160,44 @@ def test_latest_records_are_short_even_for_long_messages(tmp_path):
     diary = Journal(str(tmp_path))
     diary.write("ERROR", "log", "boom " * 2000)
     assert len(diary.latest()[-1]["m"]) == 160
+
+
+
+def test_a_late_tick_cannot_undo_the_clean_stop(tmp_path):
+    beat = _pulse(tmp_path)
+    beat.tick()
+    beat.stop()
+    beat.tick()
+    assert json.loads((tmp_path / "pulse.json").read_text())["stopped"] is True
+
+
+def test_stop_gives_up_instead_of_waiting_on_a_busy_disk(tmp_path):
+    beat = _pulse(tmp_path)
+    beat._write_lock.acquire()
+    started = time.monotonic()
+    beat.stop()
+    assert time.monotonic() - started < 2 * pulse._STOP_WAIT_S + 0.5
+    assert beat.write_failures == 1
+    beat._write_lock.release()
+
+
+def test_a_second_live_instance_is_not_an_unclean_end(tmp_path):
+    (tmp_path / "pulse.json").write_text(json.dumps(
+        {"boot": "boot-a", "pid": os.getppid(), "started": 1.0, "stopped": False, "samples": [{"t": 2.0}]}))
+    assert _pulse(tmp_path).set_aside_previous() is None
+    assert (tmp_path / "pulse.json").exists()
+
+
+def test_an_odd_previous_file_does_not_kill_the_black_box(tmp_path):
+    (tmp_path / "pulse.json").write_text(json.dumps({"boot": "boot-z", "started": "x", "samples": ["x"]}))
+    beat = _pulse(tmp_path, interval_s=60)
+    beat.start()
+    beat.stop()
+    assert json.loads((tmp_path / "pulse.json").read_text())["stopped"] is True
+
+
+def test_the_bundle_redacts_the_black_box(tmp_path):
+    bundle = report_collector.build_bundle(
+        app="pdc", categories=[], text="", environment={}, capabilities={}, state={}, stores={}, logs=[],
+        journal={"pulse": {"current": {"recent": [{"a": "/home/deck/Games/x.zip"}]}}}, home="/home/deck")
+    assert "/home/deck" not in json.dumps(bundle)

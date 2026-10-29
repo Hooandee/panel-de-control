@@ -478,7 +478,8 @@ _LOADER_LIFECYCLE_GREP = (
     "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
 )
 
-# Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels.
+# Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl
+# built without PCRE2 rejects --grep: those commands run again unfiltered.
 _KERNEL_NOISE_FREE = "^(?!.*(split lock detection|handle_bus_lock))"
 
 _SLEEP_KERNEL_GREP = (
@@ -511,11 +512,6 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b", "-1", "--grep", _KERNEL_NOISE_FREE,
         "-n", "120", "--no-pager",
     ],
-    "boot_minus_2_tail": [
-        "/usr/bin/journalctl", "-b", "-2", "--grep", _KERNEL_NOISE_FREE,
-        "-n", "60", "--no-pager",
-    ],
-    "boots": ["/usr/bin/journalctl", "--list-boots", "-n", "8", "--no-pager"],
     "previous_boot_end": [
         "/usr/bin/journalctl", "-b", "-1",
         "-t", "systemd", "-t", "systemd-logind", "-t", "systemd-shutdown",
@@ -615,6 +611,9 @@ def kernel_logs(
     for key, cmd in {**_KERNEL_CMDS, **(extra or {})}.items():
         try:
             text = run(cmd)
+            if _KERNEL_NOISE_FREE in cmd and (text is None or text.startswith("[exit ")):
+                at = cmd.index(_KERNEL_NOISE_FREE)
+                text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
         out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None

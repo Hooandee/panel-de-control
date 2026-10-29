@@ -14280,6 +14280,7 @@ class Plugin:
             )
 
         decky.logger.info("Shutdown stage unload:begin")
+        self._stop_pulse()
         self._prepare_shutdown()
         stage("prepared")
         if getattr(self, "_screen_sleep", None) is not None:
@@ -14340,6 +14341,11 @@ class Plugin:
             on_unclean=lambda end: diary.write("WARNING", "session", "previous_unclean_end", **end),
         )
         self._pulse.start()
+
+    def _stop_pulse(self) -> None:
+        beat, self._pulse = getattr(self, "_pulse", None), None
+        if beat is not None:
+            beat.stop()
 
     def _pulse_context(self) -> dict:
         sample = getattr(self, "_support_last_sample", None) or {}
@@ -14555,9 +14561,7 @@ class Plugin:
         if diary is None:
             return
         journal.active = None
-        beat = getattr(self, "_pulse", None)
-        if beat is not None:
-            beat.stop()
+        self._stop_pulse()
         watchdog = getattr(self, "_loop_watchdog", None)
         if watchdog is not None:
             watchdog.stop()
@@ -14733,6 +14737,7 @@ class Plugin:
 
     async def _uninstall(self) -> None:
         decky.logger.info("Shutdown stage uninstall:begin")
+        self._stop_pulse()
         self._prepare_shutdown()
         try:
             drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
