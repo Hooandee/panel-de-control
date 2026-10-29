@@ -83,12 +83,13 @@ def test_system_sample_reads_memory_pressure_gpu_and_steam_memory(tmp_path):
     gpu.mkdir(parents=True)
     (gpu / "gpu_busy_percent").write_text("97\n")
     (gpu / "mem_info_vram_used").write_text(str(512 * 1048576))
+    (gpu / "mem_info_vram_total").write_text(str(12 * 1024 * 1048576))
 
     sample = system_sample(str(tmp_path))
 
-    assert sample["avail_mb"] == 2000 and sample["psi_mem"] == 12.5
+    assert sample["avail_mb"] == 2000 and sample["total_mb"] == 15625 and sample["psi_mem"] == 12.5
     assert sample["load1"] == 3.1 and sample["up"] == 321.5
-    assert sample["gpu"] == {"busy": 97, "vram_mb": 512, "gtt_mb": None}
+    assert sample["gpu"] == {"busy": 97, "vram_mb": 512, "vram_total_mb": 12288, "gtt_mb": None}
     assert sample["proc"]["steamwebhelper"]["n"] == 2 and "bash" not in sample["proc"]
 
 

@@ -45,6 +45,7 @@ def _meminfo(root: str) -> dict:
         if parts and parts[0].isdigit():
             values[name] = int(parts[0]) // 1024
     return {
+        "total_mb": values.get("MemTotal"),
         "avail_mb": values.get("MemAvailable"),
         "swap_free_mb": values.get("SwapFree"),
         "swap_total_mb": values.get("SwapTotal"),
@@ -78,10 +79,12 @@ def _gpu(root: str) -> dict | None:
         if busy is None:
             continue
         vram = _number(os.path.join(device, "mem_info_vram_used"))
+        vram_total = _number(os.path.join(device, "mem_info_vram_total"))
         gtt = _number(os.path.join(device, "mem_info_gtt_used"))
         return {
             "busy": busy,
             "vram_mb": vram // 1048576 if vram is not None else None,
+            "vram_total_mb": vram_total // 1048576 if vram_total is not None else None,
             "gtt_mb": gtt // 1048576 if gtt is not None else None,
         }
     return None
