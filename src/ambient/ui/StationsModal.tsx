@@ -241,7 +241,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
         <LuLibrary size={20} style={{ color: theme.color.accent, flexShrink: 0 }} />
         <span style={{ fontSize: 18, fontWeight: 700, color: theme.color.textPrimary }}>{t("ambient.lib.title")}</span>
-        {tab !== "music" && <LibraryPlayback inline runtime={runtime} player={snapshot.player} />}
+        {!(tab === "music" && snapshot.player.video) && <LibraryPlayback inline runtime={runtime} player={snapshot.player} />}
       </div>
       <div style={{ width: "100%" }}>
         <Segmented value={tab} options={[

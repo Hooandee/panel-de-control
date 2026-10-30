@@ -1,6 +1,8 @@
 import type { Lang } from "../../i18n";
 
 const es = {
+  "ambient.lib.playAll": "Reproducir todo",
+  "ambient.lib.selectedCount": "{n} elegidas",
   "ambient.queue.title": "Cola",
   "ambient.queue.empty": "La cola está vacía. Añade algo con ☰ o desde el móvil.",
   "ambient.queue.count": "{n} en cola",
@@ -345,6 +347,8 @@ const es = {
 type Key = keyof typeof es;
 
 const en: Record<Key, string> = {
+  "ambient.lib.playAll": "Play all",
+  "ambient.lib.selectedCount": "{n} chosen",
   "ambient.queue.title": "Queue",
   "ambient.queue.empty": "The queue is empty. Add something with ☰ or from your phone.",
   "ambient.queue.count": "{n} queued",
@@ -687,6 +691,8 @@ const en: Record<Key, string> = {
 };
 
 const it: Record<Key, string> = {
+  "ambient.lib.playAll": "Riproduci tutto",
+  "ambient.lib.selectedCount": "{n} scelti",
   "ambient.queue.title": "Coda",
   "ambient.queue.empty": "La coda è vuota. Aggiungi qualcosa con ☰ o dal telefono.",
   "ambient.queue.count": "{n} in coda",
@@ -1029,6 +1035,8 @@ const it: Record<Key, string> = {
 };
 
 const de: Record<Key, string> = {
+  "ambient.lib.playAll": "Alle abspielen",
+  "ambient.lib.selectedCount": "{n} ausgewählt",
   "ambient.queue.title": "Warteschlange",
   "ambient.queue.empty": "Die Warteschlange ist leer. Mit ☰ oder vom Handy etwas hinzufügen.",
   "ambient.queue.count": "{n} in der Warteschlange",
@@ -1371,6 +1379,8 @@ const de: Record<Key, string> = {
 };
 
 const ptBR: Record<Key, string> = {
+  "ambient.lib.playAll": "Tocar tudo",
+  "ambient.lib.selectedCount": "{n} escolhidas",
   "ambient.queue.title": "Fila",
   "ambient.queue.empty": "A fila está vazia. Adicione algo com ☰ ou pelo celular.",
   "ambient.queue.count": "{n} na fila",
@@ -1713,6 +1723,8 @@ const ptBR: Record<Key, string> = {
 };
 
 const fr: Record<Key, string> = {
+  "ambient.lib.playAll": "Tout lire",
+  "ambient.lib.selectedCount": "{n} choisis",
   "ambient.queue.title": "File d’attente",
   "ambient.queue.empty": "La file est vide. Ajoutez quelque chose avec ☰ ou depuis le téléphone.",
   "ambient.queue.count": "{n} en attente",

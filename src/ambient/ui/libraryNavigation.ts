@@ -79,6 +79,9 @@ export function useLibraryNavigation(onClose?: () => void) {
     if (index === null) return;
     if ((event.target as HTMLElement)?.closest?.('input,textarea,[role="slider"]')) return;
     const delta = event.detail.button === GamepadButton.DIR_RIGHT ? 1 : event.detail.button === GamepadButton.DIR_LEFT ? -1 : 0;
+    const tile = (event.target as HTMLElement)?.closest?.("[data-library-tile]");
+    const neighbour = tile && (delta > 0 ? tile.nextElementSibling : tile.previousElementSibling);
+    if (neighbour?.matches("[data-library-tile]")) return;
     if (delta && index + delta >= 0 && focusColumn(index + delta)) consume(event);
   };
   return { ref: root, onGamepadFocus, onClickCapture, onCancelButton, onGamepadDirection };
