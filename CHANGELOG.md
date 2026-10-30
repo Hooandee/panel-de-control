@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.80.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.2...panel-de-control-v0.80.3) (2026-10-30)
+
+
+### Bug Fixes
+
+* **logs:** keep a black box to explain hard freezes ([#1046](https://github.com/Hooandee/panel-de-control/issues/1046)) ([8abd349](https://github.com/Hooandee/panel-de-control/commit/8abd34938b692a54d786b74d35d9761bb19b51a5))
+* **qam:** keep Steam running on the public beta client ([#1047](https://github.com/Hooandee/panel-de-control/issues/1047)) ([2724d9a](https://github.com/Hooandee/panel-de-control/commit/2724d9a8fef587038b1643da913dabf42310af34))
+
 ## [0.80.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.1...panel-de-control-v0.80.2) (2026-10-29)
 
 ### Español
