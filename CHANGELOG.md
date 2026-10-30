@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.81.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.0...panel-de-control-v0.81.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **ambient:** stop the library from shrinking until it vanishes ([#1057](https://github.com/Hooandee/panel-de-control/issues/1057)) ([c3eeeed](https://github.com/Hooandee/panel-de-control/commit/c3eeeed6f9b9ebd22b397dc9180d523aac322b6b))
+
 ## [0.81.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.3...panel-de-control-v0.81.0) (2026-10-30)
 
 
