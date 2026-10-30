@@ -59,6 +59,10 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { ambientThemeChannel, startAmbient } from "./ambient";
+import { adoptStaleActivePlugin } from "./deckyInternal";
+import { createGameSessionPort } from "./platform/gameSessions";
+import { createPowerPort } from "./platform/power";
 import { parseSectionHandoffs } from "./themes/sectionOwnership";
 import {
   configureEarlyArchivePicker,
@@ -219,20 +223,31 @@ export default definePlugin(() => {
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
     subscribeQamDocument: onQamDocument,
+    ambient: ambientThemeChannel,
     subscribePackageChanges: onThemePackagesChanged,
   });
+  const stopAmbient = startAmbient({
+    gameSessions: createGameSessionPort(),
+    power: createPowerPort(),
+    notify: (title, body) => toaster.toast({ title, body }),
+    translate,
+  });
+
+  const content = (
+    <StandardPluginContent
+      lifecycle={standardLifecycle.signal}
+    />
+  );
+  const stopAdoptingActivePlugin = adoptStaleActivePlugin("Panel de Control", content);
 
   return {
     name: "Panel de Control",
     titleView: <PluginTitle />,
-    content: (
-      <StandardPluginContent
-        lifecycle={standardLifecycle.signal}
-      />
-    ),
+    content,
     icon: <LuSlidersVertical />,
     onDismount() {
       dismounted = true;
+      stopAdoptingActivePlugin();
       cancelHydrationRetry();
       standardLifecycle.abort();
       qamRuntime?.dispose();
@@ -250,6 +265,7 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      stopAmbient();
       stopArtworkHydration();
       releaseArtworkEditor();
       releaseArtworkHost();

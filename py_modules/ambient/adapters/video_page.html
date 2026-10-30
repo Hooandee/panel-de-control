@@ -1,0 +1,359 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+#p,video{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
+video{object-fit:cover}
+</style>
+</head>
+<body>
+<div id="p"></div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  // Embedded players copy the page address into their own requests (Twitch's referrer); keep the
+  // session token out of it. Direct streams need the address to load hls.js next to the page.
+  if (!q.get("src")) {
+    try { history.replaceState(null, "", location.pathname.replace(/\/v\/[^/]+\//, "/v/-/")); } catch (e) {}
+  }
+  var state = { s: "loading", t: 0, d: 0, title: "", id: "", err: 0, pic: 1 };
+  var volume = Math.max(0, Math.min(100, Number(q.get("vol") || 50)));
+  var api = null;
+
+  var COMMANDS = { play: 1, pause: 1, seek: 1, volume: 1, next: 1, previous: 1 };
+  var key = q.get("k") || "";
+  function report() {
+    try {
+      if (api && api.sample) api.sample();
+      if (window.parent !== window) window.parent.postMessage({ pdc: state }, "*");
+    } catch (e) {}
+  }
+  setInterval(report, 500);
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    // Panel sends from its own Steam context, not from the window holding this frame, so a key
+    // handed over in the page address authenticates the sender.
+    if (!data || !key || data.k !== key || !COMMANDS[data.pdcCmd] || !api) return;
+    api[data.pdcCmd](data.arg);
+  });
+
+  var src = q.get("src");
+  if (src && /^https?:\/\//.test(src)) {
+    var video = document.createElement("video");
+    var wantPaused = false;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.addEventListener("canplay", function () { if (!wantPaused && video.paused) video.play().catch(function () {}); });
+    var hls = /\.m3u8(\?|#|$)/i.test(src) && !video.canPlayType("application/vnd.apple.mpegurl");
+    if (hls) {
+      var lib = document.createElement("script");
+      lib.src = "hls.js";
+      lib.onload = function () {
+        if (!window.Hls || !Hls.isSupported()) { state.s = "error"; state.err = 4; return; }
+        var engine = new Hls({ lowLatencyMode: false, backBufferLength: 30, capLevelToPlayerSize: true });
+        engine.on(Hls.Events.ERROR, function (_, data) { if (data && data.fatal) { state.s = "error"; state.err = 2; } });
+        var maxHeight = Number(q.get("maxh") || 0);
+        // A background trailer is decoded in software on these machines; the lowest rendition is plenty.
+        if (maxHeight > 0) engine.on(Hls.Events.MANIFEST_PARSED, function (_, data) {
+          var cap = -1;
+          (data.levels || []).forEach(function (level, index) { if (level.height && level.height <= maxHeight) cap = index; });
+          engine.autoLevelCapping = cap >= 0 ? cap : 0;
+        });
+        engine.loadSource(src);
+        engine.attachMedia(video);
+      };
+      lib.onerror = function () { state.s = "error"; state.err = 4; };
+      document.head.appendChild(lib);
+    } else {
+      video.src = src;
+    }
+    video.volume = volume / 100;
+    video.muted = volume === 0;
+    video.loop = q.get("loop") === "1";
+    var start = Number(q.get("t") || 0);
+    if (start > 0) video.addEventListener("loadedmetadata", function () { video.currentTime = start; }, { once: true });
+    function samplePicture() { state.pic = video.videoWidth > 0 ? 1 : 0; }
+    video.addEventListener("loadedmetadata", samplePicture);
+    video.addEventListener("resize", samplePicture);
+    video.addEventListener("playing", function () { samplePicture(); state.s = "playing"; });
+    video.addEventListener("pause", function () { state.s = "paused"; });
+    video.addEventListener("waiting", function () { state.s = "loading"; });
+    video.addEventListener("ended", function () { state.s = "ended"; });
+    video.addEventListener("error", function () { state.s = "error"; state.err = video.error ? video.error.code : 0; });
+    document.getElementById("p").replaceWith(video);
+    api = {
+      play: function () { wantPaused = false; video.play().catch(function () {}); },
+      pause: function () { wantPaused = true; video.pause(); },
+      seek: function (t) { video.currentTime = t; },
+      volume: function (v) { video.volume = v / 100; },
+      next: function () {},
+      previous: function () {},
+      sample: function () {
+        state.t = video.currentTime || 0;
+        state.d = isFinite(video.duration) ? video.duration : 0;
+        // hls.js can swallow the first play while it switches levels at start-up.
+        if (!wantPaused && video.paused && video.readyState >= 3 && !video.ended) video.play().catch(function () {});
+      }
+    };
+    window.pdc = api;
+    return;
+  }
+
+  var embed = q.get("embed");
+  var ref = q.get("ref") || "";
+  if (embed) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(ref)) { state.s = "error"; state.err = 2; return; }
+    if (embed === "twitch") {
+      var twitch = null;
+      var twitchReady = false;
+      var wantPaused = false;
+      var tag = document.createElement("script");
+      tag.src = "https://player.twitch.tv/js/embed/v1.js";
+      tag.onload = function () {
+        // Twitch's frame-ancestors lists only the given parents, and this page is framed by Steam's own window.
+        var options = { width: "100%", height: "100%", parent: [location.hostname, "steamloopback.host"], autoplay: true, muted: false };
+        if (q.get("vod")) options.video = "v" + ref; else options.channel = ref;
+        twitch = new Twitch.Player("p", options);
+        twitch.addEventListener(Twitch.Player.READY, function () {
+          twitchReady = true;
+          twitch.setMuted(false);
+          twitch.setVolume(volume / 100);
+          if (!wantPaused) twitch.play();
+        });
+        twitch.addEventListener(Twitch.Player.PLAYING, function () {
+          state.s = "playing";
+          // Twitch mutes autoplayed streams; the listener already chose to hear this one.
+          if (twitch.getMuted()) twitch.setMuted(false);
+          twitch.setVolume(volume / 100);
+        });
+        twitch.addEventListener(Twitch.Player.PAUSE, function () { state.s = "paused"; });
+        twitch.addEventListener(Twitch.Player.ENDED, function () { state.s = "ended"; });
+        twitch.addEventListener(Twitch.Player.OFFLINE, function () { state.s = "error"; state.err = 100; });
+      };
+      tag.onerror = function () { state.s = "error"; state.err = 5; };
+      document.head.appendChild(tag);
+      state.title = ref;
+      api = {
+        play: function () { wantPaused = false; if (twitchReady) twitch.play(); },
+        pause: function () { wantPaused = true; if (twitchReady) twitch.pause(); },
+        seek: function (t) { if (twitchReady && q.get("vod")) twitch.seek(t); },
+        volume: function (v) { volume = v; if (twitchReady) twitch.setVolume(v / 100); },
+        next: function () {},
+        previous: function () {},
+        sample: function () {
+          if (!twitchReady) return;
+          state.t = twitch.getCurrentTime() || 0;
+          state.d = q.get("vod") ? twitch.getDuration() || 0 : 0;
+        }
+      };
+      window.pdc = api;
+      return;
+    }
+    var sources = {
+      kick: "https://player.kick.com/" + ref + "?autoplay=true&muted=false",
+      vimeo: "https://player.vimeo.com/video/" + ref + "?autoplay=1&title=0&byline=0&portrait=0",
+      dailymotion: "https://www.dailymotion.com/embed/video/" + ref + "?autoplay=1&queue-enable=false&ui-logo=false"
+    };
+    var frameSrc = sources[embed];
+    if (!frameSrc) { state.s = "error"; state.err = 2; return; }
+    var frame = document.createElement("iframe");
+    frame.allow = "autoplay; fullscreen; encrypted-media";
+    frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0";
+    frame.src = frameSrc;
+    var vimeo = embed === "vimeo";
+    var tell = function (method, value) {
+      if (!frame.contentWindow) return;
+      frame.contentWindow.postMessage(JSON.stringify(value === undefined ? { method: method } : { method: method, value: value }), "https://player.vimeo.com");
+    };
+    var vimeoPaused = false;
+    var vimeoPlaying = false;
+    var vimeoReady = false;
+    var vimeoFailed = false;
+    var vimeoProgress = null;
+    var vimeoSeeking = false;
+    var vimeoTimer = null;
+    function clearVimeoWait() {
+      if (vimeoTimer !== null) clearTimeout(vimeoTimer);
+      vimeoTimer = null;
+    }
+    function failVimeo() {
+      clearVimeoWait();
+      vimeoFailed = true;
+      vimeoPlaying = false;
+      state.s = "error";
+      state.err = 0;
+    }
+    function waitForVimeo() {
+      if (vimeoTimer !== null) return;
+      // The outer page's heartbeat proves only that this bridge loaded, not that Vimeo can play.
+      vimeoTimer = setTimeout(function () {
+        if (!vimeoPaused && !vimeoPlaying) failVimeo();
+      }, 20000);
+    }
+    function vimeoNumber(value) {
+      return typeof value === "number" && isFinite(value) && value >= 0;
+    }
+    function confirmVimeoPlayback() {
+      clearVimeoWait();
+      vimeoPlaying = true;
+      state.s = "playing";
+    }
+    frame.onload = function () {
+      if (frame.src === "about:blank") return;
+      if (vimeo) tell("ping");
+      else state.s = "playing";
+    };
+    if (vimeo) {
+      waitForVimeo();
+      window.addEventListener("message", function (event) {
+        if (event.origin !== "https://player.vimeo.com" || event.source !== frame.contentWindow) return;
+        var data;
+        try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch (e) { return; }
+        if (!data || typeof data !== "object") return;
+        // Some Vimeo player builds answer string messages with the legacy event names.
+        if (data.event === "playProgress") data.event = "timeupdate";
+        else if (data.event === "finish") data.event = "ended";
+        if (data.event === "error") { failVimeo(); return; }
+        if (data.event === "ready" || data.method === "ping") {
+          if (vimeoReady) return;
+          vimeoReady = true;
+          ["playing", "pause", "ended", "timeupdate", "durationchange", "bufferstart", "seeking", "seeked", "error"].forEach(function (name) {
+            tell("addEventListener", name);
+          });
+          if (vimeoFailed) return;
+          tell("setVolume", volume / 100);
+          tell("getDuration");
+          tell(vimeoPaused ? "pause" : "play");
+          return;
+        }
+        if (vimeoFailed) return;
+        if (data.event === "playing") {
+          if (vimeoPaused) { tell("pause"); return; }
+          confirmVimeoPlayback();
+        } else if (data.event === "pause") {
+          clearVimeoWait();
+          vimeoPlaying = false;
+          state.s = "paused";
+        } else if (data.event === "ended") {
+          clearVimeoWait();
+          vimeoPlaying = false;
+          state.s = "ended";
+        } else if (data.event === "bufferstart" && !vimeoPaused) {
+          vimeoPlaying = false;
+          state.s = "loading";
+          waitForVimeo();
+        } else if (data.event === "seeking" || data.event === "seeked") {
+          vimeoSeeking = data.event === "seeking";
+          vimeoProgress = null;
+        }
+        var details = data.data;
+        if (data.event === "timeupdate" && details) {
+          if (vimeoNumber(details.seconds)) {
+            // Autoplay may precede the ready handshake, leaving no playing event to observe.
+            if (state.s === "loading" && !vimeoPaused && !vimeoSeeking && vimeoProgress !== null && details.seconds > vimeoProgress) confirmVimeoPlayback();
+            vimeoProgress = vimeoSeeking ? null : details.seconds;
+            state.t = details.seconds;
+          }
+          if (vimeoNumber(details.duration)) state.d = details.duration;
+        } else if (data.event === "durationchange" && details && vimeoNumber(details.duration)) state.d = details.duration;
+        else if (data.method === "getDuration" && vimeoNumber(data.value)) state.d = data.value;
+      });
+    }
+    document.getElementById("p").replaceWith(frame);
+    state.title = ref;
+    if (vimeo) {
+      api = {
+        play: function () {
+          if (vimeoPlaying && !vimeoPaused) return;
+          vimeoPaused = false;
+          vimeoFailed = false;
+          vimeoProgress = null;
+          state.s = "loading";
+          state.err = 0;
+          waitForVimeo();
+          if (vimeoReady) tell("play");
+        },
+        pause: function () {
+          vimeoPaused = true;
+          vimeoPlaying = false;
+          vimeoProgress = null;
+          clearVimeoWait();
+          if (!vimeoFailed) state.s = "paused";
+          if (vimeoReady) tell("pause");
+        },
+        seek: function (t) { vimeoProgress = null; tell("setCurrentTime", t); },
+        volume: function (v) { volume = v; tell("setVolume", v / 100); },
+        next: function () {},
+        previous: function () {}
+      };
+      window.pdc = api;
+      return;
+    }
+    // Kick and Dailymotion embeds expose no player API here: pausing unloads the frame, playing loads it again.
+    api = {
+      play: function () { if (frame.src === "about:blank") { state.s = "loading"; frame.src = frameSrc; } },
+      pause: function () { frame.src = "about:blank"; state.s = "paused"; },
+      seek: function () {},
+      volume: function () {},
+      next: function () {},
+      previous: function () {}
+    };
+    window.pdc = api;
+    return;
+  }
+
+  var id = q.get("yt") || "";
+  var list = q.get("list") || "";
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id) && !/^[A-Za-z0-9_-]{2,64}$/.test(list)) {
+    state.s = "error";
+    state.err = 2;
+    return;
+  }
+  var STATES = { "-1": "loading", 0: "ended", 1: "playing", 2: "paused", 3: "loading", 5: "loading" };
+  var player = null;
+  var ready = false;
+  var pending = { seek: null, paused: false };
+  var vars = { autoplay: 1, controls: 0, playsinline: 1, rel: 0, modestbranding: 1, iv_load_policy: 3, disablekb: 1, fs: 0, start: Math.floor(Number(q.get("t") || 0)) };
+  if (list) { vars.list = list; vars.listType = "playlist"; }
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player("p", {
+      videoId: id || undefined,
+      playerVars: vars,
+      events: {
+        onReady: function (e) {
+          ready = true;
+          e.target.setVolume(volume);
+          if (pending.seek !== null) e.target.seekTo(pending.seek, true);
+          if (!pending.paused) e.target.playVideo();
+        },
+        onStateChange: function (e) { state.s = STATES[e.data] || state.s; },
+        onError: function (e) { state.s = "error"; state.err = e.data; }
+      }
+    });
+  };
+  api = {
+    play: function () { pending.paused = false; if (ready) player.playVideo(); },
+    pause: function () { pending.paused = true; if (ready) player.pauseVideo(); },
+    seek: function (t) { if (ready) player.seekTo(t, true); else pending.seek = t; },
+    volume: function (v) { volume = v; if (ready) player.setVolume(v); },
+    next: function () { if (ready) player.nextVideo(); },
+    previous: function () { if (ready) player.previousVideo(); },
+    sample: function () {
+      if (!player || !player.getCurrentTime) return;
+      state.t = player.getCurrentTime() || 0;
+      state.d = player.getDuration() || 0;
+      var data = player.getVideoData ? player.getVideoData() : null;
+      if (data) { state.title = data.title || ""; state.id = data.video_id || ""; }
+    }
+  };
+  window.pdc = api;
+  var tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  adoptStaleActivePlugin,
   callLegacyPluginBackend,
   cleanupOwnedQuickAccessTabs,
   configureQuickAccessTabComposition,
@@ -1609,5 +1610,54 @@ describe("callLegacyPluginBackend", () => {
       {},
       { DeckyBackend: { call: vi.fn(async () => ({ unexpected: true })) } },
     )).rejects.toThrow("invalid legacy response");
+  });
+});
+
+
+describe("adoptStaleActivePlugin", () => {
+  function hostWith(state: { plugins: { name: string; content: unknown }[]; activePlugin: unknown }) {
+    const setActivePlugin = vi.fn();
+    return { setActivePlugin, host: { DeckyPluginLoader: { deckyState: { publicState: () => state, setActivePlugin } } } };
+  }
+
+  it("replaces a stale copy of this plugin once the new instance is listed", async () => {
+    vi.useFakeTimers();
+    const content = {};
+    const state = { plugins: [] as { name: string; content: unknown }[], activePlugin: { name: "Panel de Control", content: {} } as unknown };
+    const { host, setActivePlugin } = hostWith(state);
+    adoptStaleActivePlugin("Panel de Control", content, host);
+    vi.advanceTimersByTime(300);
+    expect(setActivePlugin).not.toHaveBeenCalled();
+    state.plugins.push({ name: "Panel de Control", content });
+    vi.advanceTimersByTime(300);
+    expect(setActivePlugin).toHaveBeenCalledWith("Panel de Control");
+    vi.useRealTimers();
+  });
+
+  it("never steals focus from another open plugin or an up-to-date view", () => {
+    vi.useFakeTimers();
+    const content = {};
+    const mine = { name: "Panel de Control", content };
+    const other = hostWith({ plugins: [mine], activePlugin: { name: "CSS Loader", content: {} } });
+    adoptStaleActivePlugin("Panel de Control", content, other.host);
+    const fresh = hostWith({ plugins: [mine], activePlugin: mine });
+    adoptStaleActivePlugin("Panel de Control", content, fresh.host);
+    const closed = hostWith({ plugins: [mine], activePlugin: null });
+    adoptStaleActivePlugin("Panel de Control", content, closed.host);
+    vi.advanceTimersByTime(10);
+    expect(other.setActivePlugin).not.toHaveBeenCalled();
+    expect(fresh.setActivePlugin).not.toHaveBeenCalled();
+    expect(closed.setActivePlugin).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("gives up after a while and can be cancelled", () => {
+    vi.useFakeTimers();
+    const { host, setActivePlugin } = hostWith({ plugins: [], activePlugin: { name: "Panel de Control", content: {} } });
+    const cancel = adoptStaleActivePlugin("Panel de Control", {}, host);
+    vi.advanceTimersByTime(20_000);
+    cancel();
+    expect(setActivePlugin).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

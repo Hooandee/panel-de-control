@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "background": {
+    "enabled": false,
+    "collections": [
+      "suggested.library"
+    ],
+    "intervalSec": 300,
+    "onReturnHome": false,
+    "order": "shuffle",
+    "transition": "fade",
+    "gameArt": "blend",
+    "library": false,
+    "perGame": {},
+    "pinned": "",
+    "selectedRefs": [],
+    "gameTrailers": false,
+    "gameThemes": false,
+    "lowBatteryPercent": 20,
+    "optimizeVideos": true,
+    "videoQuality": "fluid"
+  },
+  "music": {
+    "enabled": false,
+    "source": "radio",
+    "volume": 0.5,
+    "inGameMusic": "pause",
+    "inGameRadio": "continue",
+    "qamPlayer": true,
+    "videoOn": false,
+    "overlay": "peek",
+    "overlayCorner": "top-right",
+    "videoSize": "medium",
+    "videoScale": 40,
+    "inGameMusicLevel": 0,
+    "inGameRadioLevel": 100,
+    "inGameMediaLevel": 100,
+    "inGameGameLevel": 100,
+    "folders": [],
+    "lastTrack": null,
+    "stationId": null
+  },
+  "collections": {
+    "removedSuggested": [],
+    "favorites": [],
+    "folders": []
+  },
+  "radio": {
+    "removedSuggested": [],
+    "favorites": [],
+    "playlists": []
+  },
+  "claims": {}
+}

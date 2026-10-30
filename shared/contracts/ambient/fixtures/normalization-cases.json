@@ -1,0 +1,278 @@
+[
+  {
+    "name": "empty input yields defaults",
+    "input": {},
+    "expect": "defaults"
+  },
+  {
+    "name": "missing version is read as the current version",
+    "input": {
+      "background": {
+        "intervalSec": 60
+      },
+      "music": {
+        "volume": 0.8
+      }
+    },
+    "patch": {
+      "background": {
+        "intervalSec": 60
+      },
+      "music": {
+        "volume": 0.8
+      }
+    }
+  },
+  {
+    "name": "interval snaps to nearest allowed value",
+    "input": {
+      "version": 1,
+      "background": {
+        "intervalSec": 200
+      }
+    },
+    "patch": {
+      "background": {
+        "intervalSec": 300
+      }
+    }
+  },
+  {
+    "name": "volume and battery threshold are clamped",
+    "input": {
+      "version": 1,
+      "music": {
+        "volume": 3
+      },
+      "background": {
+        "lowBatteryPercent": 90
+      }
+    },
+    "patch": {
+      "music": {
+        "volume": 1
+      },
+      "background": {
+        "lowBatteryPercent": 50
+      }
+    }
+  },
+  {
+    "name": "invalid enums fall back to defaults",
+    "input": {
+      "version": 1,
+      "background": {
+        "gameArt": "sparkles",
+        "order": "random"
+      },
+      "music": {
+        "inGameRadio": "explode"
+      }
+    },
+    "patch": {}
+  },
+  {
+    "name": "claims keep only known owners",
+    "input": {
+      "version": 1,
+      "claims": {
+        "hooandee-gallery": "panel",
+        "x": "nobody",
+        "audioloader": "other"
+      }
+    },
+    "patch": {
+      "claims": {
+        "hooandee-gallery": "panel",
+        "audioloader": "other"
+      }
+    }
+  },
+  {
+    "name": "per game keys must be numeric appids",
+    "input": {
+      "version": 1,
+      "background": {
+        "perGame": {
+          "1091500": "local:abc",
+          "nope": "local:x",
+          "7": 5
+        }
+      }
+    },
+    "patch": {
+      "background": {
+        "perGame": {
+          "1091500": "local:abc"
+        }
+      }
+    }
+  },
+  {
+    "name": "favorites require http urls and dedupe",
+    "input": {
+      "version": 1,
+      "collections": {
+        "favorites": [
+          {
+            "id": "f1",
+            "name": "Sky",
+            "url": "https://a.test/sky.jpg"
+          },
+          {
+            "id": "f2",
+            "name": "Dup",
+            "url": "https://a.test/sky.jpg"
+          },
+          {
+            "id": "f3",
+            "name": "Bad",
+            "url": "file:///etc/passwd"
+          }
+        ]
+      }
+    },
+    "patch": {
+      "collections": {
+        "favorites": [
+          {
+            "id": "f1",
+            "name": "Sky",
+            "url": "https://a.test/sky.jpg"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "unknown keys are dropped",
+    "input": {
+      "version": 1,
+      "evil": true,
+      "background": {
+        "zzz": 1
+      }
+    },
+    "patch": {}
+  },
+  {
+    "name": "newer unknown version falls back to defaults",
+    "input": {
+      "version": 99,
+      "background": {
+        "intervalSec": 60
+      }
+    },
+    "expect": "defaults"
+  },
+  {
+    "name": "third-party painter claims survive",
+    "input": {
+      "version": 1,
+      "claims": {
+        "css:ScrollArea": "panel",
+        "css:RecentGamesInnerContainer::before": "other",
+        "css:bad key": "panel"
+      }
+    },
+    "patch": {
+      "claims": {
+        "css:ScrollArea": "panel",
+        "css:RecentGamesInnerContainer::before": "other"
+      }
+    }
+  },
+  {
+    "name": "per-game refs from every source survive",
+    "input": {
+      "version": 1,
+      "background": {
+        "perGame": {
+          "1": "steam:730",
+          "2": "remote:https://x.test/a.jpg?b=1",
+          "3": "opt:opt-abc",
+          "4": "bogus:x"
+        }
+      }
+    },
+    "patch": {
+      "background": {
+        "perGame": {
+          "1": "steam:730",
+          "2": "remote:https://x.test/a.jpg?b=1",
+          "3": "opt:opt-abc"
+        }
+      }
+    }
+  },
+  {
+    "name": "radio favorites keep safe art and subtitle",
+    "input": {
+      "version": 1,
+      "radio": {
+        "favorites": [
+          {
+            "id": "f1",
+            "name": "Lofi",
+            "url": "https://s.test/l",
+            "art": "https://s.test/i.png",
+            "subtitle": "Francia · 128 kbps"
+          },
+          {
+            "id": "f2",
+            "name": "Bad art",
+            "url": "https://s.test/b",
+            "art": "javascript:x"
+          }
+        ]
+      }
+    },
+    "patch": {
+      "radio": {
+        "removedSuggested": [],
+        "favorites": [
+          {
+            "id": "f1",
+            "name": "Lofi",
+            "url": "https://s.test/l",
+            "art": "https://s.test/i.png",
+            "subtitle": "Francia · 128 kbps"
+          },
+          {
+            "id": "f2",
+            "name": "Bad art",
+            "url": "https://s.test/b"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "selected backgrounds preserve original references and order",
+    "input": {
+      "background": {
+        "selectedRefs": ["local:second", "remote:https://example.test/photo.jpg", "local:second", "steam:10", "opt:copy", "url:copy", "javascript:x", null]
+      }
+    },
+    "patch": {
+      "background": {
+        "selectedRefs": ["local:second", "remote:https://example.test/photo.jpg", "steam:10"]
+      }
+    }
+  },
+  {
+    "name": "invalid selection preserves legacy collection behavior",
+    "input": {
+      "background": {
+        "collections": ["suggested.bing"],
+        "selectedRefs": "local:one"
+      }
+    },
+    "patch": {
+      "background": {
+        "collections": ["suggested.bing"],
+        "selectedRefs": []
+      }
+    }
+  }
+]

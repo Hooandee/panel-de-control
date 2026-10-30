@@ -4,7 +4,7 @@ import {
   LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuLamp, LuShieldAlert, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle, LuHardDrive,
-  LuMonitorCog, LuImage,
+  LuMonitorCog, LuImage, LuRadio,
 } from "react-icons/lu";
 import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
@@ -147,6 +147,9 @@ export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   power: [
     { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} />, handheldOnly: true, learningTags: ["tdp"] },
     ...SECTION_BLOCKS.power,
+  ],
+  ambient: [
+    { id: "ambientPlayer", labelKey: "ambient.player.title", icon: <LuRadio size={ICON} /> },
   ],
 };
 
