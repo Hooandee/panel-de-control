@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.81.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.1...panel-de-control-v0.81.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* **ambient:** recover radio searches and controller navigation ([#1062](https://github.com/Hooandee/panel-de-control/issues/1062)) ([fac2ae8](https://github.com/Hooandee/panel-de-control/commit/fac2ae8d9ba8e744549ee3dbe4d134a7e44492da))
+
 ## [0.81.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.0...panel-de-control-v0.81.1) (2026-10-30)
 
 
