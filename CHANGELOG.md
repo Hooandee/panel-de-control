@@ -5,10 +5,35 @@
 ## [0.80.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.2...panel-de-control-v0.80.3) (2026-10-30)
 
 
-### Bug Fixes
+### Español
 
-* **logs:** keep a black box to explain hard freezes ([#1046](https://github.com/Hooandee/panel-de-control/issues/1046)) ([8abd349](https://github.com/Hooandee/panel-de-control/commit/8abd34938b692a54d786b74d35d9761bb19b51a5))
-* **qam:** keep Steam running on the public beta client ([#1047](https://github.com/Hooandee/panel-de-control/issues/1047)) ([2724d9a](https://github.com/Hooandee/panel-de-control/commit/2724d9a8fef587038b1643da913dabf42310af34))
+* **Steam ya no se cae en la beta:** Con el cliente beta de Steam, Panel podía tumbar toda la interfaz y dejar la pantalla de error de Decky al arrancar. Ahora Steam abre con normalidad y Panel funciona en el menú de acceso rápido.
+* **Reportes después de un bloqueo:** Si la consola se queda congelada y hay que forzar el reinicio, Panel conserva lo que estaba pasando en los minutos anteriores (memoria, gráfica, juego y tema activos) y lo incluye en el siguiente reporte, para poder encontrar la causa.
+
+### English
+
+* **Steam no longer crashes on the beta:** On Steam's beta client, Panel could take down the whole interface and leave Decky's error screen on startup. Steam now opens normally and Panel works in the Quick Access menu.
+* **Reports after a freeze:** If the device freezes and you have to force a restart, Panel keeps what was happening in the minutes before (memory, GPU, game and active theme) and includes it in the next report, so the cause can be found.
+
+### Italiano
+
+* **Steam non si blocca più con la beta:** Con il client beta di Steam, Panel poteva far cadere tutta l'interfaccia e lasciare la schermata di errore di Decky all'avvio. Ora Steam si apre normalmente e Panel funziona nel menu di accesso rapido.
+* **Segnalazioni dopo un blocco:** Se la console si blocca e devi forzare il riavvio, Panel conserva quello che stava succedendo nei minuti precedenti (memoria, GPU, gioco e tema attivo) e lo include nella segnalazione successiva, così da trovarne la causa.
+
+### Deutsch
+
+* **Steam stürzt mit der Beta nicht mehr ab:** Mit dem Beta-Client von Steam konnte Panel die gesamte Oberfläche zum Absturz bringen und beim Start den Fehlerbildschirm von Decky hinterlassen. Jetzt startet Steam normal und Panel funktioniert im Schnellzugriffsmenü.
+* **Berichte nach einem Einfrieren:** Wenn das Gerät einfriert und du einen Neustart erzwingen musst, behält Panel, was in den Minuten davor passiert ist (Speicher, GPU, Spiel und aktives Theme), und fügt es dem nächsten Bericht bei, damit sich die Ursache finden lässt.
+
+### Português (Brasil)
+
+* **O Steam não cai mais na beta:** Com o cliente beta do Steam, o Panel podia derrubar toda a interface e deixar a tela de erro do Decky ao iniciar. Agora o Steam abre normalmente e o Panel funciona no menu de acesso rápido.
+* **Relatórios depois de um travamento:** Se o aparelho travar e for preciso forçar o reinício, o Panel guarda o que estava acontecendo nos minutos anteriores (memória, GPU, jogo e tema ativo) e inclui isso no próximo relatório, para que a causa possa ser encontrada.
+
+### Français
+
+* **Steam ne plante plus avec la bêta :** Avec le client bêta de Steam, Panel pouvait faire tomber toute l'interface et laisser l'écran d'erreur de Decky au démarrage. Steam s'ouvre maintenant normalement et Panel fonctionne dans le menu d'accès rapide.
+* **Rapports après un blocage :** Si l'appareil se fige et qu'il faut forcer le redémarrage, Panel conserve ce qui se passait dans les minutes précédentes (mémoire, GPU, jeu et thème actif) et l'inclut dans le rapport suivant, pour pouvoir en trouver la cause.
 
 ## [0.80.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.1...panel-de-control-v0.80.2) (2026-10-29)
 
