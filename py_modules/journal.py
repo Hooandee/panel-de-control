@@ -7,6 +7,7 @@ last six written within a minute is folded into a later line carrying `n` and
 """
 from __future__ import annotations
 
+import collections
 import contextvars
 import errno
 import functools
@@ -31,6 +32,7 @@ _LEVELS = {"DEBUG": "D", "INFO": "I", "WARNING": "W", "ERROR": "E", "CRITICAL": 
 _MAX_MESSAGE = 4000
 _MAX_ARGS = 400
 _DAY_S = 86_400
+_LATEST_KEPT = 8
 
 active: "Journal | None" = None
 _inside_call: contextvars.ContextVar[bool] = contextvars.ContextVar("pdc_journal_inside_call", default=False)
@@ -76,6 +78,7 @@ class Journal:
         self._pending: dict | None = None
         self._recent: dict[str, float] = {}
         self._folded: dict[str, dict] = {}
+        self._latest: collections.deque = collections.deque(maxlen=_LATEST_KEPT)
         self.dropped = 0
         self.write_failures = 0
 
@@ -107,11 +110,19 @@ class Journal:
                 "m": message if len(message) <= _MAX_MESSAGE else message[:_MAX_MESSAGE] + "…",
             }
             record.update({key: value for key, value in fields.items() if key not in record})
+            self._latest.append({
+                "t": record["t"], "l": record["l"], "s": record["s"], "m": record["m"][:160],
+                **({"a": str(record["a"])[:160]} if "a" in record else {}),
+            })
             self._queue.put_nowait(record)
         except queue.Full:
             self.dropped += 1
         except Exception:  # noqa: BLE001
             self.write_failures += 1
+
+    def latest(self) -> list[dict]:
+        """The last few records handed to the diary, before they reach the disk."""
+        return list(self._latest)
 
     def files(self) -> list[str]:
         try:
