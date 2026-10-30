@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 import socket
+import threading
+import time
 import urllib.parse
+from http.client import HTTPException
 from typing import Any, Callable, Optional
 
 from .remote_sources import Opener, build_request, default_opener
@@ -12,7 +16,23 @@ FALLBACK_HOST = "de1.api.radio-browser.info"
 MAX_LIMIT = 50
 MAX_GEO_LIMIT = 150
 DEFAULT_LIMIT = 30
-TIMEOUT_SEC = 10.0
+TIMEOUT_SEC = 3.0
+MAX_ATTEMPTS = 2
+REQUEST_BUDGET_SEC = 6.0
+DISCOVERY_WAIT_SEC = 1.0
+DISCOVERY_TTL_SEC = 3600.0
+_discovery_lock = threading.Lock()
+_discovery_done = threading.Event()
+_discovery_done.set()
+_discovered_hosts: list[str] = []
+_discovery_at = 0.0
+
+
+class RadioBrowserError(RuntimeError):
+    def __init__(self, host: str, error_class: str):
+        self.host = host
+        self.error_class = error_class
+        super().__init__(f"radio_unreachable:{host}:{error_class}")
 
 
 def _dns_hosts() -> list[str]:
@@ -26,6 +46,33 @@ def _dns_hosts() -> list[str]:
         if name.endswith(".api.radio-browser.info") and name not in hosts:
             hosts.append(name)
     return hosts
+
+
+def _refresh_hosts() -> None:
+    global _discovered_hosts, _discovery_at
+    hosts = []
+    try:
+        hosts = _dns_hosts()
+    except OSError:
+        hosts = []
+    finally:
+        with _discovery_lock:
+            _discovered_hosts = hosts
+            _discovery_at = time.monotonic()
+            _discovery_done.set()
+
+
+def _candidate_hosts() -> list[str]:
+    with _discovery_lock:
+        ttl = DISCOVERY_TTL_SEC if _discovered_hosts else 60.0
+        if _discovery_done.is_set() and (not _discovery_at or time.monotonic() - _discovery_at >= ttl):
+            _discovery_done.clear()
+            threading.Thread(target=_refresh_hosts, name="ambient-radio-dns", daemon=True).start()
+    _discovery_done.wait(DISCOVERY_WAIT_SEC)
+    with _discovery_lock:
+        hosts = list(_discovered_hosts)
+    random.shuffle(hosts)
+    return list(dict.fromkeys([*hosts, FALLBACK_HOST, "all.api.radio-browser.info"]))
 
 
 def pick_host(resolver: Callable[[], list[str]] = _dns_hosts) -> str:
@@ -42,8 +89,14 @@ def _playable(entry: Any) -> Optional[dict[str, Any]]:
     url = entry.get("url_resolved")
     if not isinstance(url, str) or not url.startswith(("https://", "http://")):
         return None
-    if entry.get("hls") or not entry.get("lastcheckok"):
+    if not entry.get("lastcheckok"):
         return None
+    if entry.get("hls"):
+        try:
+            if not urllib.parse.urlsplit(url).path.lower().endswith(".m3u8"):
+                return None
+        except ValueError:
+            return None
     tags = entry.get("tags") if isinstance(entry.get("tags"), str) else ""
     geo = _geo(entry)
     station = {
@@ -72,15 +125,7 @@ def _geo(entry: dict[str, Any]) -> Optional[list[float]]:
 
 
 def _query(path: str, params: dict[str, Any], opener: Opener, host: Optional[str]) -> list[dict[str, Any]]:
-    url = f"https://{host or pick_host()}/json/{path}?{urllib.parse.urlencode(params)}"
-    try:
-        with opener(build_request(url), TIMEOUT_SEC) as response:
-            data = json.loads(response.read(4 * 1024 * 1024).decode("utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    return [s for s in (_playable(e) for e in data) if s and s["id"]]
+    return [s for s in (_playable(e) for e in _fetch_list(path, params, opener, host)) if s and s["id"]]
 
 
 def _limit(limit: int) -> int:
@@ -91,13 +136,24 @@ ORDERS = {"popular": "clickcount", "trending": "clicktrend", "votes": "votes", "
 
 
 def _fetch_list(path: str, params: dict[str, Any], opener: Opener, host: Optional[str]) -> list[Any]:
-    url = f"https://{host or pick_host()}/json/{path}?{urllib.parse.urlencode(params)}"
-    try:
-        with opener(build_request(url), TIMEOUT_SEC) as response:
-            data = json.loads(response.read(8 * 1024 * 1024).decode("utf-8"))
-    except (OSError, ValueError):
-        return []
-    return data if isinstance(data, list) else []
+    hosts = [host] if host else _candidate_hosts()
+    deadline = time.monotonic() + REQUEST_BUDGET_SEC
+    last_error = RadioBrowserError(hosts[0], "TimeoutError")
+    for candidate in hosts[:MAX_ATTEMPTS]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        url = f"https://{candidate}/json/{path}?{urllib.parse.urlencode(params)}"
+        try:
+            with opener(build_request(url), min(TIMEOUT_SEC, remaining)) as response:
+                data = json.loads(response.read(8 * 1024 * 1024).decode("utf-8"))
+            if not isinstance(data, list):
+                raise ValueError("invalid_list")
+            return data
+        except (OSError, ValueError, HTTPException) as error:
+            last_error = RadioBrowserError(candidate, type(error).__name__)
+            logging.getLogger(__name__).warning("Radio Browser failed: host=%s class=%s", candidate, last_error.error_class)
+    raise last_error from None
 
 
 def countries(opener: Opener = default_opener, host: Optional[str] = None) -> list[dict[str, Any]]:

@@ -112,6 +112,7 @@ export interface RadioTag {
 export interface RadioCatalog {
   countries: RadioCountry[];
   tags: RadioTag[];
+  error?: "catalog_unreachable";
 }
 
 export type RadioOrder = "popular" | "trending" | "votes" | "quality";

@@ -1,4 +1,4 @@
-import { Dropdown, Focusable, ModalRoot, TextField, showModal } from "@decky/ui";
+import { Dropdown, Focusable, ModalRoot, NavEntryPositionPreferences, TextField, showModal } from "@decky/ui";
 import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { LuGlobe, LuHeart, LuLibrary, LuSearch } from "react-icons/lu";
 
@@ -18,6 +18,7 @@ import { LinksTab } from "./LibraryTabs";
 import { FilesTab } from "./FilesTab";
 import { LibraryPlayback } from "./LibraryPlayback";
 import type { LibraryPurpose } from "./libraryModel";
+import { focusLibraryElement } from "./libraryNavigation";
 import { backToPanel, leavePanel } from "./panelModal";
 import { useAmbient } from "./useAmbient";
 import { VirtualList } from "./VirtualList";
@@ -93,7 +94,7 @@ const PAGE = 40;
 const MAX_STATIONS = 400;
 
 
-export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose; onClose?: () => void }> = ({ initialTab, purpose, onClose }) => {
+export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose; onClose?: () => void; mapActive?: boolean; onMapActiveChange?: (active: boolean) => void }> = ({ initialTab, purpose, onClose, mapActive = false, onMapActiveChange }) => {
   const { t, lang } = useI18n();
   const { runtime, snapshot } = useAmbient();
   useEffect(() => runtime?.showLibrary(), [runtime]);
@@ -103,6 +104,11 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   const [query, setQuery] = useState("");
   const [stations, setStations] = useState<Station[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [geoError, setGeoError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const searchRef = useRef<HTMLDivElement>(null);
   const [exhausted, setExhausted] = useState(false);
   const [allStyles, setAllStyles] = useState(false);
   const [listRef, listHeight] = useMeasuredHeight();
@@ -116,26 +122,45 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   const [home, setHome] = useState<string | null>(null);
 
   useEffect(() => {
-    if (runtime && purpose === "playback") void runtime.radioCatalog().then(setCatalog);
-    if (purpose === "playback") void homeCountry().then(setHome);
-  }, [runtime]);
+    if (!runtime || purpose !== "playback") return;
+    let cancelled = false;
+    setCatalogError(false);
+    void runtime.radioCatalog(retry > 0).then((result) => {
+      if (cancelled) return;
+      setCatalog(result);
+      setCatalogError(!!result.error);
+    }).catch(() => { if (!cancelled) setCatalogError(true); });
+    return () => { cancelled = true; };
+  }, [runtime, purpose, retry]);
+
+  useEffect(() => {
+    if (purpose !== "playback") return;
+    let cancelled = false;
+    void homeCountry().then((country) => { if (!cancelled) setHome(country); });
+    return () => { cancelled = true; };
+  }, [purpose]);
 
   useEffect(() => {
     if (!runtime || tab !== "discover") return;
     const id = ++request.current;
     offsetRef.current = 0;
+    setStations(null);
     setLoading(true);
+    setSearchError(false);
     setExhausted(false);
     const timer = setTimeout(() => {
       void runtime.discoverRadio({ ...filters, limit: PAGE }).then((result) => {
         if (id !== request.current) return;
         setStations(result);
         setExhausted(result.length === 0);
-        setLoading(false);
+      }).catch(() => {
+        if (id === request.current) setSearchError(true);
+      }).finally(() => {
+        if (id === request.current) setLoading(false);
       });
     }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [runtime, filters, tab]);
+    return () => { clearTimeout(timer); ++request.current; };
+  }, [runtime, filters, tab, retry]);
 
   const cityLevel = view.zoom >= CITY_ZOOM;
   const areaQuery = useMemo((): { key: string; query: RadioFilters } | null => {
@@ -155,7 +180,8 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   }, [view.zoom, view.center, view.nearestCountry, filters.country, filters.tag, filters.minBitrate, cityLevel]);
 
   useEffect(() => {
-    if (!runtime || !areaQuery) {
+    setGeoError(false);
+    if (!runtime || !areaQuery || tab !== "discover") {
       setGeoStations([]);
       setGeoLoading(false);
       return;
@@ -175,30 +201,37 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
         geoCache.current.set(areaQuery.key, result);
         if (geoCache.current.size > GEO_CACHE_SIZE) geoCache.current.delete(geoCache.current.keys().next().value!);
         setGeoStations(result);
-        setGeoLoading(false);
+      }).catch(() => {
+        if (!cancelled) setGeoError(true);
+      }).finally(() => {
+        if (!cancelled) setGeoLoading(false);
       });
     }, GEO_SETTLE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [runtime, areaQuery?.key]);
+  }, [runtime, areaQuery?.key, tab, retry]);
 
   if (!runtime || !snapshot) return null;
 
   const loadMore = () => {
-    if (loading || exhausted || !stations || stations.length >= MAX_STATIONS) return;
-    offsetRef.current += PAGE;
+    if (loading || searchError || exhausted || !stations || stations.length >= MAX_STATIONS) return;
+    const offset = offsetRef.current + PAGE;
     const id = request.current;
     setLoading(true);
-    void runtime.discoverRadio({ ...filters, limit: PAGE, offset: offsetRef.current }).then((page) => {
+    void runtime.discoverRadio({ ...filters, limit: PAGE, offset }).then((page) => {
       if (id !== request.current) return;
       setStations((current) => {
         const seen = new Set((current ?? []).map((s) => s.id));
         return [...(current ?? []), ...page.filter((s) => !seen.has(s.id))];
       });
+      offsetRef.current = offset;
       setExhausted(page.length === 0);
-      setLoading(false);
+    }).catch(() => {
+      if (id === request.current) setSearchError(true);
+    }).finally(() => {
+      if (id === request.current) setLoading(false);
     });
   };
 
@@ -250,7 +283,10 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
           { value: "links", label: t("ambient.lib.tab.links") },
           { value: "lists", label: t("ambient.lists.title") },
           { value: "queue", label: snapshot.player.queue.length ? `${t("ambient.queue.title")} (${snapshot.player.queue.length})` : t("ambient.queue.title") },
-        ].filter((option) => purpose === "playback" || option.value === "music" || option.value === "links")} onChange={(value) => setTab(value as LibraryTab)} />
+        ].filter((option) => purpose === "playback" || option.value === "music" || option.value === "links")} onChange={(value) => {
+          if (tab === "discover" && value !== "discover") onMapActiveChange?.(false);
+          setTab(value as LibraryTab);
+        }} />
       </div>
     </div>
   );
@@ -291,13 +327,21 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
             }}
           />
         </div>
-        <Button primary label={<><LuSearch size={14} /> {t("ambient.radio.searchAction")}</>} onActivate={() => update({ name: query.trim() || undefined })} style={{ height: 40 }} />
+        <Focusable ref={searchRef} onActivate={() => update({ name: query.trim() || undefined })} onClick={() => update({ name: query.trim() || undefined })} style={{ padding: "10px 14px", borderRadius: theme.radius.sm, background: theme.color.accent, color: theme.color.onAccent }}><LuSearch size={14} /> {t("ambient.radio.searchAction")}</Focusable>
       </div>
 
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)", gap: theme.space.md, alignItems: "stretch", flex: 1, minHeight: 0 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      {(catalogError || searchError || geoError) && <div role="alert" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span>{t("ambient.stations.unavailable")}</span>
+        <Button label={t("ambient.retry")} onActivate={() => { geoCache.current.clear(); setRetry((value) => value + 1); }} />
+      </div>}
+      <Focusable flow-children="row" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)", gap: theme.space.md, alignItems: "stretch", flex: 1, minHeight: 0 }}>
+        <Focusable flow-children="column" navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_Y} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: 4, scrollPaddingBlock: 4 }}>
           <WorldMap
+            active={mapActive}
+            onActiveChange={(active) => onMapActiveChange?.(active)}
+            onExit={() => { if (searchRef.current) focusLibraryElement(searchRef.current); }}
+            navigationHint={t(mapActive ? "ambient.stations.mapExit" : "ambient.stations.mapEnter")}
             countries={catalog.countries}
             stations={geoStations}
             loadingStations={geoLoading}
@@ -311,12 +355,12 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
             zoomInLabel={t("ambient.stations.zoomIn")}
             zoomOutLabel={t("ambient.stations.zoomOut")}
           />
-          <Dropdown menuLabel={t("ambient.stations.country")} selectedOption={filters.country ?? ""} rgOptions={countryOptions} onChange={(option) => update({ country: option.data || undefined })} />
-          <Focusable flow-children="row" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ flexShrink: 0 }}><Dropdown menuLabel={t("ambient.stations.country")} selectedOption={filters.country ?? ""} rgOptions={countryOptions} onChange={(option) => update({ country: option.data || undefined })} /></div>
+          <Focusable flow-children="grid" style={{ display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 }}>
             {home && <Chip icon={<LuGlobe size={13} />} label={t("ambient.stations.nearYou")} active={filters.country === home} onActivate={() => update({ country: filters.country === home ? undefined : home })} />}
             <Chip label={t("ambient.stations.highQuality")} active={filters.minBitrate === HIGH_QUALITY_KBPS} onActivate={() => update({ minBitrate: filters.minBitrate ? undefined : HIGH_QUALITY_KBPS })} />
           </Focusable>
-          <Focusable flow-children="row" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignContent: "flex-start", overflowY: "auto", flex: 1, minHeight: 0 }}>
+          <Focusable flow-children="grid" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignContent: "flex-start", flexShrink: 0 }}>
             <Chip label={t("ambient.stations.allStyles")} active={!filters.tag} onActivate={() => update({ tag: undefined })} />
             {MOODS.map((m) => (
               <Chip key={m.id} label={t(`ambient.mood.${m.id}`)} active={filters.tag === m.tag} onActivate={() => update({ tag: filters.tag === m.tag ? undefined : m.tag })} />
@@ -326,10 +370,10 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
             ))}
             <Chip label={allStyles ? t("ambient.stations.fewerStyles") : t("ambient.stations.moreStyles")} active={false} subtle onActivate={() => setAllStyles((v) => !v)} />
           </Focusable>
-        </div>
+        </Focusable>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, minHeight: 0 }}>
-          <Segmented value={filters.order ?? "popular"} options={orderOptions} onChange={(value) => update({ order: value as RadioOrder })} />
+        <Focusable flow-children="column" navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_Y} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, minHeight: 0 }}>
+          <Segmented centerLabels value={filters.order ?? "popular"} options={orderOptions} onChange={(value) => update({ order: value as RadioOrder })} />
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "4px 6px 2px" }}>
             <span style={{ ...oneLine, fontSize: 14, fontWeight: 700, color: theme.color.textPrimary, flex: 1 }}>{heading}</span>
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, whiteSpace: "nowrap" }}>
@@ -339,25 +383,28 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
           <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>
             {!stations && loading
               ? <Empty text={t("ambient.radio.searching")} />
-              : stations && stations.length === 0
+              : !searchError && stations && stations.length === 0
                 ? <Empty text={t("ambient.radio.noResults")} />
                 : listHeight > 0 && <VirtualList items={stations ?? []} rowHeight={ROW_HEIGHT} height={listHeight} keyOf={(s) => s.id} renderRow={row} onEndReached={loadMore} />}
           </div>
-        </div>
-      </div>
+        </Focusable>
+      </Focusable>
     </Sheet>
   );
 };
 
 
-const LibraryModal: FC<{ tab: LibraryTab; purpose: LibraryPurpose; closeModal?: () => void }> = ({ tab, purpose, closeModal }) => (
-  <ModalRoot closeModal={backToPanel(closeModal)} onOK={() => undefined} bAllowFullSize>
+const LibraryModal: FC<{ tab: LibraryTab; purpose: LibraryPurpose; closeModal?: () => void }> = ({ tab, purpose, closeModal }) => {
+  const [mapActive, setMapActive] = useState(false);
+  const cancel = () => { if (mapActive) setMapActive(false); else backToPanel(closeModal)(); };
+  return <ModalRoot closeModal={cancel} onCancel={cancel} onEscKeypress={cancel} onOK={() => undefined} bAllowFullSize>
     <FocusRoot>
       <DimDialog />
-      <StationsBody initialTab={tab} purpose={purpose} onClose={backToPanel(closeModal)} />
+      <StationsBody initialTab={tab} purpose={purpose} onClose={backToPanel(closeModal)} mapActive={mapActive} onMapActiveChange={setMapActive} />
     </FocusRoot>
-  </ModalRoot>
-);
+  </ModalRoot>;
+};
+
 
 export function openLibrary(purpose: LibraryPurpose, tab: LibraryTab = "music"): void {
   leavePanel();
