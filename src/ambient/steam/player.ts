@@ -254,12 +254,15 @@ export class AmbientPlayer {
   }
 
   /** Puts a saved queue back exactly as it was, without mixing it again. */
-  restoreQueue(tracks: Track[], startIndex: number, position: number, repeat: RepeatMode, shuffle: boolean): void {
+  restoreQueue(tracks: Track[], startIndex: number, position: number, repeat: RepeatMode, shuffle: boolean, play = true): void {
     if (!tracks.length) return;
     const restored = playQueue.fromItems({ ...playQueue.emptyQueue<Track>(repeat), shuffle: false }, tracks, startIndex);
     this.setQueue({ ...restored, shuffle });
     this.attempt = 0;
-    this.load(this.queue.entries[this.queue.position].item, position);
+    const track = this.queue.entries[this.queue.position].item;
+    if (play) return this.load(track, position);
+    this.pendingPosition = track.live ? 0 : position;
+    this.emit({ track, status: "paused", position: this.pendingPosition, duration: null });
   }
 
   /** Repeat and shuffle chosen before anything plays, e.g. restored from settings. */

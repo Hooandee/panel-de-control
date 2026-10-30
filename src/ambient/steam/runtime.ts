@@ -311,6 +311,7 @@ export class AmbientRuntime {
       this.player.setModes(settings.music.repeat, settings.music.shuffle);
     }
     if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
+    else if (settings?.music.queue.length) void this.restoreSavedQueue(settings, false);
   }
 
   stop(): void {
@@ -1153,13 +1154,13 @@ export class AmbientRuntime {
     }, QUEUE_SAVE_MS);
   }
 
-  private async restoreSavedQueue(settings: AmbientSettings): Promise<boolean> {
+  private async restoreSavedQueue(settings: AmbientSettings, play = true): Promise<boolean> {
     const tracks = (await Promise.all(settings.music.queue.map((entry) => this.queuedTrack(entry)))).filter((t): t is Track => t !== null);
     if (!tracks.length || this.stopped || this.librarySession) return false;
     const last = settings.music.lastTrack;
     const start = last ? Math.max(0, tracks.findIndex((t) => t.id === last.id)) : 0;
     const position = last && tracks[start]?.id === last.id && !tracks[start].live ? last.position : 0;
-    this.player.restoreQueue(tracks, start, position, settings.music.repeat, settings.music.shuffle);
+    this.player.restoreQueue(tracks, start, position, settings.music.repeat, settings.music.shuffle, play);
     this.render();
     return true;
   }

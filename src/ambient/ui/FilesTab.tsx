@@ -226,11 +226,11 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
       </Focusable>
       <Focusable data-library-column="1" flow-children="column" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
         <Caption>{t(purpose === "background" ? "ambient.lib.visualFiles" : "ambient.lib.playableFiles")}</Caption>
-        <Focusable flow-children="row" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-          <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />
-          {playback && multiple && picks.size > 0 && <Button label={<><LuListPlus size={14} /> {t("ambient.queue.addEnd")}</>} onActivate={() => { void queueItems([...picks.values()], "end"); cancelMultiple(); }} />}
-          {playback && !multiple && !!visible?.length && <Button label={<><LuPlay size={14} /> {t("ambient.lib.playFolder")}</>} onActivate={() => void playFolder("now")} />}
-          {playback && !multiple && !!visible?.length && <Button label={<><LuListPlus size={14} /> {t("ambient.lib.queueFolder")}</>} onActivate={() => void playFolder("end")} />}
+        <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <Button disabled={applying} style={{ flex: 1, minWidth: 0 }} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />
+          {playback && multiple && picks.size > 0 && <RoundButton label={t("ambient.queue.addEnd")} size={34} onActivate={() => { void queueItems([...picks.values()], "end"); cancelMultiple(); }}><LuListPlus size={15} /></RoundButton>}
+          {playback && !multiple && !!visible?.length && <RoundButton label={t("ambient.lib.playFolder")} size={34} onActivate={() => void playFolder("now")}><LuPlay size={15} /></RoundButton>}
+          {playback && !multiple && !!visible?.length && <RoundButton label={t("ambient.lib.queueFolder")} size={34} onActivate={() => void playFolder("end")}><LuListPlus size={15} /></RoundButton>}
         </Focusable>
         <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>
           {visible == null ? <Empty text={t("ambient.lib.loading")} /> : visible.length === 0 ? <Empty text={error || t("ambient.lib.filesEmpty")} /> : listHeight > 0 && <VirtualList key={`${current?.id}:${multiple}`} controllerNavigation items={visible} height={listHeight} rowHeight={ROW_HEIGHT} keyOf={(m) => m.ref} renderRow={(m) => <Focusable {...menuHandlers(rowMenu(m))} onSecondaryActionDescription={m.kind === "image" ? undefined : t("ambient.lib.preview")} onSecondaryButton={m.kind === "image" ? undefined : (event) => {

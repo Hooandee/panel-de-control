@@ -127,7 +127,28 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
-  it("saves queue changes, never an empty queue before anything played", async () => {
+  it("a paused queue comes back paused, ready to resume, after a restart", async () => {
+    const configured = settings();
+    configured.music.enabled = false;
+    configured.music.queue = [
+      { id: "remote:https://s.test/a", url: "https://s.test/a", title: "A", subtitle: "", art: "", kind: "audio", live: false },
+      { id: "remote:https://s.test/b", url: "https://s.test/b", title: "B", subtitle: "", art: "", kind: "audio", live: false },
+    ];
+    configured.music.lastTrack = { id: "remote:https://s.test/b", position: 12 };
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const audio = audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.waitFor(() => expect(runtime.getSnapshot().player.queue).toHaveLength(2));
+      expect(runtime.getSnapshot().player).toMatchObject({ status: "paused", track: { id: "remote:https://s.test/b" } });
+      expect(audio.play).not.toHaveBeenCalled();
+      runtime.resumeMusic();
+      expect(audio.getAttribute("src")).toBe("https://s.test/b");
+    } finally { runtime.stop(); }
+  });
+
+  it("saves queue changes on top of the saved queue, never an empty one", async () => {
     vi.useFakeTimers();
     const configured = settings();
     configured.music.enabled = false;
@@ -147,7 +168,7 @@ describe("AmbientRuntime", () => {
       await vi.advanceTimersByTimeAsync(2000);
       const calls = rpcMock.saveAmbientSettings.mock.calls;
       const saved = calls[calls.length - 1]?.[0] as AmbientSettings;
-      expect(saved.music.queue.map((q) => q.id).sort()).toEqual(["remote:https://s.test/b", "remote:https://s.test/c"]);
+      expect(saved.music.queue.map((q) => q.id).sort()).toEqual(["remote:https://s.test/a", "remote:https://s.test/b", "remote:https://s.test/c"]);
       expect(saved.music.shuffle).toBe(true);
     } finally { runtime.stop(); }
   });
