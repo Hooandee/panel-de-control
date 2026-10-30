@@ -101,6 +101,7 @@ const POSITION_SAVE_MS = 15000;
 const RESUME_TICK_MS = 2000;
 const CACHE_RECONCILE_MS = 60000;
 const QUEUE_SAVE_MS = 1500;
+const EMPTY_QUEUE_VIEW: Pick<PlayerSnapshot, "queue" | "repeat" | "shuffle"> = { queue: [], repeat: "all", shuffle: false };
 /** Right after a loader restart the backend can still be starting; the domain keeps asking instead of staying dark. */
 const BACKEND_RETRY_MS = [3000, 10000, 30000];
 // Themes remount (plugin reloads, CSS Loader resets) and reclaim a moment later; a painter only
@@ -195,6 +196,7 @@ export class AmbientRuntime {
   private queueSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private savedQueue = "";
   private queueLoaded = false;
+  private lastQueue: Pick<PlayerSnapshot, "queue" | "repeat" | "shuffle"> = EMPTY_QUEUE_VIEW;
   private saveChain: Promise<void> = Promise.resolve();
   private saveSequence = 0;
   private librarySession: LibrarySession | null = null;
@@ -524,6 +526,8 @@ export class AmbientRuntime {
     }
     this.librarySession = null;
     this.patch({ libraryOpen: false, videoCollapsed: restore ? session.videoCollapsed : this.snapshot.videoCollapsed, videoFullscreen: false, overlayControl: false });
+    this.lastQueue = EMPTY_QUEUE_VIEW;
+    this.scheduleQueueSave(this.player.getSnapshot());
     if (restore) console.info("[Ambient library] cancel");
     void this.render();
   }
@@ -1131,11 +1135,12 @@ export class AmbientRuntime {
     void this.render();
   }
 
-  /** What the user puts on wins over the selected game's soundtrack until another game is selected. */
   private scheduleQueueSave(player: PlayerSnapshot): void {
     if (this.librarySession || this.stopped || !this.snapshot.state) return;
     if (!this.queueLoaded && !player.track) return;
     this.queueLoaded = true;
+    if (player.queue === this.lastQueue.queue && player.repeat === this.lastQueue.repeat && player.shuffle === this.lastQueue.shuffle) return;
+    this.lastQueue = player;
     const queue = player.queue.map(({ track }) => toQueued(track));
     const signature = queueSignature(queue, player.repeat, player.shuffle);
     if (signature === this.savedQueue) return;
@@ -1160,13 +1165,15 @@ export class AmbientRuntime {
   }
 
   private async queuedTrack(entry: QueuedTrack): Promise<Track | null> {
-    const url = entry.id.startsWith("local:") ? await rpc.getAmbientMediaUrl(entry.id).catch(() => null) : entry.url;
+    const served = entry.url.startsWith("http://127.0.0.1:");
+    const url = served ? await rpc.getAmbientMediaUrl(entry.id).catch(() => null) : entry.url;
     return url ? { id: entry.id, title: entry.title, subtitle: entry.subtitle, art: entry.art, url, live: entry.live, kind: entry.kind } : null;
   }
 
   /** Queues tracks; with nothing loaded the first one starts. */
   enqueue(tracks: Track[], where: "end" | "next" = "end"): void {
     if (!tracks.length || this.stopped) return;
+    this.settleLibraryPreview(true);
     this.preferUserMusic();
     const starts = !this.player.getSnapshot().track;
     this.player.enqueue(tracks, where);
@@ -1225,6 +1232,7 @@ export class AmbientRuntime {
 
   playTracks(tracks: Track[], start = 0): void {
     if (!tracks.length || this.stopped) return;
+    this.settleLibraryPreview(false);
     this.preferUserMusic();
     this.currentStation = null;
     this.player.playQueue(tracks, start, 0, tracks[start]?.kind === "video" || this.player.getSnapshot().video);
@@ -1238,6 +1246,21 @@ export class AmbientRuntime {
   setRepeat(repeat: RepeatMode): void { this.player.setRepeat(repeat); }
   setShuffle(on: boolean): void { this.player.setShuffle(on); }
 
+  /**
+   * A deliberate choice in the library ends its preview: queueing builds on what played before the
+   * preview, playing replaces it. Either way closing the library no longer rolls it back.
+   */
+  private settleLibraryPreview(keepPrevious: boolean): void {
+    const session = this.librarySession;
+    if (!session?.modified) return;
+    if (keepPrevious) {
+      this.currentStation = session.station;
+      this.player.restore(session.checkpoint);
+    }
+    session.modified = false;
+  }
+
+  /** What the user puts on wins over the selected game's soundtrack until another game is selected. */
   private preferUserMusic(): void {
     this.themeSilencedFor = this.lastSelectedAppId;
     this.themePausedMusic = false;

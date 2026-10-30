@@ -69,6 +69,15 @@ describe("AmbientPlayer", () => {
     expect(player.getSnapshot().track?.id).toBe("r1");
   });
 
+  it("removing the paused current entry and pressing play plays the one that took its place", () => {
+    player.playQueue(songs);
+    player.pause();
+    player.removeEntry(player.getSnapshot().queue[0].key);
+    player.resume();
+    expect(player.getSnapshot().track?.id).toBe("b");
+    expect(audio.getAttribute("src")).toBe("http://127.0.0.1/b.mp3");
+  });
+
   it("clearing keeps only what is playing", () => {
     player.playQueue(songs, 1);
     player.clearQueue();

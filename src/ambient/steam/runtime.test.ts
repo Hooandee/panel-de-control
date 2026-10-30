@@ -152,6 +152,40 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it("a choice made after a library preview survives closing the library", async () => {
+    const { runtime } = await libraryFixture();
+    try {
+      runtime.enqueue([{ id: "remote:https://s.test/mine", title: "Mine", subtitle: "", art: "", url: "https://s.test/mine", live: false }]);
+      let end = runtime.beginLibrarySession();
+      await runtime.previewLibraryMedia({ ref: "local:song", name: "Song", kind: "audio", collection: "known.music" });
+      await runtime.enqueueItems([{ ref: "local:other", name: "Other", kind: "audio", collection: "known.music" }]);
+      end();
+      expect(runtime.getSnapshot().player.queue.map((q) => q.track.id)).toEqual(["remote:https://s.test/mine", "local:other"]);
+      end = runtime.beginLibrarySession();
+      await runtime.previewLibraryMedia({ ref: "local:song", name: "Song", kind: "audio", collection: "known.music" });
+      runtime.playTracks(await runtime.tracksFor([{ ref: "local:other", name: "Other", kind: "audio", collection: "known.music" }]));
+      end();
+      expect(runtime.getSnapshot().player.queue.map((q) => q.track.id)).toEqual(["local:other"]);
+    } finally { runtime.stop(); }
+  });
+
+  it("saves what changed in the library once it closes, even while paused", async () => {
+    vi.useFakeTimers();
+    const { runtime } = await libraryFixture();
+    try {
+      runtime.enqueue([{ id: "remote:https://s.test/a", title: "A", subtitle: "", art: "", url: "https://s.test/a", live: false }]);
+      runtime.pauseMusic();
+      await vi.advanceTimersByTimeAsync(2000);
+      const end = runtime.beginLibrarySession();
+      await runtime.enqueueItems([{ ref: "local:other", name: "Other", kind: "audio", collection: "known.music" }]);
+      end();
+      await vi.advanceTimersByTimeAsync(2000);
+      const calls = rpcMock.saveAmbientSettings.mock.calls;
+      const saved = calls[calls.length - 1]?.[0] as AmbientSettings;
+      expect(saved.music.queue.map((q) => q.id)).toEqual(["remote:https://s.test/a", "local:other"]);
+    } finally { runtime.stop(); }
+  });
+
   it("does not cache a NASA failure and preserves credits when the feed recovers", async () => {
     const { runtime } = await libraryFixture();
     try {

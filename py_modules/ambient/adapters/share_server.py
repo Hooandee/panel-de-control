@@ -19,6 +19,7 @@ _MAX_LINKS_PER_SEND = 50
 _MAX_PENDING = 200
 _MAX_URL = 2048
 _CLIENT_TIMEOUT_SEC = 10
+_MAX_CLIENTS = 8
 SESSION_TTL_SEC = 600
 _REASONS = {200: "OK", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 413: "Payload Too Large", 429: "Too Many Requests"}
 _LINK = re.compile(r"(?:https?://|(?<![\w.@/])(?=[a-z0-9-]+(?:\.[a-z0-9-]+)+/))[^\s<>\"'`]+", re.IGNORECASE)
@@ -68,6 +69,7 @@ class ShareServer:
         self._pending: deque[str] = deque(maxlen=_MAX_PENDING)
         self._page = b""
         self._deadline = 0.0
+        self._clients = threading.BoundedSemaphore(_MAX_CLIENTS)
         self.token = ""
 
     @property
@@ -127,9 +129,18 @@ class ShareServer:
                 continue
             except OSError:
                 return
+            if not self._clients.acquire(blocking=False):
+                client.close()
+                continue
             threading.Thread(target=self._handle, args=(client,), name="ambient-share-client", daemon=True).start()
 
     def _handle(self, client: socket.socket) -> None:
+        try:
+            self._serve_client(client)
+        finally:
+            self._clients.release()
+
+    def _serve_client(self, client: socket.socket) -> None:
         with client:
             client.settimeout(_CLIENT_TIMEOUT_SEC)
             try:

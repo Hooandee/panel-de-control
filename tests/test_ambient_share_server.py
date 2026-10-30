@@ -78,3 +78,23 @@ def test_without_a_network_there_is_no_session():
     s = ShareServer(host="127.0.0.1", lan_address=lambda: None)
     assert s.start({}) == {"error": "no_network"}
     assert s.active is False
+
+
+def test_idle_connections_cannot_pile_up(server):
+    import socket as sock
+
+    session = server.start({})
+    port = int(session["url"].split(":")[2].split("/")[0])
+    idle = [sock.create_connection(("127.0.0.1", port), timeout=2) for _ in range(8)]
+    try:
+        time.sleep(0.8)
+        extra = sock.create_connection(("127.0.0.1", port), timeout=2)
+        extra.settimeout(2)
+        assert extra.recv(1) == b""
+        extra.close()
+    finally:
+        for s in idle:
+            s.close()
+    time.sleep(0.3)
+    with urllib.request.urlopen(session["url"], timeout=3) as response:
+        assert response.status == 200

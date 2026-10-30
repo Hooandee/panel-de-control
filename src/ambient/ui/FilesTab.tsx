@@ -135,8 +135,9 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
     setError("");
     setNotice("");
     try {
-      if (!await runtime.playCollection(current.id, where)) setError(t("ambient.lib.actionFailed"));
-      else if (where === "end") setNotice(t("ambient.queue.added", { n: String(visible?.length ?? 0) }));
+      if (!await runtime.playCollection(current.id, where)) return setError(t("ambient.lib.actionFailed"));
+      if (where === "end") setNotice(t("ambient.queue.added", { n: String(visible?.length ?? 0) }));
+      else onClose?.();
     } catch { setError(t("ambient.lib.actionFailed")); }
   };
   const rowMenu = (item: LibraryItem): ItemMenu | undefined => playback && !multiple && item.kind !== "image" ? {
@@ -228,7 +229,7 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
         <Focusable flow-children="row" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
           <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />
           {playback && multiple && picks.size > 0 && <Button label={<><LuListPlus size={14} /> {t("ambient.queue.addEnd")}</>} onActivate={() => { void queueItems([...picks.values()], "end"); cancelMultiple(); }} />}
-          {playback && !multiple && !!visible?.length && <Button label={<><LuPlay size={14} /> {t("ambient.lib.playFolder")}</>} onActivate={() => void playFolder("now").then(() => onClose?.())} />}
+          {playback && !multiple && !!visible?.length && <Button label={<><LuPlay size={14} /> {t("ambient.lib.playFolder")}</>} onActivate={() => void playFolder("now")} />}
           {playback && !multiple && !!visible?.length && <Button label={<><LuListPlus size={14} /> {t("ambient.lib.queueFolder")}</>} onActivate={() => void playFolder("end")} />}
         </Focusable>
         <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>

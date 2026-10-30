@@ -227,9 +227,13 @@ export class AmbientPlayer {
     this.setQueue(state);
     if (!currentChanged) return;
     const next = playQueue.current(state);
-    if (next && this.wantPlaying) this.load(next.item);
-    else if (!next) this.stopAt(null);
-    else this.emit({ track: next.item, position: 0, duration: null, status: "paused" });
+    if (next && this.wantPlaying) return this.load(next.item);
+    if (!next) return this.stopAt(null);
+    const active = this.active;
+    this.active = null;
+    if (active) this.silence(active);
+    this.pendingPosition = 0;
+    this.emit({ track: next.item, position: 0, duration: null, status: "paused" });
   }
 
   moveEntry(key: string, to: number): void {
