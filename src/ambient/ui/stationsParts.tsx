@@ -12,6 +12,8 @@ function scrollingAncestor(node: HTMLElement, view: Window): HTMLElement | null 
   return null;
 }
 
+const MIN_SHEET_HEIGHT = 280;
+
 export function sheetRoom(node: HTMLElement, scroller: HTMLElement, view: Window): number {
   const style = view.getComputedStyle(scroller);
   const padTop = parseFloat(style.paddingTop) || 0;
@@ -32,9 +34,17 @@ export const Sheet: FC<{ children: ReactNode }> = ({ children }) => {
     const view = node?.ownerDocument.defaultView;
     const scroller = node && view ? scrollingAncestor(node, view) : null;
     if (!node || !view || !scroller) return;
+    // The dialog can size itself to its content: shrinking the sheet then shrinks the scroller and
+    // fires the observer again. Only a scroller that did not get smaller (the screen) refits.
+    let fittedFor = 0;
     const fit = () => {
+      const available = scroller.clientHeight;
+      if (available < fittedFor) return;
       const room = sheetRoom(node, scroller, view);
-      if (room > 0 && room < node.offsetHeight) setHeight(room);
+      if (room >= MIN_SHEET_HEIGHT && room < node.offsetHeight) {
+        fittedFor = available;
+        setHeight(room);
+      }
     };
     fit();
     const Observer = view.ResizeObserver;
