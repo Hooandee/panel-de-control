@@ -25,6 +25,7 @@ vi.mock("./primitives", () => ({
   Button: ({ label, onActivate, disabled }: any) => <button disabled={disabled} onClick={onActivate}>{label}</button>,
   Caption: ({ children }: any) => <div>{children}</div>,
   Row: ({ title, onActivate, trailing }: any) => <div><button onClick={onActivate}>{title}</button>{trailing}</div>,
+  menuHandlers: () => ({}),
 }));
 vi.mock("./stationsParts", () => ({
   Empty: ({ text }: any) => <div>{text}</div>,
@@ -43,6 +44,8 @@ function fixture() {
     useBackground: vi.fn().mockResolvedValue(undefined),
     useBackgroundSelection: vi.fn().mockResolvedValue(undefined),
     playMedia: vi.fn().mockResolvedValue(undefined),
+    playCollection: vi.fn().mockResolvedValue(true),
+    enqueueItems: vi.fn().mockResolvedValue(2),
     removeItem: vi.fn().mockResolvedValue(true),
   } as unknown as AmbientRuntime;
   const snapshot = {
@@ -136,7 +139,23 @@ it("opens the current track folder and keeps a manually chosen source when the t
   view.rerender(<FilesTab runtime={props.runtime} snapshot={snapshot} purpose="playback" header={null} />);
   expect(screen.getByText("Song.mp3")).toBeTruthy();
   expect(screen.queryByText("Other.mp3")).toBeNull();
-  expect(screen.queryByText("ambient.lib.chooseSeveral")).toBeNull();
+});
+
+it("plays several chosen songs, queues them, or plays the whole folder", async () => {
+  const props = twoSources();
+  render(<FilesTab {...props} purpose="playback" header={null} />);
+  fireEvent.click(await screen.findByText("Other"));
+  await screen.findByText("Other.mp3");
+  fireEvent.click(screen.getByText("ambient.lib.playFolder"));
+  await waitFor(() => expect(props.runtime.playCollection).toHaveBeenCalledWith("folder.other", "now"));
+  fireEvent.click(screen.getByText("ambient.lib.chooseSeveral"));
+  expect(screen.queryByText("Other.jpg")).toBeNull();
+  fireEvent.click(screen.getByText("Other next.mp3"));
+  fireEvent.click(screen.getByText("Other.mp3"));
+  fireEvent.click(screen.getByText("ambient.queue.addEnd"));
+  await waitFor(() => expect(props.runtime.enqueueItems).toHaveBeenCalledWith([
+    expect.objectContaining({ ref: "local:other-next" }), expect.objectContaining({ ref: "local:other-song" }),
+  ], "end"));
 });
 
 it("preserves checked photos across folders and rotates only the chosen images", async () => {

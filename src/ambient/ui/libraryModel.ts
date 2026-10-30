@@ -1,3 +1,4 @@
+import { linkKind } from "../core/linkName";
 import type { Favorite, MediaKind } from "../core/types";
 import { parseEmbedStream } from "../core/streams";
 import { isHls, parseYouTube } from "../core/youtube";
@@ -9,13 +10,7 @@ export type LibraryPhoto = LibraryItem & { kind: "image" };
 
 export const acceptsMedia = (kind: MediaKind, purpose: LibraryPurpose): boolean => purpose === "background" ? kind !== "audio" : kind !== "image";
 
-export function linkKind(url: string): MediaKind | null {
-  const path = url.split(/[?#]/)[0].toLowerCase();
-  if (/\.(?:jpg|jpeg|png|webp|gif|bmp|avif)$/.test(path)) return "image";
-  if (/\.(?:mp4|webm|mkv|mov|m4v)$/.test(path)) return "video";
-  if (/\.(?:mp3|ogg|opus|flac|wav|m4a|aac)$/.test(path)) return "audio";
-  return null;
-}
+export { linkKind };
 
 export function libraryFavorites(background: Favorite[], playback: Favorite[], purpose: LibraryPurpose): Favorite[] {
   const visual = new Set(background.map((f) => f.url));

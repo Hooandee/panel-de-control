@@ -200,6 +200,18 @@ class AmbientRpc:
             return None
         return await self._ambient_call(lambda s: s.resolve_radio(station_id), pool="network")
 
+    async def start_ambient_share(self, texts: dict) -> dict[str, Any]:
+        if not isinstance(texts, dict):
+            return {"error": "invalid_arguments"}
+        return await self._ambient_call(lambda s: s.start_share(texts))
+
+    async def take_ambient_shared(self) -> dict[str, Any]:
+        return await self._ambient_call(lambda s: s.take_shared())
+
+    async def stop_ambient_share(self) -> bool:
+        await self._ambient_call(lambda s: s.stop_share())
+        return True
+
     async def record_ambient_event(self, kind: str, detail: str) -> bool:
         if not isinstance(kind, str) or not isinstance(detail, str):
             return False

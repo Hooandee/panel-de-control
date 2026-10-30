@@ -13,7 +13,7 @@ afterEach(cleanup);
 
 it("shows the shared video slot inside the normal card with its existing playback controls", () => {
   const onToggle = vi.fn();
-  const player = { track: { id: "film", title: "Film", url: "http://localhost/film.mp4", kind: "video", live: false }, status: "playing", video: true, volume: 0.6, position: 10, duration: 120, error: null } as PlayerSnapshot;
+  const player = { track: { id: "film", title: "Film", subtitle: "", art: "", url: "http://localhost/film.mp4", kind: "video", live: false }, status: "playing", video: true, volume: 0.6, position: 10, duration: 120, error: null, picture: true, queue: [], queueIndex: 0, repeat: "all", shuffle: false } as PlayerSnapshot;
   const { container } = render(<NowPlaying player={player} media={<div data-testid="slot" />} onToggle={onToggle} onNext={vi.fn()} onPrevious={vi.fn()} onVolume={vi.fn()} />);
   expect(container.querySelector(".pdc-np")?.contains(screen.getByTestId("slot"))).toBe(true);
   fireEvent.click(screen.getByLabelText("ambient.player.pause"));

@@ -11,8 +11,9 @@ import { homeCountry } from "../steam/homeCountry";
 import { trackSource } from "../steam/player";
 import { stationSubtitle } from "../steam/runtime";
 import { Artwork, RoundButton } from "./NowPlaying";
-import { Button, Segmented } from "./primitives";
+import { Button, Segmented, menuHandlers, type ItemMenu } from "./primitives";
 import { PlaylistsTab } from "./PlaylistsTab";
+import { QueueTab } from "./QueueTab";
 import { LinksTab } from "./LibraryTabs";
 import { FilesTab } from "./FilesTab";
 import { LibraryPlayback } from "./LibraryPlayback";
@@ -23,7 +24,7 @@ import { VirtualList } from "./VirtualList";
 import { WorldMap, type MapView } from "./WorldMap";
 import { Chip, DimDialog, Empty, ROW_HEIGHT, Sheet, oneLine, useMeasuredHeight } from "./stationsParts";
 
-export type LibraryTab = "music" | "discover" | "links" | "lists";
+export type LibraryTab = "music" | "discover" | "links" | "lists" | "queue";
 
 /** Curated moods mapped to Radio Browser tags; the long tail lives in "More styles". */
 const MOODS: readonly { id: string; tag: string }[] = [
@@ -61,7 +62,7 @@ const Equalizer: FC = () => (
 );
 
 
-const StationRow: FC<{ station: Station; playing: boolean; favorite: boolean; favoriteLabel: string; onPlay: () => void; onFavorite: () => void }> = ({ station, playing, favorite, favoriteLabel, onPlay, onFavorite }) => (
+const StationRow: FC<{ station: Station; playing: boolean; favorite: boolean; favoriteLabel: string; onPlay: () => void; onFavorite: () => void; menu?: ItemMenu }> = ({ station, playing, favorite, favoriteLabel, onPlay, onFavorite, menu }) => (
   <Focusable
     flow-children="row"
     style={{
@@ -74,7 +75,7 @@ const StationRow: FC<{ station: Station; playing: boolean; favorite: boolean; fa
       boxShadow: playing ? `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.45)` : "none",
     }}
   >
-    <Focusable onActivate={onPlay} onClick={onPlay} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, cursor: "pointer", borderRadius: theme.radius.sm }}>
+    <Focusable {...menuHandlers(menu)} onActivate={onPlay} onClick={onPlay} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, cursor: "pointer", borderRadius: theme.radius.sm }}>
       <Artwork src={station.favicon} label={station.name} size={40} />
       <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
         <span style={{ ...oneLine, fontSize: 13, fontWeight: 600, color: theme.color.textPrimary }}>{station.name}</span>
@@ -227,6 +228,10 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
         favoriteLabel={favorite ? t("ambient.stations.unfavorite") : t("ambient.stations.favorite")}
         onPlay={() => runtime.playStation(station)}
         onFavorite={() => void runtime.toggleFavoriteStation(station)}
+        menu={{ title: station.name, hint: t("ambient.menu.options"), actions: [
+          { label: t("ambient.queue.addEnd"), onSelect: () => runtime.enqueueStation(station, "end") },
+          { label: t("ambient.queue.playNext"), onSelect: () => runtime.enqueueStation(station, "next") },
+        ] }}
       />
     );
   };
@@ -244,6 +249,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
           { value: "discover", label: t("ambient.lib.tab.radio") },
           { value: "links", label: t("ambient.lib.tab.links") },
           { value: "lists", label: t("ambient.lists.title") },
+          { value: "queue", label: snapshot.player.queue.length ? `${t("ambient.queue.title")} · ${snapshot.player.queue.length}` : t("ambient.queue.title") },
         ].filter((option) => purpose === "playback" || option.value === "music" || option.value === "links")} onChange={(value) => setTab(value as LibraryTab)} />
       </div>
     </div>
@@ -251,6 +257,10 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
 
   if (tab === "music") {
     return <Sheet><FilesTab runtime={runtime} snapshot={snapshot} purpose={purpose} header={header} onClose={onClose} /></Sheet>;
+  }
+
+  if (tab === "queue") {
+    return <Sheet><QueueTab runtime={runtime} snapshot={snapshot} header={header} /></Sheet>;
   }
 
   if (tab === "lists") {

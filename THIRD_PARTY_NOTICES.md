@@ -45,6 +45,7 @@ The built plugin (`dist/index.js`) bundles the following runtime packages:
 | [@decky/api](https://github.com/SteamDeckHomebrew/decky-frontend-lib) | BSD-3-Clause |
 | [react-icons](https://github.com/react-icons/react-icons) | MIT |
 | [tslib](https://github.com/microsoft/tslib) | 0BSD |
+| [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 | MIT, Copyright (c) 2009 Kazuhiko Arase |
 | React / React-DOM (provided by the Decky runtime) | MIT |
 
 ### Bundled with the backend

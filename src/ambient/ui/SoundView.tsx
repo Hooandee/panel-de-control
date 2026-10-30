@@ -59,6 +59,9 @@ export const SoundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRuntime 
           favorite={runtime.isFavoriteTrack()}
           onFavorite={runtime.canFavoriteTrack() ? () => runtime.toggleFavoriteTrack() : undefined}
           onBrowse={() => openMediaLibrary("music")}
+          onQueue={() => openMediaLibrary("queue")}
+          onRepeat={(repeat) => runtime.setRepeat(repeat)}
+          onShuffle={(on) => runtime.setShuffle(on)}
           onToggle={() => (busy ? runtime.pauseMusic() : runtime.resumeMusic())}
           onNext={() => runtime.nextTrack()}
           onPrevious={() => runtime.previousTrack()}

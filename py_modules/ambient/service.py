@@ -20,6 +20,7 @@ from .adapters.library_scan import media_id as local_media_id, scan_folder
 from .adapters.media_server import MediaServer
 from .adapters.optimizer import OptimizeError, optimize, output_name
 from .adapters.remote_sources import download
+from .adapters.share_server import ShareServer
 from .adapters.steam_screenshots import screenshot_folders
 from .core import collections as coll
 from .core.m3u import parse_m3u
@@ -34,7 +35,7 @@ _MAX_EVENTS = 20
 DISCOVER_TTL_SEC = 600
 PLAYLIST_TTL_SEC = 6 * 3600
 DISCOVER_CACHE_SIZE = 64
-_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen"}
+_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share"}
 
 
 _GAME_MEDIA_TTL_S = 7 * 24 * 3600
@@ -69,13 +70,38 @@ class AmbientService:
         self._server_lock = threading.Lock()
         self._closed = False
         self._cancel = threading.Event()
+        self._share: Optional[ShareServer] = None
 
     def close(self) -> None:
         self._closed = True
         self._cancel.set()
+        self.stop_share()
         with self._server_lock:
             self._server.stop()
             self._server_started = False
+
+    def start_share(self, texts: dict[str, str]) -> dict[str, Any]:
+        """Opens the page a phone uses to send links; only one session at a time."""
+        if self._closed:
+            return {"error": "unavailable"}
+        with self._lock:
+            if self._share is None:
+                self._share = ShareServer()
+            share = self._share
+        session = share.start(texts)
+        self.record_event("share", "started" if "url" in session else session.get("error", "failed"))
+        return session
+
+    def take_shared(self) -> dict[str, Any]:
+        share = self._share
+        if share is None:
+            return {"links": [], "active": False}
+        return {"links": share.take(), "active": share.active}
+
+    def stop_share(self) -> None:
+        share = self._share
+        if share is not None:
+            share.stop()
 
     def cancel_jobs(self) -> None:
         """Stops a running optimization (e.g. a game started); later jobs start fresh."""
@@ -643,6 +669,10 @@ class AmbientService:
             "selectedBackgroundCount": len(settings["background"]["selectedRefs"]),
             "musicEnabled": settings["music"]["enabled"],
             "musicSource": settings["music"]["source"],
+            "queueLength": len(settings["music"]["queue"]),
+            "repeat": settings["music"]["repeat"],
+            "shuffle": settings["music"]["shuffle"],
+            "shareActive": bool(self._share and self._share.active),
             "claims": settings["claims"],
             "events": list(self._events),
         }

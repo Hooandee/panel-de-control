@@ -217,3 +217,17 @@ def test_slow_network_calls_never_hold_back_settings(host, monkeypatch):
             await asyncio.gather(*downloads)
 
     run(scenario())
+
+
+def test_share_session_round_trip_and_stop(host, monkeypatch):
+    from ambient.adapters import share_server
+
+    monkeypatch.setattr(share_server, "lan_address", lambda: "127.0.0.1")
+    monkeypatch.setattr(share_server.ShareServer.__init__, "__defaults__", ("127.0.0.1", lambda: "127.0.0.1", share_server.SESSION_TTL_SEC))
+    session = run(host.start_ambient_share({"title": "T"}))
+    assert session["url"].startswith("http://127.0.0.1:")
+    host._ambient_service._share._pending.append("https://a.test/x")
+    assert run(host.take_ambient_shared()) == {"links": ["https://a.test/x"], "active": True}
+    assert run(host.stop_ambient_share()) is True
+    assert run(host.take_ambient_shared())["active"] is False
+    assert run(host.start_ambient_share("nope")) == {"error": "invalid_arguments"}

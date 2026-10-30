@@ -14,6 +14,7 @@ import { AudioLoaderBridge } from "./audioLoader";
 import { BackgroundLayer } from "./backgroundLayer";
 import { GameMediaDirector, ThemeAudio, type GameMedia } from "./gameMedia";
 import { installedGameAppIds, isStoreApp, libraryHeroUrl, neighborAppIdsIn, selectedAppIdIn } from "./librarySources";
+import { linkKind, linkName } from "../core/linkName";
 import { isLiveEmbed, parseEmbedStream } from "../core/streams";
 import { parseYouTube } from "../core/youtube";
 import { VideoFrameEngine, type VideoBounds } from "./videoFrame";
@@ -1100,7 +1101,7 @@ export class AmbientRuntime {
   playStation(station: Station, persist = true): void {
     if (persist) this.preferUserMusic();
     this.currentStation = station;
-    this.player.playQueue([{ id: station.id, title: station.name, subtitle: stationSubtitle(station), art: station.favicon, url: station.url, live: liveStream(station.url), countryCode: station.countryCode || undefined }]);
+    this.player.playQueue([stationTrack(station)]);
     if (persist) void this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: true, source: "radio", stationId: station.id } }));
     void this.render();
   }
@@ -1176,6 +1177,39 @@ export class AmbientRuntime {
   async tracksFor(items: LibraryMediaItem[]): Promise<Track[]> {
     const tracks = await Promise.all(items.map((item) => this.libraryTrack(item).catch(() => null)));
     return tracks.filter((t): t is Track => t !== null);
+  }
+
+  /** Links sent from a phone or pasted: each one becomes a queue entry; pictures are left out. */
+  enqueueLinks(urls: string[]): number {
+    const tracks = urls.filter((url) => linkKind(url) !== "image").map(linkTrack);
+    this.enqueue(tracks);
+    return tracks.length;
+  }
+
+  /** Opens the page a phone on the same network uses to send links; texts are the page's own copy. */
+  startShare(texts: Record<string, string>): Promise<rpc.ShareSession> {
+    return rpc.startAmbientShare(texts).catch(() => ({ error: "unavailable" }));
+  }
+
+  /** Queues whatever the phone sent since the last call. */
+  async pollShare(): Promise<{ added: number; active: boolean }> {
+    const result = await rpc.takeAmbientShared().catch(() => ({ links: [] as string[], active: false }));
+    return { added: result.links.length ? this.enqueueLinks(result.links) : 0, active: result.active };
+  }
+
+  stopShare(): void {
+    void rpc.stopAmbientShare().catch(() => undefined);
+  }
+
+  enqueueStation(station: Station, where: "end" | "next" = "end"): void {
+    this.enqueue([stationTrack(station)], where);
+  }
+
+  /** Library items added to the queue, at the end or right after what plays. */
+  async enqueueItems(items: LibraryMediaItem[], where: "end" | "next" = "end"): Promise<number> {
+    const tracks = await this.tracksFor(items);
+    this.enqueue(tracks, where);
+    return tracks.length;
   }
 
   /** Plays a whole folder (or My music) from its first song. */
@@ -1526,4 +1560,13 @@ function toQueued(track: Track): QueuedTrack {
 
 function queueSignature(queue: readonly QueuedTrack[], repeat: RepeatMode, shuffle: boolean): string {
   return JSON.stringify([repeat, shuffle, queue.map((q) => q.id)]);
+}
+
+function stationTrack(station: Station): Track {
+  return { id: station.id, title: station.name, subtitle: stationSubtitle(station), art: station.favicon, url: station.url, live: liveStream(station.url), countryCode: station.countryCode || undefined };
+}
+
+function linkTrack(url: string): Track {
+  const file = linkKind(url);
+  return { id: `remote:${url}`, title: linkName(url), subtitle: "", art: "", url, live: file ? false : liveStream(url), kind: file === "video" ? "video" : "audio" };
 }

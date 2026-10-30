@@ -1,11 +1,12 @@
 import { Focusable, SliderField } from "@decky/ui";
 import { createContext, useContext, useState, type CSSProperties, type FC, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { LuGamepad2, LuHeart, LuListMusic, LuMinimize2, LuMusic, LuPause, LuPlay, LuRadio, LuSkipBack, LuSkipForward, LuTv, LuVolume2, LuYoutube } from "react-icons/lu";
+import { LuGamepad2, LuHeart, LuListMusic, LuListOrdered, LuMinimize2, LuMusic, LuPause, LuPlay, LuRadio, LuRepeat, LuRepeat1, LuShuffle, LuSkipBack, LuSkipForward, LuTv, LuVolume2, LuYoutube } from "react-icons/lu";
 
 import { useI18n } from "../../i18n";
 import { theme } from "../../theme";
 import { playbackProblem } from "../core/playbackErrors";
 import { embedLabel, parseEmbedStream } from "../core/streams";
+import type { RepeatMode } from "../core/types";
 import { hasYouTubeList, isYouTubeTrack, type PlayerSnapshot } from "../steam/player";
 
 interface Props {
@@ -35,6 +36,9 @@ interface Props {
   flush?: boolean;
   /** No gamepad-focusable controls; for players floating outside any navigation tree. */
   touchOnly?: boolean;
+  onQueue?: () => void;
+  onRepeat?: (repeat: RepeatMode) => void;
+  onShuffle?: (on: boolean) => void;
 }
 
 const MOTION_CSS = `
@@ -127,6 +131,26 @@ export const RoundButton: FC<{ label: string; onActivate: () => void; size?: num
   return touchOnly
     ? <div role="button" aria-label={label} onClick={onActivate} style={style}>{face}</div>
     : <Focusable aria-label={label} onActivate={onActivate} onClick={onActivate} style={style}>{face}</Focusable>;
+};
+
+const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { all: "one", one: "off", off: "all" };
+
+export const RepeatButton: FC<{ repeat: RepeatMode; onChange: (repeat: RepeatMode) => void; size?: number; glass?: boolean }> = ({ repeat, onChange, size = 36, glass }) => {
+  const { t } = useI18n();
+  return (
+    <RoundButton glass={glass} label={t(`ambient.repeat.${repeat}`)} active={repeat !== "off"} size={size} onActivate={() => onChange(NEXT_REPEAT[repeat])}>
+      {repeat === "one" ? <LuRepeat1 size={15} /> : <LuRepeat size={15} style={{ opacity: repeat === "off" ? 0.55 : 1 }} />}
+    </RoundButton>
+  );
+};
+
+export const ShuffleButton: FC<{ shuffle: boolean; onChange: (on: boolean) => void; size?: number; glass?: boolean }> = ({ shuffle, onChange, size = 36, glass }) => {
+  const { t } = useI18n();
+  return (
+    <RoundButton glass={glass} label={t(shuffle ? "ambient.shuffle.on" : "ambient.shuffle.off")} active={shuffle} size={size} onActivate={() => onChange(!shuffle)}>
+      <LuShuffle size={15} style={{ opacity: shuffle ? 1 : 0.55 }} />
+    </RoundButton>
+  );
 };
 
 /** The artwork, blurred, becomes the card itself: every station or song tints its own player. */
@@ -224,14 +248,14 @@ export const Progress: FC<{ live: boolean; fraction: number; onSeek?: (fraction:
   );
 };
 
-const NowPlayingBody: FC<Props> = ({ player, compact, inGame, favorite, onToggle, onNext, onPrevious, onVolume, onFavorite, onBrowse, onVideo, videoShown, onControl, onSeek, onStep, media, flush }) => {
+const NowPlayingBody: FC<Props> = ({ player, compact, inGame, favorite, onToggle, onNext, onPrevious, onVolume, onFavorite, onBrowse, onVideo, videoShown, onControl, onSeek, onStep, media, flush, onQueue, onRepeat, onShuffle }) => {
   const showingVideo = videoShown ?? player.video;
   const { t } = useI18n();
   const track = player.track;
   const busy = player.status === "playing" || player.status === "loading" || player.status === "retrying";
   const live = !!track?.live;
   const youtube = !!track && isYouTubeTrack(track);
-  const skippable = !!track && !live && (!youtube || hasYouTubeList(track));
+  const skippable = !!track && (player.queue.length > 1 || (!live && (!youtube || hasYouTubeList(track))));
   const title = track?.title ?? t("ambient.player.idle");
   const art = track?.art ?? "";
   const statusText = {
@@ -325,6 +349,11 @@ const NowPlayingBody: FC<Props> = ({ player, compact, inGame, favorite, onToggle
               {showingVideo ? <LuMinimize2 size={13} /> : <LuTv size={13} />}
             </RoundButton>
           )}
+          {onQueue && (
+            <RoundButton glass label={t("ambient.queue.title")} onActivate={onQueue} size={30}>
+              <LuListOrdered size={13} />
+            </RoundButton>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, textAlign: "center" }}>
@@ -345,6 +374,7 @@ const NowPlayingBody: FC<Props> = ({ player, compact, inGame, favorite, onToggle
         )}
 
         <ControlRow style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14 }}>
+          {onShuffle && skippable && <ShuffleButton glass size={30} shuffle={player.shuffle} onChange={onShuffle} />}
           {!skippable
             ? onFavorite && (
               <RoundButton glass label={favorite ? t("ambient.stations.unfavorite") : t("ambient.stations.favorite")} onActivate={onFavorite} active={favorite} size={36}>
@@ -356,6 +386,7 @@ const NowPlayingBody: FC<Props> = ({ player, compact, inGame, favorite, onToggle
           {!skippable
             ? onBrowse && <RoundButton glass label={t("ambient.stations.browse")} onActivate={onBrowse} size={36}><LuListMusic size={15} /></RoundButton>
             : <RoundButton glass label={t("ambient.player.next")} onActivate={onNext} size={36}><LuSkipForward size={15} fill="currentColor" /></RoundButton>}
+          {onRepeat && skippable && <RepeatButton glass size={30} repeat={player.repeat} onChange={onRepeat} />}
         </ControlRow>
 
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, padding: "2px 2px 6px" }}>

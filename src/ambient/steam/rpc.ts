@@ -59,3 +59,8 @@ export const getAmbientRadioCatalog = callable<[], RadioCatalog>("get_ambient_ra
 export const discoverAmbientRadio = callable<[filters: RadioFilters], Station[]>("discover_ambient_radio");
 export const cancelAmbientJobs = callable<[], boolean>("cancel_ambient_jobs");
 export const recordAmbientEvent = callable<[kind: string, detail: string], boolean>("record_ambient_event");
+
+export type ShareSession = { url: string; expiresIn: number } | { error: string };
+export const startAmbientShare = callable<[texts: Record<string, string>], ShareSession>("start_ambient_share");
+export const takeAmbientShared = callable<[], { links: string[]; active: boolean }>("take_ambient_shared");
+export const stopAmbientShare = callable<[], boolean>("stop_ambient_share");

@@ -1,14 +1,14 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
-import { LuCheck, LuFolder, LuFolderPlus, LuImage, LuMusic, LuTrash2, LuVideo } from "react-icons/lu";
+import { LuCheck, LuFolder, LuFolderPlus, LuImage, LuListPlus, LuMusic, LuPlay, LuTrash2, LuVideo } from "react-icons/lu";
 
 import { useI18n } from "../../i18n";
 import { theme } from "../../theme";
 import type { AmbientRuntime, AmbientSnapshot } from "../steam/runtime";
 import { RoundButton } from "./NowPlaying";
 import { LibraryPlayback } from "./LibraryPlayback";
-import { Button, Caption, Row } from "./primitives";
+import { Button, Caption, Row, menuHandlers, type ItemMenu } from "./primitives";
 import { Empty, ROW_HEIGHT, useMeasuredHeight } from "./stationsParts";
 import { VirtualList } from "./VirtualList";
 import { useLibraryNavigation } from "./libraryNavigation";
@@ -74,6 +74,8 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
   const quickPlaying = useRef(false);
   const [multiple, setMultiple] = useState(false);
   const [photos, setPhotos] = useState(new Map<string, LibraryPhoto>());
+  const [picks, setPicks] = useState(new Map<string, LibraryItem>());
+  const [notice, setNotice] = useState("");
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -87,7 +89,9 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
   const wantedCollection = purpose === "background" && snapshot.current?.ref === wantedRef ? snapshot.current?.collection : undefined;
   const preferred = preferredSource(sources, snapshot.scan, purpose, wantedRef, wantedCollection);
   const current = sources.find((s) => s.id === sourceId) ?? sources.find((s) => s.id === preferred);
-  const visible = multiple ? items?.filter((item) => item.kind === "image") : items;
+  const playback = purpose === "playback";
+  const visible = multiple ? items?.filter((item) => (item.kind === "image") !== playback) : items;
+  const chosen = playback ? picks : photos;
   useEffect(() => {
     let active = true;
     setSelected(null);
@@ -115,13 +119,46 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
   const cancelMultiple = () => {
     setMultiple(false);
     setPhotos(new Map());
+    setPicks(new Map());
   };
+  const queueItems = async (selection: LibraryItem[], where: "end" | "next") => {
+    setError("");
+    setNotice("");
+    try {
+      const added = await runtime.enqueueItems(selection, where);
+      if (!added) setError(t("ambient.lib.actionFailed"));
+      else setNotice(t("ambient.queue.added", { n: String(added) }));
+    } catch { setError(t("ambient.lib.actionFailed")); }
+  };
+  const playFolder = async (where: "now" | "end") => {
+    if (!current || applying) return;
+    setError("");
+    setNotice("");
+    try {
+      if (!await runtime.playCollection(current.id, where)) setError(t("ambient.lib.actionFailed"));
+      else if (where === "end") setNotice(t("ambient.queue.added", { n: String(visible?.length ?? 0) }));
+    } catch { setError(t("ambient.lib.actionFailed")); }
+  };
+  const rowMenu = (item: LibraryItem): ItemMenu | undefined => playback && !multiple && item.kind !== "image" ? {
+    title: item.name,
+    hint: t("ambient.menu.options"),
+    actions: [
+      { label: t("ambient.queue.addEnd"), onSelect: () => void queueItems([item], "end") },
+      { label: t("ambient.queue.playNext"), onSelect: () => void queueItems([item], "next") },
+    ],
+  } : undefined;
   const choose = (item: LibraryItem) => {
     if (applying) return;
     setSelected(item);
     setViewed(item);
     setSourceId(current?.id ?? null);
-    if (multiple && item.kind === "image") setPhotos((previous) => {
+    if (multiple && playback && item.kind !== "image") setPicks((previous) => {
+      const next = new Map(previous);
+      if (next.has(item.ref)) next.delete(item.ref);
+      else next.set(item.ref, item);
+      return next;
+    });
+    else if (multiple && item.kind === "image") setPhotos((previous) => {
       const next = new Map(previous);
       if (next.has(item.ref)) next.delete(item.ref);
       else next.set(item.ref, { ...item, kind: "image" });
@@ -140,8 +177,8 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
     finally { quickPlaying.current = false; }
   };
   const save = async () => {
-    const selection = multiple ? [...photos.values()] : selected ? [selected] : [];
-    if (saving.current || !selection.length || (multiple && selection.length < 2)) return;
+    const selection = multiple ? [...chosen.values()] : selected ? [selected] : [];
+    if (saving.current || !selection.length || (multiple && !playback && selection.length < 2)) return;
     saving.current = true;
     setApplying(true);
     setError("");
@@ -188,15 +225,20 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
       </Focusable>
       <Focusable data-library-column="1" flow-children="column" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
         <Caption>{t(purpose === "background" ? "ambient.lib.visualFiles" : "ambient.lib.playableFiles")}</Caption>
-        {purpose === "background" && <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : startMultiple} style={{ marginBottom: 6 }} />}
+        <Focusable flow-children="row" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+          <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />
+          {playback && multiple && picks.size > 0 && <Button label={<><LuListPlus size={14} /> {t("ambient.queue.addEnd")}</>} onActivate={() => { void queueItems([...picks.values()], "end"); cancelMultiple(); }} />}
+          {playback && !multiple && !!visible?.length && <Button label={<><LuPlay size={14} /> {t("ambient.lib.playFolder")}</>} onActivate={() => void playFolder("now").then(() => onClose?.())} />}
+          {playback && !multiple && !!visible?.length && <Button label={<><LuListPlus size={14} /> {t("ambient.lib.queueFolder")}</>} onActivate={() => void playFolder("end")} />}
+        </Focusable>
         <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>
-          {visible == null ? <Empty text={t("ambient.lib.loading")} /> : visible.length === 0 ? <Empty text={error || t("ambient.lib.filesEmpty")} /> : listHeight > 0 && <VirtualList key={`${current?.id}:${multiple}`} controllerNavigation items={visible} height={listHeight} rowHeight={ROW_HEIGHT} keyOf={(m) => m.ref} renderRow={(m) => <Focusable onSecondaryActionDescription={m.kind === "image" ? undefined : t("ambient.lib.preview")} onSecondaryButton={m.kind === "image" ? undefined : (event) => {
+          {visible == null ? <Empty text={t("ambient.lib.loading")} /> : visible.length === 0 ? <Empty text={error || t("ambient.lib.filesEmpty")} /> : listHeight > 0 && <VirtualList key={`${current?.id}:${multiple}`} controllerNavigation items={visible} height={listHeight} rowHeight={ROW_HEIGHT} keyOf={(m) => m.ref} renderRow={(m) => <Focusable {...menuHandlers(rowMenu(m))} onSecondaryActionDescription={m.kind === "image" ? undefined : t("ambient.lib.preview")} onSecondaryButton={m.kind === "image" ? undefined : (event) => {
             event.preventDefault();
             event.stopPropagation();
             if (!event.detail.is_repeat) void quickAction(m);
-          }}><Row title={m.name} selected={multiple ? photos.has(m.ref) : m.ref === selected?.ref} swatch={m.kind === "image" ? <LuImage size={18} /> : m.kind === "video" ? <LuVideo size={18} /> : <LuMusic size={18} />} trailing={multiple ? <span role="checkbox" aria-checked={photos.has(m.ref)} aria-label={m.name} style={{ width: 18, height: 18, flexShrink: 0, border: `1px solid ${theme.color.accent}`, borderRadius: 4, display: "grid", placeItems: "center", color: theme.color.accent }}>{photos.has(m.ref) && <LuCheck size={14} />}</span> : undefined} onActivate={() => choose(m)} /></Focusable>} />}
+          }}><Row title={m.name} selected={multiple ? chosen.has(m.ref) : m.ref === selected?.ref} swatch={m.kind === "image" ? <LuImage size={18} /> : m.kind === "video" ? <LuVideo size={18} /> : <LuMusic size={18} />} trailing={multiple ? <span role="checkbox" aria-checked={chosen.has(m.ref)} aria-label={m.name} style={{ width: 18, height: 18, flexShrink: 0, border: `1px solid ${theme.color.accent}`, borderRadius: 4, display: "grid", placeItems: "center", color: theme.color.accent }}>{chosen.has(m.ref) && <LuCheck size={14} />}</span> : undefined} onActivate={() => choose(m)} /></Focusable>} />}
         </div>
-        {error && <div role="status" style={{ color: theme.color.warn, fontSize: theme.font.caption }}>{error}</div>}
+        {(error || notice) && <div role="status" style={{ color: error ? theme.color.warn : theme.color.textMuted, fontSize: theme.font.caption }}>{error || notice}</div>}
       </Focusable>
       <Focusable data-library-column="2" flow-children="column" style={{ display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
       <aside aria-label={viewed?.name} style={{ minWidth: 0, paddingTop: 22, minHeight: 0, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
@@ -206,7 +248,7 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
             ? <LibraryPlayback runtime={runtime} player={snapshot.player} />
             : viewed && <MediaPreview key={viewed.ref} item={viewed} runtime={runtime} />}
       </aside>
-      <Button primary style={{ flexShrink: 0 }} disabled={applying || (multiple ? photos.size < 2 : !selected)} label={t(applying ? "ambient.lib.working" : "ambient.lib.save")} onActivate={() => void save()} />
+      <Button primary style={{ flexShrink: 0 }} disabled={applying || (multiple ? chosen.size < (playback ? 1 : 2) : !selected)} label={applying ? t("ambient.lib.working") : multiple && playback ? t("ambient.lib.playSelected", { n: String(picks.size) }) : t("ambient.lib.save")} onActivate={() => void save()} />
       </Focusable>
     </Focusable>
   </Focusable>;
