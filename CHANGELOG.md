@@ -5,9 +5,53 @@
 ## [0.81.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.3...panel-de-control-v0.81.0) (2026-10-30)
 
 
-### Features
+### Español
 
-* **ambient:** Home background, music and radio ([#1054](https://github.com/Hooandee/panel-de-control/issues/1054)) ([1041283](https://github.com/Hooandee/panel-de-control/commit/10412835b7d08234a642c100d8a8ccf5301055f8))
+* **Nueva sección Ambiente:** Pon tus fotos, tus vídeos o el arte de tus juegos de fondo en Inicio. Viene apagada, así que Steam se queda como siempre hasta que la actives.
+* **Música y radio mientras juegas:** Escucha tu música, radios de todo el mundo, YouTube o Twitch con un mini reproductor que sigue sonando en partida y se maneja con el mando.
+* **Cola de reproducción:** Añade canciones, carpetas, emisoras y enlaces, ordénalos a tu gusto y elige repetir o aleatorio. La cola se guarda aunque reinicies.
+* **Enlaces desde el móvil:** Escanea un código QR con el móvil, pega los enlaces que quieras y entran directos en la cola.
+* **Temas y fondo, sin pelearse:** Los temas compatibles pueden mostrar tu fondo o quedarse con el suyo. Si hay conflicto, Panel te pregunta una sola vez.
+
+### English
+
+* **New Ambient section:** Use your photos, your videos or your games' art as the Home background. It starts off, so Steam stays as it is until you turn it on.
+* **Music and radio while you play:** Listen to your music, radio from around the world, YouTube or Twitch with a mini player that keeps playing in game and works with the controller.
+* **Play queue:** Add songs, folders, stations and links, put them in any order and choose repeat or shuffle. The queue is kept after a restart.
+* **Links from your phone:** Scan a QR code with your phone, paste as many links as you like and they go straight into the queue.
+* **Themes and background get along:** Compatible themes can show your background or keep their own. If they clash, Panel asks you just once.
+
+### Italiano
+
+* **Nuova sezione Atmosfera:** Usa le tue foto, i tuoi video o le immagini dei tuoi giochi come sfondo della Home. Parte disattivata, quindi Steam resta com'è finché non la attivi.
+* **Musica e radio mentre giochi:** Ascolta la tua musica, radio da tutto il mondo, YouTube o Twitch con un mini lettore che continua a suonare in partita e si usa con il controller.
+* **Coda di riproduzione:** Aggiungi brani, cartelle, stazioni e link, mettili nell'ordine che vuoi e scegli ripetizione o casuale. La coda resta anche dopo un riavvio.
+* **Link dal telefono:** Inquadra un codice QR con il telefono, incolla tutti i link che vuoi e finiscono subito in coda.
+* **Temi e sfondo vanno d'accordo:** I temi compatibili possono mostrare il tuo sfondo o tenere il loro. Se c'è un conflitto, Panel te lo chiede una sola volta.
+
+### Deutsch
+
+* **Neuer Bereich Ambiente:** Nutze deine Fotos, Videos oder die Bilder deiner Spiele als Hintergrund der Startseite. Er ist anfangs aus, Steam bleibt also unverändert, bis du ihn einschaltest.
+* **Musik und Radio beim Spielen:** Hör deine Musik, Radio aus aller Welt, YouTube oder Twitch mit einem Mini-Player, der im Spiel weiterläuft und sich mit dem Controller bedienen lässt.
+* **Warteschlange:** Füge Songs, Ordner, Sender und Links hinzu, ordne sie, wie du willst, und wähle Wiederholen oder Zufall. Die Warteschlange bleibt auch nach einem Neustart erhalten.
+* **Links vom Handy:** Scanne einen QR-Code mit dem Handy, füge so viele Links ein, wie du willst, und sie landen direkt in der Warteschlange.
+* **Themes und Hintergrund vertragen sich:** Kompatible Themes können deinen Hintergrund zeigen oder ihren eigenen behalten. Gibt es einen Konflikt, fragt Panel dich nur einmal.
+
+### Português (Brasil)
+
+* **Nova seção Ambiente:** Use suas fotos, seus vídeos ou a arte dos seus jogos como fundo do Início. Ela vem desligada, então o Steam continua como sempre até você ativar.
+* **Música e rádio enquanto você joga:** Ouça suas músicas, rádios do mundo todo, YouTube ou Twitch com um mini player que continua tocando no jogo e funciona com o controle.
+* **Fila de reprodução:** Adicione músicas, pastas, estações e links, organize do seu jeito e escolha repetir ou aleatório. A fila fica salva mesmo depois de reiniciar.
+* **Links pelo celular:** Escaneie um código QR com o celular, cole quantos links quiser e eles vão direto para a fila.
+* **Temas e fundo sem briga:** Temas compatíveis podem mostrar o seu fundo ou manter o deles. Se houver conflito, o Panel pergunta uma única vez.
+
+### Français
+
+* **Nouvelle section Ambiance :** Mettez vos photos, vos vidéos ou les images de vos jeux en fond de l'Accueil. Elle est désactivée au départ, donc Steam reste tel quel tant que vous ne l'activez pas.
+* **Musique et radio pendant vos parties :** Écoutez votre musique, des radios du monde entier, YouTube ou Twitch avec un mini-lecteur qui continue en jeu et se pilote à la manette.
+* **File de lecture :** Ajoutez morceaux, dossiers, stations et liens, rangez-les comme vous voulez et choisissez répétition ou aléatoire. La file est conservée après un redémarrage.
+* **Liens depuis le téléphone :** Scannez un code QR avec votre téléphone, collez autant de liens que vous voulez et ils arrivent directement dans la file.
+* **Thèmes et fond s'entendent :** Les thèmes compatibles peuvent afficher votre fond ou garder le leur. En cas de conflit, Panel vous pose la question une seule fois.
 
 ## [0.80.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.2...panel-de-control-v0.80.3) (2026-10-30)
 
