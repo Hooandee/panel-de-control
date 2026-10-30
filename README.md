@@ -30,9 +30,9 @@ portugués de Brasil y francés.
 
 ## 🎬 Guías en vídeo
 
-| [![Panel de Control a fondo](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![Cómo instalar temas](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel en ARM con Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) |
-|:---:|:---:|:---:|
-| **El plugin a fondo** | **Cómo instalar temas** | **Panel en ARM con Armada** |
+| [![Panel de Control a fondo](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![Cómo instalar temas](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel en ARM con Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) | [![Tele, música y fondos con Ambiente](https://img.youtube.com/vi/tSKquRbJgeg/hqdefault.jpg)](https://youtu.be/tSKquRbJgeg) |
+|:---:|:---:|:---:|:---:|
+| **El plugin a fondo** | **Cómo instalar temas** | **Panel en ARM con Armada** | **Tele, música y fondos** |
 
 ## Qué hace
 
@@ -63,9 +63,8 @@ explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de 
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.
 
-🌄 **Ambiente.** Tus fotos, tus vídeos o el arte de tus juegos de fondo en Inicio, el tráiler y la
-banda sonora del juego que seleccionas, y un mini reproductor para tu música, radios de todo el
-mundo, YouTube o Twitch que sigue sonando mientras juegas y se maneja con el mando.
+🌄 **Ambiente.** Tus propios fondos en Inicio y un reproductor de música, radio, YouTube, Twitch y
+tele que sigue sonando mientras juegas. Más abajo te lo cuento.
 
 ✨ **Temas.** Cambia la cara de Steam por completo con temas que se instalan y se actualizan desde
 el propio Panel. Los que están en acceso anticipado salen con la etiqueta Early y se instalan
@@ -76,6 +75,19 @@ beta.
 
 🧩 **A tu manera.** Ordena y oculta pestañas, crea tus propias vistas y elige el color de acento.
 Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido.
+
+## 📺 Ambiente
+
+Pon de fondo en Inicio tus fotos, tus vídeos o el arte de tus juegos, y al pasar por un juego deja
+que suene su banda sonora o se vea su tráiler.
+
+Además es un reproductor para todo: tu música, radios de todo el mundo en un mapa, YouTube, Twitch
+o canales de tele con listas M3U. Lo pones en cola, eliges repetir o aleatorio y te lo llevas a la
+partida en un mini reproductor que manejas con el mando. Y para no escribir enlaces con la
+cruceta, escaneas un QR con el móvil y los mandas desde ahí.
+
+Viene apagado, así que Steam se queda como siempre hasta que lo enciendes. En el
+[vídeo](https://youtu.be/tSKquRbJgeg) lo ves en marcha.
 
 ## 📱 También en ARM
 
