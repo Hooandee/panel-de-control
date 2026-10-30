@@ -15,6 +15,10 @@ export interface MapView {
 }
 
 interface Props {
+  active: boolean;
+  onActiveChange: (active: boolean) => void;
+  onExit: () => void;
+  navigationHint: string;
   countries: readonly RadioCountry[];
   stations: readonly Station[];
   loadingStations: boolean;
@@ -56,12 +60,12 @@ const Land = memo(function Land({ highlight }: { highlight: string | null }) {
   );
 });
 
-/**
- * Stations on a flat world. Far out, one dot per country; from 2x, every geolocated station in its
- * city. The d-pad walks between visible dots and leaves at the edges, A plays a focused station,
- * L2/R2 or the wheel zoom, and dragging pans.
- */
-export const WorldMap: FC<Props> = ({ countries, stations, loadingStations, loadingLabel, selected, playingUrl, playingCountry, onSelect, onPlay, onViewChange, zoomInLabel, zoomOutLabel }) => {
+export const WorldMap: FC<Props> = ({ active, onActiveChange, onExit, navigationHint, countries, stations, loadingStations, loadingLabel, selected, playingUrl, playingCountry, onSelect, onPlay, onViewChange, zoomInLabel, zoomOutLabel }) => {
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (wasActive.current && !active) onExit();
+    wasActive.current = active;
+  }, [active, onExit]);
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState({ x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 });
   /** The view other parts react to; it only moves when the map comes to rest, never mid-drag. */
@@ -105,10 +109,10 @@ export const WorldMap: FC<Props> = ({ countries, stations, loadingStations, load
     setSettled(next);
   };
 
+  const selectedCountry = countryPoints.find((p) => p.code === selected);
   useEffect(() => {
-    const country = countryPoints.find((p) => p.code === selected);
-    if (country) moveTo({ x: country.x, y: country.y });
-  }, [selected, countryPoints]);
+    if (selectedCountry) moveTo({ x: selectedCountry.x, y: selectedCountry.y });
+  }, [selected, selectedCountry?.x, selectedCountry?.y]);
 
   useEffect(() => {
     onViewChange({ zoom, center: settled, nearestCountry: nearestCode(settled, countryPoints) });
@@ -121,29 +125,32 @@ export const WorldMap: FC<Props> = ({ countries, stations, loadingStations, load
   const changeZoom = (delta: 1 | -1) => setZoom((z) => stepZoom(z, delta));
 
   const onDirection = (event: PadEvent) => {
+    if (!active) return false;
     const direction = DIRECTIONS[event.detail.button];
-    if (!direction) return;
+    if (!direction) return false;
     if (stationMode) {
       const visible = stationPoints.filter(inView);
       const from: MapPoint = focusedStation ?? { code: "", x: center.x, y: center.y };
       const next = focusedStation ? nextPoint(from, visible.length > 1 ? visible : stationPoints, direction) : (visible[0] ?? stationPoints[0]).code;
-      if (!next) return;
+      if (!next) return false;
       const point = stationPoints.find((p) => p.code === next)!;
       event.preventDefault();
       event.stopPropagation();
       setFocused(next);
       if (!inView(point)) moveTo({ x: point.x, y: point.y });
-      return;
+      return true;
     }
     const current = countryPoints.find((p) => p.code === selected) ?? null;
     const next = current ? nextPoint(current, zoom > 1 ? countryPoints.filter(inView) : countryPoints, direction) : countryPoints[0]?.code ?? null;
-    if (!next) return;
+    if (!next) return false;
     event.preventDefault();
     event.stopPropagation();
     onSelect(next);
+    return true;
   };
 
   const onButton = (event: PadEvent) => {
+    if (!active) return;
     if (event.detail.button === GamepadButton.TRIGGER_RIGHT) changeZoom(1);
     else if (event.detail.button === GamepadButton.TRIGGER_LEFT) changeZoom(-1);
     else return;
@@ -188,109 +195,117 @@ export const WorldMap: FC<Props> = ({ countries, stations, loadingStations, load
   const onWheel = (event: WheelEvent<SVGSVGElement>) => changeZoom(event.deltaY < 0 ? 1 : -1);
 
   return (
-    <div style={{ position: "relative" }}>
-      <Focusable
-        onGamepadDirection={onDirection as never}
-        onButtonDown={onButton as never}
-        onActivate={() => {
-          if (focusedStation) onPlay(focusedStation.station);
-        }}
-        onCancelButton={(focusedStation ? () => setFocused(null) : selected ? () => onSelect(null) : undefined) as never}
-        style={{
-          borderRadius: theme.radius.md,
-          overflow: "hidden",
-          background: "rgba(255,255,255,0.03)",
-          boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-          touchAction: "none",
-        }}
-      >
-        <svg
-          ref={svgRef}
-          viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
-          style={{ display: "block", width: "100%", height: "auto", aspectRatio: `${WORLD_WIDTH} / ${WORLD_HEIGHT}`, cursor: zoom > 1 ? "grab" : "default" }}
-          role="img"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onWheel={onWheel}
+    <div style={{ flexShrink: 0 }}>
+      <div style={{ position: "relative" }}>
+        <Focusable
+          onGamepadDirection={active ? onDirection as never : undefined}
+          onButtonDown={active ? onButton as never : undefined}
+          onActivate={() => {
+            if (!active) { onActiveChange(true); return; }
+            if (focusedStation) onPlay(focusedStation.station);
+          }}
+          onCancelButton={active ? ((event: PadEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onActiveChange(false);
+          }) as never : undefined}
+          style={{
+            borderRadius: theme.radius.md,
+            overflow: "hidden",
+            background: "rgba(255,255,255,0.03)",
+            boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+            touchAction: "none",
+          }}
         >
-          <Land highlight={selected} />
-          {!stationMode && countryPoints.map((p) => {
-            const isSelected = p.code === selected;
-            const isPlaying = p.code === playingCountry;
-            const r = (1.6 + p.r * 0.45) * Math.max(0.7, 1 / Math.sqrt(zoom)) * unit;
-            return (
-              <g key={p.code} onClick={() => !wasDrag() && onSelect(isSelected ? null : p.code)} style={{ cursor: "pointer" }}>
-                {(isSelected || isPlaying) && <circle cx={p.x} cy={p.y} r={r + 5 * unit} fill={`rgba(${theme.color.accentRgb},0.22)`} />}
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={r}
-                  fill={isSelected || isPlaying ? `rgb(${theme.color.accentRgb})` : "rgba(255,255,255,0.6)"}
-                  stroke={isSelected ? "#fff" : "rgba(0,0,0,0.35)"}
-                  strokeWidth={isSelected ? 1.6 : 0.6}
-                  vectorEffect="non-scaling-stroke"
-                />
-              </g>
-            );
-          })}
-          {stationMode && stationPoints.map((p) => {
-            const isFocused = p.code === focused;
-            const isPlaying = p.station.url === playingUrl;
-            const r = (isFocused ? 5.5 : 3.5) * unit;
-            return (
-              <g key={p.code} onClick={() => {
-                if (wasDrag()) return;
-                setFocused(p.code);
-                onPlay(p.station);
-              }} style={{ cursor: "pointer" }}>
-                {(isFocused || isPlaying) && <circle cx={p.x} cy={p.y} r={r + 5 * unit} fill={`rgba(${theme.color.accentRgb},0.25)`} />}
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={r}
-                  fill={isFocused || isPlaying ? `rgb(${theme.color.accentRgb})` : "#7ee0a0"}
-                  stroke={isFocused ? "#fff" : "rgba(0,0,0,0.45)"}
-                  strokeWidth={isFocused ? 1.4 : 0.5}
-                  vectorEffect="non-scaling-stroke"
-                  opacity={isFocused || isPlaying ? 1 : 0.85}
-                />
-              </g>
-            );
-          })}
-        </svg>
-      </Focusable>
-      {regionLevel && loadingStations && (
-        <div style={{ position: "absolute", left: 8, bottom: 8, padding: "4px 10px", borderRadius: 99, fontSize: 11, color: "rgba(255,255,255,0.8)", background: "rgba(0,0,0,0.5)", pointerEvents: "none" }}>
-          {loadingLabel}
-        </div>
-      )}
-      {focusedStation && (
-        <div style={{
-          position: "absolute",
-          left: 8,
-          top: 8,
-          maxWidth: "70%",
-          padding: "5px 10px",
-          borderRadius: 99,
-          fontSize: 12,
-          fontWeight: 600,
-          color: "#fff",
-          background: "rgba(0,0,0,0.55)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.14)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          pointerEvents: "none",
-        }}>
-          {focusedStation.station.name}
-        </div>
-      )}
-      <Focusable flow-children="column" style={{ position: "absolute", right: 8, bottom: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-        <RoundButton glass label={zoomInLabel} onActivate={() => changeZoom(1)} size={28}><LuPlus size={14} /></RoundButton>
-        <RoundButton glass label={zoomOutLabel} onActivate={() => changeZoom(-1)} size={28}><LuMinus size={14} /></RoundButton>
-      </Focusable>
+          <svg
+            ref={svgRef}
+            viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
+            style={{ display: "block", width: "100%", height: "auto", aspectRatio: `${WORLD_WIDTH} / ${WORLD_HEIGHT}`, cursor: zoom > 1 ? "grab" : "default" }}
+            role="img"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onWheel={onWheel}
+          >
+            <Land highlight={selected} />
+            {!stationMode && countryPoints.map((p) => {
+              const isSelected = p.code === selected;
+              const isPlaying = p.code === playingCountry;
+              const r = (1.6 + p.r * 0.45) * Math.max(0.7, 1 / Math.sqrt(zoom)) * unit;
+              return (
+                <g key={p.code} onClick={() => !wasDrag() && onSelect(isSelected ? null : p.code)} style={{ cursor: "pointer" }}>
+                  {(isSelected || isPlaying) && <circle cx={p.x} cy={p.y} r={r + 5 * unit} fill={`rgba(${theme.color.accentRgb},0.22)`} />}
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={r}
+                    fill={isSelected || isPlaying ? `rgb(${theme.color.accentRgb})` : "rgba(255,255,255,0.6)"}
+                    stroke={isSelected ? "#fff" : "rgba(0,0,0,0.35)"}
+                    strokeWidth={isSelected ? 1.6 : 0.6}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              );
+            })}
+            {stationMode && stationPoints.map((p) => {
+              const isFocused = p.code === focused;
+              const isPlaying = p.station.url === playingUrl;
+              const r = (isFocused ? 5.5 : 3.5) * unit;
+              return (
+                <g key={p.code} onClick={() => {
+                  if (wasDrag()) return;
+                  setFocused(p.code);
+                  onPlay(p.station);
+                }} style={{ cursor: "pointer" }}>
+                  {(isFocused || isPlaying) && <circle cx={p.x} cy={p.y} r={r + 5 * unit} fill={`rgba(${theme.color.accentRgb},0.25)`} />}
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={r}
+                    fill={isFocused || isPlaying ? `rgb(${theme.color.accentRgb})` : "#7ee0a0"}
+                    stroke={isFocused ? "#fff" : "rgba(0,0,0,0.45)"}
+                    strokeWidth={isFocused ? 1.4 : 0.5}
+                    vectorEffect="non-scaling-stroke"
+                    opacity={isFocused || isPlaying ? 1 : 0.85}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        </Focusable>
+        {regionLevel && loadingStations && (
+          <div style={{ position: "absolute", left: 8, bottom: 8, padding: "4px 10px", borderRadius: 99, fontSize: 11, color: "rgba(255,255,255,0.8)", background: "rgba(0,0,0,0.5)", pointerEvents: "none" }}>
+            {loadingLabel}
+          </div>
+        )}
+        {focusedStation && (
+          <div style={{
+            position: "absolute",
+            left: 8,
+            top: 8,
+            maxWidth: "70%",
+            padding: "5px 10px",
+            borderRadius: 99,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#fff",
+            background: "rgba(0,0,0,0.55)",
+            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.14)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+          }}>
+            {focusedStation.station.name}
+          </div>
+        )}
+        <Focusable flow-children="column" style={{ position: "absolute", right: 8, bottom: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+          <RoundButton glass label={zoomInLabel} onActivate={() => changeZoom(1)} size={28}><LuPlus size={14} /></RoundButton>
+          <RoundButton glass label={zoomOutLabel} onActivate={() => changeZoom(-1)} size={28}><LuMinus size={14} /></RoundButton>
+        </Focusable>
+      </div>
+      <div style={{ fontSize: 11, color: theme.color.textMuted, paddingTop: 4 }}>{navigationHint}</div>
     </div>
   );
 };

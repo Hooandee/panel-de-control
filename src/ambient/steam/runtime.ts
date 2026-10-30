@@ -1394,16 +1394,22 @@ export class AmbientRuntime {
 
   private catalog: Promise<RadioCatalog> | null = null;
 
-  radioCatalog(): Promise<RadioCatalog> {
-    this.catalog ??= rpc.getAmbientRadioCatalog().catch(() => {
-      this.catalog = null;
-      return { countries: [], tags: [] };
-    });
+  radioCatalog(refresh = false): Promise<RadioCatalog> {
+    if (!this.catalog || refresh) {
+      const pending = rpc.getAmbientRadioCatalog(refresh).then((catalog) => {
+        if (catalog.error && this.catalog === pending) this.catalog = null;
+        return catalog;
+      }).catch((error: unknown) => {
+        if (this.catalog === pending) this.catalog = null;
+        throw error;
+      });
+      this.catalog = pending;
+    }
     return this.catalog;
   }
 
   discoverRadio(filters: RadioFilters): Promise<Station[]> {
-    return rpc.discoverAmbientRadio(filters).catch(() => [] as Station[]);
+    return rpc.discoverAmbientRadio(filters);
   }
 
   searchRadio(query: string): Promise<Station[]> {
