@@ -19,8 +19,8 @@ from audio.const import balance_channels
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
 from controllers.detect import resolve_bin
+from pdc_platform.user_session import find_session as _find_session, session_command
 from osinfo import _parse_os_release
-from user_session import UserSession, spawn_args
 
 _DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
@@ -180,19 +180,6 @@ def _relevant_links(pw_link_text, *, cap=2500):
     return "\n".join(out)[:cap]
 
 
-def _find_session():
-    """Return the session owning the active PipeWire socket."""
-    for sock in glob.glob("/run/user/*/pipewire-0"):
-        runtime = os.path.dirname(sock)
-        try:
-            uid = int(os.path.basename(runtime))
-            return uid, runtime, pwd.getpwuid(uid).pw_name
-        except (ValueError, KeyError):
-            continue
-    return None
-
-
-
 def _journal_sink_write(kind, sink, before, requested, readback, caller):
     diary = journal.active
     wanted = list(requested) if isinstance(requested, tuple) else requested
@@ -261,11 +248,7 @@ class PipeWireEq:
         self._label = f"{self._name} EQ"
 
     def _session_cmd(self, argv):
-        if not self._session:
-            return None, None, None
-        cmd, env, identity = spawn_args(UserSession(*self._session), argv, resolve=lambda name: resolve_bin(name))
-        env["LC_ALL"] = "C"  # pactl field labels ("Name:", "Active Port:") must stay English to parse
-        return cmd, env, identity
+        return session_command(self._session, argv)
 
     def _run(self, argv, timeout=8):
         cmd, env, identity = self._session_cmd(argv)

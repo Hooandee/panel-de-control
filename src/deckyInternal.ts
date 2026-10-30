@@ -1176,8 +1176,16 @@ export function registerQuickAccessTab(
 
 type PluginListEntry = string | { name?: string; version?: string };
 
+interface LoadedPlugin {
+  name?: string;
+  content?: unknown;
+}
+
 interface DeckyState {
-  publicState?(): Partial<Record<"installedPlugins" | "disabledPlugins", PluginListEntry[]>>;
+  publicState?(): Partial<Record<"installedPlugins" | "disabledPlugins", PluginListEntry[]>> & {
+    plugins?: LoadedPlugin[];
+    activePlugin?: LoadedPlugin | null;
+  };
   setActivePlugin?(name: string): void;
 }
 
@@ -1301,4 +1309,43 @@ export function setActivePlugin(name: string): void {
   try {
     (window as unknown as DeckyHost).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
   } catch {}
+}
+
+const ACTIVE_PLUGIN_CHECKS = 40;
+const ACTIVE_PLUGIN_CHECK_MS = 250;
+
+/**
+ * After a reload Decky keeps the previous instance as the QAM's active plugin, whose aborted
+ * lifecycle renders nothing. Once this instance is listed, take over only if the QAM is showing
+ * an older copy of this plugin; another open plugin is never touched.
+ */
+export function adoptStaleActivePlugin(name: string, content: unknown, host: unknown = window): () => void {
+  let checks = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const check = () => {
+    timer = null;
+    let state: ReturnType<NonNullable<DeckyState["publicState"]>> | undefined;
+    try {
+      state = (host as DeckyHost | null)?.DeckyPluginLoader?.deckyState?.publicState?.();
+    } catch {
+      return;
+    }
+    const current = state?.plugins?.find((plugin) => plugin.name === name && plugin.content === content);
+    if (!current) {
+      checks += 1;
+      if (checks < ACTIVE_PLUGIN_CHECKS) timer = setTimeout(check, ACTIVE_PLUGIN_CHECK_MS);
+      return;
+    }
+    const active = state?.activePlugin;
+    if (active && active.name === name && active !== current) {
+      try {
+        (host as DeckyHost).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
+      } catch {}
+    }
+  };
+  timer = setTimeout(check, 0);
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  };
 }

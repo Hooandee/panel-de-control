@@ -3079,7 +3079,7 @@ def _root_session_eq(monkeypatch):
     monkeypatch.setattr(pipewire.os, "geteuid", lambda: 0)
     monkeypatch.setattr(pipewire.pwd, "getpwuid", lambda uid: account)
     monkeypatch.setattr(pipewire.os, "getgrouplist", lambda user, gid: [1000, 998])
-    monkeypatch.setattr(pipewire, "resolve_bin", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("pdc_platform.user_session.resolve_bin", lambda name: f"/usr/bin/{name}")
     eq = PipeWireEq(name="X")
     eq._session = (1000, "/run/user/1000", "deck")
     return eq

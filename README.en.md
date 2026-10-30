@@ -64,6 +64,10 @@ FSR4, HDR, scaling and more, but only what your Proton version supports.
 🧹 **Cleanup.** See how much space your games' Shader Cache and prefixes take up and get it back in
 a moment.
 
+🌄 **Ambient.** Your photos, your videos or your games' art as the Home background, the selected
+game's trailer and soundtrack, and a mini player for your music, radio from around the world,
+YouTube or Twitch that keeps playing while you play and works with the controller.
+
 ✨ **Themes.** Change how Steam looks from top to bottom with themes you install and update right
 from Panel. Themes in early access show an Early label and install from their zip.
 

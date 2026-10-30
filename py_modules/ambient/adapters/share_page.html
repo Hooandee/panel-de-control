@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Panel de Control</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--text:#f2f3f5;--muted:#9aa0aa;--accent:#4c8dff;--ok:#3ccf8e;--warn:#ff9f43;--line:rgba(255,255,255,.1)}
+@media (prefers-color-scheme:light){:root{--bg:#f4f5f7;--card:#fff;--text:#14161a;--muted:#5d636d;--line:rgba(0,0,0,.1)}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:24px 16px}
+main{width:100%;max-width:520px;display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:22px}
+p{margin:0;color:var(--muted)}
+textarea{width:100%;min-height:160px;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;resize:vertical}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{appearance:none;border:0;border-radius:14px;padding:14px 18px;background:var(--accent);color:#fff;font:600 17px/1 inherit;font-family:inherit}
+button:disabled{opacity:.6}
+#status{min-height:1.4em;color:var(--muted)}
+#status.ok{color:var(--ok)}
+#status.err{color:var(--warn)}
+ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+li{padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);overflow-wrap:anywhere;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p id="hint"></p>
+  <textarea id="text" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+  <button id="send" type="button"></button>
+  <div id="status" role="status"></div>
+  <ul id="sent"></ul>
+</main>
+<script>
+(function () {
+  var t = __PDC_TEXTS__;
+  var say = function (key, n) { return String(t[key] || "").replace("{n}", String(n)); };
+  var $ = function (id) { return document.getElementById(id); };
+  $("title").textContent = say("title");
+  $("hint").textContent = say("hint");
+  $("text").placeholder = say("placeholder");
+  $("send").textContent = say("send");
+  if (t.lang) document.documentElement.lang = t.lang;
+  var status = function (text, kind) { $("status").textContent = text; $("status").className = kind || ""; };
+  $("send").addEventListener("click", function () {
+    var text = $("text").value.trim();
+    if (!text) return;
+    $("send").disabled = true;
+    fetch("add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text }) })
+      .then(function (response) {
+        if (response.status === 403 || response.status === 404) throw new Error("expired");
+        if (!response.ok) throw new Error("failed");
+        return response.json();
+      })
+      .then(function (result) {
+        if (!result.added) return status(say("none"), "err");
+        status(say("sent", result.added), "ok");
+        result.links.forEach(function (link) {
+          var item = document.createElement("li");
+          item.textContent = link;
+          $("sent").insertBefore(item, $("sent").firstChild);
+        });
+        $("text").value = "";
+      })
+      .catch(function (error) { status(say(error.message === "expired" ? "expired" : "error"), "err"); })
+      .then(function () { $("send").disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

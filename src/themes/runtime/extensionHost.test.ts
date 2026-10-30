@@ -770,6 +770,104 @@ describe("ThemeExtensionRuntimeHost", () => {
   });
 });
 
+describe("ambient channel", () => {
+  function provider() {
+    const released: string[] = [];
+    const claims: { themeId: string; options: unknown }[] = [];
+    const listeners = new Set<() => void>();
+    return {
+      released,
+      claims,
+      listeners,
+      value: {
+        claim: vi.fn((themeId: string, options: unknown) => {
+          claims.push({ themeId, options });
+          return () => released.push(themeId);
+        }),
+        getState: () => ({ owner: "panel" as const, media: null, motion: "play" as const }),
+        subscribe: vi.fn((listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        }),
+      },
+    };
+  }
+
+  function capturing(onMount: (context: ThemeExtensionMountContext) => void): (source: string) => ThemeExtensionExport {
+    return () => Object.freeze({
+      abiVersion: 1 as const,
+      mount(context: ThemeExtensionMountContext) {
+        onMount(context);
+        return () => undefined;
+      },
+    });
+  }
+
+  it("is absent when Panel offers no provider", async () => {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen).toBeDefined();
+    expect(seen && "ambient" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("is frozen, keyed by the theme, and sanitizes claims", async () => {
+    const p = provider();
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(Object.isFrozen(seen?.ambient)).toBe(true);
+    seen?.ambient?.claim({ name: "  Example  ", surfaces: ["home", "bogus" as never], mode: "host" });
+    expect(p.claims).toEqual([{ themeId: "example-theme", options: { name: "Example", surfaces: ["home"], mode: "host" } }]);
+    host.dispose();
+  });
+
+  it("passes Panel's frame through, and null from a provider without one", async () => {
+    const frame = document.createElement("video");
+    const p = provider();
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: { ...p.value, frame: () => frame }, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen?.ambient?.frame()).toBe(frame);
+    host.dispose();
+    let older: ThemeExtensionMountContext | undefined;
+    const olderHost = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { older = c; }) });
+    olderHost.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(older?.ambient?.frame()).toBeNull();
+    olderHost.dispose();
+  });
+
+  it("releases claims and subscriptions the runtime forgot when it unmounts", async () => {
+    const p = provider();
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      ambient: p.value,
+      evaluate: capturing((c) => {
+        c.ambient?.claim({ name: "Example", surfaces: ["home"], mode: "yield" });
+        c.ambient?.subscribe(() => undefined);
+      }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(p.listeners.size).toBe(1);
+    host.reconcile({ status: "ready", themes: [] });
+    expect(p.released).toEqual(["example-theme"]);
+    expect(p.listeners.size).toBe(0);
+    host.dispose();
+  });
+});
+
 describe("DUO artwork bridge", () => {
   it.each([1, 2] as const)("exposes the optional bridge only to DUO ABI %s and disposes subscriptions", async (abiVersion) => {
     const unsubscribe = vi.fn();

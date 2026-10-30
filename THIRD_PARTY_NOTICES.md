@@ -45,7 +45,28 @@ The built plugin (`dist/index.js`) bundles the following runtime packages:
 | [@decky/api](https://github.com/SteamDeckHomebrew/decky-frontend-lib) | BSD-3-Clause |
 | [react-icons](https://github.com/react-icons/react-icons) | MIT |
 | [tslib](https://github.com/microsoft/tslib) | 0BSD |
+| [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 | MIT, Copyright (c) 2009 Kazuhiko Arase |
 | React / React-DOM (provided by the Decky runtime) | MIT |
+
+### Bundled with the backend
+
+| Package | License | Use |
+| --- | --- | --- |
+| [hls.js](https://github.com/video-dev/hls.js) 1.7.3 | Apache-2.0 (`py_modules/ambient/adapters/vendor/hls.js.LICENSE`) | Plays HLS streams (IPTV, radio, Steam trailers with separate audio) in Ambiente's video window page. |
+
+### Bundled data
+
+| Data | License | Use |
+| --- | --- | --- |
+| [Natural Earth](https://www.naturalearthdata.com/) 1:110m admin-0 countries | Public domain | Simplified country outlines for the Ambiente station map (`src/ambient/ui/worldMap.data.ts`). |
+
+### Online services used at runtime (nothing bundled)
+
+| Service | Use |
+| --- | --- |
+| [Radio Browser](https://www.radio-browser.info/) | Community station directory: search, countries, styles and stream URLs. |
+| [NASA APOD](https://apod.nasa.gov/) | Astronomy Picture of the Day as an optional background collection. |
+| Bing image of the day | Daily landscape as an optional background collection; images belong to their owners. |
 
 ### Bundled binary (release builds only)
 

@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "panel-de-control/ambient/settings.v1",
+  "title": "Ambient settings",
+  "type": "object",
+  "required": [
+    "version",
+    "background",
+    "music",
+    "collections",
+    "radio",
+    "claims"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$"
+    },
+    "inGameAction": {
+      "enum": [
+        "pause",
+        "continue",
+        "duck"
+      ]
+    },
+    "favorite": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "maxLength": 2048
+        },
+        "art": {
+          "type": "string",
+          "pattern": "^https://",
+          "maxLength": 2048
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 80
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "background": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "collections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "intervalSec": {
+          "enum": [
+            30,
+            60,
+            300,
+            900,
+            3600
+          ]
+        },
+        "onReturnHome": {
+          "type": "boolean"
+        },
+        "order": {
+          "enum": [
+            "sequential",
+            "shuffle"
+          ]
+        },
+        "transition": {
+          "enum": [
+            "fade",
+            "kenburns"
+          ]
+        },
+        "gameArt": {
+          "enum": [
+            "mine",
+            "blend",
+            "game"
+          ]
+        },
+        "library": {
+          "type": "boolean"
+        },
+        "optimizeVideos": {
+          "type": "boolean"
+        },
+        "videoQuality": {
+          "enum": [
+            "fluid",
+            "saver",
+            "sharp"
+          ]
+        },
+        "gameTrailers": {
+          "type": "boolean"
+        },
+        "gameThemes": {
+          "type": "boolean"
+        },
+        "pinned": {
+          "type": "string",
+          "pattern": "^$|^(local|url|opt|steam|remote):"
+        },
+        "selectedRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(local|steam|remote):[A-Za-z0-9._:/?&=%+~@#!$'()*,;-]{1,2048}$"
+          },
+          "uniqueItems": true
+        },
+        "perGame": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[0-9]{1,10}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(local|url|opt|steam|remote):"
+          }
+        },
+        "lowBatteryPercent": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 50
+        }
+      }
+    },
+    "music": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "source": {
+          "enum": [
+            "music",
+            "radio"
+          ]
+        },
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "inGameMusic": {
+          "$ref": "#/$defs/inGameAction"
+        },
+        "inGameRadio": {
+          "$ref": "#/$defs/inGameAction"
+        },
+        "qamPlayer": {
+          "type": "boolean"
+        },
+        "videoOn": {
+          "type": "boolean"
+        },
+        "overlay": {
+          "enum": [
+            "off",
+            "peek",
+            "always"
+          ]
+        },
+        "overlayCorner": {
+          "enum": [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right"
+          ]
+        },
+        "videoSize": {
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "videoScale": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 70
+        },
+        "inGameMusicLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "inGameRadioLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "inGameMediaLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "inGameGameLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        },
+        "lastTrack": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "position"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "stationId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/id"
+            }
+          ]
+        },
+        "repeat": {
+          "enum": [
+            "all",
+            "one",
+            "off"
+          ]
+        },
+        "shuffle": {
+          "type": "boolean"
+        },
+        "queue": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "url",
+              "title",
+              "subtitle",
+              "art",
+              "kind",
+              "live"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2100
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https?://",
+                "maxLength": 2048
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "subtitle": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "art": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "kind": {
+                "enum": [
+                  "audio",
+                  "video"
+                ]
+              },
+              "live": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "collections": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removedSuggested": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "favorites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/favorite"
+          }
+        },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        }
+      }
+    },
+    "radio": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removedSuggested": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "favorites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/favorite"
+          }
+        },
+        "playlists": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "url"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(css:[A-Za-z]{1,48}(::before|::after)?|[A-Za-z0-9._-]{1,64})$"
+      },
+      "additionalProperties": {
+        "enum": [
+          "panel",
+          "theme",
+          "other"
+        ]
+      }
+    }
+  }
+}

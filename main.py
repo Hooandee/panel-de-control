@@ -160,6 +160,7 @@ from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
+from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
@@ -530,7 +531,7 @@ DEFAULTS = {
 }
 
 
-class Plugin:
+class Plugin(AmbientRpc):
     # Re-fit + re-apply the learned fan curve every this-many collected in-game
     # samples. The sampler ticks every 5 s only while in-game, so 360 × 5 s ≈ 30 min
     # of ACTUAL play — matching the telemetry histogram's ~30 min decay half-life so
@@ -2589,6 +2590,7 @@ class Plugin:
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
+            "ambient": self.ambient_diagnostics(),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
             ),
@@ -14611,6 +14613,7 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
+        self._ambient_stop()
         self._close_steam_cleaner_sync()
 
     def _perform_shutdown_handoff(

@@ -3,6 +3,7 @@ import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
   ThemeExtensionRuntimeHost,
+  type AmbientChannelProvider,
   type ThemeExtensionExport,
   type ThemeExtensionQamAccess,
 } from "./extensionHost";
@@ -153,6 +154,7 @@ interface ThemesRuntimeOptions {
   subscribePackageChanges?(listener: () => void): () => void;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  ambient?: AmbientChannelProvider;
   evaluate?(source: string): ThemeExtensionExport;
   log?(code: string): void;
   createManager?(
@@ -175,6 +177,7 @@ export function startThemesRuntime({
   evaluate,
   log,
   createManager,
+  ambient,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -191,6 +194,7 @@ export function startThemesRuntime({
       library,
       artwork,
       navigation,
+      ambient,
       evaluate,
       log,
     }),

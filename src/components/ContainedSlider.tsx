@@ -14,6 +14,7 @@ interface Props {
   /** Uniform shrink factor. Default 0.80; use a smaller value in tighter cards
    *  (e.g. the Pantalla cards) where 0.80 still bleeds past the right edge. */
   scale?: number;
+  bottomSeparator?: "standard" | "thick" | "none";
   onChange: (value: number) => void;
 }
 
@@ -23,7 +24,7 @@ interface Props {
  * uniform scale (keeps the knob round) inside an overflow:hidden box. This wraps
  * that containment so call sites don't re-hand-roll it.
  */
-export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, onChange }) => (
+export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, bottomSeparator, onChange }) => (
   <div data-pdc-part="contained-slider" style={{ overflow: "hidden", width: "100%" }}>
     <div style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
       <SliderField
@@ -34,6 +35,7 @@ export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, d
         showValue={showValue}
         disabled={disabled}
         label={label}
+        bottomSeparator={bottomSeparator}
         onChange={onChange}
       />
     </div>

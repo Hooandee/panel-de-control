@@ -13,6 +13,39 @@ export interface ThemeExtensionHostDescriptor {
   abiVersion: 1;
 }
 
+export interface AmbientBackgroundState {
+  owner: "panel" | "theme";
+  media: { url: string; kind: "image" | "video" } | null;
+  motion: "play" | "pause" | "freeze";
+}
+
+export interface AmbientClaimOptions {
+  name: string;
+  surfaces: readonly ("home" | "library")[];
+  mode: "yield" | "host";
+}
+
+/** What a theme runtime sees: an optional channel, present only when Panel offers Ambiente. */
+export interface ThemeExtensionAmbientAccess {
+  claim(options: AmbientClaimOptions): () => void;
+  getState(): AmbientBackgroundState;
+  subscribe(listener: (state: AmbientBackgroundState) => void): () => void;
+  /**
+   * The picture or video element Panel is painting now (owner "panel"), readable by canvas and WebGL, so
+   * a theme can mirror the real background. Null when Panel paints nothing or a stream it cannot share.
+   * The element stays Panel's: draw from it, never move, restyle or keep it.
+   */
+  frame(): HTMLImageElement | HTMLVideoElement | null;
+}
+
+/** What the orchestrator provides; claims are keyed by the theme that makes them. */
+export interface AmbientChannelProvider {
+  claim(themeId: string, options: AmbientClaimOptions): () => void;
+  getState(): AmbientBackgroundState;
+  subscribe(listener: (state: AmbientBackgroundState) => void): () => void;
+  frame?(): HTMLImageElement | HTMLVideoElement | null;
+}
+
 export interface ThemeExtensionQamAccess {
   getDocument(): Document | null;
   subscribe(listener: (doc: Document) => void): () => void;
@@ -24,6 +57,7 @@ export interface ThemeExtensionMountContextV1 {
   document: Document;
   host: Readonly<ThemeExtensionHostDescriptor>;
   qam?: never;
+  ambient?: Readonly<ThemeExtensionAmbientAccess>;
   navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
 }
 
@@ -35,6 +69,7 @@ export interface ThemeExtensionMountContextV2 {
   qam: Readonly<ThemeExtensionQamAccess>;
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
+  ambient?: Readonly<ThemeExtensionAmbientAccess>;
 }
 
 export type ThemeExtensionMountContext =
@@ -74,6 +109,7 @@ interface ThemeExtensionRuntimeHostOptions {
   qam?: ThemeExtensionQamAccess;
   library?: ThemeExtensionLibraryAccess;
   navigation?: ThemeExtensionNavigationAccess;
+  ambient?: AmbientChannelProvider;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -92,6 +128,56 @@ interface ActiveRuntime {
 class ThemeExtensionPayloadMismatchError extends Error {}
 
 const HOST_DESCRIPTOR: Readonly<ThemeExtensionHostDescriptor> = Object.freeze({ abiVersion: 1 });
+
+export function ambientThemeId(themeName: string): string {
+  return themeName.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) || "theme";
+}
+
+const AMBIENT_SURFACES = new Set(["home", "library"]);
+
+/** Scopes the channel to one mount so every claim a runtime forgets is released when it unmounts. */
+function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
+  const releases = new Set<() => void>();
+  const listeners = new Set<() => void>();
+  const access: ThemeExtensionAmbientAccess = {
+    claim(options) {
+      const surfaces = Array.isArray(options?.surfaces) ? options.surfaces.filter((s) => AMBIENT_SURFACES.has(s)) : [];
+      const mode = options?.mode === "host" ? "host" : "yield";
+      const name = typeof options?.name === "string" && options.name.trim() ? options.name.trim().slice(0, 60) : themeId;
+      const releaseClaim = provider.claim(themeId, { name, surfaces, mode });
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        releases.delete(release);
+        releaseClaim();
+      };
+      releases.add(release);
+      return release;
+    },
+    getState: () => provider.getState(),
+    frame: () => provider.frame?.() ?? null,
+    subscribe(listener) {
+      const off = provider.subscribe(listener);
+      let active = true;
+      const unsubscribe = () => {
+        if (!active) return;
+        active = false;
+        listeners.delete(unsubscribe);
+        off();
+      };
+      listeners.add(unsubscribe);
+      return unsubscribe;
+    },
+  };
+  return {
+    access: Object.freeze(access),
+    release() {
+      for (const release of [...releases]) release();
+      for (const unsubscribe of [...listeners]) unsubscribe();
+    },
+  };
+}
 
 // Steam's global button handlers consume input for the whole UI; a theme that throws in mount or in
 // its disposer must not leave a capture or a QAM subscription behind.
@@ -224,6 +310,7 @@ export class ThemeExtensionRuntimeHost {
   private descriptorRequest: Promise<void> | null = null;
   private snapshot: CssLoaderSnapshot = { status: "missing", themes: [] };
   private readonly payloads = new Map<string, ThemeExtensionPayload>();
+  private readonly ambient: AmbientChannelProvider | undefined;
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
@@ -242,7 +329,9 @@ export class ThemeExtensionRuntimeHost {
     navigation,
     evaluate = evaluateThemeExtensionBundle,
     log = (code) => console.warn(`[themes:${code}]`),
+    ambient,
   }: ThemeExtensionRuntimeHostOptions) {
+    this.ambient = ambient;
     this.artwork = artwork;
     this.client = client;
     this.doc = doc;
@@ -432,10 +521,12 @@ export class ThemeExtensionRuntimeHost {
     if (!this.isCurrent(selection.fingerprint, generation)) return this.abandon(selection.fingerprint, generation);
     const scope = new MountScope(this.log);
     try {
+      const scoped = this.ambient ? scopedAmbientAccess(this.ambient, ambientThemeId(selection.theme.name)) : null;
       const sharedContext = {
         theme: freezeTheme(selection.theme),
         document: this.doc,
         host: HOST_DESCRIPTOR,
+        ...(scoped ? { ambient: scoped.access } : {}),
         ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
           artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
             get: this.artwork.get,
@@ -445,6 +536,7 @@ export class ThemeExtensionRuntimeHost {
           })),
         } : {}),
       };
+      if (scoped) scope.track(() => scoped.release());
       let stop: () => void;
       if (extension.abiVersion === 1) {
         const navigation = this.navigation;
@@ -487,6 +579,7 @@ export class ThemeExtensionRuntimeHost {
         } catch {
           this.log("extension_dispose_failed");
         }
+        scoped?.release();
         this.abandon(selection.fingerprint, generation);
         return;
       }
