@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.81.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.3...panel-de-control-v0.81.0) (2026-10-30)
+
+
+### Features
+
+* **ambient:** Home background, music and radio ([#1054](https://github.com/Hooandee/panel-de-control/issues/1054)) ([1041283](https://github.com/Hooandee/panel-de-control/commit/10412835b7d08234a642c100d8a8ccf5301055f8))
+
 ## [0.80.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.2...panel-de-control-v0.80.3) (2026-10-30)
 
 
