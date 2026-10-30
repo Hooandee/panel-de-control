@@ -184,8 +184,8 @@ class AmbientRpc:
         args = [a if isinstance(a, str) else "" for a in (name, country, tag)]
         return await self._ambient_call(lambda s: s.search_radio(*args), pool="network")
 
-    async def get_ambient_radio_catalog(self) -> dict[str, Any]:
-        return await self._ambient_call(lambda s: s.radio_catalog(), pool="network")
+    async def get_ambient_radio_catalog(self, force_refresh: bool = False) -> dict[str, Any]:
+        return await self._ambient_call(lambda s: s.radio_catalog(force_refresh=force_refresh is True), pool="network")
 
     async def discover_ambient_radio(self, filters: dict) -> list[dict[str, Any]]:
         if not isinstance(filters, dict):

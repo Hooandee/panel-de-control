@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from collections import OrderedDict, deque
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 from json_store import atomic_json_save
 
@@ -555,17 +555,25 @@ class AmbientService:
 
 
     def search_radio(self, name: str = "", country: str = "", tag: str = "") -> list[dict[str, Any]]:
-        stations = radio_browser.search(name=name, country=country, tag=tag)
-        if not stations and (name or country or tag):
-            self.record_event("radio_error", "empty_or_unreachable")
-        return stations
+        return self._radio_request("search", lambda: radio_browser.search(name=name, country=country, tag=tag))
+
+    def _radio_request(self, operation: str, request: Callable[[], Any]) -> Any:
+        try:
+            return request()
+        except radio_browser.RadioBrowserError as error:
+            self.record_event("radio_error", f"{operation}:{error.host}:{error.error_class}")
+            raise
 
     def suggested_stations(self) -> list[dict[str, Any]]:
         with self._lock:
             removed = set(self._settings["radio"]["removedSuggested"])
         stations: list[dict[str, Any]] = []
         for tag in coll.SUGGESTED_STATION_TAGS:
-            for station in radio_browser.top(tag=tag, limit=3):
+            try:
+                suggested = self._radio_request(f"suggested:{tag}", lambda: radio_browser.top(tag=tag, limit=3))
+            except radio_browser.RadioBrowserError:
+                continue
+            for station in suggested:
                 if station["id"] not in removed and all(s["id"] != station["id"] for s in stations):
                     stations.append(station)
         return stations
@@ -610,25 +618,34 @@ class AmbientService:
             self._playlist_cache[playlist_id] = (time.time(), channels)
         return {"id": playlist_id, "channels": channels}
 
-    def radio_catalog(self) -> dict[str, Any]:
-        """Countries and styles with station counts, cached for a day and kept on disk for offline use."""
+    def radio_catalog(self, force_refresh: bool = False) -> dict[str, Any]:
+        """Cache complete catalogs for a day; keep the last complete result available offline."""
         path = os.path.join(self._cache_dir, "radio-catalog.json")
         try:
             with open(path, encoding="utf-8") as handle:
                 cached = json.load(handle)
-        except (OSError, ValueError):
-            cached = None
-        fresh = isinstance(cached, dict) and time.time() - float(cached.get("at", 0)) < 24 * 3600
-        if fresh:
-            return {"countries": cached.get("countries", []), "tags": cached.get("tags", [])}
-        countries, tags = radio_browser.countries(), radio_browser.tags()
-        if countries or tags:
-            atomic_json_save(path, {"at": time.time(), "countries": countries, "tags": tags})
-            return {"countries": countries, "tags": tags}
-        if isinstance(cached, dict):
-            return {"countries": cached.get("countries", []), "tags": cached.get("tags", [])}
-        self.record_event("radio_error", "catalog_unreachable")
-        return {"countries": [], "tags": []}
+            complete = (isinstance(cached, dict) and isinstance(cached.get("countries"), list)
+                        and isinstance(cached.get("tags"), list)
+                        and bool(cached["countries"]) and bool(cached["tags"]))
+            fresh = complete and time.time() - float(cached.get("at", 0)) < 24 * 3600
+        except (OSError, ValueError, TypeError):
+            cached, complete, fresh = None, False, False
+        if fresh and not force_refresh:
+            return {"countries": cached["countries"], "tags": cached["tags"]}
+        try:
+            countries = self._radio_request("countries", radio_browser.countries)
+            tags = self._radio_request("tags", radio_browser.tags)
+        except radio_browser.RadioBrowserError:
+            if complete:
+                return {"countries": cached["countries"], "tags": cached["tags"], "error": "catalog_unreachable"}
+            raise
+        if not countries or not tags:
+            self.record_event("radio_error", "catalog_incomplete")
+            if complete:
+                return {"countries": cached["countries"], "tags": cached["tags"], "error": "catalog_unreachable"}
+            return {"countries": countries, "tags": tags, "error": "catalog_unreachable"}
+        atomic_json_save(path, {"at": time.time(), "countries": countries, "tags": tags})
+        return {"countries": countries, "tags": tags}
 
     def discover_radio(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         """Identical queries within ten minutes are answered from memory (bounded to 64 entries)."""
@@ -640,7 +657,7 @@ class AmbientService:
             if hit and now - hit[0] < DISCOVER_TTL_SEC:
                 self._discover_cache.move_to_end(key)
                 return hit[1]
-        stations = radio_browser.discover(filters)
+        stations = self._radio_request("discover", lambda: radio_browser.discover(filters))
         if stations:
             with self._lock:
                 self._discover_cache[key] = (now, stations)
@@ -649,7 +666,7 @@ class AmbientService:
         return stations
 
     def resolve_radio(self, station_id: str) -> Optional[dict[str, Any]]:
-        return radio_browser.resolve(station_id)
+        return self._radio_request("resolve", lambda: radio_browser.resolve(station_id))
 
 
     def record_event(self, kind: str, detail: str) -> bool:

@@ -204,8 +204,10 @@ def test_radio_catalog_is_cached_and_survives_offline(service, monkeypatch):
     data = json.load(open(path))
     data["at"] = 0
     json.dump(data, open(path, "w"))
-    monkeypatch.setattr(radio_browser, "countries", lambda: [])
-    monkeypatch.setattr(radio_browser, "tags", lambda: [])
+    def offline():
+        raise radio_browser.RadioBrowserError("h", "OSError")
+    monkeypatch.setattr(radio_browser, "countries", offline)
+    monkeypatch.setattr(radio_browser, "tags", offline)
     assert service.radio_catalog()["tags"] == [{"name": "lofi", "count": 9}]
 
 
@@ -259,3 +261,100 @@ def test_shortcuts_never_ask_the_store(service, monkeypatch):
     monkeypatch.setattr("ambient.service.game_trailer", lambda appid: pytest.fail("store asked for a shortcut"))
     monkeypatch.setattr("ambient.service.game_theme", lambda name: None)
     assert service.game_media("3141592653", "Emulator", store=False) == {"trailer": None, "theme": None}
+
+
+
+def test_radio_failure_is_not_cached_and_recovery_uses_same_filters(service, monkeypatch):
+    from ambient.adapters import radio_browser as rb
+    calls = []
+    def discover(filters):
+        calls.append(filters)
+        if len(calls) == 1:
+            raise rb.RadioBrowserError("second.test", "TimeoutError")
+        return []
+    monkeypatch.setattr(rb, "discover", discover)
+    filters = {"country": "ES", "near": {"lat": 40, "lon": -3, "radiusKm": 20}}
+    with pytest.raises(RuntimeError):
+        service.discover_radio(filters)
+    assert service.discover_radio(filters) == []
+    assert calls == [filters, filters]
+    assert service.diagnostics()["events"][-1]["kind"] == "radio_error"
+
+
+def test_empty_success_does_not_record_radio_error(service, monkeypatch):
+    from ambient.adapters import radio_browser as rb
+    monkeypatch.setattr(rb, "search", lambda **kwargs: [])
+    assert service.search_radio(name="none") == []
+    assert not service.diagnostics()["events"]
+
+
+def test_partial_catalog_is_not_cached_for_a_day(service, monkeypatch, tmp_path):
+    from ambient.adapters import radio_browser as rb
+    monkeypatch.setattr(rb, "countries", lambda: [{"code": "ES", "count": 3}])
+    def failed():
+        raise rb.RadioBrowserError("h", "TimeoutError")
+    monkeypatch.setattr(rb, "tags", failed)
+    with pytest.raises(RuntimeError):
+        service.radio_catalog()
+    assert not (tmp_path / "cache" / "radio-catalog.json").exists()
+    monkeypatch.setattr(rb, "tags", lambda: [{"name": "pop", "count": 5}])
+    assert service.radio_catalog()["tags"] == [{"name": "pop", "count": 5}]
+
+
+def test_force_refresh_attempts_network_and_marks_stale_fallback(service, monkeypatch):
+    from ambient.adapters import radio_browser as rb
+    monkeypatch.setattr(rb, "countries", lambda: [{"code": "ES", "count": 3}])
+    monkeypatch.setattr(rb, "tags", lambda: [{"name": "pop", "count": 5}])
+    original = service.radio_catalog()
+    def failed():
+        raise rb.RadioBrowserError("h", "TimeoutError")
+    monkeypatch.setattr(rb, "countries", failed)
+    assert service.radio_catalog() == original
+    assert service.radio_catalog(force_refresh=True) == {**original, "error": "catalog_unreachable"}
+
+
+def test_legacy_partial_catalog_is_refreshed(service, monkeypatch, tmp_path):
+    import time
+    from ambient.adapters import radio_browser as rb
+    path = tmp_path / "cache" / "radio-catalog.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"at": time.time(), "countries": [{"code": "ES"}], "tags": []}))
+    monkeypatch.setattr(rb, "countries", lambda: [{"code": "DE"}])
+    monkeypatch.setattr(rb, "tags", lambda: [{"name": "pop"}])
+    assert service.radio_catalog() == {"countries": [{"code": "DE"}], "tags": [{"name": "pop"}]}
+
+
+@pytest.mark.parametrize("failed_tag", ["lofi", "chillout"])
+def test_suggested_stations_keep_successes_before_and_after_failed_tag(service, monkeypatch, failed_tag):
+    from ambient.adapters import radio_browser as rb
+    from ambient.core import collections as coll
+    monkeypatch.setattr(coll, "SUGGESTED_STATION_TAGS", ("lofi", "chillout"))
+    def top(tag, limit):
+        if tag == failed_tag:
+            raise rb.RadioBrowserError("second.test", "TimeoutError")
+        return [{"id": "available", "name": "Available station"}]
+    monkeypatch.setattr(rb, "top", top)
+    assert service.suggested_stations() == [{"id": "available", "name": "Available station"}]
+    events = service.diagnostics()["events"]
+    assert len(events) == 1
+    assert events[0]["kind"] == "radio_error"
+    assert events[0]["detail"] == f"suggested:{failed_tag}:second.test:TimeoutError"
+
+
+@pytest.mark.parametrize("empty_section", ["countries", "tags"])
+@pytest.mark.parametrize("has_previous", [False, True])
+def test_empty_global_catalog_section_reports_incomplete_and_preserves_previous(service, monkeypatch, empty_section, has_previous):
+    from ambient.adapters import radio_browser as rb
+    complete = {"countries": [{"code": "ES", "count": 3}], "tags": [{"name": "pop", "count": 5}]}
+    monkeypatch.setattr(rb, "countries", lambda: complete["countries"])
+    monkeypatch.setattr(rb, "tags", lambda: complete["tags"])
+    if has_previous:
+        assert service.radio_catalog() == complete
+    monkeypatch.setattr(rb, empty_section, lambda: [])
+    expected = complete if has_previous else {**complete, empty_section: []}
+    assert service.radio_catalog(force_refresh=True) == {**expected, "error": "catalog_unreachable"}
+    event = service.diagnostics()["events"][-1]
+    assert event["kind"] == "radio_error"
+    assert event["detail"] == "catalog_incomplete"
+    monkeypatch.setattr(rb, empty_section, lambda: complete[empty_section])
+    assert service.radio_catalog() == complete

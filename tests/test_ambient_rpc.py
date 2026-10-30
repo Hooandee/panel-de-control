@@ -34,6 +34,31 @@ def test_state_and_save_roundtrip(host):
     assert saved["music"]["inGameRadio"] == "pause"
 
 
+def test_radio_catalog_retry_reaches_service_without_breaking_no_argument_calls(host, monkeypatch):
+    refreshes = []
+
+    def catalog(self, force_refresh=False):
+        refreshes.append(force_refresh)
+        return {"countries": [], "tags": []}
+
+    monkeypatch.setattr(AmbientService, "radio_catalog", catalog)
+    assert run(host.get_ambient_radio_catalog()) == {"countries": [], "tags": []}
+    run(host.get_ambient_radio_catalog(True))
+    run(host.get_ambient_radio_catalog("false"))
+    assert refreshes == [False, True, False]
+
+
+def test_radio_search_transport_failure_survives_rpc_for_retry_ui(host, monkeypatch):
+    from ambient.adapters.radio_browser import RadioBrowserError
+
+    def discover(self, filters):
+        raise RadioBrowserError("de1.api.radio-browser.info", "TimeoutError")
+
+    monkeypatch.setattr(AmbientService, "discover_radio", discover)
+    with pytest.raises(RadioBrowserError):
+        run(host.discover_ambient_radio({"country": "JP"}))
+
+
 def test_scan_then_url(host):
     scanned = run(host.scan_ambient_sources())
     media_id = scanned["collections"]["known.images"][0]["id"]

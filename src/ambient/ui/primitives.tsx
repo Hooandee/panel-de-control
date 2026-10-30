@@ -114,7 +114,7 @@ export const Swatch: FC<{ background: string; image?: string | null }> = ({ back
   }} />
 );
 
-export const Segmented: FC<{ options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }> = ({ options, value, onChange }) => (
+export const Segmented: FC<{ options: { value: string; label: string }[]; value: string; onChange: (value: string) => void; centerLabels?: boolean }> = ({ options, value, onChange, centerLabels = false }) => (
   <Focusable flow-children="row" style={{ display: "grid", gridTemplateColumns: `repeat(${options.length}, 1fr)`, gap: 3, padding: 3, borderRadius: theme.radius.sm, background: "rgba(255,255,255,0.05)" }}>
     {options.map((option) => {
       const active = option.value === value;
@@ -124,6 +124,7 @@ export const Segmented: FC<{ options: { value: string; label: string }[]; value:
           onActivate={() => onChange(option.value)}
           onClick={() => onChange(option.value)}
           style={{
+            ...(centerLabels ? { display: "flex", alignItems: "center", justifyContent: "center" } : {}),
             fontSize: theme.font.caption,
             textAlign: "center",
             padding: "7px 2px",

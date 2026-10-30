@@ -18,6 +18,8 @@ const rpcMock = vi.hoisted(() => ({
   resolveAmbientRadio: vi.fn(async () => null),
   getAmbientSuggestedStations: vi.fn(async () => []),
   searchAmbientRadio: vi.fn(async () => []),
+  getAmbientRadioCatalog: vi.fn(),
+  discoverAmbientRadio: vi.fn(),
   optimizeAmbientMedia: vi.fn(),
   addAmbientFolder: vi.fn(),
   addAmbientFavorite: vi.fn(),
@@ -60,7 +62,49 @@ function ports(inGame = false) {
 }
 
 describe("AmbientRuntime", () => {
+  it("retries a failed radio catalog instead of remembering an empty catalog", async () => {
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    const catalog = { countries: [{ code: "JP", name: "Japan", count: 3 }], tags: [] };
+    rpcMock.getAmbientRadioCatalog.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(catalog);
+    await expect(runtime.radioCatalog()).rejects.toThrow("offline");
+    await expect(runtime.radioCatalog(true)).resolves.toEqual(catalog);
+    expect(rpcMock.getAmbientRadioCatalog).toHaveBeenLastCalledWith(true);
+  });
+
+  it("keeps a successful empty radio search distinct from a failed request", async () => {
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    rpcMock.discoverAmbientRadio.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([]);
+    await expect(runtime.discoverRadio({ country: "JP" })).rejects.toThrow("offline");
+    await expect(runtime.discoverRadio({ country: "JP" })).resolves.toEqual([]);
+  });
+
+  it("does not retain a degraded catalog after the network recovers", async () => {
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    const degraded = { countries: [], tags: [], error: "catalog_unreachable" };
+    const recovered = { countries: [{ code: "JP", name: "Japan", count: 3 }], tags: [] };
+    rpcMock.getAmbientRadioCatalog.mockResolvedValueOnce(degraded).mockResolvedValueOnce(recovered);
+    await expect(runtime.radioCatalog()).resolves.toEqual(degraded);
+    await expect(runtime.radioCatalog()).resolves.toEqual(recovered);
+    expect(rpcMock.getAmbientRadioCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let an older catalog failure evict the successful retry", async () => {
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    let rejectOld!: (error: Error) => void;
+    const catalog = { countries: [], tags: [] };
+    rpcMock.getAmbientRadioCatalog.mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject; })).mockResolvedValueOnce(catalog);
+    const old = runtime.radioCatalog();
+    const rejected = expect(old).rejects.toThrow("old failure");
+    await expect(runtime.radioCatalog(true)).resolves.toEqual(catalog);
+    rejectOld(new Error("old failure"));
+    await rejected;
+    await expect(runtime.radioCatalog()).resolves.toEqual(catalog);
+    expect(rpcMock.getAmbientRadioCatalog).toHaveBeenCalledTimes(2);
+  });
+
   beforeEach(() => {
+    rpcMock.getAmbientRadioCatalog.mockReset();
+    rpcMock.discoverAmbientRadio.mockReset();
     rpcMock.saveAmbientSettings.mockImplementation(async (s) => s);
     rpcMock.reconcileAmbientCache.mockResolvedValue(false);
     document.body.innerHTML = '<div class="h-BasicHome"><section></section></div>';
