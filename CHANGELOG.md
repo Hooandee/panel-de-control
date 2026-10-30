@@ -5,9 +5,29 @@
 ## [0.81.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.0...panel-de-control-v0.81.1) (2026-10-30)
 
 
-### Bug Fixes
+### Español
 
-* **ambient:** stop the library from shrinking until it vanishes ([#1057](https://github.com/Hooandee/panel-de-control/issues/1057)) ([c3eeeed](https://github.com/Hooandee/panel-de-control/commit/c3eeeed6f9b9ebd22b397dc9180d523aac322b6b))
+* **La biblioteca de Ambiente ya no se encoge:** Al abrir la biblioteca de fotos, la ventana podía hacerse pequeña sola hasta desaparecer. Ahora se abre a su tamaño y se queda así.
+
+### English
+
+* **The Ambient library no longer shrinks:** Opening the photo library could make the window shrink by itself until it disappeared. It now opens at full size and stays that way.
+
+### Italiano
+
+* **La libreria di Atmosfera non si rimpicciolisce più:** Aprendo la libreria delle foto, la finestra poteva rimpicciolirsi da sola fino a sparire. Ora si apre a dimensione piena e resta così.
+
+### Deutsch
+
+* **Die Ambiente-Bibliothek schrumpft nicht mehr:** Beim Öffnen der Fotobibliothek konnte das Fenster von selbst immer kleiner werden, bis es verschwand. Jetzt öffnet es sich in voller Größe und bleibt so.
+
+### Português (Brasil)
+
+* **A biblioteca do Ambiente não encolhe mais:** Ao abrir a biblioteca de fotos, a janela podia encolher sozinha até sumir. Agora ela abre no tamanho certo e continua assim.
+
+### Français
+
+* **La bibliothèque d'Ambiance ne rétrécit plus :** En ouvrant la bibliothèque de photos, la fenêtre pouvait rétrécir toute seule jusqu'à disparaître. Elle s'ouvre maintenant en taille normale et le reste.
 
 ## [0.81.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.80.3...panel-de-control-v0.81.0) (2026-10-30)
 
