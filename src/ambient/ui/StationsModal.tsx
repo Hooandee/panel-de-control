@@ -206,7 +206,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   const playing = snapshot.player.track && trackSource(snapshot.player.track) === "radio" ? snapshot.player.track : null;
   const countryOptions = [
     { data: "", label: t("ambient.stations.allCountries") },
-    ...catalog.countries.map((c) => ({ data: c.code, label: `${regionName(c.code, c.name)} · ${c.count}` })),
+    ...catalog.countries.map((c) => ({ data: c.code, label: `${regionName(c.code, c.name)} (${c.count})` })),
   ];
   const extraTags = catalog.tags.filter((tag) => !MOODS.some((m) => m.tag === tag.name)).slice(0, 48);
   const orderOptions: { value: RadioOrder; label: string }[] = [
@@ -216,7 +216,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   ];
   const mood = MOODS.find((m) => m.tag === filters.tag);
   const styleLabel = mood ? t(`ambient.mood.${mood.id}`) : filters.tag ?? null;
-  const heading = [filters.country ? regionName(filters.country, filters.country) : null, styleLabel].filter(Boolean).join(" · ") || t("ambient.stations.worldwide");
+  const heading = [filters.country ? regionName(filters.country, filters.country) : null, styleLabel].filter(Boolean).join(", ") || t("ambient.stations.worldwide");
 
   const row = (station: Station) => {
     const favorite = runtime.isFavoriteStation(station);
@@ -249,7 +249,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
           { value: "discover", label: t("ambient.lib.tab.radio") },
           { value: "links", label: t("ambient.lib.tab.links") },
           { value: "lists", label: t("ambient.lists.title") },
-          { value: "queue", label: snapshot.player.queue.length ? `${t("ambient.queue.title")} · ${snapshot.player.queue.length}` : t("ambient.queue.title") },
+          { value: "queue", label: snapshot.player.queue.length ? `${t("ambient.queue.title")} (${snapshot.player.queue.length})` : t("ambient.queue.title") },
         ].filter((option) => purpose === "playback" || option.value === "music" || option.value === "links")} onChange={(value) => setTab(value as LibraryTab)} />
       </div>
     </div>

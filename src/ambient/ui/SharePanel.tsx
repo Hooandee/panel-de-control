@@ -9,6 +9,7 @@ import type { AmbientRuntime } from "../steam/runtime";
 import { Button } from "./primitives";
 
 const POLL_MS = 1000;
+const QR_PX = 148;
 const PAGE_KEYS = ["title", "hint", "placeholder", "send", "sent", "none", "expired", "error"] as const;
 
 const Qr: FC<{ text: string }> = ({ text }) => {
@@ -16,7 +17,7 @@ const Qr: FC<{ text: string }> = ({ text }) => {
   const quiet = 3;
   return (
     <svg role="img" aria-label={text} viewBox={`${-quiet} ${-quiet} ${size + quiet * 2} ${size + quiet * 2}`} shapeRendering="crispEdges"
-      style={{ width: "100%", maxWidth: 220, aspectRatio: "1", background: "#fff", borderRadius: 12 }}>
+      width={QR_PX} height={QR_PX} style={{ width: QR_PX, height: QR_PX, flexShrink: 0, background: "#fff", borderRadius: 12 }}>
       <path d={path} fill="#000" />
     </svg>
   );
@@ -62,7 +63,7 @@ export const SharePanel: FC<{ runtime: AmbientRuntime; onClose: () => void }> = 
 
   const remaining = session && "url" in session ? Math.max(0, Math.round((session.endsAt - now) / 1000)) : 0;
   return (
-    <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.sm, flex: 1, minHeight: 0, textAlign: "center" }}>
+    <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1, minHeight: 0, overflowY: "auto", textAlign: "center" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 700, color: theme.color.textPrimary }}>
         <LuSmartphone size={18} style={{ color: theme.color.accent }} /> {t("ambient.share.title")}
       </div>

@@ -128,7 +128,7 @@ export function gameName(appid: string): string {
 }
 
 export function stationSubtitle(station: Station): string {
-  return [station.country, station.tags[0], station.bitrate ? `${station.bitrate} kbps` : ""].filter(Boolean).join(" · ");
+  return [station.country, station.tags[0], station.bitrate ? `${station.bitrate} kbps` : ""].filter(Boolean).join(", ");
 }
 
 export function favoriteToStation(favorite: { id: string; name: string; url: string; art?: string; subtitle?: string }): Station {

@@ -49,7 +49,7 @@ export const QueueTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
           <RepeatButton repeat={player.repeat} onChange={(repeat) => runtime.setRepeat(repeat)} />
         </Focusable>
         <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {moving ? t("ambient.queue.moving") : t(`ambient.repeat.${player.repeat}`) + (queue.length ? ` · ${t("ambient.queue.count", { n: String(queue.length) })}` : "")}
+          {moving ? t("ambient.queue.moving") : queue.length ? t("ambient.queue.count", { n: String(queue.length) }) : ""}
         </span>
         {!sharing && <Button label={<><LuSmartphone size={14} /> {t("ambient.share.open")}</>} onActivate={() => setSharing(true)} />}
         {queue.length > 1 && <Button label={<><LuListX size={14} /> {t("ambient.queue.clear")}</>} onActivate={() => runtime.clearQueue()} />}
