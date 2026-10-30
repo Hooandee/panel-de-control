@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## [0.81.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.1...panel-de-control-v0.81.2) (2026-10-30)
+
+
+### Español
+
+* **Radio más fiable:** Si el servicio de emisoras falla, Ambiente ya no te dice que no hay resultados. Lo vuelve a intentar solo y, si sigue sin responder, te deja un botón para reintentar sin perder tus filtros. Además ahora suenan más emisoras.
+* **Mapa de emisoras con el mando:** Entras al mapa con A y sales con B, y moverte entre el mapa y los filtros funciona como esperas.
+
+### English
+
+* **More reliable radio:** If the station service fails, Ambient no longer tells you there are no results. It tries again on its own and, if it still doesn't answer, gives you a button to retry without losing your filters. More stations play now too.
+* **Station map with the controller:** Press A to enter the map and B to leave it, and moving between the map and the filters works as you'd expect.
+
+### Italiano
+
+* **Radio più affidabile:** Se il servizio delle stazioni non risponde, Atmosfera non ti dice più che non ci sono risultati. Riprova da sola e, se ancora non risponde, ti lascia un pulsante per riprovare senza perdere i filtri. Inoltre ora si possono ascoltare più stazioni.
+* **Mappa delle stazioni con il controller:** Entri nella mappa con A ed esci con B, e spostarti tra la mappa e i filtri funziona come ti aspetti.
+
+### Deutsch
+
+* **Zuverlässigeres Radio:** Wenn der Senderdienst ausfällt, zeigt Ambiente nicht mehr „keine Ergebnisse“ an. Es versucht es selbst noch einmal und bietet dir, falls weiterhin keine Antwort kommt, eine Schaltfläche zum erneuten Versuchen, ohne deine Filter zu verlieren. Außerdem laufen jetzt mehr Sender.
+* **Senderkarte mit dem Controller:** Mit A gehst du in die Karte, mit B wieder heraus, und der Wechsel zwischen Karte und Filtern funktioniert wie erwartet.
+
+### Português (Brasil)
+
+* **Rádio mais confiável:** Se o serviço de estações falhar, o Ambiente não diz mais que não há resultados. Ele tenta de novo sozinho e, se continuar sem resposta, mostra um botão para tentar outra vez sem perder seus filtros. Além disso, agora tocam mais estações.
+* **Mapa de estações no controle:** Você entra no mapa com A e sai com B, e passar do mapa para os filtros funciona como esperado.
+
+### Français
+
+* **Radio plus fiable :** Si le service des stations ne répond pas, Ambiance ne vous dit plus qu'il n'y a aucun résultat. Il réessaie tout seul et, s'il ne répond toujours pas, vous propose un bouton pour réessayer sans perdre vos filtres. Davantage de stations fonctionnent aussi.
+* **Carte des stations à la manette :** Vous entrez dans la carte avec A et en sortez avec B, et passer de la carte aux filtres fonctionne comme prévu.
+
 ## [0.81.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.0...panel-de-control-v0.81.1) (2026-10-30)
 
 
