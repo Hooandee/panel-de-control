@@ -96,6 +96,62 @@ describe("AmbientRuntime", () => {
     return { runtime, audio };
   }
 
+  function audioStub() {
+    const audio = document.createElement("audio");
+    vi.spyOn(audio, "play").mockImplementation(async () => { audio.dispatchEvent(new Event("playing")); });
+    vi.spyOn(audio, "pause").mockImplementation(() => { audio.dispatchEvent(new Event("pause")); });
+    vi.spyOn(audio, "load").mockImplementation(() => undefined);
+    vi.stubGlobal("Audio", function () { return audio; });
+    return audio;
+  }
+
+  it("puts the saved queue back as it was, resolving local songs again", async () => {
+    const configured = settings();
+    configured.music.enabled = true;
+    configured.music.source = "music";
+    configured.music.repeat = "one";
+    configured.music.queue = [
+      { id: "local:song", url: "http://127.0.0.1:1/m/old/local%3Asong", title: "Song", subtitle: "", art: "", kind: "audio", live: false },
+      { id: "remote:https://s.test/live", url: "https://s.test/live", title: "Live", subtitle: "", art: "", kind: "audio", live: true },
+    ];
+    configured.music.lastTrack = { id: "remote:https://s.test/live", position: 0 };
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.waitFor(() => expect(runtime.getSnapshot().player.track?.id).toBe("remote:https://s.test/live"));
+      const player = runtime.getSnapshot().player;
+      expect(player.queue.map((q) => q.track.url)).toEqual(["http://127.0.0.1:1/m/t/local:song", "https://s.test/live"]);
+      expect(player.repeat).toBe("one");
+    } finally { runtime.stop(); }
+  });
+
+  it("saves queue changes, never an empty queue before anything played", async () => {
+    vi.useFakeTimers();
+    const configured = settings();
+    configured.music.enabled = false;
+    configured.music.queue = [{ id: "remote:https://s.test/a", url: "https://s.test/a", title: "A", subtitle: "", art: "", kind: "audio", live: false }];
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(rpcMock.saveAmbientSettings).not.toHaveBeenCalledWith(expect.objectContaining({ music: expect.objectContaining({ queue: [] }) }));
+      runtime.enqueue([
+        { id: "remote:https://s.test/b", title: "B", subtitle: "", art: "", url: "https://s.test/b", live: false },
+        { id: "remote:https://s.test/c", title: "C", subtitle: "", art: "", url: "https://s.test/c", live: false },
+      ]);
+      runtime.setShuffle(true);
+      await vi.advanceTimersByTimeAsync(2000);
+      const calls = rpcMock.saveAmbientSettings.mock.calls;
+      const saved = calls[calls.length - 1]?.[0] as AmbientSettings;
+      expect(saved.music.queue.map((q) => q.id).sort()).toEqual(["remote:https://s.test/b", "remote:https://s.test/c"]);
+      expect(saved.music.shuffle).toBe(true);
+    } finally { runtime.stop(); }
+  });
+
   it("does not cache a NASA failure and preserves credits when the feed recovers", async () => {
     const { runtime } = await libraryFixture();
     try {

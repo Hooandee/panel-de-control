@@ -2,6 +2,17 @@ export type ClaimOwner = "panel" | "theme" | "other";
 export type InGameAction = "pause" | "continue" | "duck";
 export type GameArtMode = "mine" | "blend" | "game";
 export type MediaKind = "image" | "video" | "audio";
+export type RepeatMode = "all" | "one" | "off";
+
+export interface QueuedTrack {
+  id: string;
+  url: string;
+  title: string;
+  subtitle: string;
+  art: string;
+  kind: "audio" | "video";
+  live: boolean;
+}
 
 export interface AmbientSettings {
   version: 1;
@@ -47,6 +58,10 @@ export interface AmbientSettings {
     inGameGameLevel: number;
     folders: string[];
     lastTrack: { id: string; position: number } | null;
+    repeat: RepeatMode;
+    shuffle: boolean;
+    /** What was queued, in play order; local songs are resolved again because their URL carries a session token. */
+    queue: QueuedTrack[];
     stationId: string | null;
   };
   collections: { removedSuggested: string[]; favorites: Favorite[]; folders: string[] };

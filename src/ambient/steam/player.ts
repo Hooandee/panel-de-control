@@ -1,5 +1,7 @@
 import { playbackProblem } from "../core/playbackErrors";
 import { nextRetryDelay } from "../core/playbackPolicy";
+import * as playQueue from "../core/playQueue";
+import type { QueueState, RepeatMode } from "../core/playQueue";
 import { parseEmbedStream } from "../core/streams";
 import { canShowVideo, isHls, parseYouTube } from "../core/youtube";
 import type { VideoBounds } from "./videoFrame";
@@ -29,11 +31,19 @@ export interface PlayerSnapshot {
   video: boolean;
   /** False once the stream proved to carry sound only, so there is no picture to show. */
   picture: boolean;
+  queue: QueueItem[];
+  queueIndex: number;
+  repeat: RepeatMode;
+  shuffle: boolean;
+}
+
+export interface QueueItem {
+  key: string;
+  track: Track;
 }
 
 export interface PlayerCheckpoint {
-  queue: Track[];
-  index: number;
+  queue: QueueState<Track>;
   snapshot: PlayerSnapshot;
   playing: boolean;
   videoMode: boolean;
@@ -65,14 +75,13 @@ export class AmbientPlayer {
   private video: ReturnType<VideoFactory> | null = null;
   private videoMode = false;
   private active: MediaLike | null = null;
-  private queue: Track[] = [];
-  private index = 0;
+  private queue: QueueState<Track> = playQueue.emptyQueue();
   private volume = 0.5;
   private scale = 1;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<Listener>();
-  private snapshot: PlayerSnapshot = { status: "idle", track: null, volume: 0.5, error: null, position: 0, duration: null, video: false, picture: true };
+  private snapshot: PlayerSnapshot = { status: "idle", track: null, volume: 0.5, error: null, position: 0, duration: null, video: false, picture: true, queue: [], queueIndex: 0, repeat: "all", shuffle: false };
   private lastTimeEmit = 0;
   private wantPlaying = false;
   private disposed = false;
@@ -130,7 +139,7 @@ export class AmbientPlayer {
     element.addEventListener("pause", () => {
       if (mine() && !this.wantPlaying && this.snapshot.status !== "error") this.emit({ status: "paused" });
     });
-    element.addEventListener("ended", () => mine() && this.next());
+    element.addEventListener("ended", () => mine() && this.advance("ended"));
     element.addEventListener("picturechange", () => mine() && this.emit({ picture: (element as { hasPicture?: boolean }).hasPicture !== false }));
     element.addEventListener("timeupdate", () => {
       if (!mine()) return;
@@ -165,7 +174,7 @@ export class AmbientPlayer {
     this.wantPlaying = false;
     this.emit({ status: "error", error: `media_error_${code}` });
     this.onError(`${trackSource(track)}:media_error_${code}`);
-    if (!track.live && this.queue.length > 1) this.next();
+    if (!track.live && this.queue.entries.length > 1) this.advance("skip");
   }
 
   private clearRetry(): void {
@@ -195,14 +204,103 @@ export class AmbientPlayer {
   playQueue(tracks: Track[], startIndex = 0, position = 0, videoMode = this.videoMode): void {
     if (tracks.length === 0) return;
     this.videoMode = videoMode;
-    this.queue = tracks;
-    this.index = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    this.setQueue(playQueue.fromItems(this.queue, tracks, startIndex));
     this.attempt = 0;
-    this.load(tracks[this.index], position);
+    this.load(this.queue.entries[this.queue.position].item, position);
+  }
+
+  /** Adds to the queue; with nothing loaded the first added track starts. */
+  enqueue(tracks: Track[], where: "end" | "next" = "end"): void {
+    if (!tracks.length) return;
+    const idle = !this.snapshot.track;
+    this.setQueue(playQueue.enqueue(idle ? playQueue.clear(this.queue) : this.queue, tracks, where));
+    if (idle) this.playPosition(0);
+  }
+
+  playEntry(key: string): void {
+    const index = playQueue.indexOfKey(this.queue, key);
+    if (index >= 0) this.playPosition(index);
+  }
+
+  removeEntry(key: string): void {
+    const { state, currentChanged } = playQueue.remove(this.queue, key);
+    this.setQueue(state);
+    if (!currentChanged) return;
+    const next = playQueue.current(state);
+    if (next && this.wantPlaying) this.load(next.item);
+    else if (!next) this.stopAt(null);
+    else this.emit({ track: next.item, position: 0, duration: null, status: "paused" });
+  }
+
+  moveEntry(key: string, to: number): void {
+    this.setQueue(playQueue.move(this.queue, key, to));
+  }
+
+  clearQueue(): void {
+    const playing = playQueue.current(this.queue);
+    this.setQueue(playing ? { ...this.queue, entries: [playing], position: 0, original: this.queue.shuffle ? [playing.key] : null } : playQueue.clear(this.queue));
+  }
+
+  setRepeat(repeat: RepeatMode): void {
+    this.setQueue(playQueue.setRepeat(this.queue, repeat));
+  }
+
+  setShuffle(on: boolean): void {
+    this.setQueue(playQueue.setShuffle(this.queue, on));
+  }
+
+  /** Puts a saved queue back exactly as it was, without mixing it again. */
+  restoreQueue(tracks: Track[], startIndex: number, position: number, repeat: RepeatMode, shuffle: boolean): void {
+    if (!tracks.length) return;
+    const restored = playQueue.fromItems({ ...playQueue.emptyQueue<Track>(repeat), shuffle: false }, tracks, startIndex);
+    this.setQueue({ ...restored, shuffle });
+    this.attempt = 0;
+    this.load(this.queue.entries[this.queue.position].item, position);
+  }
+
+  /** Repeat and shuffle chosen before anything plays, e.g. restored from settings. */
+  setModes(repeat: RepeatMode, shuffle: boolean): void {
+    this.setQueue({ ...playQueue.setShuffle(this.queue, shuffle), repeat });
+  }
+
+  private setQueue(queue: QueueState<Track>): void {
+    this.queue = queue;
+    this.emit({
+      queue: queue.entries.map((entry) => ({ key: entry.key, track: entry.item })),
+      queueIndex: queue.position,
+      repeat: queue.repeat,
+      shuffle: queue.shuffle,
+    });
+  }
+
+  private playPosition(position: number): void {
+    this.setQueue(playQueue.goTo(this.queue, position));
+    this.attempt = 0;
+    this.load(this.queue.entries[this.queue.position].item);
+  }
+
+  private advance(reason: "ended" | "skip"): void {
+    const next = playQueue.nextPosition(this.queue, reason);
+    if (next === null) return this.stopAt(this.snapshot.track);
+    this.playPosition(next);
+  }
+
+  /** The queue ran out with repeat off: stay on the last track, paused at its start. */
+  private stopAt(track: Track | null): void {
+    this.wantPlaying = false;
+    this.clearRetry();
+    this.active?.pause();
+    if (!track) {
+      const active = this.active;
+      this.active = null;
+      if (active) this.silence(active);
+    }
+    this.pendingPosition = track ? 0 : null;
+    this.emit({ track, status: track ? "paused" : "idle", position: 0, video: false });
   }
 
   checkpoint(): PlayerCheckpoint {
-    return { queue: this.queue.map((track) => ({ ...track })), index: this.index,
+    return { queue: { ...this.queue, entries: this.queue.entries.map((e) => ({ key: e.key, item: { ...e.item } })) },
       snapshot: { ...this.snapshot, track: this.snapshot.track && { ...this.snapshot.track }, position: this.position() },
       playing: this.wantPlaying, videoMode: this.videoMode, scale: this.scale };
   }
@@ -215,8 +313,7 @@ export class AmbientPlayer {
     const active = this.active;
     this.active = null;
     if (active) this.silence(active);
-    this.queue = saved.queue.map((track) => ({ ...track }));
-    this.index = saved.index;
+    this.queue = { ...saved.queue, entries: saved.queue.entries.map((e) => ({ key: e.key, item: { ...e.item } })) };
     this.volume = saved.snapshot.volume;
     this.videoMode = saved.videoMode;
     this.scale = saved.scale;
@@ -227,17 +324,16 @@ export class AmbientPlayer {
   }
 
   next(): void {
-    if (this.queue.length === 0) return;
+    if (this.queue.entries.length === 0) return;
     if (this.stepList("next")) return;
-    this.index = (this.index + 1) % this.queue.length;
-    this.load(this.queue[this.index]);
+    this.advance("skip");
   }
 
   previous(): void {
-    if (this.queue.length === 0) return;
+    if (this.queue.entries.length === 0) return;
     if (this.stepList("previous")) return;
-    this.index = (this.index - 1 + this.queue.length) % this.queue.length;
-    this.load(this.queue[this.index]);
+    const previous = playQueue.previousPosition(this.queue);
+    if (previous !== null) this.playPosition(previous);
   }
 
   private stepList(direction: "next" | "previous"): boolean {

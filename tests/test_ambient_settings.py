@@ -88,3 +88,18 @@ def test_a_fresh_install_leaves_steam_home_untouched_until_the_background_is_swi
     fresh = normalize_settings({})
     assert fresh["background"]["enabled"] is False
     assert fresh["background"]["collections"] == ["suggested.library"]
+
+
+def test_queue_and_play_modes_are_kept_only_when_valid():
+    good = {"id": "local:abc", "url": "http://127.0.0.1:1/m/t/local%3Aabc", "title": "Song", "subtitle": "", "art": "", "kind": "audio", "live": False}
+    out = normalize_settings({"version": 1, "music": {
+        "repeat": "one", "shuffle": True,
+        "queue": [good, {"id": "x", "url": "file:///etc/passwd"}, "nope", {**good, "id": "remote:https://a.test/s", "url": "https://a.test/s", "kind": "bogus", "live": True, "art": "javascript:x"}] + [good] * 300,
+    }})
+    music = out["music"]
+    assert music["repeat"] == "one" and music["shuffle"] is True
+    assert music["queue"][0] == good
+    assert music["queue"][1] == {**good, "id": "remote:https://a.test/s", "url": "https://a.test/s", "kind": "audio", "live": True, "art": ""}
+    assert len(music["queue"]) == 200
+    defaults = normalize_settings({"version": 1, "music": {"repeat": "sometimes", "queue": "x"}})["music"]
+    assert defaults["repeat"] == "all" and defaults["shuffle"] is False and defaults["queue"] == []

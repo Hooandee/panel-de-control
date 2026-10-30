@@ -9,7 +9,7 @@ import { motionFor, type MotionState } from "../core/powerPolicy";
 import { needsCopy, videoTarget } from "../core/videoQuality";
 import { gameVolumeTarget, planForGameState } from "../core/playbackPolicy";
 import { advance, createRotation, shouldAdvance, type RotationState } from "../core/rotation";
-import type { AmbientSettings, ClaimOwner, MediaKind, Channel, PlaylistContents, RadioCatalog, RadioFilters, Station } from "../core/types";
+import type { AmbientSettings, ClaimOwner, MediaKind, Channel, PlaylistContents, QueuedTrack, RadioCatalog, RadioFilters, RepeatMode, Station } from "../core/types";
 import { AudioLoaderBridge } from "./audioLoader";
 import { BackgroundLayer } from "./backgroundLayer";
 import { GameMediaDirector, ThemeAudio, type GameMedia } from "./gameMedia";
@@ -99,6 +99,7 @@ const CLAIM_CHECK_MS = 30000;
 const POSITION_SAVE_MS = 15000;
 const RESUME_TICK_MS = 2000;
 const CACHE_RECONCILE_MS = 60000;
+const QUEUE_SAVE_MS = 1500;
 /** Right after a loader restart the backend can still be starting; the domain keeps asking instead of staying dark. */
 const BACKEND_RETRY_MS = [3000, 10000, 30000];
 // Themes remount (plugin reloads, CSS Loader resets) and reclaim a moment later; a painter only
@@ -190,6 +191,9 @@ export class AmbientRuntime {
   private mountRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private backendRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private backendRetries = 0;
+  private queueSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private savedQueue = "";
+  private queueLoaded = false;
   private saveChain: Promise<void> = Promise.resolve();
   private saveSequence = 0;
   private librarySession: LibrarySession | null = null;
@@ -251,6 +255,7 @@ export class AmbientRuntime {
     this.cleanups.push(this.player.subscribe((player) => {
       if (!player.video && this.snapshot.videoFullscreen) this.setVideoFullscreen(false);
       this.patch({ player });
+      this.scheduleQueueSave(player);
     }));
     this.cleanups.push(this.channel.onClaimsChanged(() => {
       this.claimChangedAt = Date.now();
@@ -298,6 +303,10 @@ export class AmbientRuntime {
     if (!await this.reconcileCache()) await this.reload();
     if (this.stopped) return;
     const settings = this.settings();
+    if (settings) {
+      this.savedQueue = queueSignature(settings.music.queue, settings.music.repeat, settings.music.shuffle);
+      this.player.setModes(settings.music.repeat, settings.music.shuffle);
+    }
     if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
   }
 
@@ -310,6 +319,7 @@ export class AmbientRuntime {
     for (const cleanup of this.cleanups.splice(0)) cleanup();
     if (this.mountRetryTimer !== null) clearTimeout(this.mountRetryTimer);
     if (this.backendRetryTimer !== null) clearTimeout(this.backendRetryTimer);
+    if (this.queueSaveTimer !== null) clearTimeout(this.queueSaveTimer);
     if (this.signalTimer !== null) clearTimeout(this.signalTimer);
     this.layer.dispose();
     this.channel.reset();
@@ -583,7 +593,15 @@ export class AmbientRuntime {
         if (visuals.length === 1) await this.useBackground(visuals[0], persist);
         else await this.useBackgroundSelection(visuals, persist);
       } else {
-        if (items.length !== 1) throw new Error("invalid_playback_selection");
+        if (items.length > 1) {
+          const tracks = await this.tracksFor(items);
+          if (this.librarySession !== session) throw new Error("library_closed");
+          if (!tracks.length) throw new Error("media_unavailable");
+          this.playTracks(tracks);
+          console.info(`[Ambient library] save:${purpose}`);
+          this.finishLibrarySession(session, false);
+          return;
+        }
         const item = items[0];
         const track = await this.libraryTrack(item);
         if (this.librarySession !== session) throw new Error("library_closed");
@@ -1030,6 +1048,7 @@ export class AmbientRuntime {
     if (!settings) return;
     this.player.setVolume(settings.music.volume);
     this.player.setVideoMode(settings.music.videoOn);
+    if (settings.music.queue.length && await this.restoreSavedQueue(settings)) return;
     if (settings.music.source === "radio") {
       const station = this.currentStation
         ?? [...settings.radio.favorites, ...settings.collections.favorites].map(favoriteToStation).find((s) => s.id === settings.music.stationId)
@@ -1112,6 +1131,79 @@ export class AmbientRuntime {
   }
 
   /** What the user puts on wins over the selected game's soundtrack until another game is selected. */
+  private scheduleQueueSave(player: PlayerSnapshot): void {
+    if (this.librarySession || this.stopped || !this.snapshot.state) return;
+    if (!this.queueLoaded && !player.track) return;
+    this.queueLoaded = true;
+    const queue = player.queue.map(({ track }) => toQueued(track));
+    const signature = queueSignature(queue, player.repeat, player.shuffle);
+    if (signature === this.savedQueue) return;
+    if (this.queueSaveTimer !== null) clearTimeout(this.queueSaveTimer);
+    this.queueSaveTimer = setTimeout(() => {
+      this.queueSaveTimer = null;
+      if (this.stopped || this.librarySession) return;
+      this.savedQueue = signature;
+      void this.updateSettings((s) => ({ ...s, music: { ...s.music, queue, repeat: player.repeat, shuffle: player.shuffle } }));
+    }, QUEUE_SAVE_MS);
+  }
+
+  private async restoreSavedQueue(settings: AmbientSettings): Promise<boolean> {
+    const tracks = (await Promise.all(settings.music.queue.map((entry) => this.queuedTrack(entry)))).filter((t): t is Track => t !== null);
+    if (!tracks.length || this.stopped || this.librarySession) return false;
+    const last = settings.music.lastTrack;
+    const start = last ? Math.max(0, tracks.findIndex((t) => t.id === last.id)) : 0;
+    const position = last && tracks[start]?.id === last.id && !tracks[start].live ? last.position : 0;
+    this.player.restoreQueue(tracks, start, position, settings.music.repeat, settings.music.shuffle);
+    this.render();
+    return true;
+  }
+
+  private async queuedTrack(entry: QueuedTrack): Promise<Track | null> {
+    const url = entry.id.startsWith("local:") ? await rpc.getAmbientMediaUrl(entry.id).catch(() => null) : entry.url;
+    return url ? { id: entry.id, title: entry.title, subtitle: entry.subtitle, art: entry.art, url, live: entry.live, kind: entry.kind } : null;
+  }
+
+  /** Queues tracks; with nothing loaded the first one starts. */
+  enqueue(tracks: Track[], where: "end" | "next" = "end"): void {
+    if (!tracks.length || this.stopped) return;
+    this.preferUserMusic();
+    const starts = !this.player.getSnapshot().track;
+    this.player.enqueue(tracks, where);
+    if (starts) void this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: true } }));
+  }
+
+  /** Library items (songs, videos, links) as tracks, in the order given; missing ones are skipped. */
+  async tracksFor(items: LibraryMediaItem[]): Promise<Track[]> {
+    const tracks = await Promise.all(items.map((item) => this.libraryTrack(item).catch(() => null)));
+    return tracks.filter((t): t is Track => t !== null);
+  }
+
+  /** Plays a whole folder (or My music) from its first song. */
+  async playCollection(collection: string, where: "now" | "end" = "now"): Promise<boolean> {
+    const scan = this.snapshot.scan;
+    const media = scan?.library?.[collection] ?? (collection === "known.music" ? scan?.music : scan?.collections[collection]) ?? [];
+    const tracks = await this.tracksFor(media.filter((m) => m.kind !== "image").map((m) => ({ ref: m.id, name: m.name.replace(/\.[^.]+$/, ""), kind: m.kind, collection })));
+    if (!tracks.length || this.stopped) return false;
+    if (where === "end") this.enqueue(tracks);
+    else this.playTracks(tracks);
+    return true;
+  }
+
+  playTracks(tracks: Track[], start = 0): void {
+    if (!tracks.length || this.stopped) return;
+    this.preferUserMusic();
+    this.currentStation = null;
+    this.player.playQueue(tracks, start, 0, tracks[start]?.kind === "video" || this.player.getSnapshot().video);
+    void this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: true, source: "music" } }));
+  }
+
+  playQueueEntry(key: string): void { this.player.playEntry(key); }
+  removeQueueEntry(key: string): void { this.player.removeEntry(key); }
+  moveQueueEntry(key: string, to: number): void { this.player.moveEntry(key, to); }
+  clearQueue(): void { this.player.clearQueue(); }
+  setRepeat(repeat: RepeatMode): void { this.player.setRepeat(repeat); }
+  setShuffle(on: boolean): void { this.player.setShuffle(on); }
+
   private preferUserMusic(): void {
     this.themeSilencedFor = this.lastSelectedAppId;
     this.themePausedMusic = false;
@@ -1230,8 +1322,8 @@ export class AmbientRuntime {
     if (this.snapshot.libraryOpen) return;
     const track = this.snapshot.player.track;
     const settings = this.settings();
-    if (!track || track.live || !settings) return;
-    const position = this.player.position();
+    if (!track || !settings) return;
+    const position = track.live ? 0 : this.player.position();
     if (settings.music.lastTrack?.id === track.id && Math.abs(settings.music.lastTrack.position - position) < 5) return;
     void this.updateSettings((s) => ({ ...s, music: { ...s.music, lastTrack: { id: track.id, position } } }));
   }
@@ -1426,4 +1518,12 @@ function liveStream(url: string): boolean {
   if (parseYouTube(url)) return false;
   const embed = parseEmbedStream(url);
   return embed ? isLiveEmbed(embed) : true;
+}
+
+function toQueued(track: Track): QueuedTrack {
+  return { id: track.id, url: track.url, title: track.title, subtitle: track.subtitle, art: track.art, kind: track.kind ?? "audio", live: track.live };
+}
+
+function queueSignature(queue: readonly QueuedTrack[], repeat: RepeatMode, shuffle: boolean): string {
+  return JSON.stringify([repeat, shuffle, queue.map((q) => q.id)]);
 }

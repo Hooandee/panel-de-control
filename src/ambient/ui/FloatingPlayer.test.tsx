@@ -68,7 +68,7 @@ function runtimeStore(inGame = true) {
     overlayControl: false,
     videoFullscreen: false,
     videoCollapsed: false,
-    player: { status: "playing", video: true, picture: true, position: 42, duration: 300, volume: 0.6, error: null, track: { id: "video", title: "Example video", subtitle: "", art: "", url: "https://example.test/video.mp4", live: false, kind: "video" } },
+    player: { status: "playing", video: true, picture: true, position: 42, duration: 300, volume: 0.6, error: null, queue: [], queueIndex: 0, repeat: "all", shuffle: false, track: { id: "video", title: "Example video", subtitle: "", art: "", url: "https://example.test/video.mp4", live: false, kind: "video" } },
   };
   const listeners = new Set<() => void>();
   let previousControl = false;

@@ -34,6 +34,47 @@ describe("AmbientPlayer", () => {
     vi.useRealTimers();
   });
 
+  it("follows the repeat mode when a track ends", () => {
+    player.playQueue(songs, 1);
+    audio.dispatchEvent(new Event("ended"));
+    expect(player.getSnapshot().track?.id).toBe("a");
+    player.setRepeat("one");
+    audio.dispatchEvent(new Event("ended"));
+    expect(player.getSnapshot().track?.id).toBe("a");
+    player.next();
+    expect(player.getSnapshot().track?.id).toBe("b");
+    player.setRepeat("off");
+    audio.dispatchEvent(new Event("ended"));
+    expect(player.getSnapshot()).toMatchObject({ status: "paused", track: { id: "b" }, position: 0 });
+    expect(player.isPlaying).toBe(false);
+  });
+
+  it("starts the first link added to an empty player and only queues the rest", () => {
+    player.enqueue([songs[0]]);
+    expect(player.getSnapshot()).toMatchObject({ status: "loading", track: { id: "a" } });
+    player.enqueue([songs[1], radio]);
+    expect(player.getSnapshot().track?.id).toBe("a");
+    expect(player.getSnapshot().queue.map((q) => q.track.id)).toEqual(["a", "b", "r1"]);
+  });
+
+  it("removing the playing entry plays what follows; moving keeps the current one", () => {
+    player.playQueue([...songs, radio]);
+    const [first, , third] = player.getSnapshot().queue;
+    player.moveEntry(third.key, 0);
+    expect(player.getSnapshot()).toMatchObject({ queueIndex: 1, track: { id: "a" } });
+    player.removeEntry(first.key);
+    expect(player.getSnapshot().track?.id).toBe("b");
+    expect(player.getSnapshot().queue.map((q) => q.track.id)).toEqual(["r1", "b"]);
+    player.playEntry(player.getSnapshot().queue[0].key);
+    expect(player.getSnapshot().track?.id).toBe("r1");
+  });
+
+  it("clearing keeps only what is playing", () => {
+    player.playQueue(songs, 1);
+    player.clearQueue();
+    expect(player.getSnapshot().queue.map((q) => q.track.id)).toEqual(["b"]);
+  });
+
   it("reports playing only when the element says so", () => {
     player.playQueue([radio]);
     expect(player.getSnapshot().status).toBe("loading");

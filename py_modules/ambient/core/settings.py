@@ -20,6 +20,8 @@ _ACTION_LEVEL = {"pause": 0, "duck": 30, "continue": 100}
 VIDEO_SCALE_RANGE = (20, 70)
 VIDEO_QUALITIES = ("fluid", "saver", "sharp")
 CLAIM_OWNERS = ("panel", "theme", "other")
+REPEAT_MODES = ("all", "one", "off")
+QUEUE_KINDS = ("audio", "video")
 
 _APPID = re.compile(r"^[0-9]{1,10}$")
 _MEDIA_REF = re.compile(r"^(local|url|opt|steam|remote):[A-Za-z0-9._:/?&=%+~@#!$'()*,;-]{1,2048}$")
@@ -27,6 +29,7 @@ _SELECTED_REF = re.compile(r"(?:local|steam|remote):[A-Za-z0-9._:/?&=%+~@#!$'()*
 _ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _CLAIM_KEY = re.compile(r"^(css:[A-Za-z]{1,48}(::before|::after)?|[A-Za-z0-9._-]{1,64})$")
 _MAX_ITEMS = 200
+_MAX_TRACK_ID = 2100
 _MAX_PLAYLISTS = 20
 
 DEFAULTS: dict[str, Any] = {
@@ -67,6 +70,9 @@ DEFAULTS: dict[str, Any] = {
         "inGameGameLevel": 100,
         "folders": [],
         "lastTrack": None,
+        "repeat": "all",
+        "shuffle": False,
+        "queue": [],
         "stationId": None,
     },
     "collections": {"removedSuggested": [], "favorites": [], "folders": []},
@@ -151,10 +157,42 @@ def _normalize_music(out: dict[str, Any], raw: dict[str, Any]) -> None:
     out["folders"] = _folders(raw.get("folders"))
     track = raw.get("lastTrack")
     if isinstance(track, dict) and isinstance(track.get("id"), str) and _number(track.get("position")):
-        out["lastTrack"] = {"id": track["id"][:128], "position": max(0.0, float(track["position"]))}
+        out["lastTrack"] = {"id": track["id"][:_MAX_TRACK_ID], "position": max(0.0, float(track["position"]))}
     station = raw.get("stationId")
     if isinstance(station, str) and _ID.match(station):
         out["stationId"] = station
+    _enum(out, raw, "repeat", REPEAT_MODES)
+    _bool(out, raw, "shuffle")
+    out["queue"] = _queue(raw.get("queue"))
+
+
+def _http_url(value: Any) -> bool:
+    return isinstance(value, str) and len(value) <= 2048 and value.lower().startswith(("https://", "http://"))
+
+
+def _queue(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in raw:
+        if len(out) >= _MAX_ITEMS:
+            break
+        if not isinstance(entry, dict):
+            continue
+        track_id, url = entry.get("id"), entry.get("url")
+        if not isinstance(track_id, str) or not 0 < len(track_id) <= _MAX_TRACK_ID or not _http_url(url):
+            continue
+        art = entry.get("art")
+        out.append({
+            "id": track_id,
+            "url": url,
+            "title": entry["title"][:200] if isinstance(entry.get("title"), str) else "",
+            "subtitle": entry["subtitle"][:200] if isinstance(entry.get("subtitle"), str) else "",
+            "art": art if _http_url(art) else "",
+            "kind": entry["kind"] if entry.get("kind") in QUEUE_KINDS else "audio",
+            "live": entry.get("live") is True,
+        })
+    return out
 
 
 def _normalize_collections(out: dict[str, Any], raw: dict[str, Any]) -> None:

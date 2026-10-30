@@ -38,6 +38,9 @@
     "inGameGameLevel": 100,
     "folders": [],
     "lastTrack": null,
+    "repeat": "all",
+    "shuffle": false,
+    "queue": [],
     "stationId": null
   },
   "collections": {
