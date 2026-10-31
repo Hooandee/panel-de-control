@@ -42,9 +42,11 @@ export function isStoreApp(appid: string): boolean {
 /**
  * The carousel's selected game. The focused tile is the truth: while Steam cross-fades its blurred
  * hero the previous game's image is still in the page, and a game without art has none at all.
+ * A theme that draws its own Home hides the carousel without unmounting it, so a hidden carousel
+ * selects nothing: its last hero is not what the user is looking at.
  */
 export function selectedAppIdIn(container: Element | null): string | null {
-  if (!container) return null;
+  if (!container?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
   const focused = container.querySelector(".gpfocus");
   if (focused) {
     for (const img of Array.from(focused.querySelectorAll("img"))) {

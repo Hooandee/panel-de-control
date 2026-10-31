@@ -761,6 +761,7 @@ export class AmbientRuntime {
   }
 
   private selectedAppId(doc: Document | null): string | null {
+    if (this.channel.activeClaim()?.surfaces.includes("home")) return null;
     const container = steamClass("RecentGamesContainer");
     return doc && container ? selectedAppIdIn(doc.querySelector(`.${container}`)) : null;
   }

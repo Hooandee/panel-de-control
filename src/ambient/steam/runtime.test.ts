@@ -718,6 +718,32 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   }, 30000);
 
+  it("a theme with its own Home plays no game soundtrack from Steam's hidden carousel", async () => {
+    const home = (style: string) => { document.body.innerHTML = `<div class="h-BasicHome"><section></section><div style="${style}"><div class="h-RecentGamesContainer"><img src="https://steamloopback.host/assets/413150/library_hero_blur.jpg"></div></div></div>`; };
+    rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: { url: "https://video.akamai.steamstatic.com/a.m3u8", poster: "", title: "" }, theme: { url: "https://audio.test/theme.m4a", title: "Theme", artist: "" } });
+    const configured = settings();
+    configured.background.gameThemes = true;
+    configured.background.gameTrailers = true;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const quiet = async (channel?: AmbientThemeChannel) => {
+      const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+      try {
+        await runtime.start();
+        await runtime.updateSettings((s) => s);
+        await new Promise((done) => setTimeout(done, 300));
+        expect(runtime.getSnapshot().selectedGame).toBeNull();
+        expect(rpcMock.getAmbientGameMedia).not.toHaveBeenCalled();
+        expect(document.querySelector("#pdc-ambient-layer iframe")).toBeNull();
+      } finally { runtime.stop(); }
+    };
+    home("opacity: 0");
+    await quiet();
+    home("");
+    const channel = new AmbientThemeChannel();
+    channel.claim("hooandee-bubble", { name: "Bubble", surfaces: ["home"], mode: "yield" });
+    await quiet(channel);
+  });
+
   it("says when Decky never draws the floating player, and not when it does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     rpcMock.getAmbientState.mockResolvedValue({ settings: settings(), knownFolders: {}, collections: [], mediaServer: "stopped" });
