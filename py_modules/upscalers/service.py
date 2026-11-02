@@ -406,7 +406,7 @@ class UpscalerService:
         except OSError:
             raise UpscalerError("broken") from None
         plan = install.get("fg_plan")
-        if installed and not installed.native and not (isinstance(plan, dict) and plan.get("routes")):
+        if installed and not installed.native:
             recipe = self._recipe(appid, self._identity(installed, entry))
             analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
             plan = _fg_plan(self.gpu, analysis, recipe, _generation(install), choice.get("fg_route"))
