@@ -15,6 +15,7 @@ _FACTS = (
     ("proxy", re.compile(r"OptiScaler working as ([A-Za-z0-9_]+\.(?:dll|asi))", re.I)),
     ("gpu", re.compile(r"Adapter Desc:\s*(.+)")),
     ("upscaler", re.compile(r"Creating new (.+?) upscaler")),
+    ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
     ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: 0|XeFG context created|Nukem.{0,40}(?:initialized|loaded))", re.I)),

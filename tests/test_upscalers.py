@@ -454,3 +454,14 @@ def test_beta_build_uses_the_v10_subfolder_layout(steam, fake_catalog, proc, mon
     assert service.game(APPID)["fg_plan"]["input"] != "nukems"
     service.uninstall(APPID)
     assert not (target / "OptiScaler").exists()
+
+
+def test_log_reader_understands_optiscaler_10(tmp_path):
+    log = _write(tmp_path / "OptiScaler.log",
+                 "[00:05:24.702753] [W] OptiScaler v10.0.0-dev (ab379b25) (20261102_120120) loaded\n"
+                 "[00:06:04.046244] [I] TryCreateOptiFeature Creating FSR 3.X upscaler feature\n"
+                 "[00:06:04.046456] [I] IFeature::SetInitParameters Render Resolution: 936x624, Display Resolution 1440x960, Quality: 1\n")
+    facts = logread.read(log.parent)
+    assert facts["version"] == "10.0.0-dev"
+    assert facts["upscaler"] == "FSR 3.X"
+    assert logread.verdict(facts) == "active"
