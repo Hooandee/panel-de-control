@@ -199,8 +199,8 @@ class UpscalerService:
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
-            "fg_plan": None if installed.native else catalog.fg_plan(
-                self.gpu, analysis["inputs"], recipe.fg if recipe else None, _generation(install)),
+            "fg_plan": None if installed.native else _fg_plan(self.gpu, analysis, recipe, _generation(install),
+                                                             (install or {}).get("options", {}).get("fg_route")),
         }
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
@@ -330,7 +330,7 @@ class UpscalerService:
             for name, asset_id in recipe.files.items():
                 sources[name] = paths[asset_id]
 
-        fg_plan = catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None, archive_asset.generation)
+        fg_plan = _fg_plan(self.gpu, analysis, recipe, archive_asset.generation, choice.get("fg_route"))
         overrides = {
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
@@ -404,6 +404,7 @@ class UpscalerService:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             raise UpscalerError("broken") from None
+        install["fg_plan"] = catalog.fg_route_plan(install.get("fg_plan"), choice.get("fg_route"))
         fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on")
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **fg}), encoding="utf-8")
         install["options"] = _clean_options(choice)
@@ -547,6 +548,11 @@ class UpscalerService:
         }
 
 
+def _fg_plan(gpu: str, analysis: dict, recipe, generation: int, route: str | None) -> dict | None:
+    return catalog.fg_plan(gpu, analysis["inputs"], recipe.fg if recipe else None, generation,
+                           analysis.get("apis", ()), analysis.get("streamline"), route)
+
+
 def _generation(install: dict | None) -> int:
     build = catalog.BUILDS.get(str((install or {}).get("build")))
     return catalog.ASSETS[build.archive].generation if build else 9
@@ -573,6 +579,7 @@ def _clean_options(choice: dict) -> dict:
         "quality": quality if quality in catalog.QUALITY_RATIOS else None,
         "sharpness": sharpness if sharpness in catalog.SHARPNESS else None,
         "fg": "on" if choice.get("fg") == "on" else "off",
+        "fg_route": choice.get("fg_route") if choice.get("fg_route") in ("game", "optiscaler") else None,
     }
 
 

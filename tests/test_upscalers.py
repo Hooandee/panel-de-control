@@ -1,3 +1,4 @@
+import json
 import hashlib
 import os
 import time
@@ -398,30 +399,64 @@ def test_shortcut_hint_covers_shortcuts_missing_from_vdf(steam, fake_catalog, pr
     assert "1" not in service.state["games"]
 
 
-def test_fg_plan_prefers_the_games_own_generator():
-    assert catalog.fg_plan("rdna3", {"fsrfg": ["a"]})["input"] == "fsrfg"
-    assert catalog.fg_plan("rdna3", {"dlssg": ["a"]}) == {"input": "dlssg", "output": "fsrfg", "source": "game", "experimental": False}
-    optifg = catalog.fg_plan("intel", {})
-    assert optifg == {"input": "upscaler", "output": "xefg", "source": "optiscaler", "experimental": True}
-    assert catalog.fg_overrides(optifg, True)["OptiFG.HUDFix"] == "true"
-    assert catalog.fg_overrides(optifg, False)["FrameGen.FGInput"] == "nofg"
+def test_fg_routes_follow_the_wiki_ranking_and_each_generation():
+    sl2 = {"dlssg": ["a"], "fsrfg": ["b"], "streamline": ["c"]}
+    v10 = catalog.fg_plan("rdna3", sl2, generation=10, apis=["d3d12"], streamline=2)
+    assert (v10["input"], v10["output"], v10["follows_game"], v10["route"]) == ("dlssg", "fsrfg", True, "game")
+    assert catalog.fg_overrides(v10, True)["FrameGen.Enabled"] == "auto"
+    assert catalog.fg_plan("rdna3", sl2, generation=9, streamline=2)["input"] == "dlssg"
+    # 0.9 cannot read DLSSG through Streamline 1; Nukem's bridge can.
+    assert catalog.fg_plan("rdna3", sl2, generation=9, streamline=1)["input"] == "nukems"
+    sl1_v10 = catalog.fg_plan("rdna3", sl2, generation=10, streamline=1)
+    assert sl1_v10["input"] == "dlssg" and catalog.fg_overrides(sl1_v10, True)["FrameGen.Enabled"] == "true"
+    assert catalog.fg_plan("rdna3", {"fsrfg": ["b"]})["input"] == "fsrfg"
+    assert catalog.fg_plan("rdna3", {"xefg": ["b"]})["route"] == "optiscaler"
+    assert catalog.fg_plan("rdna3", {"xefg": ["b"]}, generation=10)["input"] == "xefg"
+
+
+def test_optifg_is_a_choice_and_never_offered_without_dx12():
+    plan = catalog.fg_plan("rdna3", {"fsrfg": ["b"]}, apis=["d3d12"], route="optiscaler")
+    assert plan["input"] == "upscaler" and set(plan["routes"]) == {"game", "optiscaler"}
+    assert catalog.fg_overrides(plan, True)["OptiFG.HUDFix"] == "true"
+    assert catalog.fg_route_plan(plan, "game")["input"] == "fsrfg"
+    assert catalog.fg_plan("intel", {}, apis=["vulkan"]) is None
+    vulkan = catalog.fg_plan("intel", {"dlssg": ["a"]}, apis=["vulkan"], streamline=2)
+    assert vulkan["output"] == "fsrfg" and list(vulkan["routes"]) == ["game"]
+    assert catalog.fg_overrides(None, False)["FrameGen.FGInput"] == "nofg"
+
+
+def test_optiscaler_files_never_count_as_the_games_generator(tmp_path):
+    root = tmp_path / "Game"
+    _write(root / "game.exe", b"MZ")
+    _write(root / "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll", b"v10 bundle")
+    _write(root / "libxess_fg.dll", b"ours")
+    _write(root / "amd_fidelityfx_upscaler_dx12.dll", b"ours, game had one")
+    _write(root / games.MANIFEST_DIR / "manifest.json", json.dumps({
+        "files": {"libxess_fg.dll": "", "amd_fidelityfx_upscaler_dx12.dll": ""},
+        "backups": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    inputs = games.analyze(root)["inputs"]
+    assert "fsrfg" not in inputs and "xefg" not in inputs
+    assert inputs["fsr31"] == ["amd_fidelityfx_upscaler_dx12.dll"]
 
 
 def test_frame_generation_is_written_on_install_and_toggled_after(steam, fake_catalog, proc):
     _, game = steam
     target = game / "bin/x64_dx12"
     service = _service(steam, fake_catalog, proc)
-    assert service.game(APPID)["fg_plan"]["input"] == "nukems"
+    _write(target / "amd_fidelityfx_framegeneration_dx12.dll", b"game fg")
+    assert service.game(APPID)["fg_plan"]["input"] == "fsrfg"
     service.install(APPID, {"build": "fsr-test", "fg": "on"})
     text = (target / "OptiScaler.ini").read_text()
     assert ini.read(text, "FrameGen.Enabled") == "true"
-    assert ini.read(text, "FrameGen.FGInput") == "nukems"
+    assert ini.read(text, "FrameGen.FGInput") == "fsrfg"
+    service.configure(APPID, {"fg": "on", "fg_route": "optiscaler"})
+    assert ini.read((target / "OptiScaler.ini").read_text(), "FrameGen.FGInput") == "upscaler"
     service.configure(APPID, {"fg": "off"})
     text = (target / "OptiScaler.ini").read_text()
     assert ini.read(text, "FrameGen.Enabled") == "false"
     assert ini.read(text, "FrameGen.FGOutput") == "nofg"
 
-    log = _write(target / "OptiScaler.log", "[I] FSR3FG D3D12_Configure Enabled: true, result: 0 (0)\n")
+    log = _write(target / "OptiScaler.log", "[I] FSRFG_Dx12::Activate D3D12_Configure Enabled: true, result: FFX_API_RETURN_OK (0)\n")
     future = time.time() + 5
     os.utime(log, (future, future))
     assert service.live(APPID)["fg"] is True
@@ -451,7 +486,6 @@ def test_beta_build_uses_the_v10_subfolder_layout(steam, fake_catalog, proc, mon
     # The game's own FFX dll stays untouched in the exe folder.
     assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
     assert ini.read((target / "OptiScaler.ini").read_text(), "FSR.Fsr4GpuSupport") == "2"
-    assert service.game(APPID)["fg_plan"]["input"] != "nukems"
     service.uninstall(APPID)
     assert not (target / "OptiScaler").exists()
 

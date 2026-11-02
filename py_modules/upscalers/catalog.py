@@ -219,25 +219,62 @@ def describe(gpu: str) -> list[dict]:
     ]
 
 
-def fg_plan(gpu: str, inputs: dict, recipe_fg: dict | None = None, generation: int = 9) -> dict:
-    """Which frame generation path fits this game and GPU: the game's own generator first.
+def fg_routes(gpu: str, inputs: dict, apis: list | tuple = (), streamline: int | None = None, generation: int = 9) -> dict:
+    """Every frame generation path this game, GPU and OptiScaler generation can take.
 
-    Recipe paths target the stable build; v10 hooks Streamline 1 DLSSG itself and dropped Nukem's output.
+    The OptiScaler wiki ranks DLSSG via Streamline first, then the game's FSR/Xe FG, then OptiFG.
+    0.9 only reads DLSSG through Streamline 2+, so Streamline 1 games go through Nukem's there;
+    v10 hooks Streamline 1 itself. OptiFG and XeFG are DX12 only.
     """
     output = "xefg" if gpu == "intel" else "fsrfg"
-    if recipe_fg and generation == 9:
-        return {"input": recipe_fg["input"], "output": recipe_fg.get("output", output), "source": "game", "experimental": False}
-    if "fsrfg" in inputs:
-        return {"input": "fsrfg", "output": output, "source": "game", "experimental": False}
+    dx12 = not apis or "d3d12" in apis
+    game = None
     if "dlssg" in inputs:
-        return {"input": "dlssg", "output": output, "source": "game", "experimental": False}
-    return {"input": "upscaler", "output": output, "source": "optiscaler", "experimental": True}
+        if generation >= 10:
+            game = {"input": "dlssg", "output": output, "follows_game": (streamline or 0) >= 2}
+        elif (streamline or 0) >= 2:
+            game = {"input": "dlssg", "output": output, "follows_game": False}
+        else:
+            game = {"input": "nukems", "output": "nukems", "follows_game": False}
+    elif "fsrfg" in inputs and dx12:
+        game = {"input": "fsrfg", "output": output, "follows_game": False}
+    elif "xefg" in inputs and dx12 and generation >= 10:
+        game = {"input": "xefg", "output": output, "follows_game": False}
+    if game and output == "xefg" and not dx12:
+        game = {**game, "output": "fsrfg"}
+    routes = {}
+    if game:
+        routes["game"] = {**game, "source": "game", "experimental": False}
+    if dx12:
+        routes["optiscaler"] = {"input": "upscaler", "output": output, "follows_game": False,
+                                "source": "optiscaler", "experimental": True}
+    return routes
+
+
+def fg_plan(gpu: str, inputs: dict, recipe_fg: dict | None = None, generation: int = 9,
+            apis: list | tuple = (), streamline: int | None = None, route: str | None = None) -> dict | None:
+    routes = fg_routes(gpu, inputs, apis, streamline, generation)
+    if recipe_fg and generation == 9:
+        routes["game"] = {"input": recipe_fg["input"], "output": recipe_fg.get("output", "fsrfg"),
+                          "follows_game": False, "source": "game", "experimental": False}
+    if not routes:
+        return None
+    name = route if route in routes else ("game" if "game" in routes else "optiscaler")
+    return {**routes[name], "route": name, "routes": routes}
+
+
+def fg_route_plan(plan: dict | None, route: str | None) -> dict | None:
+    """The stored plan switched to another of its routes, without re-scanning the game."""
+    if not plan or route not in (plan.get("routes") or {}):
+        return plan
+    return {**plan["routes"][route], "route": route, "routes": plan["routes"]}
 
 
 def fg_overrides(plan: dict | None, enabled: bool) -> dict[str, str]:
     if not enabled or not plan:
         return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg"}
-    overrides = {"FrameGen.Enabled": "true", "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"]}
+    enabled = "auto" if plan.get("follows_game") else "true"
+    overrides = {"FrameGen.Enabled": enabled, "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"]}
     if plan["input"] == "upscaler":
         overrides["OptiFG.HUDFix"] = "true"
     return overrides

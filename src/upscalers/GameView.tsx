@@ -22,7 +22,7 @@ import {
   revertLaunch,
 } from "./model";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
-import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
+import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
 const POLL_MS = 250;
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
@@ -139,7 +139,11 @@ export const GameView: FC<{
   const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
   const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness
-    || (install.options.fg ?? "off") !== (choice.fg ?? "off");
+    || (install.options.fg ?? "off") !== (choice.fg ?? "off")
+    || (choice.fg === "on" && (install.options.fg_route ?? null) !== (choice.fg_route ?? null));
+  const routes = detail?.fg_plan?.routes ?? {};
+  const bothRoutes = "game" in routes && "optiscaler" in routes;
+  const route: FgRoute = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
   const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
 
   const apply = async () => {
@@ -369,7 +373,14 @@ export const GameView: FC<{
                 options={[{ value: "off", label: t("up.fg.off") }, { value: "on", label: t("up.fg.on") }]}
               />
               <Note>{t("up.fg.explain")}</Note>
-              <Note>{t(detail.fg_plan.source === "game" ? "up.fg.fromGame" : "up.fg.fromOpti")}</Note>
+              {choice.fg === "on" && bothRoutes && (
+                <SegmentRow
+                  value={route}
+                  onChange={(fg_route) => setChoice({ ...choice, fg_route })}
+                  options={[{ value: "game", label: t("up.fg.route.game") }, { value: "optiscaler", label: t("up.fg.route.opti") }]}
+                />
+              )}
+              <Note>{t(route === "game" ? "up.fg.fromGame" : bothRoutes ? "up.fg.fromOptiChoice" : "up.fg.fromOpti")}</Note>
             </>
           )}
 

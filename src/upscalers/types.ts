@@ -37,11 +37,16 @@ export interface UpscalersOverview {
   job: UpscalerJob | null;
 }
 
+export type FgRoute = "game" | "optiscaler";
+
 export interface FgPlan {
   input: string;
   output: string;
-  source: "game" | "optiscaler";
+  source: FgRoute;
   experimental: boolean;
+  follows_game?: boolean;
+  route?: FgRoute;
+  routes?: Partial<Record<FgRoute, unknown>>;
 }
 
 export interface UpscalerChoice {
@@ -49,6 +54,7 @@ export interface UpscalerChoice {
   quality: Quality | null;
   sharpness: Sharpness | null;
   fg?: "on" | "off";
+  fg_route?: FgRoute | null;
   confirm_anti_cheat?: boolean;
 }
 
@@ -80,7 +86,7 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
-    options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off" };
+    options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null };
     status: UpscalerStatus;
   } | null;
   history: HistoryEntry[];

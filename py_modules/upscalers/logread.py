@@ -18,7 +18,7 @@ _FACTS = (
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
     ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
-    ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: 0|XeFG context created|Nukem.{0,40}(?:initialized|loaded))", re.I)),
+    ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
     ("resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
 _ERROR = re.compile(r"\[(?:E|C)\]\s")

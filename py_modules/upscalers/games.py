@@ -1,5 +1,6 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ _SKIP_EXE = re.compile(
     r"d3dconfig|compiler|7za|reporter|webhelper|cefprocess|vc_?redist|dxsetup|launcherpatcher",
     re.I,
 )
-_SKIP_DIRS = {"__installer", "_commonredist", "redist", "redistributables", "directx", "support", "extras"}
+_SKIP_DIRS = {"__installer", "_commonredist", "redist", "redistributables", "directx", "support", "extras", "optiscaler"}
 
 INPUTS = {
     "fsr31": ("amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_dx12.dll", "amd_fidelityfx_loader_dx12.dll"),
@@ -165,6 +166,22 @@ def _walk(root: Path):
         yield Path(current), files
 
 
+def _installed_by_panel(folder: Path) -> set[str]:
+    """Lower-case names Panel put in `folder`; replaced game files stay the game's."""
+    try:
+        manifest = json.loads((folder / MANIFEST_DIR / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return set()
+    backups = set(manifest.get("backups", []))
+    return {Path(name).name.lower() for name in manifest.get("files", {}) if name not in backups and "/" not in name}
+
+
+def streamline_major(path: Path) -> int | None:
+    version = pe.version_strings(str(path)).get("FileVersion", "")
+    head = version.replace(",", ".").strip().split(".")[0]
+    return int(head) if head.isdecimal() else None
+
+
 def _score(path: Path, root: Path, size: int) -> int:
     name = path.name.lower()
     relative = path.relative_to(root).as_posix().lower()
@@ -200,6 +217,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     inputs: dict[str, list[str]] = {key: [] for key in INPUTS}
     anti_cheat = False
     for current, files in _walk(root):
+        ours = _installed_by_panel(current)
         lower_dir = current.as_posix().lower()
         if any(marker in lower_dir for marker in ANTI_CHEAT):
             anti_cheat = True
@@ -208,7 +226,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             if any(marker in lower for marker in ANTI_CHEAT):
                 anti_cheat = True
             for kind, names in INPUTS.items():
-                if lower in names:
+                if lower in names and lower not in ours:
                     inputs[kind].append((current / file).relative_to(root).as_posix())
             if lower.endswith(".exe") and not _SKIP_EXE.search(lower):
                 path = current / file
@@ -256,6 +274,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         "manual": manual,
         "target": str(target) if target else None,
         "inputs": {kind: sorted(paths)[:4] for kind, paths in inputs.items() if paths},
+        "streamline": streamline_major(root / sorted(inputs["streamline"])[0]) if inputs["streamline"] else None,
         "anti_cheat": anti_cheat,
         "foreign": bool(target) and not (target / MANIFEST_DIR).exists() and any(
             (target / marker).exists() for marker in FOREIGN_MARKERS
