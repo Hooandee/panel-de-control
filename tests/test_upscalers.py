@@ -381,3 +381,18 @@ def test_shortcut_identity_applies_the_steam_recipe(steam, fake_catalog, proc, m
     assert detail["recipe"] is True
     result = service.install("3000000001", {"build": "fsr-test"})
     assert result["args"] == ["--launcher-skip", "-dx12"]
+
+
+def test_shortcut_hint_covers_shortcuts_missing_from_vdf(steam, fake_catalog, proc, tmp_path):
+    home, _ = steam
+    native = _write(home / "Downloads/Port-x86_64.appimage", b"ELF")
+    windows = _write(home / "Games/Other/game.exe", b"MZ" + b"\0" * 64)
+    service = _service(steam, fake_catalog, proc)
+    linux = service.game("2953644062", {"exe": f'"{native}"', "dir": "", "name": "Bloodborne"})
+    assert linux["native"] is True and linux["analysis"]["target"] is None
+    with pytest.raises(UpscalerError, match="native_game"):
+        service.install("2953644062", {"build": "fsr-test"})
+    win = service.game("2000000001", {"exe": f'"{windows}"', "dir": "", "name": "Other"})
+    assert win["native"] is False and win["analysis"]["exe"] == "game.exe"
+    assert service.compatibility(["1"]) == {}
+    assert "1" not in service.state["games"]

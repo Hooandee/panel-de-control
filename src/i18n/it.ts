@@ -311,6 +311,8 @@ export const it: Record<string, string> = {
   "nav.upscalers": "Upscaler",
   "nav.upscalers.desc": "Immagine migliore e più FPS nei tuoi giochi",
   "up.title": "Upscaler",
+  "up.native": "È un gioco Linux; OptiScaler funziona solo con giochi Windows",
+  "up.error.native_game": "È un gioco Linux; OptiScaler funziona solo con giochi Windows",
   "up.identity.known": "Riconosciuto come {name}",
   "up.identity.unknown": "Gioco non riconosciuto",
   "up.identity.change": "Cambia",

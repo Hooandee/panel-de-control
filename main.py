@@ -1332,8 +1332,8 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "identity", appid=str(appid), steam_appid=steam_appid)
         return result
 
-    async def get_upscalers_game(self, appid: str) -> dict:
-        return await self._upscalers_call("game", str(appid))
+    async def get_upscalers_game(self, appid: str, hint: dict | None = None) -> dict:
+        return await self._upscalers_call("game", str(appid), hint if isinstance(hint, dict) else None)
 
     async def set_upscalers_exe(self, appid: str, exe: str | None = None) -> dict:
         result = await self._upscalers_call("set_exe", str(appid), exe)

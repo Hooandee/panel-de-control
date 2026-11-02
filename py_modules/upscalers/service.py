@@ -19,6 +19,13 @@ _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
 
 
+# Native Linux games run without Proton; OptiScaler only hooks Windows executables.
+NATIVE_ANALYSIS = {
+    "candidates": [], "exe": None, "apis": [], "manual": False, "target": None,
+    "inputs": {}, "anti_cheat": False, "foreign": False,
+}
+
+
 class UpscalerError(Exception):
     def __init__(self, code: str):
         super().__init__(code)
@@ -119,7 +126,7 @@ class UpscalerService:
         """Which games ship an upscaler Panel can replace, cached by install folder mtime."""
         result = {}
         for appid in appids[:400]:
-            installed = games.find_installed(self.home, str(appid))
+            installed = self._find(str(appid))
             if installed is None:
                 continue
             try:
@@ -133,9 +140,13 @@ class UpscalerService:
             result[installed.appid] = cached[1]
         return result
 
+    def _find(self, appid: str) -> games.Installed | None:
+        hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
+        return games.find_installed(self.home, appid) or games.from_hint(appid, hint)
+
     def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
         """Real game behind a non-Steam shortcut; worked out once, then remembered."""
-        if not installed.shortcut:
+        if not installed.shortcut or installed.native:
             return None
         cached = entry.get("identity")
         if isinstance(cached, dict):
@@ -161,20 +172,28 @@ class UpscalerService:
         self._save()
         return self.game(appid)
 
-    def game(self, appid: str) -> dict:
-        installed = games.find_installed(self.home, appid)
+    def game(self, appid: str, hint: dict | None = None) -> dict:
+        if isinstance(hint, dict) and hint.get("exe"):
+            entry = self._game_state(appid)
+            clean = {k: str(hint.get(k) or "")[:1024] for k in ("exe", "dir", "name")}
+            if entry.get("shortcut_hint") != clean:
+                entry["shortcut_hint"] = clean
+                self._save()
+        installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
         recipe = self._recipe(appid, identity)
-        analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
+        analysis = NATIVE_ANALYSIS if installed.native else games.analyze(
+            installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
         return {
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
             "shortcut": installed.shortcut,
+            "native": installed.native,
             "identity": identity,
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
@@ -183,7 +202,7 @@ class UpscalerService:
         }
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
-        installed = games.find_installed(self.home, appid)
+        installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
@@ -239,9 +258,11 @@ class UpscalerService:
 
     # ---- install -------------------------------------------------------------
     def _guard(self, appid: str, confirm_anti_cheat: bool = False) -> tuple[games.Installed, dict, Path]:
-        installed = games.find_installed(self.home, appid)
+        installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
+        if installed.native:
+            raise UpscalerError("native_game")
         update = games.update_state(installed.state_flags)
         if update:
             raise UpscalerError("updating" if update == "running" else "update_pending")
@@ -373,7 +394,7 @@ class UpscalerService:
         install = entry.get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        installed = games.find_installed(self.home, appid)
+        installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         path = Path(install["target"]) / "OptiScaler.ini"
@@ -391,7 +412,7 @@ class UpscalerService:
         install = entry.get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        installed = games.find_installed(self.home, appid)
+        installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         self._update_job(phase="restore")
@@ -447,7 +468,7 @@ class UpscalerService:
         install = self._game_state(appid).get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        installed = games.find_installed(self.home, appid)
+        installed = self._find(appid)
         if installed is None or not games.running_under(installed.root, self.proc):
             raise UpscalerError("not_running")
         name = f"{appid}-{int(time.time() * 1000)}"

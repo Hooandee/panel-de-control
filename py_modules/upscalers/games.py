@@ -41,6 +41,7 @@ class Installed:
     state_flags: int
     exe: str | None = None
     shortcut: bool = False
+    native: bool = False
 
 
 def steam_roots(home: str) -> list[Path]:
@@ -111,6 +112,24 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
                         start, relative = exe.parent, exe.name
                 return Installed(appid, str(entry.get("appname") or appid), start, STATE_FULLY_INSTALLED, relative, True)
     return None
+
+
+def from_hint(appid: str, hint: dict | None) -> Installed | None:
+    """A shortcut described by Steam's own app details, for when shortcuts.vdf does not list it."""
+    if not isinstance(hint, dict):
+        return None
+    exe = Path(_unquote(hint.get("exe")))
+    start = Path(_unquote(hint.get("dir"))) if _unquote(hint.get("dir")) else exe.parent
+    if not str(exe) or not start.is_dir():
+        return None
+    name = str(hint.get("name") or appid)
+    if exe.suffix.lower() != ".exe":
+        return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+    try:
+        relative = exe.resolve().relative_to(start.resolve()).as_posix()
+    except (ValueError, OSError):
+        start, relative = exe.parent, exe.name
+    return Installed(appid, name, start, STATE_FULLY_INSTALLED, relative, True)
 
 
 def find_installed(home: str, appid: str) -> Installed | None:

@@ -12,6 +12,7 @@ import { useSectionBack } from "../components/sectionBack";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { CompareView } from "./CompareView";
 import { openIdentityModal } from "./IdentityModal";
+import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
@@ -62,7 +63,8 @@ export const GameView: FC<{
 
   const load = useCallback(async () => {
     try {
-      const next = await getUpscalersGame(appid);
+      const hint = game.isNonSteam ? await readShortcutHint(game.liveAppid, game.name) : null;
+      const next = await getUpscalersGame(appid, hint);
       if (!mounted.current) return;
       setDetail(next);
       setLoadError(false);
@@ -74,7 +76,7 @@ export const GameView: FC<{
     } catch {
       if (mounted.current) setLoadError(true);
     }
-  }, [appid, overview.preferred]);
+  }, [appid, overview.preferred, game.isNonSteam, game.liveAppid, game.name]);
 
   useEffect(() => {
     mounted.current = true;
@@ -218,7 +220,8 @@ export const GameView: FC<{
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
           )}
           {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
-          {detail.shortcut && (
+          {detail.native && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.native")}</span>}
+          {detail.shortcut && !detail.native && (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <span style={{ flex: 1 }}>
                 {detail.identity?.steam_appid
@@ -255,7 +258,7 @@ export const GameView: FC<{
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
 
-      {detail && !running && (status === "broken" || dirty) && (
+      {detail && !detail.native && !running && (status === "broken" || dirty) && (
         <Row>
           <ActionButton
             primary
@@ -290,7 +293,7 @@ export const GameView: FC<{
       )}
       {loadError && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
 
-      {detail && (
+      {detail && !detail.native && (
         <>
           <SegmentRow
             value={mode}

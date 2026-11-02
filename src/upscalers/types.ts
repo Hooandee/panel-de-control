@@ -77,6 +77,7 @@ export interface GameDetail {
   history: HistoryEntry[];
   recipe: boolean;
   shortcut: boolean;
+  native: boolean;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
 }
 
