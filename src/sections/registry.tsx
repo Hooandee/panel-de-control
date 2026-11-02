@@ -11,6 +11,7 @@ import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
 import { LimpiezaSection } from "./LimpiezaSection";
+import { EscaladoresSection } from "./EscaladoresSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
 import { AmbienteSection, AmbientPlayerBlock } from "../ambient";
@@ -39,6 +40,7 @@ const COMPONENTS: Record<string, FC> = {
   mandos: MandosSection,
   hud: HudSection,
   params: ParametrosSection,
+  upscalers: EscaladoresSection,
   cleaner: LimpiezaSection,
   ambient: AmbienteSection,
   themes: TemasSection,

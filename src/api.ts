@@ -4,6 +4,7 @@ import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
 import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
+import type { GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./upscalers/types";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
@@ -1351,3 +1352,13 @@ export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_re
 
 export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
+
+export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
+export const getUpscalersGame = callable<[appid: string], GameDetail>("get_upscalers_game");
+export const setUpscalersExe = callable<[appid: string, exe: string | null], GameDetail>("set_upscalers_exe");
+export const installUpscaler = callable<[appid: string, choice: UpscalerChoice], UpscalerJob>("install_upscaler");
+export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
+export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
+export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
+export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
+export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upscalers_job");

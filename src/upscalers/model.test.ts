@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { easyChoice, easyModeOf, renderHeight, withOverride, withoutOverride } from "./model";
+
+describe("upscaler model", () => {
+  it("adds the proxy override without touching other launch options", () => {
+    expect(withOverride("", "dxgi=n,b")).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command%');
+    expect(withOverride('WINEDLLOVERRIDES="winmm=n,b" mangohud %command% -dx12', "dxgi=n,b"))
+      .toBe('WINEDLLOVERRIDES="winmm,dxgi=n,b" mangohud %command% -dx12');
+    expect(withOverride('WINEDLLOVERRIDES="dxgi=b" %command%', "dxgi=n,b")).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command%');
+    expect(withOverride('WINEDLLOVERRIDES="winmm=b" %command%', "dxgi=n,b")).toBeNull();
+  });
+
+  it("removes only its own override", () => {
+    expect(withoutOverride('WINEDLLOVERRIDES="dxgi=n,b" %command%', "dxgi=n,b")).toBe("");
+    expect(withoutOverride('WINEDLLOVERRIDES="winmm,dxgi=n,b" gamemoderun %command%', "dxgi=n,b"))
+      .toBe('WINEDLLOVERRIDES="winmm=n,b" gamemoderun %command%');
+  });
+
+  it("refuses to rewrite launch options it cannot model", () => {
+    expect(withOverride('sh -c "x %command%"', "dxgi=n,b")).toBeNull();
+  });
+
+  it("maps easy presets to cards and back", () => {
+    const choice = easyChoice("fps", "fsr-4.1.1-rdna2");
+    expect(easyModeOf(choice, "fsr-4.1.1-rdna2")).toBe("fps");
+    expect(easyModeOf({ ...choice, sharpness: "off" }, "fsr-4.1.1-rdna2")).toBeNull();
+    expect(easyModeOf(choice, "xess")).toBeNull();
+    expect(renderHeight(800, "balanced")).toBe(471);
+  });
+});

@@ -8,6 +8,7 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
 from concurrent.futures import (
@@ -165,6 +166,7 @@ from report import client as report_client
 from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
+from upscalers import UpscalerError, UpscalerService
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
@@ -236,6 +238,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     ),
     "params": (("_support_launch_state", None),),
     "cleaner": (("_steam_cleaner_diagnostics", ("phase", "interrupted", "persistence_error")),),
+    "upscalers": (("_support_upscalers_state", None),),
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
@@ -410,6 +413,15 @@ def _current_boot_id():
 
 def _user_home() -> str:
     return getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+
+
+_UPSCALERS_LOCK = threading.Lock()
+
+
+def _upscalers_journal(level: str, event: str, **fields) -> None:
+    diary = journal.active
+    if diary is not None:
+        diary.write(level, "upscalers", event, **fields)
 
 
 def _kiosk_journal(level: str, event: str, **fields) -> None:
@@ -1258,6 +1270,102 @@ class Plugin(AmbientRpc):
             if executor is not None:
                 executor.shutdown(wait=True, cancel_futures=True)
                 self._steam_cleaner_executor = None
+
+    def _upscalers(self) -> UpscalerService:
+        if getattr(self, "_upscalers_closed", False):
+            raise RuntimeError("closed")
+        with _UPSCALERS_LOCK:
+            return getattr(self, "_upscaler_service", None) or self._create_upscalers()
+
+    def _create_upscalers(self) -> UpscalerService:
+        chip = self._chip or self._device.chip
+        service = UpscalerService(
+            _user_home(),
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
+            device_registry.gpu_generation(self._device.vendor, chip),
+            logger=decky.logger,
+        )
+        self._upscaler_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upscalers")
+        self._upscaler_service = service
+        return service
+
+    async def _upscalers_call(self, method: str, *args):
+        self._init()
+        loop = asyncio.get_running_loop()
+        service = await loop.run_in_executor(None, self._upscalers)
+        try:
+            return await loop.run_in_executor(None, lambda: getattr(service, method)(*args))
+        except UpscalerError as error:
+            _upscalers_journal("WARNING", "refused", action=method, code=error.code)
+            raise RuntimeError(error.code) from None
+
+    async def _upscalers_job(self, kind: str, appid: str, method: str, *args) -> dict:
+        self._init()
+        loop = asyncio.get_running_loop()
+        service = await loop.run_in_executor(None, self._upscalers)
+        try:
+            service.begin(kind, appid)
+        except UpscalerError as error:
+            raise RuntimeError(error.code) from None
+
+        def work() -> None:
+            service.run(getattr(service, method), appid, *args)
+            job = service.job() or {}
+            level = "INFO" if job.get("state") == "done" else "WARNING"
+            _upscalers_journal(level, kind, appid=appid, state=job.get("state"), error=job.get("error"),
+                               detail=json.dumps(args[0] if args else {}, sort_keys=True)[:400])
+
+        self._upscaler_executor.submit(work)
+        return service.job() or {}
+
+    async def get_upscalers_overview(self) -> dict:
+        return await self._upscalers_call("overview")
+
+    async def get_upscalers_game(self, appid: str) -> dict:
+        return await self._upscalers_call("game", str(appid))
+
+    async def set_upscalers_exe(self, appid: str, exe: str | None = None) -> dict:
+        result = await self._upscalers_call("set_exe", str(appid), exe)
+        _upscalers_journal("INFO", "exe", appid=str(appid), manual=exe is not None)
+        return result
+
+    async def install_upscaler(self, appid: str, choice: dict) -> dict:
+        return await self._upscalers_job("install", str(appid), "install", dict(choice or {}))
+
+    async def uninstall_upscaler(self, appid: str) -> dict:
+        return await self._upscalers_job("uninstall", str(appid), "uninstall")
+
+    async def configure_upscaler(self, appid: str, choice: dict) -> dict:
+        result = await self._upscalers_call("configure", str(appid), dict(choice or {}))
+        _upscalers_journal("INFO", "configure", appid=str(appid), **result.get("options", {}))
+        return result
+
+    async def verify_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("verify", str(appid))
+        _upscalers_journal("INFO", "verify", appid=str(appid), result=result.get("result"))
+        return result
+
+    async def get_upscalers_job(self) -> dict | None:
+        service = getattr(self, "_upscaler_service", None)
+        return service.job() if service is not None else None
+
+    async def cancel_upscalers_job(self) -> dict | None:
+        service = getattr(self, "_upscaler_service", None)
+        return service.cancel() if service is not None else None
+
+    async def _support_upscalers_state(self) -> dict:
+        service = getattr(self, "_upscaler_service", None)
+        return service.support_state() if service is not None else {"loaded": False}
+
+    def _close_upscalers_sync(self) -> None:
+        self._upscalers_closed = True
+        service = getattr(self, "_upscaler_service", None)
+        if service is not None:
+            service.cancel()
+        executor = getattr(self, "_upscaler_executor", None)
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
+            self._upscaler_executor = None
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -14709,6 +14817,7 @@ class Plugin(AmbientRpc):
         self._cancel_queued_offloads()
         self._ambient_stop()
         self._close_steam_cleaner_sync()
+        self._close_upscalers_sync()
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
