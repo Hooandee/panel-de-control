@@ -19,7 +19,7 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   revertLaunch,
 } from "./model";
-import { ActionButton, BAR_COLUMN, Bars, Chip, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
+import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
 const POLL_MS = 250;
@@ -198,11 +198,11 @@ export const GameView: FC<{
       {detail ? (
         <div style={{
           ...theme.card,
-          boxShadow: `${theme.card.boxShadow}, inset 3px 0 0 ${statusColor(status)}`,
           padding: `${theme.space.sm}px ${theme.space.md}px`,
           display: "flex", flexDirection: "column", gap: 4,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
+            {install && <Dot color={statusColor(status)} />}
             <span style={{ flex: 1, fontWeight: 700, fontSize: theme.font.body, color: theme.color.textPrimary }}>
               {install ? t(`up.status.${status}`) : t("up.status.none")}
             </span>
