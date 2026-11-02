@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, ini, logread, recipes
+from . import capture, catalog, diagnostics, games, identify, ini, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -59,6 +59,7 @@ class UpscalerService:
         self.logger = logger
         self.proc = proc
         self.drm = drm
+        self.search = identify.store_search
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self._lock = threading.Lock()
@@ -132,12 +133,41 @@ class UpscalerService:
             result[installed.appid] = cached[1]
         return result
 
+    def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
+        """Real game behind a non-Steam shortcut; worked out once, then remembered."""
+        if not installed.shortcut:
+            return None
+        cached = entry.get("identity")
+        if isinstance(cached, dict):
+            return cached
+        exe = installed.root / installed.exe if installed.exe else None
+        entry["identity"] = identify.identify(installed.name, installed.root, exe, search=self.search)
+        self._save()
+        return entry["identity"]
+
+    def _recipe(self, appid: str, identity: dict | None):
+        steam_appid = identity.get("steam_appid") if identity else None
+        return recipes.recipe_for(str(steam_appid)) if steam_appid else recipes.recipe_for(appid)
+
+    def search_games(self, term: str) -> list[dict]:
+        return self.search(identify.clean_name(term) or term)[:8]
+
+    def set_identity(self, appid: str, steam_appid: int | None, name: str | None) -> dict:
+        entry = self._game_state(appid)
+        if steam_appid:
+            entry["identity"] = identify.from_override(int(steam_appid), str(name or steam_appid))
+        else:
+            entry.pop("identity", None)
+        self._save()
+        return self.game(appid)
+
     def game(self, appid: str) -> dict:
         installed = games.find_installed(self.home, appid)
         if installed is None:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
-        recipe = recipes.recipe_for(appid)
+        identity = self._identity(installed, entry)
+        recipe = self._recipe(appid, identity)
         analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
         return {
@@ -145,6 +175,7 @@ class UpscalerService:
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
             "shortcut": installed.shortcut,
+            "identity": identity,
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
@@ -216,7 +247,7 @@ class UpscalerService:
             raise UpscalerError("updating" if update == "running" else "update_pending")
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        recipe = recipes.recipe_for(appid)
+        recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)))
         analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else installed.exe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
@@ -242,7 +273,7 @@ class UpscalerService:
         if analysis["foreign"]:
             raise UpscalerError("foreign")
 
-        recipe = recipes.recipe_for(appid)
+        recipe = self._recipe(appid, entry.get("identity"))
         assets = catalog.build_assets(build)
         if recipe:
             assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]

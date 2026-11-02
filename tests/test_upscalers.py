@@ -61,9 +61,11 @@ def fake_catalog(monkeypatch, tmp_path):
     return state
 
 
-def _service(steam, state, proc):
+def _service(steam, state, proc, search=lambda term: []):
     home, _ = steam
-    return UpscalerService(str(home), str(state), "rdna2", proc=str(proc))
+    service = UpscalerService(str(home), str(state), "rdna2", proc=str(proc))
+    service.search = search
+    return service
 
 
 @pytest.fixture
@@ -333,3 +335,49 @@ def test_non_steam_shortcut_installs_like_any_game(steam, fake_catalog, proc):
     assert detail["analysis"]["exe"] == "bin/game.exe"
     service.install(str(shortcut_id), {"build": "fsr-test"})
     assert (folder / "bin/dxgi.dll").read_bytes() == b"injector"
+
+
+def test_clean_name_drops_release_tags():
+    from upscalers.identify import clean_name
+    assert clean_name("Cyberpunk.2077.v2.13-[FitGirl Repack]") == "Cyberpunk 2077"
+    assert clean_name("ELDEN_RING-CODEX (Build 12345)") == "ELDEN RING"
+
+
+def test_identity_prefers_appid_left_by_the_release(tmp_path):
+    from upscalers.identify import identify
+    root = tmp_path / "Game"
+    _write(root / "bin/steam_emu.ini", "[Settings]\nAppId=1091500\n")
+    exe = _write(root / "bin/game.exe", b"MZ")
+    result = identify("Whatever [DODI]", root, exe, search=lambda term: pytest.fail("no search needed"))
+    assert result["steam_appid"] == 1091500 and result["source"] == "steam_emu.ini"
+
+
+def test_identity_falls_back_to_store_search_on_the_clean_name(tmp_path):
+    from upscalers.identify import identify
+    root = tmp_path / "The.Witcher.3.v4.04-GOG"
+    exe = _write(root / "witcher3.exe", b"MZ")
+    asked = []
+
+    def search(term):
+        asked.append(term)
+        return [{"id": 999, "name": "Witcher Fan Kit"}, {"id": 292030, "name": "The Witcher 3: Wild Hunt"}]
+
+    result = identify("The Witcher 3 [FitGirl Repack]", root, exe, search=search)
+    assert asked[0] == "The Witcher 3"
+    assert result["steam_appid"] == 292030 and result["source"] == "store:shortcut"
+
+
+def test_shortcut_identity_applies_the_steam_recipe(steam, fake_catalog, proc, monkeypatch):
+    home, _ = steam
+    folder = home / "Games/W3"
+    exe = _write(folder / "bin/x64_dx12/witcher3.exe", b"MZ" + b"\0" * 64)
+    _write(folder / "steam_appid.txt", "292030")
+    _write(home / ".local/share/Steam/userdata/123/config/shortcuts.vdf", _shortcuts_vdf([
+        {"appid": 3000000001, "name": "W3 GOTY", "exe": f'"{exe}"', "start": f'"{folder}"'},
+    ]))
+    service = _service(steam, fake_catalog, proc)
+    detail = service.game("3000000001")
+    assert detail["identity"]["steam_appid"] == 292030
+    assert detail["recipe"] is True
+    result = service.install("3000000001", {"build": "fsr-test"})
+    assert result["args"] == ["--launcher-skip", "-dx12"]

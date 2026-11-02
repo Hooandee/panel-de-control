@@ -11,6 +11,7 @@ import { GameCover } from "../components/GameCover";
 import { useSectionBack } from "../components/sectionBack";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { CompareView } from "./CompareView";
+import { openIdentityModal } from "./IdentityModal";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
@@ -217,6 +218,18 @@ export const GameView: FC<{
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
           )}
           {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
+          {detail.shortcut && (
+            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <span style={{ flex: 1 }}>
+                {detail.identity?.steam_appid
+                  ? t("up.identity.known", { name: detail.identity.name ?? String(detail.identity.steam_appid) })
+                  : t("up.identity.unknown")}
+              </span>
+              <span style={{ width: 92 }}>
+                <ActionButton label={t("up.identity.change")} onPress={() => openIdentityModal(appid, detail.identity?.name ?? game.name, setDetail)} />
+              </span>
+            </div>
+          )}
         </div>
       ) : <Skeleton height={56} />}
 

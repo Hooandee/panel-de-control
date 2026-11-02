@@ -1324,6 +1324,14 @@ class Plugin(AmbientRpc):
     async def get_upscalers_compat(self, appids: list[str]) -> dict:
         return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])])
 
+    async def search_upscaler_games(self, term: str) -> list:
+        return await self._upscalers_call("search_games", str(term)[:120])
+
+    async def set_upscaler_identity(self, appid: str, steam_appid: int | None = None, name: str | None = None) -> dict:
+        result = await self._upscalers_call("set_identity", str(appid), steam_appid, name)
+        _upscalers_journal("INFO", "identity", appid=str(appid), steam_appid=steam_appid)
+        return result
+
     async def get_upscalers_game(self, appid: str) -> dict:
         return await self._upscalers_call("game", str(appid))
 
