@@ -412,6 +412,11 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                 <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption }}>
                   {t("themes.early.version", { version: formatVersion(card.early.version) })}
                 </div>
+                {card.earlyUpdateAvailable ? (
+                  <div role="status" data-pdc-theme-early-update="true" style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.45, fontWeight: 700, color: theme.color.accent }}>
+                    {t("themes.early.update")}
+                  </div>
+                ) : null}
                 <div data-pdc-theme-muted style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.45 }}>
                   {t(card.early.installable ? "themes.early.desc" : "themes.early.unavailable")}
                 </div>

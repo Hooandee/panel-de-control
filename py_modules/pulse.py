@@ -22,6 +22,9 @@ _UNCLEAN_PREFIX = "pulse-unclean-"
 _KEEP_UNCLEAN = 4
 _MAX_FILE_BYTES = 24_000
 _STOP_WAIT_S = 0.5
+_MAX_SCREENS = 4
+_LIFECYCLE_KEPT = 4
+_LIFECYCLE_EVENT_CHARS = 40
 _WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader")
 
 
@@ -92,6 +95,21 @@ def _gpu(root: str) -> dict | None:
     return None
 
 
+def _screens(root: str) -> dict | None:
+    """Kernel DPMS of each connected display ("On"/"Off"): gamescope switches the panel
+    through DRM, so this is the screen's real state whoever turned it off."""
+    screens = {}
+    for connector in sorted(glob.glob(os.path.join(root, "sys/class/drm/card*-*"))):
+        if (_read(os.path.join(connector, "status")) or "").strip() != "connected":
+            continue
+        state = (_read(os.path.join(connector, "dpms")) or "").strip()
+        name = os.path.basename(connector).split("-", 1)[-1]
+        screens[name[:24]] = state[:8] or None
+        if len(screens) >= _MAX_SCREENS:
+            break
+    return screens or None
+
+
 def _processes(root: str) -> dict:
     page_kb = os.sysconf("SC_PAGE_SIZE") // 1024
     usage: dict[str, dict] = {}
@@ -119,6 +137,7 @@ def system_sample(root: str = "/") -> dict:
         "psi_io": _pressure(root, "io"),
         "psi_cpu": _pressure(root, "cpu"),
         "gpu": _gpu(root),
+        "screen": _screens(root),
         "proc": _processes(root),
     }
 
@@ -151,6 +170,7 @@ class Pulse:
         *,
         context: Callable[[], dict] | None = None,
         recent: Callable[[], list] | None = None,
+        lifecycle: Callable[[], list] | None = None,
         on_unclean: Callable[[dict], None] | None = None,
         sample: Callable[[], dict] = system_sample,
         interval_s: float = 10.0,
@@ -161,6 +181,7 @@ class Pulse:
         self.directory = directory
         self._context = context
         self._recent = recent
+        self._lifecycle = lifecycle
         self._on_unclean = on_unclean
         self._sample = sample
         self._interval_s = interval_s
@@ -252,6 +273,11 @@ class Pulse:
                 payload["recent"] = self._recent()
             except Exception:  # noqa: BLE001
                 pass
+        if self._lifecycle is not None:
+            try:
+                payload["lifecycle"] = lifecycle_tail(self._lifecycle())
+            except Exception:  # noqa: BLE001
+                pass
         if not self._write_lock.acquire(timeout=wait_s):
             self.write_failures += 1
             return
@@ -276,6 +302,15 @@ class Pulse:
             self.tick()
             if self._stop.wait(self._interval_s):
                 return
+
+
+def lifecycle_tail(events: list) -> list:
+    """The last lifecycle transitions as time and event name only: details live in the diary."""
+    tail = []
+    for event in list(events or [])[-_LIFECYCLE_KEPT:]:
+        if isinstance(event, dict):
+            tail.append({"t": event.get("t"), "event": str(event.get("event"))[:_LIFECYCLE_EVENT_CHARS]})
+    return tail
 
 
 def _load(path: str) -> dict | None:
@@ -312,6 +347,7 @@ def summarize_unclean(previous: dict, current_boot: str | None) -> dict:
         else None,
         "system_rebooted": previous.get("boot") != current_boot if previous.get("boot") and current_boot else None,
         "last": last,
+        "lifecycle": lifecycle_tail(previous["lifecycle"]) if isinstance(previous.get("lifecycle"), list) else None,
     }
 
 

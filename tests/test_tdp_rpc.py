@@ -2014,3 +2014,81 @@ def test_set_auto_tdp_keeps_saved_choice_while_auto_is_unavailable(
 
     monkeypatch.setattr(p, "_auto_tdp_supported", lambda: True)
     assert asyncio.run(p.get_power_draw())["auto_tdp"] is True
+
+
+def test_the_black_box_sees_the_last_lifecycle_events_and_the_eco_screen(Plugin):
+    p = Plugin()
+    p._init()
+    for name in ("baseline", "ac_changed", "ac_stable", "resume_detected", "ac_changed"):
+        p._log_lifecycle_event({"event": name, "on_ac": True})
+
+    assert [entry["event"] for entry in p._lifecycle_recent] == ["ac_changed", "ac_stable", "resume_detected", "ac_changed"]
+    p._screen_sleep.asleep = True
+    assert p._pulse_context()["screen_asleep"] is True
+
+
+def test_hooandee_theme_folders_coming_and_going_reach_the_diary(Plugin, tmp_path, monkeypatch):
+    import json
+    import time
+
+    import journal_context
+
+    themes = tmp_path / "homebrew" / "themes"
+    duo = themes / "Duo"
+    duo.mkdir(parents=True)
+    (duo / "theme.json").write_text(json.dumps({"name": "Hooandee Duo"}))
+    (duo / "panel-theme.json").write_text("{}")
+    monkeypatch.setenv("DECKY_HOME", str(tmp_path / "homebrew"))
+    written = []
+    diary = types.SimpleNamespace(write=lambda *args, **fields: written.append((args, fields)))
+    p = Plugin()
+    p._init()
+    watcher = journal_context.ThemeFolderWatcher({"t": time.time(), "current": {"Duo": "Hooandee Duo"}})
+
+    asyncio.run(p._journal_theme_folders(diary, watcher, True))
+    asyncio.run(p._journal_theme_folders(diary, watcher, False))
+    assert written == []
+
+    for item in duo.iterdir():
+        item.unlink()
+    duo.rmdir()
+    asyncio.run(p._journal_theme_folders(diary, watcher, False))
+    asyncio.run(p._journal_theme_folders(diary, watcher, False))
+
+    assert written == [(("WARNING", "themes", "folders_changed"), {
+        "before": 1, "after": 0, "added": [], "removed": [{"folder": "Duo", "name": "Hooandee Duo"}], "current": {},
+    })]
+
+
+def test_force_close_game_reaches_the_diary(Plugin, monkeypatch):
+    import game_force_close
+    import journal
+
+    calls = []
+    written = []
+    monkeypatch.setattr(
+        game_force_close, "force_close",
+        lambda appid: calls.append(appid) or {"result": "killed", "appid": 4049170, "processes": 4, "killed": 1},
+    )
+    monkeypatch.setattr(journal, "active", types.SimpleNamespace(write=lambda *args, **fields: written.append((args, fields))))
+    p = Plugin()
+    p._init()
+
+    assert asyncio.run(p.force_close_game("4049170"))["result"] == "killed"
+    assert calls == ["4049170"]
+    assert written == [(("WARNING", "games", "force_close"), {"result": "killed", "appid": 4049170, "processes": 4, "killed": 1})]
+
+
+def test_storage_rpcs_answer_with_codes_instead_of_raising(Plugin, tmp_path, monkeypatch):
+    import decky
+
+    monkeypatch.setattr(decky, "DECKY_PLUGIN_SETTINGS_DIR", str(tmp_path))
+    p = Plugin()
+    p._init()
+
+    assert asyncio.run(p.set_theme_storage("hooandee-duo", "pdc.hybrid.dock.v1", "{}")) == {"ok": True}
+    assert asyncio.run(p.get_theme_storage("hooandee-duo", "pdc.hybrid.dock.v1")) == {"ok": True, "value": "{}"}
+    assert asyncio.run(p.get_theme_storage("hooandee-duo", "missing")) == {"ok": True, "value": None}
+    assert asyncio.run(p.set_theme_storage("hooandee-duo", "big", "x" * (128 * 1024 + 1))) == {"ok": False, "code": "too_large"}
+    (tmp_path / "theme-storage" / "hooandee-bubble.json").write_text("{broken")
+    assert asyncio.run(p.get_theme_storage("hooandee-bubble", "layout")) == {"ok": False, "code": "corrupt"}

@@ -25,6 +25,9 @@ import {
   restoreThemeCleanup,
   acknowledgeThemeCleanupUndo,
   loadThemeExtension,
+  getThemeStorage,
+  setThemeStorage,
+  forceCloseGame,
   prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -74,6 +77,8 @@ import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from
 import { configureThemeHealthHost } from "./themes/themeCleanupHost";
 import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
+import { createThemeStorage } from "./themes/runtime/themeStorage";
+import { createThemeGamesAccess } from "./themes/runtime/gamesAccess";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
 
@@ -224,6 +229,8 @@ export default definePlugin(() => {
     getQamDocument,
     subscribeQamDocument: onQamDocument,
     ambient: ambientThemeChannel,
+    storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
+    games: createThemeGamesAccess({ forceClose: forceCloseGame }),
     subscribePackageChanges: onThemePackagesChanged,
   });
   const stopAmbient = startAmbient({

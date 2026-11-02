@@ -77,7 +77,8 @@ public static class Program
                 steam,
                 themeService.EngineInputs,
                 SteamThemeHostBundle.Read,
-                classTable);
+                classTable,
+                new ThemeStorageStore(ThemeLibrary.DefaultRoot));
             var themesServer = new ThemesPipeServer(
                 ThemesPipeServer.PackagedPipeName,
                 new ThemesController(themeService, themeEngine),

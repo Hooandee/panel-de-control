@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import theme_packages
 from json_store import atomic_json_save
@@ -44,6 +44,7 @@ _MAX_CACHE_FILE_BYTES = 128 * 1024
 _MAX_EARLY_ARCHIVE_BYTES = 64 * 1024 * 1024
 _COPY_CHUNK = 1024 * 1024
 _CACHE_FIELDS = frozenset({"schemaVersion", "checkedAt", "catalog"})
+_Parsed = TypeVar("_Parsed")
 
 
 @dataclass(frozen=True)
@@ -245,6 +246,7 @@ class ThemeRemoteService:
         transport: ThemeMetadataTransport | None,
         runtime_versions: Callable[[], ThemeRuntimeVersions],
         cache: ThemeCatalogCache | None = None,
+        early_cache: ThemeCatalogCache | None = None,
         cache_error_logger: Callable[[str], None] | None = None,
         clock: Callable[[], float] = time.time,
     ):
@@ -254,6 +256,7 @@ class ThemeRemoteService:
         self._transport = transport
         self._runtime_versions = runtime_versions
         self._cache_store = cache
+        self._early_cache_store = early_cache
         self._cache_error_logger = cache_error_logger
         self._clock = clock
         self._memory: _CachedCatalog | None = None
@@ -415,16 +418,27 @@ class ThemeRemoteService:
             if not force and early is not None and math.isfinite(now) and 0 <= now - early[1] < _CACHE_SECONDS:
                 return self._early_success(early[0])
         try:
-            catalog = self._fetch_early()
+            payload, catalog = self._fetch_early()
         except ThemeTransportError as error:
-            return self._transport_failure(error)
+            return self._early_fallback_or_failure(error.code, self._transport_failure(error))
         except ThemeContractError:
-            return {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
+            failure = {"status": "recoverable-failure", "code": "invalid_descriptor", "retryable": True}
+            return self._early_fallback_or_failure("invalid_descriptor", failure)
+        checked_at = float(self._clock())
+        if not math.isfinite(checked_at) or checked_at < 0:
+            checked_at = 0.0
+        result = self._early_success(catalog)
         with self._lock:
             if self._stopping:
                 return self._lifecycle_failure()
-            self._early = (catalog, float(self._clock()))
-        return self._early_success(catalog)
+            self._early = (catalog, checked_at)
+        if self._early_cache_store is not None:
+            try:
+                self._early_cache_store.save(payload, checked_at)
+            except Exception as error:  # noqa: BLE001
+                if self._cache_error_logger is not None:
+                    self._cache_error_logger(type(error).__name__)
+        return result
 
     def prepare_early_install(
         self,
@@ -439,9 +453,10 @@ class ThemeRemoteService:
         with tempfile.TemporaryDirectory(prefix=".panel-theme-early-", dir=root.parent) as temporary:
             archive = Path(temporary) / "theme.zip"
             size, digest = _copy_hashing(archive_path, archive)
-            # A fresh read: an archive is only accepted against what is published now.
+            # A fresh read: an archive is only accepted against what is published now, never the
+            # copy persisted for offline listing.
             try:
-                catalog = self._fetch_early()
+                _, catalog = self._fetch_early()
             except ThemeTransportError as error:
                 raise ThemeRemoteError(error.code, "Early theme list is unavailable") from error
             except ThemeContractError as error:
@@ -478,10 +493,23 @@ class ThemeRemoteService:
                     self._active_preparations -= 1
             return {**result, "catalogId": release.catalog_id, "version": artifact.version}
 
-    def _fetch_early(self) -> ThemeEarlyCatalog:
+    def _fetch_early(self) -> tuple[bytes, ThemeEarlyCatalog]:
         if self._transport is None or self._channel is None:
             raise ThemeRemoteError("channel_disabled", "Official theme updates are disabled")
-        return parse_theme_early_catalog(self._transport.fetch_metadata(self._channel.early_path))
+        payload = self._transport.fetch_metadata(self._channel.early_path)
+        return payload, parse_theme_early_catalog(payload)
+
+    def _early_fallback_or_failure(self, code: str, failure: dict[str, object]) -> dict[str, object]:
+        """Without the network, the last verified early list keeps solo-early themes on screen."""
+        with self._lock:
+            if self._stopping:
+                return self._lifecycle_failure()
+            memory = self._early
+        catalog = memory[0] if memory is not None else self._load_persisted_early()
+        if catalog is None:
+            return failure
+        return {**self._early_success(catalog), "status": "cached", "code": code, "retryable": True}
+
 
     def _early_success(self, catalog: ThemeEarlyCatalog) -> dict[str, object]:
         runtime = self._runtime_versions()
@@ -494,10 +522,31 @@ class ThemeRemoteService:
         return payload, parse_theme_catalog(payload, self._channel.pages_base_url)
 
     def _load_persisted(self) -> _CachedCatalog | None:
-        if self._cache_store is None or self._channel is None:
+        channel = self._channel
+        if channel is None:
+            return None
+        loaded = self._load_persisted_list(
+            self._cache_store,
+            lambda payload: parse_theme_catalog(payload, channel.pages_base_url),
+        )
+        return None if loaded is None else _CachedCatalog(*loaded)
+
+    def _load_persisted_early(self) -> ThemeEarlyCatalog | None:
+        if self._channel is None:
+            return None
+        loaded = self._load_persisted_list(self._early_cache_store, parse_theme_early_catalog)
+        return None if loaded is None else loaded[0]
+
+    def _load_persisted_list(
+        self,
+        store: ThemeCatalogCache | None,
+        parse: Callable[[bytes], _Parsed],
+    ) -> tuple[_Parsed, float] | None:
+        """A persisted list, revalidated with its own contract; anything unreadable is no copy."""
+        if store is None:
             return None
         try:
-            record = self._cache_store.load()
+            record = store.load()
             if not isinstance(record, dict) or frozenset(record) != _CACHE_FIELDS:
                 return None
             if record.get("schemaVersion") != 1 or isinstance(
@@ -518,8 +567,7 @@ class ThemeRemoteService:
             payload = base64.b64decode(encoded, validate=True)
             if base64.b64encode(payload).decode("ascii") != encoded:
                 return None
-            parsed = parse_theme_catalog(payload, self._channel.pages_base_url)
-            return _CachedCatalog(parsed, float(checked_at))
+            return parse(payload), float(checked_at)
         except (
             binascii.Error,
             ThemeContractError,

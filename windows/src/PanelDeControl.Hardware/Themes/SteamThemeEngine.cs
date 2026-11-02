@@ -58,7 +58,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
-    public const int HostVersion = 5;
+    public const int HostVersion = 6;
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
@@ -68,6 +68,7 @@ public sealed class SteamThemeEngine
     private readonly Func<ThemeEngineInputs> loadInputs;
     private readonly Func<string> hostBundle;
     private readonly IClassTableSource classTable;
+    private readonly ThemeStorageStore? storage;
     private readonly Dictionary<string, PageSession> pages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> cssCache = new(StringComparer.Ordinal);
     private readonly HashSet<string> inspectedPages = new(StringComparer.Ordinal);
@@ -91,8 +92,10 @@ public sealed class SteamThemeEngine
         ISteamInstallation steam,
         Func<ThemeEngineInputs> loadInputs,
         Func<string> hostBundle,
-        IClassTableSource classTable)
+        IClassTableSource classTable,
+        ThemeStorageStore? storage = null)
     {
+        this.storage = storage;
         this.devTools = devTools;
         this.steam = steam;
         this.loadInputs = loadInputs;
@@ -472,7 +475,73 @@ public sealed class SteamThemeEngine
             result = reported;
         }
 
+        if (storage is not null)
+        {
+            await SyncStorageAsync(session, storage, result, cancellationToken).ConfigureAwait(false);
+        }
+
         return ReadHostStatus(result);
+    }
+
+    /// <summary>
+    /// Persists what theme runtimes saved since the last cycle and, once per host, hands over what is on disk.
+    /// The host reports <c>storage.seeded</c> and <c>storage.pending</c>, so an idle cycle costs no extra call.
+    /// </summary>
+    private async Task SyncStorageAsync(ICdpSession session, ThemeStorageStore store, JsonElement hostStatus, CancellationToken cancellationToken)
+    {
+        if (hostStatus.ValueKind != JsonValueKind.Object
+            || !hostStatus.TryGetProperty("storage", out var state)
+            || state.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var seeded = state.TryGetProperty("seeded", out var seededValue) && seededValue.ValueKind == JsonValueKind.True;
+        var pending = state.TryGetProperty("pending", out var pendingValue) && pendingValue.TryGetInt32(out var count) ? count : 0;
+        if (seeded && pending == 0)
+        {
+            return;
+        }
+
+        var results = new List<object>();
+        if (pending > 0)
+        {
+            var writes = await session.EvaluateAsync($"window.{HostGlobal}.storageTake()", cancellationToken).ConfigureAwait(false);
+            if (writes.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var write in writes.EnumerateArray())
+                {
+                    if (write.ValueKind != JsonValueKind.Object || !write.TryGetProperty("seq", out var seq) || !seq.TryGetInt64(out var number))
+                    {
+                        continue;
+                    }
+
+                    static string? Text(JsonElement element, string name) =>
+                        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+                    var failure = store.Set(Text(write, "catalogId"), Text(write, "key"), Text(write, "value"));
+                    if (failure is not null)
+                    {
+                        CompanionLog.Write("themes.storage_set", failure);
+                    }
+
+                    results.Add(new { seq = number, ok = failure is null });
+                }
+            }
+        }
+
+        object settlement;
+        if (!seeded)
+        {
+            var snapshot = store.Snapshot();
+            settlement = new { seed = snapshot.Themes, unreadable = snapshot.Unreadable, results };
+        }
+        else
+        {
+            settlement = new { results };
+        }
+
+        await session.EvaluateAsync($"window.{HostGlobal}.storageSettle({JsonSerializer.Serialize(settlement)})", cancellationToken).ConfigureAwait(false);
     }
 
     private static long HostRevision(JsonElement status) =>

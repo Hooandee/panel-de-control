@@ -126,6 +126,33 @@ describe("Windows theme host", () => {
     expect(document.body.dataset.mounted).toBe("Venus");
   });
 
+  it("gives the runtime storage the companion persists", async () => {
+    const storingSource = `
+module.exports = Object.freeze({
+  abiVersion: 2,
+  mount: (context) => {
+    context.document.body.dataset.games = String("games" in context);
+    void context.storage.set("layout", "grid").then((ok) => { context.document.body.dataset.saved = String(ok); });
+    return () => {};
+  },
+});`;
+    host = createWindowsThemeHost(scopeWith([{ m_ID: "GamepadUI_Full_Root", doc: document }]));
+    host.update({ revision: 1, snapshot: snapshot(true), extensions: [{ ...extension, source: storingSource }] });
+    await settle();
+
+    expect(host.status().storage).toEqual({ seeded: false, pending: 1 });
+    const writes = host.storageTake();
+    expect(writes).toEqual([{ seq: 1, catalogId: "hooandee-eclipse", key: "layout", value: "grid" }]);
+    expect(host.storageSettle({ seed: { "hooandee-eclipse": { layout: "grid" } }, results: [{ seq: 1, ok: true }] }))
+      .toEqual({ seeded: true, pending: 0 });
+    await settle();
+    expect(document.body.dataset.saved).toBe("true");
+    // Force close has no Windows equivalent yet: the runtime sees it as absent.
+    expect(document.body.dataset.games).toBe("false");
+    delete document.body.dataset.saved;
+    delete document.body.dataset.games;
+  });
+
   it("rejects a payload whose identity is malformed", () => {
     host = createWindowsThemeHost(scopeWith([]));
 

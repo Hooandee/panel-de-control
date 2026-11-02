@@ -2,6 +2,10 @@ import json
 
 from journal_context import (
     StateWatcher,
+    ThemeFolderWatcher,
+    hooandee_theme_folders,
+    stored_theme_folders,
+    theme_folder_event,
     needs_snapshot,
     active_services,
     context_changes,
@@ -155,3 +159,81 @@ def test_armada_power_daemons_are_rivals(tmp_path):
         {"name": "armada-steamos-manager", "kind": "service", "writes": "tdp"},
     ]
     assert "armada-control" in context["services"]
+
+
+def _theme(root, folder, name, *, hooandee=True):
+    path = root / folder
+    path.mkdir()
+    (path / "theme.json").write_text(json.dumps({"name": name, "version": "1.0.0"}))
+    if hooandee:
+        (path / "panel-theme.json").write_text("{}")
+
+
+def test_only_hooandee_theme_folders_are_listed_with_their_theme_names(tmp_path):
+    _theme(tmp_path, "Duo", "Hooandee Duo")
+    _theme(tmp_path, "Gallery", "Hooandee Gallery")
+    _theme(tmp_path, "Someone", "Someone's Theme", hooandee=False)
+    _theme(tmp_path, ".hidden", "Hooandee Hidden")
+    (tmp_path / "leftover").mkdir()
+    assert hooandee_theme_folders(tmp_path) == {"Duo": "Hooandee Duo", "Gallery": "Hooandee Gallery"}
+    assert hooandee_theme_folders(tmp_path / "missing") == {}
+
+
+def test_a_missing_theme_folder_is_written_with_counts_and_names_once_confirmed():
+    now = 1_790_000_000.0
+    last = {"t": now - 60, "s": "themes", "current": {"Duo": "Hooandee Duo", "Gallery": "Hooandee Gallery"}}
+    watcher = ThemeFolderWatcher(last)
+    assert watcher.observe({"Duo": "Hooandee Duo", "Gallery": "Hooandee Gallery"}, now) is None
+
+    assert watcher.observe({"Gallery": "Hooandee Gallery"}, now) is None
+    assert watcher.pending
+    message, event = watcher.observe({"Gallery": "Hooandee Gallery"}, now + 30)
+
+    assert message == "folders_changed"
+    assert event == {
+        "before": 2, "after": 1, "added": [],
+        "removed": [{"folder": "Duo", "name": "Hooandee Duo"}],
+        "current": {"Gallery": "Hooandee Gallery"},
+    }
+    assert not watcher.pending
+    assert watcher.observe({"Gallery": "Hooandee Gallery"}, now + 60) is None
+
+
+def test_an_update_swapping_a_folder_out_and_back_is_not_a_change():
+    now = 1_790_000_000.0
+    watcher = ThemeFolderWatcher({"t": now, "current": {"Duo": "Hooandee Duo"}})
+    assert watcher.observe({}, now) is None
+    assert watcher.observe({"Duo": "Hooandee Duo"}, now + 30) is None
+    assert not watcher.pending
+
+
+def test_the_theme_folder_set_is_written_first_and_then_once_a_day():
+    now = 1_790_000_000.0
+    watcher = ThemeFolderWatcher(None)
+    assert watcher.observe({"Duo": "Hooandee Duo"}, now) is None
+    message, event = watcher.observe({"Duo": "Hooandee Duo"}, now + 30)
+    assert message == "folders" and event["before"] is None and event["after"] == 1
+    assert event["added"] == [{"folder": "Duo", "name": "Hooandee Duo"}]
+    assert watcher.observe({"Duo": "Hooandee Duo"}, now + 60) is None
+
+    message, event = watcher.observe({"Duo": "Hooandee Duo"}, now + 2 * 86_400)
+    assert message == "folders" and event["before"] == event["after"] == 1
+    assert event["added"] == event["removed"] == []
+
+
+def test_the_last_theme_record_is_read_back_from_the_diary(tmp_path):
+    import journal
+
+    diary = journal.Journal(str(tmp_path))
+    diary.start()
+    diary.write("INFO", "themes", "folders", **theme_folder_event(None, {"Duo": "Hooandee Duo"}))
+    diary.stop()
+    record = journal.last_record(str(tmp_path), "themes")
+    assert stored_theme_folders(record) == {"Duo": "Hooandee Duo"}
+    assert stored_theme_folders(None) is None
+
+
+def test_theme_folder_events_stay_bounded():
+    many = {f"theme-{index:03}": f"Hooandee {index}" for index in range(100)}
+    event = theme_folder_event({}, many)
+    assert len(event["added"]) == 16 and event["more"] == 84 and len(event["current"]) == 32

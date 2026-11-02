@@ -201,3 +201,38 @@ def test_the_bundle_redacts_the_black_box(tmp_path):
         app="pdc", categories=[], text="", environment={}, capabilities={}, state={}, stores={}, logs=[],
         journal={"pulse": {"current": {"recent": [{"a": "/home/deck/Games/x.zip"}]}}}, home="/home/deck")
     assert "/home/deck" not in json.dumps(bundle)
+
+
+def test_system_sample_reads_whether_each_connected_screen_is_on(tmp_path):
+    drm = tmp_path / "sys/class/drm"
+    for name, status, dpms in (("card1-eDP-1", "connected", "Off"), ("card1-DP-1", "disconnected", "Off"),
+                               ("card1-HDMI-A-1", "connected", "On")):
+        (drm / name).mkdir(parents=True)
+        (drm / name / "status").write_text(f"{status}\n")
+        (drm / name / "dpms").write_text(f"{dpms}\n")
+    assert system_sample(str(tmp_path))["screen"] == {"HDMI-A-1": "On", "eDP-1": "Off"}
+    assert system_sample(str(tmp_path / "none"))["screen"] is None
+
+
+def test_the_box_keeps_the_last_lifecycle_transitions_through_an_unclean_end(tmp_path):
+    events = [{"t": float(index), "event": name, "suspend_seconds": 9}
+              for index, name in enumerate(("baseline", "ac_changed", "ac_stable", "x" * 200, "resume_detected"))]
+    beat = _pulse(tmp_path, lifecycle=lambda: events)
+    beat.tick()
+    saved = json.loads((tmp_path / "pulse.json").read_text())
+    assert [entry["event"] for entry in saved["lifecycle"]] == ["ac_changed", "ac_stable", "x" * 40, "resume_detected"]
+    assert saved["lifecycle"][-1] == {"t": 4.0, "event": "resume_detected"}
+
+    end = _pulse(tmp_path, boot="boot-b").set_aside_previous()
+    assert end["lifecycle"][-1]["event"] == "resume_detected"
+    assert report(str(tmp_path))["unclean"][0]["lifecycle"][-1]["event"] == "resume_detected"
+
+
+def test_a_broken_lifecycle_source_never_stops_the_box(tmp_path):
+    def broken():
+        raise RuntimeError("boom")
+
+    beat = _pulse(tmp_path, lifecycle=broken)
+    beat.tick()
+    saved = json.loads((tmp_path / "pulse.json").read_text())
+    assert "lifecycle" not in saved and beat.write_failures == 0

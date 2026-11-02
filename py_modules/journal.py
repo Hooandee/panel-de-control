@@ -364,7 +364,7 @@ def merged_sections(directory: str) -> dict | None:
     return None if merged is None else {"t": at, "sections": merged}
 
 
-_KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop")
+_KEY_SOURCES = ("rpc", "session", "context", "sections", "state", "tdp", "loop", "themes")
 _KEY_MESSAGES = ("TDP transition", "Lifecycle transition", "Shutdown stage", " loaded (euid")
 
 
