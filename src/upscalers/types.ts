@@ -55,7 +55,7 @@ export interface HistoryEntry {
 export interface GameDetail {
   appid: string;
   name: string;
-  updating: boolean;
+  updating: "running" | "pending" | null;
   analysis: {
     candidates: { exe: string; apis: string[] }[];
     exe: string | null;

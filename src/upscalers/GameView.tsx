@@ -1,6 +1,6 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
-import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
+import { useSectionBack } from "../components/sectionBack";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
@@ -49,6 +50,8 @@ export const GameView: FC<{
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const mounted = useRef(true);
   const height = overview.display?.[1] ?? 800;
+  const backOverride = useMemo(() => ({ label: t("up.back"), onBack }), [t, onBack]);
+  const borrowedBack = useSectionBack(backOverride);
 
   const load = useCallback(async () => {
     try {
@@ -164,16 +167,16 @@ export const GameView: FC<{
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
   const render = facts?.resolution?.render[1] ?? (choice.quality ? renderHeight(height, choice.quality) : null);
   const output = facts?.resolution?.output[1] ?? height;
-  const blocked = !detail?.analysis.target || detail.updating || (detail.analysis.foreign && !install)
+  const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
   const usable = builds.filter((b) => b.available && b.supported);
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
-  const coming = builds.filter((b) => !b.available);
+  const coming = builds.filter((b) => !b.available && b.supported);
   const compatible = [...new Set(Object.keys(detail?.analysis.inputs ?? {}).map((k) => INPUT_NAMES[k]).filter(Boolean))];
 
   return (
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      <Row><CompactBackAction onBack={onBack} label={t("up.back")} /></Row>
+      {!borrowedBack && <Row><CompactBackAction onBack={onBack} label={t("up.back")} /></Row>}
 
       <div style={{ display: "flex", gap: theme.space.sm, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
         <GameCover urls={game.coverUrls} name={game.name} width={44} />
@@ -192,6 +195,25 @@ export const GameView: FC<{
         </div>
       </div>
 
+      {detail && (
+        <>
+          {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
+          {detail.updating && <Note tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Note>}
+          {detail.analysis.foreign && !install && <Note tone="warn">{t("up.error.foreign")}</Note>}
+          {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
+          {detail.analysis.anti_cheat && !install && (
+            <>
+              <Note tone="danger">{t("up.error.anti_cheat")}</Note>
+              <SegmentRow
+                value={confirmAntiCheat ? "yes" : null}
+                onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
+                options={[{ value: "yes", label: t("up.error.anti_cheat.confirm") }]}
+              />
+            </>
+          )}
+
+        </>
+      )}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
 
@@ -226,21 +248,6 @@ export const GameView: FC<{
 
       {detail && (
         <>
-          {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
-          {detail.updating && <Note tone="warn">{t("up.error.updating")}</Note>}
-          {detail.analysis.foreign && !install && <Note tone="warn">{t("up.error.foreign")}</Note>}
-          {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
-          {detail.analysis.anti_cheat && !install && (
-            <>
-              <Note tone="danger">{t("up.error.anti_cheat")}</Note>
-              <SegmentRow
-                value={confirmAntiCheat ? "yes" : null}
-                onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
-                options={[{ value: "yes", label: t("up.error.anti_cheat.confirm") }]}
-              />
-            </>
-          )}
-
           <SegmentRow
             value={mode}
             onChange={setMode}

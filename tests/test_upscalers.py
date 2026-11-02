@@ -157,6 +157,9 @@ def test_refuses_running_updating_foreign_and_unavailable(steam, fake_catalog, p
 
     manifest = home / f".local/share/Steam/steamapps/appmanifest_{APPID}.acf"
     manifest.write_text(manifest.read_text().replace('"StateFlags" "4"', '"StateFlags" "6"'))
+    with pytest.raises(UpscalerError, match="update_pending"):
+        service.install(APPID, {"build": "fsr-test"})
+    manifest.write_text(manifest.read_text().replace('"StateFlags" "6"', '"StateFlags" "1030"'))
     with pytest.raises(UpscalerError, match="updating"):
         service.install(APPID, {"build": "fsr-test"})
 

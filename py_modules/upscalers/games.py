@@ -10,6 +10,7 @@ from steam_cleaner import vdf
 from . import pe
 
 STATE_FULLY_INSTALLED = 4
+STATE_UPDATE_RUNNING = 256 | 1024
 MAX_DEPTH = 6
 MAX_PE_SCANS = 12
 MANIFEST_DIR = ".pdc-upscaler"
@@ -68,6 +69,13 @@ def library_paths(home: str) -> list[Path]:
             if (path / "steamapps").is_dir() and path not in libraries:
                 libraries.append(path)
     return libraries
+
+
+def update_state(flags: int) -> str | None:
+    """None when Steam has nothing pending, else `running` (downloading) or `pending`."""
+    if flags == STATE_FULLY_INSTALLED:
+        return None
+    return "running" if flags & STATE_UPDATE_RUNNING else "pending"
 
 
 def find_installed(home: str, appid: str) -> Installed | None:

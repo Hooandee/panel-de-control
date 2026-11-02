@@ -371,6 +371,7 @@ export const de: Record<string, string> = {
   "up.history.active": "Hat funktioniert",
   "up.error.running": "Schließe das Spiel, bevor du etwas änderst",
   "up.error.updating": "Steam aktualisiert das Spiel, warte, bis es fertig ist",
+  "up.error.update_pending": "Ein Update steht aus, aktualisiere es in Steam",
   "up.error.foreign": "OptiScaler wurde bereits mit einem anderen Tool hinzugefügt. Entferne es zuerst",
   "up.error.anti_cheat": "Dieses Spiel hat einen Anti-Cheat: Online-Nutzung kann zu einer Sperre führen",
   "up.error.anti_cheat.confirm": "Ich verstehe das Risiko",

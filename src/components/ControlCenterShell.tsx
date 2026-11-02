@@ -20,6 +20,7 @@ import { DeviceHeader } from "./DeviceHeader";
 import { FocusRoot } from "./FocusRoot";
 import { LearningBanner } from "./LearningBanner";
 import { ShellHeader } from "./ShellHeader";
+import { SectionBackContext, type SectionBackOverride } from "./sectionBack";
 import { TabsModeHeader } from "./TabsModeHeader";
 
 export interface ControlCenterShellProps {
@@ -94,6 +95,7 @@ export function ControlCenterShell({
   const storedMode = useShellMode();
   const [entryMode, setEntryMode] = useState<ShellMode | undefined>(initialMode);
   const [dashboardOrigin, setDashboardOrigin] = useState<string | null>(null);
+  const [backOverride, setBackOverride] = useState<SectionBackOverride | null>(null);
   const ids = sections.map((section) => section.id);
   const resolved = resolveShellState(entryMode ?? storedMode, activeId, ids, showHome);
   const active = resolved.activeId
@@ -192,6 +194,7 @@ export function ControlCenterShell({
   }));
 
   return (
+    <SectionBackContext.Provider value={{ shown: resolved.mode === "detail", set: setBackOverride }}>
     <PanelSection>
       <FocusRoot publishDocument>
         <Focusable
@@ -200,7 +203,8 @@ export function ControlCenterShell({
           data-pdc-view={resolved.mode === "home" ? "home" : active?.id}
           onCancel={resolved.mode === "detail" || (showHome && resolved.mode === "tabs") ? (event) => {
             event.stopPropagation();
-            leaveDetail();
+            if (backOverride && resolved.mode === "detail") backOverride.onBack();
+            else leaveDetail();
           } : undefined}
         >
           <PanelSectionRow>
@@ -225,8 +229,8 @@ export function ControlCenterShell({
               ) : null}
               {resolved.mode === "detail" ? (
                 <ShellHeader
-                  onBack={leaveDetail}
-                  backLabel={showHome ? undefined : t("customize.home.tabs")}
+                  onBack={backOverride?.onBack ?? leaveDetail}
+                  backLabel={backOverride?.label ?? (showHome ? undefined : t("customize.home.tabs"))}
                   trailing={showDeviceHeader ? <DeviceHeader device={device} presentation="compact" /> : undefined}
                 />
               ) : null}
@@ -265,5 +269,6 @@ export function ControlCenterShell({
         </Focusable>
       </FocusRoot>
     </PanelSection>
+    </SectionBackContext.Provider>
   );
 }

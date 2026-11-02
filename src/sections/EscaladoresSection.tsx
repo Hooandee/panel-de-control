@@ -29,6 +29,7 @@ export const EscaladoresSection: FC = () => {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  const closeGame = useCallback(() => setSelected(null), []);
 
   const games = useMemo(() => {
     const installs = overview?.installs ?? {};
@@ -49,7 +50,7 @@ export const EscaladoresSection: FC = () => {
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <style>{MOTION_CSS}</style>
       {selected && overview ? (
-        <GameView game={selected} overview={overview} onBack={() => setSelected(null)} onChanged={() => void refresh()} />
+        <GameView game={selected} overview={overview} onBack={closeGame} onChanged={refresh} />
       ) : (
         <>
           {failed && <span style={{ fontSize: theme.font.caption }}>{t("load.error")}</span>}

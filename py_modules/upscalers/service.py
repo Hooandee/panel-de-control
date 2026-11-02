@@ -140,7 +140,7 @@ class UpscalerService:
         return {
             "appid": appid,
             "name": installed.name,
-            "updating": installed.state_flags != games.STATE_FULLY_INSTALLED,
+            "updating": games.update_state(installed.state_flags),
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
@@ -207,8 +207,9 @@ class UpscalerService:
         installed = games.find_installed(self.home, appid)
         if installed is None:
             raise UpscalerError("not_installed")
-        if installed.state_flags != games.STATE_FULLY_INSTALLED:
-            raise UpscalerError("updating")
+        update = games.update_state(installed.state_flags)
+        if update:
+            raise UpscalerError("updating" if update == "running" else "update_pending")
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         analysis = games.analyze(installed.root, self._game_state(appid).get("exe"))
