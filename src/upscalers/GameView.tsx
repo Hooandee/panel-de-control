@@ -44,7 +44,7 @@ export const GameView: FC<{
   const { t } = useI18n();
   const appid = String(game.liveAppid);
   const [detail, setDetail] = useState<GameDetail | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"easy" | "custom">("easy");
   const [choice, setChoice] = useState<UpscalerChoice>(() => easyChoice("balanced", overview.preferred));
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
@@ -67,14 +67,14 @@ export const GameView: FC<{
       const next = await getUpscalersGame(appid, hint);
       if (!mounted.current) return;
       setDetail(next);
-      setLoadError(false);
+      setLoadError(null);
       if (next.install) {
         const restored: UpscalerChoice = { build: next.install.build, ...next.install.options };
         setChoice(restored);
         setMode(easyModeOf(restored, overview.preferred) ? "easy" : "custom");
       }
-    } catch {
-      if (mounted.current) setLoadError(true);
+    } catch (error) {
+      if (mounted.current) setLoadError(String((error as Error)?.message ?? "") || "generic");
     }
   }, [appid, overview.preferred, game.isNonSteam, game.liveAppid, game.name]);
 
@@ -291,7 +291,8 @@ export const GameView: FC<{
           <Skeleton height={96} />
         </div>
       )}
-      {loadError && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
+      {loadError === "not_installed" && <Note tone="warn">{t("up.error.missingFolder")}</Note>}
+      {loadError && loadError !== "not_installed" && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
 
       {detail && !detail.native && (
         <>

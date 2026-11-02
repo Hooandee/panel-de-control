@@ -311,6 +311,7 @@ export const ptBR: Record<string, string> = {
   "nav.upscalers": "Upscalers",
   "nav.upscalers.desc": "Imagem melhor e mais FPS nos seus jogos",
   "up.title": "Upscalers",
+  "up.error.missingFolder": "A pasta do jogo não foi encontrada",
   "up.native": "É um jogo de Linux; o OptiScaler só funciona com jogos de Windows",
   "up.error.native_game": "É um jogo de Linux; o OptiScaler só funciona com jogos de Windows",
   "up.identity.known": "Reconhecido como {name}",
