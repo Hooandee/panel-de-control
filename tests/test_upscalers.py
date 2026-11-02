@@ -400,7 +400,11 @@ def test_shortcut_hint_covers_shortcuts_missing_from_vdf(steam, fake_catalog, pr
 
 
 def test_fg_routes_follow_the_wiki_ranking_and_each_generation():
-    sl2 = {"dlssg": ["a"], "fsrfg": ["b"], "streamline": ["c"]}
+    both = {"dlssg": ["a"], "fsrfg": ["b"], "streamline": ["c"]}
+    # Off NVIDIA the game's own FSR FG wins: DLSSG needs spoofing the game may refuse.
+    assert catalog.fg_plan("rdna3", both, generation=10, streamline=2)["input"] == "fsrfg"
+    assert catalog.fg_plan("nvidia", both, generation=10, streamline=2)["input"] == "dlssg"
+    sl2 = {"dlssg": ["a"], "streamline": ["c"]}
     v10 = catalog.fg_plan("rdna3", sl2, generation=10, apis=["d3d12"], streamline=2)
     assert (v10["input"], v10["output"], v10["follows_game"], v10["route"]) == ("dlssg", "fsrfg", True, "game")
     assert catalog.fg_overrides(v10, True)["FrameGen.Enabled"] == "auto"
@@ -412,6 +416,8 @@ def test_fg_routes_follow_the_wiki_ranking_and_each_generation():
     assert catalog.fg_plan("rdna3", {"fsrfg": ["b"]})["input"] == "fsrfg"
     assert catalog.fg_plan("rdna3", {"xefg": ["b"]})["route"] == "optiscaler"
     assert catalog.fg_plan("rdna3", {"xefg": ["b"]}, generation=10)["input"] == "xefg"
+    assert catalog.fg_plan("intel", {"xefg": ["b"], "fsrfg": ["c"]}, generation=10)["input"] == "xefg"
+    assert catalog.fg_plan("rdna3", {"xefg": ["b"], "fsrfg": ["c"]}, generation=10)["input"] == "fsrfg"
 
 
 def test_optifg_is_a_choice_and_never_offered_without_dx12():
@@ -511,3 +517,12 @@ def test_streamline_version_comes_from_any_version_string(monkeypatch):
     assert games.streamline_major(Path("sl.interposer.dll")) == 1
     monkeypatch.setattr(games.pe, "version_strings", lambda _: {})
     assert games.streamline_major(Path("sl.interposer.dll")) is None
+
+
+def test_fsr_inputs_are_not_reported_as_dlss(tmp_path):
+    log = _write(tmp_path / "OptiScaler.log",
+                 "[I] ffxCreateContext_Dx12 context created: 1EE8\n"
+                 "[I] CreateDLSSContext renderWidth: 936, maxWidth: 1440, ratio: 1.5384616\n"
+                 "[I] FSRFG_Dx12::Activate D3D12_Configure Enabled: true, result: FFX_API_RETURN_OK (0)\n")
+    facts = logread.read(log.parent)
+    assert facts["input"] == "FSR3" and facts["fg"]

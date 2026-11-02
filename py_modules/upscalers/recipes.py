@@ -16,13 +16,15 @@ class Recipe:
     native_dlls: tuple[str, ...] = ()
     ini: dict[str, str] = field(default_factory=dict)
     fg: dict[str, str] | None = None
+    fg_note: str | None = None
 
 
 RECIPES: dict[str, Recipe] = {
     recipe.appid: recipe
     for recipe in (
         # REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers.
-        Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12")),
+        # graphics.xml: FSR Frame Generation is disabled while Reflex is on.
+        Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
         # RE Engine exposes its upscaler to OptiScaler only through REFramework.
         Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
     )

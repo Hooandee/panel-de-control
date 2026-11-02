@@ -199,6 +199,7 @@ class UpscalerService:
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
+            "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
         }

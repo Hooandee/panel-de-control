@@ -17,6 +17,7 @@ _FACTS = (
     ("upscaler", re.compile(r"Creating new (.+?) upscaler")),
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
     ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
+    ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
     ("resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
@@ -55,6 +56,9 @@ def read(target: Path, since: float | None = None) -> dict:
                 facts[key] = match.group(1).strip()[:120]
         if _ERROR.search(line):
             errors += 1
+    # OptiScaler names its shared feature path CreateDLSSContext even for FSR 3.1 inputs.
+    if facts.pop("ffx_input", None):
+        facts["input"] = "FSR3"
     facts["errors"] = errors
     return facts
 

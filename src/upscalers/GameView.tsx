@@ -144,6 +144,11 @@ export const GameView: FC<{
   const routes = detail?.fg_plan?.routes ?? {};
   const bothRoutes = "game" in routes && "optiscaler" in routes;
   const route: FgRoute = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
+  const gameFgInput = (detail?.fg_plan?.routes?.game as { input?: string } | undefined)?.input;
+  const gameFgHint = [
+    t(gameFgInput === "xefg" ? "up.fg.enableInGame.xess" : gameFgInput === "fsrfg" ? "up.fg.enableInGame.fsr" : "up.fg.enableInGame.dlss"),
+    detail?.fg_note === "reflexOff" ? t("up.fg.note.reflexOff") : null,
+  ].filter(Boolean).join(". ");
   const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
 
   const apply = async () => {
@@ -222,7 +227,7 @@ export const GameView: FC<{
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
           )}
           {install?.options.fg === "on" && !facts?.fg && facts?.upscaler && detail.fg_plan?.source === "game" && (
-            <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("up.fg.enableInGame")}</span>
+            <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{gameFgHint}</span>
           )}
           {render && output && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
@@ -380,7 +385,7 @@ export const GameView: FC<{
                   options={[{ value: "game", label: t("up.fg.route.game") }, { value: "optiscaler", label: t("up.fg.route.opti") }]}
                 />
               )}
-              <Note>{t(route === "game" ? "up.fg.fromGame" : bothRoutes ? "up.fg.fromOptiChoice" : "up.fg.fromOpti")}</Note>
+              <Note>{route === "game" ? `${t("up.fg.fromGame")}. ${gameFgHint}` : t(bothRoutes ? "up.fg.fromOptiChoice" : "up.fg.fromOpti")}</Note>
             </>
           )}
 

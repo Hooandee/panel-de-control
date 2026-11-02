@@ -91,6 +91,7 @@ export interface GameDetail {
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
+  fg_note?: "reflexOff" | null;
   shortcut: boolean;
   native: boolean;
   fg_plan: FgPlan | null;

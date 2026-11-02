@@ -228,18 +228,23 @@ def fg_routes(gpu: str, inputs: dict, apis: list | tuple = (), streamline: int |
     """
     output = "xefg" if gpu == "intel" else "fsrfg"
     dx12 = not apis or "d3d12" in apis
-    game = None
+    candidates = []
     if "dlssg" in inputs:
         if generation >= 10:
-            game = {"input": "dlssg", "output": output, "follows_game": (streamline or 0) >= 2}
+            candidates.append({"input": "dlssg", "output": output, "follows_game": (streamline or 0) >= 2})
         elif (streamline or 0) >= 2:
-            game = {"input": "dlssg", "output": output, "follows_game": False}
+            candidates.append({"input": "dlssg", "output": output, "follows_game": False})
         else:
-            game = {"input": "nukems", "output": "nukems", "follows_game": False}
-    elif "fsrfg" in inputs and dx12:
-        game = {"input": "fsrfg", "output": output, "follows_game": False}
-    elif "xefg" in inputs and dx12 and generation >= 10:
-        game = {"input": "xefg", "output": output, "follows_game": False}
+            candidates.append({"input": "nukems", "output": "nukems", "follows_game": False})
+    native = []
+    if "fsrfg" in inputs and dx12:
+        native.append({"input": "fsrfg", "output": output, "follows_game": False})
+    if "xefg" in inputs and dx12 and generation >= 10:
+        native.insert(0 if gpu == "intel" else len(native), {"input": "xefg", "output": output, "follows_game": False})
+    # Off NVIDIA, DLSSG only appears through spoofing the game may refuse (Witcher 3 resets DLSSGMode);
+    # the game's own FSR/Xe generator needs no spoofing.
+    candidates = native + candidates if gpu != "nvidia" else candidates + native
+    game = candidates[0] if candidates else None
     if game and output == "xefg" and not dx12:
         game = {**game, "output": "fsrfg"}
     routes = {}
