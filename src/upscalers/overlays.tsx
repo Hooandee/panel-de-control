@@ -17,8 +17,7 @@ export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
 
 const IN_GAME_KEY = "pdc:upscalers:inGame";
 const START_MS = 6000;
-const LIVE_POLL_MS = 3000;
-const LIVE_GIVE_UP_MS = 180000;
+const LIVE_POLL_MS = 5000;
 const STYLE_ID = "pdc-up-cover-style";
 const HOST_ID = "pdc-up-ingame";
 const COVER_IMAGE = /\/(?:assets|customimages|apps)\/(\d+)(?:\/|p\.|\.)/;
@@ -175,7 +174,6 @@ export const InGameBadge: FC = () => {
     if (!badge || mode === "off" || !running) return;
     let alive = true;
     let hideTimer = 0;
-    const started = Date.now();
     const poll = window.setInterval(async () => {
       const live = await getUpscalerLive(String(running.liveAppid)).catch(() => null);
       if (!alive) return;
@@ -184,8 +182,6 @@ export const InGameBadge: FC = () => {
         setResolution(live.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null);
         setVisible(true);
         if (mode === "start") hideTimer = window.setTimeout(() => setVisible(false), START_MS);
-      } else if (Date.now() - started > LIVE_GIVE_UP_MS) {
-        window.clearInterval(poll);
       }
     }, LIVE_POLL_MS);
     return () => {
