@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, games, ini, logread, recipes
+from . import capture, catalog, diagnostics, games, ini, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -138,12 +138,13 @@ class UpscalerService:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
         recipe = recipes.recipe_for(appid)
-        analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else None)
+        analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
         return {
             "appid": appid,
             "name": installed.name,
             "updating": games.update_state(installed.state_flags),
+            "shortcut": installed.shortcut,
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
@@ -216,7 +217,7 @@ class UpscalerService:
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         recipe = recipes.recipe_for(appid)
-        analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else None)
+        analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else installed.exe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
         if analysis["anti_cheat"] and not confirm_anti_cheat:
@@ -455,6 +456,24 @@ class UpscalerService:
             history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fsr4", "resolution", "version") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
+
+    def diagnose(self, appid: str) -> dict:
+        return diagnostics.game_report(self.home, str(appid), self._game_state(str(appid)))
+
+    def report(self) -> dict:
+        """Bundle section: every game Panel has touched, newest first, explained in full."""
+        touched = [
+            (appid, entry) for appid, entry in self.state["games"].items()
+            if isinstance(entry.get("install"), dict) or entry.get("history") or entry.get("exe")
+        ]
+        touched.sort(key=lambda item: max([h.get("at", 0) for h in item[1].get("history", [])] or [0]), reverse=True)
+        return {
+            "gpu": self.gpu,
+            "environment": diagnostics.environment(),
+            "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
+            "job": self.job(),
+            "games": [diagnostics.game_report(self.home, appid, entry) for appid, entry in touched[:12]],
+        }
 
     def support_state(self) -> dict:
         return {

@@ -1367,6 +1367,15 @@ class Plugin(AmbientRpc):
         service = getattr(self, "_upscaler_service", None)
         return service.cancel() if service is not None else None
 
+    async def _upscalers_report(self) -> dict:
+        try:
+            return await self._upscalers_call("report")
+        except Exception:  # noqa: BLE001
+            return {"error": "diagnostics_unavailable"}
+
+    async def diagnose_upscaler(self, appid: str) -> dict:
+        return await self._upscalers_call("diagnose", str(appid))
+
     async def _support_upscalers_state(self) -> dict:
         service = getattr(self, "_upscaler_service", None)
         return service.support_state() if service is not None else {"loaded": False}
@@ -2769,6 +2778,7 @@ class Plugin(AmbientRpc):
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
+            "upscalers": await self._upscalers_report(),
             "ambient": self.ambient_diagnostics(),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context

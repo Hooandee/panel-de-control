@@ -275,3 +275,61 @@ def test_capture_moves_gamescope_shot_and_keeps_a_few(tmp_path):
 
     with pytest.raises(capture.CaptureError):
         capture.take(folder, "bad", run=lambda *a: (1, ""), scratch=str(tmp_path))
+
+
+def test_report_explains_an_install_from_the_bundle_alone(steam, fake_catalog, proc):
+    home, game = steam
+    root = home / ".local/share/Steam"
+    _write(root / "config/config.vdf",
+           '"InstallConfigStore" { "Software" { "Valve" { "Steam" { "CompatToolMapping" { "%s" { "name" "proton_experimental" } } } } } }' % APPID)
+    _write(root / "userdata/123/config/localconfig.vdf",
+           '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "%s" { "LaunchOptions" "WINEDLLOVERRIDES=\\"dxgi=n,b\\" %%command%%" } } } } } }' % APPID)
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    target = game / "bin/x64_dx12"
+    log = _write(target / "OptiScaler.log", "[W] OptiScaler v0.9.4 loaded\n[I] VulkanSpoofing noise\n[E] hkD3D12CreateDevice ppDevice is nullptr\n")
+    future = time.time() + 5
+    os.utime(log, (future, future))
+    (target / "amdxcffx64.dll").write_bytes(b"tampered")
+
+    report = service.report()
+    game_report = report["games"][0]
+    assert game_report["steam"] == {"compat_tool": "proton_experimental", "launch_options": 'WINEDLLOVERRIDES="dxgi=n,b" %command%'}
+    assert game_report["manifest"]["changed"] == ["amdxcffx64.dll"]
+    assert game_report["ini"]["FSR.Fsr4Update"] == "true"
+    assert game_report["log_verdict"] == "loaded"
+    assert any("ppDevice" in line for line in game_report["log_excerpt"])
+    assert not any("VulkanSpoofing" in line for line in game_report["log_excerpt"])
+    assert "kernel" in report["environment"]
+
+
+def _shortcuts_vdf(entries: list[dict]) -> bytes:
+    def string(key, value):
+        return b"\x01" + key.encode() + b"\0" + value.encode() + b"\0"
+
+    def number(key, value):
+        return b"\x02" + key.encode() + b"\0" + int(value).to_bytes(4, "little")
+
+    body = b""
+    for index, entry in enumerate(entries):
+        fields = number("appid", entry["appid"]) + string("AppName", entry["name"]) \
+            + string("Exe", entry["exe"]) + string("StartDir", entry["start"])
+        body += b"\x00" + str(index).encode() + b"\0" + fields + b"\x08"
+    return b"\x00shortcuts\0" + body + b"\x08\x08"
+
+
+def test_non_steam_shortcut_installs_like_any_game(steam, fake_catalog, proc):
+    home, _ = steam
+    folder = home / "Games/Cracked Game"
+    exe = _write(folder / "bin/game.exe", b"MZ" + b"\0" * 64)
+    shortcut_id = 3123456789
+    _write(home / ".local/share/Steam/userdata/123/config/shortcuts.vdf", _shortcuts_vdf([
+        {"appid": shortcut_id, "name": "Cracked Game", "exe": f'"{exe}"', "start": f'"{folder}"'},
+    ]))
+    service = _service(steam, fake_catalog, proc)
+    detail = service.game(str(shortcut_id))
+    assert detail["shortcut"] is True
+    assert detail["name"] == "Cracked Game"
+    assert detail["analysis"]["exe"] == "bin/game.exe"
+    service.install(str(shortcut_id), {"build": "fsr-test"})
+    assert (folder / "bin/dxgi.dll").read_bytes() == b"injector"

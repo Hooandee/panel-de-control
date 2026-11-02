@@ -39,6 +39,8 @@ class Installed:
     name: str
     root: Path
     state_flags: int
+    exe: str | None = None
+    shortcut: bool = False
 
 
 def steam_roots(home: str) -> list[Path]:
@@ -78,6 +80,39 @@ def update_state(flags: int) -> str | None:
     return "running" if flags & STATE_UPDATE_RUNNING else "pending"
 
 
+def _unquote(value: object) -> str:
+    return str(value or "").strip().strip('"')
+
+
+def find_shortcut(home: str, appid: str) -> Installed | None:
+    """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
+    for root in steam_roots(home):
+        try:
+            profiles = [p for p in (root / "userdata").iterdir() if p.name.isdecimal()]
+        except OSError:
+            continue
+        for profile in profiles:
+            try:
+                shortcuts = vdf.read_shortcuts(profile / "config/shortcuts.vdf")
+            except (OSError, ValueError, UnicodeError):
+                continue
+            for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
+                if not isinstance(entry, dict) or str(entry.get("appid")) != appid:
+                    continue
+                exe = Path(_unquote(entry.get("exe")))
+                start = Path(_unquote(entry.get("startdir"))) if _unquote(entry.get("startdir")) else exe.parent
+                if not start.is_dir():
+                    return None
+                relative = None
+                if exe.suffix.lower() == ".exe" and exe.is_file():
+                    try:
+                        relative = exe.resolve().relative_to(start.resolve()).as_posix()
+                    except ValueError:
+                        start, relative = exe.parent, exe.name
+                return Installed(appid, str(entry.get("appname") or appid), start, STATE_FULLY_INSTALLED, relative, True)
+    return None
+
+
 def find_installed(home: str, appid: str) -> Installed | None:
     if not appid.isdecimal():
         return None
@@ -97,7 +132,7 @@ def find_installed(home: str, appid: str) -> Installed | None:
             except (TypeError, ValueError):
                 flags = 0
             return Installed(appid, str(state.get("name") or appid), root, flags)
-    return None
+    return find_shortcut(home, appid)
 
 
 def _walk(root: Path):

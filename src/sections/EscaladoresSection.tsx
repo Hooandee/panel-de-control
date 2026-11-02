@@ -43,7 +43,6 @@ export const EscaladoresSection: FC = () => {
   const games = useMemo(() => {
     const installs = overview?.installs ?? {};
     return listInstalledGames()
-      .filter((g) => !g.isNonSteam)
       .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
   }, [overview]);
 
