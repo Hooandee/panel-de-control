@@ -17,7 +17,7 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   revertLaunch,
 } from "./model";
-import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
+import { ActionButton, BAR_COLUMN, Bars, Chip, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
 const POLL_MS = 250;
@@ -178,6 +178,7 @@ export const GameView: FC<{
   const usable = builds.filter((b) => b.available && b.supported);
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
+  const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
   const compatible = [...new Set(Object.keys(detail?.analysis.inputs ?? {}).map((k) => INPUT_NAMES[k]).filter(Boolean))];
 
   return (
@@ -185,22 +186,34 @@ export const GameView: FC<{
       {!borrowedBack && <Row><CompactBackAction onBack={onBack} label={t("up.back")} /></Row>}
 
       <div style={{ display: "flex", gap: theme.space.sm, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
-        <GameCover urls={game.coverUrls} name={game.name} width={44} />
-        <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-          <div style={{ fontWeight: 700, fontSize: theme.font.body, lineHeight: 1.2, color: theme.color.textPrimary }}>{game.name}</div>
-          {detail ? (
-            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, flexWrap: "wrap" }}>
-              {install && <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>}
-              {install && <Dot color={statusColor(status)} />}
-              <span style={{ color: install ? theme.color.textPrimary : theme.color.textMuted }}>
-                {install ? t(`up.status.${status}`) : t("up.status.none")}
-              </span>
-            </div>
-          ) : <Skeleton height={10} width="60%" />}
-          {detail?.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
-          {render && output && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.resolution", { render, output })}</span>}
-        </div>
+        <GameCover urls={game.coverUrls} name={game.name} width={40} />
+        <div style={{ fontWeight: 700, fontSize: theme.font.body + 1, lineHeight: 1.2, color: theme.color.textPrimary }}>{game.name}</div>
       </div>
+
+      {detail ? (
+        <div style={{
+          ...theme.card,
+          boxShadow: `${theme.card.boxShadow}, inset 3px 0 0 ${statusColor(status)}`,
+          padding: `${theme.space.sm}px ${theme.space.md}px`,
+          display: "flex", flexDirection: "column", gap: 4,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
+            <span style={{ flex: 1, fontWeight: 700, fontSize: theme.font.body, color: theme.color.textPrimary }}>
+              {install ? t(`up.status.${status}`) : t("up.status.none")}
+            </span>
+            {install
+              ? <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>
+              : preferredBuild && <Chip>{buildLabel(preferredBuild)}</Chip>}
+          </div>
+          {render && output && (
+            <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
+          )}
+          {!install && preferredBuild && (
+            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
+          )}
+          {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
+        </div>
+      ) : <Skeleton height={56} />}
 
       {detail && (
         <>

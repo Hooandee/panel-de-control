@@ -329,6 +329,7 @@ export const de: Record<string, string> = {
   "up.easy.caption.image": "Schärfer",
   "up.resolution": "Von {render}p auf {output}p skaliert",
   "up.recipe": "Mit den Einstellungen, die dieses Spiel braucht",
+  "up.recommendedFor": "Empfohlen für deine Grafik",
   "up.empty": "Keine Spiele installiert",
   "up.status.active": "Aktiv",
   "up.status.pending": "Spiel kurz, um es zu prüfen",
