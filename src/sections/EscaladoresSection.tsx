@@ -1,7 +1,7 @@
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useState, type FC } from "react";
 
-import { getUpscalersOverview } from "../api";
+import { getUpscalersCompat, getUpscalersOverview } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -9,18 +9,15 @@ import { listInstalledGames, type GameEntry } from "../launch/steamApi";
 import { theme } from "../theme";
 import { GameView } from "../upscalers/GameView";
 import { buildLabel } from "../upscalers/model";
-import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { Chip, Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import type { UpscalersOverview } from "../upscalers/types";
-
-const GPU_LABELS: Record<string, string> = {
-  rdna2: "RDNA 2", rdna3: "RDNA 3", rdna35: "RDNA 3.5", rdna4: "RDNA 4", intel: "Intel", unknown: "GPU",
-};
 
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<GameEntry | null>(null);
+  const [compat, setCompat] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     try {
@@ -40,6 +37,14 @@ export const EscaladoresSection: FC = () => {
       .sort((a, b) => Number(String(b.liveAppid) in installs) - Number(String(a.liveAppid) in installs) || b.lastPlayed - a.lastPlayed);
   }, [overview]);
 
+  const appids = games.map((g) => String(g.liveAppid)).join(",");
+  useEffect(() => {
+    if (!appids) return;
+    let alive = true;
+    getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [appids]);
+
   return (
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <style>{MOTION_CSS}</style>
@@ -47,14 +52,7 @@ export const EscaladoresSection: FC = () => {
         <GameView game={selected} overview={overview} onBack={() => setSelected(null)} onChanged={() => void refresh()} />
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("nav.upscalers.desc")}</span>
-            {overview && (
-              <span style={{ fontSize: theme.font.caption, color: theme.color.accent, fontWeight: 600 }}>
-                {GPU_LABELS[overview.gpu] ?? overview.gpu}
-              </span>
-            )}
-          </div>
+          <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>{t("nav.upscalers.desc")}</span>
           {failed && <span style={{ fontSize: theme.font.caption }}>{t("load.error")}</span>}
           {!overview && !failed && [0, 1, 2, 3].map((i) => <Skeleton key={i} height={64} />)}
           {overview && games.length === 0 && (
@@ -72,13 +70,22 @@ export const EscaladoresSection: FC = () => {
                     {game.name}
                   </div>
                   {install && (
-                    <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
+                      <Chip>{build ? buildLabel(build) : install.build}</Chip>
                       <Dot color={statusColor(install.status)} />
-                      {build ? buildLabel(build) : install.build} · {t(`up.status.${install.status}`)}
+                      <span>{t(`up.status.${install.status}`)}</span>
                     </div>
                   )}
                   {busy && <div style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.phase.prepare")}</div>}
                 </div>
+                {!install && compat[String(game.liveAppid)] && (
+                  <span style={{
+                    fontSize: theme.font.caption, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
+                    color: theme.color.ok, boxShadow: `inset 0 0 0 1px ${theme.color.ok}66`, flexShrink: 0,
+                  }}>
+                    {t("up.compatible")}
+                  </span>
+                )}
               </FocusableCard>
             );
           })}

@@ -1321,6 +1321,9 @@ class Plugin(AmbientRpc):
     async def get_upscalers_overview(self) -> dict:
         return await self._upscalers_call("overview")
 
+    async def get_upscalers_compat(self, appids: list[str]) -> dict:
+        return await self._upscalers_call("compatibility", [str(a) for a in (appids or [])])
+
     async def get_upscalers_game(self, appid: str) -> dict:
         return await self._upscalers_call("game", str(appid))
 

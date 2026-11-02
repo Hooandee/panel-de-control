@@ -60,6 +60,7 @@ class UpscalerService:
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self._lock = threading.Lock()
+        self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
         self._cancel = threading.Event()
         self.state = self._load()
@@ -110,6 +111,24 @@ class UpscalerService:
             return "broken"
         history = entry.get("history") or []
         return history[-1].get("result", "pending") if history else "pending"
+
+    def compatibility(self, appids: list[str]) -> dict[str, bool]:
+        """Which games ship an upscaler Panel can replace, cached by install folder mtime."""
+        result = {}
+        for appid in appids[:400]:
+            installed = games.find_installed(self.home, str(appid))
+            if installed is None:
+                continue
+            try:
+                stamp = installed.root.stat().st_mtime
+            except OSError:
+                continue
+            cached = self._compat.get(installed.appid)
+            if cached is None or cached[0] != stamp:
+                cached = (stamp, games.ships_upscaler(installed.root))
+                self._compat[installed.appid] = cached
+            result[installed.appid] = cached[1]
+        return result
 
     def game(self, appid: str) -> dict:
         installed = games.find_installed(self.home, appid)

@@ -1,13 +1,12 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
-import { LuGauge, LuScale, LuSparkles } from "react-icons/lu";
+import { LuChevronLeft, LuGauge, LuScale, LuSparkles } from "react-icons/lu";
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
   setUpscalersExe, uninstallUpscaler, verifyUpscaler,
 } from "../api";
-import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
@@ -17,12 +16,24 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   withOverride, withoutOverride,
 } from "./model";
-import { ActionButton, ChoiceCard, Dot, Label, Pips, Row, Skeleton, Spinner, statusColor } from "./parts";
-import type { EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
+import { ActionButton, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
+import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
 const EASY_ICONS: Record<EasyMode, FC<{ size?: number }>> = { image: LuSparkles, balanced: LuScale, fps: LuGauge };
 const POLL_MS = 250;
-const INPUT_LABELS: Record<string, string> = { fsr31: "FSR 3.1", fsr2: "FSR 2", dlss: "DLSS", xess: "XeSS", streamline: "Streamline" };
+const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function joinNames(names: string[], and: string): string {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
+}
+
+function errorText(t: Translate, code: string | null | undefined): string {
+  const key = `up.error.${code}`;
+  const text = t(key);
+  return text === key ? t("up.error.generic") : text;
+}
 
 export const GameView: FC<{
   game: GameEntry;
@@ -80,7 +91,7 @@ export const GameView: FC<{
         setMessage(t("up.kept", { count: finished.result.kept.length }));
       }
     } else if (finished.state === "error") {
-      setMessage(t(`up.error.${finished.error}`) === `up.error.${finished.error}` ? t("up.error.generic") : t(`up.error.${finished.error}`));
+      setMessage(errorText(t, finished.error));
     }
     await load();
     onChanged();
@@ -106,16 +117,17 @@ export const GameView: FC<{
     try {
       setJob(await run());
     } catch (error) {
-      const code = String((error as Error)?.message ?? "");
-      setMessage(t(`up.error.${code}`) === `up.error.${code}` ? t("up.error.generic") : t(`up.error.${code}`));
+      setMessage(errorText(t, String((error as Error)?.message ?? "")));
     }
   };
 
   const install = detail?.install ?? null;
   const running = job?.state === "running";
   const builds = overview.builds;
+  const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
   const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness;
+  const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
 
   const apply = async () => {
     if (install && sameBuild) {
@@ -125,12 +137,11 @@ export const GameView: FC<{
         await load();
         onChanged();
       } catch (error) {
-        const code = String((error as Error)?.message ?? "");
-        setMessage(t(`up.error.${code}`) === `up.error.${code}` ? t("up.error.generic") : t(`up.error.${code}`));
+        setMessage(errorText(t, String((error as Error)?.message ?? "")));
       }
       return;
     }
-    await start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
+    await reinstall();
   };
 
   const check = async () => {
@@ -147,165 +158,166 @@ export const GameView: FC<{
   };
 
   const pickExe = async () => {
-    const start = detail?.analysis.target ?? "/home";
     try {
-      const picked = await openFilePicker(0 as never, start, true, true, undefined, ["exe"]);
+      const picked = await openFilePicker(0 as never, detail?.analysis.target ?? "/home", true, true, undefined, ["exe"]);
       if (picked?.realpath) setDetail(await setUpscalersExe(appid, picked.realpath));
     } catch (error) {
-      const code = String((error as Error)?.message ?? "");
-      if (code) setMessage(t("up.error.invalid_exe"));
+      if (String((error as Error)?.message ?? "")) setMessage(t("up.error.invalid_exe"));
     }
   };
 
-  const status = install?.status ?? null;
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
-  const resolution = facts?.resolution
-    ? `${facts.resolution.render[1]}p → ${facts.resolution.output[1]}p`
-    : choice.quality ? `${renderHeight(height, choice.quality)}p → ${height}p` : null;
+  const render = facts?.resolution?.render[1] ?? (choice.quality ? renderHeight(height, choice.quality) : null);
+  const output = facts?.resolution?.output[1] ?? height;
+  const blocked = !detail?.analysis.target || detail.updating || (detail.analysis.foreign && !install)
+    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
+  const usable = builds.filter((b) => b.available && b.supported);
+  const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
+  const coming = builds.filter((b) => !b.available);
+  const compatible = [...new Set(Object.keys(detail?.analysis.inputs ?? {}).map((k) => INPUT_NAMES[k]).filter(Boolean))];
 
   return (
-    <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-      <CompactBackAction onBack={onBack} label={t("up.title")} />
+    <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      <Row>
+        <Focusable
+          onActivate={onBack}
+          onClick={onBack}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 2, padding: `${theme.space.xs}px ${theme.space.sm}px`,
+            borderRadius: theme.radius.sm, fontSize: theme.font.caption + 1, color: theme.color.textPrimary, cursor: "pointer",
+            boxShadow: `inset 0 0 0 1px ${theme.color.outline}`,
+          }}
+        >
+          <LuChevronLeft size={14} /> {t("up.back")}
+        </Focusable>
+      </Row>
 
       <div style={{ display: "flex", gap: theme.space.md, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
-        <GameCover urls={game.coverUrls} name={game.name} width={52} />
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <GameCover urls={game.coverUrls} name={game.name} width={56} />
+        <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
           <div style={{ fontWeight: 700, fontSize: theme.font.body + 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {game.name}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {detail ? (
-              <>
-                <Dot color={statusColor(status)} />
-                <span style={{ color: status ? theme.color.textPrimary : theme.color.textMuted }}>
-                  {install ? `${buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })} · ${t(`up.status.${status}`)}` : t("up.status.none")}
-                </span>
-              </>
-            ) : <Skeleton height={10} width="60%" />}
-          </div>
-          {install && resolution && (
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{facts?.upscaler ? `${facts.upscaler} · ` : ""}{resolution}</div>
+          {detail ? (
+            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body }}>
+              {install && <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>}
+              <Dot color={statusColor(status)} />
+              <span>{install ? t(`up.status.${status}`) : t("up.status.none")}</span>
+            </div>
+          ) : <Skeleton height={12} width="55%" />}
+          {render && (
+            <div style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>
+              {t("up.resolution", { render, output })}
+            </div>
           )}
         </div>
-        {install && !running && (
-          <div style={{ width: 96 }}>
-            <ActionButton label={t("up.verify")} onPress={check} busy={verifying} />
-          </div>
-        )}
       </div>
 
-      {install && (install.status === "pending" || install.status === "loaded" || install.status === "not_run") && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {t(install.status === "loaded" ? "up.hint.loaded" : "up.next.play")}
-        </div>
+      {install && (status === "loaded" || status === "pending" || status === "not_run") && (
+        <Note color={theme.color.accent}>{t(status === "loaded" ? "up.hint.loaded" : "up.next.play")}</Note>
       )}
 
+      {running && job && <Progress job={job} />}
+      {message && <Note color={theme.color.warn}>{message}</Note>}
+
+      {detail && !running && (
+        <Row>
+          {status === "broken" ? (
+            <ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} />
+          ) : (
+            dirty && <ActionButton primary label={install ? t("up.save") : t("up.apply")} onPress={apply} disabled={blocked} />
+          )}
+          {install && <ActionButton label={t("up.verify")} onPress={check} busy={verifying} grow={false} />}
+          {install && <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} grow={false} />}
+        </Row>
+      )}
+      {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
+
       {!detail && !loadError && (
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, marginTop: theme.space.sm }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
             <Spinner size={12} /> {t("up.detect.analyzing")}
           </div>
-          <Skeleton height={54} />
-          <Skeleton height={54} />
+          <Skeleton height={44} />
+          <Skeleton height={64} />
         </div>
       )}
       {loadError && <ActionButton label={t("load.retry")} onPress={() => void load()} />}
 
       {detail && (
         <>
-          <Row>
-            {(["easy", "custom"] as const).map((m) => (
-              <ChoiceCard key={m} selected={mode === m} onPick={() => setMode(m)} style={{ alignItems: "center", padding: theme.space.xs }}>
-                <span style={{ fontWeight: 600, fontSize: theme.font.body }}>{t(`up.mode.${m}`)}</span>
-              </ChoiceCard>
-            ))}
-          </Row>
+          <SegmentRow
+            value={mode}
+            onChange={setMode}
+            options={[{ value: "easy", label: t("up.mode.easy") }, { value: "custom", label: t("up.mode.custom") }]}
+          />
 
           {mode === "easy" ? (
-            <>
-              <Label>{t("up.easy.title")}</Label>
-              <Row>
-                {EASY_MODES.map((m) => {
-                  const Icon = EASY_ICONS[m];
-                  const preset = easyChoice(m, overview.preferred);
-                  return (
-                    <ChoiceCard key={m} selected={easyModeOf(choice, overview.preferred) === m} onPick={() => setChoice(preset)}
-                      style={{ alignItems: "center", textAlign: "center", padding: `${theme.space.md}px ${theme.space.xs}px` }}>
-                      <Icon size={22} />
-                      <span style={{ fontWeight: 600, fontSize: theme.font.body }}>{t(`up.easy.${m}`)}</span>
-                      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                        {renderHeight(height, preset.quality!)}p
-                      </span>
-                    </ChoiceCard>
-                  );
-                })}
-              </Row>
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
-                {buildLabel(builds.find((b) => b.id === overview.preferred) ?? { family: "fsr", version: "" })}
-              </div>
-            </>
+            <SegmentRow<EasyMode>
+              value={easyModeOf(choice, overview.preferred)}
+              onChange={(m) => setChoice(easyChoice(m, overview.preferred))}
+              options={EASY_MODES.map((m) => {
+                const Icon = EASY_ICONS[m];
+                return { value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`), icon: <Icon size={20} /> };
+              })}
+            />
           ) : (
             <>
               <Label>{t("up.section.version")}</Label>
-              <Row>
-                {builds.map((build) => {
-                  const usable = build.available && build.supported;
-                  return (
-                    <ChoiceCard key={build.id} selected={choice.build === build.id} disabled={!usable}
-                      onPick={() => setChoice({ ...choice, build: build.id })}>
-                      <span style={{ fontWeight: 700, fontSize: theme.font.body }}>{buildLabel(build)}</span>
-                      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                        {!build.available ? t("up.build.soon")
-                          : !build.supported ? t("up.build.unsupported")
-                          : build.id === overview.preferred ? t("up.build.recommended") : " "}
-                      </span>
-                      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                        <Pips value={build.image} glyph="★" /> <Pips value={build.cost} glyph="●" />
-                      </span>
-                    </ChoiceCard>
-                  );
-                })}
-              </Row>
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: 2 }}>
-                ★ {t("up.image")} · ● {t("up.cost")}
-              </div>
+              <SegmentRow
+                value={choice.build}
+                onChange={(build) => setChoice({ ...choice, build })}
+                options={usable.map((build: BuildInfo) => ({
+                  value: build.id,
+                  label: buildLabel(build),
+                  caption: (
+                    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <Bars value={build.image} label={t("up.bar.image")} />
+                      <Bars value={4 - build.cost} label={t("up.bar.perf")} />
+                    </span>
+                  ),
+                }))}
+              />
+              {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
+              {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 
               <Label>{t("up.section.quality")}</Label>
-              <Row>
-                {QUALITIES.map((q) => (
-                  <ChoiceCard key={q} selected={choice.quality === q} onPick={() => setChoice({ ...choice, quality: q })} style={{ alignItems: "center" }}>
-                    <span style={{ fontWeight: 600, fontSize: theme.font.caption + 1 }}>{t(`up.quality.${q}`)}</span>
-                    <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{renderHeight(height, q)}p</span>
-                  </ChoiceCard>
-                ))}
-              </Row>
+              <Note>{t("up.quality.help")}</Note>
+              <SegmentRow
+                value={choice.quality}
+                onChange={(quality) => setChoice({ ...choice, quality })}
+                options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
+              />
 
               <Label>{t("up.section.sharpness")}</Label>
-              <Row>
-                {SHARPNESS.map((s) => (
-                  <ChoiceCard key={s} selected={choice.sharpness === s} onPick={() => setChoice({ ...choice, sharpness: s })} style={{ alignItems: "center" }}>
-                    <span style={{ fontWeight: 600, fontSize: theme.font.caption + 1 }}>{t(`up.sharp.${s}`)}</span>
-                  </ChoiceCard>
-                ))}
-              </Row>
+              <SegmentRow
+                value={choice.sharpness}
+                onChange={(sharpness) => setChoice({ ...choice, sharpness })}
+                options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
+              />
             </>
           )}
 
           <Label>{t("up.detect.title")}</Label>
-          <div style={{ ...theme.card, padding: theme.space.sm, display: "flex", flexDirection: "column", gap: 2, fontSize: theme.font.caption }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: theme.space.sm }}>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {detail.analysis.exe ?? t("up.error.no_exe")}
-                {detail.analysis.apis.length > 0 && <span style={{ color: theme.color.textMuted }}> · {detail.analysis.apis.filter((a) => a !== "dxgi").map((a) => a.toUpperCase()).join(" ")}</span>}
-                {detail.analysis.manual && <span style={{ color: theme.color.accent }}> · {t("up.detect.manual")}</span>}
-              </span>
-            </div>
-            <span style={{ color: theme.color.textMuted }}>
-              {Object.keys(detail.analysis.inputs).length
-                ? t("up.detect.inputs", { list: Object.keys(detail.analysis.inputs).map((k) => INPUT_LABELS[k] ?? k).join(", ") })
-                : t("up.detect.noinputs")}
-            </span>
-          </div>
+          <Note>
+            {compatible.length ? t("up.detect.inputs", { list: joinNames(compatible, t("up.and")) }) : t("up.detect.noinputs")}
+          </Note>
+          {detail.analysis.manual && detail.analysis.exe && (
+            <Note>{t("up.detect.manual", { exe: detail.analysis.exe.split("/").pop() ?? detail.analysis.exe })}</Note>
+          )}
+          {!detail.analysis.target && <Note color={theme.color.warn}>{t("up.error.no_exe")}</Note>}
+          {detail.updating && <Note color={theme.color.warn}>{t("up.error.updating")}</Note>}
+          {detail.analysis.foreign && !install && <Note color={theme.color.warn}>{t("up.error.foreign")}</Note>}
+          {detail.analysis.anti_cheat && !install && (
+            <>
+              <Note color={theme.color.danger}>{t("up.error.anti_cheat")}</Note>
+              <SegmentRow
+                value={confirmAntiCheat ? "yes" : null}
+                onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
+                options={[{ value: "yes", label: t("up.error.anti_cheat.confirm") }]}
+              />
+            </>
+          )}
           <Row>
             <ActionButton label={t("up.detect.pick")} onPress={pickExe} disabled={running} />
             {detail.analysis.manual && (
@@ -313,48 +325,17 @@ export const GameView: FC<{
             )}
           </Row>
 
-          {detail.updating && <Notice color={theme.color.warn} text={t("up.error.updating")} />}
-          {detail.analysis.foreign && !install && <Notice color={theme.color.warn} text={t("up.error.foreign")} />}
-          {detail.analysis.anti_cheat && !install && (
-            <>
-              <Notice color={theme.color.danger} text={t("up.error.anti_cheat")} />
-              <ChoiceCard selected={confirmAntiCheat} onPick={() => setConfirmAntiCheat(!confirmAntiCheat)} style={{ flexDirection: "row", alignItems: "center", gap: theme.space.xs }}>
-                <span style={{ fontSize: theme.font.caption + 1 }}>{t("up.error.anti_cheat.confirm")}</span>
-              </ChoiceCard>
-            </>
-          )}
-
-          {running && job && <Progress job={job} />}
-          {message && <Notice color={theme.color.warn} text={message} />}
-
-          <div style={{ display: "flex", gap: theme.space.xs, marginTop: theme.space.sm }}>
-            {running ? (
-              <ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} />
-            ) : (
-              <>
-                <ActionButton
-                  primary
-                  label={install ? (sameBuild ? t("up.save") : t("up.apply")) : t("up.apply")}
-                  onPress={apply}
-                  disabled={!dirty || !detail.analysis.target || detail.updating || (detail.analysis.foreign && !install)
-                    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat)}
-                />
-                {install && <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} />}
-              </>
-            )}
-          </div>
-
           {detail.history.length > 0 && (
             <>
               <Label>{t("up.history")}</Label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {[...detail.history].reverse().slice(0, 6).map((entry) => {
                   const build = builds.find((b) => b.id === entry.build);
                   return (
-                    <div key={`${entry.at}`} style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption }}>
+                    <div key={`${entry.at}`} style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
                       <Dot color={statusColor(entry.result)} />
                       <span style={{ flex: 1, textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>
-                        {build ? buildLabel(build) : entry.build} · {entry.proxy}
+                        {build ? buildLabel(build) : entry.build}
                       </span>
                       <span style={{ color: theme.color.textMuted }}>{t(`up.status.${entry.result}`)}</span>
                     </div>
@@ -369,13 +350,6 @@ export const GameView: FC<{
   );
 };
 
-const Notice: FC<{ color: string; text: string }> = ({ color, text }) => (
-  <div style={{ display: "flex", gap: theme.space.xs, alignItems: "flex-start", fontSize: theme.font.caption + 1, padding: `${theme.space.xs}px 0` }}>
-    <span style={{ marginTop: 5 }}><Dot color={color} /></span>
-    <span>{text}</span>
-  </div>
-);
-
 const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
   const { t } = useI18n();
   const determinate = job.phase === "download" && job.total > 0;
@@ -384,7 +358,7 @@ const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
     ? t("up.phase.download", { done: megabytes(job.done), total: megabytes(job.total) })
     : t(`up.phase.${job.phase}`);
   return (
-    <div style={{ ...theme.card, padding: theme.space.sm, display: "flex", flexDirection: "column", gap: theme.space.xs, animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
         <Spinner size={12} /> {label}
       </div>

@@ -205,3 +205,8 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
         _write(tmp_path / name / "modes", mode + "\n")
     assert panel_resolution(str(tmp_path)) == [1920, 1200]
     assert panel_resolution(str(tmp_path / "missing")) is None
+
+
+def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
+    service = _service(steam, fake_catalog, proc)
+    assert service.compatibility([APPID, "999"]) == {APPID: True}

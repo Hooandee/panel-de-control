@@ -116,6 +116,15 @@ def _score(path: Path, root: Path, size: int) -> int:
     return score
 
 
+def ships_upscaler(root: Path) -> bool:
+    """Whether the game folder carries any DLSS, FSR or XeSS library."""
+    names = {name for group in ("fsr31", "fsr2", "dlss", "xess") for name in INPUTS[group]}
+    for _current, files in _walk(root):
+        if any(file.lower() in names for file in files):
+            return True
+    return False
+
+
 def analyze(root: Path, chosen_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 

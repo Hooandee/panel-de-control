@@ -1,6 +1,7 @@
 import { Focusable } from "@decky/ui";
-import { useState, type CSSProperties, type FC, type ReactNode } from "react";
+import { useState, type FC, type ReactNode } from "react";
 
+import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { theme } from "../theme";
 import type { UpscalerStatus } from "./types";
 
@@ -48,54 +49,81 @@ export const Dot: FC<{ color: string }> = ({ color }) => (
   <span style={{ width: 8, height: 8, borderRadius: 4, background: color, flexShrink: 0, display: "inline-block" }} />
 );
 
-export const Pips: FC<{ value: number; glyph: string }> = ({ value, glyph }) => (
-  <span style={{ letterSpacing: 1, fontSize: theme.font.caption }}>
-    {[1, 2, 3].map((n) => (
-      <span key={n} style={{ opacity: n <= value ? 1 : 0.25 }}>{glyph}</span>
-    ))}
+export const Chip: FC<{ children: ReactNode }> = ({ children }) => (
+  <span style={{
+    fontSize: theme.font.caption, fontWeight: 700, padding: "1px 7px", borderRadius: 999, flexShrink: 0,
+    color: theme.color.textPrimary, boxShadow: `inset 0 0 0 1px ${theme.color.outline}`, background: theme.color.hairline,
+  }}>
+    {children}
   </span>
 );
 
-/** A selectable card; `disabled` keeps it visible and focusable so its reason can be read. */
-export const ChoiceCard: FC<{
-  selected: boolean;
-  disabled?: boolean;
-  onPick: () => void;
-  style?: CSSProperties;
-  children: ReactNode;
-}> = ({ selected, disabled, onPick, style, children }) => {
-  const [focused, setFocused] = useState(false);
-  const ring = focused
-    ? `inset 0 0 0 2px ${theme.color.accent}`
-    : selected
-      ? `inset 0 0 0 1.5px ${theme.color.accent}`
-      : theme.card.boxShadow;
+export const Bars: FC<{ value: number; label: string }> = ({ value, label }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: theme.font.caption, fontWeight: 400 }}>
+    <span style={{ display: "inline-flex", gap: 2 }}>
+      {[1, 2, 3].map((n) => (
+        <span key={n} style={{ width: 8, height: 4, borderRadius: 2, background: "currentColor", opacity: n <= value ? 0.9 : 0.25 }} />
+      ))}
+    </span>
+    {label}
+  </span>
+);
+
+export interface SegmentOption<T extends string> {
+  value: T;
+  label: string;
+  caption?: ReactNode;
+  icon?: ReactNode;
+}
+
+/** The shared segmented look (themes map it to their own keys); options may carry a caption line. */
+export function SegmentRow<T extends string>({ options, value, onChange }: {
+  options: SegmentOption<T>[];
+  value: T | null;
+  onChange: (value: T) => void;
+}) {
   return (
-    <Focusable
-      onActivate={disabled ? undefined : onPick}
-      onClick={disabled ? undefined : onPick}
-      onGamepadFocus={() => setFocused(true)}
-      onGamepadBlur={() => setFocused(false)}
-      data-pdc-up-motion
-      style={{
-        flex: "1 1 0", minWidth: 0, padding: theme.space.sm, borderRadius: theme.radius.sm,
-        background: selected ? `${theme.color.accent}22` : theme.color.surfaceRaised,
-        boxShadow: ring, opacity: disabled ? 0.45 : 1, cursor: disabled ? "default" : "pointer",
-        display: "flex", flexDirection: "column", gap: 2, transition: "background 120ms ease, box-shadow 120ms ease",
-        ...style,
-      }}
-    >
-      {children}
+    <Focusable flow-children="row" style={{ ...segmentGroupStyle, display: "grid", gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Focusable
+            key={option.value}
+            onActivate={() => onChange(option.value)}
+            onClick={() => onChange(option.value)}
+            style={{
+              ...segmentItemStyle(active),
+              flexDirection: "column",
+              gap: 2,
+              padding: `${theme.space.sm}px ${theme.space.xs}px`,
+              color: active ? theme.color.selectedText : theme.color.textPrimary,
+              whiteSpace: "normal",
+              textAlign: "center",
+            }}
+          >
+            {option.icon}
+            <span>{option.label}</span>
+            {option.caption && <span style={{ fontSize: theme.font.caption, fontWeight: 400, opacity: 0.75 }}>{option.caption}</span>}
+          </Focusable>
+        );
+      })}
     </Focusable>
   );
-};
+}
 
 export const Label: FC<{ children: ReactNode }> = ({ children }) => (
   <div style={{ ...theme.sectionLabel, margin: `${theme.space.md}px 0 ${theme.space.xs}px` }}>{children}</div>
 );
 
+export const Note: FC<{ children: ReactNode; color?: string }> = ({ children, color }) => (
+  <div style={{ display: "flex", gap: theme.space.xs, alignItems: "baseline", fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>
+    {color && <Dot color={color} />}
+    <span style={{ color: color ? theme.color.textPrimary : undefined }}>{children}</span>
+  </div>
+);
+
 export const Row: FC<{ children: ReactNode }> = ({ children }) => (
-  <Focusable flow-children="horizontal" style={{ display: "flex", gap: theme.space.xs }}>{children}</Focusable>
+  <Focusable flow-children="row" style={{ display: "flex", gap: theme.space.xs }}>{children}</Focusable>
 );
 
 export const ActionButton: FC<{
@@ -105,7 +133,8 @@ export const ActionButton: FC<{
   danger?: boolean;
   busy?: boolean;
   disabled?: boolean;
-}> = ({ label, onPress, primary, danger, busy, disabled }) => {
+  grow?: boolean;
+}> = ({ label, onPress, primary, danger, busy, disabled, grow = true }) => {
   const [focused, setFocused] = useState(false);
   const fill = primary ? theme.color.accent : "transparent";
   const color = primary ? theme.color.onAccent : danger ? theme.color.danger : theme.color.textPrimary;
@@ -116,11 +145,11 @@ export const ActionButton: FC<{
       onGamepadFocus={() => setFocused(true)}
       onGamepadBlur={() => setFocused(false)}
       style={{
-        flex: "1 1 0", padding: `${theme.space.sm}px ${theme.space.md}px`, borderRadius: theme.radius.sm,
+        flex: grow ? "1 1 0" : "0 0 auto", padding: `${theme.space.sm}px ${theme.space.md}px`, borderRadius: theme.radius.sm,
         background: fill, color, fontWeight: 600, fontSize: theme.font.body, textAlign: "center",
         boxShadow: focused ? `0 0 0 2px ${theme.color.textPrimary}` : primary ? "none" : `inset 0 0 0 1px ${theme.color.outline}`,
         opacity: disabled ? 0.45 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs,
-        cursor: disabled ? "default" : "pointer",
+        cursor: disabled ? "default" : "pointer", whiteSpace: "nowrap",
       }}
     >
       {busy && <Spinner size={12} />}
