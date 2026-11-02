@@ -1351,6 +1351,9 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "verify", appid=str(appid), result=result.get("result"))
         return result
 
+    async def get_upscaler_live(self, appid: str) -> dict:
+        return await self._upscalers_call("live", str(appid))
+
     async def get_upscalers_job(self) -> dict | None:
         service = getattr(self, "_upscaler_service", None)
         return service.job() if service is not None else None

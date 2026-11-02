@@ -63,6 +63,7 @@ import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
 import { ambientThemeChannel, startAmbient } from "./ambient";
+import { startUpscalerOverlays } from "./upscalers/overlays";
 import { adoptStaleActivePlugin } from "./deckyInternal";
 import { createGameSessionPort } from "./platform/gameSessions";
 import { createPowerPort } from "./platform/power";
@@ -233,6 +234,7 @@ export default definePlugin(() => {
     games: createThemeGamesAccess({ forceClose: forceCloseGame }),
     subscribePackageChanges: onThemePackagesChanged,
   });
+  const stopUpscalerOverlays = startUpscalerOverlays();
   const stopAmbient = startAmbient({
     gameSessions: createGameSessionPort(),
     power: createPowerPort(),
@@ -273,6 +275,7 @@ export default definePlugin(() => {
       stopKioskSteamBridge();
       stopThemesRuntime();
       stopAmbient();
+      stopUpscalerOverlays();
       stopArtworkHydration();
       releaseArtworkEditor();
       releaseArtworkHost();

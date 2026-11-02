@@ -410,6 +410,14 @@ class UpscalerService:
             shutil.rmtree(meta, ignore_errors=True)
         return kept
 
+    def live(self, appid: str) -> dict:
+        """Read-only look at the log while the game runs; never touches history."""
+        install = self._game_state(appid).get("install")
+        if not isinstance(install, dict):
+            return {"result": "not_patched"}
+        facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
+        return {"result": logread.verdict(facts), "resolution": facts.get("resolution")}
+
     def verify(self, appid: str) -> dict:
         entry = self._game_state(appid)
         install = entry.get("install")

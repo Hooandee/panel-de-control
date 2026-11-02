@@ -8,6 +8,8 @@ import { useI18n } from "../i18n";
 import { listInstalledGames, type GameEntry } from "../launch/steamApi";
 import { theme } from "../theme";
 import { GameView } from "../upscalers/GameView";
+import { IN_GAME_MODES, publishOverview, readInGameMode, writeInGameMode, type InGameMode } from "../upscalers/overlays";
+import { Label, SegmentRow } from "../upscalers/parts";
 import { buildLabel } from "../upscalers/model";
 import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import type { UpscalersOverview } from "../upscalers/types";
@@ -18,10 +20,13 @@ export const EscaladoresSection: FC = () => {
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<GameEntry | null>(null);
   const [compat, setCompat] = useState<Record<string, boolean>>({});
+  const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
 
   const refresh = useCallback(async () => {
     try {
-      setOverview(await getUpscalersOverview());
+      const next = await getUpscalersOverview();
+      setOverview(next);
+      publishOverview(next);
       setFailed(false);
     } catch {
       setFailed(true);
@@ -55,6 +60,17 @@ export const EscaladoresSection: FC = () => {
         <>
           {failed && <span style={{ fontSize: theme.font.caption }}>{t("load.error")}</span>}
           {!overview && !failed && [0, 1, 2, 3].map((i) => <Skeleton key={i} height={64} />)}
+          {overview && (
+            <>
+              <Label>{t("up.inGame.title")}</Label>
+              <SegmentRow
+                value={inGame}
+                onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
+                options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
+              />
+              <Label>{t("up.games")}</Label>
+            </>
+          )}
           {overview && games.length === 0 && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.empty")}</span>
           )}
