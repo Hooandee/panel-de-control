@@ -1,12 +1,12 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
-import { LuChevronLeft, LuGauge, LuScale, LuSparkles } from "react-icons/lu";
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
   setUpscalersExe, uninstallUpscaler, verifyUpscaler,
 } from "../api";
+import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
@@ -16,18 +16,13 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   withOverride, withoutOverride,
 } from "./model";
-import { ActionButton, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
+import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
-const EASY_ICONS: Record<EasyMode, FC<{ size?: number }>> = { image: LuSparkles, balanced: LuScale, fps: LuGauge };
 const POLL_MS = 250;
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-function joinNames(names: string[], and: string): string {
-  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
-}
 
 function errorText(t: Translate, code: string | null | undefined): string {
   const key = `up.error.${code}`;
@@ -178,57 +173,42 @@ export const GameView: FC<{
 
   return (
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      <Row>
-        <Focusable
-          onActivate={onBack}
-          onClick={onBack}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 2, padding: `${theme.space.xs}px ${theme.space.sm}px`,
-            borderRadius: theme.radius.sm, fontSize: theme.font.caption + 1, color: theme.color.textPrimary, cursor: "pointer",
-            boxShadow: `inset 0 0 0 1px ${theme.color.outline}`,
-          }}
-        >
-          <LuChevronLeft size={14} /> {t("up.back")}
-        </Focusable>
-      </Row>
+      <Row><CompactBackAction onBack={onBack} label={t("up.back")} /></Row>
 
-      <div style={{ display: "flex", gap: theme.space.md, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
-        <GameCover urls={game.coverUrls} name={game.name} width={56} />
+      <div style={{ display: "flex", gap: theme.space.sm, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
+        <GameCover urls={game.coverUrls} name={game.name} width={44} />
         <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-          <div style={{ fontWeight: 700, fontSize: theme.font.body + 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {game.name}
-          </div>
+          <div style={{ fontWeight: 700, fontSize: theme.font.body, lineHeight: 1.2, color: theme.color.textPrimary }}>{game.name}</div>
           {detail ? (
-            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body }}>
+            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, flexWrap: "wrap" }}>
               {install && <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>}
-              <Dot color={statusColor(status)} />
-              <span>{install ? t(`up.status.${status}`) : t("up.status.none")}</span>
+              {install && <Dot color={statusColor(status)} />}
+              <span style={{ color: install ? theme.color.textPrimary : theme.color.textMuted }}>
+                {install ? t(`up.status.${status}`) : t("up.status.none")}
+              </span>
             </div>
-          ) : <Skeleton height={12} width="55%" />}
-          {render && (
-            <div style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>
-              {t("up.resolution", { render, output })}
-            </div>
-          )}
+          ) : <Skeleton height={10} width="60%" />}
+          {render && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.resolution", { render, output })}</span>}
         </div>
       </div>
 
-      {install && (status === "loaded" || status === "pending" || status === "not_run") && (
-        <Note color={theme.color.accent}>{t(status === "loaded" ? "up.hint.loaded" : "up.next.play")}</Note>
-      )}
-
       {running && job && <Progress job={job} />}
-      {message && <Note color={theme.color.warn}>{message}</Note>}
+      {message && <Note tone="warn">{message}</Note>}
 
-      {detail && !running && (
+      {detail && !running && (status === "broken" || dirty) && (
         <Row>
-          {status === "broken" ? (
-            <ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} />
-          ) : (
-            dirty && <ActionButton primary label={install ? t("up.save") : t("up.apply")} onPress={apply} disabled={blocked} />
-          )}
-          {install && <ActionButton label={t("up.verify")} onPress={check} busy={verifying} grow={false} />}
-          {install && <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} grow={false} />}
+          <ActionButton
+            primary
+            label={status === "broken" ? t("up.repair") : install ? t("up.save") : t("up.apply")}
+            onPress={status === "broken" ? reinstall : apply}
+            disabled={blocked}
+          />
+        </Row>
+      )}
+      {detail && !running && install && (
+        <Row>
+          <ActionButton label={t("up.verify")} onPress={check} busy={verifying} />
+          <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} />
         </Row>
       )}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
@@ -238,14 +218,29 @@ export const GameView: FC<{
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
             <Spinner size={12} /> {t("up.detect.analyzing")}
           </div>
-          <Skeleton height={44} />
-          <Skeleton height={64} />
+          <Skeleton height={36} />
+          <Skeleton height={96} />
         </div>
       )}
-      {loadError && <ActionButton label={t("load.retry")} onPress={() => void load()} />}
+      {loadError && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
 
       {detail && (
         <>
+          {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
+          {detail.updating && <Note tone="warn">{t("up.error.updating")}</Note>}
+          {detail.analysis.foreign && !install && <Note tone="warn">{t("up.error.foreign")}</Note>}
+          {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
+          {detail.analysis.anti_cheat && !install && (
+            <>
+              <Note tone="danger">{t("up.error.anti_cheat")}</Note>
+              <SegmentRow
+                value={confirmAntiCheat ? "yes" : null}
+                onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
+                options={[{ value: "yes", label: t("up.error.anti_cheat.confirm") }]}
+              />
+            </>
+          )}
+
           <SegmentRow
             value={mode}
             onChange={setMode}
@@ -254,26 +249,30 @@ export const GameView: FC<{
 
           {mode === "easy" ? (
             <SegmentRow<EasyMode>
+              vertical
               value={easyModeOf(choice, overview.preferred)}
               onChange={(m) => setChoice(easyChoice(m, overview.preferred))}
-              options={EASY_MODES.map((m) => {
-                const Icon = EASY_ICONS[m];
-                return { value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`), icon: <Icon size={20} /> };
-              })}
+              options={EASY_MODES.map((m) => ({ value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`) }))}
             />
           ) : (
             <>
-              <Label>{t("up.section.version")}</Label>
+              <Label aside={
+                <span style={{ display: "inline-flex", paddingRight: theme.space.sm + 4 }}>
+                  <span style={{ width: BAR_COLUMN, textAlign: "center" }}>{t("up.bar.image")}</span>
+                  <span style={{ width: BAR_COLUMN, textAlign: "center" }}>{t("up.bar.perf")}</span>
+                </span>
+              }>{t("up.section.version")}</Label>
               <SegmentRow
+                vertical
                 value={choice.build}
                 onChange={(build) => setChoice({ ...choice, build })}
                 options={usable.map((build: BuildInfo) => ({
                   value: build.id,
                   label: buildLabel(build),
                   caption: (
-                    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                      <Bars value={build.image} label={t("up.bar.image")} />
-                      <Bars value={4 - build.cost} label={t("up.bar.perf")} />
+                    <span style={{ display: "inline-flex" }}>
+                      <Bars value={build.image} />
+                      <Bars value={4 - build.cost} />
                     </span>
                   ),
                 }))}
@@ -282,12 +281,13 @@ export const GameView: FC<{
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 
               <Label>{t("up.section.quality")}</Label>
-              <Note>{t("up.quality.help")}</Note>
               <SegmentRow
+                vertical
                 value={choice.quality}
                 onChange={(quality) => setChoice({ ...choice, quality })}
                 options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
               />
+              <Note>{t("up.quality.help")}</Note>
 
               <Label>{t("up.section.sharpness")}</Label>
               <SegmentRow
@@ -298,50 +298,27 @@ export const GameView: FC<{
             </>
           )}
 
-          <Label>{t("up.detect.title")}</Label>
-          <Note>
-            {compatible.length ? t("up.detect.inputs", { list: joinNames(compatible, t("up.and")) }) : t("up.detect.noinputs")}
-          </Note>
           {detail.analysis.manual && detail.analysis.exe && (
             <Note>{t("up.detect.manual", { exe: detail.analysis.exe.split("/").pop() ?? detail.analysis.exe })}</Note>
           )}
-          {!detail.analysis.target && <Note color={theme.color.warn}>{t("up.error.no_exe")}</Note>}
-          {detail.updating && <Note color={theme.color.warn}>{t("up.error.updating")}</Note>}
-          {detail.analysis.foreign && !install && <Note color={theme.color.warn}>{t("up.error.foreign")}</Note>}
-          {detail.analysis.anti_cheat && !install && (
-            <>
-              <Note color={theme.color.danger}>{t("up.error.anti_cheat")}</Note>
-              <SegmentRow
-                value={confirmAntiCheat ? "yes" : null}
-                onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
-                options={[{ value: "yes", label: t("up.error.anti_cheat.confirm") }]}
-              />
-            </>
-          )}
           <Row>
-            <ActionButton label={t("up.detect.pick")} onPress={pickExe} disabled={running} />
-            {detail.analysis.manual && (
-              <ActionButton label={t("up.detect.auto")} onPress={async () => setDetail(await setUpscalersExe(appid, null))} disabled={running} />
-            )}
+            {detail.analysis.manual
+              ? <ActionButton label={t("up.detect.auto")} onPress={async () => setDetail(await setUpscalersExe(appid, null))} disabled={running} />
+              : <ActionButton label={t("up.detect.pick")} onPress={pickExe} disabled={running} />}
           </Row>
 
-          {detail.history.length > 0 && (
+          {detail.history.length > 1 && (
             <>
               <Label>{t("up.history")}</Label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {[...detail.history].reverse().slice(0, 6).map((entry) => {
-                  const build = builds.find((b) => b.id === entry.build);
-                  return (
-                    <div key={`${entry.at}`} style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
-                      <Dot color={statusColor(entry.result)} />
-                      <span style={{ flex: 1, textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>
-                        {build ? buildLabel(build) : entry.build}
-                      </span>
-                      <span style={{ color: theme.color.textMuted }}>{t(`up.status.${entry.result}`)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+              {[...detail.history].reverse().slice(0, 5).map((entry) => {
+                const build = builds.find((b) => b.id === entry.build);
+                return (
+                  <div key={`${entry.at}`} style={{ display: "flex", justifyContent: "space-between", gap: theme.space.xs, fontSize: theme.font.caption }}>
+                    <span style={{ textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>{build ? buildLabel(build) : entry.build}</span>
+                    <span style={{ color: statusColor(entry.result) }}>{t(`up.history.${entry.result}`)}</span>
+                  </div>
+                );
+              })}
             </>
           )}
         </>

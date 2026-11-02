@@ -9,7 +9,7 @@ import { listInstalledGames, type GameEntry } from "../launch/steamApi";
 import { theme } from "../theme";
 import { GameView } from "../upscalers/GameView";
 import { buildLabel } from "../upscalers/model";
-import { Chip, Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import type { UpscalersOverview } from "../upscalers/types";
 
 export const EscaladoresSection: FC = () => {
@@ -52,7 +52,6 @@ export const EscaladoresSection: FC = () => {
         <GameView game={selected} overview={overview} onBack={() => setSelected(null)} onChanged={() => void refresh()} />
       ) : (
         <>
-          <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>{t("nav.upscalers.desc")}</span>
           {failed && <span style={{ fontSize: theme.font.caption }}>{t("load.error")}</span>}
           {!overview && !failed && [0, 1, 2, 3].map((i) => <Skeleton key={i} height={64} />)}
           {overview && games.length === 0 && (
@@ -64,16 +63,15 @@ export const EscaladoresSection: FC = () => {
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
-                <GameCover urls={game.coverUrls} name={game.name} width={34} />
+                <GameCover urls={game.coverUrls} name={game.name} width={30} />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: theme.font.body, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {game.name}
                   </div>
                   {install && (
-                    <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
-                      <Chip>{build ? buildLabel(build) : install.build}</Chip>
+                    <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, marginTop: 2 }}>
                       <Dot color={statusColor(install.status)} />
-                      <span>{t(`up.status.${install.status}`)}</span>
+                      <span style={{ color: theme.color.textMuted }}>{build ? buildLabel(build) : install.build}</span>
                     </div>
                   )}
                   {busy && <div style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.phase.prepare")}</div>}
