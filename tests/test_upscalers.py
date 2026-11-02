@@ -198,7 +198,7 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
         assert len(asset.sha256) == 64 and asset.urls
     for build in catalog.BUILDS.values():
         if build.available:
-            assert catalog.build_assets(build)[0].id == catalog.OPTISCALER_ARCHIVE
+            assert catalog.build_assets(build)[0].id == build.archive and catalog.ASSETS[build.archive].archive
     assert catalog.preferred_build("rdna2") == "fsr-4.1.1-rdna2"
     assert logread.verdict({"present": False}) == "not_run"
 
@@ -425,3 +425,32 @@ def test_frame_generation_is_written_on_install_and_toggled_after(steam, fake_ca
     future = time.time() + 5
     os.utime(log, (future, future))
     assert service.live(APPID)["fg"] is True
+
+
+def test_beta_build_uses_the_v10_subfolder_layout(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    beta = Asset(catalog.OPTISCALER_BETA, "opti10.7z", hashlib.sha256(b"v10").hexdigest(), 3, ("http://invalid",), archive=True, generation=10)
+    monkeypatch.setitem(catalog.ASSETS, catalog.OPTISCALER_BETA, beta)
+    monkeypatch.setitem(catalog.BUILDS, "beta", Build(
+        "beta", "fsr", "4.1.2", ("rdna2",), 3, 2, assets=("extra",), archive=catalog.OPTISCALER_BETA,
+        channel="beta", extra_dir="OptiScaler", ini={"FSR.Fsr4GpuSupport": "2"}))
+    unpacked = fake_catalog / "cache" / beta.sha256 / "unpacked"
+    _write(unpacked / "OptiScaler.dll", b"v10 injector")
+    _write(unpacked / "OptiScaler.ini", "[FSR]\nFsr4GpuSupport=auto\n")
+    _write(unpacked / "OptiScaler/amd_fidelityfx_upscaler_dx12.dll", b"ffx 4.1.2")
+    _write(unpacked / "OptiScaler/Streamlined_fetcher_windows.bat", b"bat")
+    _write(unpacked / "setup_linux.sh", b"junk")
+    _write(unpacked / ".complete", beta.sha256)
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "beta"})
+    assert (target / "dxgi.dll").read_bytes() == b"v10 injector"
+    assert (target / "OptiScaler/amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"ffx 4.1.2"
+    assert (target / "OptiScaler/amdxcffx64.dll").read_bytes() == b"provider"
+    assert not (target / "OptiScaler/Streamlined_fetcher_windows.bat").exists()
+    # The game's own FFX dll stays untouched in the exe folder.
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+    assert ini.read((target / "OptiScaler.ini").read_text(), "FSR.Fsr4GpuSupport") == "2"
+    assert service.game(APPID)["fg_plan"]["input"] != "nukems"
+    service.uninstall(APPID)
+    assert not (target / "OptiScaler").exists()

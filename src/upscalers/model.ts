@@ -28,8 +28,9 @@ export function renderHeight(outputHeight: number, quality: Quality): number {
   return Math.round(outputHeight / QUALITY_RATIO[quality]);
 }
 
-export function buildLabel(build: Pick<BuildInfo, "family" | "version">): string {
-  return build.family === "xess" ? `XeSS ${build.version}` : `FSR ${build.version}`;
+export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {
+  const name = build.family === "xess" ? `XeSS ${build.version}` : `FSR ${build.version}`;
+  return build.channel === "beta" ? `${name} Beta` : name;
 }
 
 // The composer treats `;` as a shell operator, so overrides stay one `names=mode` entry:

@@ -199,7 +199,8 @@ class UpscalerService:
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
-            "fg_plan": None if installed.native else catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None),
+            "fg_plan": None if installed.native else catalog.fg_plan(
+                self.gpu, analysis["inputs"], recipe.fg if recipe else None, _generation(install)),
         }
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
@@ -312,29 +313,24 @@ class UpscalerService:
             self._update_job(done=offset)
 
         self._update_job(phase="copy")
-        archive = paths[catalog.OPTISCALER_ARCHIVE]
-        sources: dict[str, Path] = {}
-        for item in archive.iterdir():
-            if item.is_file() and item.name not in _JUNK and not item.name.startswith(("!", ".")):
-                sources[item.name] = item
-        for directory in _ARCHIVE_DIRS:
-            for item in (archive / directory).rglob("*"):
-                if item.is_file():
-                    sources[item.relative_to(archive).as_posix()] = item
+        archive_asset = catalog.ASSETS[build.archive]
+        archive = paths[build.archive]
+        sources = _archive_sources(archive, archive_asset.generation)
         base_ini = sources.pop("OptiScaler.ini").read_text(encoding="utf-8", errors="replace")
         injector = sources.pop("OptiScaler.dll")
         if build.injector:
             injector = paths[build.injector]
         sources[proxy] = injector
+        prefix = f"{build.extra_dir}/" if build.extra_dir else ""
         for name, asset_id in build.replace.items():
-            sources[name] = paths[asset_id]
+            sources[prefix + name] = paths[asset_id]
         for asset_id in build.assets:
-            sources[catalog.ASSETS[asset_id].filename] = paths[asset_id]
+            sources[prefix + catalog.ASSETS[asset_id].filename] = paths[asset_id]
         if recipe:
             for name, asset_id in recipe.files.items():
                 sources[name] = paths[asset_id]
 
-        fg_plan = catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None)
+        fg_plan = catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None, archive_asset.generation)
         overrides = {
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
@@ -549,6 +545,25 @@ class UpscalerService:
                 if isinstance(entry.get("install"), dict)
             },
         }
+
+
+def _generation(install: dict | None) -> int:
+    build = catalog.BUILDS.get(str((install or {}).get("build")))
+    return catalog.ASSETS[build.archive].generation if build else 9
+
+
+def _archive_sources(archive: Path, generation: int) -> dict[str, Path]:
+    """Files of an unpacked OptiScaler release keyed by where they go relative to the exe folder."""
+    sources: dict[str, Path] = {}
+    for item in archive.iterdir():
+        if item.is_file() and item.name not in _JUNK and not item.name.startswith(("!", ".")):
+            sources[item.name] = item
+    folders = ("OptiScaler",) if generation >= 10 else _ARCHIVE_DIRS
+    for directory in folders:
+        for item in (archive / directory).rglob("*"):
+            if item.is_file() and item.suffix.lower() != ".bat":
+                sources[item.relative_to(archive).as_posix()] = item
+    return sources
 
 
 def _clean_options(choice: dict) -> dict:

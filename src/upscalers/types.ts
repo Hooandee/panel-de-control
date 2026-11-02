@@ -10,6 +10,7 @@ export interface BuildInfo {
   image: number;
   cost: number;
   available: boolean;
+  channel?: "stable" | "beta";
   supported: boolean;
   download_bytes: number;
 }

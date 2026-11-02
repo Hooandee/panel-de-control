@@ -8,6 +8,7 @@ never invalidates an install.
 from dataclasses import dataclass, field
 
 OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
+OPTISCALER_BETA = "optiscaler-10-nightly"
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class Asset:
     urls: tuple[str, ...]
     archive: bool = False
     member: str | None = None
+    generation: int = 9
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,9 @@ class Build:
     ini: dict[str, str] = field(default_factory=dict)
     injector: str | None = None
     available: bool = True
+    archive: str = OPTISCALER_ARCHIVE
+    channel: str = "stable"
+    extra_dir: str = ""
 
 
 _BLEEDING = "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download"
@@ -49,6 +54,17 @@ ASSETS: dict[str, Asset] = {
             ("https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/"
              "Optiscaler_0.9.4-final.20260718._MM.7z",),
             archive=True,
+        ),
+        # OptiScaler 10 nightly: bundled files move to an `OptiScaler/` subfolder; FFX upscaler 4.1.2.4555.
+        Asset(
+            OPTISCALER_BETA,
+            "OptiScaler_v10.0.0-pre1_20261102.7z",
+            "7465483deac95ccc93cf05efc9e883e00c03d3186ea79304c076c800bc399501",
+            72315137,
+            ("https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261102/"
+             "OptiScaler_v10.0.0-pre1_20261102.7z",),
+            archive=True,
+            generation=10,
         ),
         Asset(
             "reframework-nightly",
@@ -110,8 +126,11 @@ EVERY_GPU = (*AMD, "intel", "unknown")
 BUILDS: dict[str, Build] = {
     build.id: build
     for build in (
+        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8).
         Build(
-            "fsr-4.1.2", "fsr", "4.1.2", AMD, image=3, cost=3, available=False,
+            "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna3", "rdna35"), image=3, cost=2,
+            assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
+            ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "2"},
         ),
         # Valve's RDNA2 provider pair needs the 0.10 injector, which knows how to load it.
         Build(
@@ -177,7 +196,7 @@ def build_supported(build: Build, gpu: str) -> bool:
 
 
 def build_assets(build: Build) -> list[Asset]:
-    ids = [OPTISCALER_ARCHIVE, *build.assets, *build.replace.values()]
+    ids = [build.archive, *build.assets, *build.replace.values()]
     if build.injector:
         ids.append(build.injector)
     return [ASSETS[asset_id] for asset_id in dict.fromkeys(ids)]
@@ -192,6 +211,7 @@ def describe(gpu: str) -> list[dict]:
             "image": build.image,
             "cost": build.cost,
             "available": build.available,
+            "channel": build.channel,
             "supported": build_supported(build, gpu),
             "download_bytes": sum(asset.size for asset in build_assets(build)) if build.available else 0,
         }
@@ -199,10 +219,13 @@ def describe(gpu: str) -> list[dict]:
     ]
 
 
-def fg_plan(gpu: str, inputs: dict, recipe_fg: dict | None = None) -> dict:
-    """Which frame generation path fits this game and GPU: the game's own generator first."""
+def fg_plan(gpu: str, inputs: dict, recipe_fg: dict | None = None, generation: int = 9) -> dict:
+    """Which frame generation path fits this game and GPU: the game's own generator first.
+
+    Recipe paths target the stable build; v10 hooks Streamline 1 DLSSG itself and dropped Nukem's output.
+    """
     output = "xefg" if gpu == "intel" else "fsrfg"
-    if recipe_fg:
+    if recipe_fg and generation == 9:
         return {"input": recipe_fg["input"], "output": recipe_fg.get("output", output), "source": "game", "experimental": False}
     if "fsrfg" in inputs:
         return {"input": "fsrfg", "output": output, "source": "game", "experimental": False}
