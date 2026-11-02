@@ -1,6 +1,42 @@
 # Changelog
 
-## Unreleased
+## [0.82.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.3...panel-de-control-v0.82.0) (2026-11-02)
+
+### Español
+
+* **Los temas recuerdan tus ajustes:** Lo que personalizas en un tema, como el dock, los grupos o el orden de la biblioteca, ya no se pierde al reiniciar o apagar la consola.
+* **Cerrar un juego que se ha quedado colgado:** Los temas pueden cerrar del todo un juego que no responde al salir, sin tener que reiniciar la consola.
+* **Avisos de los temas early:** Si tienes un tema early y sale una versión nueva, su ficha te lo dice. Sin conexión, tus temas early siguen apareciendo y la página te avisa de que estás sin conexión en lugar de decir que no hay actualizaciones.
+
+### English
+
+* **Themes remember your settings:** What you customize in a theme, like the dock, groups or library order, is no longer lost when you restart or turn off the console.
+* **Close a game that got stuck:** Themes can fully close a game that stops responding when you quit it, without restarting the console.
+* **Early theme notices:** If you have an early theme and a new version comes out, its card tells you. Offline, your early themes still show up and the page tells you you're offline instead of saying there are no updates.
+
+### Italiano
+
+* **I temi ricordano le tue impostazioni:** Quello che personalizzi in un tema, come il dock, i gruppi o l'ordine della libreria, non si perde più quando riavvii o spegni la console.
+* **Chiudere un gioco bloccato:** I temi possono chiudere del tutto un gioco che non risponde quando ne esci, senza dover riavviare la console.
+* **Avvisi dei temi early:** Se hai un tema early ed esce una nuova versione, la sua scheda te lo dice. Senza connessione i tuoi temi early continuano a comparire e la pagina ti avvisa che sei offline invece di dire che non ci sono aggiornamenti.
+
+### Deutsch
+
+* **Themes merken sich deine Einstellungen:** Was du in einem Theme anpasst, etwa das Dock, die Gruppen oder die Reihenfolge der Bibliothek, geht beim Neustart oder Ausschalten der Konsole nicht mehr verloren.
+* **Ein hängendes Spiel beenden:** Themes können ein Spiel, das beim Beenden nicht mehr reagiert, vollständig schließen, ohne dass du die Konsole neu starten musst.
+* **Hinweise zu Early-Themes:** Wenn du ein Early-Theme hast und eine neue Version erscheint, zeigt es dir seine Karte an. Ohne Verbindung bleiben deine Early-Themes sichtbar und die Seite sagt dir, dass du offline bist, statt zu melden, dass es keine Updates gibt.
+
+### Português (Brasil)
+
+* **Os temas lembram seus ajustes:** O que você personaliza em um tema, como o dock, os grupos ou a ordem da biblioteca, não se perde mais ao reiniciar ou desligar o console.
+* **Fechar um jogo travado:** Os temas podem fechar de vez um jogo que para de responder ao sair, sem precisar reiniciar o console.
+* **Avisos dos temas early:** Se você tem um tema early e sai uma versão nova, o card dele avisa. Sem conexão, seus temas early continuam aparecendo e a página avisa que você está offline em vez de dizer que não há atualizações.
+
+### Français
+
+* **Les thèmes se souviennent de tes réglages :** Ce que tu personnalises dans un thème, comme le dock, les groupes ou l'ordre de la bibliothèque, ne se perd plus quand tu redémarres ou éteins la console.
+* **Fermer un jeu bloqué :** Les thèmes peuvent fermer complètement un jeu qui ne répond plus quand tu le quittes, sans redémarrer la console.
+* **Avis des thèmes early :** Si tu as un thème early et qu'une nouvelle version sort, sa fiche te le dit. Hors connexion, tes thèmes early restent visibles et la page t'indique que tu es hors ligne au lieu de dire qu'il n'y a pas de mise à jour.
 
 ## [0.81.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.2...panel-de-control-v0.81.3) (2026-11-02)
 
