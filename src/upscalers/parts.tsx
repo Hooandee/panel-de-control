@@ -16,7 +16,7 @@ export const statusColor = (status: UpscalerStatus | null): string => {
   switch (status) {
     case "active": return theme.color.ok;
     case "broken": return theme.color.danger;
-    case "loaded": return theme.color.warn;
+    case "loaded":
     case "pending":
     case "not_run": return theme.color.accent;
     default: return theme.color.textMuted;

@@ -1,6 +1,6 @@
 import { openFilePicker } from "@decky/api";
 import { Focusable } from "@decky/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { LuGauge, LuScale, LuSparkles } from "react-icons/lu";
 
 import {
@@ -24,11 +24,6 @@ const EASY_ICONS: Record<EasyMode, FC<{ size?: number }>> = { image: LuSparkles,
 const POLL_MS = 250;
 const INPUT_LABELS: Record<string, string> = { fsr31: "FSR 3.1", fsr2: "FSR 2", dlss: "DLSS", xess: "XeSS", streamline: "Streamline" };
 
-function outputHeight(): number {
-  const height = Math.round((window.screen?.height || 800) * (window.devicePixelRatio || 1));
-  return height > 0 ? height : 800;
-}
-
 export const GameView: FC<{
   game: GameEntry;
   overview: UpscalersOverview;
@@ -47,7 +42,7 @@ export const GameView: FC<{
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const mounted = useRef(true);
-  const height = useMemo(outputHeight, []);
+  const height = overview.display?.[1] ?? 800;
 
   const load = useCallback(async () => {
     try {
@@ -199,8 +194,10 @@ export const GameView: FC<{
         )}
       </div>
 
-      {install?.status === "pending" && !verify && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.next.play")}</div>
+      {install && (install.status === "pending" || install.status === "loaded" || install.status === "not_run") && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          {t(install.status === "loaded" ? "up.hint.loaded" : "up.next.play")}
+        </div>
       )}
 
       {!detail && !loadError && (

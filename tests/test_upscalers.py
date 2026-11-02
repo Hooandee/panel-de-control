@@ -195,3 +195,13 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
             assert catalog.build_assets(build)[0].id == catalog.OPTISCALER_ARCHIVE
     assert catalog.preferred_build("rdna2") == "fsr-4.1.1-rdna2"
     assert logread.verdict({"present": False}) == "not_run"
+
+
+def test_panel_resolution_prefers_the_internal_panel(tmp_path):
+    from upscalers.service import panel_resolution
+    for name, status, mode in (("card0-DP-1", "connected", "3840x2160"), ("card0-eDP-1", "connected", "1920x1200"),
+                               ("card0-HDMI-A-1", "disconnected", "")):
+        _write(tmp_path / name / "status", status + "\n")
+        _write(tmp_path / name / "modes", mode + "\n")
+    assert panel_resolution(str(tmp_path)) == [1920, 1200]
+    assert panel_resolution(str(tmp_path / "missing")) is None

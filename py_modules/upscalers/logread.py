@@ -19,7 +19,7 @@ _FACTS = (
     ("fsr4", re.compile(r"(FSR\s*4[\w.\s]*?(?:INT8|FP8|model\s*\d)[^\n]*)", re.I)),
     ("resolution", re.compile(r"Render\w*\s*[:=]?\s*(\d{3,5})\s*x\s*(\d{3,5}).{0,40}?(?:Display|Output|Target)\w*\s*[:=]?\s*(\d{3,5})\s*x\s*(\d{3,5})", re.I)),
 )
-_ERROR = re.compile(r"\[(?:error|critical)\]|\b(?:E|C)\b\s", re.I)
+_ERROR = re.compile(r"\[(?:E|C)\]\s")
 
 
 def read(target: Path, since: float | None = None) -> dict:

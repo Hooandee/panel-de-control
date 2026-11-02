@@ -28,6 +28,7 @@ export interface UpscalerJob {
 
 export interface UpscalersOverview {
   gpu: string;
+  display: [number, number] | null;
   preferred: string;
   builds: BuildInfo[];
   cached: string[];

@@ -25,16 +25,38 @@ class UpscalerError(Exception):
         self.code = code
 
 
+def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
+    """Native mode of the built-in panel (first connected eDP/DSI/LVDS), else any connected output."""
+    connected = []
+    try:
+        names = sorted(os.listdir(drm))
+    except OSError:
+        return None
+    for name in names:
+        base = os.path.join(drm, name)
+        try:
+            with open(os.path.join(base, "status")) as status, open(os.path.join(base, "modes")) as modes:
+                if status.read().strip() != "connected":
+                    continue
+                width, _, height = modes.readline().strip().partition("x")
+                mode = [int(width), int(height.rstrip("i"))]
+        except (OSError, ValueError):
+            continue
+        connected.append((not any(kind in name for kind in ("eDP", "DSI", "LVDS")), mode))
+    return sorted(connected)[0][1] if connected else None
+
+
 def _proxy_override(proxy: str) -> str:
     return f"{proxy.removesuffix('.dll')}=n,b"
 
 
 class UpscalerService:
-    def __init__(self, home: str, state_dir: str, gpu: str, logger=None, proc: str = "/proc"):
+    def __init__(self, home: str, state_dir: str, gpu: str, logger=None, proc: str = "/proc", drm: str = "/sys/class/drm"):
         self.home = home
         self.gpu = gpu
         self.logger = logger
         self.proc = proc
+        self.drm = drm
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self._lock = threading.Lock()
@@ -73,6 +95,7 @@ class UpscalerService:
                 }
         return {
             "gpu": self.gpu,
+            "display": panel_resolution(self.drm),
             "preferred": catalog.preferred_build(self.gpu),
             "builds": catalog.describe(self.gpu),
             "cached": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
@@ -151,7 +174,10 @@ class UpscalerService:
             result = operation(*args)
             self._update_job(state="done", phase="done", result=result)
         except (UpscalerError, AssetError) as error:
-            self._update_job(state="error", error=error.code)
+            detail = getattr(error, "detail", "")
+            if detail and self.logger:
+                self.logger.warning(f"Upscaler job failed: {error.code} ({detail})")
+            self._update_job(state="error", error=error.code, detail=detail or None)
         except Exception as error:  # noqa: BLE001
             if self.logger:
                 self.logger.warning(f"Upscaler job failed: {type(error).__name__}")

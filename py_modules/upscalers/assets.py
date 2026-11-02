@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
+from http_util import ssl_context
+
 from .catalog import Asset
 
 CHUNK = 256 * 1024
@@ -19,9 +21,10 @@ Progress = Callable[[int], None]
 
 
 class AssetError(Exception):
-    def __init__(self, code: str):
+    def __init__(self, code: str, detail: str = ""):
         super().__init__(code)
         self.code = code
+        self.detail = detail
 
 
 def sha256(path: Path) -> str:
@@ -63,14 +66,14 @@ class AssetCache:
             progress(asset.size)
             return
         target.parent.mkdir(parents=True, exist_ok=True)
-        last_error = "download_failed"
+        last_error = AssetError("download_failed")
         for url in asset.urls:
             fd, partial = tempfile.mkstemp(dir=target.parent, prefix=".part-")
             digest = hashlib.sha256()
             received = 0
             try:
                 request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-                with os.fdopen(fd, "wb") as out, urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+                with os.fdopen(fd, "wb") as out, urllib.request.urlopen(request, timeout=TIMEOUT_S, context=ssl_context()) as response:
                     while True:
                         if cancelled():
                             raise AssetError("cancelled")
@@ -88,16 +91,16 @@ class AssetCache:
                 os.replace(partial, target)
                 return
             except AssetError as error:
-                last_error = error.code
+                last_error = error
                 if error.code == "cancelled":
                     raise
-            except OSError:
-                last_error = "download_failed"
+            except OSError as error:
+                last_error = AssetError("download_failed", f"{type(error).__name__}: {error}"[:200])
             finally:
                 if os.path.exists(partial):
                     os.unlink(partial)
             progress(0)
-        raise AssetError(last_error)
+        raise last_error
 
     def _unpack(self, asset: Asset) -> None:
         destination = self.unpacked(asset)
