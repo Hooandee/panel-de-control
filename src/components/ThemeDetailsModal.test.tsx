@@ -128,12 +128,28 @@ describe("ThemeDetailsModal", () => {
     const view = render(<ThemeDetailsModal themeId="example-theme" />);
     expect(view.container.querySelector("[data-pdc-theme-early]")).not.toBeNull();
     expect(screen.queryByText(/themes.action.install$/)).toBeNull();
+    expect(screen.queryByText("themes.early.update")).toBeNull();
     fireEvent.click(screen.getByText(/themes.early.install/));
     expect(installEarly).toHaveBeenCalledWith("example-theme");
     cleanup();
     mocks.controller = { ...mocks.controller!, error: "x", errorCode: "unknown_archive" };
     render(<ThemeDetailsModal themeId="example-theme" />);
     expect(screen.getByText("themes.early.rejected")).toBeTruthy();
+  });
+
+  it("says a newer early build is out and points at installing it from a file", () => {
+    const base = controller();
+    mocks.controller = controller({
+      snapshot: { status: "ready", themes: [] },
+      cards: [{
+        ...base.cards[0], installed: true, installedVersion: "0.2.0", installable: false, targetVersion: undefined,
+        earlyOnly: true, early: { version: "0.3.0", installable: true }, earlyUpdateAvailable: true,
+      }],
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+    expect(screen.getByText("themes.early.update")).toBeTruthy();
+    expect(screen.getByText(/themes.early.install/)).toBeTruthy();
+    expect(screen.queryByText("themes.update.ready")).toBeNull();
   });
 
   it("keeps working when its card disappears while the catalog refreshes", () => {

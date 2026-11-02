@@ -7,6 +7,8 @@ import type {
 } from "../themeExtensionClient";
 import type { ThemeExtensionLibraryAccess } from "./libraryAccess";
 import type { ThemeExtensionNavigationAccess } from "./navigationAccess";
+import type { ThemeExtensionStorageAccess, ThemeStorageProvider } from "./themeStorage";
+import type { ThemeExtensionGamesAccess } from "./gamesAccess";
 import { SECTION_ON, sectionKeyOf } from "../sectionOwnership";
 
 export interface ThemeExtensionHostDescriptor {
@@ -59,6 +61,10 @@ export interface ThemeExtensionMountContextV1 {
   qam?: never;
   ambient?: Readonly<ThemeExtensionAmbientAccess>;
   navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
+  /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
+  storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
+  games?: Readonly<ThemeExtensionGamesAccess>;
 }
 
 export interface ThemeExtensionMountContextV2 {
@@ -70,6 +76,10 @@ export interface ThemeExtensionMountContextV2 {
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
   ambient?: Readonly<ThemeExtensionAmbientAccess>;
+  /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
+  storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
+  games?: Readonly<ThemeExtensionGamesAccess>;
 }
 
 export type ThemeExtensionMountContext =
@@ -110,6 +120,8 @@ interface ThemeExtensionRuntimeHostOptions {
   library?: ThemeExtensionLibraryAccess;
   navigation?: ThemeExtensionNavigationAccess;
   ambient?: AmbientChannelProvider;
+  storage?: ThemeStorageProvider;
+  games?: Readonly<ThemeExtensionGamesAccess>;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -311,6 +323,8 @@ export class ThemeExtensionRuntimeHost {
   private snapshot: CssLoaderSnapshot = { status: "missing", themes: [] };
   private readonly payloads = new Map<string, ThemeExtensionPayload>();
   private readonly ambient: AmbientChannelProvider | undefined;
+  private readonly storage: ThemeStorageProvider | undefined;
+  private readonly games: Readonly<ThemeExtensionGamesAccess> | undefined;
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
@@ -330,8 +344,12 @@ export class ThemeExtensionRuntimeHost {
     evaluate = evaluateThemeExtensionBundle,
     log = (code) => console.warn(`[themes:${code}]`),
     ambient,
+    storage,
+    games,
   }: ThemeExtensionRuntimeHostOptions) {
     this.ambient = ambient;
+    this.storage = storage;
+    this.games = games;
     this.artwork = artwork;
     this.client = client;
     this.doc = doc;
@@ -527,6 +545,8 @@ export class ThemeExtensionRuntimeHost {
         document: this.doc,
         host: HOST_DESCRIPTOR,
         ...(scoped ? { ambient: scoped.access } : {}),
+        ...(this.storage ? { storage: this.storage.forTheme(selection.descriptor.catalogId) } : {}),
+        ...(this.games ? { games: this.games } : {}),
         ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
           artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
             get: this.artwork.get,

@@ -139,6 +139,39 @@ public sealed class SteamThemeEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task PersistsThemeStorageWritesAndSeedsTheHost()
+    {
+        devTools.Targets = new[] { Shared(), Page("bp", "SP", BigPictureUrl) };
+        var store = new ThemeStorageStore(root);
+        Assert.Null(store.Set("hooandee-eclipse", "layout", "list"));
+        var engine = new SteamThemeEngine(
+            devTools,
+            steam,
+            () => Inputs(new[] { new ThemeSelection(Theme(), new Dictionary<string, string>()) }, extension: true),
+            () => "host-bundle",
+            new FixedTable(null),
+            store);
+
+        devTools.StorageStatus = """{"seeded":false,"pending":1}""";
+        devTools.StorageWrites = """[{"seq":7,"catalogId":"hooandee-eclipse","key":"layout","value":"grid"},{"seq":8,"catalogId":"../x","key":"layout","value":"bad"}]""";
+        await engine.CycleAsync(default);
+
+        Assert.Equal("grid", store.Snapshot().Themes["hooandee-eclipse"]["layout"]);
+        using (var settlement = JsonDocument.Parse(devTools.Settlements.Single()))
+        {
+            Assert.Equal("grid", settlement.RootElement.GetProperty("seed").GetProperty("hooandee-eclipse").GetProperty("layout").GetString());
+            var results = settlement.RootElement.GetProperty("results").EnumerateArray().ToArray();
+            Assert.Equal(7, results[0].GetProperty("seq").GetInt64());
+            Assert.True(results[0].GetProperty("ok").GetBoolean());
+            Assert.False(results[1].GetProperty("ok").GetBoolean());
+        }
+
+        devTools.StorageStatus = """{"seeded":true,"pending":0}""";
+        await engine.CycleAsync(default);
+        Assert.Single(devTools.Settlements);
+    }
+
+    [Fact]
     public async Task DisablingEveryThemeCleansThePagesItPainted()
     {
         devTools.Targets = new[] { Page("bp", "SP", BigPictureUrl) };
@@ -273,6 +306,12 @@ public sealed class SteamThemeEngineTests : IDisposable
 
         public int HostUpdates { get; private set; }
 
+        public string? StorageStatus { get; set; }
+
+        public string StorageWrites { get; set; } = "[]";
+
+        public List<string> Settlements { get; } = new();
+
         public void ResetHost()
         {
             hostPresent = false;
@@ -307,6 +346,19 @@ public sealed class SteamThemeEngineTests : IDisposable
             if (expression.Contains("?.status()", StringComparison.Ordinal))
             {
                 return hostPresent ? HostStatus() : Json("null");
+            }
+
+            if (expression.Contains("__pdcWindowsThemeHost.storageTake()", StringComparison.Ordinal))
+            {
+                return Json(StorageWrites);
+            }
+
+            const string settle = "__pdcWindowsThemeHost.storageSettle(";
+            if (expression.Contains(settle, StringComparison.Ordinal))
+            {
+                var start = expression.IndexOf(settle, StringComparison.Ordinal) + settle.Length;
+                Settlements.Add(expression[start..^1]);
+                return Json("""{"seeded":true,"pending":0}""");
             }
 
             if (expression.Contains("__pdcWindowsThemeHost.update(", StringComparison.Ordinal))
@@ -344,7 +396,7 @@ public sealed class SteamThemeEngineTests : IDisposable
 
         private JsonElement HostStatus() => Json($$"""
             {"hostVersion":{{HostVersionInSteam}},"revision":{{hostRevision}},"steamDocument":true,"qamDocument":true,
-             "mounted":{{(hostRevision > 0 ? "[\"hooandee-eclipse@0.2.5\"]" : "[]")}},"errors":[]}
+             "mounted":{{(hostRevision > 0 ? "[\"hooandee-eclipse@0.2.5\"]" : "[]")}},"errors":[]{{(StorageStatus is null ? "" : $",\"storage\":{StorageStatus}")}}}
             """);
 
         private static JsonElement Json(string json)

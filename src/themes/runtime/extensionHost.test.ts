@@ -904,3 +904,52 @@ describe("DUO artwork bridge", () => {
     expect(detach).toHaveBeenCalledOnce();
   });
 });
+
+describe("theme storage", () => {
+  function capturing(onMount: (context: ThemeExtensionMountContext) => void): (source: string) => ThemeExtensionExport {
+    return () => Object.freeze({
+      abiVersion: 1 as const,
+      mount(context: ThemeExtensionMountContext) {
+        onMount(context);
+        return () => undefined;
+      },
+    });
+  }
+
+  it("is absent when Panel offers no backend", async () => {
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(seen).toBeDefined();
+    expect(seen && "storage" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("is scoped to the mounted theme's catalog id", async () => {
+    const forTheme = vi.fn(() => Object.freeze({ get: async () => null, set: async () => true }));
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, storage: { forTheme }, evaluate: capturing((c) => { seen = c; }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(forTheme).toHaveBeenCalledWith("example-theme");
+    expect(await seen?.storage?.get("layout")).toBeNull();
+    expect(seen && "games" in seen).toBe(false);
+    host.dispose();
+  });
+
+  it("offers game controls only when Panel provides them", async () => {
+    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const) });
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(await seen?.games?.forceClose(730)).toBe("terminated");
+    host.dispose();
+  });
+});

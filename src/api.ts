@@ -58,6 +58,13 @@ export const loadThemeExtension = callable<[
   catalogId: string,
   version: string,
 ], unknown>("load_theme_extension");
+export const getThemeStorage = callable<[catalogId: string, key: string], unknown>("get_theme_storage");
+export const setThemeStorage = callable<[
+  catalogId: string,
+  key: string,
+  value: string,
+], unknown>("set_theme_storage");
+export const forceCloseGame = callable<[appid: string], unknown>("force_close_game");
 export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
 export const discardThemeExtensionReceipt = callable<[catalogId: string], unknown>(
   "discard_theme_extension_receipt",

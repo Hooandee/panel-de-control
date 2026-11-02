@@ -29,6 +29,9 @@ describe("early access themes", () => {
     expect(parseEarlyPublication({ status: "temporarily-unavailable", code: "offline", retryable: true })).toEqual([]);
     expect(parseEarlyPublication({ status: "published", themes: [{ ...RAW_EARLY, earlyVersion: "x" }] })).toEqual([]);
     expect(parseEarlyPublication(null)).toEqual([]);
+    expect(parseEarlyPublication({ status: "cached", themes: [RAW_EARLY], code: "offline", retryable: true }))
+      .toEqual(parseEarlyPublication({ status: "published", themes: [RAW_EARLY] }));
+    expect(parseEarlyPublication({ status: "cached", themes: [RAW_EARLY] })).toEqual([]);
   });
 
   it("lists an early-only theme without a regular install and tags a catalog theme with its early build", () => {

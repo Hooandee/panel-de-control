@@ -717,3 +717,113 @@ def test_close_during_install_catalog_fetch_prevents_artifact_download(
 
     assert [error.code for error in failures] == ["lifecycle_stopping"]
     assert transport.downloads == []
+
+
+EARLY_ARCHIVE = b"published early theme archive"
+
+
+def early_list(version: str = "0.3.0", archive: bytes = EARLY_ARCHIVE) -> bytes:
+    theme = {
+        "schemaVersion": 1,
+        "catalogId": "example-early",
+        "cssLoaderName": "Example Early",
+        "displayName": {"es": "Ejemplo", "en": "Example", "it": "Esempio"},
+        "description": {"es": "Desc.", "en": "Desc.", "it": "Desc."},
+        "author": "Example Author",
+        "tags": [],
+        "minimumVersions": {"panel": "1.0.0"},
+        "early": {
+            "version": version,
+            "artifacts": [
+                {"version": version, "size": len(archive), "sha256": hashlib.sha256(archive).hexdigest()},
+            ],
+        },
+    }
+    return json.dumps({"schemaVersion": 1, "themes": [theme]}).encode()
+
+
+def early_service(transport: FakeTransport, *, early_cache: MemoryCache | None, clock: Clock | None = None) -> ThemeRemoteService:
+    return ThemeRemoteService(
+        channel(),
+        transport=transport,
+        runtime_versions=runtime,
+        early_cache=early_cache,
+        clock=clock or Clock(),
+    )
+
+
+def test_persists_exact_validated_live_early_list() -> None:
+    raw = early_list()
+    early_cache = MemoryCache()
+    result = early_service(FakeTransport(raw), early_cache=early_cache, clock=Clock(77.0)).check_early()
+
+    assert result["status"] == "published"
+    assert early_cache.saves == [(raw, 77.0)]
+    assert early_service(FakeTransport(b"{}"), early_cache=(empty := MemoryCache())).check_early()["code"] == "invalid_descriptor"
+    assert empty.saves == []
+
+
+@pytest.mark.parametrize("code", ["offline", "timeout", "rate_limited", "http_status"])
+def test_early_list_without_network_falls_back_to_persisted_copy(code: str) -> None:
+    early_cache = MemoryCache(cached_record(early_list("0.4.0"), checked_at=42.0))
+    result = early_service(
+        FakeTransport(ThemeTransportError(code, "x")),
+        early_cache=early_cache,
+    ).check_early()
+
+    assert result["status"] == "cached"
+    assert result["code"] == code
+    assert result["retryable"] is True
+    assert [theme["earlyVersion"] for theme in result["themes"]] == ["0.4.0"]
+    assert frozenset(result) == {"status", "themes", "code", "retryable"}
+    assert early_cache.saves == []
+
+
+def test_early_list_offline_prefers_the_copy_read_in_this_session() -> None:
+    clock = Clock()
+    transport = FakeTransport(early_list("0.5.0"))
+    remote = early_service(transport, early_cache=MemoryCache(cached_record(early_list("0.4.0"))), clock=clock)
+    remote.check_early()
+    transport.result = ThemeTransportError("offline", "x")
+
+    result = remote.check_early(force=True)
+
+    assert result["status"] == "cached"
+    assert result["themes"][0]["earlyVersion"] == "0.5.0"
+
+
+@pytest.mark.parametrize("bad_cache", [None, {"schemaVersion": 1}, cached_record(b"{}"), cached_record(catalog(release()))])
+def test_invalid_persisted_early_list_never_masks_live_failure(bad_cache: object) -> None:
+    result = early_service(
+        FakeTransport(ThemeTransportError("offline", "x")),
+        early_cache=MemoryCache(bad_cache),
+    ).check_early()
+
+    assert result == {"status": "temporarily-unavailable", "code": "offline", "retryable": True}
+
+
+def test_early_list_cache_round_trips_through_the_atomic_store(tmp_path: Path) -> None:
+    store = ThemeCatalogCacheStore(tmp_path / "settings" / "theme-early-cache.json")
+    early_service(FakeTransport(early_list()), early_cache=store).check_early()  # type: ignore[arg-type]
+
+    restarted = early_service(FakeTransport(ThemeTransportError("timeout", "x")), early_cache=store)  # type: ignore[arg-type]
+    result = restarted.check_early()
+
+    assert result["status"] == "cached"
+    assert result["themes"][0]["catalogId"] == "example-early"
+
+
+def test_early_install_never_uses_the_persisted_early_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(theme_packages, "prepare_theme_archive", lambda *a, **k: pytest.fail("must not install"))
+    picked = tmp_path / "early.zip"
+    picked.write_bytes(EARLY_ARCHIVE)
+    clock = Clock()
+    transport = FakeTransport(early_list())
+    remote = early_service(transport, early_cache=MemoryCache(cached_record(early_list())), clock=clock)
+    assert remote.check_early()["status"] == "published"
+    transport.result = ThemeTransportError("offline", "x")
+
+    with pytest.raises(ThemeRemoteError) as error:
+        remote.prepare_early_install(str(picked), tmp_path / "themes", tmp_path / "r.json")
+
+    assert error.value.code == "offline"

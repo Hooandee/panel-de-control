@@ -1,6 +1,6 @@
 import { Focusable } from "@decky/ui";
 import { type CSSProperties, useRef, useState } from "react";
-import { LuDownload, LuSparkles } from "react-icons/lu";
+import { LuDownload, LuSparkles, LuWifiOff } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme, themed } from "../theme";
@@ -114,7 +114,10 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;
-  const versionLabel = card.earlyOnly
+  const earlyUpdate = card.earlyUpdateAvailable && card.early ? card.early : null;
+  const versionLabel = earlyUpdate
+    ? "themes.early.card.update"
+    : card.earlyOnly
     ? "themes.early.version"
     : !card.installable
     ? "themes.remote.card.incompatible"
@@ -159,7 +162,12 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
             {tagline}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable || card.earlyOnly ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
-            <span>{t(versionLabel, { version: card.release.publishedVersion })}</span>
+            <span>{t(versionLabel, { version: earlyUpdate?.version ?? card.release.publishedVersion })}</span>
+            {card.offline ? (
+              <span data-pdc-theme-offline="true" style={{ color: theme.color.textMuted, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <LuWifiOff size={12} aria-hidden /> {t("themes.remote.card.offline")}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

@@ -15,6 +15,8 @@ import {
   createThemeNavigationAccess,
   type ThemeExtensionNavigationAccess,
 } from "./navigationAccess";
+import type { ThemeStorageProvider } from "./themeStorage";
+import type { ThemeExtensionGamesAccess } from "./gamesAccess";
 
 interface RuntimeManagerLike {
   reconcile(snapshot: CssLoaderSnapshot): void;
@@ -155,6 +157,8 @@ interface ThemesRuntimeOptions {
   library?: Readonly<ThemeExtensionLibraryAccess>;
   navigation?: Readonly<ThemeExtensionNavigationAccess>;
   ambient?: AmbientChannelProvider;
+  storage?: ThemeStorageProvider;
+  games?: Readonly<ThemeExtensionGamesAccess>;
   evaluate?(source: string): ThemeExtensionExport;
   log?(code: string): void;
   createManager?(
@@ -178,6 +182,8 @@ export function startThemesRuntime({
   log,
   createManager,
   ambient,
+  storage,
+  games,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -195,6 +201,8 @@ export function startThemesRuntime({
       artwork,
       navigation,
       ambient,
+      storage,
+      games,
       evaluate,
       log,
     }),

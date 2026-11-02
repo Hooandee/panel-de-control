@@ -33,6 +33,7 @@ from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
 import journal
+import game_force_close
 import journal_context
 import pulse
 import self_updater
@@ -40,6 +41,7 @@ import theme_activation
 import theme_health
 import theme_packages
 import theme_remote
+import theme_storage
 import theme_transport
 from version import read_version
 from json_store import atomic_json_save
@@ -242,6 +244,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
+        ("_support_theme_storage", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -303,7 +306,9 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
     catalog_path="themes/v1/catalog.json",
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
+_THEME_EARLY_CACHE_FILE = "theme-early-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
+_THEME_STORAGE_DIR = "theme-storage"
 _THEME_EARLY_INSTALLS_FILE = "theme-early-installs.json"
 _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 _THEME_FAILURE_OPERATIONS = frozenset({
@@ -1636,6 +1641,16 @@ class Plugin(AmbientRpc):
     def _theme_receipts_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
 
+    def _theme_storage(self) -> theme_storage.ThemeStorage:
+        store = getattr(self, "_theme_storage_store", None)
+        if store is None:
+            store = theme_storage.ThemeStorage(Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_STORAGE_DIR)
+            self._theme_storage_store = store
+        return store
+
+    def _support_theme_storage(self) -> dict:
+        return {"storage": self._theme_storage().summary()}
+
     def _theme_activation_recovery_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_ACTIVATION_RECOVERY_FILE
 
@@ -1844,6 +1859,9 @@ class Plugin(AmbientRpc):
                 panel=read_version(),
             ),
             cache=cache,
+            early_cache=theme_remote.ThemeCatalogCacheStore(
+                os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, _THEME_EARLY_CACHE_FILE)
+            ),
             cache_error_logger=lambda error_name: decky.logger.warning(
                 "Theme catalog cache unavailable (%s)",
                 error_name,
@@ -2185,6 +2203,45 @@ class Plugin(AmbientRpc):
                 type(error).__name__,
             )
             raise RuntimeError("extension_unavailable") from None
+
+    async def get_theme_storage(self, catalog_id: str, key: str) -> dict:
+        """A theme runtime's durable value; a failed read is an error, never an empty value."""
+        self._init()
+        try:
+            value = await self._offload_theme_call(lambda: self._theme_storage().get(catalog_id, key))
+            return {"ok": True, "value": value}
+        except theme_storage.ThemeStorageError as error:
+            decky.logger.warning("Theme storage read failed (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme storage read failed (%s)", type(error).__name__)
+            return {"ok": False, "code": "read_failed"}
+
+    async def set_theme_storage(self, catalog_id: str, key: str, value: str) -> dict:
+        self._init()
+        try:
+            await self._offload_theme_call(lambda: self._theme_storage().set(catalog_id, key, value))
+            return {"ok": True}
+        except theme_storage.ThemeStorageError as error:
+            decky.logger.warning("Theme storage write rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Theme storage write failed (%s)", type(error).__name__)
+            return {"ok": False, "code": "write_failed"}
+
+    async def force_close_game(self, appid) -> dict:
+        """Last resort after Steam's TerminateApp left a game running: TERM, then KILL, its reaper tree only."""
+        self._init()
+        try:
+            result = await asyncio.to_thread(game_force_close.force_close, appid)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Force close failed (%s)", type(error).__name__)
+            result = {"result": "failed", "code": type(error).__name__}
+        diary = journal.active
+        if diary is not None:
+            level = "INFO" if result.get("result") in ("terminated", "not_found") else "WARNING"
+            diary.write(level, "games", "force_close", **result)
+        return result
 
     async def get_theme_health(self) -> dict:
         self._init()
@@ -14158,6 +14215,9 @@ class Plugin(AmbientRpc):
         log("Controller transition %s", encoded)
 
     def _log_lifecycle_event(self, event) -> None:
+        # The black box keeps the last transitions' names: a freeze right after a resume.
+        recent = getattr(self, "_lifecycle_recent", None) or []
+        self._lifecycle_recent = [*recent, {"t": round(time.time(), 1), "event": event.get("event")}][-4:]
         if event.get("event") == "resume_detected":
             self._reset_auto_session("resume")
         if event.get("event") in ("resume_detected", "ac_changed"):
@@ -14340,6 +14400,7 @@ class Plugin(AmbientRpc):
             diary.directory,
             context=self._pulse_context,
             recent=diary.latest,
+            lifecycle=lambda: getattr(self, "_lifecycle_recent", None) or [],
             on_unclean=lambda end: diary.write("WARNING", "session", "previous_unclean_end", **end),
         )
         self._pulse.start()
@@ -14354,6 +14415,8 @@ class Plugin(AmbientRpc):
         return {
             "game": self._current_appid,
             "themes": getattr(self, "_support_active_themes", None),
+            # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
+            "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
             **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
         }
 
@@ -14428,13 +14491,16 @@ class Plugin(AmbientRpc):
         diary = journal.active
         if diary is None:
             return
-        last_context, last_sections = await loop.run_in_executor(
+        last_context, last_sections, last_themes = await loop.run_in_executor(
             None,
             lambda: (
                 journal.last_record(diary.directory, "context"),
                 journal.merged_sections(diary.directory),
+                journal.last_record(diary.directory, "themes"),
             ),
         )
+        theme_folders = journal_context.ThemeFolderWatcher(last_themes)
+        rescan_themes = True
         while not self._shutting_down:
             diary = journal.active
             if diary is None:
@@ -14454,6 +14520,7 @@ class Plugin(AmbientRpc):
                         last_context = {"t": time.time(), **context}
                     sections = await self._support_section_states()
                     self._support_active_themes = journal_context.active_themes(sections)
+                    rescan_themes = True
                     if journal_context.needs_snapshot(last_sections, {}, (), now=time.time()):
                         diary.write("INFO", "sections", "snapshot", sections=sections)
                         last_sections = {"t": time.time(), "sections": sections}
@@ -14467,6 +14534,8 @@ class Plugin(AmbientRpc):
                         if changed:
                             diary.write("INFO", "sections", "changed", sections=changed)
                             last_sections = {"t": time.time(), "sections": {**last_sections["sections"], **changed}}
+                await self._journal_theme_folders(diary, theme_folders, rescan_themes)
+                rescan_themes = False
                 sample = await self._support_sample()
                 self._support_last_sample = sample
                 reason = watcher.observe(sample, time.time())
@@ -14477,6 +14546,31 @@ class Plugin(AmbientRpc):
             except Exception as error:  # noqa: BLE001
                 diary.write("WARNING", "state", "sample_failed", error=type(error).__name__)
             await self._support_pause()
+
+    def _support_theme_folders(self, force: bool) -> dict | None:
+        """Hooandee theme folders, rescanned only when the themes folder changed (one stat
+        per sample), with the section refresh or while a change awaits confirmation."""
+        root = self._themes_root()
+        try:
+            stamp = os.stat(root).st_mtime_ns
+        except OSError:
+            stamp = None
+        if not force and stamp == getattr(self, "_support_themes_stamp", False):
+            return None
+        self._support_themes_stamp = stamp
+        return journal_context.hooandee_theme_folders(root)
+
+    async def _journal_theme_folders(self, diary, watcher, rescan: bool) -> None:
+        """Settings lost on a restart showed no trace of theme folders coming and going."""
+        try:
+            # The theme executor runs installs one at a time: never scans half an update.
+            folders = await self._offload_theme_call(lambda: self._support_theme_folders(rescan or watcher.pending))
+        except Exception:  # noqa: BLE001 - stopping, or the folder is unreadable
+            return
+        found = watcher.observe(folders) if folders is not None else None
+        if found is not None:
+            message, event = found
+            diary.write("WARNING" if event["removed"] else "INFO", "themes", message, **event)
 
     async def _support_pause(self) -> None:
         deadline = time.monotonic() + _SUPPORT_SAMPLE_INTERVAL_S
@@ -14761,6 +14855,7 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
+        "get_theme_storage", "set_theme_storage", "force_close_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),

@@ -11,8 +11,15 @@ import { installHostGameAudio } from "./gameAudio";
 import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
 import { installOverlayToastPosition } from "./notificationPosition";
 import { installSteamButtonHome } from "./steamButton";
+import { createThemeStorage } from "../themes/runtime/themeStorage";
+import {
+  createWindowsThemeStorage,
+  type WindowsStorageSettlement,
+  type WindowsStorageStatus,
+  type WindowsStorageWrite,
+} from "./storage";
 
-export const WINDOWS_THEME_HOST_VERSION = 5;
+export const WINDOWS_THEME_HOST_VERSION = 6;
 
 export interface WindowsThemeHostState {
   revision: number;
@@ -28,12 +35,16 @@ export interface WindowsThemeHostStatus {
   mounted: readonly string[];
   errors: readonly string[];
   gameSilenced: boolean;
+  storage: WindowsStorageStatus;
 }
 
 export interface WindowsThemeHost {
   readonly hostVersion: number;
   update(state: WindowsThemeHostState): WindowsThemeHostStatus;
   status(): WindowsThemeHostStatus;
+  /** Writes theme runtimes made since the last settlement, oldest first; the companion persists them. */
+  storageTake(): WindowsStorageWrite[];
+  storageSettle(settlement: WindowsStorageSettlement): WindowsStorageStatus;
   dispose(): void;
 }
 
@@ -138,6 +149,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     for (const listener of [...qamListeners]) listener(doc);
   };
 
+  const storage = createWindowsThemeStorage();
   const gameAudio = installHostGameAudio(scope);
   const releaseClassMaps = installHostClassMaps(scope);
 
@@ -192,6 +204,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
         }
       };
     },
+    storage: createThemeStorage(storage.backend),
     evaluate: trackMounts,
     log: recordError,
   });
@@ -204,6 +217,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     mounted: [...mounted].sort(),
     errors: [...errors],
     gameSilenced: gameAudio.silenced(),
+    storage: storage.status(),
   });
 
   return Object.freeze({
@@ -219,8 +233,11 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
       return status();
     },
     status,
+    storageTake: storage.take,
+    storageSettle: storage.settle,
     dispose() {
       stopRuntime();
+      storage.dispose();
       gameAudio.dispose();
       stopSteamButton();
       stopToastPosition();

@@ -14,6 +14,16 @@ export interface ThemeCardModel {
   cssLoaderTheme?: CssLoaderTheme;
   early?: { version: string; installable: boolean };
   earlyOnly?: boolean;
+  /**
+   * The installed copy is an early build and a newer early is published. It never comes as a download:
+   * the user fetches the zip and uses «Instalar desde archivo».
+   */
+  earlyUpdateAvailable?: boolean;
+  /**
+   * The publication is the copy saved on this device because the channel could not be reached:
+   * "no update" means "not checked", never "up to date".
+   */
+  offline?: boolean;
 }
 
 interface SemanticVersion {
@@ -91,6 +101,23 @@ export function managedThemeReleases(publication: ThemePublicationState): readon
   return [...usableThemes(publication), ...earlyOnlyThemes(publication).map((theme) => theme.release)];
 }
 
+/**
+ * An installed early build is behind the published early. A solo-early install is always an early build;
+ * on a catalog theme only an install newer than the stable release can be one. Like stable updates, only
+ * an early this Panel can install is offered.
+ */
+function earlyUpdateAvailable(
+  installed: CssLoaderTheme | undefined,
+  early: PublishedEarlyTheme | undefined,
+  onlyEarly: boolean,
+  versionRelation: ThemeCardModel["versionRelation"],
+): boolean {
+  if (!installed || !early || early.release.compatibility !== "compatible") return false;
+  if (!onlyEarly && versionRelation !== "local-newer") return false;
+  const comparison = compareVersions(installed.version, early.earlyVersion);
+  return comparison !== null && comparison < 0;
+}
+
 export function deriveThemeCards(
   publication: ThemePublicationState,
   snapshot: CssLoaderSnapshot,
@@ -133,6 +160,8 @@ export function deriveThemeCards(
       ...(targetVersion ? { targetVersion } : {}),
       ...(earlyTheme ? { early: { version: earlyTheme.earlyVersion, installable: earlyTheme.release.compatibility === "compatible" } } : {}),
       earlyOnly: onlyEarly,
+      earlyUpdateAvailable: earlyUpdateAvailable(cssLoaderTheme, earlyTheme, onlyEarly, versionRelation),
+      offline: publication.status === "cached",
     };
   });
 }
