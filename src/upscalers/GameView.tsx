@@ -236,7 +236,7 @@ export const GameView: FC<{
         </div>
       ) : <Skeleton height={56} />}
 
-      {detail && (
+      {detail && !detail.native && (
         <>
           {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
           {detail.updating && <Note tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Note>}
