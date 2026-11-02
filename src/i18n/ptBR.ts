@@ -311,6 +311,7 @@ export const ptBR: Record<string, string> = {
   "nav.upscalers": "Upscalers",
   "nav.upscalers.desc": "Imagem melhor e mais FPS nos seus jogos",
   "up.title": "Upscalers",
+  "up.fg.enableInGame": "Ative a geração de quadros nos gráficos do jogo",
   "up.fg.title": "Geração de quadros",
   "up.fg.off": "Não",
   "up.fg.on": "Sim",

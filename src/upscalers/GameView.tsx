@@ -217,6 +217,9 @@ export const GameView: FC<{
           {install?.options.fg === "on" && facts?.fg && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
           )}
+          {install?.options.fg === "on" && !facts?.fg && facts?.upscaler && detail.fg_plan?.source === "game" && (
+            <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("up.fg.enableInGame")}</span>
+          )}
           {render && output && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
           )}

@@ -311,6 +311,7 @@ export const de: Record<string, string> = {
   "nav.upscalers": "Upscaler",
   "nav.upscalers.desc": "Schärferes Bild und mehr FPS in deinen Spielen",
   "up.title": "Upscaler",
+  "up.fg.enableInGame": "Aktiviere die Bildgenerierung in den Grafikeinstellungen des Spiels",
   "up.fg.title": "Bildgenerierung",
   "up.fg.off": "Aus",
   "up.fg.on": "An",
