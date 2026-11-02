@@ -404,7 +404,12 @@ class UpscalerService:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             raise UpscalerError("broken") from None
-        install["fg_plan"] = catalog.fg_route_plan(install.get("fg_plan"), choice.get("fg_route"))
+        plan = install.get("fg_plan")
+        if installed and not installed.native and not (isinstance(plan, dict) and plan.get("routes")):
+            recipe = self._recipe(appid, self._identity(installed, entry))
+            analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
+            plan = _fg_plan(self.gpu, analysis, recipe, _generation(install), choice.get("fg_route"))
+        install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
         fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on")
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **fg}), encoding="utf-8")
         install["options"] = _clean_options(choice)

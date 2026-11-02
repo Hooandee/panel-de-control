@@ -449,6 +449,9 @@ def test_frame_generation_is_written_on_install_and_toggled_after(steam, fake_ca
     text = (target / "OptiScaler.ini").read_text()
     assert ini.read(text, "FrameGen.Enabled") == "true"
     assert ini.read(text, "FrameGen.FGInput") == "fsrfg"
+    service._game_state(APPID)["install"]["fg_plan"] = {"input": "nukems", "output": "nukems", "source": "game", "experimental": False}
+    service.configure(APPID, {"fg": "on", "fg_route": "game"})
+    assert ini.read((target / "OptiScaler.ini").read_text(), "FrameGen.FGInput") == "fsrfg"
     service.configure(APPID, {"fg": "on", "fg_route": "optiscaler"})
     assert ini.read((target / "OptiScaler.ini").read_text(), "FrameGen.FGInput") == "upscaler"
     service.configure(APPID, {"fg": "off"})
