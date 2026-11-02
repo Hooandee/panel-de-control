@@ -176,10 +176,17 @@ def _installed_by_panel(folder: Path) -> set[str]:
     return {Path(name).name.lower() for name in manifest.get("files", {}) if name not in backups and "/" not in name}
 
 
+_SL_VERSION = re.compile(r"(?:^|v)(\d+)[.,]\d+")
+
+
 def streamline_major(path: Path) -> int | None:
-    version = pe.version_strings(str(path)).get("FileVersion", "")
-    head = version.replace(",", ".").strip().split(".")[0]
-    return int(head) if head.isdecimal() else None
+    """NVIDIA leaves FileVersion out of some builds; OriginalFilename then carries "v2.14.1"."""
+    strings = pe.version_strings(str(path))
+    for key in ("FileVersion", "ProductVersion", "OriginalFilename"):
+        match = _SL_VERSION.search(strings.get(key, ""))
+        if match:
+            return int(match.group(1))
+    return None
 
 
 def _score(path: Path, root: Path, size: int) -> int:

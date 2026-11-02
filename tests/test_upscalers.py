@@ -499,3 +499,12 @@ def test_log_reader_understands_optiscaler_10(tmp_path):
     assert facts["version"] == "10.0.0-dev"
     assert facts["upscaler"] == "FSR 3.X"
     assert logread.verdict(facts) == "active"
+
+
+def test_streamline_version_comes_from_any_version_string(monkeypatch):
+    monkeypatch.setattr(games.pe, "version_strings", lambda _: {"OriginalFilename": "SHA: 98614dad6 v2.14.1-rc0"})
+    assert games.streamline_major(Path("sl.interposer.dll")) == 2
+    monkeypatch.setattr(games.pe, "version_strings", lambda _: {"FileVersion": "1.5.0.0"})
+    assert games.streamline_major(Path("sl.interposer.dll")) == 1
+    monkeypatch.setattr(games.pe, "version_strings", lambda _: {})
+    assert games.streamline_major(Path("sl.interposer.dll")) is None

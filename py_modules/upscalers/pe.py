@@ -12,7 +12,7 @@ _IMPORT_DIR = 1
 _DELAY_IMPORT_DIR = 13
 _MAX_DLLS = 512
 _MAX_RESOURCES = 8 * 1024 * 1024
-VERSION_KEYS = ("ProductName", "FileDescription", "CompanyName", "OriginalFilename")
+VERSION_KEYS = ("ProductName", "FileDescription", "CompanyName", "OriginalFilename", "FileVersion", "ProductVersion")
 
 
 class _Image:
