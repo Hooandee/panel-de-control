@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.82.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.3...panel-de-control-v0.82.0) (2026-11-02)
+
+
+### Features
+
+* **themes:** durable theme storage, forced game close and early update notice ([#1096](https://github.com/Hooandee/panel-de-control/issues/1096)) ([83acdad](https://github.com/Hooandee/panel-de-control/commit/83acdadb0391640c8b96fc672ee52f033d2d193f))
+
 ## [0.81.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.2...panel-de-control-v0.81.3) (2026-11-02)
 
 
