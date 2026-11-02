@@ -400,7 +400,7 @@ class UpscalerService:
         history = entry.get("history") or []
         if history and history[-1].get("build") == install.get("build") and result != "not_run":
             history[-1]["result"] = result
-            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "fsr4", "resolution", "version") if k in facts}
+            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fsr4", "resolution", "version") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
 

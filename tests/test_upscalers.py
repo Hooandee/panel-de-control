@@ -213,3 +213,21 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
 def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
     assert service.compatibility([APPID, "999"]) == {APPID: True}
+
+
+def test_log_reader_takes_real_optiscaler_lines(tmp_path):
+    log = _write(tmp_path / "OptiScaler.log",
+                 "[13:19:00.245658] [W] OptiScaler v0.9.4-final (7534ad0) loaded\n"
+                 "[13:19:00.252768] [I] CheckWorkingMode OptiScaler working as dxgi.dll, system dll loaded\n"
+                 "[13:19:07.990345] [E] hkD3D12CreateDevice ppDevice is nullptr\n"
+                 "[13:21:05.132712] [I] CreateDLSSContext renderWidth: 936, maxWidth: 1440, ratio: 1.5384616\n"
+                 "[13:21:05.132848] [I] NVSDK_NGX_D3D12_CreateFeature Creating new fsr31 upscaler\n"
+                 "[13:21:05.132956] [I] IFeature::SetInitParameters Render Resolution: 936x624, Display Resolution 1440x960, Quality: 1\n")
+    facts = logread.read(log.parent)
+    assert facts["version"] == "0.9.4-final"
+    assert facts["proxy"] == "dxgi.dll"
+    assert facts["upscaler"] == "fsr31"
+    assert facts["input"] == "DLSS"
+    assert facts["resolution"] == {"render": [936, 624], "output": [1440, 960]}
+    assert facts["errors"] == 1
+    assert logread.verdict(facts) == "active"

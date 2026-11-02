@@ -49,7 +49,8 @@ export const GameView: FC<{
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const mounted = useRef(true);
-  const height = overview.display?.[1] ?? 800;
+  const lastFacts = detail?.history.map((h) => h.facts).filter(Boolean).pop();
+  const height = lastFacts?.resolution?.output[1] ?? overview.display?.[1] ?? 800;
   const backOverride = useMemo(() => ({ label: t("up.back"), onBack }), [t, onBack]);
   const borrowedBack = useSectionBack(backOverride);
 
@@ -165,8 +166,8 @@ export const GameView: FC<{
   };
 
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
-  const render = facts?.resolution?.render[1] ?? (choice.quality ? renderHeight(height, choice.quality) : null);
-  const output = facts?.resolution?.output[1] ?? height;
+  const render = facts?.resolution?.render[1] ?? null;
+  const output = facts?.resolution?.output[1] ?? null;
   const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
   const usable = builds.filter((b) => b.available && b.supported);
@@ -191,7 +192,7 @@ export const GameView: FC<{
               </span>
             </div>
           ) : <Skeleton height={10} width="60%" />}
-          {render && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.resolution", { render, output })}</span>}
+          {render && output && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.resolution", { render, output })}</span>}
         </div>
       </div>
 

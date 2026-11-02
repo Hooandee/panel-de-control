@@ -15,9 +15,9 @@ _FACTS = (
     ("proxy", re.compile(r"OptiScaler working as ([A-Za-z0-9_]+\.(?:dll|asi))", re.I)),
     ("gpu", re.compile(r"Adapter Desc:\s*(.+)")),
     ("upscaler", re.compile(r"Creating new (.+?) upscaler")),
+    ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
-    ("fsr4", re.compile(r"(FSR\s*4[\w.\s]*?(?:INT8|FP8|model\s*\d)[^\n]*)", re.I)),
-    ("resolution", re.compile(r"Render\w*\s*[:=]?\s*(\d{3,5})\s*x\s*(\d{3,5}).{0,40}?(?:Display|Output|Target)\w*\s*[:=]?\s*(\d{3,5})\s*x\s*(\d{3,5})", re.I)),
+    ("resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
 )
 _ERROR = re.compile(r"\[(?:E|C)\]\s")
 
