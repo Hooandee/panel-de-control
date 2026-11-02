@@ -207,16 +207,16 @@ export const GameView: FC<{
           <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
             {install && <Dot color={statusColor(status)} />}
             <span style={{ flex: 1, fontWeight: 700, fontSize: theme.font.body, color: theme.color.textPrimary }}>
-              {install ? t(`up.status.${status}`) : t("up.status.none")}
+              {detail.native ? t("up.native.title") : install ? t(`up.status.${status}`) : t("up.status.none")}
             </span>
             {install
               ? <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>
-              : preferredBuild && <Chip>{buildLabel(preferredBuild)}</Chip>}
+              : preferredBuild && !detail.native && <Chip>{buildLabel(preferredBuild)}</Chip>}
           </div>
           {render && output && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
           )}
-          {!install && preferredBuild && (
+          {!install && preferredBuild && !detail.native && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
           )}
           {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
