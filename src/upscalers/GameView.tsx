@@ -9,6 +9,8 @@ import {
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
 import { useSectionBack } from "../components/sectionBack";
+import { useRunningGame } from "../tdp/useRunningGame";
+import { CompareView } from "./CompareView";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
@@ -48,6 +50,9 @@ export const GameView: FC<{
   const [verify, setVerify] = useState<VerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const runningGame = useRunningGame();
+  const gameRunning = runningGame?.liveAppid === game.liveAppid;
   const mounted = useRef(true);
   const lastFacts = detail?.history.map((h) => h.facts).filter(Boolean).pop();
   const height = lastFacts?.resolution?.output[1] ?? overview.display?.[1] ?? 800;
@@ -252,6 +257,12 @@ export const GameView: FC<{
           <ActionButton label={t("up.verify")} onPress={check} busy={verifying} />
           <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} />
         </Row>
+      )}
+      {detail && !running && install && !comparing && (
+        <Row><ActionButton label={t("up.compare.open")} onPress={() => setComparing(true)} /></Row>
+      )}
+      {detail && install && comparing && (
+        <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
       )}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
 

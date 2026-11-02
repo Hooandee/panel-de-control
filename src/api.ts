@@ -1362,6 +1362,7 @@ export const recordUpscalerArgs = callable<[appid: string, args: string[]], { ad
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } }>("get_upscaler_live");
+export const captureUpscalerFrame = callable<[appid: string], import("./upscalers/CompareView").Shot>("capture_upscaler_frame");
 export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
 export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
 export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upscalers_job");

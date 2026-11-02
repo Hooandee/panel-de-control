@@ -33,6 +33,7 @@ interface Badge {
 
 let installs: Record<string, Badge> = {};
 let sectionOpen = false;
+let ghost: { image: string; opacity: number } | null = null;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -58,6 +59,12 @@ function useInstalls(): Record<string, Badge> {
     return () => { listeners.delete(update); };
   }, []);
   return value;
+}
+
+/** The first comparison shot drawn over the game so the second can be framed the same way. */
+export function setCompareGhost(next: { image: string; opacity: number } | null): void {
+  ghost = next;
+  emit();
 }
 
 /** While Escaladores is on screen the pill stays up, whatever the mode, so the user can see what runs. */
@@ -154,6 +161,7 @@ export const InGameBadge: FC = () => {
   const running = useRunningGame();
   const [mode, setMode] = useState(readInGameMode);
   const [inSection, setInSection] = useState(sectionOpen);
+  const [ghostShot, setGhostShot] = useState(ghost);
   const [surface, setSurface] = useState<QamSurface | null>(null);
 
   useEffect(() => subscribeQamSurface(setSurface), []);
@@ -165,6 +173,7 @@ export const InGameBadge: FC = () => {
     const update = () => {
       setMode(readInGameMode());
       setInSection(sectionOpen);
+      setGhostShot(ghost);
     };
     listeners.add(update);
     return () => { listeners.delete(update); };
@@ -210,11 +219,32 @@ export const InGameBadge: FC = () => {
 
   const sectionShown = inSection && !!surface?.visible;
   const visible = active && (sectionShown || mode === "always" || (mode === "start" && startWindow));
-  if (!host || !badge) return null;
+  if (!host) return null;
+  const ghostShown = !!ghostShot && !!running;
   return (
     <>
-      {visible && <OverGameComposition />}
-      {createPortal(
+      {(visible || ghostShown) && <OverGameComposition />}
+      {ghostShown && createPortal(
+        <>
+          <img
+            src={ghostShot!.image}
+            style={{
+              position: "fixed", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+              zIndex: 2147483000, pointerEvents: "none", opacity: ghostShot!.opacity,
+            }}
+          />
+          <div style={{
+            position: "fixed", bottom: 22, left: "50%", transform: "translateX(-50%)", zIndex: 2147483002,
+            pointerEvents: "none", padding: "8px 16px", borderRadius: 999, background: "rgba(10,12,18,.8)",
+            color: "#fff", font: "600 13px/16px 'Motiva Sans', Arial, sans-serif", whiteSpace: "nowrap",
+            boxShadow: "inset 0 0 0 1px rgba(255,255,255,.16)",
+          }}>
+            {t("up.compare.ghostHint")}
+          </div>
+        </>,
+        host,
+      )}
+      {badge && createPortal(
         <div
           style={{
             position: "fixed", top: 18, left: 18, zIndex: 2147483001, pointerEvents: "none",

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import catalog, games, ini, logread, recipes
+from . import capture, catalog, games, ini, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -409,6 +409,28 @@ class UpscalerService:
         if not kept:
             shutil.rmtree(meta, ignore_errors=True)
         return kept
+
+    def capture_frame(self, appid: str) -> dict:
+        """Grab the running game's frame for the comparison and label it with what is installed."""
+        install = self._game_state(appid).get("install")
+        if not isinstance(install, dict):
+            raise UpscalerError("not_patched")
+        installed = games.find_installed(self.home, appid)
+        if installed is None or not games.running_under(installed.root, self.proc):
+            raise UpscalerError("not_running")
+        name = f"{appid}-{int(time.time() * 1000)}"
+        try:
+            path = capture.take(self.state_path.parent / "compare", name)
+        except capture.CaptureError as error:
+            raise UpscalerError(error.code) from None
+        facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
+        return {
+            "id": name,
+            "build": install.get("build"),
+            "resolution": facts.get("resolution"),
+            "upscaler": facts.get("upscaler"),
+            "image": capture.data_url(path),
+        }
 
     def live(self, appid: str) -> dict:
         """Read-only look at the log while the game runs; never touches history."""

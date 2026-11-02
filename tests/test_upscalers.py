@@ -257,3 +257,21 @@ def test_recipe_adds_files_dlls_and_args_then_undoes_them(steam, fake_catalog, p
     assert removed["args"] == ["--launcher-skip"]
     assert removed["overrides"] == ["dxgi=n,b", "dinput8=n,b"]
     assert not (target / "dinput8.dll").exists()
+
+
+def test_capture_moves_gamescope_shot_and_keeps_a_few(tmp_path):
+    from upscalers import capture
+
+    def fake_run(verb, path):
+        Path(path).write_bytes(b"\x89PNG fake")
+        return 0, ""
+
+    folder = tmp_path / "compare"
+    for index in range(capture.KEEP + 2):
+        shot = capture.take(folder, f"s{index}", run=fake_run, scratch=str(tmp_path))
+        os.utime(shot, (index, index))
+    assert len(list(folder.glob("*.png"))) == capture.KEEP
+    assert capture.data_url(shot).startswith("data:image/png;base64,")
+
+    with pytest.raises(capture.CaptureError):
+        capture.take(folder, "bad", run=lambda *a: (1, ""), scratch=str(tmp_path))

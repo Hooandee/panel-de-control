@@ -1351,6 +1351,11 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "verify", appid=str(appid), result=result.get("result"))
         return result
 
+    async def capture_upscaler_frame(self, appid: str) -> dict:
+        result = await self._upscalers_call("capture_frame", str(appid))
+        _upscalers_journal("INFO", "capture", appid=str(appid), build=result.get("build"))
+        return result
+
     async def get_upscaler_live(self, appid: str) -> dict:
         return await self._upscalers_call("live", str(appid))
 
