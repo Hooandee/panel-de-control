@@ -197,3 +197,24 @@ def describe(gpu: str) -> list[dict]:
         }
         for build in BUILDS.values()
     ]
+
+
+def fg_plan(gpu: str, inputs: dict, recipe_fg: dict | None = None) -> dict:
+    """Which frame generation path fits this game and GPU: the game's own generator first."""
+    output = "xefg" if gpu == "intel" else "fsrfg"
+    if recipe_fg:
+        return {"input": recipe_fg["input"], "output": recipe_fg.get("output", output), "source": "game", "experimental": False}
+    if "fsrfg" in inputs:
+        return {"input": "fsrfg", "output": output, "source": "game", "experimental": False}
+    if "dlssg" in inputs:
+        return {"input": "dlssg", "output": output, "source": "game", "experimental": False}
+    return {"input": "upscaler", "output": output, "source": "optiscaler", "experimental": True}
+
+
+def fg_overrides(plan: dict | None, enabled: bool) -> dict[str, str]:
+    if not enabled or not plan:
+        return {"FrameGen.Enabled": "false", "FrameGen.FGInput": "nofg", "FrameGen.FGOutput": "nofg"}
+    overrides = {"FrameGen.Enabled": "true", "FrameGen.FGInput": plan["input"], "FrameGen.FGOutput": plan["output"]}
+    if plan["input"] == "upscaler":
+        overrides["OptiFG.HUDFix"] = "true"
+    return overrides

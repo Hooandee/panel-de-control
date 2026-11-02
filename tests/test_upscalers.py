@@ -396,3 +396,32 @@ def test_shortcut_hint_covers_shortcuts_missing_from_vdf(steam, fake_catalog, pr
     assert win["native"] is False and win["analysis"]["exe"] == "game.exe"
     assert service.compatibility(["1"]) == {}
     assert "1" not in service.state["games"]
+
+
+def test_fg_plan_prefers_the_games_own_generator():
+    assert catalog.fg_plan("rdna3", {"fsrfg": ["a"]})["input"] == "fsrfg"
+    assert catalog.fg_plan("rdna3", {"dlssg": ["a"]}) == {"input": "dlssg", "output": "fsrfg", "source": "game", "experimental": False}
+    optifg = catalog.fg_plan("intel", {})
+    assert optifg == {"input": "upscaler", "output": "xefg", "source": "optiscaler", "experimental": True}
+    assert catalog.fg_overrides(optifg, True)["OptiFG.HUDFix"] == "true"
+    assert catalog.fg_overrides(optifg, False)["FrameGen.FGInput"] == "nofg"
+
+
+def test_frame_generation_is_written_on_install_and_toggled_after(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["fg_plan"]["input"] == "nukems"
+    service.install(APPID, {"build": "fsr-test", "fg": "on"})
+    text = (target / "OptiScaler.ini").read_text()
+    assert ini.read(text, "FrameGen.Enabled") == "true"
+    assert ini.read(text, "FrameGen.FGInput") == "nukems"
+    service.configure(APPID, {"fg": "off"})
+    text = (target / "OptiScaler.ini").read_text()
+    assert ini.read(text, "FrameGen.Enabled") == "false"
+    assert ini.read(text, "FrameGen.FGOutput") == "nofg"
+
+    log = _write(target / "OptiScaler.log", "[I] FSR3FG D3D12_Configure Enabled: true, result: 0 (0)\n")
+    future = time.time() + 5
+    os.utime(log, (future, future))
+    assert service.live(APPID)["fg"] is True

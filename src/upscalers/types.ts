@@ -36,10 +36,18 @@ export interface UpscalersOverview {
   job: UpscalerJob | null;
 }
 
+export interface FgPlan {
+  input: string;
+  output: string;
+  source: "game" | "optiscaler";
+  experimental: boolean;
+}
+
 export interface UpscalerChoice {
   build: string;
   quality: Quality | null;
   sharpness: Sharpness | null;
+  fg?: "on" | "off";
   confirm_anti_cheat?: boolean;
 }
 
@@ -49,7 +57,7 @@ export interface HistoryEntry {
   at: number;
   result: UpscalerStatus;
   exe: string | null;
-  facts?: { upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] } };
+  facts?: { fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] } };
 }
 
 export interface GameDetail {
@@ -71,13 +79,14 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
-    options: { quality: Quality | null; sharpness: Sharpness | null };
+    options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off" };
     status: UpscalerStatus;
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
   shortcut: boolean;
   native: boolean;
+  fg_plan: FgPlan | null;
   identity: { steam_appid: number | null; name: string | null; source: string } | null;
 }
 

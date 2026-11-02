@@ -15,13 +15,16 @@ class Recipe:
     files: dict[str, str] = field(default_factory=dict)
     native_dlls: tuple[str, ...] = ()
     ini: dict[str, str] = field(default_factory=dict)
+    fg: dict[str, str] | None = None
 
 
 RECIPES: dict[str, Recipe] = {
     recipe.appid: recipe
     for recipe in (
         # REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers.
-        Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12")),
+        # Streamline 1 rules out DLSSG via SL; the wiki's working path is Nukem's bridge to FSR FG.
+        Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"),
+               fg={"input": "nukems", "output": "nukems"}),
         # RE Engine exposes its upscaler to OptiScaler only through REFramework.
         Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
     )

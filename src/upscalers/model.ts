@@ -14,8 +14,8 @@ const EASY: Record<EasyMode, { quality: Quality; sharpness: Sharpness }> = {
   fps: { quality: "performance", sharpness: "high" },
 };
 
-export function easyChoice(mode: EasyMode, preferred: string): UpscalerChoice {
-  return { build: preferred, ...EASY[mode] };
+export function easyChoice(mode: EasyMode, preferred: string, fg: "on" | "off" = "off"): UpscalerChoice {
+  return { build: preferred, ...EASY[mode], fg };
 }
 
 /** The easy preset a choice equals, or null once the user has changed any card. */

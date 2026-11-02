@@ -13,7 +13,7 @@ from .assets import sha256
 INI_KEYS = (
     "Upscalers.Dx11Upscaler", "Upscalers.Dx12Upscaler", "Upscalers.VulkanUpscaler",
     "FSR.Fsr4Update", "FSR.Fsr4ForceEnableInt8", "FSR.Fsr4ForceModel", "FSR.UpscalerIndex",
-    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput",
+    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "OptiFG.HUDFix",
     "QualityOverrides.QualityRatioOverrideEnabled", "Sharpness.OverrideSharpness", "Sharpness.Sharpness",
     "Plugins.LoadAsiPlugins", "Plugins.LoadCustomAmdxc64OnRdna2", "Spoofing.Dxgi", "Log.LogLevel",
 )

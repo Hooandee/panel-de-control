@@ -199,6 +199,7 @@ class UpscalerService:
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
+            "fg_plan": None if installed.native else catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None),
         }
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
@@ -333,7 +334,11 @@ class UpscalerService:
             for name, asset_id in recipe.files.items():
                 sources[name] = paths[asset_id]
 
-        overrides = {**catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice)}
+        fg_plan = catalog.fg_plan(self.gpu, analysis["inputs"], recipe.fg if recipe else None)
+        overrides = {
+            **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
+        }
         manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
 
         now = time.time()
@@ -341,6 +346,7 @@ class UpscalerService:
             "build": build.id, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice),
             "native_dlls": list(recipe.native_dlls) if recipe else [],
+            "fg_plan": fg_plan,
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
@@ -402,7 +408,8 @@ class UpscalerService:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             raise UpscalerError("broken") from None
-        path.write_text(ini.apply(text, _option_overrides(choice, reset=True)), encoding="utf-8")
+        fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on")
+        path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **fg}), encoding="utf-8")
         install["options"] = _clean_options(choice)
         self._save()
         return {"options": install["options"]}
@@ -491,7 +498,7 @@ class UpscalerService:
         if not isinstance(install, dict):
             return {"result": "not_patched"}
         facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
-        return {"result": logread.verdict(facts), "resolution": facts.get("resolution")}
+        return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": bool(facts.get("fg"))}
 
     def verify(self, appid: str) -> dict:
         entry = self._game_state(appid)
@@ -505,7 +512,7 @@ class UpscalerService:
         history = entry.get("history") or []
         if history and history[-1].get("build") == install.get("build") and result != "not_run":
             history[-1]["result"] = result
-            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fsr4", "resolution", "version") if k in facts}
+            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "version") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
 
@@ -550,6 +557,7 @@ def _clean_options(choice: dict) -> dict:
     return {
         "quality": quality if quality in catalog.QUALITY_RATIOS else None,
         "sharpness": sharpness if sharpness in catalog.SHARPNESS else None,
+        "fg": "on" if choice.get("fg") == "on" else "off",
     }
 
 

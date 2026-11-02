@@ -28,6 +28,9 @@ INPUTS = {
     "dlss": ("nvngx_dlss.dll",),
     "xess": ("libxess.dll",),
     "streamline": ("sl.interposer.dll",),
+    "dlssg": ("nvngx_dlssg.dll", "sl.dlss_g.dll"),
+    "fsrfg": ("amd_fidelityfx_framegeneration_dx12.dll",),
+    "xefg": ("libxess_fg.dll",),
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")
 FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json")

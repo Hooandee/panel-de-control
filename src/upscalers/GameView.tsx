@@ -138,7 +138,8 @@ export const GameView: FC<{
   const builds = overview.builds;
   const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
-  const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness;
+  const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness
+    || (install.options.fg ?? "off") !== (choice.fg ?? "off");
   const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
 
   const apply = async () => {
@@ -213,6 +214,9 @@ export const GameView: FC<{
               ? <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>
               : preferredBuild && !detail.native && <Chip>{buildLabel(preferredBuild)}</Chip>}
           </div>
+          {install?.options.fg === "on" && facts?.fg && (
+            <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
+          )}
           {render && output && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
           )}
@@ -306,7 +310,7 @@ export const GameView: FC<{
             <SegmentRow<EasyMode>
               vertical
               value={easyModeOf(choice, overview.preferred)}
-              onChange={(m) => setChoice(easyChoice(m, overview.preferred))}
+              onChange={(m) => setChoice(easyChoice(m, overview.preferred, choice.fg ?? "off"))}
               options={EASY_MODES.map((m) => ({ value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`) }))}
             />
           ) : (
@@ -350,6 +354,19 @@ export const GameView: FC<{
                 onChange={(sharpness) => setChoice({ ...choice, sharpness })}
                 options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
               />
+            </>
+          )}
+
+          {detail.fg_plan && (
+            <>
+              <Label>{t("up.fg.title")}</Label>
+              <SegmentRow
+                value={choice.fg ?? "off"}
+                onChange={(fg) => setChoice({ ...choice, fg })}
+                options={[{ value: "off", label: t("up.fg.off") }, { value: "on", label: t("up.fg.on") }]}
+              />
+              <Note>{t("up.fg.explain")}</Note>
+              <Note>{t(detail.fg_plan.source === "game" ? "up.fg.fromGame" : "up.fg.fromOpti")}</Note>
             </>
           )}
 
