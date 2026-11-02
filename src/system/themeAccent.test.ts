@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { THEME_ACCENT_ID, applyAccentId, applyThemeAccent, currentAccentHex, DEFAULT_ACCENT } from "./accentColor";
 import { applyThemeTokens } from "./themeTokens";
 import { theme } from "../theme";
@@ -47,3 +47,33 @@ describe("theme accent watcher", () => {
   document.documentElement.removeAttribute("style");
   applyThemeTokens({ color: {}, radius: {} });
  });
+
+it("reads the theme once per document across panel mounts until a style changes", async () => {
+  const style = document.createElement("style");
+  style.textContent = ":root { --pdc-theme-accent: 95, 242, 176; }";
+  document.head.append(style);
+  await frame();
+  const first = watchThemeAccent(document);
+  first();
+  const reads = vi.spyOn(window, "getComputedStyle");
+  const readsDuring = (mount: () => () => void) => {
+    const before = reads.mock.calls.length;
+    const stop = mount();
+    return { stop, reads: reads.mock.calls.length - before };
+  };
+  // Decky mounts the panel again on the next opening: nothing changed, nothing is read.
+  const second = readsDuring(() => watchThemeAccent(document));
+  expect(second.reads).toBe(0);
+  second.stop();
+  // A theme option rewritten while the menu is closed is read on the next opening.
+  style.textContent = ":root { --pdc-theme-accent: 255, 0, 0; }";
+  await frame();
+  applyAccentId(THEME_ACCENT_ID);
+  const third = readsDuring(() => watchThemeAccent(document));
+  expect(third.reads).toBeGreaterThan(0);
+  expect(currentAccentHex()).toBe("#ff0000");
+  third.stop();
+  reads.mockRestore();
+  style.remove();
+  applyThemeAccent(null);
+});

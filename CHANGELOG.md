@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.81.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.2...panel-de-control-v0.81.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* **theme:** read the theme accent once per quick access menu, not on every opening ([#1094](https://github.com/Hooandee/panel-de-control/issues/1094)) ([3458a30](https://github.com/Hooandee/panel-de-control/commit/3458a30966b2e2505763765424e54458cb73f20b))
+
 ## [0.81.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.1...panel-de-control-v0.81.2) (2026-10-30)
 
 
