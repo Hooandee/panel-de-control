@@ -68,12 +68,35 @@ export function detectPainters(doc: Document): Painter[] {
   return painters;
 }
 
+function painterBackground(doc: Document, painter: Painter): string | null {
+  const cls = steamClass(painter.key);
+  const element = cls ? doc.querySelector(`.${cls}`) : null;
+  const style = element && doc.defaultView?.getComputedStyle(element, painter.part || null);
+  return style ? `${style.backgroundImage}|${style.backgroundColor}|${style.content}` : null;
+}
+
 export function detectThirdParty(doc: Document, hasCssLoaderStyles: boolean = !!doc.querySelector("style.css-loader-style")): ThirdPartySignal {
   if (!hasCssLoaderStyles) return { confidence: "none" };
+  const sheets = Array.from(doc.querySelectorAll<HTMLStyleElement>("style.css-loader-style"))
+    .map((style) => style.sheet).filter((sheet): sheet is CSSStyleSheet => !!sheet && !sheet.disabled);
+  if (sheets.length === 0) return { confidence: "none" };
   const painters = detectPainters(doc);
   if (painters.length === 0) return { confidence: "none" };
-  const candidates = painters.map((p) => p.id);
-  return { confidence: painters.length === 1 ? "high" : "low", id: candidates[0], candidates };
+  const painted = painters.map((painter) => painterBackground(doc, painter));
+  let candidates: string[];
+  try {
+    // Synchronous CSSOM changes cannot paint a theme-less frame or trigger DOM observers.
+    // Comparing resolved backgrounds also handles inherited variables and active media rules.
+    for (const sheet of sheets) sheet.disabled = true;
+    candidates = painters.filter((painter, index) => painted[index] !== null && painterBackground(doc, painter) !== painted[index])
+      .map((painter) => painter.id);
+  } catch {
+    return { confidence: "none" };
+  } finally {
+    for (const sheet of sheets) sheet.disabled = false;
+  }
+  if (candidates.length === 0) return { confidence: "none" };
+  return { confidence: candidates.length === 1 ? "high" : "low", id: candidates[0], candidates };
 }
 
 const NEUTRALIZE_ID = "pdc-ambient-neutralize";

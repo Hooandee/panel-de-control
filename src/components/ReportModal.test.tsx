@@ -202,4 +202,16 @@ describe("ReportModal request type", () => {
       expect.objectContaining({ report_kind: "bug" }),
     ));
   });
+  it("submits the selected Ambiente category without requiring Other", async () => {
+    openReportModal();
+    render(mocks.modal);
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.ambient" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "El fondo no aparece" } });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["ambient"], "El fondo no aparece", expect.objectContaining({ report_kind: "bug" }),
+    ));
+  });
+
 });

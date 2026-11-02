@@ -167,6 +167,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
+from steam_inventory_compat import SteamInventoryCompat
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
@@ -245,6 +246,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
         ("_support_theme_storage", None),
+        ("_support_steam_inventory", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -1179,9 +1181,9 @@ class Plugin(AmbientRpc):
         self._init()
         return await self._offload_steam_cleaner("inventory")
 
-    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str], force_entry_ids: list[str] | None = None) -> dict:
         self._init()
-        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids, force_entry_ids)
 
     async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
         self._init()
@@ -14232,6 +14234,26 @@ class Plugin(AmbientRpc):
         )
         log("Lifecycle transition %s", encoded)
 
+    def _support_steam_inventory(self) -> dict:
+        service = getattr(self, "_steam_inventory_compat", None)
+        return service.state() if service is not None else {"status": "stopped"}
+
+    def _start_steam_inventory_compat(self) -> None:
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_inventory_compat", None) is not None:
+            return
+
+        def report(event: dict) -> None:
+            if journal.active is not None:
+                journal.active.write("INFO", "steam_inventory", "compatibility", **event)
+
+        self._steam_inventory_compat = SteamInventoryCompat(journal=report)
+        self._steam_inventory_compat.start()
+
+    async def _stop_steam_inventory_compat(self) -> None:
+        service = getattr(self, "_steam_inventory_compat", None)
+        if service is not None:
+            await service.stop()
+
     async def _main(self) -> None:
         try:
             await self._startup()
@@ -14325,6 +14347,7 @@ class Plugin(AmbientRpc):
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            self._start_steam_inventory_compat()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
                 await self._remote_access.set_enabled(True)
@@ -14366,6 +14389,8 @@ class Plugin(AmbientRpc):
         finally:
             self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
+        stage("inventory")
         decky.logger.info("Panel de Control unloaded")
         self._stop_journal()
 
@@ -14847,6 +14872,7 @@ class Plugin(AmbientRpc):
                 self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
         finally:
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
         decky.logger.info("Panel de Control uninstalled")
         self._stop_journal()
 

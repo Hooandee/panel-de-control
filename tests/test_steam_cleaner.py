@@ -940,3 +940,136 @@ def test_scan_records_why_every_game_stays_blocked(tmp_path):
     assert reloaded_completed["activity"] == completed["activity"]
     reported = [event for event in steam_cleaner_snapshot(reloaded)["events"] if event["event"] == "completed"][-1]
     assert reported["activity"] == completed["activity"]
+
+
+@pytest.mark.parametrize('reason', ['activity_unknown', 'active_game', 'active_download', 'runtime', 'unknown_identity', 'coverage_incomplete'])
+@pytest.mark.parametrize('kind', ['shadercache', 'compatdata'])
+def test_manual_force_is_explicit_and_deletes_only_inspected_targets(tmp_path, reason, kind):
+    home, steam = make_steam(tmp_path)
+    payload = data(steam, kind)
+    activity = idle()
+    if reason == 'activity_unknown':
+        activity['complete'] = False
+    elif reason == 'active_game':
+        activity['appids'] = ['10']
+    elif reason == 'active_download':
+        (steam / 'steamapps/downloading/10').mkdir(parents=True)
+    elif reason == 'runtime':
+        manifest(steam)
+        write(steam / 'steamapps/common/Example/toolmanifest.vdf')
+    elif reason == 'unknown_identity':
+        write(steam / 'steamapps/appmanifest_10.acf', '')
+    elif reason == 'coverage_incomplete':
+        write(steam / 'steamapps/libraryfolders.vdf', f'"libraryfolders" {{ "1" {{ "path" "{tmp_path / "absent"}" }} }}')
+    state_dir = tmp_path / 'state'
+    cleaner = service(home, activity_provider=lambda: activity, state_dir=state_dir)
+    state = cleaner.inventory()
+    entry = state['entries'][0]
+    assert entry['blocked_reason'] == reason
+    assert entry['can_force'] is True
+    with pytest.raises(SteamCleanerError, match=f'^{reason}$'):
+        cleaner.prepare(state['scan_id'], [entry['id']])
+    plan = cleaner.prepare(state['scan_id'], [entry['id']], [entry['id']])
+    if kind == 'compatdata':
+        with pytest.raises(SteamCleanerError, match='^prefix_confirmation_required$'):
+            cleaner.execute(plan['id'])
+    result = cleaner.execute(plan['id'], confirm_compatdata=kind == 'compatdata')
+    assert result['items'][0]['status'] == 'deleted'
+    assert not payload.exists()
+    events = service(home, state_dir=state_dir).diagnostics()['events']
+    assert any(event.get('forced_count') == 1 for event in events)
+    assert any(event['event'] == 'deleted' and event.get('forced') is True for event in events)
+
+
+@pytest.mark.parametrize('forced', ['not-a-list', ['invalid'], [1], ['ENTRY', 'ENTRY'], ['OTHER']])
+def test_manual_force_rejects_invalid_or_unselected_ids(tmp_path, forced):
+    home, steam = make_steam(tmp_path)
+    data(steam)
+    data(steam, appid='11')
+    cleaner = service(home, activity_provider=lambda: {'complete': False})
+    state = cleaner.inventory()
+    entry, other = state['entries']
+    if isinstance(forced, list):
+        forced = [entry['id'] if value == 'ENTRY' else other['id'] if value == 'OTHER' else value for value in forced]
+    with pytest.raises(SteamCleanerError, match='^invalid_selection$'):
+        cleaner.prepare(state['scan_id'], [entry['id']], forced)
+
+
+@pytest.mark.parametrize('change_phase', ['prepare', 'execute'])
+def test_manual_force_keeps_tree_fingerprint_checks(tmp_path, change_phase):
+    home, steam = make_steam(tmp_path)
+    payload = data(steam)
+    cleaner = service(home, activity_provider=lambda: {'complete': False})
+    state = cleaner.inventory()
+    ids = [state['entries'][0]['id']]
+    if change_phase == 'execute':
+        plan = cleaner.prepare(state['scan_id'], ids, ids)
+    payload.write_bytes(b'changed content')
+    if change_phase == 'prepare':
+        with pytest.raises(SteamCleanerError, match='^path_changed$'):
+            cleaner.prepare(state['scan_id'], ids, ids)
+    else:
+        assert cleaner.execute(plan['id'])['items'][0]['reason'] == 'path_changed'
+    assert payload.exists()
+
+
+@pytest.mark.parametrize('unsafe', ['symlink', 'mount_point', 'size_unknown'])
+def test_manual_force_never_allows_uninspected_targets(tmp_path, monkeypatch, unsafe):
+    home, steam = make_steam(tmp_path)
+    payload = data(steam)
+    if unsafe == 'symlink':
+        payload.unlink()
+        payload.parent.rmdir()
+        outside = tmp_path / 'outside'
+        outside.mkdir()
+        payload.parent.symlink_to(outside)
+    elif unsafe == 'mount_point':
+        monkeypatch.setattr('steam_cleaner.filesystem.mount_points', lambda: {str(payload.parent)})
+    else:
+        def fail(*args):
+            raise OSError('cannot inspect')
+        monkeypatch.setattr('steam_cleaner.filesystem.inspect_tree', fail)
+    cleaner = service(home)
+    state = cleaner.inventory()
+    entry = state['entries'][0]
+    assert entry['can_force'] is False
+    with pytest.raises(SteamCleanerError, match='^invalid_selection$'):
+        cleaner.prepare(state['scan_id'], [entry['id']], [entry['id']])
+
+
+@pytest.mark.parametrize('change_phase', ['prepare', 'execute'])
+def test_manual_force_keeps_source_fingerprint_checks(tmp_path, change_phase):
+    home, steam = make_steam(tmp_path)
+    payload = data(steam)
+    source = manifest(steam)
+    cleaner = service(home, activity_provider=lambda: {'complete': False})
+    state = cleaner.inventory()
+    ids = [state['entries'][0]['id']]
+    if change_phase == 'execute':
+        plan = cleaner.prepare(state['scan_id'], ids, ids)
+    source.write_text('changed manifest')
+    if change_phase == 'prepare':
+        with pytest.raises(SteamCleanerError, match='^path_changed$'):
+            cleaner.prepare(state['scan_id'], ids, ids)
+    else:
+        assert cleaner.execute(plan['id'])['items'][0]['reason'] == 'path_changed'
+    assert payload.exists()
+
+
+def test_manual_force_does_not_extend_to_other_plan_entries(tmp_path):
+    home, steam = make_steam(tmp_path)
+    forced_payload = data(steam)
+    normal_payload = data(steam, appid='11')
+    activity = idle()
+    activity['appids'] = ['10']
+    cleaner = service(home, activity_provider=lambda: activity)
+    state = cleaner.inventory()
+    ids = [entry['id'] for entry in state['entries']]
+    forced_id = next(entry['id'] for entry in state['entries'] if entry['appid'] == '10')
+    plan = cleaner.prepare(state['scan_id'], ids, [forced_id])
+    activity['appids'] = ['10', '11']
+    result = cleaner.execute(plan['id'])
+    assert next(item for item in result['items'] if item['id'] == forced_id)['status'] == 'deleted'
+    assert next(item for item in result['items'] if item['id'] != forced_id)['reason'] == 'active_game'
+    assert not forced_payload.exists()
+    assert normal_payload.exists()

@@ -416,7 +416,7 @@ export const HudSection: FC = () => {
       );
     }
     const id = r.id;
-    const colorKey: ColorKey | null = id === "fps" ? "fps" : id === "frametime" ? "frametime" : null;
+    const colorKey: ColorKey | null = id === "fps" ? "fps" : (id === "frametime" || id === "frame_timing") ? "frametime" : null;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {canLabel(id) ? (

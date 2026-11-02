@@ -8,6 +8,7 @@ _DIRECTIVE = {
     "fps": "fps",
     "fps_metrics": "fps_metrics",
     "frametime": "frametime",
+    "frame_timing": "frame_timing",
     "frame_count": "frame_count",
     "show_fps_limit": "show_fps_limit",
     "time": "time",

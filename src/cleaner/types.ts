@@ -14,6 +14,7 @@ export interface CleanerEntry {
   bytes: number | null;
   installation: CleanerInstallation;
   blocked_reason: string | null;
+  can_force?: boolean;
   requires_manual_selection: boolean;
   warnings: string[];
 }

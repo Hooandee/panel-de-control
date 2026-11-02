@@ -39,10 +39,11 @@ describe("BackgroundLayer", () => {
     expect(css).toContain(':root[data-pdc-ambient-art=blend] .hashedHeroArt');
   });
 
-  it("tells the page how Steam's game art shows over the layer", () => {
+  it("tells the page how Steam's game art shows over the layer only once ready", async () => {
     const layer = new BackgroundLayer(() => document);
     layer.apply({ url: "http://127.0.0.1/a.jpg", kind: "image" }, { ...options, nativeArt: "hide" });
-    expect(document.documentElement.getAttribute("data-pdc-ambient-art")).toBe("hide");
+    expect(document.documentElement.hasAttribute("data-pdc-ambient-art")).toBe(false);
+    await vi.waitFor(() => expect(document.documentElement.getAttribute("data-pdc-ambient-art")).toBe("hide"));
     layer.apply({ url: "http://127.0.0.1/a.jpg", kind: "image" }, { ...options, nativeArt: "blend" });
     expect(document.documentElement.getAttribute("data-pdc-ambient-art")).toBe("blend");
     layer.apply({ url: "http://127.0.0.1/a.jpg", kind: "image" }, options);
@@ -140,3 +141,99 @@ describe("BackgroundLayer", () => {
   });
 });
 
+
+describe("BackgroundLayer failed loads", () => {
+  let layer: BackgroundLayer;
+  const failure = vi.fn();
+  const hiddenArt = { ...options, nativeArt: "hide" as const };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<div class="hashedHome"></div>';
+    document.documentElement.removeAttribute("data-pdc-ambient-art");
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(() => undefined);
+    failure.mockClear();
+    layer = new BackgroundLayer(() => document, undefined, failure);
+  });
+  afterEach(() => {
+    layer.dispose();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps Steam art after a video error and recovers the same URL on a bounded retry", async () => {
+    const media = { kind: "video" as const, url: "http://127.0.0.1/v.mp4" };
+    layer.apply(media, hiddenArt);
+    const first = document.querySelector("video")!;
+    first.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBeNull();
+    expect(document.documentElement.hasAttribute("data-pdc-ambient-art")).toBe(false);
+    for (let i = 0; i < 10; i++) layer.apply(media, hiddenArt);
+    expect(document.querySelector("video")).toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+    const recovered = document.querySelector("video")!;
+    expect(recovered).not.toBe(first);
+    expect(recovered.src).toBe(first.src || media.url);
+    recovered.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(recovered);
+    expect(document.documentElement.getAttribute("data-pdc-ambient-art")).toBe("hide");
+    expect(failure).toHaveBeenCalledWith("background video error; attempt=1; retrying=true");
+  });
+
+  it("never promotes a trailer without playing, preserves the ready background and stops retrying", async () => {
+    layer.apply({ kind: "video", url: "http://127.0.0.1/previous.mp4" }, hiddenArt);
+    const previous = document.querySelector("video")!;
+    previous.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    const media = { kind: "page" as const, url: "http://127.0.0.1/trailer" };
+    layer.apply(media, hiddenArt);
+    await vi.advanceTimersByTimeAsync(28000);
+    expect(layer.activeMedia()).toBe(previous);
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(failure).toHaveBeenCalledTimes(3);
+    expect(failure).toHaveBeenLastCalledWith("background page timeout; attempt=3; retrying=false");
+    for (let i = 0; i < 10; i++) layer.apply(media, hiddenArt);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(failure).toHaveBeenCalledTimes(3);
+    expect(layer.activeMedia()).toBe(previous);
+  });
+
+  it("promotes a trailer only on playing from its own window", async () => {
+    layer.apply({ kind: "page", url: "http://127.0.0.1/trailer" }, hiddenArt);
+    const frame = document.querySelector("iframe")!;
+    window.dispatchEvent(new MessageEvent("message", { data: { pdc: { s: "playing" } }, source: window }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(frame.closest("[data-active]")).toBeNull();
+    window.dispatchEvent(new MessageEvent("message", { data: { pdc: { s: "playing" } }, source: frame.contentWindow }));
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(frame.closest("[data-active]")).not.toBeNull();
+    expect(document.documentElement.getAttribute("data-pdc-ambient-art")).toBe("hide");
+    expect(failure).not.toHaveBeenCalled();
+  });
+
+  it("keeps Steam art while a first trailer loads and cancels its deadline on disposal", async () => {
+    layer.apply({ kind: "page", url: "http://127.0.0.1/trailer" }, hiddenArt);
+    expect(document.documentElement.hasAttribute("data-pdc-ambient-art")).toBe(false);
+    layer.dispose();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(failure).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(layer.mounted).toBe(false);
+  });
+
+  it("cancels a pending retry when a new medium replaces it", async () => {
+    layer.apply({ kind: "video", url: "http://127.0.0.1/bad.mp4" }, hiddenArt);
+    document.querySelector("video")!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    layer.apply({ kind: "video", url: "http://127.0.0.1/good.mp4" }, hiddenArt);
+    const current = document.querySelector("video")!;
+    current.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(layer.activeMedia()).toBe(current);
+    expect(failure).toHaveBeenCalledTimes(1);
+  });
+});
