@@ -165,6 +165,43 @@ def test_item_order_is_preserved_for_enabled_metrics():
     assert lines.index("cpu_stats=1") < lines.index("fps=1")
 
 
+@pytest.mark.parametrize("layout", ["vertical", "horizontal"])
+def test_display_server_is_absent_unless_selected(layout):
+    off = to_directives({"layout": layout, "items": _metrics("fps")})
+    assert not any(line.startswith("display_server=") for line in off)
+    on = to_directives({"layout": layout, "items": _metrics("display_server")})
+    assert "display_server=1" in on
+
+
+@pytest.mark.parametrize("level", [1, 2, 3, 4])
+def test_horizontal_presets_do_not_register_disabled_render_callbacks(level):
+    # MangoHud v0.8.1 sort_elements registers these even for =0, and
+    # render_imgui inserts a separator after each callback, including empty ones.
+    lines = directives_for_level({"layout": "horizontal", "items": _metrics("fps")}, level)
+    for name in ("fps_only", "version", "time", "gpu_stats", "cpu_stats",
+                 "core_load", "io_read", "io_write", "arch", "wine", "procmem",
+                 "gamemode", "vkbasalt", "engine_version", "vulkan_driver",
+                 "resolution", "show_fps_limit", "vram", "ram", "gpu_name",
+                 "frame_timing", "media_player", "battery", "fsr", "frame_count", "fan"):
+        assert not any(line.startswith(name + "=") for line in lines), name
+    assert "fps=1" in lines
+    # These belong to active metric callbacks; omitting frametime would enable
+    # its default value beside FPS. They must still be explicitly disabled.
+    for line in ("frametime=0", "gpu_temp=0", "cpu_temp=0", "battery_watt=0"):
+        assert line in lines
+
+
+def test_horizontal_preserves_selected_callbacks_and_custom_separators():
+    lines = to_directives({"layout": "horizontal", "items": [
+        *_metrics("cpu"), {"kind": "separator", "id": "divider"},
+        *_metrics("gpu", "display_server", "fps"),
+    ]})
+    visible = [line for line in lines if line in (
+        "cpu_stats=1", "custom_text=--------------", "gpu_stats=1", "display_server=1", "fps=1")]
+    assert visible == ["cpu_stats=1", "custom_text=--------------", "gpu_stats=1", "display_server=1", "fps=1"]
+    assert "fps_only=0" in to_directives({"layout": "vertical", "items": _metrics("fps")})
+
+
 @pytest.mark.parametrize(
     ("field", "on", "off", "directive"),
     [
@@ -579,7 +616,7 @@ def test_frame_timing_serializes_independently_in_both_layouts(layout):
     assert lines.count("frame_timing=1") == 1
     assert "frame_timing=0" not in lines
     assert "frametime=0" in lines
-    assert "fps=0" in lines
+    assert ("fps=0" in lines) == (layout == "vertical")
     assert "frametime_color=123abc" in lines
     assert ("horizontal=1" in lines) == (layout == "horizontal")
 
