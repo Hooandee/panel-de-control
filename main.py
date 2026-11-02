@@ -1335,6 +1335,9 @@ class Plugin(AmbientRpc):
     async def install_upscaler(self, appid: str, choice: dict) -> dict:
         return await self._upscalers_job("install", str(appid), "install", dict(choice or {}))
 
+    async def record_upscaler_args(self, appid: str, args: list[str]) -> dict:
+        return await self._upscalers_call("record_added_args", str(appid), [str(a) for a in (args or [])])
+
     async def uninstall_upscaler(self, appid: str) -> dict:
         return await self._upscalers_job("uninstall", str(appid), "uninstall")
 

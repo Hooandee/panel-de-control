@@ -133,10 +133,11 @@ def ships_upscaler(root: Path) -> bool:
     return False
 
 
-def analyze(root: Path, chosen_exe: str | None = None) -> dict:
+def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 
     `chosen_exe` (relative to `root`) wins when it still exists: the user picked it.
+    Otherwise a recipe's known executable beats the heuristic.
     """
     exes: list[tuple[int, Path, int]] = []
     inputs: dict[str, list[str]] = {key: [] for key in INPUTS}
@@ -176,6 +177,11 @@ def analyze(root: Path, chosen_exe: str | None = None) -> dict:
 
     manual = False
     selected = candidates[0] if candidates else None
+    if not chosen_exe and recipe_exe and (root / recipe_exe).is_file():
+        selected = next((c for c in candidates if c["exe"] == recipe_exe), None) or {
+            "exe": recipe_exe, "apis": pe.graphics_apis(str(root / recipe_exe)),
+            "size": (root / recipe_exe).stat().st_size, "score": 0,
+        }
     if chosen_exe and (root / chosen_exe).is_file():
         manual = True
         selected = next((c for c in candidates if c["exe"] == chosen_exe), None) or {

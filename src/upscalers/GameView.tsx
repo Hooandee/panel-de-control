@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "reac
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
-  setUpscalersExe, uninstallUpscaler, verifyUpscaler,
+  recordUpscalerArgs, setUpscalersExe, uninstallUpscaler, verifyUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
@@ -14,8 +14,8 @@ import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
 import { theme } from "../theme";
 import {
-  EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
-  withOverride, withoutOverride,
+  EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
+  revertLaunch,
 } from "./model";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
@@ -77,24 +77,29 @@ export const GameView: FC<{
   }, [load]);
 
   const finish = useCallback(async (finished: UpscalerJob) => {
-    const override = finished.result?.override;
-    if (finished.state === "done" && override) {
+    const result = finished.result;
+    if (finished.state === "done" && result?.overrides) {
       const details = await readAppDetails(game.liveAppid);
-      const next = details && (finished.kind === "install"
-        ? withOverride(details.launch, override)
-        : withoutOverride(details.launch, override));
-      if (next === null || next === undefined || !writeLaunchOptions(game.liveAppid, next, game.isNonSteam)) {
-        setMessage(t("up.launch.failed", { value: `WINEDLLOVERRIDES="${override}"` }));
-      }
-      if (finished.kind === "uninstall" && finished.result?.kept?.length) {
-        setMessage(t("up.kept", { count: finished.result.kept.length }));
+      const overrides = result.overrides;
+      const args = result.args ?? [];
+      if (finished.kind === "install") {
+        const next = details ? applyLaunch(details.launch, overrides, args) : null;
+        if (next && writeLaunchOptions(game.liveAppid, next.value, game.isNonSteam)) {
+          if (next.added.length) await recordUpscalerArgs(appid, next.added).catch(() => undefined);
+        } else {
+          setMessage(t("up.launch.failed", { value: `WINEDLLOVERRIDES="${overrides.map((o) => o.split("=")[0]).join(",")}=n,b" %command% ${args.join(" ")}`.trim() }));
+        }
+      } else {
+        const next = details ? revertLaunch(details.launch, overrides, args) : null;
+        if (next === null || !writeLaunchOptions(game.liveAppid, next, game.isNonSteam)) setMessage(t("up.error.generic"));
+        if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
       }
     } else if (finished.state === "error") {
       setMessage(errorText(t, finished.error));
     }
     await load();
     onChanged();
-  }, [game.liveAppid, game.isNonSteam, load, onChanged, t]);
+  }, [appid, game.liveAppid, game.isNonSteam, load, onChanged, t]);
 
   useEffect(() => {
     if (!job || job.state !== "running") return;
@@ -192,6 +197,7 @@ export const GameView: FC<{
               </span>
             </div>
           ) : <Skeleton height={10} width="60%" />}
+          {detail?.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
           {render && output && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.resolution", { render, output })}</span>}
         </div>
       </div>

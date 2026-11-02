@@ -323,6 +323,7 @@ export const it: Record<string, string> = {
   "up.easy.caption.balanced": "Il meglio di entrambi",
   "up.easy.caption.image": "Più nitido",
   "up.resolution": "Da {render}p scalato a {output}p",
+  "up.recipe": "Con le regolazioni che servono a questo gioco",
   "up.empty": "Nessun gioco installato",
   "up.status.active": "Funziona",
   "up.status.pending": "Gioca un po' per verificarlo",

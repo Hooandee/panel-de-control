@@ -1358,6 +1358,7 @@ export const getUpscalersCompat = callable<[appids: string[]], Record<string, bo
 export const getUpscalersGame = callable<[appid: string], GameDetail>("get_upscalers_game");
 export const setUpscalersExe = callable<[appid: string, exe: string | null], GameDetail>("set_upscalers_exe");
 export const installUpscaler = callable<[appid: string, choice: UpscalerChoice], UpscalerJob>("install_upscaler");
+export const recordUpscalerArgs = callable<[appid: string, args: string[]], { added_args: string[] }>("record_upscaler_args");
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
 export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");

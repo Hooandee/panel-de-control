@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import catalog, games, ini, logread
+from . import catalog, games, ini, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -46,8 +46,10 @@ def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
     return sorted(connected)[0][1] if connected else None
 
 
-def _proxy_override(proxy: str) -> str:
-    return f"{proxy.removesuffix('.dll')}=n,b"
+def _overrides(install: dict) -> list[str]:
+    """WINEDLLOVERRIDES entries Panel owns for an install: the proxy plus any recipe DLLs."""
+    names = [str(install.get("proxy", "dxgi.dll")).removesuffix(".dll"), *install.get("native_dlls", [])]
+    return [f"{name}=n,b" for name in dict.fromkeys(names)]
 
 
 class UpscalerService:
@@ -135,7 +137,8 @@ class UpscalerService:
         if installed is None:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
-        analysis = games.analyze(installed.root, entry.get("exe"))
+        recipe = recipes.recipe_for(appid)
+        analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else None)
         install = entry.get("install")
         return {
             "appid": appid,
@@ -144,7 +147,7 @@ class UpscalerService:
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
-            "override": _proxy_override(install["proxy"]) if isinstance(install, dict) else None,
+            "recipe": bool(recipe),
         }
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
@@ -212,7 +215,8 @@ class UpscalerService:
             raise UpscalerError("updating" if update == "running" else "update_pending")
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        analysis = games.analyze(installed.root, self._game_state(appid).get("exe"))
+        recipe = recipes.recipe_for(appid)
+        analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else None)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
         if analysis["anti_cheat"] and not confirm_anti_cheat:
@@ -237,7 +241,10 @@ class UpscalerService:
         if analysis["foreign"]:
             raise UpscalerError("foreign")
 
+        recipe = recipes.recipe_for(appid)
         assets = catalog.build_assets(build)
+        if recipe:
+            assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]
         total = sum(asset.size for asset in assets)
         self._update_job(phase="download", total=total, done=0)
         paths: dict[str, Path] = {}
@@ -269,21 +276,27 @@ class UpscalerService:
             sources[name] = paths[asset_id]
         for asset_id in build.assets:
             sources[catalog.ASSETS[asset_id].filename] = paths[asset_id]
+        if recipe:
+            for name, asset_id in recipe.files.items():
+                sources[name] = paths[asset_id]
 
-        overrides = {**catalog.BASE_INI, **build.ini, **_option_overrides(choice)}
+        overrides = {**catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice)}
         manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
 
         now = time.time()
         entry["install"] = {
             "build": build.id, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice),
+            "native_dlls": list(recipe.native_dlls) if recipe else [],
+            "args": list(recipe.args) if recipe else [],
+            "added_args": [],
         }
         entry["history"].append({
             "build": build.id, "proxy": proxy, "at": now, "result": "pending", "exe": analysis["exe"],
         })
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
         self._save()
-        return {"files": len(manifest["files"]), "override": _proxy_override(proxy)}
+        return {"files": len(manifest["files"]), "overrides": _overrides(entry["install"]), "args": entry["install"]["args"]}
 
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str) -> dict:
         meta = target / games.MANIFEST_DIR
@@ -351,10 +364,19 @@ class UpscalerService:
             raise UpscalerError("running")
         self._update_job(phase="restore")
         kept = self._remove(Path(install["target"]))
-        override = _proxy_override(install["proxy"])
+        result = {"kept": kept, "overrides": _overrides(install), "args": install.get("added_args", [])}
         entry["install"] = None
         self._save()
-        return {"kept": kept, "override": override}
+        return result
+
+    def record_added_args(self, appid: str, args: list[str]) -> dict:
+        """Remember which launch arguments Panel added, so removal never strips the user's own."""
+        install = self._game_state(appid).get("install")
+        if not isinstance(install, dict):
+            raise UpscalerError("not_patched")
+        install["added_args"] = [a for a in args if a in install.get("args", [])]
+        self._save()
+        return {"added_args": install["added_args"]}
 
     @staticmethod
     def _remove(target: Path) -> list[str]:

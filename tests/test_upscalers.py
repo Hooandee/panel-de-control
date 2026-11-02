@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, games, ini, logread
+from upscalers import catalog, games, ini, logread, recipes
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -110,7 +110,8 @@ def test_install_backs_up_then_uninstall_restores_exactly(steam, fake_catalog, p
 
     result = service.install(APPID, {"build": "fsr-test", "quality": "balanced", "sharpness": "soft"})
 
-    assert result["override"] == "dxgi=n,b"
+    assert result["overrides"] == ["dxgi=n,b"]
+    assert result["args"] == ["--launcher-skip", "-dx12"]
     assert (target / "dxgi.dll").read_bytes() == b"injector"
     assert (target / "amdxcffx64.dll").read_bytes() == b"provider"
     assert (target / "D3D12_Optiscaler/D3D12Core.dll").is_file()
@@ -231,3 +232,28 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["resolution"] == {"render": [936, 624], "output": [1440, 960]}
     assert facts["errors"] == 1
     assert logread.verdict(facts) == "active"
+
+
+def test_recipe_adds_files_dlls_and_args_then_undoes_them(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    content = b"ref"
+    member = Asset("ref", "REF.zip", hashlib.sha256(b"zip").hexdigest(), 3, ("http://invalid",), member="dinput8.dll")
+    monkeypatch.setitem(catalog.ASSETS, "ref", member)
+    _write(fake_catalog / "cache" / member.sha256 / "unpacked" / "dinput8.dll", content)
+    monkeypatch.setattr(recipes, "RECIPES", {APPID: recipes.Recipe(
+        APPID, exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip",),
+        files={"dinput8.dll": "ref"}, native_dlls=("dinput8",))})
+    service = _service(steam, fake_catalog, proc)
+
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["dxgi=n,b", "dinput8=n,b"]
+    assert result["args"] == ["--launcher-skip"]
+    assert (target / "dinput8.dll").read_bytes() == content
+    assert service.game(APPID)["recipe"] is True
+
+    service.record_added_args(APPID, ["--launcher-skip", "-unknown"])
+    removed = service.uninstall(APPID)
+    assert removed["args"] == ["--launcher-skip"]
+    assert removed["overrides"] == ["dxgi=n,b", "dinput8=n,b"]
+    assert not (target / "dinput8.dll").exists()

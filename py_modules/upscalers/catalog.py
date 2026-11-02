@@ -18,6 +18,7 @@ class Asset:
     size: int
     urls: tuple[str, ...]
     archive: bool = False
+    member: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,15 @@ ASSETS: dict[str, Asset] = {
             ("https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/"
              "Optiscaler_0.9.4-final.20260718._MM.7z",),
             archive=True,
+        ),
+        Asset(
+            "reframework-nightly",
+            "REFramework.zip",
+            "9ef584db4a37715f0a677a5d304a5048b850389875b5dae0e204d4abbe9366f5",
+            13269112,
+            ("https://github.com/praydog/REFramework-nightly/releases/download/"
+             "nightly-01436-1813bf34f720cfed51c0e8f40fc90ed1459a3c6b/REFramework.zip",),
+            member="dinput8.dll",
         ),
         Asset(
             "optiscaler-0.10-pre1",

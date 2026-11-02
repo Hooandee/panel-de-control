@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Callable
 
@@ -45,9 +46,14 @@ class AssetCache:
     def unpacked(self, asset: Asset) -> Path:
         return self.root / asset.sha256 / "unpacked"
 
+    def member(self, asset: Asset) -> Path:
+        return self.unpacked(asset) / str(asset.member)
+
     def ready(self, asset: Asset) -> bool:
         if asset.archive:
             return (self.unpacked(asset) / ".complete").is_file()
+        if asset.member:
+            return self.member(asset).is_file()
         return self.file(asset).is_file()
 
     def ensure(self, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> Path:
@@ -56,9 +62,27 @@ class AssetCache:
             self._download(asset, progress, cancelled)
             if asset.archive:
                 self._unpack(asset)
+            elif asset.member:
+                self._extract_member(asset)
         else:
             progress(asset.size)
-        return self.unpacked(asset) if asset.archive else self.file(asset)
+        if asset.archive:
+            return self.unpacked(asset)
+        return self.member(asset) if asset.member else self.file(asset)
+
+    def _extract_member(self, asset: Asset) -> None:
+        """Copy one named file out of a verified zip, never anything else it carries."""
+        target = self.member(asset)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with zipfile.ZipFile(self.file(asset)) as archive:
+                info = archive.getinfo(str(asset.member))
+                fd, partial = tempfile.mkstemp(dir=target.parent, prefix=".part-")
+                with os.fdopen(fd, "wb") as out, archive.open(info) as source:
+                    shutil.copyfileobj(source, out)
+                os.replace(partial, target)
+        except (KeyError, zipfile.BadZipFile, OSError) as error:
+            raise AssetError("unpack_failed", type(error).__name__) from None
 
     def _download(self, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> None:
         target = self.file(asset)

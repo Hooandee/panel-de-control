@@ -23,7 +23,7 @@ export interface UpscalerJob {
   done: number;
   total: number;
   error: string | null;
-  result?: { override?: string; kept?: string[] };
+  result?: { overrides?: string[]; args?: string[]; kept?: string[] };
 }
 
 export interface UpscalersOverview {
@@ -75,7 +75,7 @@ export interface GameDetail {
     status: UpscalerStatus;
   } | null;
   history: HistoryEntry[];
-  override: string | null;
+  recipe: boolean;
 }
 
 export interface VerifyResult {

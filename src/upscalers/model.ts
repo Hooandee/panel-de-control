@@ -1,4 +1,4 @@
-import { getEnv, parse, serialize, setEnv } from "../launch/compose";
+import { addArg, getEnv, hasArg, parse, removeArg, serialize, setEnv } from "../launch/compose";
 import type { BuildInfo, EasyMode, Quality, Sharpness, UpscalerChoice } from "./types";
 
 const OVERRIDES = "WINEDLLOVERRIDES";
@@ -66,4 +66,30 @@ export function withoutOverride(launch: string, override: string): string | null
 
 export function megabytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(0);
+}
+
+/** Launch options after adding Panel's overrides and recipe args; `added` lists args that were not there. */
+export function applyLaunch(launch: string, overrides: string[], args: string[]): { value: string; added: string[] } | null {
+  let value: string | null = launch;
+  for (const override of overrides) {
+    value = withOverride(value, override);
+    if (value === null) return null;
+  }
+  let parsed = parse(value);
+  if (parsed.malformed) return null;
+  const added = args.filter((arg) => !hasArg(parsed, arg));
+  for (const arg of added) parsed = addArg(parsed, arg);
+  return { value: serialize(parsed), added };
+}
+
+export function revertLaunch(launch: string, overrides: string[], added: string[]): string | null {
+  let value: string | null = launch;
+  for (const override of overrides) {
+    value = withoutOverride(value, override);
+    if (value === null) return null;
+  }
+  let parsed = parse(value);
+  if (parsed.malformed) return null;
+  for (const arg of added) parsed = removeArg(parsed, arg);
+  return serialize(parsed);
 }

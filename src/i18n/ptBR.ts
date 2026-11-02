@@ -323,6 +323,7 @@ export const ptBR: Record<string, string> = {
   "up.easy.caption.balanced": "O melhor dos dois",
   "up.easy.caption.image": "Mais nítido",
   "up.resolution": "De {render}p escalado para {output}p",
+  "up.recipe": "Com os ajustes que este jogo precisa",
   "up.empty": "Nenhum jogo instalado",
   "up.status.active": "Funcionando",
   "up.status.pending": "Jogue um pouco para verificar",
