@@ -7,6 +7,7 @@ import { getUpscalerLive, getUpscalersOverview } from "../api";
 import { useI18n } from "../i18n";
 import { registerGlobal } from "../platform/globalComponent";
 import { OverGameComposition } from "../platform/overGameComposition";
+import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { buildLabel } from "./model";
@@ -31,6 +32,7 @@ interface Badge {
 }
 
 let installs: Record<string, Badge> = {};
+let sectionOpen = false;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -56,6 +58,12 @@ function useInstalls(): Record<string, Badge> {
     return () => { listeners.delete(update); };
   }, []);
   return value;
+}
+
+/** While Escaladores is on screen the pill stays up, whatever the mode, so the user can see what runs. */
+export function setUpscalersSectionOpen(open: boolean): void {
+  sectionOpen = open;
+  emit();
 }
 
 export function readInGameMode(): InGameMode {
@@ -145,13 +153,19 @@ export const InGameBadge: FC = () => {
   const map = useInstalls();
   const running = useRunningGame();
   const [mode, setMode] = useState(readInGameMode);
+  const [inSection, setInSection] = useState(sectionOpen);
+  const [surface, setSurface] = useState<QamSurface | null>(null);
+
+  useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [visible, setVisible] = useState(false);
   const [resolution, setResolution] = useState<[number, number] | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
 
   useEffect(() => {
-    const update = () => setMode(readInGameMode());
+    const update = () => {
+      setMode(readInGameMode());
+      setInSection(sectionOpen);
+    };
     listeners.add(update);
     return () => { listeners.delete(update); };
   }, []);
@@ -167,31 +181,36 @@ export const InGameBadge: FC = () => {
     return () => { node.remove(); };
   }, []);
 
+  const [active, setActive] = useState(false);
+  const [startWindow, setStartWindow] = useState(false);
+
   // Appear once OptiScaler has actually created the upscaler, not while the game is still loading.
   useEffect(() => {
-    setVisible(false);
+    setActive(false);
+    setStartWindow(false);
     setResolution(null);
-    if (!badge || mode === "off" || !running) return;
+    if (!badge || !running) return;
     let alive = true;
     let hideTimer = 0;
     const poll = window.setInterval(async () => {
       const live = await getUpscalerLive(String(running.liveAppid)).catch(() => null);
-      if (!alive) return;
-      if (live?.result === "active") {
-        window.clearInterval(poll);
-        setResolution(live.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null);
-        setVisible(true);
-        if (mode === "start") hideTimer = window.setTimeout(() => setVisible(false), START_MS);
-      }
+      if (!alive || live?.result !== "active") return;
+      window.clearInterval(poll);
+      setResolution(live.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null);
+      setActive(true);
+      setStartWindow(true);
+      hideTimer = window.setTimeout(() => setStartWindow(false), START_MS);
     }, LIVE_POLL_MS);
     return () => {
       alive = false;
       window.clearInterval(poll);
       window.clearTimeout(hideTimer);
     };
-  }, [running?.liveAppid, badge?.build, mode]);
+  }, [running?.liveAppid, badge?.build]);
 
-  if (!host || !badge || mode === "off") return null;
+  const sectionShown = inSection && !!surface?.visible;
+  const visible = active && (sectionShown || mode === "always" || (mode === "start" && startWindow));
+  if (!host || !badge) return null;
   return (
     <>
       {visible && <OverGameComposition />}

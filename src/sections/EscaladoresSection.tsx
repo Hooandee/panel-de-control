@@ -8,7 +8,7 @@ import { useI18n } from "../i18n";
 import { listInstalledGames, type GameEntry } from "../launch/steamApi";
 import { theme } from "../theme";
 import { GameView } from "../upscalers/GameView";
-import { IN_GAME_MODES, publishOverview, readInGameMode, writeInGameMode, type InGameMode } from "../upscalers/overlays";
+import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Label, SegmentRow } from "../upscalers/parts";
 import { buildLabel } from "../upscalers/model";
 import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
@@ -34,6 +34,10 @@ export const EscaladoresSection: FC = () => {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    setUpscalersSectionOpen(true);
+    return () => setUpscalersSectionOpen(false);
+  }, []);
   const closeGame = useCallback(() => setSelected(null), []);
 
   const games = useMemo(() => {
