@@ -2,7 +2,7 @@ import asyncio
 import sys
 
 from kiosk.displays import Detection
-from kiosk.rpc import public_rpc_methods
+from kiosk.rpc import KIOSK_RPC_METHODS, kiosk_rpc_methods
 from test_tdp_guard_rpc import plugin  # noqa: F401
 
 
@@ -44,10 +44,8 @@ def test_support_log_records_the_kiosk_setting(plugin):  # noqa: F811
     assert plugin._support_settings_state()["kiosk_enabled"] is True
 
 
-def test_kiosk_rpcs_match_what_decky_exposes(plugin):  # noqa: F811
-    methods = public_rpc_methods(plugin)
-    assert {"get_kiosk_state", "set_kiosk_enabled", "get_tdp_state", "get_ui_prefs"} <= methods
-    assert not any(name.startswith("_") for name in methods)
+def test_every_kiosk_rpc_is_a_real_plugin_method(plugin):  # noqa: F811
+    assert kiosk_rpc_methods(plugin) == KIOSK_RPC_METHODS
 
 
 def test_kiosk_game_name_comes_from_the_steam_library(plugin, tmp_path, monkeypatch):  # noqa: F811
