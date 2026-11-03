@@ -26,8 +26,9 @@ LAYER_FILES = (
 )
 CONFIG = ".config/lsfg-vk/conf.toml"
 MARKER = "# Managed by Panel de Control"
-MULTIPLIERS = (2, 3, 4)
-FLOW_SCALES = {"quality": 1.0, "balanced": 0.75, "performance": 0.5}
+MULTIPLIERS = (2, 3, 4, 5, 6)
+# lsfg-vk accepts 0.25-1.0; lower is faster and softer.
+FLOW_SCALES = {"quality": 1.0, "balanced": 0.75, "performance": 0.5, "fastest": 0.25}
 # lsfg-vk rejects a config without any [[profile]] and then fails every present (the game freezes).
 PLACEHOLDER = "pdc-none"
 PAUSED_LIMIT = 50
@@ -104,6 +105,7 @@ class Lsfg:
             "lossless": lossless_installed(str(self.home)),
             "dll": str(dll) if dll else None,
             "profiles": self._manifest()["profiles"],
+            "foreign_backup": bool(self._manifest().get("foreign_backup")),
         }
 
     # ---- layer -------------------------------------------------------------------------------
@@ -130,13 +132,51 @@ class Lsfg:
         data = self._manifest()
         if not data["files"]:
             return self.status()
+        kept = data.get("foreign_backup")
         for relative, digest in data["files"].items():
             path = self.local / relative
             if path.is_file() and (not digest or sha256(path) == digest):
                 path.unlink()
         if self.config_path.is_file() and not self._foreign():
             self.config_path.unlink()
-        self._save({"files": {}, "profiles": {}})
+        self._save({"files": {}, "profiles": {}, **({"foreign_backup": kept} if kept else {})})
+        return self.status()
+
+    # ---- another tool's lsfg-vk --------------------------------------------------------------
+    def adopt_foreign(self) -> dict:
+        """Set another tool's layer and config aside, restorable, so Panel's own can go in."""
+        if not self._foreign():
+            raise LsfgError("lsfg_not_foreign")
+        backup = self.manifest_path.parent / "lsfg-foreign"
+        backup.mkdir(parents=True, exist_ok=True)
+        moved = []
+        for path in [*(self.local / f for f in LAYER_FILES), self.config_path]:
+            if path.is_file():
+                relative = path.relative_to(self.home).as_posix()
+                (backup / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(path), str(backup / relative))
+                moved.append(relative)
+        data = self._manifest()
+        data["foreign_backup"] = {"dir": str(backup), "items": moved}
+        self._save(data)
+        return self.status()
+
+    def restore_foreign(self) -> dict:
+        data = self._manifest()
+        record = data.get("foreign_backup")
+        if not record:
+            raise LsfgError("lsfg_no_backup")
+        if self._ours():
+            raise LsfgError("lsfg_installed")
+        backup = Path(record["dir"])
+        for relative in record.get("items", []):
+            source, target = backup / relative, self.home / relative
+            if source.is_file() and not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(source), str(target))
+        shutil.rmtree(backup, ignore_errors=True)
+        data.pop("foreign_backup", None)
+        self._save(data)
         return self.status()
 
     # ---- per-game profiles -------------------------------------------------------------------

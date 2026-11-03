@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "reac
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
-  recordUpscalerArgs, setUpscalersExe, uninstallUpscaler, verifyUpscaler,
+  recordUpscalerArgs, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
@@ -26,7 +26,7 @@ import {
 } from "./model";
 import { AdvancedIni } from "./AdvancedIni";
 import { LivePanel } from "./LivePanel";
-import { LsfgCard } from "./LsfgCard";
+import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
@@ -166,7 +166,6 @@ export const GameView: FC<{
     || (choice.fg === "on" && (install.options.fg_route ?? null) !== (choice.fg_route ?? null))
     || (install.options.model ?? null) !== (choice.model ?? null);
   const routes = detail?.fg_plan?.routes ?? {};
-  const bothRoutes = "game" in routes && "optiscaler" in routes;
   const route: FgRoute = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
   const gameFgInput = (detail?.fg_plan?.routes?.game as { input?: string } | undefined)?.input;
   const gameFgHint = [
@@ -196,6 +195,17 @@ export const GameView: FC<{
       return;
     }
     await reinstall();
+  };
+
+  const foreignAction = async (action: (id: string) => Promise<unknown>) => {
+    setMessage(null);
+    try {
+      await action(appid);
+      await load();
+      onChanged();
+    } catch (error) {
+      setMessage(errorText(t, String((error as Error)?.message ?? "")));
+    }
   };
 
   const check = async () => {
@@ -299,7 +309,15 @@ export const GameView: FC<{
         <>
           {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
           {detail.updating && <Note tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Note>}
-          {detail.analysis.foreign && !install && <Note tone="warn">{t("up.error.foreign")}</Note>}
+          {detail.analysis.foreign && !install && (
+            <>
+              <Note tone="warn">{t("up.error.foreign")}</Note>
+              <Row><ActionButton label={t("up.foreign.adopt")} onPress={() => void foreignAction(adoptForeignUpscaler)} /></Row>
+            </>
+          )}
+          {detail.foreign_backup && !install && !detail.analysis.foreign && (
+            <Row><ActionButton label={t("up.foreign.restore")} onPress={() => void foreignAction(restoreForeignUpscaler)} /></Row>
+          )}
           {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
           {detail.recipe_info?.broken && <Note tone="warn">{t("up.recipe.broken")}</Note>}
           {detail.recipe_info?.needs.map((need) => <Note key={need} tone="warn">{t(`up.recipe.need.${need}`)}</Note>)}
@@ -355,7 +373,12 @@ export const GameView: FC<{
       {detail && install && comparing && (
         <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
       )}
-      {detail?.native && <LsfgCard appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning} />}
+      {detail?.native && (
+        <FrameGenRow
+          appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning}
+          routes={{}} optiscaler={{ fg: "off", route: "game" }} gameHint="" onOptiscaler={() => undefined}
+        />
+      )}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
 
       {!detail && !loadError && (
@@ -458,27 +481,16 @@ export const GameView: FC<{
           )}
 
 
-          {detail.fg_plan && !replacesFsr && (
-            <>
-              <Label>{t("up.fg.title")}</Label>
-              <SegmentRow
-                value={choice.fg ?? "off"}
-                onChange={(fg) => setChoice({ ...choice, fg })}
-                options={[{ value: "off", label: t("up.fg.off") }, { value: "on", label: t("up.fg.on") }]}
-              />
-              <Note>{t("up.fg.explain")}</Note>
-              {choice.fg === "on" && bothRoutes && (
-                <SegmentRow
-                  value={route}
-                  onChange={(fg_route) => setChoice({ ...choice, fg_route })}
-                  options={[{ value: "game", label: t("up.fg.route.game") }, { value: "optiscaler", label: t("up.fg.route.opti") }]}
-                />
-              )}
-              <Note>{route === "game" ? `${t("up.fg.fromGame")}. ${gameFgHint}` : t(bothRoutes ? "up.fg.fromOptiChoice" : "up.fg.fromOpti")}</Note>
-            </>
-          )}
-
-          <LsfgCard appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning} />
+          <FrameGenRow
+            appid={appid}
+            liveAppid={game.liveAppid}
+            isNonSteam={game.isNonSteam}
+            gameRunning={gameRunning}
+            routes={detail.fg_plan && !replacesFsr ? routes : {}}
+            optiscaler={{ fg: choice.fg ?? "off", route }}
+            gameHint={gameFgHint}
+            onOptiscaler={(fg, fg_route) => setChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
+          />
 
           {install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && !running && <AdvancedIni appid={appid} />}
 

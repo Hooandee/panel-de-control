@@ -222,6 +222,7 @@ class UpscalerService:
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": recipes.applies(recipe),
             "recipe_info": _recipe_info(recipe),
+            "foreign_backup": {"at": entry["foreign_backup"]["at"]} if isinstance(entry.get("foreign_backup"), dict) else None,
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native or _is_helix(install) else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
@@ -572,6 +573,51 @@ class UpscalerService:
         self._save()
         return {"options": install["options"]}
 
+    # ---- another tool's install --------------------------------------------------------------
+    def adopt_foreign(self, appid: str) -> dict:
+        """Set another tool's OptiScaler or HelixSR aside (kept, restorable) so Panel's can go in cleanly."""
+        installed, _analysis, target = self._guard(appid, True)
+        entry = self._game_state(appid)
+        items, swaps = games.foreign_items(target), games.helix_swaps(target)
+        if not items and not swaps:
+            raise UpscalerError("no_foreign")
+        backup = self.state_path.parent / "foreign" / str(appid) / str(int(time.time()))
+        backup.mkdir(parents=True, exist_ok=True)
+        for name in items:
+            shutil.move(str(target / name), str(backup / name))
+        for name in swaps:
+            original = target / Path(name).with_suffix(".original.dll").name
+            if (target / name).exists():
+                shutil.move(str(target / name), str(backup / name))
+            os.replace(original, target / name)
+        entry["foreign_backup"] = {"dir": str(backup), "target": str(target), "items": items, "swaps": swaps,
+                                   "at": time.time()}
+        self._save()
+        return {"moved": [*items, *swaps]}
+
+    def restore_foreign(self, appid: str) -> dict:
+        entry = self._game_state(appid)
+        record = entry.get("foreign_backup")
+        if not isinstance(record, dict):
+            raise UpscalerError("no_foreign")
+        if isinstance(entry.get("install"), dict):
+            raise UpscalerError("still_patched")
+        installed = self._find(appid)
+        if installed and games.running_under(installed.root, self.proc):
+            raise UpscalerError("running")
+        target, backup = Path(record["target"]), Path(record["dir"])
+        for name in record.get("swaps", []):
+            os.replace(target / name, target / Path(name).with_suffix(".original.dll").name)
+            if (backup / name).exists():
+                shutil.move(str(backup / name), str(target / name))
+        for name in record.get("items", []):
+            if (backup / name).exists() and not (target / name).exists():
+                shutil.move(str(backup / name), str(target / name))
+        shutil.rmtree(backup, ignore_errors=True)
+        entry.pop("foreign_backup", None)
+        self._save()
+        return {"restored": [*record.get("items", []), *record.get("swaps", [])]}
+
     # ---- advanced: every OptiScaler.ini key ---------------------------------------------------
     def _ini_path(self, appid: str) -> tuple[dict, Path]:
         install = self._game_state(appid).get("install")
@@ -725,6 +771,20 @@ class UpscalerService:
             return self.lsfg.install(unpacked, asset.id)
         except AssetError as error:
             raise UpscalerError(error.code) from None
+        except lsfg.LsfgError as error:
+            raise UpscalerError(error.code) from None
+
+    def lsfg_adopt_foreign(self) -> dict:
+        try:
+            self.lsfg.adopt_foreign()
+        except lsfg.LsfgError as error:
+            raise UpscalerError(error.code) from None
+        return self.lsfg_install()
+
+    def lsfg_restore_foreign(self) -> dict:
+        try:
+            self.lsfg.uninstall()
+            return self.lsfg.restore_foreign()
         except lsfg.LsfgError as error:
             raise UpscalerError(error.code) from None
 

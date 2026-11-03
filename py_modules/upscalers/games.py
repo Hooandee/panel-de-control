@@ -36,6 +36,13 @@ INPUTS = {
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")
 FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json")
+# What other tools leave beside the exe: OptiScaler's own files, Decky-Framegen's marker, HelixSR's records.
+FOREIGN_ITEMS = (
+    "OptiScaler.ini", "OptiScaler.log", "OptiScaler", "D3D12_Optiscaler", "D3D12_OptiScaler", "FRAMEGEN_PATCH",
+    "helixsr-install.json", "helixsr.ini", "helixsr.log", "HLX_FSR.log",
+)
+PROXY_NAMES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll", "d3d12.dll")
+_SCAN_LIMIT = 96 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -328,3 +335,37 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
         if unix in cmdline or wine in cmdline:
             return True
     return False
+
+
+def is_optiscaler(path: Path) -> bool:
+    """A proxy DLL is someone's OptiScaler only if its own strings say so; a game's real dxgi.dll never does."""
+    try:
+        with open(path, "rb") as handle:
+            tail = b""
+            read = 0
+            while read < _SCAN_LIMIT:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    return False
+                if b"OptiScaler" in tail + chunk:
+                    return True
+                tail = chunk[-16:]
+                read += len(chunk)
+    except OSError:
+        return False
+    return False
+
+
+def foreign_items(target: Path) -> list[str]:
+    items = [name for name in FOREIGN_ITEMS if (target / name).exists()]
+    return items + [name for name in PROXY_NAMES if (target / name).is_file() and is_optiscaler(target / name)]
+
+
+def helix_swaps(target: Path) -> list[str]:
+    """Game DLLs HelixSR replaced: their originals wait beside them as *.original.dll."""
+    try:
+        record = json.loads((target / "helixsr-install.json").read_text())
+    except (OSError, ValueError):
+        return []
+    names = record.get("files") if isinstance(record, dict) else None
+    return [n for n in names or [] if isinstance(n, str) and "/" not in n and (target / Path(n).with_suffix(".original.dll").name).is_file()]

@@ -1366,8 +1366,12 @@ export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean; fps?: number | null }>("get_upscaler_live");
-export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4; flow: "quality" | "balanced" | "performance"; performance: boolean }
-export interface LsfgStatus { installed: boolean; foreign: boolean; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
+export interface LsfgStatus { installed: boolean; foreign: boolean; foreign_backup?: boolean; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");
+export const restoreForeignLsfg = callable<[], LsfgStatus>("restore_foreign_lsfg");
+export const adoptForeignUpscaler = callable<[appid: string], { moved: string[] }>("adopt_foreign_upscaler");
+export const restoreForeignUpscaler = callable<[appid: string], { restored: string[] }>("restore_foreign_upscaler");
 export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
 export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
 export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");

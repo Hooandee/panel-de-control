@@ -988,3 +988,65 @@ def test_any_re_engine_game_gets_reframework_and_loses_the_warning(steam, fake_c
     result = service.install(APPID, {"build": "fsr-test"})
     assert (game / "bin/x64_dx12/dinput8.dll").read_bytes() == b"reframework"
     assert sorted(result["overrides"]) == ["dinput8=n,b", "dxgi=n,b"]
+
+
+def test_another_tools_optiscaler_is_set_aside_and_can_come_back(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "dxgi.dll", b"MZ...OptiScaler build...")
+    _write(target / "OptiScaler.ini", "[FSR]\n")
+    _write(target / "OptiScaler/amd_fidelityfx_upscaler_dx12.dll", b"x")
+    _write(target / "FRAMEGEN_PATCH", "")
+    _write(target / "winmm.dll", b"the game's own winmm")
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["analysis"]["foreign"]
+
+    moved = service.adopt_foreign(APPID)
+    assert sorted(moved["moved"]) == ["FRAMEGEN_PATCH", "OptiScaler", "OptiScaler.ini", "dxgi.dll"]
+    detail = service.game(APPID)
+    assert not detail["analysis"]["foreign"] and detail["foreign_backup"]
+    assert (target / "winmm.dll").read_bytes() == b"the game's own winmm"
+    service.install(APPID, {"build": "fsr-test"})
+    with pytest.raises(UpscalerError, match="patched"):
+        service.restore_foreign(APPID)
+    service.uninstall(APPID)
+
+    service.restore_foreign(APPID)
+    assert (target / "dxgi.dll").read_bytes() == b"MZ...OptiScaler build..."
+    assert (target / "OptiScaler/amd_fidelityfx_upscaler_dx12.dll").is_file()
+    assert service.game(APPID)["foreign_backup"] is None
+
+
+def test_helixsr_manager_install_gives_the_game_its_fsr_back(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"helixsr")
+    _write(target / "amd_fidelityfx_upscaler_dx12.original.dll", b"game fsr")
+    _write(target / "helixsr-install.json", json.dumps({"helixsr": "1.8.1", "files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    service = _service(steam, fake_catalog, proc)
+    service.adopt_foreign(APPID)
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"game fsr"
+    assert not (target / "amd_fidelityfx_upscaler_dx12.original.dll").exists()
+    service.restore_foreign(APPID)
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"helixsr"
+    assert (target / "amd_fidelityfx_upscaler_dx12.original.dll").read_bytes() == b"game fsr"
+
+
+def test_lsfg_from_another_tool_is_set_aside_then_restored(steam, tmp_path):
+    home, _ = steam
+    for relative in lsfg.LAYER_FILES:
+        _write(home / ".local" / relative, b"theirs")
+    _write(home / lsfg.CONFIG, "version = 2\n[[profile]]\nname = \"Bloodborne\"\n")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    assert tool.status()["foreign"]
+    tool.adopt_foreign()
+    assert not tool.status()["foreign"] and tool.status()["foreign_backup"]
+    assert not (home / lsfg.CONFIG).exists()
+    tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    with pytest.raises(lsfg.LsfgError, match="lsfg_installed"):
+        tool.restore_foreign()
+    tool.uninstall()
+    tool.restore_foreign()
+    assert (home / lsfg.CONFIG).read_text().startswith("version = 2")
+    assert (home / ".local" / lsfg.LAYER_FILES[0]).read_bytes() == b"theirs"
+    assert not tool.status()["foreign_backup"]

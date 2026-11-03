@@ -1387,6 +1387,26 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "lsfg_install", installed=result.get("installed"), dll=bool(result.get("dll")))
         return result
 
+    async def adopt_foreign_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_adopt_foreign")
+        _upscalers_journal("INFO", "lsfg_adopt_foreign", installed=result.get("installed"))
+        return result
+
+    async def restore_foreign_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_restore_foreign")
+        _upscalers_journal("INFO", "lsfg_restore_foreign", foreign=result.get("foreign"))
+        return result
+
+    async def adopt_foreign_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("adopt_foreign", str(appid))
+        _upscalers_journal("INFO", "adopt_foreign", appid=str(appid), moved=",".join(result["moved"])[:300])
+        return result
+
+    async def restore_foreign_upscaler(self, appid: str) -> dict:
+        result = await self._upscalers_call("restore_foreign", str(appid))
+        _upscalers_journal("INFO", "restore_foreign", appid=str(appid), restored=",".join(result["restored"])[:300])
+        return result
+
     async def uninstall_lsfg(self) -> dict:
         result = await self._upscalers_call("lsfg_uninstall")
         _upscalers_journal("INFO", "lsfg_uninstall")
