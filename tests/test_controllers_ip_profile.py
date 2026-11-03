@@ -1,3 +1,6 @@
+import pytest
+
+
 from controllers import ip_profile as ip
 
 # Full Legion Go 2 source capability set (superset — includes phantom paddles the
@@ -43,11 +46,12 @@ def test_buttons_legion_go_1_omits_unmapped_m1():
     ]
 
 
-def test_buttons_msi_claw_two_grips():
+@pytest.mark.parametrize("key", ("msi_claw_8_ai_plus", "msi_claw_8_ex_ai_plus"))
+def test_buttons_msi_claw_two_grips(key):
     caps = ["Gamepad:Button:South", "Gamepad:Button:LeftPaddle1",
             "Gamepad:Button:RightPaddle1", "Gamepad:Button:Guide"]
     # Same caps as a Legion Y1/Y3 but on the Claw they are the physical M1/M2.
-    assert ip.buttons_for("msi_claw_8_ai_plus", caps) == [
+    assert ip.buttons_for(key, caps) == [
         ("RightPaddle1", "M1"),
         ("LeftPaddle1", "M2"),
     ]

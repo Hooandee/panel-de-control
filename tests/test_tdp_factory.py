@@ -2636,3 +2636,61 @@ def test_go2_handoff_journal_identifies_failure_stage(tmp_path, monkeypatch, fai
     assert event["result"]["stage"] == stage
     if failure == "readback":
         assert event["result"]["observed_profile"] == "custom"
+
+
+_MSI = "Micro-Star International Co., Ltd."
+
+
+def _mk_claw_ex_dmi(root):
+    d = os.path.join(root, "sys/class/dmi/id")
+    os.makedirs(d, exist_ok=True)
+    for name, value in (
+        ("sys_vendor", _MSI),
+        ("product_name", "Claw 8 EX AI+ CG3EM"),
+        ("board_name", "MS-1T91"),
+    ):
+        with open(os.path.join(d, name), "w") as handle:
+            handle.write(value)
+
+
+def test_claw_8_ex_drives_both_rapl_surfaces_instead_of_unhonored_firmware(tmp_path):
+    # PDC-CKHF: msi-wmi-platform echoed 30 W while RAPL stayed at 40/50 W.
+    root = str(tmp_path)
+    _mk_claw_ex_dmi(root)
+    _mk_fw(root, "msi-wmi-platform")
+    _mk_rapl(root)
+    _mk_rapl(root, base="intel-rapl/intel-rapl:0")
+
+    backend = select_backend(
+        _p("msi_claw_8_ex_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ
+    )
+
+    assert backend.supported is True
+    assert backend.name.startswith("intel-rapl")
+    assert backend.auto_tdp_safe is False
+    assert backend.set_tdp(12, False).ok is True
+    for base in ("intel-rapl-mmio/intel-rapl-mmio:0", "intel-rapl/intel-rapl:0"):
+        path = os.path.join(
+            root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw"
+        )
+        with open(path) as handle:
+            assert int(handle.read()) == 12_000_000
+    with open(os.path.join(
+        root,
+        "sys/class/firmware-attributes/msi-wmi-platform/attributes/ppt_pl1_spl/current_value",
+    )) as handle:
+        assert handle.read() == "15"
+
+
+def test_claw_8_ex_keeps_firmware_route_when_rapl_is_absent(tmp_path):
+    root = str(tmp_path)
+    _mk_claw_ex_dmi(root)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_8_ex_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ
+    )
+
+    assert backend.supported is True
+    assert "msi-wmi-platform" in backend.name
+    assert [item["candidate"] for item in backend.probe_trace] == ["intel", "msi"]
