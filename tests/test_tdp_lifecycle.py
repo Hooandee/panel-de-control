@@ -579,3 +579,38 @@ def test_a_normal_plug_after_a_quiet_spell_keeps_the_last_episode():
     episode = lm.diagnostics()["ac_unstable"]
     assert episode["last_at"] == t
     assert episode["transitions"] == 6
+
+
+def test_poller_reads_wakeup_count_off_the_event_loop():
+    # PDC-CKHF: after a 20 min suspend, reading wakeup_count blocked the loop 5 s.
+    import asyncio
+    import threading
+
+    loop_thread = threading.get_ident()
+    reader_threads = []
+    applied = []
+
+    def slow_wakeup():
+        reader_threads.append(threading.get_ident())
+        return 1
+
+    async def scenario():
+        manager = LifecycleManager(
+            apply_cb=applied.append,
+            interval=0.01,
+            read_wakeup=slow_wakeup,
+            read_ac=lambda: True,
+            read_suspend=lambda: 0.0,
+        )
+        task = asyncio.ensure_future(manager.run())
+        while len(reader_threads) < 2:
+            await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(scenario())
+
+    assert reader_threads and loop_thread not in reader_threads
