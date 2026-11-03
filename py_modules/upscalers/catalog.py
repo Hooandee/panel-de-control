@@ -11,6 +11,7 @@ OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
 OPTISCALER_BETA = "optiscaler-10-nightly"
 LSFG_ARCHIVE = "lsfg-vk-2.0.0"
 HELIXSR_ARCHIVE = "helixsr-3.2.0"
+OPTIPATCHER = "optipatcher-0.42"
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,12 @@ ASSETS: dict[str, Asset] = {
             HELIXSR_ARCHIVE, "HelixSR-3.2.0.zip",
             "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7", 217396302,
             ("https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip",),
+        ),
+        # MIT; lets supported games offer DLSS/DLSS-FG to OptiScaler without spoofing (OptiScaler loads *.asi from plugins).
+        Asset(
+            OPTIPATCHER, "OptiPatcher.asi",
+            "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b", 107520,
+            ("https://github.com/optiscaler/OptiPatcher/releases/download/v0.42/OptiPatcher_v0.42.asi",),
         ),
         Asset(
             OPTISCALER_ARCHIVE,

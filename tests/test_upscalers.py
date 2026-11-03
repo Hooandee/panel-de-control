@@ -1071,3 +1071,24 @@ def test_unreal_plugin_libraries_deep_in_the_tree_are_found(tmp_path):
     assert "streamline" in result["inputs"]
     assert result["inputs"]["fsr2"] == ["FSD/Binaries/Win64/FSD-Win64-Shipping.exe"]
     assert games.shipped_upscalers(root) == ["DLSS", "FSR 2"]
+
+
+def test_optipatcher_goes_into_optiscalers_plugins_for_games_that_support_it(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    patcher = Asset(catalog.OPTIPATCHER, "OptiPatcher_v0.42.asi", hashlib.sha256(b"op").hexdigest(), 2, ("http://invalid",))
+    monkeypatch.setitem(catalog.ASSETS, patcher.id, patcher)
+    _write(Path(fake_catalog) / "cache" / patcher.sha256 / patcher.filename, b"op")
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, optipatcher=True))
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["recipe"] is True
+    service.install(APPID, {"build": "fsr-test"})
+    target = game / "bin/x64_dx12"
+    assert (target / "plugins/OptiPatcher.asi").read_bytes() == b"op"
+    assert ini.read((target / "OptiScaler.ini").read_text(), "Plugins.LoadAsiPlugins") == "true"
+    service.uninstall(APPID)
+    assert not (target / "plugins").exists()
+
+
+def test_wiki_optipatcher_flag_makes_a_recipe():
+    recipe = recipes.from_facts("1", {"optipatcher": True}, "wiki")
+    assert recipe is not None and recipe.optipatcher

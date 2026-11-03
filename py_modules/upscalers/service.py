@@ -337,6 +337,8 @@ class UpscalerService:
         assets = catalog.build_assets(build)
         if recipe:
             assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]
+            if recipe.optipatcher:
+                assets.append(catalog.ASSETS[catalog.OPTIPATCHER])
         total = sum(asset.size for asset in assets)
         self._update_job(phase="download", total=total, done=0)
         paths: dict[str, Path] = {}
@@ -366,10 +368,13 @@ class UpscalerService:
         if recipe:
             for name, asset_id in recipe.files.items():
                 sources[name] = paths[asset_id]
+            if recipe.optipatcher:
+                sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
 
         fg_plan = _fg_plan(self.gpu, analysis, recipe, archive_asset.generation, choice.get("fg_route"))
         overrides = {
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+            **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
         }

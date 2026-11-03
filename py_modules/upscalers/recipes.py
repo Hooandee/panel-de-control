@@ -28,6 +28,7 @@ class Recipe:
     proxy: str | None = None
     needs: tuple[str, ...] = ()
     broken: bool = False
+    optipatcher: bool = False
     source: str = "panel"
 
 
@@ -67,9 +68,10 @@ def from_facts(appid: str, entry: dict, source: str) -> Recipe | None:
         proxy=entry.get("proxy") if isinstance(entry.get("proxy"), str) else None,
         needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
         broken=entry.get("status") == "broken",
+        optipatcher=bool(entry.get("optipatcher")),
         source=source,
     )
-    return recipe if recipe.args or recipe.proxy or recipe.needs or recipe.broken else None
+    return recipe if recipe.args or recipe.proxy or recipe.needs or recipe.broken or recipe.optipatcher else None
 
 
 WIKI = _wiki()
@@ -78,7 +80,7 @@ WIKI = _wiki()
 def applies(recipe: Recipe | None) -> bool:
     """Whether installing changes anything because of the recipe."""
     return bool(recipe and (recipe.exe or recipe.args or recipe.files or recipe.native_dlls or recipe.ini
-                            or recipe.fg or recipe.proxy))
+                            or recipe.fg or recipe.proxy or recipe.optipatcher))
 
 
 def recipe_for(appid: str) -> Recipe | None:
