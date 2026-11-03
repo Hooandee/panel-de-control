@@ -29,6 +29,16 @@ export function renderHeight(outputHeight: number, quality: Quality): number {
   return Math.round(outputHeight / QUALITY_RATIO[quality]);
 }
 
+/** What runs, as short as a cover allows: the family and version, with Lite when FSR 4 runs its Lite model. */
+export function badgeLabel(build: Pick<BuildInfo, "family" | "version" | "models"> | undefined, model: string | null | undefined, fallback: string): { full: string; short: string } {
+  if (!build) return { full: fallback, short: fallback };
+  if (build.family === "proton") return { full: build.version, short: build.version };
+  const family = build.family === "xess" ? "XeSS" : build.family === "helixsr" ? "HLX" : "FSR";
+  const lite = build.models?.includes("lite") && model !== "full" ? " Lite" : "";
+  const major = build.version.split(".")[0];
+  return { full: `${family} ${build.version}${lite}`.trim(), short: `${family} ${major}${lite}`.trim() };
+}
+
 export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {
   const name = build.family === "xess" ? `XeSS ${build.version}`
     : build.family === "helixsr" ? `HLX ${build.version}`

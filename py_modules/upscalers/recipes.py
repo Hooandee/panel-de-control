@@ -1,10 +1,11 @@
 """What a particular game needs besides OptiScaler, so nobody has to research it.
 
 Hand-written entries are checked against the game's files and a real install on a handheld.
-`recipes_wiki.json` is generated from the OptiScaler wiki's compatibility table and only carries
-facts Panel can apply (proxy name, launch arguments) or must warn about (REFramework, a copied
-nvngx_dlss.dll, anti-cheat, games that do not work). Hand-written entries win. Panel applies a
-recipe on install and undoes exactly what it added.
+`recipes_wiki.json` is generated from the whole OptiScaler wiki (`wiki.py`): every listed game with
+the community verdict, its inputs, the proxy, -dx12, OptiPatcher, the OptiScaler.ini settings its
+page lists and what Panel must warn about (REFramework, a copied nvngx_dlss.dll, anti-cheat, a
+third-party mod, games that do not work). Hand-written entries win. Panel applies a recipe on install
+and undoes exactly what it added.
 """
 
 import json
@@ -12,7 +13,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
-NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off")
+NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off", "luma", "mod")
+STATUSES = ("works", "broken", "partial")
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,14 @@ class Recipe:
     optipatcher: bool = False
     # Panel's live-panel key for OptiScaler's menu when the game already uses Insert.
     menu_key: str | None = None
+    # The wiki's verdict and what it says without Panel acting on it.
+    status: str | None = None
+    inputs: tuple[str, ...] = ()
+    page: str | None = None
+    linux: bool = False
+    # OptiScaler.ini `Key=value` pairs from the game's wiki page, resolved against the installed INI on install.
+    wiki_settings: dict[str, str] = field(default_factory=dict)
+    wiki_suggestions: dict[str, str] = field(default_factory=dict)
     source: str = "panel"
 
 
@@ -59,24 +69,39 @@ def _wiki(path: Path = WIKI_FILE) -> dict[str, Recipe]:
     for appid, entry in (data.get("recipes") or {}).items():
         if not str(appid).isdecimal() or not isinstance(entry, dict):
             continue
-        recipe = from_facts(str(appid), entry, source)
+        recipe = from_facts(str(appid), entry, source, entry.get("page_facts"))
         if recipe:
             loaded[str(appid)] = recipe
     return loaded
 
 
-def from_facts(appid: str, entry: dict, source: str) -> Recipe | None:
-    """A recipe from the wiki's facts, or None when they change nothing and warn about nothing."""
+def _pairs(value) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(k)[:64]: str(v)[:64] for k, v in value.items() if str(k).replace("_", "").isalnum()}
+
+
+def from_facts(appid: str, entry: dict, source: str, page: dict | None = None) -> Recipe | None:
+    """A recipe from the wiki's facts for a game, merged with its page when Panel has it."""
+    page = page if isinstance(page, dict) else entry.get("page_facts") if isinstance(entry.get("page_facts"), dict) else {}
+    proxy = entry.get("proxy") if isinstance(entry.get("proxy"), str) else page.get("proxy")
+    status = entry.get("status") if entry.get("status") in STATUSES else None
     recipe = Recipe(
         appid,
         args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
-        proxy=entry.get("proxy") if isinstance(entry.get("proxy"), str) else None,
+        proxy=proxy if isinstance(proxy, str) else None,
         needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
-        broken=entry.get("status") == "broken",
+        broken=status == "broken",
         optipatcher=bool(entry.get("optipatcher")),
+        status=status,
+        inputs=tuple(str(i)[:12] for i in entry.get("inputs", ()) if isinstance(i, str))[:9],
+        page=str(entry["page"])[:120] if isinstance(entry.get("page"), str) else None,
+        linux=bool(page.get("linux")),
+        wiki_settings=_pairs(page.get("settings")),
+        wiki_suggestions=_pairs(page.get("suggestions")),
         source=source,
     )
-    return recipe if recipe.args or recipe.proxy or recipe.needs or recipe.broken or recipe.optipatcher else None
+    return recipe if recipe.status or recipe.args or recipe.proxy or recipe.needs or recipe.optipatcher else None
 
 
 WIKI = _wiki()
@@ -85,11 +110,39 @@ WIKI = _wiki()
 def applies(recipe: Recipe | None) -> bool:
     """Whether installing changes anything because of the recipe."""
     return bool(recipe and (recipe.exe or recipe.args or recipe.files or recipe.native_dlls or recipe.ini
-                            or recipe.fg or recipe.proxy or recipe.optipatcher))
+                            or recipe.fg or recipe.proxy or recipe.optipatcher or recipe.wiki_settings))
 
 
-def recipe_for(appid: str) -> Recipe | None:
-    return RECIPES.get(str(appid)) or WIKI.get(str(appid))
+def combine(hand: Recipe | None, wiki: Recipe | None) -> Recipe | None:
+    """A hand-written recipe keeps its own steps and gains what the wiki knows about the game."""
+    if hand is None or wiki is None:
+        return hand or wiki
+    return replace(
+        hand,
+        proxy=hand.proxy or wiki.proxy,
+        args=hand.args or wiki.args,
+        needs=tuple(dict.fromkeys((*hand.needs, *wiki.needs))),
+        broken=hand.broken or wiki.broken,
+        optipatcher=hand.optipatcher or wiki.optipatcher,
+        status=wiki.status, inputs=wiki.inputs, page=wiki.page, linux=wiki.linux,
+        wiki_settings={k: v for k, v in wiki.wiki_settings.items() if not any(d.endswith(f".{k}") for d in hand.ini)},
+        wiki_suggestions=wiki.wiki_suggestions,
+    )
+
+
+def with_wiki(recipe: Recipe | None, live: Recipe | None) -> Recipe | None:
+    """The live wiki row replaces the bundled one; the bundled page facts stay until the live page is read."""
+    if live is None or recipe is None:
+        return live or recipe
+    return replace(live, linux=live.linux or recipe.linux, status=live.status or recipe.status,
+                   inputs=live.inputs or recipe.inputs, page=live.page or recipe.page,
+                   wiki_settings=live.wiki_settings or recipe.wiki_settings,
+                   wiki_suggestions=live.wiki_suggestions or recipe.wiki_suggestions,
+                   proxy=live.proxy or recipe.proxy)
+
+
+def recipe_for(appid: str, live: Recipe | None = None) -> Recipe | None:
+    return combine(RECIPES.get(str(appid)), with_wiki(WIKI.get(str(appid)), live))
 
 
 # Every RE Engine game ships its packs as re_chunk_000.pak in the game root.

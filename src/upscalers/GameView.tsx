@@ -27,6 +27,7 @@ import {
 import { AdvancedIni } from "./AdvancedIni";
 import { onJobUpdate, trackJob } from "./jobRunner";
 import { LivePanel } from "./LivePanel";
+import { WikiFacts } from "./WikiFacts";
 import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
@@ -107,7 +108,7 @@ export const GameView: FC<{
   useEffect(() => {
     let done = false;
     const slow = setTimeout(() => { if (!done && mounted.current) setWikiUpdating(true); }, 300);
-    refreshUpscalerWiki()
+    refreshUpscalerWiki(appid)
       .then((result) => { if (result.updated && mounted.current) void load(); })
       .catch(() => undefined)
       .finally(() => { done = true; clearTimeout(slow); if (mounted.current) setWikiUpdating(false); });
@@ -316,6 +317,9 @@ export const GameView: FC<{
           {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
           {detail.recipe_info?.broken && <Note tone="warn">{t("up.recipe.broken")}</Note>}
           {detail.recipe_info?.needs.map((need) => <Note key={need} tone="warn">{t(`up.recipe.need.${need}`)}</Note>)}
+          {detail.recipe_info && (
+            <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
+          )}
           {detail.analysis.anti_cheat && !install && (
             <>
               <Note tone="danger">{t("up.error.anti_cheat")}</Note>

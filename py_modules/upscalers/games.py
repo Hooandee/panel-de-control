@@ -133,13 +133,17 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
                 start = Path(_unquote(entry.get("startdir"))) if _unquote(entry.get("startdir")) else exe.parent
                 if not start.is_dir():
                     return None
+                name = str(entry.get("appname") or appid)
+                if exe.suffix.lower() != ".exe":
+                    # An AppImage, script or Linux binary: its start folder is not a Windows game to patch.
+                    return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
                 relative = None
-                if exe.suffix.lower() == ".exe" and exe.is_file():
+                if exe.is_file():
                     try:
                         relative = exe.resolve().relative_to(start.resolve()).as_posix()
                     except ValueError:
                         start, relative = exe.parent, exe.name
-                return Installed(appid, str(entry.get("appname") or appid), start, STATE_FULLY_INSTALLED, relative, True)
+                return Installed(appid, name, start, STATE_FULLY_INSTALLED, relative, True)
     return None
 
 

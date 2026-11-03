@@ -10,7 +10,8 @@ import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
-import { buildLabel } from "./model";
+import { useGameInFront } from "./gameInFront";
+import { badgeLabel } from "./model";
 import type { UpscalersOverview } from "./types";
 
 export type InGameMode = "off" | "start" | "always";
@@ -22,11 +23,10 @@ const LIVE_POLL_MS = 5000;
 const STYLE_ID = "pdc-up-cover-style";
 const HOST_ID = "pdc-up-ingame";
 const COVER_IMAGE = /\/(?:assets|customimages|apps)\/(\d+)(?:\/|p\.|\.)/;
-// Covers only: portrait, header and capsule art or a custom grid image; never icons or the hero backdrop.
-const COVER_FILE = /library_600x900|library_capsule|library_header|header|capsule|\/customimages\/\d+p?\./;
 
 interface Badge {
   label: string;
+  short: string;
   state: string;
   build: string;
 }
@@ -45,7 +45,8 @@ export function publishOverview(overview: UpscalersOverview): void {
   const next: Record<string, Badge> = {};
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
-    next[appid] = { label: build ? buildLabel(build) : install.build, state: install.status, build: install.build };
+    const label = badgeLabel(build, install.options?.model, install.build);
+    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build };
   }
   installs = next;
   emit();
@@ -91,63 +92,152 @@ function mainWindow(): Window | null {
   }
 }
 
+const BADGE_CLASS = "pdc-up-badge";
+const HOST_ATTR = "data-pdc-up-host";
+const GLYPH = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 9 15"/><path d="M12 3H3v18h18v-9"/><path d="M16 3h5v5"/><path d="M14 15H9v-5"/></svg>`;
+// Logos and blurred backdrops are never the tile itself; icons count only as round tiles (bubbles).
+const NOT_TILE = /logo|_hero_blur/i;
+const ICON = /icon|\/community_assets\//i;
+
 const COVER_CSS = `
-[data-pdc-up]::after {
-  content: attr(data-pdc-up);
-  position: absolute; top: 6px; left: 6px; z-index: 2;
-  padding: 2px 8px; border-radius: 999px;
-  font: 700 11px/16px "Motiva Sans", Arial, sans-serif; letter-spacing: .2px;
-  color: #fff; background: rgba(12, 14, 20, .78);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18), 0 2px 6px rgba(0, 0, 0, .35);
-  pointer-events: none;
+[${HOST_ATTR}="relative"] { position: relative; }
+.${BADGE_CLASS} {
+  position: absolute; z-index: 3; top: var(--pdc-up-inset, 6px); left: var(--pdc-up-inset, 6px);
+  display: inline-flex; align-items: center; gap: 5px; max-width: calc(100% - 2 * var(--pdc-up-inset, 6px));
+  padding: 3px 9px 3px 6px; border-radius: 999px; box-sizing: border-box;
+  font: 700 11px/15px "Motiva Sans", "Noto Sans", Arial, sans-serif; letter-spacing: .15px; white-space: nowrap;
+  color: #f4f7fb; background: rgba(14, 17, 24, .82);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 3px 10px rgba(0, 0, 0, .38);
+  pointer-events: none; overflow: hidden; text-overflow: ellipsis;
+  transform-origin: top left; animation: pdc-up-badge-in 260ms cubic-bezier(.2, .8, .2, 1) both;
 }
-[data-pdc-up-state="active"]::after { box-shadow: inset 0 0 0 1px rgba(126, 224, 160, .7), 0 2px 6px rgba(0, 0, 0, .35); }
-[data-pdc-up-state="broken"]::after { color: #ffb454; box-shadow: inset 0 0 0 1px rgba(255, 180, 84, .7), 0 2px 6px rgba(0, 0, 0, .35); }
+.${BADGE_CLASS} > svg { flex: none; font-size: 12px; color: #9fb4c8; }
+.${BADGE_CLASS} > b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.${BADGE_CLASS}[data-state="active"] > svg { color: #6fe3a1; }
+.${BADGE_CLASS}[data-state="active"] { box-shadow: inset 0 0 0 1px rgba(111, 227, 161, .55), 0 3px 10px rgba(0, 0, 0, .38); }
+.${BADGE_CLASS}[data-state="broken"] > svg, .${BADGE_CLASS}[data-state="broken"] > b { color: #ffbe63; }
+.${BADGE_CLASS}[data-state="broken"] { box-shadow: inset 0 0 0 1px rgba(255, 190, 99, .6), 0 3px 10px rgba(0, 0, 0, .38); }
+.${BADGE_CLASS}[data-size="s"] { padding: 2px 7px 2px 5px; gap: 4px; font-size: 9.5px; line-height: 13px; }
+.${BADGE_CLASS}[data-size="s"] > svg { font-size: 10px; }
+.${BADGE_CLASS}[data-round] { top: auto; left: 50%; bottom: 4%; transform: translateX(-50%); animation-name: pdc-up-badge-in-round; }
+@keyframes pdc-up-badge-in-round { from { opacity: 0; transform: translateX(-50%) scale(.88); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes pdc-up-badge-in { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
 `;
 
-/** Marks Steam's own cover images; one stylesheet draws the pill, so nothing is re-rendered per cover. */
+function appidOf(src: string): string | null {
+  return src.match(COVER_IMAGE)?.[1] ?? null;
+}
+
+/** The visible tile an image belongs to: its ancestors while they stay the image's size, as every theme wraps art. */
+function tileOf(img: HTMLImageElement): HTMLElement | null {
+  const box = img.getBoundingClientRect();
+  let tile: HTMLElement | null = img.parentElement;
+  if (!tile) return null;
+  for (let depth = 0; depth < 5; depth++) {
+    const parent: HTMLElement | null = tile.parentElement;
+    if (!parent || parent === img.ownerDocument.body) break;
+    const outer = parent.getBoundingClientRect();
+    if (outer.width > box.width * 1.15 + 8 || outer.height > box.height * 1.15 + 8) break;
+    tile = parent;
+  }
+  return tile;
+}
+
+function isRound(tile: HTMLElement, view: Window): boolean {
+  const radius = view.getComputedStyle(tile).borderTopLeftRadius;
+  return radius.endsWith("%") ? parseFloat(radius) >= 35 : parseFloat(radius) >= tile.getBoundingClientRect().width * 0.35;
+}
+
+function placeBadge(tile: HTMLElement, badge: Badge, view: Window): void {
+  let node = tile.querySelector<HTMLElement>(`:scope > .${BADGE_CLASS}`);
+  if (!node) {
+    node = tile.ownerDocument.createElement("span");
+    node.className = BADGE_CLASS;
+    tile.appendChild(node);
+  }
+  const width = tile.getBoundingClientRect().width;
+  const small = width < 150;
+  const text = small ? badge.short : badge.label;
+  if (node.getAttribute("data-label") !== text) {
+    node.setAttribute("data-label", text);
+    node.innerHTML = `${GLYPH}<b></b>`;
+    node.querySelector("b")!.textContent = text;
+  }
+  if (node.getAttribute("data-state") !== badge.state) node.setAttribute("data-state", badge.state);
+  if (node.getAttribute("data-size") !== (small ? "s" : "m")) node.setAttribute("data-size", small ? "s" : "m");
+  const style = view.getComputedStyle(tile);
+  if (style.position === "static" && tile.getAttribute(HOST_ATTR) !== "relative") tile.setAttribute(HOST_ATTR, "relative");
+  else if (!tile.hasAttribute(HOST_ATTR)) tile.setAttribute(HOST_ATTR, "own");
+  // Keep the pill inside rounded corners, whatever radius the theme gives its tiles; on round tiles it sits at the bottom.
+  const radius = parseFloat(style.borderTopLeftRadius) || 0;
+  const round = isRound(tile, view);
+  if (round !== node.hasAttribute("data-round")) node.toggleAttribute("data-round", round);
+  const inset = `${Math.round(Math.max(6, Math.min(14, radius * 0.45 + 4)))}px`;
+  if (node.style.getPropertyValue("--pdc-up-inset") !== inset) node.style.setProperty("--pdc-up-inset", inset);
+}
+
+function clearBadge(tile: Element): void {
+  tile.querySelector(`:scope > .${BADGE_CLASS}`)?.remove();
+  tile.removeAttribute(HOST_ATTR);
+}
+
+/** Puts a pill on every tile showing a game's art, in Steam's library and in any theme that draws its own tiles. */
 export const CoverBadges: FC = () => {
   const map = useInstalls();
   useEffect(() => {
     const view = mainWindow();
     const doc = view?.document;
-    if (!doc?.body) return;
+    if (!view || !doc?.body) return;
     let style = doc.getElementById(STYLE_ID);
     if (!style) {
       style = doc.createElement("style");
       style.id = STYLE_ID;
-      style.textContent = COVER_CSS;
       doc.head.appendChild(style);
     }
+    style.textContent = COVER_CSS;
     let pending = 0;
     const mark = () => {
       pending = 0;
+      const limit = view.innerWidth * 0.6;
+      const marked = new Set<Element>();
       for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src*='/assets/'], img[src*='/customimages/'], img[src*='/apps/']"))) {
-        const holder = img.parentElement;
-        if (!holder || !COVER_FILE.test(img.src)) continue;
-        const badge = map[img.src.match(COVER_IMAGE)?.[1] ?? ""];
-        if (badge) {
-          if (holder.getAttribute("data-pdc-up") !== badge.label) holder.setAttribute("data-pdc-up", badge.label);
-          if (holder.getAttribute("data-pdc-up-state") !== badge.state) holder.setAttribute("data-pdc-up-state", badge.state);
-        } else if (holder.hasAttribute("data-pdc-up")) {
-          holder.removeAttribute("data-pdc-up");
-          holder.removeAttribute("data-pdc-up-state");
-        }
+        const appid = appidOf(img.src);
+        if (!appid || NOT_TILE.test(img.src)) continue;
+        const box = img.getBoundingClientRect();
+        if (box.width < 56 || box.height < 40 || box.width > limit) continue;
+        const tile = tileOf(img);
+        if (!tile || marked.has(tile)) continue;
+        if (ICON.test(img.src) && !isRound(tile, view)) continue;
+        const badge = map[appid];
+        if (!badge) continue;
+        marked.add(tile);
+        placeBadge(tile, badge, view);
+      }
+      for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
+        if (node.parentElement && !marked.has(node.parentElement)) clearBadge(node.parentElement);
       }
     };
     const schedule = () => {
-      if (!pending) pending = view!.setTimeout(mark, 200);
+      if (!pending) pending = view.setTimeout(mark, 180);
     };
     mark();
     const Observer = (view as Window & typeof globalThis).MutationObserver;
-    const observer = new Observer(schedule);
+    const ours = (node: Node) => (node as Element).classList?.contains(BADGE_CLASS) ?? false;
+    const observer = new Observer((records: MutationRecord[]) => {
+      // Our own pills going in or out must not wake the observer again.
+      const foreign = records.some((r) => r.type === "attributes"
+        || [...Array.from(r.addedNodes), ...Array.from(r.removedNodes)].some((n) => !ours(n)));
+      if (foreign) schedule();
+    });
     observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+    const settle = view.setInterval(mark, 1500);
     return () => {
       observer.disconnect();
-      if (pending) view!.clearTimeout(pending);
-      for (const node of Array.from(doc.querySelectorAll("[data-pdc-up]"))) {
-        node.removeAttribute("data-pdc-up");
-        node.removeAttribute("data-pdc-up-state");
+      view.clearInterval(settle);
+      if (pending) view.clearTimeout(pending);
+      for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
+        if (node.parentElement) clearBadge(node.parentElement);
       }
     };
   }, [map]);
@@ -159,6 +249,7 @@ export const InGameBadge: FC = () => {
   const { t } = useI18n();
   const map = useInstalls();
   const running = useRunningGame();
+  const gameInFront = useGameInFront();
   const [mode, setMode] = useState(readInGameMode);
   const [inSection, setInSection] = useState(sectionOpen);
   const [ghostShot, setGhostShot] = useState(ghost);
@@ -218,7 +309,7 @@ export const InGameBadge: FC = () => {
   }, [running?.liveAppid, badge?.build]);
 
   const sectionShown = inSection && !!surface?.visible;
-  const visible = active && (sectionShown || mode === "always" || (mode === "start" && startWindow));
+  const visible = active && (sectionShown || (gameInFront && (mode === "always" || (mode === "start" && startWindow))));
   if (!host) return null;
   const ghostShown = !!ghostShot && !!running;
   return (
@@ -247,25 +338,27 @@ export const InGameBadge: FC = () => {
       {badge && createPortal(
         <div
           style={{
-            position: "fixed", top: 18, left: 18, zIndex: 2147483001, pointerEvents: "none",
-            display: "flex", alignItems: "center", gap: 8, padding: "7px 14px 7px 10px", borderRadius: 999,
-            background: "rgba(10, 12, 18, .72)", color: "#fff",
-            boxShadow: "inset 0 0 0 1px rgba(255,255,255,.16), 0 6px 20px rgba(0,0,0,.4)",
-            font: "700 13px/16px 'Motiva Sans', Arial, sans-serif",
-            opacity: visible ? 1 : 0, transform: visible ? "translateY(0) scale(1)" : "translateY(-8px) scale(.96)",
+            // Top centre: Steam's performance overlay owns the top-left corner and the Quick Access Menu the right.
+            // Opaque on purpose: over a running game the translucent fill showed as bare text on a Steam Deck.
+            position: "fixed", top: 14, left: "50%", zIndex: 2147483001, pointerEvents: "none",
+            display: "flex", alignItems: "center", gap: 10, padding: "6px 14px 6px 6px", borderRadius: 16,
+            background: "linear-gradient(180deg, #1e222c, #11141b)", color: "#f4f7fb",
+            boxShadow: "inset 0 0 0 1px rgba(111,227,161,.42), 0 8px 24px rgba(0,0,0,.45)",
+            font: "600 13px/16px 'Motiva Sans', 'Noto Sans', Arial, sans-serif", letterSpacing: 0.15,
+            opacity: visible ? 1 : 0, transform: visible ? "translate(-50%, 0) scale(1)" : "translate(-50%, -8px) scale(.96)",
             transition: "opacity 320ms ease, transform 420ms cubic-bezier(.2,.8,.2,1)",
           }}
         >
           <span style={{
-            display: "inline-flex", width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center",
-            background: badge.state === "active" ? "rgba(126,224,160,.25)" : "rgba(255,255,255,.12)",
+            display: "inline-flex", width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center", flex: "none",
+            color: "#6fe3a1", background: "#1d3a2c",
           }}>
-            <LuScaling size={13} />
+            <LuScaling size={16} />
           </span>
-          <span style={{ display: "flex", flexDirection: "column" }}>
-            {badge.label}
+          <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "#f4f7fb" }}>{badge.label}</span>
             {resolution && resolution[0] < resolution[1] && (
-              <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.75 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(244,247,251,.68)", fontVariantNumeric: "tabular-nums" }}>
                 {t("up.resolution", { render: resolution[0], output: resolution[1] })}
               </span>
             )}

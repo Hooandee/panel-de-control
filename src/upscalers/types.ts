@@ -41,7 +41,7 @@ export interface UpscalersOverview {
   preferred: string;
   builds: BuildInfo[];
   cached: string[];
-  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus }>;
+  installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice> }>;
   job: UpscalerJob | null;
   helixsr?: { downloaded: boolean };
 }
@@ -103,7 +103,7 @@ export interface GameDetail {
   history: HistoryEntry[];
   recipe: boolean;
   foreign_backup?: { at: number } | null;
-  recipe_info?: { needs: ("reframework" | "nvngx_dlss" | "anti_cheat_off")[]; broken: boolean; proxy: string | null; args: string[] } | null;
+  recipe_info?: RecipeInfo | null;
   fg_note?: "reflexOff" | null;
   launcher?: "heroic" | "lutris" | null;
   shortcut: boolean;
@@ -129,4 +129,18 @@ export interface IniKey {
 export interface IniSection {
   name: string;
   keys: IniKey[];
+}
+
+export interface RecipeInfo {
+  needs: ("reframework" | "nvngx_dlss" | "anti_cheat_off" | "luma" | "mod")[];
+  broken: boolean;
+  proxy: string | null;
+  args: string[];
+  status?: "works" | "broken" | "partial" | null;
+  inputs?: string[];
+  linux?: boolean;
+  optipatcher?: boolean;
+  page?: string | null;
+  settings?: Record<string, string>;
+  suggestions?: Record<string, string>;
 }

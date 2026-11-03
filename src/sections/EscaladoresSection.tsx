@@ -8,6 +8,7 @@ import { useI18n } from "../i18n";
 import { listInstalledGames, type GameEntry } from "../launch/steamApi";
 import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/deepLink";
 import { theme } from "../theme";
+import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Label, SegmentRow } from "../upscalers/parts";
@@ -82,6 +83,7 @@ export const EscaladoresSection: FC = () => {
                 onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
                 options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
               />
+              <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
               <Label>{t("up.games")}</Label>
             </>
           )}

@@ -114,6 +114,7 @@ class UpscalerService:
                     "build": install.get("build"),
                     "proxy": install.get("proxy"),
                     "status": self._status(install, entry),
+                    "options": install.get("options") or {},
                 }
         return {
             "gpu": self.gpu,
@@ -179,15 +180,23 @@ class UpscalerService:
         return entry["identity"]
 
     def _recipe(self, appid: str, identity: dict | None, installed: games.Installed | None = None):
-        steam_appid = identity.get("steam_appid") if identity else None
-        recipe = recipes.recipe_for(str(steam_appid)) if steam_appid else recipes.recipe_for(appid)
-        if recipe is None and installed is not None:
+        steam_appid = str(identity.get("steam_appid") or appid) if identity else str(appid)
+        live = None
+        if installed is not None:
             found = self.wiki.lookup(identity.get("name") if identity else None, installed.name)
-            recipe = recipes.from_facts(str(appid), found, "optiscaler-wiki@live") if found else None
+            if found:
+                live = recipes.from_facts(steam_appid, found, "optiscaler-wiki@live", self.wiki.page_facts(found.get("page")))
+        recipe = recipes.recipe_for(steam_appid, live)
         return recipes.with_engine(recipe, appid, installed.root) if installed else recipe
 
-    def refresh_wiki(self) -> dict:
-        return self.wiki.refresh()
+    def refresh_wiki(self, appid: str | None = None) -> dict:
+        result = self.wiki.refresh()
+        if appid:
+            installed = self._find(str(appid))
+            recipe = self._recipe(str(appid), self._identity(installed, self._game_state(str(appid))), installed) if installed else None
+            page = self.wiki.refresh_page(recipe.page if recipe else None)
+            result = {"updated": result["updated"] or page["updated"], "fresh": result["fresh"] and page["fresh"]}
+        return result
 
     def search_games(self, term: str) -> list[dict]:
         return self.search(identify.clean_name(term) or term)[:8]
@@ -374,15 +383,18 @@ class UpscalerService:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
 
         fg_plan = _fg_plan(self.gpu, analysis, recipe, archive_asset.generation, choice.get("fg_route"))
-        overrides = {
+        wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
+        panel = {
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
         }
-        managed = sorted(overrides)
-        # Hand edits from the advanced editor survive a repair or a new version.
-        overrides.update({k: v for k, v in edited.items() if k not in overrides})
+        managed = sorted(panel)
+        # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
+        # and hand edits from the advanced editor survive a repair or a new version.
+        overrides = {**{k: v for k, v in wiki_ini.items() if k not in panel}, **panel}
+        overrides.update({k: v for k, v in edited.items() if k not in panel})
         manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
 
         now = time.time()
@@ -691,6 +703,9 @@ class UpscalerService:
         if not value or len(value) > 200 or any(c in value for c in "\r\n[]"):
             raise UpscalerError("ini_value")
         text = path.read_text(encoding="utf-8", errors="replace")
+        if "." not in str(dotted):
+            # A bare `Key` as the OptiScaler wiki writes it; only taken when the installed INI has exactly one.
+            dotted = next(iter(wiki.resolve_settings(text, {str(dotted): value})), str(dotted))
         section, _, key = str(dotted).partition(".")
         entry = next((k for s in ini.schema(text) if s["name"] == section for k in s["keys"] if k["key"] == key), None)
         if entry is None:
@@ -978,7 +993,9 @@ def _recipe_proxy(recipe) -> str | None:
 def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
-    return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args)}
+    return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
+            "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
+            "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions)}
 
 
 def _is_helix(install: dict | None) -> bool:

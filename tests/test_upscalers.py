@@ -53,7 +53,7 @@ def fake_catalog(monkeypatch, tmp_path):
     state = tmp_path / "state"
     unpacked = state / "cache" / archive.sha256 / "unpacked"
     _write(unpacked / "OptiScaler.dll", b"injector")
-    _write(unpacked / "OptiScaler.ini", "[FSR]\nFsr4Update=auto\n[Log]\nLogToFile=auto\n")
+    _write(unpacked / "OptiScaler.ini", "[FSR]\nFsr4Update=auto\n[Log]\nLogToFile=auto\n[Spoofing]\n; true or false - Default (auto) is true\nDxgi=auto\n")
     _write(unpacked / "amd_fidelityfx_upscaler_dx12.dll", b"sdk")
     _write(unpacked / "D3D12_Optiscaler/D3D12Core.dll", b"core")
     _write(unpacked / "setup_linux.sh", b"junk")
@@ -847,8 +847,9 @@ def test_wiki_recipes_load_and_hand_written_ones_win():
     assert data["source"].startswith("optiscaler-wiki@")
     for appid, entry in data["recipes"].items():
         assert appid.isdecimal()
-        assert set(entry) <= {"name", "args", "proxy", "needs", "optipatcher", "status"}
-        assert set(entry.get("needs", [])) <= {"reframework", "nvngx_dlss", "anti_cheat_off"}
+        assert set(entry) <= {"name", "args", "proxy", "needs", "optipatcher", "status", "inputs", "page", "page_facts"}
+        assert set(entry.get("needs", [])) <= set(recipes.NEEDS)
+    assert len(data["recipes"]) > 500
     assert recipes.recipe_for("292030").exe == "bin/x64_dx12/witcher3.exe"
     wild_hearts = recipes.recipe_for("1938010")
     assert wild_hearts.proxy == "winmm.dll" and wild_hearts.source.startswith("optiscaler-wiki@")
@@ -861,7 +862,8 @@ def test_recipe_proxy_and_args_apply_unless_the_user_picked(steam, fake_catalog,
     service = _service(steam, fake_catalog, proc)
     result = service.install(APPID, {"build": "fsr-test"})
     assert result["overrides"] == ["winmm=n,b"] and result["args"] == ["-dx12"]
-    assert service.game(APPID)["recipe_info"] == {"needs": [], "broken": False, "proxy": "winmm.dll", "args": ["-dx12"]}
+    info = service.game(APPID)["recipe_info"]
+    assert {k: info[k] for k in ("needs", "broken", "proxy", "args")} == {"needs": [], "broken": False, "proxy": "winmm.dll", "args": ["-dx12"]}
     result = service.install(APPID, {"build": "fsr-test", "proxy": "version.dll"})
     assert result["overrides"] == ["version=n,b"]
 
@@ -1210,3 +1212,37 @@ def test_no_quality_leaves_the_games_own_scaling_mode_alone():
     forced = _option_overrides({"quality": "ultra"})
     assert forced["QualityOverrides.QualityRatioOverrideEnabled"] == "true"
     assert forced["QualityOverrides.QualityRatioBalanced"] == "3.00"
+
+
+def test_wiki_page_settings_apply_but_panel_keys_and_hand_edits_win(steam, fake_catalog, proc, monkeypatch):
+    recipe = recipes.Recipe(APPID, status="works", wiki_settings={"Dxgi": "false", "NoSuchKey": "1"},
+                            wiki_suggestions={"HUDFix": "true"})
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipe)
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    target = Path(service.game(APPID)["install"]["target"])
+    text = (target / "OptiScaler.ini").read_text()
+    assert ini.read(text, "Spoofing.Dxgi") == "false"
+    assert "NoSuchKey" not in text
+    assert "Spoofing.Dxgi" not in service.game(APPID)["install"]["managed"]
+    service.set_ini(APPID, "Dxgi", "true")
+    service.install(APPID, {"build": "fsr-test"})
+    assert ini.read((target / "OptiScaler.ini").read_text(), "Spoofing.Dxgi") == "true"
+    assert service.game(APPID)["recipe_info"]["suggestions"] == {"HUDFix": "true"}
+
+
+def test_appimage_shortcut_on_the_desktop_is_a_linux_game_not_the_desktop_folder(steam, fake_catalog, proc):
+    home, _ = steam
+    desktop = home / "Desktop"
+    _write(desktop / "HelixSR/amd_fidelityfx_upscaler_dx12.dll", b"x")
+    _write(desktop / "HelixSR/setup/tool.exe", b"MZ" + b"\0" * 64)
+    app = _write(desktop / "Uncharted-x86_64.appimage", b"\x7fELF")
+    shortcut_id = 2163226583
+    _write(home / ".local/share/Steam/userdata/123/config/shortcuts.vdf", _shortcuts_vdf([
+        {"appid": shortcut_id, "name": "Uncharted", "exe": f'"{app}"', "start": f'"{desktop}"'},
+    ]))
+    service = _service(steam, fake_catalog, proc)
+    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": []}
+    with pytest.raises(UpscalerError):
+        service.install(str(shortcut_id), {"build": "fsr-test"})
+    assert not (desktop / "HelixSR/setup/dxgi.dll").exists()

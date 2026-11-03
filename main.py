@@ -1357,8 +1357,8 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "configure", appid=str(appid), **result.get("options", {}))
         return result
 
-    async def refresh_upscaler_wiki(self) -> dict:
-        result = await self._upscalers_call("refresh_wiki")
+    async def refresh_upscaler_wiki(self, appid: str | None = None) -> dict:
+        result = await self._upscalers_call("refresh_wiki", str(appid) if appid else None)
         if result.get("updated") or not result.get("fresh"):
             _upscalers_journal("INFO", "wiki_refresh", **result)
         return result
