@@ -614,7 +614,8 @@ def _option_overrides(choice: dict, reset: bool = False) -> dict[str, str]:
     ratio = catalog.QUALITY_RATIOS.get(options["quality"] or "")
     if ratio is not None:
         overrides["QualityOverrides.QualityRatioOverrideEnabled"] = "true"
-        for mode in ("UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance"):
+        # DLAA is the game's native-AA mode: without it the chosen quality never applies there.
+        for mode in ("DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance"):
             overrides[f"QualityOverrides.QualityRatio{mode}"] = f"{ratio:.2f}"
     elif reset:
         overrides["QualityOverrides.QualityRatioOverrideEnabled"] = "false"

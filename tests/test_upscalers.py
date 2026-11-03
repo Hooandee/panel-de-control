@@ -123,6 +123,7 @@ def test_install_backs_up_then_uninstall_restores_exactly(steam, fake_catalog, p
     assert ini.read(text, "FSR.Fsr4Update") == "true"
     assert ini.read(text, "Log.LogToFile") == "true"
     assert ini.read(text, "QualityOverrides.QualityRatioQuality") == "1.70"
+    assert ini.read(text, "QualityOverrides.QualityRatioDLAA") == "1.70"
     assert ini.read(text, "Sharpness.Sharpness") == "0.30"
     assert service.overview()["installs"][APPID]["status"] == "pending"
 
