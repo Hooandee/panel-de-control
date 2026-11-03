@@ -313,6 +313,8 @@ export const de: Record<string, string> = {
   "up.title": "Upscaler",
   "up.live.fps": "FPS jetzt",
   "up.live.menu": "OptiScaler öffnen",
+  "up.live.fps.counter": "OptiScaler-Zähler",
+  "up.live.fps.style": "Zähler wechseln",
   "up.live.pause": "Pausieren",
   "up.live.resume": "Fortsetzen",
   "up.live.generating": "Bilder werden generiert",

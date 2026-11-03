@@ -313,6 +313,8 @@ export const ptBR: Record<string, string> = {
   "up.title": "Upscalers",
   "up.live.fps": "FPS agora",
   "up.live.menu": "Abrir OptiScaler",
+  "up.live.fps.counter": "Contador do OptiScaler",
+  "up.live.fps.style": "Trocar contador",
   "up.live.pause": "Pausar",
   "up.live.resume": "Retomar",
   "up.live.generating": "Gerando quadros",

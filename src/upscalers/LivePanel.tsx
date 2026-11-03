@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FC } from "react";
 
-import { getUpscalerLive, pressUpscalerKey } from "../api";
+import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { ActionButton, Row } from "./parts";
@@ -12,7 +12,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
   const { t } = useI18n();
   const [fps, setFps] = useState<number | null>(null);
   const [generating, setGenerating] = useState<boolean | null>(null);
-  const [pressing, setPressing] = useState<"menu" | "fg" | null>(null);
+  const [pressing, setPressing] = useState<UpscalerKey | null>(null);
   const [failed, setFailed] = useState(false);
 
   const reported = useRef(false);
@@ -39,7 +39,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
     };
   }, [appid]);
 
-  const press = async (action: "menu" | "fg") => {
+  const press = async (action: UpscalerKey) => {
     setPressing(action);
     setFailed(false);
     try {
@@ -76,6 +76,12 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
           />
         )}
       </Row>
+      {menu && (
+        <Row>
+          <ActionButton label={t("up.live.fps.counter")} onPress={() => press("fps")} busy={pressing === "fps"} disabled={pressing !== null} />
+          <ActionButton label={t("up.live.fps.style")} onPress={() => press("fps_style")} busy={pressing === "fps_style"} disabled={pressing !== null} />
+        </Row>
+      )}
       {failed && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("up.live.failed")}</span>}
     </div>
   );

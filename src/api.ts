@@ -1371,7 +1371,8 @@ export interface LsfgStatus { installed: boolean; foreign: boolean; lossless: bo
 export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
 export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
 export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
-export const pressUpscalerKey = callable<[appid: string, action: "menu" | "fg"], { pressed: string }>("press_upscaler_key");
+export type UpscalerKey = "menu" | "fg" | "fps" | "fps_style";
+export const pressUpscalerKey = callable<[appid: string, action: UpscalerKey], { pressed: string }>("press_upscaler_key");
 export const captureUpscalerFrame = callable<[appid: string], import("./upscalers/CompareView").Shot>("capture_upscaler_frame");
 export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
 export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
