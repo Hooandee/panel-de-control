@@ -232,7 +232,7 @@ export const GameView: FC<{
           {install?.options.fg === "on" && !facts?.fg && facts?.upscaler && detail.fg_plan?.source === "game" && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{gameFgHint}</span>
           )}
-          {render && output && (
+          {render && output && render < output && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
           )}
           {!install && preferredBuild && !detail.native && (

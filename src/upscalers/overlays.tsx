@@ -264,7 +264,7 @@ export const InGameBadge: FC = () => {
           </span>
           <span style={{ display: "flex", flexDirection: "column" }}>
             {badge.label}
-            {resolution && (
+            {resolution && resolution[0] < resolution[1] && (
               <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.75 }}>
                 {t("up.resolution", { render: resolution[0], output: resolution[1] })}
               </span>
