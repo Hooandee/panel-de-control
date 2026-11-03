@@ -13,6 +13,7 @@ export interface BuildInfo {
   channel?: "stable" | "beta";
   supported: boolean;
   download_bytes: number;
+  models?: string[];
 }
 
 export interface UpscalerJob {
@@ -55,6 +56,7 @@ export interface UpscalerChoice {
   sharpness: Sharpness | null;
   fg?: "on" | "off";
   fg_route?: FgRoute | null;
+  model?: string | null;
   confirm_anti_cheat?: boolean;
 }
 
@@ -86,7 +88,7 @@ export interface GameDetail {
     proxy: string;
     exe: string | null;
     installed_at: number;
-    options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null };
+    options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null; model?: string | null };
     status: UpscalerStatus;
   } | null;
   history: HistoryEntry[];

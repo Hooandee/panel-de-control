@@ -141,7 +141,8 @@ export const GameView: FC<{
   const sameBuild = install?.build === choice.build;
   const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness
     || (install.options.fg ?? "off") !== (choice.fg ?? "off")
-    || (choice.fg === "on" && (install.options.fg_route ?? null) !== (choice.fg_route ?? null));
+    || (choice.fg === "on" && (install.options.fg_route ?? null) !== (choice.fg_route ?? null))
+    || (install.options.model ?? null) !== (choice.model ?? null);
   const routes = detail?.fg_plan?.routes ?? {};
   const bothRoutes = "game" in routes && "optiscaler" in routes;
   const route: FgRoute = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
@@ -150,6 +151,7 @@ export const GameView: FC<{
     t(gameFgInput === "xefg" ? "up.fg.enableInGame.xess" : gameFgInput === "fsrfg" ? "up.fg.enableInGame.fsr" : "up.fg.enableInGame.dlss"),
     detail?.fg_note === "reflexOff" ? t("up.fg.note.reflexOff") : null,
   ].filter(Boolean).join(". ");
+  const selectedModels = builds.find((b) => b.id === choice.build)?.models;
   const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
 
   const apply = async () => {
@@ -338,7 +340,7 @@ export const GameView: FC<{
               <SegmentRow
                 vertical
                 value={choice.build}
-                onChange={(build) => setChoice({ ...choice, build })}
+                onChange={(build) => setChoice({ ...choice, build, model: null })}
                 options={usable.map((build: BuildInfo) => ({
                   value: build.id,
                   label: buildLabel(build),
@@ -350,6 +352,17 @@ export const GameView: FC<{
                   ),
                 }))}
               />
+              {(selectedModels?.length ?? 0) > 1 && (
+                <>
+                  <Label>{t("up.section.model")}</Label>
+                  <SegmentRow
+                    value={choice.model ?? selectedModels![0]}
+                    onChange={(model) => setChoice({ ...choice, model })}
+                    options={selectedModels!.map((m) => ({ value: m, label: t(`up.model.${m}`) }))}
+                  />
+                  <Note>{t("up.model.help")}</Note>
+                </>
+              )}
               {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 

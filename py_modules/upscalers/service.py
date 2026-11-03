@@ -335,6 +335,7 @@ class UpscalerService:
         fg_plan = _fg_plan(self.gpu, analysis, recipe, archive_asset.generation, choice.get("fg_route"))
         overrides = {
             **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+            **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
         }
         manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
@@ -413,7 +414,8 @@ class UpscalerService:
             plan = _fg_plan(self.gpu, analysis, recipe, _generation(install), choice.get("fg_route"))
         install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
         fg = catalog.fg_overrides(install.get("fg_plan"), choice.get("fg") == "on")
-        path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **fg}), encoding="utf-8")
+        model = catalog.model_overrides(catalog.BUILDS.get(install.get("build", "")), choice.get("model"))
+        path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **model, **fg}), encoding="utf-8")
         install["options"] = _clean_options(choice)
         self._save()
         return {"options": install["options"]}
@@ -602,6 +604,7 @@ def _clean_options(choice: dict) -> dict:
         "sharpness": sharpness if sharpness in catalog.SHARPNESS else None,
         "fg": "on" if choice.get("fg") == "on" else "off",
         "fg_route": choice.get("fg_route") if choice.get("fg_route") in ("game", "optiscaler") else None,
+        "model": choice.get("model") if isinstance(choice.get("model"), str) and choice.get("model") else None,
     }
 
 

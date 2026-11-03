@@ -39,6 +39,8 @@ class Build:
     archive: str = OPTISCALER_ARCHIVE
     channel: str = "stable"
     extra_dir: str = ""
+    # (model id, INI overrides); the first one is the default.
+    models: tuple[tuple[str, dict[str, str]], ...] = ()
 
 
 _BLEEDING = "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download"
@@ -132,6 +134,7 @@ BUILDS: dict[str, Build] = {
             "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna3", "rdna35"), image=3, cost=2,
             assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
             ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "2"},
+            models=(("full", {"FSR.Fsr4GpuSupport": "2"}), ("lite", {"FSR.Fsr4GpuSupport": "4"})),
         ),
         # Valve's RDNA2 provider pair needs the 0.10 injector, which knows how to load it.
         Build(
@@ -203,6 +206,12 @@ def build_assets(build: Build) -> list[Asset]:
     return [ASSETS[asset_id] for asset_id in dict.fromkeys(ids)]
 
 
+def model_overrides(build: Build | None, model: str | None) -> dict[str, str]:
+    if not build or not build.models:
+        return {}
+    return dict(next((ini for name, ini in build.models if name == model), build.models[0][1]))
+
+
 def describe(gpu: str) -> list[dict]:
     return [
         {
@@ -215,6 +224,7 @@ def describe(gpu: str) -> list[dict]:
             "channel": build.channel,
             "supported": build_supported(build, gpu),
             "download_bytes": sum(asset.size for asset in build_assets(build)) if build.available else 0,
+            "models": [model for model, _ in build.models],
         }
         for build in BUILDS.values()
     ]
