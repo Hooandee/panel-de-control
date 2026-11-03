@@ -1059,3 +1059,15 @@ def test_a_game_without_a_bundled_recipe_uses_the_live_wiki_by_name(steam, fake_
     service.wiki._rows = {"witcher": {"args": ["-dx12"], "needs": ["anti_cheat_off"]}}
     detail = service.game(APPID)
     assert detail["recipe_info"]["needs"] == ["anti_cheat_off"] and detail["recipe_info"]["args"] == ["-dx12"]
+
+
+def test_unreal_plugin_libraries_deep_in_the_tree_are_found(tmp_path):
+    root = tmp_path / "game"
+    _write(root / "FSD/Binaries/Win64/FSD-Win64-Shipping.exe", b"MZ" + b"\0" * 4096 + b"ffxFsr2ContextCreate\0")
+    _write(root / "FSD/Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll")
+    _write(root / "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64/sl.interposer.dll")
+    result = games.analyze(root)
+    assert result["inputs"]["dlss"] == ["FSD/Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll"]
+    assert "streamline" in result["inputs"]
+    assert result["inputs"]["fsr2"] == ["FSD/Binaries/Win64/FSD-Win64-Shipping.exe"]
+    assert games.shipped_upscalers(root) == ["DLSS", "FSR 2"]

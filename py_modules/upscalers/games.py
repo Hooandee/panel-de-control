@@ -1,6 +1,7 @@
 """Where an installed game lives, which executable creates its device and what it ships."""
 
 import json
+import mmap
 import os
 import re
 from dataclasses import dataclass
@@ -12,7 +13,8 @@ from . import launchers, pe
 
 STATE_FULLY_INSTALLED = 4
 STATE_UPDATE_RUNNING = 256 | 1024
-MAX_DEPTH = 6
+# Unreal keeps plugin libraries seven or eight folders down (Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64).
+MAX_DEPTH = 9
 MAX_PE_SCANS = 12
 MANIFEST_DIR = ".pdc-upscaler"
 
@@ -238,6 +240,7 @@ SHIPPED_NAMES = {"dlss": "DLSS", "fsr31": "FSR 3.1", "fsr2": "FSR 2", "xess": "X
 def shipped_upscalers(root: Path) -> list[str]:
     """The DLSS, FSR and XeSS libraries the game folder carries, by name, in a fixed order."""
     found = set()
+    largest: tuple[int, Path] | None = None
     for current, files in _walk(root):
         ours = _installed_by_panel(current)
         for file in files:
@@ -245,6 +248,15 @@ def shipped_upscalers(root: Path) -> list[str]:
             for kind in SHIPPED_NAMES:
                 if lower in INPUTS[kind] and lower not in ours:
                     found.add(kind)
+            if lower.endswith(".exe") and not _SKIP_EXE.search(lower):
+                try:
+                    size = (current / file).stat().st_size
+                except OSError:
+                    continue
+                if largest is None or size > largest[0]:
+                    largest = (size, current / file)
+    if largest:
+        found |= embedded_upscalers(largest[1])
     return [SHIPPED_NAMES[kind] for kind in SHIPPED_NAMES if kind in found]
 
 
@@ -308,6 +320,10 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         }
 
     target = (root / selected["exe"]).parent if selected else None
+    if selected:
+        for kind in embedded_upscalers(root / selected["exe"]):
+            if not inputs[kind]:
+                inputs[kind].append(selected["exe"])
     return {
         "candidates": candidates[:6],
         "exe": selected["exe"] if selected else None,
@@ -342,6 +358,18 @@ def running_under(root: Path, proc: str = "/proc") -> bool:
         if unix in cmdline or wine in cmdline:
             return True
     return False
+
+
+# Upscalers compiled into the game's own executable leave their entry points as strings.
+EMBEDDED = {"fsr2": (b"ffxFsr2ContextCreate",), "fsr31": (b"ffxFsr3UpscalerContextCreate",), "xess": (b"xessD3D12CreateContext",)}
+
+
+def embedded_upscalers(exe: Path) -> set[str]:
+    try:
+        with open(exe, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            return {kind for kind, needles in EMBEDDED.items() if any(data.find(n) != -1 for n in needles)}
+    except (OSError, ValueError):
+        return set()
 
 
 def is_optiscaler(path: Path) -> bool:
