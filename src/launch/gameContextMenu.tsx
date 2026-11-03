@@ -13,6 +13,7 @@ import { FC } from "react";
 
 import { openLaunchEditorModal } from "../components/LaunchEditorModal";
 import { GameEntry, overviewToEntry } from "./steamApi";
+import { openUpscalersFor } from "../upscalers/deepLink";
 import { replaceMenuItem } from "./menuItems";
 import { translate } from "../i18n";
 
@@ -73,6 +74,7 @@ const patchMenuItems = (menuItems: unknown) => {
       if (foundApp) appid = foundApp.app.appid;
     }
     spliceLaunchItem(menuItems, appid);
+    if (appid) replaceMenuItem<any>(menuItems, "pdc-upscalers", <MenuItem key="pdc-upscalers" onSelected={() => openUpscalersFor(appid)}>{translate("nav.upscalers")}</MenuItem>, () => false);
     if (appid && artworkThemeActive()) replaceMenuItem<any>(menuItems, "pdc-duo-artwork", <MenuItem key="pdc-duo-artwork" onSelected={() => artworkAccess.edit(appid)}>{translate("artwork.contextMenu")}</MenuItem>, () => false);
   } catch {
     /* Steam changed the internal menu shape. */

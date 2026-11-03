@@ -6,6 +6,7 @@ import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
 import { listInstalledGames, type GameEntry } from "../launch/steamApi";
+import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/deepLink";
 import { theme } from "../theme";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
@@ -39,6 +40,16 @@ export const EscaladoresSection: FC = () => {
     return () => setUpscalersSectionOpen(false);
   }, []);
   const closeGame = useCallback(() => setSelected(null), []);
+
+  useEffect(() => {
+    const open = () => {
+      const appid = takePendingUpscalersGame();
+      const game = appid === null ? null : listInstalledGames().find((g) => g.liveAppid === appid);
+      if (game) setSelected(game);
+    };
+    open();
+    return onUpscalersGameRequest(open);
+  }, []);
 
   const games = useMemo(() => {
     const installs = overview?.installs ?? {};
