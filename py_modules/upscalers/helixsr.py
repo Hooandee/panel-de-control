@@ -29,6 +29,9 @@ MAX_LOG_BYTES = 2 * 1024 * 1024
 _SAY = re.compile(r"^\[helixsr-setup\]\s+(.+)$")
 _DISPATCH = re.compile(r"render (\d{2,5})x(\d{2,5}) -> (\d{2,5})x(\d{2,5})")
 _FFX = re.compile(r"FFX upscaler: (HLX [\w ]+?) \(")
+# HLX FSR 4 logs its context once, with the largest render size the game may send, not one line per frame.
+_HLX_FSR = re.compile(r"HLX-FSR-4 own runtime active: .*?output (\d{2,5})x(\d{2,5}), max render (\d{2,5})x(\d{2,5})")
+HLX_FSR_LOG = "HLX_FSR.log"
 _NETWORK_OFF = re.compile(r"network (?:is )?not running|red border", re.I)
 
 
@@ -165,7 +168,8 @@ class HelixSR:
 def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> dict:
     """What HelixSR did: its own dispatch lines, and HelixSR Scaler's choice of upscaler."""
     facts: dict = {"present": False}
-    for path in [*logs, exe_folder / "OptiScaler.log"]:
+    paths = [*logs, *(log.with_name(HLX_FSR_LOG) for log in logs), exe_folder / "OptiScaler.log"]
+    for path in dict.fromkeys(paths):
         try:
             stat = path.stat()
             with open(path, "rb") as handle:
@@ -185,6 +189,12 @@ def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> 
                     "render": [int(match.group(1)), int(match.group(2))],
                     "output": [int(match.group(3)), int(match.group(4))],
                 }
+            elif match := _HLX_FSR.search(line):
+                facts["upscaler"] = "HLX FSR 4"
+                facts["resolution"] = {
+                    "render": [int(match.group(3)), int(match.group(4))],
+                    "output": [int(match.group(1)), int(match.group(2))],
+                }
             elif match := _FFX.search(line):
                 facts["upscaler"] = match.group(1).strip()
             elif _NETWORK_OFF.search(line):
@@ -195,6 +205,6 @@ def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> 
 def verdict(facts: dict) -> str:
     if not facts.get("present") or facts.get("stale"):
         return "not_run"
-    if facts.get("resolution") and not facts.get("network_off"):
+    if (facts.get("resolution") or facts.get("upscaler")) and not facts.get("network_off"):
         return "active"
     return "loaded"

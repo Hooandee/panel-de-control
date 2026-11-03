@@ -154,3 +154,14 @@ def test_log_older_than_the_install_proves_nothing(tmp_path):
     log = _write(tmp_path / "helixsr.log", "dispatch 1: render 640x360 -> 1280x720\n")
     facts = helixsr.read_log(tmp_path, [log], since=log.stat().st_mtime + 10)
     assert helixsr.verdict(facts) == "not_run"
+
+
+def test_hlx_fsr4_proves_itself_in_its_own_log(tmp_path):
+    _write(tmp_path / "HLX_FSR.log",
+           "[10:03:58.951000] [I] HLX-FSR-4 RADV: yes\n"
+           "[10:03:59.458000] [I] HLX-FSR-4 own runtime active: int8p-s-std-k01 (tier 9), output 1280x800, "
+           "max render 753x471, flags 0x19\n")
+    facts = helixsr.read_log(tmp_path, [tmp_path / "helixsr.log"])
+    assert facts["upscaler"] == "HLX FSR 4"
+    assert facts["resolution"] == {"render": [753, 471], "output": [1280, 800]}
+    assert helixsr.verdict(facts) == "active"
