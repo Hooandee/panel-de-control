@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
 OPTISCALER_BETA = "optiscaler-10-nightly"
+LSFG_ARCHIVE = "lsfg-vk-2.0.0"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,11 @@ _BLEEDING = "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases
 ASSETS: dict[str, Asset] = {
     asset.id: asset
     for asset in (
+        Asset(
+            LSFG_ARCHIVE, "lsfg-vk-2.0.0.tar.xz",
+            "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74", 561348,
+            ("https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",), archive=True,
+        ),
         Asset(
             OPTISCALER_ARCHIVE,
             "Optiscaler_0.9.4-final.20260718._MM.7z",

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, identify, ini, keys, launchers, logread, recipes
+from . import capture, catalog, diagnostics, games, identify, ini, keys, launchers, logread, lsfg, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -70,6 +70,7 @@ class UpscalerService:
         self.press = keys.press
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
+        self.lsfg = lsfg.Lsfg(home, Path(state_dir))
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -534,6 +535,32 @@ class UpscalerService:
         generating = bool(facts.get("fg")) and facts.get("fg_state", "true") == "true"
         return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": generating}
 
+    # ---- lsfg-vk -----------------------------------------------------------------------------
+    def lsfg_status(self) -> dict:
+        return self.lsfg.status()
+
+    def lsfg_install(self) -> dict:
+        asset = catalog.ASSETS[catalog.LSFG_ARCHIVE]
+        try:
+            unpacked = self.cache.ensure(asset, lambda _done: None, lambda: False)
+            return self.lsfg.install(unpacked, asset.id)
+        except AssetError as error:
+            raise UpscalerError(error.code) from None
+        except lsfg.LsfgError as error:
+            raise UpscalerError(error.code) from None
+
+    def lsfg_uninstall(self) -> dict:
+        return self.lsfg.uninstall()
+
+    def lsfg_game(self, appid: str, config: dict | None) -> dict:
+        installed = self._find(appid)
+        if installed is None:
+            raise UpscalerError("not_installed")
+        try:
+            return self.lsfg.set_game(appid, installed.name, config)
+        except lsfg.LsfgError as error:
+            raise UpscalerError(error.code) from None
+
     def press_key(self, appid: str, action: str) -> dict:
         """OptiScaler hotkeys for devices without a keyboard; only while the game runs."""
         install = self._game_state(appid).get("install")
@@ -579,6 +606,7 @@ class UpscalerService:
             "environment": diagnostics.environment(),
             "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
             "job": self.job(),
+            "lsfg": self.lsfg.status(),
             "games": [diagnostics.game_report(self.home, appid, entry) for appid, entry in touched[:12]],
         }
 

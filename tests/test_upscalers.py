@@ -660,3 +660,51 @@ def test_heroic_shortcut_installs_with_overrides_in_heroic(steam, fake_catalog, 
     removed = service.uninstall("3000000001")
     assert removed["overrides"] == [] and not (game / "dxgi.dll").exists()
     assert json.loads((base / "GamesConfig/Quail.json").read_text())["Quail"]["enviromentOptions"] == []
+
+
+# ---- lsfg-vk ----------------------------------------------------------------------------------
+
+from upscalers import lsfg
+
+
+def _lsfg_bundle(root):
+    for relative in lsfg.LAYER_FILES:
+        _write(root / relative, relative.encode())
+    _write(root / "bin/lsfg-vk-ui", b"ui")
+    return root
+
+
+def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
+    home, _ = steam
+    library = home / ".local/share/Steam"
+    _write(library / "steamapps/appmanifest_993090.acf", '"AppState"\n{\n "appid" "993090"\n}\n')
+    dll = _write(library / "steamapps/common/Lossless Scaling/lsfg-vk.dll", b"dll")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    status = tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    assert status["installed"] and status["lossless"] and status["dll"] == str(dll)
+    assert not (home / ".local/bin/lsfg-vk-ui").exists()
+    result = tool.set_game("123", "Game", {"multiplier": 3, "flow": "performance", "performance": True})
+    assert result["env"] == {"ENABLE_GAMESCOPE_WSI": "0"}
+    config = (home / lsfg.CONFIG).read_text()
+    import tomllib
+    parsed = tomllib.loads(config)
+    assert parsed["global"]["dll"] == str(dll)
+    assert parsed["profile"] == [{"name": "Game (123)", "active_in": ["123"], "multiplier": 3,
+                                  "flow_scale": 0.5, "performance_mode": True}]
+    assert tool.set_game("123", "Game", None)["env"] == {}
+    with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
+        tool.set_game("123", "Game", {"multiplier": 7})
+    tool.uninstall()
+    assert not (home / ".local" / lsfg.LAYER_FILES[0]).exists() and not (home / lsfg.CONFIG).exists()
+
+
+def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
+    home, _ = steam
+    _write(home / lsfg.CONFIG, "version = 2\n[global]\nallow_fp16 = true\n")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    assert tool.status()["foreign"]
+    with pytest.raises(lsfg.LsfgError, match="lsfg_foreign"):
+        tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    assert (home / lsfg.CONFIG).read_text().startswith("version = 2")
+    with pytest.raises(lsfg.LsfgError, match="lsfg_missing"):
+        tool.set_game("123", "Game", {"multiplier": 2})

@@ -94,3 +94,11 @@ export function revertLaunch(launch: string, overrides: string[], added: string[
   for (const arg of added) parsed = removeArg(parsed, arg);
   return serialize(parsed);
 }
+
+/** Launch options with each `env` key set (a string) or removed (null); null when unsafe to edit. */
+export function withEnv(launch: string, env: Record<string, string | null>): string | null {
+  let parsed = parse(launch);
+  if (parsed.malformed) return null;
+  for (const [name, value] of Object.entries(env)) parsed = setEnv(parsed, name, value);
+  return serialize(parsed);
+}

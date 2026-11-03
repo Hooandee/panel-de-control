@@ -1371,6 +1371,24 @@ class Plugin(AmbientRpc):
         fps = self._gamescope_perf.fps()
         return {**result, "fps": round(fps, 1) if fps is not None else None}
 
+    async def get_lsfg_status(self) -> dict:
+        return await self._upscalers_call("lsfg_status")
+
+    async def install_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_install")
+        _upscalers_journal("INFO", "lsfg_install", installed=result.get("installed"), dll=bool(result.get("dll")))
+        return result
+
+    async def uninstall_lsfg(self) -> dict:
+        result = await self._upscalers_call("lsfg_uninstall")
+        _upscalers_journal("INFO", "lsfg_uninstall")
+        return result
+
+    async def set_lsfg_game(self, appid: str, config: dict | None = None) -> dict:
+        result = await self._upscalers_call("lsfg_game", str(appid), config)
+        _upscalers_journal("INFO", "lsfg_game", appid=str(appid), profile=result.get("profile"))
+        return result
+
     async def press_upscaler_key(self, appid: str, action: str) -> dict:
         result = await self._upscalers_call("press_key", str(appid), str(action))
         _upscalers_journal("INFO", "key", appid=str(appid), action=str(action))

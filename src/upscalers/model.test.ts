@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLaunch, easyChoice, easyModeOf, renderHeight, revertLaunch, withOverride, withoutOverride } from "./model";
+import { applyLaunch, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -32,5 +32,15 @@ describe("upscaler model", () => {
     const applied = applyLaunch("%command% -dx12", ["dxgi=n,b", "dinput8=n,b"], ["--launcher-skip", "-dx12"]);
     expect(applied).toEqual({ value: 'WINEDLLOVERRIDES="dxgi,dinput8=n,b" %command% -dx12 --launcher-skip', added: ["--launcher-skip"] });
     expect(revertLaunch(applied!.value, ["dxgi=n,b", "dinput8=n,b"], applied!.added)).toBe("%command% -dx12");
+  });
+});
+
+describe("withEnv", () => {
+  it("adds and removes variables without touching the rest", () => {
+    const on = withEnv('WINEDLLOVERRIDES="dxgi=n,b" %command% -dx12', { ENABLE_GAMESCOPE_WSI: "0" });
+    expect(on).toContain("ENABLE_GAMESCOPE_WSI=0");
+    expect(on).toContain('WINEDLLOVERRIDES="dxgi=n,b"');
+    expect(on).toContain("-dx12");
+    expect(withEnv(on!, { ENABLE_GAMESCOPE_WSI: null })).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command% -dx12');
   });
 });

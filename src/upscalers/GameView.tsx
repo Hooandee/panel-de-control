@@ -22,6 +22,7 @@ import {
   revertLaunch,
 } from "./model";
 import { LivePanel } from "./LivePanel";
+import { LsfgCard } from "./LsfgCard";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
@@ -303,6 +304,7 @@ export const GameView: FC<{
       {detail && install && comparing && (
         <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
       )}
+      {detail?.native && <LsfgCard appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning} />}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
 
       {!detail && !loadError && (
@@ -406,6 +408,8 @@ export const GameView: FC<{
               <Note>{route === "game" ? `${t("up.fg.fromGame")}. ${gameFgHint}` : t(bothRoutes ? "up.fg.fromOptiChoice" : "up.fg.fromOpti")}</Note>
             </>
           )}
+
+          <LsfgCard appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning} />
 
           {detail.analysis.manual && detail.analysis.exe && (
             <Note>{t("up.detect.manual", { exe: detail.analysis.exe.split("/").pop() ?? detail.analysis.exe })}</Note>

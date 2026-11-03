@@ -1364,6 +1364,11 @@ export const recordUpscalerArgs = callable<[appid: string, args: string[]], { ad
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean; fps?: number | null }>("get_upscaler_live");
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4; flow: "quality" | "balanced" | "performance"; performance: boolean }
+export interface LsfgStatus { installed: boolean; foreign: boolean; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
+export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
+export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
 export const pressUpscalerKey = callable<[appid: string, action: "menu" | "fg"], { pressed: string }>("press_upscaler_key");
 export const captureUpscalerFrame = callable<[appid: string], import("./upscalers/CompareView").Shot>("capture_upscaler_frame");
 export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
