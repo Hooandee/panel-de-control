@@ -1194,3 +1194,11 @@ def test_hand_edits_survive_a_repair(steam, fake_catalog, proc):
     service.set_ini(APPID, "Menu.ShowFps", "true")
     service.install(APPID, {"build": "fsr-test"})
     assert ini.read((target / "OptiScaler.ini").read_text(), "Menu.ShowFps") == "true"
+
+
+def test_monster_hunter_wilds_turns_dxgi_spoofing_off_and_still_gets_reframework(tmp_path):
+    root = tmp_path / "MonsterHunterWilds"
+    _write(root / "re_chunk_000.pak")
+    recipe = recipes.with_engine(recipes.recipe_for("2246340"), "2246340", root)
+    assert recipe.ini == {"Spoofing.Dxgi": "false", "Menu.ShortcutKey": "0x24"}
+    assert recipe.files == {"dinput8.dll": "reframework-nightly"} and recipe.menu_key == "home"

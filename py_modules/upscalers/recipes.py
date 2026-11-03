@@ -42,6 +42,9 @@ RECIPES: dict[str, Recipe] = {
         Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
         # RE Engine exposes its upscaler to OptiScaler only through REFramework.
         Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
+        # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
+        # on top crashes it. REFramework comes from the RE Engine rule.
+        Recipe("2246340", ini={"Spoofing.Dxgi": "false"}, needs=("reframework",)),
     )
 }
 
