@@ -415,7 +415,7 @@ export const ptBR: Record<string, string> = {
   "up.empty": "Nenhum jogo instalado",
   "up.status.active": "O jogo ativou",
   "up.status.pending": "Jogue um pouco para verificar",
-  "up.status.loaded": "Ative nos gráficos do jogo",
+  "up.status.loaded": "Escolha DLSS, FSR ou XeSS nos gráficos do jogo, com uma qualidade fixa (não Auto)",
   "up.status.not_run": "Jogue um pouco para verificar",
   "up.status.broken": "Precisa de reparo",
   "up.status.none": "Sem upscaler",

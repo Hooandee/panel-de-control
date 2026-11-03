@@ -415,7 +415,7 @@ export const fr: Record<string, string> = {
   "up.empty": "Aucun jeu installé",
   "up.status.active": "Le jeu l'a activé",
   "up.status.pending": "Jouez un peu pour vérifier",
-  "up.status.loaded": "Activez-le dans les graphismes du jeu",
+  "up.status.loaded": "Choisissez DLSS, FSR ou XeSS dans les graphismes du jeu, avec une qualité fixe (pas Auto)",
   "up.status.not_run": "Jouez un peu pour vérifier",
   "up.status.broken": "À réparer",
   "up.status.none": "Aucun upscaler",
