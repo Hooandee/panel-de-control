@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, helixsr, identify, ini, keys, launchers, logread, lsfg, recipes
+from . import capture, catalog, diagnostics, games, helixsr, identify, ini, keys, launchers, logread, lsfg, recipes, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -79,6 +79,7 @@ class UpscalerService:
         self.cache = AssetCache(Path(state_dir) / "cache")
         self.lsfg = lsfg.Lsfg(home, Path(state_dir))
         self.helix = helixsr.HelixSR(home)
+        self.wiki = wiki.WikiCache(Path(state_dir))
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -177,10 +178,16 @@ class UpscalerService:
         self._save()
         return entry["identity"]
 
-    def _recipe(self, appid: str, identity: dict | None, root: Path | None = None):
+    def _recipe(self, appid: str, identity: dict | None, installed: games.Installed | None = None):
         steam_appid = identity.get("steam_appid") if identity else None
         recipe = recipes.recipe_for(str(steam_appid)) if steam_appid else recipes.recipe_for(appid)
-        return recipes.with_engine(recipe, appid, root) if root else recipe
+        if recipe is None and installed is not None:
+            found = self.wiki.lookup(identity.get("name") if identity else None, installed.name)
+            recipe = recipes.from_facts(str(appid), found, "optiscaler-wiki@live") if found else None
+        return recipes.with_engine(recipe, appid, installed.root) if installed else recipe
+
+    def refresh_wiki(self) -> dict:
+        return self.wiki.refresh()
 
     def search_games(self, term: str) -> list[dict]:
         return self.search(identify.clean_name(term) or term)[:8]
@@ -206,7 +213,7 @@ class UpscalerService:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
-        recipe = self._recipe(appid, identity, installed.root)
+        recipe = self._recipe(appid, identity, installed)
         analysis = NATIVE_ANALYSIS if installed.native else games.analyze(
             installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
@@ -296,7 +303,7 @@ class UpscalerService:
             raise UpscalerError("updating" if update == "running" else "update_pending")
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed.root)
+        recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed)
         analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else installed.exe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
@@ -325,7 +332,7 @@ class UpscalerService:
         if analysis["foreign"]:
             raise UpscalerError("foreign")
 
-        recipe = self._recipe(appid, entry.get("identity"), installed.root)
+        recipe = self._recipe(appid, entry.get("identity"), installed)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
         assets = catalog.build_assets(build)
         if recipe:
@@ -563,7 +570,7 @@ class UpscalerService:
             raise UpscalerError("broken") from None
         plan = install.get("fg_plan")
         if installed and not installed.native:
-            recipe = self._recipe(appid, self._identity(installed, entry), installed.root)
+            recipe = self._recipe(appid, self._identity(installed, entry), installed)
             analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
             plan = _fg_plan(self.gpu, analysis, recipe, _generation(install), choice.get("fg_route"))
         install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
@@ -799,7 +806,7 @@ class UpscalerService:
         exe = installed.exe
         if config is not None and not installed.native:
             entry = self._game_state(appid)
-            recipe = self._recipe(appid, self._identity(installed, entry), installed.root)
+            recipe = self._recipe(appid, self._identity(installed, entry), installed)
             exe = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)["exe"]
         try:
             return self.lsfg.set_game(appid, installed.name, config, exe)

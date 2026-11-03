@@ -390,6 +390,7 @@ export const fr: Record<string, string> = {
   "up.games": "Jeux",
   "up.back": "Jeux",
   "up.compatible": "Compatible",
+  "up.wiki.updating": "Mise à jour des infos…",
   "up.list.linux": "Jeu Linux",
   "up.list.none": "Pas d'upscaler propre",
   "up.bar.perf": "FPS",

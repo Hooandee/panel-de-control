@@ -1364,6 +1364,7 @@ export const installUpscaler = callable<[appid: string, choice: UpscalerChoice],
 export const recordUpscalerArgs = callable<[appid: string, args: string[]], { added_args: string[] }>("record_upscaler_args");
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
+export const refreshUpscalerWiki = callable<[], { updated: boolean; fresh: boolean }>("refresh_upscaler_wiki");
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean; fps?: number | null }>("get_upscaler_live");

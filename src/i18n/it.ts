@@ -390,6 +390,7 @@ export const it: Record<string, string> = {
   "up.games": "Giochi",
   "up.back": "Giochi",
   "up.compatible": "Compatibile",
+  "up.wiki.updating": "Aggiornamento informazioni…",
   "up.list.linux": "Gioco Linux",
   "up.list.none": "Nessun upscaler proprio",
   "up.bar.perf": "FPS",

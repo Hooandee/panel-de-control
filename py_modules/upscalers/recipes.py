@@ -53,17 +53,23 @@ def _wiki(path: Path = WIKI_FILE) -> dict[str, Recipe]:
     for appid, entry in (data.get("recipes") or {}).items():
         if not str(appid).isdecimal() or not isinstance(entry, dict):
             continue
-        recipe = Recipe(
-            str(appid),
-            args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
-            proxy=entry.get("proxy") if isinstance(entry.get("proxy"), str) else None,
-            needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
-            broken=entry.get("status") == "broken",
-            source=source,
-        )
-        if recipe.args or recipe.proxy or recipe.needs or recipe.broken:
+        recipe = from_facts(str(appid), entry, source)
+        if recipe:
             loaded[str(appid)] = recipe
     return loaded
+
+
+def from_facts(appid: str, entry: dict, source: str) -> Recipe | None:
+    """A recipe from the wiki's facts, or None when they change nothing and warn about nothing."""
+    recipe = Recipe(
+        appid,
+        args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
+        proxy=entry.get("proxy") if isinstance(entry.get("proxy"), str) else None,
+        needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
+        broken=entry.get("status") == "broken",
+        source=source,
+    )
+    return recipe if recipe.args or recipe.proxy or recipe.needs or recipe.broken else None
 
 
 WIKI = _wiki()

@@ -1050,3 +1050,12 @@ def test_lsfg_from_another_tool_is_set_aside_then_restored(steam, tmp_path):
     assert (home / lsfg.CONFIG).read_text().startswith("version = 2")
     assert (home / ".local" / lsfg.LAYER_FILES[0]).read_bytes() == b"theirs"
     assert not tool.status()["foreign_backup"]
+
+
+def test_a_game_without_a_bundled_recipe_uses_the_live_wiki_by_name(steam, fake_catalog, proc, monkeypatch):
+    monkeypatch.setattr(recipes, "RECIPES", {})
+    monkeypatch.setattr(recipes, "WIKI", {})
+    service = _service(steam, fake_catalog, proc)
+    service.wiki._rows = {"witcher": {"args": ["-dx12"], "needs": ["anti_cheat_off"]}}
+    detail = service.game(APPID)
+    assert detail["recipe_info"]["needs"] == ["anti_cheat_off"] and detail["recipe_info"]["args"] == ["-dx12"]

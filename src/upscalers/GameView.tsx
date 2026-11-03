@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "reac
 
 import {
   cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
-  recordUpscalerArgs, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
+  recordUpscalerArgs, refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
@@ -101,6 +101,17 @@ export const GameView: FC<{
     mounted.current = true;
     void load();
     return () => { mounted.current = false; };
+  }, [load]);
+
+  const [wikiUpdating, setWikiUpdating] = useState(false);
+  useEffect(() => {
+    let done = false;
+    const slow = setTimeout(() => { if (!done && mounted.current) setWikiUpdating(true); }, 300);
+    refreshUpscalerWiki()
+      .then((result) => { if (result.updated && mounted.current) void load(); })
+      .catch(() => undefined)
+      .finally(() => { done = true; clearTimeout(slow); if (mounted.current) setWikiUpdating(false); });
+    return () => clearTimeout(slow);
   }, [load]);
 
   const finish = useCallback(async (finished: UpscalerJob) => {
@@ -271,6 +282,11 @@ export const GameView: FC<{
               : preferredBuild && !detail.native && <Chip>{buildLabel(preferredBuild)}</Chip>}
           </div>
           {tested && <span style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.tested")}</span>}
+          {wikiUpdating && (
+            <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              <Spinner size={10} /> {t("up.wiki.updating")}
+            </span>
+          )}
           {install?.options.fg === "on" && facts?.fg && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
           )}
