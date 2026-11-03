@@ -526,3 +526,30 @@ def test_fsr_inputs_are_not_reported_as_dlss(tmp_path):
                  "[I] FSRFG_Dx12::Activate D3D12_Configure Enabled: true, result: FFX_API_RETURN_OK (0)\n")
     facts = logread.read(log.parent)
     assert facts["input"] == "FSR3" and facts["fg"]
+
+
+def test_hotkeys_only_reach_a_running_patched_game(steam, fake_catalog, proc):
+    service = _service(steam, fake_catalog, proc)
+    pressed = []
+    service.press = pressed.append
+    with pytest.raises(UpscalerError, match="not_patched"):
+        service.press_key(APPID, "menu")
+    service.install(APPID, {"build": "fsr-test"})
+    with pytest.raises(UpscalerError, match="not_running"):
+        service.press_key(APPID, "menu")
+    assert pressed == []
+
+
+def test_virtual_key_press_writes_down_and_up(tmp_path, monkeypatch):
+    from upscalers import keys
+    calls = []
+    monkeypatch.setattr(keys.fcntl, "ioctl", lambda fd, req, *a: calls.append(req))
+    device = tmp_path / "uinput"
+    device.write_bytes(b"")
+    keys.press("fg", str(device), sleep=lambda _: None)
+    data = device.read_bytes()
+    events = [keys._EVENT.unpack_from(data, len(keys._device_blob()) + i * keys._EVENT.size) for i in range(4)]
+    assert [(e[2], e[3], e[4]) for e in events] == [(1, 107, 1), (0, 0, 0), (1, 107, 0), (0, 0, 0)]
+    assert calls[-2:] == [keys.UI_DEV_CREATE, keys.UI_DEV_DESTROY]
+    with pytest.raises(keys.HotkeyError):
+        keys.press("nope", str(device))

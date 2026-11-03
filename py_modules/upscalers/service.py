@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, identify, ini, logread, recipes
+from . import capture, catalog, diagnostics, games, identify, ini, keys, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -67,6 +67,7 @@ class UpscalerService:
         self.proc = proc
         self.drm = drm
         self.search = identify.store_search
+        self.press = keys.press
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self._lock = threading.Lock()
@@ -502,6 +503,20 @@ class UpscalerService:
             return {"result": "not_patched"}
         facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
         return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": bool(facts.get("fg"))}
+
+    def press_key(self, appid: str, action: str) -> dict:
+        """OptiScaler hotkeys for devices without a keyboard; only while the game runs."""
+        install = self._game_state(appid).get("install")
+        if not isinstance(install, dict):
+            raise UpscalerError("not_patched")
+        installed = self._find(appid)
+        if installed is None or not games.running_under(installed.root, self.proc):
+            raise UpscalerError("not_running")
+        try:
+            self.press(action)
+        except keys.HotkeyError as error:
+            raise UpscalerError(str(error)) from None
+        return {"pressed": action}
 
     def verify(self, appid: str) -> dict:
         entry = self._game_state(appid)

@@ -1365,7 +1365,16 @@ class Plugin(AmbientRpc):
         return result
 
     async def get_upscaler_live(self, appid: str) -> dict:
-        return await self._upscalers_call("live", str(appid))
+        result = await self._upscalers_call("live", str(appid))
+        self._kiosk_fps_at = time.monotonic()
+        await self._apply_stats_reader()
+        fps = self._gamescope_perf.fps()
+        return {**result, "fps": round(fps, 1) if fps is not None else None}
+
+    async def press_upscaler_key(self, appid: str, action: str) -> dict:
+        result = await self._upscalers_call("press_key", str(appid), str(action))
+        _upscalers_journal("INFO", "key", appid=str(appid), action=str(action))
+        return result
 
     async def get_upscalers_job(self) -> dict | None:
         service = getattr(self, "_upscaler_service", None)
