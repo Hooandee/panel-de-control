@@ -1,7 +1,7 @@
 export type UpscalerStatus = "active" | "pending" | "loaded" | "not_run" | "broken";
 export type Quality = "quality" | "balanced" | "performance" | "ultra";
 export type Sharpness = "off" | "soft" | "high";
-export type EasyMode = "image" | "balanced" | "fps";
+export type EasyMode = "game" | "image" | "balanced" | "fps";
 
 export interface BuildInfo {
   id: string;

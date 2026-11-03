@@ -1044,7 +1044,7 @@ def _option_overrides(choice: dict, reset: bool = False) -> dict[str, str]:
         # DLAA is the game's native-AA mode: without it the chosen quality never applies there.
         for mode in ("DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance"):
             overrides[f"QualityOverrides.QualityRatio{mode}"] = f"{ratio:.2f}"
-    elif reset:
+    else:
         overrides["QualityOverrides.QualityRatioOverrideEnabled"] = "false"
     sharpness = catalog.SHARPNESS.get(options["sharpness"] or "")
     if sharpness is not None:

@@ -28,6 +28,12 @@ describe("upscaler model", () => {
     expect(renderHeight(800, "balanced")).toBe(471);
   });
 
+  it("follows the game's own scaling mode by default", () => {
+    const choice = easyChoice("game", "fsr-4.1.2-beta");
+    expect(choice.quality).toBeNull();
+    expect(easyModeOf(choice, "fsr-4.1.2-beta")).toBe("game");
+  });
+
   it("applies a recipe's dlls and args and reverts only what it added", () => {
     const applied = applyLaunch("%command% -dx12", ["dxgi=n,b", "dinput8=n,b"], ["--launcher-skip", "-dx12"]);
     expect(applied).toEqual({ value: 'WINEDLLOVERRIDES="dxgi,dinput8=n,b" %command% -dx12 --launcher-skip', added: ["--launcher-skip"] });

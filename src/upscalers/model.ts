@@ -3,12 +3,13 @@ import type { BuildInfo, EasyMode, Quality, Sharpness, UpscalerChoice } from "./
 
 const OVERRIDES = "WINEDLLOVERRIDES";
 
-export const EASY_MODES: EasyMode[] = ["image", "balanced", "fps"];
+export const EASY_MODES: EasyMode[] = ["game", "image", "balanced", "fps"];
 export const QUALITIES: Quality[] = ["quality", "balanced", "performance", "ultra"];
 export const SHARPNESS: Sharpness[] = ["off", "soft", "high"];
 export const QUALITY_RATIO: Record<Quality, number> = { quality: 1.5, balanced: 1.7, performance: 2.0, ultra: 3.0 };
 
-const EASY: Record<EasyMode, { quality: Quality; sharpness: Sharpness }> = {
+const EASY: Record<EasyMode, { quality: Quality | null; sharpness: Sharpness }> = {
+  game: { quality: null, sharpness: "soft" },
   image: { quality: "quality", sharpness: "soft" },
   balanced: { quality: "balanced", sharpness: "soft" },
   fps: { quality: "performance", sharpness: "high" },

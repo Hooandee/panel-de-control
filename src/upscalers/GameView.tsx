@@ -54,7 +54,7 @@ export const GameView: FC<{
   const [detail, setDetail] = useState<GameDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<"easy" | "custom">("easy");
-  const [choice, setChoice] = useState<UpscalerChoice>(() => easyChoice("balanced", overview.preferred));
+  const [choice, setChoice] = useState<UpscalerChoice>(() => easyChoice("game", overview.preferred));
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const [message, setMessage] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult | null>(null);
@@ -458,9 +458,12 @@ export const GameView: FC<{
                   <Label>{t("up.section.quality")}</Label>
                   <SegmentRow
                     vertical
-                    value={choice.quality}
-                    onChange={(quality) => setChoice({ ...choice, quality })}
-                    options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
+                    value={choice.quality ?? "game"}
+                    onChange={(quality) => setChoice({ ...choice, quality: quality === "game" ? null : quality })}
+                    options={[
+                      { value: "game" as const, label: t("up.quality.game") },
+                      ...QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` })),
+                    ]}
                   />
                   <Note>{t("up.quality.help")}</Note>
 

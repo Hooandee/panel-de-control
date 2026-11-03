@@ -1202,3 +1202,11 @@ def test_monster_hunter_wilds_turns_dxgi_spoofing_off_and_still_gets_reframework
     recipe = recipes.with_engine(recipes.recipe_for("2246340"), "2246340", root)
     assert recipe.ini == {"Spoofing.Dxgi": "false", "Menu.ShortcutKey": "0x24"}
     assert recipe.files == {"dinput8.dll": "reframework-nightly"} and recipe.menu_key == "home"
+
+
+def test_no_quality_leaves_the_games_own_scaling_mode_alone():
+    from upscalers.service import _option_overrides
+    assert _option_overrides({"quality": None})["QualityOverrides.QualityRatioOverrideEnabled"] == "false"
+    forced = _option_overrides({"quality": "ultra"})
+    assert forced["QualityOverrides.QualityRatioOverrideEnabled"] == "true"
+    assert forced["QualityOverrides.QualityRatioBalanced"] == "3.00"
