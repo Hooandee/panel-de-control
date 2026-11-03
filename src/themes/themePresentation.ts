@@ -1,3 +1,4 @@
+import bubbleCover from "../assets/bubble-cover.jpg";
 import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
@@ -17,6 +18,23 @@ interface ThemePresentation {
 }
 
 const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
+  "hooandee-bubble": {
+    cssLoaderName: "Hooandee Bubble",
+    cover: bubbleCover,
+    tagline: {
+      es: "Tus juegos en burbujas, con alma de portátil",
+      en: "Your games as bubbles, with a handheld's soul",
+      it: "I tuoi giochi in bolle, con anima da portatile",
+      de: "Deine Spiele als Blasen, mit Handheld-Seele",
+      "pt-BR": "Seus jogos em bolhas, com alma de portátil",
+      fr: "Vos jeux en bulles, avec une âme de portable",
+    },
+    description: {
+      de: "Bubble ist ein Theme, inspiriert von einem der beliebtesten Handhelds. Deine Spiele schweben als Glasblasen, mit Seiten für jede Sammlung, einem Tor für jedes Spiel, eigenen Freunden und Trophäen sowie eigener Musik und eigenen Sounds.",
+      "pt-BR": "Bubble é um tema inspirado em um dos portáteis mais queridos. Seus jogos flutuam como bolhas de vidro, com páginas para cada coleção, um portal para cada jogo, Amigos e Troféus próprios, e música e sons próprios.",
+      fr: "Bubble est un thème inspiré de l'une des consoles portables les plus appréciées. Vos jeux flottent comme des bulles de verre, avec des pages pour chaque collection, une porte pour chaque jeu, ses propres Amis et Trophées, et sa musique et ses sons.",
+    },
+  },
   "hooandee-duo": {
     cssLoaderName: "Hooandee Duo",
     cover: duoCover,

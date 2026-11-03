@@ -17,11 +17,13 @@ describe("themeCoverFor", () => {
     const gallery = themeCoverFor(release("hooandee-gallery", "Hooandee Gallery"));
     const atlas = themeCoverFor(release("hooandee-luminous-atlas", "Hooandee Luminous Atlas"));
     const eclipse = themeCoverFor(release("hooandee-eclipse", "Hooandee Eclipse"));
+    const bubble = themeCoverFor(release("hooandee-bubble", "Hooandee Bubble"));
 
     expect(gallery).toBeTruthy();
     expect(atlas).toBeTruthy();
     expect(eclipse).toBeTruthy();
-    expect(new Set([gallery, atlas, eclipse]).size).toBe(3);
+    expect(bubble).toBeTruthy();
+    expect(new Set([gallery, atlas, eclipse, bubble]).size).toBe(4);
   });
 
   it("gives no cover to an unknown theme or one whose identity does not match", () => {
@@ -36,6 +38,7 @@ describe("themeDescriptionFor", () => {
       ["hooandee-gallery", "Hooandee Gallery"],
       ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
       ["hooandee-eclipse", "Hooandee Eclipse"],
+      ["hooandee-bubble", "Hooandee Bubble"],
     ]) {
       const de = themeDescriptionFor(release(catalogId, cssLoaderName), "de");
       const pt = themeDescriptionFor(release(catalogId, cssLoaderName), "pt-BR");
@@ -63,6 +66,7 @@ describe("themeTaglineFor", () => {
     ["hooandee-gallery", "Hooandee Gallery"],
     ["hooandee-luminous-atlas", "Hooandee Luminous Atlas"],
     ["hooandee-eclipse", "Hooandee Eclipse"],
+    ["hooandee-bubble", "Hooandee Bubble"],
   ] as const;
 
   it("gives every Hooandee theme a short line in every language", () => {
