@@ -61,6 +61,7 @@ export const GameView: FC<{
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const [acceptNvidia, setAcceptNvidia] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
   const [compat, setCompat] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -232,6 +233,9 @@ export const GameView: FC<{
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
+  const shownBuild = install?.build ?? preferredBuild?.id;
+  const tested = !!shownBuild && !!detail?.history.some((h) => h.build === shownBuild && h.result === "active");
+  const does = selected?.engine === "proton" ? "up.does.proton" : selected?.way === "fsr" ? "up.does.fsr" : "up.does.optiscaler";
   const compatible = [...new Set(Object.keys(detail?.analysis.inputs ?? {}).map((k) => INPUT_NAMES[k]).filter(Boolean))];
 
   return (
@@ -258,6 +262,7 @@ export const GameView: FC<{
               ? <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>
               : preferredBuild && !detail.native && <Chip>{buildLabel(preferredBuild)}</Chip>}
           </div>
+          {tested && <span style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.tested")}</span>}
           {install?.options.fg === "on" && facts?.fg && (
             <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
           )}
@@ -265,7 +270,11 @@ export const GameView: FC<{
             <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{gameFgHint}</span>
           )}
           {render && output && render < output && (
-            <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.resolution", { render, output })}</span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: theme.space.xs, color: theme.color.textPrimary }}>
+              <span style={{ fontSize: theme.font.body + 6, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{render}p</span>
+              <span style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>→</span>
+              <span style={{ fontSize: theme.font.body + 6, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{output}p</span>
+            </div>
           )}
           {!install && preferredBuild && !detail.native && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
@@ -332,6 +341,9 @@ export const GameView: FC<{
             disabled={blocked}
           />
         </Row>
+      )}
+      {detail && !detail.native && !running && (status === "broken" || dirty) && !sameBuild && (
+        <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.35 }}>{t(does)}</span>
       )}
       {detail && !running && install && (
         <Row>
@@ -410,7 +422,15 @@ export const GameView: FC<{
                 </>
               )}
               {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
-              {blockedBuilds.map((b) => (
+              {blockedBuilds.length > 0 && (
+                <Row>
+                  <ActionButton
+                    label={showBlocked ? t("up.blocked.hide") : t("up.blocked.more", { count: blockedBuilds.length })}
+                    onPress={() => setShowBlocked(!showBlocked)}
+                  />
+                </Row>
+              )}
+              {showBlocked && blockedBuilds.map((b) => (
                 <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
               ))}
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}

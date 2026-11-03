@@ -198,7 +198,8 @@ BUILDS: dict[str, Build] = {
 }
 
 PREFERRED = {
-    "rdna2": "fsr-4.1.1-rdna2",
+    # OptiScaler 10 runs FSR 4.1.2 Lite on Van Gogh, as AMD's driver picks for APUs.
+    "rdna2": "fsr-4.1.2-beta",
     "rdna3": "fsr-4.1.1",
     "rdna35": "fsr-4.1.1",
     "rdna4": "fsr-4.1.1",

@@ -205,7 +205,7 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
             assert catalog.build_assets(build)[0].id == build.archive
             # HelixSR's ZIP is unpacked into the user's folder by helixsr.HelixSR, not by the cache.
             assert catalog.ASSETS[build.archive].archive == (build.engine != "helixsr")
-    assert catalog.preferred_build("rdna2") == "fsr-4.1.1-rdna2"
+    assert catalog.preferred_build("rdna2") == "fsr-4.1.2-beta"
     assert logread.verdict({"present": False}) == "not_run"
 
 
