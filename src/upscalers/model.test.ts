@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLaunch, buildBlocker, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -78,5 +78,13 @@ describe("Proton FSR 4", () => {
     expect(buildBlocker({ engine: "proton" }, { fsr31: [] }, null)).toBe("needsProton");
     expect(buildBlocker({ engine: "proton" }, { fsr31: [] }, "FSR4_UPGRADE")).toBeNull();
     expect(buildLabel({ family: "proton", version: "FSR 4" })).toBe("FSR 4 (Proton)");
+  });
+});
+
+describe("downloadPace", () => {
+  it("gives speed and time left, and nothing to promise while stalled", () => {
+    const pace = downloadPace({ done: 0, at: 0 }, { done: 2_000_000, at: 1000 }, 10_000_000);
+    expect(pace).toEqual({ rate: 2_000_000, eta: 4 });
+    expect(downloadPace({ done: 5, at: 0 }, { done: 5, at: 1000 }, 10).eta).toBeNull();
   });
 });

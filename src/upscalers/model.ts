@@ -140,3 +140,13 @@ export function launchAfterJob(launch: string, change: LaunchChange, kind: "inst
   const value = change.env && Object.keys(change.env).length ? withEnv(applied.value, change.env) : applied.value;
   return value === null ? null : { value, added: applied.added };
 }
+
+export interface PaceSample { done: number; at: number }
+
+/** Bytes per second and seconds left from two progress samples, smoothed with the previous rate. */
+export function downloadPace(previous: PaceSample, current: PaceSample, total: number, lastRate = 0): { rate: number; eta: number | null } {
+  const seconds = (current.at - previous.at) / 1000;
+  const instant = seconds > 0 ? Math.max(0, current.done - previous.done) / seconds : 0;
+  const rate = lastRate > 0 ? lastRate * 0.7 + instant * 0.3 : instant;
+  return { rate, eta: rate > 0 ? Math.ceil((total - current.done) / rate) : null };
+}

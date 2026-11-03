@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -16,9 +17,21 @@ from .catalog import Asset
 
 CHUNK = 256 * 1024
 TIMEOUT_S = 30
+RETRIES = 3
+BACKOFF_S = (2, 5)
 USER_AGENT = "panel-de-control-upscalers"
 
 Progress = Callable[[int], None]
+
+
+def _wait(seconds: float, cancelled: Callable[[], bool]) -> bool:
+    """Sleep in short steps; False as soon as the user cancels."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if cancelled():
+            return False
+        time.sleep(0.1)
+    return not cancelled()
 
 
 class AssetError(Exception):
@@ -84,47 +97,81 @@ class AssetCache:
         except (KeyError, zipfile.BadZipFile, OSError) as error:
             raise AssetError("unpack_failed", type(error).__name__) from None
 
+    def partial(self, asset: Asset) -> Path:
+        """Kept across attempts and restarts so a dropped download resumes instead of starting over."""
+        return self.file(asset).with_name(f".part-{asset.filename}")
+
     def _download(self, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> None:
         target = self.file(asset)
         if target.is_file() and target.stat().st_size == asset.size and sha256(target) == asset.sha256:
             progress(asset.size)
             return
         target.parent.mkdir(parents=True, exist_ok=True)
+        self._check_space(asset)
         last_error = AssetError("download_failed")
         for url in asset.urls:
-            fd, partial = tempfile.mkstemp(dir=target.parent, prefix=".part-")
-            digest = hashlib.sha256()
-            received = 0
-            try:
-                request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-                with os.fdopen(fd, "wb") as out, urllib.request.urlopen(request, timeout=TIMEOUT_S, context=ssl_context()) as response:
-                    while True:
-                        if cancelled():
-                            raise AssetError("cancelled")
-                        chunk = response.read(CHUNK)
-                        if not chunk:
-                            break
-                        received += len(chunk)
-                        if received > asset.size:
-                            raise AssetError("size_mismatch")
-                        digest.update(chunk)
-                        out.write(chunk)
-                        progress(received)
-                if received != asset.size or digest.hexdigest() != asset.sha256:
-                    raise AssetError("hash_mismatch")
-                os.replace(partial, target)
-                return
-            except AssetError as error:
-                last_error = error
-                if error.code == "cancelled":
-                    raise
-            except OSError as error:
-                last_error = AssetError("download_failed", f"{type(error).__name__}: {error}"[:200])
-            finally:
-                if os.path.exists(partial):
-                    os.unlink(partial)
-            progress(0)
+            for attempt in range(RETRIES):
+                if attempt and not _wait(BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)], cancelled):
+                    raise AssetError("cancelled")
+                try:
+                    self._fetch(url, asset, progress, cancelled)
+                    os.replace(self.partial(asset), target)
+                    return
+                except AssetError as error:
+                    last_error = error
+                    if error.code in ("cancelled", "no_space"):
+                        raise
+                    self.partial(asset).unlink(missing_ok=True)
+                    break
+                except OSError as error:
+                    last_error = AssetError("download_failed", f"{type(error).__name__}: {error}"[:200])
         raise last_error
+
+    def _check_space(self, asset: Asset) -> None:
+        have = self.partial(asset).stat().st_size if self.partial(asset).is_file() else 0
+        # Archives are unpacked next to the download, so they need room for both.
+        need = asset.size - have + (asset.size * 2 if asset.archive else 0)
+        free = shutil.disk_usage(self.root if self.root.exists() else self.root.parent).free
+        if free < need:
+            raise AssetError("no_space", str(need - free))
+
+    def _fetch(self, url: str, asset: Asset, progress: Progress, cancelled: Callable[[], bool]) -> None:
+        partial = self.partial(asset)
+        have = partial.stat().st_size if partial.is_file() else 0
+        if have >= asset.size:
+            partial.unlink()
+            have = 0
+        headers = {"User-Agent": USER_AGENT}
+        if have:
+            headers["Range"] = f"bytes={have}-"
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=TIMEOUT_S, context=ssl_context()) as response:
+            if have and getattr(response, "status", 200) != 206:
+                have = 0
+            digest = hashlib.sha256()
+            if have:
+                with open(partial, "rb") as existing:
+                    for chunk in iter(lambda: existing.read(CHUNK), b""):
+                        digest.update(chunk)
+            received = have
+            progress(received)
+            with open(partial, "ab" if have else "wb") as out:
+                while True:
+                    if cancelled():
+                        raise AssetError("cancelled")
+                    chunk = response.read(CHUNK)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > asset.size:
+                        raise AssetError("size_mismatch")
+                    digest.update(chunk)
+                    out.write(chunk)
+                    progress(received)
+        if received != asset.size:
+            raise OSError(f"stopped at {received} of {asset.size} bytes")
+        if digest.hexdigest() != asset.sha256:
+            raise AssetError("hash_mismatch")
 
     def _unpack(self, asset: Asset) -> None:
         destination = self.unpacked(asset)

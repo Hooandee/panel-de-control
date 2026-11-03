@@ -22,7 +22,7 @@ import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
-  buildBlocker, launchAfterJob, protonFsr4Env,
+  buildBlocker, downloadPace, launchAfterJob, protonFsr4Env, type PaceSample,
 } from "./model";
 import { LivePanel } from "./LivePanel";
 import { LsfgCard } from "./LsfgCard";
@@ -31,6 +31,8 @@ import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, Upscaler
 
 const POLL_MS = 250;
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
+
+const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed", "helixsr_build_failed"]);
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -120,7 +122,9 @@ export const GameView: FC<{
         if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
       }
     } else if (finished.state === "error") {
-      const text = errorText(t, finished.error);
+      const text = finished.error === "no_space" && finished.detail
+        ? t("up.error.no_space", { mb: megabytes(Number(finished.detail)) })
+        : errorText(t, finished.error);
       setMessage(finished.detail && finished.error?.startsWith("helixsr") ? `${text} (${finished.detail})` : text);
     }
     await load();
@@ -314,6 +318,9 @@ export const GameView: FC<{
       )}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
+      {!running && job?.state === "error" && job.kind === "install" && RETRYABLE.has(job.error ?? "") && (
+        <Row><ActionButton label={t("up.retry")} onPress={reinstall} /></Row>
+      )}
 
       {detail && !detail.native && !running && (status === "broken" || dirty) && (
         <Row>
@@ -497,10 +504,28 @@ const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
   const { t } = useI18n();
   const determinate = job.phase === "download" && job.total > 0;
   const ratio = determinate ? Math.min(1, job.done / job.total) : 0;
+  const sample = useRef<PaceSample | null>(null);
+  const [pace, setPace] = useState<{ rate: number; eta: number | null } | null>(null);
+  useEffect(() => {
+    if (job.phase !== "download") return;
+    const now = { done: job.done, at: Date.now() };
+    if (sample.current && now.at - sample.current.at >= 900) {
+      setPace((last) => downloadPace(sample.current!, now, job.total, last?.rate ?? 0));
+      sample.current = now;
+    } else if (!sample.current) {
+      sample.current = now;
+    }
+  }, [job.phase, job.done, job.total]);
   const label = job.phase === "download"
     ? t("up.phase.download", { done: megabytes(job.done), total: megabytes(job.total) })
     : t(`up.phase.${job.phase}`);
-  const step = job.phase === "build" ? job.step : null;
+  const step = job.phase === "build" ? job.step
+    : job.phase === "download" && pace
+      ? pace.rate < 1024 ? t("up.phase.stalled")
+      : t(pace.eta !== null && pace.eta < 3600 ? "up.phase.pace" : "up.phase.rate", {
+        rate: (pace.rate / (1024 * 1024)).toFixed(1), eta: formatEta(pace.eta ?? 0),
+      })
+      : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
@@ -519,3 +544,7 @@ const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
     </div>
   );
 };
+
+function formatEta(seconds: number): string {
+  return seconds < 60 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
+}
