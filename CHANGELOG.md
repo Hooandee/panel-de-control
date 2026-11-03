@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.0...panel-de-control-v0.82.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* improve ambient playback, cleaner selection and Steam inventory controls ([#1101](https://github.com/Hooandee/panel-de-control/issues/1101)) ([d8c5dfd](https://github.com/Hooandee/panel-de-control/commit/d8c5dfd0b2ac8be9e8eac672a6fcb246f0020096))
+
 ## [0.82.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.3...panel-de-control-v0.82.0) (2026-11-02)
 
 ### Español
