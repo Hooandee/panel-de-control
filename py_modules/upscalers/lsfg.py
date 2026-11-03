@@ -28,6 +28,9 @@ CONFIG = ".config/lsfg-vk/conf.toml"
 MARKER = "# Managed by Panel de Control"
 MULTIPLIERS = (2, 3, 4)
 FLOW_SCALES = {"quality": 1.0, "balanced": 0.75, "performance": 0.5}
+# lsfg-vk rejects a config without any [[profile]] and then fails every present (the game freezes).
+PLACEHOLDER = "pdc-none"
+PAUSED_LIMIT = 50
 # Gamescope's own WSI layer and lsfg-vk fight over the swapchain inside a gamescope session.
 LAUNCH_ENV = {"ENABLE_GAMESCOPE_WSI": "0"}
 
@@ -142,8 +145,11 @@ class Lsfg:
         if not self._ours():
             raise LsfgError("lsfg_missing")
         data = self._manifest()
+        paused = [a for a in data.get("paused", []) if a != appid]
         if config is None:
-            data["profiles"].pop(appid, None)
+            # A running game still asks for its profile by name: keep it, generating nothing.
+            if data["profiles"].pop(appid, None) is not None:
+                paused.append(appid)
         else:
             multiplier = int(config.get("multiplier", 2))
             flow = str(config.get("flow", "balanced"))
@@ -156,6 +162,7 @@ class Lsfg:
                 "performance": bool(config.get("performance", True)),
                 "exe": Path(exe).name if exe else None,
             }
+        data["paused"] = paused[-PAUSED_LIMIT:]
         self._save(data)
         self._write_config(data)
         env = {**LAUNCH_ENV, "LSFGVK_PROFILE": profile_name(appid)} if appid in data["profiles"] else {}
@@ -168,6 +175,11 @@ class Lsfg:
         lines = [MARKER, "version = 2", "", "[global]", "allow_fp16 = true"]
         if dll:
             lines.append(f"dll = {_toml(str(dll))}")
+        for appid in data.get("paused", []):
+            if appid not in data["profiles"]:
+                lines += ["", "[[profile]]", "name = " + _toml(profile_name(appid)), "multiplier = 1"]
+        if not data["profiles"] and not data.get("paused"):
+            lines += ["", "[[profile]]", "name = " + _toml(PLACEHOLDER)]
         for appid, profile in sorted(data["profiles"].items()):
             lines += ["", f"# {profile['name']}", "[[profile]]", "name = " + _toml(profile_name(appid))]
             if profile.get("exe"):

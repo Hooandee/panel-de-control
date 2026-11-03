@@ -695,6 +695,8 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert parsed["profile"] == [{"name": "pdc-123", "active_in": ["Game.exe"], "multiplier": 3,
                                   "flow_scale": 0.5, "performance_mode": True}]
     assert tool.set_game("123", "Game", None)["env"] == {}
+    # The game may still be running with LSFGVK_PROFILE=pdc-123: its profile stays, generating nothing.
+    assert tomllib.loads((home / lsfg.CONFIG).read_text())["profile"] == [{"name": "pdc-123", "multiplier": 1}]
     with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
         tool.set_game("123", "Game", {"multiplier": 7})
     tool.uninstall()
@@ -882,3 +884,11 @@ def test_helixsr_fsr_drop_in_never_claims_frame_generation(steam, helix_catalog,
     service.install(APPID, {"build": "hlx-fsr4", "fg": "on"})
     assert service.game(APPID)["install"]["options"]["fg"] == "off"
     assert service.game(APPID)["fg_plan"] is None
+
+
+def test_lsfg_config_always_has_a_profile(steam, tmp_path):
+    import tomllib
+    home, _ = steam
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    assert tomllib.loads((home / lsfg.CONFIG).read_text())["profile"] == [{"name": "pdc-none"}]
