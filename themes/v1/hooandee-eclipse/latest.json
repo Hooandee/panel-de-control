@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-eclipse",
   "cssLoaderName": "Hooandee Eclipse",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "displayName": {
     "es": "Eclipse",
     "en": "Eclipse",
@@ -16,13 +16,18 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.3.5/theme.zip",
-    "size": 412703,
-    "sha256": "c9304a21c855164c7aabdb3f9ca69f01a6b5e14f2394071d91a23e3cf26ee1ac"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-eclipse/0.3.6/theme.zip",
+    "size": 412737,
+    "sha256": "eda07481ac0d8a803d72a25efd3aaa69a17c60fcfe291c9447d85cb551797995"
   },
   "minimumVersions": {
     "panel": "0.56.0",
     "cssLoader": "2.1.2",
     "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "La cabecera solo captura la navegación que se inicia en ella, dejando pasar las direcciones del teclado y los diálogos.",
+    "en": "The header only handles navigation that starts inside it, allowing keyboard and dialog directions to pass through.",
+    "it": "La testata gestisce solo la navigazione che inizia al suo interno, lasciando passare le direzioni della tastiera e delle finestre di dialogo."
   }
 }
