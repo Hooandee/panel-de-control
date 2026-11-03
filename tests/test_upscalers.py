@@ -894,3 +894,33 @@ def test_lsfg_config_always_has_a_profile(steam, tmp_path):
     tool = lsfg.Lsfg(str(home), tmp_path / "state")
     tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
     assert tomllib.loads((home / lsfg.CONFIG).read_text())["profile"] == [{"name": "pdc-none"}]
+
+
+def test_wiki_recipes_load_and_hand_written_ones_win():
+    data = json.loads((Path(recipes.__file__).with_name("recipes_wiki.json")).read_text())
+    assert data["source"].startswith("optiscaler-wiki@")
+    for appid, entry in data["recipes"].items():
+        assert appid.isdecimal()
+        assert set(entry) <= {"name", "args", "proxy", "needs", "optipatcher", "status"}
+        assert set(entry.get("needs", [])) <= {"reframework", "nvngx_dlss", "anti_cheat_off"}
+    assert recipes.recipe_for("292030").exe == "bin/x64_dx12/witcher3.exe"
+    wild_hearts = recipes.recipe_for("1938010")
+    assert wild_hearts.proxy == "winmm.dll" and wild_hearts.source.startswith("optiscaler-wiki@")
+    assert recipes.recipe_for("2246340").needs == ("reframework",)
+    assert recipes.recipe_for("1230530").broken
+
+
+def test_recipe_proxy_and_args_apply_unless_the_user_picked(steam, fake_catalog, proc, monkeypatch):
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", args=("-dx12",)))
+    service = _service(steam, fake_catalog, proc)
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["winmm=n,b"] and result["args"] == ["-dx12"]
+    assert service.game(APPID)["recipe_info"] == {"needs": [], "broken": False, "proxy": "winmm.dll", "args": ["-dx12"]}
+    result = service.install(APPID, {"build": "fsr-test", "proxy": "version.dll"})
+    assert result["overrides"] == ["version=n,b"]
+
+
+def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc, monkeypatch):
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
+    service = _service(steam, fake_catalog, proc)
+    assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]

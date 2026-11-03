@@ -1,0 +1,1088 @@
+{
+ "source": "optiscaler-wiki@288adff",
+ "recipes": {
+  "251570": {
+   "name": "7 Days To Die",
+   "needs": [
+    "anti_cheat_off"
+   ]
+  },
+  "275850": {
+   "name": "No Man’s Sky",
+   "optipatcher": true
+  },
+  "315210": {
+   "name": "Suicide Squad: Kill the Justice League",
+   "optipatcher": true
+  },
+  "368260": {
+   "name": "Marvel's Midnight Suns",
+   "proxy": "d3d12.dll"
+  },
+  "428660": {
+   "name": "Deliver Us the Moon",
+   "optipatcher": true
+  },
+  "440900": {
+   "name": "Conan Exiles Enhanced",
+   "optipatcher": true
+  },
+  "482400": {
+   "name": "System Shock (2023)",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "548430": {
+   "name": "Deep Rock Galactic",
+   "optipatcher": true
+  },
+  "606160": {
+   "name": "ROUTINE",
+   "optipatcher": true
+  },
+  "668580": {
+   "name": "Atomic Heart",
+   "optipatcher": true
+  },
+  "695330": {
+   "name": "Season: A Letter to the Future",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "707030": {
+   "name": "POSTAL 4: No Regerts",
+   "optipatcher": true
+  },
+  "735350": {
+   "name": "Bottle Pilgrim Redux",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "747660": {
+   "name": "Five Nights at Freddy’s: Security Breach",
+   "optipatcher": true
+  },
+  "750130": {
+   "name": "The Sinking City Remastered",
+   "optipatcher": true
+  },
+  "782330": {
+   "name": "Doom Eternal",
+   "optipatcher": true
+  },
+  "784080": {
+   "name": "MechWarrior 5: Mercenaries",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "805550": {
+   "name": "Assetto Corsa Competizione",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "813630": {
+   "name": "Supraland",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "835960": {
+   "name": "The Talos Principle 2",
+   "optipatcher": true
+  },
+  "874450": {
+   "name": "Lunacy: Saint Rhodes",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "889910": {
+   "name": "Hell Pie",
+   "optipatcher": true
+  },
+  "955050": {
+   "name": "Bright Memory",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "979690": {
+   "name": "The Ascent",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "990080": {
+   "name": "Hogwarts Legacy",
+   "optipatcher": true
+  },
+  "990380": {
+   "name": "METAL EDEN",
+   "optipatcher": true
+  },
+  "1013140": {
+   "name": "Outcast: A New Beginning",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1065310": {
+   "name": "Evil West",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1105590": {
+   "name": "Dream Cycle",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1107750": {
+   "name": "Faraday Protocol",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1119840": {
+   "name": "Sands of Aura",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1128920": {
+   "name": "EVERSPACE 2",
+   "optipatcher": true
+  },
+  "1134100": {
+   "name": "Frozenheim",
+   "optipatcher": true
+  },
+  "1139900": {
+   "name": "Ghostrunner",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1140100": {
+   "name": "The Persistence",
+   "optipatcher": true
+  },
+  "1144200": {
+   "name": "Ready or Not",
+   "optipatcher": true
+  },
+  "1149460": {
+   "name": "ICARUS",
+   "optipatcher": true
+  },
+  "1153640": {
+   "name": "Chorus",
+   "optipatcher": true
+  },
+  "1154030": {
+   "name": "Titan Quest II",
+   "optipatcher": true
+  },
+  "1154830": {
+   "name": "Scathe",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1159690": {
+   "name": "Voidtrain",
+   "optipatcher": true
+  },
+  "1160220": {
+   "name": "Paradise Killer",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1164940": {
+   "name": "Trepang2",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1173220": {
+   "name": "Bleak Faith: Forsaken",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1174180": {
+   "name": "Red Dead Redemption 2",
+   "optipatcher": true
+  },
+  "1178830": {
+   "name": "Bright Memory: Infinite",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1192810": {
+   "name": "Romancelvania",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1198970": {
+   "name": "I Am Jesus Christ",
+   "optipatcher": true
+  },
+  "1222370": {
+   "name": "Necromunda: Hired Gun",
+   "optipatcher": true
+  },
+  "1227690": {
+   "name": "Severed Steel",
+   "optipatcher": true
+  },
+  "1230530": {
+   "name": "Atlas Fallen: Reign Of Sand",
+   "status": "broken"
+  },
+  "1234430": {
+   "name": "Ad Infinitum",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1244460": {
+   "name": "Jurassic World Evolution 2",
+   "optipatcher": true
+  },
+  "1255560": {
+   "name": "Myst (2021)",
+   "optipatcher": true
+  },
+  "1265780": {
+   "name": "The Lord of the Rings: Gollum",
+   "optipatcher": true
+  },
+  "1269370": {
+   "name": "171",
+   "optipatcher": true
+  },
+  "1277130": {
+   "name": "Deathbound",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1282100": {
+   "name": "Remnant II",
+   "optipatcher": true
+  },
+  "1288320": {
+   "name": "Way of the Hunter",
+   "optipatcher": true
+  },
+  "1293730": {
+   "name": "Broken Pieces",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1294810": {
+   "name": "Redfall",
+   "optipatcher": true
+  },
+  "1297900": {
+   "name": "Gothic 1 Remake",
+   "optipatcher": true
+  },
+  "1310410": {
+   "name": "Alone in the Dark (2024)",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1314000": {
+   "name": "Achilles: Legends Untold",
+   "optipatcher": true
+  },
+  "1316680": {
+   "name": "VLADiK BRUTAL",
+   "optipatcher": true
+  },
+  "1330430": {
+   "name": "Celestial Empire",
+   "optipatcher": true
+  },
+  "1342490": {
+   "name": "Daemon x Machina Titanic Scion",
+   "optipatcher": true
+  },
+  "1345890": {
+   "name": "Deliver Us Mars",
+   "optipatcher": true
+  },
+  "1351000": {
+   "name": "Gangs of Sherwood",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1363080": {
+   "name": "Manor Lords",
+   "optipatcher": true
+  },
+  "1373960": {
+   "name": "INDIKA",
+   "proxy": "d3d12.dll",
+   "optipatcher": true
+  },
+  "1392860": {
+   "name": "Little Nightmares III",
+   "optipatcher": true
+  },
+  "1430680": {
+   "name": "Clash: Artifacts of Chaos",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1432750": {
+   "name": "Chionophile",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1449110": {
+   "name": "The Outer Worlds 2",
+   "optipatcher": true
+  },
+  "1458140": {
+   "name": "Pacific Drive",
+   "optipatcher": true
+  },
+  "1469610": {
+   "name": "Last Train Home",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1475810": {
+   "name": "Ghostwire: Tokyo",
+   "optipatcher": true
+  },
+  "1479730": {
+   "name": "Commandos: Origins",
+   "optipatcher": true
+  },
+  "1486920": {
+   "name": "Tempest Rising",
+   "optipatcher": true
+  },
+  "1491410": {
+   "name": "Eternal Strands",
+   "optipatcher": true
+  },
+  "1493640": {
+   "name": "Banishers: Ghosts of New Eden",
+   "optipatcher": true
+  },
+  "1496790": {
+   "name": "Gotham Knights",
+   "optipatcher": true
+  },
+  "1501750": {
+   "name": "Lords of the Fallen (2023)",
+   "optipatcher": true
+  },
+  "1522870": {
+   "name": "Supraland Six Inches Under",
+   "optipatcher": true
+  },
+  "1532690": {
+   "name": "Blacktail",
+   "needs": [
+    "nvngx_dlss"
+   ],
+   "optipatcher": true
+  },
+  "1549690": {
+   "name": "SPRAWL",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1550730": {
+   "name": "Ikonei Island: An Earthlock Adventure",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1551980": {
+   "name": "Clive Barker's Hellraiser: Revival",
+   "optipatcher": true
+  },
+  "1577240": {
+   "name": "Cions of Vega",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1583230": {
+   "name": "High on Life",
+   "optipatcher": true
+  },
+  "1601570": {
+   "name": "The Alters",
+   "optipatcher": true
+  },
+  "1601580": {
+   "name": "Frostpunk 2",
+   "optipatcher": true
+  },
+  "1602080": {
+   "name": "Soulstice",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "1620730": {
+   "name": "Hell is Us",
+   "optipatcher": true
+  },
+  "1621560": {
+   "name": "Black One: Blood Brothers",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1622630": {
+   "name": "Otherskin",
+   "optipatcher": true
+  },
+  "1622910": {
+   "name": "Still Wakes the Deep",
+   "optipatcher": true
+  },
+  "1623730": {
+   "name": "Palworld",
+   "optipatcher": true
+  },
+  "1627720": {
+   "name": "Lies of P",
+   "optipatcher": true
+  },
+  "1636440": {
+   "name": "SILENT HILL: Townfall",
+   "optipatcher": true
+  },
+  "1662690": {
+   "name": "Twin Stones: The Journey of Bukka",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1676130": {
+   "name": "Deadlink",
+   "optipatcher": true
+  },
+  "1680880": {
+   "name": "Forspoken",
+   "proxy": "d3d12.dll"
+  },
+  "1681430": {
+   "name": "RoboCop: Rogue City",
+   "optipatcher": true
+  },
+  "1684350": {
+   "name": "The Thaumaturge",
+   "optipatcher": true
+  },
+  "1712100": {
+   "name": "Carmageddon: Rogue Shift",
+   "optipatcher": true
+  },
+  "1712350": {
+   "name": "Riven (2024)",
+   "optipatcher": true
+  },
+  "1721060": {
+   "name": "Mandragora: Whispers of the Witch Tree",
+   "optipatcher": true
+  },
+  "1774580": {
+   "name": "STAR WARS Jedi: Survivor",
+   "optipatcher": true
+  },
+  "1778820": {
+   "name": "TEKKEN 8",
+   "optipatcher": true
+  },
+  "1778840": {
+   "name": "Spirit of the North 2",
+   "optipatcher": true
+  },
+  "1783560": {
+   "name": "The Last Caretaker",
+   "optipatcher": true
+  },
+  "1790930": {
+   "name": "Crisol: Theater of Idols",
+   "optipatcher": true
+  },
+  "1805480": {
+   "name": "Like a Dragon: Ishin!",
+   "optipatcher": true
+  },
+  "1812450": {
+   "name": "Bellwright",
+   "optipatcher": true
+  },
+  "1817070": {
+   "name": "Marvel’s Spider-Man Remastered",
+   "optipatcher": true
+  },
+  "1817190": {
+   "name": "Marvel's Spider-Man: Miles Morales",
+   "optipatcher": true
+  },
+  "1817230": {
+   "name": "Hi-Fi RUSH",
+   "optipatcher": true
+  },
+  "1832040": {
+   "name": "Flintlock: The Siege of Dawn",
+   "optipatcher": true
+  },
+  "1836730": {
+   "name": "Echo Point Nova",
+   "optipatcher": true
+  },
+  "1845910": {
+   "name": "Dragon Age: The Veilguard",
+   "proxy": "winmm.dll"
+  },
+  "1849250": {
+   "name": "EA Sports WRC",
+   "status": "broken"
+  },
+  "1869290": {
+   "name": "Supraworld",
+   "optipatcher": true
+  },
+  "1895880": {
+   "name": "Ratchet & Clank: Rift Apart",
+   "optipatcher": true
+  },
+  "1903340": {
+   "name": "Clair Obscur: Expedition 33",
+   "optipatcher": true
+  },
+  "1926270": {
+   "name": "Bloodhound",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "1926520": {
+   "name": "Ambulance Life: A Paramedic Simulator",
+   "optipatcher": true
+  },
+  "1931730": {
+   "name": "Fort Solis",
+   "optipatcher": true
+  },
+  "1933000": {
+   "name": "Luna Abyss",
+   "optipatcher": true
+  },
+  "1934570": {
+   "name": "South of Midnight",
+   "optipatcher": true
+  },
+  "1938010": {
+   "name": "Wild Hearts",
+   "proxy": "winmm.dll"
+  },
+  "1939970": {
+   "name": "Nobody Wants To Die",
+   "optipatcher": true
+  },
+  "1941540": {
+   "name": "Mafia: The Old Country",
+   "optipatcher": true
+  },
+  "1946700": {
+   "name": "Layers of Fear (2023)",
+   "optipatcher": true
+  },
+  "1949030": {
+   "name": "Sherlock Holmes: The Awakened",
+   "optipatcher": true
+  },
+  "1954200": {
+   "name": "Kena: Bridge of Spirits",
+   "optipatcher": true
+  },
+  "1962700": {
+   "name": "Subnautica 2",
+   "optipatcher": true
+  },
+  "1971870": {
+   "name": "Mortal Kombat 1",
+   "optipatcher": true
+  },
+  "1977170": {
+   "name": "Jusant",
+   "optipatcher": true
+  },
+  "1981570": {
+   "name": "Land of the Vikings",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2001760": {
+   "name": "Beast of Reincarnation",
+   "optipatcher": true
+  },
+  "2009100": {
+   "name": "Immortals of Aveum",
+   "proxy": "d3d12.dll",
+   "optipatcher": true
+  },
+  "2069250": {
+   "name": "High On Life 2",
+   "optipatcher": true
+  },
+  "2075100": {
+   "name": "Chernobylite 2: Exclusion Zone",
+   "optipatcher": true
+  },
+  "2081080": {
+   "name": "Capes",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2101960": {
+   "name": "Cronos: The New Dawn",
+   "optipatcher": true
+  },
+  "2102450": {
+   "name": "Enotria: The Last Song",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2124490": {
+   "name": "SILENT HILL 2 (2024)",
+   "optipatcher": true
+  },
+  "2129530": {
+   "name": "REANIMAL",
+   "optipatcher": true
+  },
+  "2138710": {
+   "name": "Sifu",
+   "optipatcher": true
+  },
+  "2144740": {
+   "name": "Ghostrunner 2",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2153350": {
+   "name": "Brothers: A Tale of Two Sons Remake",
+   "optipatcher": true
+  },
+  "2154070": {
+   "name": "INDUSTRIA 2",
+   "optipatcher": true
+  },
+  "2172010": {
+   "name": "Until Dawn",
+   "optipatcher": true
+  },
+  "2176430": {
+   "name": "Testament: The Order of High Human",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2183900": {
+   "name": "Warhammer 40,000: Space Marine 2",
+   "needs": [
+    "anti_cheat_off"
+   ]
+  },
+  "2215430": {
+   "name": "Ghost of Tsushima DIRECTOR'S CUT",
+   "optipatcher": true
+  },
+  "2215490": {
+   "name": "Project Borealis: Prologue",
+   "optipatcher": true
+  },
+  "2223840": {
+   "name": "The Casting of Frank Stone",
+   "proxy": "winmm.dll",
+   "optipatcher": true
+  },
+  "2233120": {
+   "name": "A Quiet Place: The Road Ahead",
+   "proxy": "winmm.dll"
+  },
+  "2246340": {
+   "name": "Monster Hunter Wilds",
+   "needs": [
+    "reframework"
+   ]
+  },
+  "2255370": {
+   "name": "Directive 8020",
+   "optipatcher": true
+  },
+  "2272250": {
+   "name": "Forgive me Father 2",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2277560": {
+   "name": "WUCHANG: Fallen Feathers",
+   "optipatcher": true
+  },
+  "2358720": {
+   "name": "Black Myth: Wukong",
+   "optipatcher": true
+  },
+  "2362060": {
+   "name": "CODE VEIN II",
+   "optipatcher": true
+  },
+  "2397300": {
+   "name": "Half Sword",
+   "optipatcher": true
+  },
+  "2399830": {
+   "name": "Ark: Survival Ascended",
+   "optipatcher": true
+  },
+  "2404880": {
+   "name": "Car Dealer Simulator",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2412960": {
+   "name": "Breathedge 2",
+   "optipatcher": true
+  },
+  "2420110": {
+   "name": "Horizon Forbidden West Complete Edition",
+   "optipatcher": true
+  },
+  "2456740": {
+   "name": "InZOI",
+   "optipatcher": true
+  },
+  "2457220": {
+   "name": "Avowed",
+   "optipatcher": true
+  },
+  "2464280": {
+   "name": "Tormented Souls 2",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2464530": {
+   "name": "VOIN",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2479650": {
+   "name": "SpongeBob SquarePants: Titans of the Tide",
+   "optipatcher": true
+  },
+  "2523720": {
+   "name": "Gears of War: Reloaded",
+   "status": "broken"
+  },
+  "2531310": {
+   "name": "The Last of Us Part II Remastered",
+   "optipatcher": true
+  },
+  "2561580": {
+   "name": "Horizon Zero Dawn Remastered",
+   "optipatcher": true
+  },
+  "2569760": {
+   "name": "The Mound: Omen of Cthulhu",
+   "optipatcher": true
+  },
+  "2584270": {
+   "name": "Mortal Shell II",
+   "optipatcher": true
+  },
+  "2591280": {
+   "name": "F1 Manager 2024",
+   "optipatcher": true
+  },
+  "2605790": {
+   "name": "Deep Rock Galactic: Rogue Core",
+   "optipatcher": true
+  },
+  "2615540": {
+   "name": "VOID/BREAKER",
+   "optipatcher": true
+  },
+  "2623190": {
+   "name": "The Elder Scrolls IV: Oblivion Remastered",
+   "optipatcher": true
+  },
+  "2634950": {
+   "name": "Tokyo Xtreme Racer",
+   "optipatcher": true
+  },
+  "2638890": {
+   "name": "Onimusha: Way of the Sword",
+   "needs": [
+    "reframework"
+   ]
+  },
+  "2649240": {
+   "name": "FINAL FANTASY XIV: Dawntrail",
+   "optipatcher": true
+  },
+  "2651280": {
+   "name": "Marvel's Spider‐Man 2",
+   "optipatcher": true
+  },
+  "2661300": {
+   "name": "Grounded 2",
+   "optipatcher": true
+  },
+  "2680010": {
+   "name": "The First Berserker: Khazan",
+   "optipatcher": true
+  },
+  "2764750": {
+   "name": "The Other Side",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2776940": {
+   "name": "Echoes of Yi: Samsara",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2787320": {
+   "name": "Revenge of the Savage Planet",
+   "optipatcher": true
+  },
+  "2795230": {
+   "name": "ODDRoom",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "2806050": {
+   "name": "Halo: Campaign Evolved",
+   "optipatcher": true
+  },
+  "2806640": {
+   "name": "The Talos Principle: Reawakened",
+   "optipatcher": true
+  },
+  "2825860": {
+   "name": "The Sinking City 2",
+   "optipatcher": true
+  },
+  "2828710": {
+   "name": "Valor Mortis",
+   "optipatcher": true
+  },
+  "2863640": {
+   "name": "The Midnight Walk",
+   "optipatcher": true
+  },
+  "2893820": {
+   "name": "Of Ash and Steel Demo",
+   "args": [
+    "-dx12"
+   ],
+   "optipatcher": true
+  },
+  "2909400": {
+   "name": "FINAL FANTASY VII REBIRTH",
+   "optipatcher": true
+  },
+  "2933130": {
+   "name": "The Lord of the Rings: Return to Moria",
+   "optipatcher": true
+  },
+  "2947440": {
+   "name": "SILENT HILL f",
+   "optipatcher": true
+  },
+  "2958130": {
+   "name": "Jurassic World Evolution 3",
+   "optipatcher": true
+  },
+  "2975950": {
+   "name": "Solasta II",
+   "optipatcher": true
+  },
+  "3010850": {
+   "name": "Gears of War: E-Day",
+   "optipatcher": true
+  },
+  "3041230": {
+   "name": "Windrose",
+   "optipatcher": true
+  },
+  "3043580": {
+   "name": "Keeper",
+   "optipatcher": true
+  },
+  "3050900": {
+   "name": "ROMEO IS A DEAD MAN",
+   "optipatcher": true
+  },
+  "3124540": {
+   "name": "Far Far West",
+   "optipatcher": true
+  },
+  "3156770": {
+   "name": "Witchfire",
+   "optipatcher": true
+  },
+  "3164330": {
+   "name": "Infinity Nikki",
+   "proxy": "version.dll"
+  },
+  "3228590": {
+   "name": "Deadzone Rogue",
+   "optipatcher": true
+  },
+  "3265250": {
+   "name": "MindsEye",
+   "optipatcher": true
+  },
+  "3280350": {
+   "name": "DEATH STRANDING 2: ON THE BEACH",
+   "optipatcher": true
+  },
+  "3287520": {
+   "name": "NINJA GAIDEN 2 Black",
+   "optipatcher": true
+  },
+  "3288210": {
+   "name": "Super Meat Boy 3D",
+   "optipatcher": true
+  },
+  "3290690": {
+   "name": "Styx: Blades of Greed",
+   "optipatcher": true
+  },
+  "3357650": {
+   "name": "PRAGMATA",
+   "needs": [
+    "reframework"
+   ]
+  },
+  "3378960": {
+   "name": "Lost Soul Aside",
+   "optipatcher": true
+  },
+  "3404260": {
+   "name": "Dead as Disco",
+   "optipatcher": true
+  },
+  "3419520": {
+   "name": "Quarantine Zone: The Last Check",
+   "optipatcher": true
+  },
+  "3448650": {
+   "name": "Aliens: Fireteam Elite 2",
+   "optipatcher": true
+  },
+  "3489700": {
+   "name": "Stellar Blade",
+   "optipatcher": true
+  },
+  "3634520": {
+   "name": "Samson",
+   "optipatcher": true
+  },
+  "3655390": {
+   "name": "Alien: Rogue Incursion Evolved Edition",
+   "optipatcher": true
+  },
+  "3729290": {
+   "name": "Dawn Break Demo",
+   "args": [
+    "-dx12"
+   ]
+  },
+  "3751260": {
+   "name": "The Blood of Dawnwalker",
+   "optipatcher": true
+  },
+  "3917090": {
+   "name": "Assetto Corsa Rally",
+   "optipatcher": true
+  },
+  "3949040": {
+   "name": "RV There Yet?",
+   "optipatcher": true
+  },
+  "3949550": {
+   "name": "1666: Amsterdam",
+   "optipatcher": true
+  },
+  "4094660": {
+   "name": "Rivage",
+   "optipatcher": true
+  },
+  "4144680": {
+   "name": "DEAD OR ALIVE 6 Last Round",
+   "proxy": "d3d12.dll"
+  },
+  "4317690": {
+   "name": "Crimson Moon",
+   "optipatcher": true
+  },
+  "5130460": {
+   "name": "Guns of Eschaton Demo",
+   "optipatcher": true
+  }
+ }
+}

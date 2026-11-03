@@ -99,6 +99,7 @@ export interface GameDetail {
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
+  recipe_info?: { needs: ("reframework" | "nvngx_dlss" | "anti_cheat_off")[]; broken: boolean; proxy: string | null; args: string[] } | null;
   fg_note?: "reflexOff" | null;
   launcher?: "heroic" | "lutris" | null;
   shortcut: boolean;

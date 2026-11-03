@@ -1,10 +1,18 @@
 """What a particular game needs besides OptiScaler, so nobody has to research it.
 
-Each entry is data checked against the OptiScaler wiki and, where marked, a real
-install on a handheld. Panel applies it on install and undoes exactly what it added.
+Hand-written entries are checked against the game's files and a real install on a handheld.
+`recipes_wiki.json` is generated from the OptiScaler wiki's compatibility table and only carries
+facts Panel can apply (proxy name, launch arguments) or must warn about (REFramework, a copied
+nvngx_dlss.dll, anti-cheat, games that do not work). Hand-written entries win. Panel applies a
+recipe on install and undoes exactly what it added.
 """
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
+
+WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
+NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off")
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,10 @@ class Recipe:
     ini: dict[str, str] = field(default_factory=dict)
     fg: dict[str, str] | None = None
     fg_note: str | None = None
+    proxy: str | None = None
+    needs: tuple[str, ...] = ()
+    broken: bool = False
+    source: str = "panel"
 
 
 RECIPES: dict[str, Recipe] = {
@@ -31,5 +43,37 @@ RECIPES: dict[str, Recipe] = {
 }
 
 
+def _wiki(path: Path = WIKI_FILE) -> dict[str, Recipe]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    source = str(data.get("source") or "optiscaler-wiki")
+    loaded = {}
+    for appid, entry in (data.get("recipes") or {}).items():
+        if not str(appid).isdecimal() or not isinstance(entry, dict):
+            continue
+        recipe = Recipe(
+            str(appid),
+            args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
+            proxy=entry.get("proxy") if isinstance(entry.get("proxy"), str) else None,
+            needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
+            broken=entry.get("status") == "broken",
+            source=source,
+        )
+        if recipe.args or recipe.proxy or recipe.needs or recipe.broken:
+            loaded[str(appid)] = recipe
+    return loaded
+
+
+WIKI = _wiki()
+
+
+def applies(recipe: Recipe | None) -> bool:
+    """Whether installing changes anything because of the recipe."""
+    return bool(recipe and (recipe.exe or recipe.args or recipe.files or recipe.native_dlls or recipe.ini
+                            or recipe.fg or recipe.proxy))
+
+
 def recipe_for(appid: str) -> Recipe | None:
-    return RECIPES.get(str(appid))
+    return RECIPES.get(str(appid)) or WIKI.get(str(appid))

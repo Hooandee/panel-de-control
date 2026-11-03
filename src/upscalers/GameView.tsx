@@ -276,6 +276,8 @@ export const GameView: FC<{
           {detail.updating && <Note tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Note>}
           {detail.analysis.foreign && !install && <Note tone="warn">{t("up.error.foreign")}</Note>}
           {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
+          {detail.recipe_info?.broken && <Note tone="warn">{t("up.recipe.broken")}</Note>}
+          {detail.recipe_info?.needs.map((need) => <Note key={need} tone="warn">{t(`up.recipe.need.${need}`)}</Note>)}
           {detail.analysis.anti_cheat && !install && (
             <>
               <Note tone="danger">{t("up.error.anti_cheat")}</Note>

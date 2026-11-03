@@ -214,7 +214,8 @@ class UpscalerService:
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
-            "recipe": bool(recipe),
+            "recipe": recipes.applies(recipe),
+            "recipe_info": _recipe_info(recipe),
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native or _helix_way(install) == "fsr" else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
@@ -303,8 +304,7 @@ class UpscalerService:
             raise UpscalerError("unsupported_gpu")
         if build.engine == "helixsr":
             return self._install_helix(appid, build, choice)
-        proxy = str(choice.get("proxy") or "dxgi.dll")
-        if proxy not in catalog.PROXIES:
+        if choice.get("proxy") and str(choice["proxy"]) not in catalog.PROXIES:
             raise UpscalerError("invalid_proxy")
 
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
@@ -317,6 +317,7 @@ class UpscalerService:
             raise UpscalerError("foreign")
 
         recipe = self._recipe(appid, entry.get("identity"))
+        proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
         assets = catalog.build_assets(build)
         if recipe:
             assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]
@@ -746,6 +747,16 @@ class UpscalerService:
                 if isinstance(entry.get("install"), dict)
             },
         }
+
+
+def _recipe_proxy(recipe) -> str | None:
+    return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None
+
+
+def _recipe_info(recipe) -> dict | None:
+    if not recipe:
+        return None
+    return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args)}
 
 
 def _is_helix(install: dict | None) -> bool:
