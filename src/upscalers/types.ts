@@ -28,6 +28,7 @@ export interface UpscalerJob {
   done: number;
   total: number;
   error: string | null;
+  leftover?: { removed_overrides: string[]; removed_args: string[]; env: Record<string, string | null> };
   result?: {
     overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris";
     removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;

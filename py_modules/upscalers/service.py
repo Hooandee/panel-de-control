@@ -494,11 +494,15 @@ class UpscalerService:
         if old.get("launcher"):
             self._launcher_overrides(installed, old, remove=True)
         entry["install"] = None
-        return {
+        self._save()
+        left = {
             "overrides": [] if old.get("launcher") else _overrides(old),
             "args": list(old.get("added_args", [])),
             "env": {old["env"]: None} if old.get("engine") == "proton" else {},
         }
+        # If the new install fails after this point, the error still tells the page what to take out.
+        self._update_job(leftover={"removed_overrides": left["overrides"], "removed_args": left["args"], "env": left["env"]})
+        return left
 
     def _helix(self, method: str, *args):
         try:

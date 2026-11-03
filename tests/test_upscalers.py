@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, games, ini, logread, recipes
+from upscalers import catalog, games, helixsr, ini, logread, recipes
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -1140,3 +1140,19 @@ def test_re_engine_games_move_optiscalers_menu_off_reframeworks_insert(steam, fa
     service.press_key(APPID, "menu")
     service.press_key(APPID, "fg")
     assert pressed == ["home", "fg"]
+
+
+def test_a_failed_switch_still_reports_what_the_old_install_left(steam, helix_catalog, proc):
+    service = _service(steam, helix_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+
+    class Broken(FakeHelix):
+        def install(self, game):
+            raise helixsr.HelixError("helixsr_failed", "bridge broke")
+
+    service.helix = Broken()
+    service.begin("install", APPID)
+    service.run(service.install, APPID, {"build": "hlx-fsr4"})
+    job = service.job()
+    assert job["state"] == "error" and job["leftover"]["removed_overrides"] == ["dxgi=n,b"]
+    assert service.game(APPID)["install"] is None

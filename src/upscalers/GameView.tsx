@@ -3,8 +3,8 @@ import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 
 import {
-  cancelUpscalersJob, configureUpscaler, getUpscalersGame, getUpscalersJob, installUpscaler,
-  recordUpscalerArgs, refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
+  cancelUpscalersJob, configureUpscaler, getUpscalersGame, installUpscaler,
+  refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
@@ -15,22 +15,22 @@ import { openIdentityModal } from "./IdentityModal";
 import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
-import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
+import { readAppDetails } from "../launch/steamApi";
 import { CATALOG, pillVisible } from "../launch/catalog";
 import type { GpuGen } from "../launch/proton";
 import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
-  buildBlocker, downloadPace, launchAfterJob, protonFsr4Env, type PaceSample,
+  buildBlocker, downloadPace, protonFsr4Env, type PaceSample,
 } from "./model";
 import { AdvancedIni } from "./AdvancedIni";
+import { onJobUpdate, trackJob } from "./jobRunner";
 import { LivePanel } from "./LivePanel";
 import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
-const POLL_MS = 250;
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
 
 const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed"]);
@@ -114,54 +114,33 @@ export const GameView: FC<{
     return () => clearTimeout(slow);
   }, [load]);
 
-  const finish = useCallback(async (finished: UpscalerJob) => {
-    const result = finished.result;
-    if (finished.state === "done" && result?.launcher) {
-      if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
-    } else if (finished.state === "done" && result?.overrides) {
-      const details = await readAppDetails(game.liveAppid);
-      const overrides = result.overrides;
-      const args = result.args ?? [];
-      const next = details ? launchAfterJob(details.launch, result, finished.kind) : null;
-      if (finished.kind === "install") {
-        if (next && writeLaunchOptions(game.liveAppid, next.value, game.isNonSteam)) {
-          if (next.added.length) await recordUpscalerArgs(appid, next.added).catch(() => undefined);
-        } else {
-          setMessage(t("up.launch.failed", { value: `WINEDLLOVERRIDES="${overrides.map((o) => o.split("=")[0]).join(",")}=n,b" %command% ${args.join(" ")}`.trim() }));
-        }
-      } else {
-        if (next === null || !writeLaunchOptions(game.liveAppid, next.value, game.isNonSteam)) setMessage(t("up.error.generic"));
-        if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
-      }
-    } else if (finished.state === "error") {
-      const text = finished.error === "no_space" && finished.detail
-        ? t("up.error.no_space", { mb: megabytes(Number(finished.detail)) })
-        : errorText(t, finished.error);
-      setMessage(finished.detail && finished.error?.startsWith("helixsr") ? `${text} (${finished.detail})` : text);
+  useEffect(() => onJobUpdate(({ job: next, finished, notice }) => {
+    if (next.appid !== appid || !mounted.current) return;
+    setJob(next);
+    if (!finished) return;
+    if (next.state === "error") {
+      const text = next.error === "no_space" && next.detail
+        ? t("up.error.no_space", { mb: megabytes(Number(next.detail)) })
+        : errorText(t, next.error);
+      setMessage(next.detail && next.error?.startsWith("helixsr") ? `${text} (${next.detail})` : text);
+    } else if (notice) {
+      setMessage(t(notice.key, notice.params));
     }
-    await load();
+    void load();
     onChanged();
-  }, [appid, game.liveAppid, game.isNonSteam, load, onChanged, t]);
+  }), [appid, load, onChanged, t]);
 
   useEffect(() => {
-    if (!job || job.state !== "running") return;
-    const timer = window.setInterval(async () => {
-      const next = await getUpscalersJob().catch(() => null);
-      if (!mounted.current || !next || next.id !== job.id) return;
-      setJob(next);
-      if (next.state !== "running") {
-        window.clearInterval(timer);
-        void finish(next);
-      }
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [job?.id, job?.state, finish]);
+    if (job?.state === "running") trackJob(job, { appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam });
+  }, [job?.id]);
 
   const start = async (run: () => Promise<UpscalerJob>) => {
     setMessage(null);
     setVerify(null);
     try {
-      setJob(await run());
+      const started = await run();
+      setJob(started);
+      trackJob(started, { appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam });
     } catch (error) {
       setMessage(errorText(t, String((error as Error)?.message ?? "")));
     }
