@@ -1,13 +1,15 @@
 """lsfg-vk: Lossless Scaling's frame generation as a Vulkan layer, for any game.
 
-The layer is implicit: once installed it loads everywhere and only acts when a profile's
-`active_in` matches the process (or the `SteamAppId` it is given). It needs `lsfg-vk.dll` from the
+The layer is implicit: once installed it loads everywhere and only acts when a profile is picked,
+by `LSFGVK_PROFILE` (the profile's name, which Panel puts in the game's launch options) or by
+`active_in`, which matches binary, .exe or process names, never a Steam appid. It needs `lsfg-vk.dll` from the
 user's own copy of Lossless Scaling on Steam (branch `lsfg-vk`); upstream only searches the main
 library, so Panel always writes the path it found. Panel owns the layer files it installed and the
 config file it wrote, and leaves another tool's install or config alone.
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -65,6 +67,13 @@ class Lsfg:
         data.setdefault("profiles", {})
         return data
 
+    def _own(self, path: Path) -> None:
+        """Files in the user's home stay the user's: Decky runs this as root."""
+        if os.geteuid() != 0:
+            return
+        stat = self.home.stat()
+        os.chown(path, stat.st_uid, stat.st_gid, follow_symlinks=False)
+
     def _save(self, data: dict) -> None:
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.manifest_path.with_suffix(".tmp")
@@ -107,6 +116,7 @@ class Lsfg:
             target = self.local / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
+            self._own(target)
             files[relative] = sha256(target)
         data.update(files=files, version=version)
         self._save(data)
@@ -127,7 +137,7 @@ class Lsfg:
         return self.status()
 
     # ---- per-game profiles -------------------------------------------------------------------
-    def set_game(self, appid: str, name: str, config: dict | None) -> dict:
+    def set_game(self, appid: str, name: str, config: dict | None, exe: str | None = None) -> dict:
         """Returns the environment the game's launch options must carry (empty when it is off)."""
         if not self._ours():
             raise LsfgError("lsfg_missing")
@@ -144,10 +154,12 @@ class Lsfg:
                 "multiplier": multiplier,
                 "flow": flow,
                 "performance": bool(config.get("performance", True)),
+                "exe": Path(exe).name if exe else None,
             }
         self._save(data)
         self._write_config(data)
-        return {"env": LAUNCH_ENV if appid in data["profiles"] else {}, "profile": data["profiles"].get(appid)}
+        env = {**LAUNCH_ENV, "LSFGVK_PROFILE": profile_name(appid)} if appid in data["profiles"] else {}
+        return {"env": env, "profile": data["profiles"].get(appid)}
 
     def _write_config(self, data: dict) -> None:
         if self._foreign():
@@ -157,10 +169,10 @@ class Lsfg:
         if dll:
             lines.append(f"dll = {_toml(str(dll))}")
         for appid, profile in sorted(data["profiles"].items()):
+            lines += ["", f"# {profile['name']}", "[[profile]]", "name = " + _toml(profile_name(appid))]
+            if profile.get("exe"):
+                lines.append(f"active_in = [{_toml(profile['exe'])}]")
             lines += [
-                "", "[[profile]]",
-                "name = " + _toml(profile["name"] + f" ({appid})"),
-                f"active_in = [{_toml(appid)}]",
                 f"multiplier = {profile['multiplier']}",
                 f"flow_scale = {FLOW_SCALES[profile['flow']]}",
                 f"performance_mode = {'true' if profile['performance'] else 'false'}",
@@ -168,7 +180,13 @@ class Lsfg:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.config_path.with_suffix(".tmp")
         tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self._own(tmp)
         tmp.replace(self.config_path)
+
+
+def profile_name(appid: str) -> str:
+    """Spaceless so `LSFGVK_PROFILE=` needs no quoting in Steam's launch options."""
+    return f"pdc-{appid}"
 
 
 def _toml(value: str) -> str:

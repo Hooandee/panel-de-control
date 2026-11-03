@@ -7,7 +7,7 @@ import { theme } from "../theme";
 import { withEnv } from "./model";
 import { ActionButton, Label, Note, Row, SegmentRow, Skeleton } from "./parts";
 
-const LAUNCH_ENV = ["ENABLE_GAMESCOPE_WSI"];
+const LAUNCH_ENV = ["ENABLE_GAMESCOPE_WSI", "LSFGVK_PROFILE"];
 type Multiplier = "off" | "2" | "3" | "4";
 
 /** Lossless Scaling frame generation through lsfg-vk: works on any Vulkan, DXVK or VKD3D game. */

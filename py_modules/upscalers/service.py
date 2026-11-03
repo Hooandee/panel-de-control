@@ -667,8 +667,13 @@ class UpscalerService:
         installed = self._find(appid)
         if installed is None:
             raise UpscalerError("not_installed")
+        exe = installed.exe
+        if config is not None and not installed.native:
+            entry = self._game_state(appid)
+            recipe = self._recipe(appid, self._identity(installed, entry))
+            exe = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)["exe"]
         try:
-            return self.lsfg.set_game(appid, installed.name, config)
+            return self.lsfg.set_game(appid, installed.name, config, exe)
         except lsfg.LsfgError as error:
             raise UpscalerError(error.code) from None
 
