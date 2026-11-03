@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, helixsr, identify, ini, keys, launchers, logread, lsfg, recipes, wiki
+from . import capture, catalog, diagnostics, games, helixsr, identify, ini, keys, launchers, logread, lsfg, ownership, recipes, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -388,6 +388,7 @@ class UpscalerService:
             "native_dlls": list(recipe.native_dlls) if recipe else [],
             "fg_plan": fg_plan,
             "managed": managed,
+            "menu_key": recipe.menu_key if recipe else None,
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
@@ -436,7 +437,7 @@ class UpscalerService:
         meta = target / games.MANIFEST_DIR
         meta.mkdir(exist_ok=True)
         atomic_json_save(str(meta / HELIX_MARKER), {"way": build.way, "release": helixsr.RELEASE})
-        _own_like(target, [meta])
+        ownership.own_like(target, [meta])
 
         now = time.time()
         entry["install"] = {
@@ -521,6 +522,8 @@ class UpscalerService:
 
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str) -> dict:
         meta = target / games.MANIFEST_DIR
+        if meta.is_symlink():
+            raise UpscalerError("unsafe_folder")
         backup = meta / "backup"
         meta.mkdir(exist_ok=True)
         manifest: dict = {"files": {}, "backups": [], "dirs": []}
@@ -541,7 +544,7 @@ class UpscalerService:
             self._remove(target)
             raise
         atomic_json_save(str(meta / "manifest.json"), manifest)
-        _own_like(target, [*(target / f for f in manifest["files"]), *(target / d for d in manifest["dirs"]), meta])
+        ownership.own_like(target, [*(target / f for f in manifest["files"]), *(target / d for d in manifest["dirs"]), meta])
         return manifest
 
     @staticmethod
@@ -831,7 +834,7 @@ class UpscalerService:
         if installed is None or not games.running_under(installed.root, self.proc):
             raise UpscalerError("not_running")
         try:
-            self.press(action)
+            self.press(install.get("menu_key") or action if action == "menu" else action)
         except keys.HotkeyError as error:
             raise UpscalerError(str(error)) from None
         return {"pressed": action}
@@ -923,22 +926,6 @@ def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args)}
-
-
-def _own_like(folder: Path, paths: list[Path]) -> None:
-    """Steam updates and verifies games as the user, so nothing Panel leaves in a game folder may stay root's."""
-    if os.geteuid() != 0:
-        return
-    try:
-        stat = folder.stat()
-    except OSError:
-        return
-    for path in paths:
-        for item in [path, *(path.rglob("*") if path.is_dir() else ())]:
-            try:
-                os.chown(item, stat.st_uid, stat.st_gid, follow_symlinks=False)
-            except OSError:
-                pass
 
 
 def _is_helix(install: dict | None) -> bool:

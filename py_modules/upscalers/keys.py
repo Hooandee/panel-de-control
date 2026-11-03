@@ -13,7 +13,7 @@ import time
 
 UINPUT = "/dev/uinput"
 EV_SYN, EV_KEY, SYN_REPORT = 0x00, 0x01, 0x00
-KEYS = {"menu": 110, "fg": 107, "fps": 104, "fps_style": 109}  # KEY_INSERT, KEY_END, KEY_PAGEUP, KEY_PAGEDOWN
+KEYS = {"menu": 110, "fg": 107, "fps": 104, "fps_style": 109, "home": 102}  # INSERT, END, PAGEUP, PAGEDOWN, HOME
 UI_SET_EVBIT = 0x40045564
 UI_SET_KEYBIT = 0x40045565
 UI_DEV_CREATE = 0x5501

@@ -1121,3 +1121,22 @@ def test_files_panel_leaves_in_a_game_belong_to_the_games_owner(steam, fake_cata
     service.install(APPID, {"build": "fsr-test"})
     for name in ("dxgi.dll", "OptiScaler.ini", "amdxcffx64.dll", "D3D12_Optiscaler", ".pdc-upscaler/manifest.json"):
         assert target / name in owned, name
+
+
+def test_re_engine_games_move_optiscalers_menu_off_reframeworks_insert(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    reframework = Asset("reframework-nightly", "REFramework.zip", hashlib.sha256(b"rf").hexdigest(), 2,
+                        ("http://invalid",), member="dinput8.dll")
+    monkeypatch.setitem(catalog.ASSETS, reframework.id, reframework)
+    _write(Path(fake_catalog) / "cache" / reframework.sha256 / "unpacked/dinput8.dll", b"reframework")
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID))
+    _write(game / "re_chunk_000.pak")
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    assert ini.read((game / "bin/x64_dx12/OptiScaler.ini").read_text(), "Menu.ShortcutKey") == "0x24"
+    pressed = []
+    service.press = pressed.append
+    _write(proc / "77/cmdline", f"{game}/bin/x64_dx12/witcher3.exe")
+    service.press_key(APPID, "menu")
+    service.press_key(APPID, "fg")
+    assert pressed == ["home", "fg"]

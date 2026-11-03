@@ -29,6 +29,8 @@ class Recipe:
     needs: tuple[str, ...] = ()
     broken: bool = False
     optipatcher: bool = False
+    # Panel's live-panel key for OptiScaler's menu when the game already uses Insert.
+    menu_key: str | None = None
     source: str = "panel"
 
 
@@ -97,7 +99,9 @@ def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     if not (root / RE_ENGINE_MARKER).is_file():
         return recipe
     base = recipe or Recipe(str(appid))
+    # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
+    keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
     if base.files:
-        return base
+        return replace(base, **keys)
     return replace(base, files=dict(REFRAMEWORK), native_dlls=(*base.native_dlls, "dinput8"),
-                   needs=tuple(n for n in base.needs if n != "reframework"))
+                   needs=tuple(n for n in base.needs if n != "reframework"), **keys)

@@ -19,6 +19,8 @@ from pathlib import Path
 
 from user_session import session_for_uid, spawn_args
 
+from . import ownership
+
 RELEASE = "HelixSR-3.2.0"
 COMPLETE = ".panel-complete"
 BRIDGE_TIMEOUT_S = 180
@@ -107,11 +109,7 @@ class HelixSR:
             shutil.rmtree(staging, ignore_errors=True)
 
     def _own(self, folder: Path) -> None:
-        if os.geteuid() != 0:
-            return
-        stat = self.home.stat()
-        for path in [folder.parent, folder, *folder.rglob("*")]:
-            os.chown(path, stat.st_uid, stat.st_gid, follow_symlinks=False)
+        ownership.own_like(self.home, [folder.parent, folder])
 
     # ---- games ----------------------------------------------------------------
     def install(self, game: Path) -> dict:
