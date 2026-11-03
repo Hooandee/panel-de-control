@@ -232,13 +232,20 @@ def _score(path: Path, root: Path, size: int) -> int:
     return score
 
 
-def ships_upscaler(root: Path) -> bool:
-    """Whether the game folder carries any DLSS, FSR or XeSS library."""
-    names = {name for group in ("fsr31", "fsr2", "dlss", "xess") for name in INPUTS[group]}
-    for _current, files in _walk(root):
-        if any(file.lower() in names for file in files):
-            return True
-    return False
+SHIPPED_NAMES = {"dlss": "DLSS", "fsr31": "FSR 3.1", "fsr2": "FSR 2", "xess": "XeSS"}
+
+
+def shipped_upscalers(root: Path) -> list[str]:
+    """The DLSS, FSR and XeSS libraries the game folder carries, by name, in a fixed order."""
+    found = set()
+    for current, files in _walk(root):
+        ours = _installed_by_panel(current)
+        for file in files:
+            lower = file.lower()
+            for kind in SHIPPED_NAMES:
+                if lower in INPUTS[kind] and lower not in ours:
+                    found.add(kind)
+    return [SHIPPED_NAMES[kind] for kind in SHIPPED_NAMES if kind in found]
 
 
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:

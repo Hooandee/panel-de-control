@@ -390,6 +390,8 @@ export const ptBR: Record<string, string> = {
   "up.games": "Jogos",
   "up.back": "Jogos",
   "up.compatible": "Compatível",
+  "up.list.linux": "Jogo de Linux",
+  "up.list.none": "Sem upscaler próprio",
   "up.bar.perf": "FPS",
   "up.bar.image": "Imagem",
   "up.build.soonLine": "{name} chega em breve",

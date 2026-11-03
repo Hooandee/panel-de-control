@@ -142,8 +142,8 @@ class UpscalerService:
         history = entry.get("history") or []
         return history[-1].get("result", "pending") if history else "pending"
 
-    def compatibility(self, appids: list[str]) -> dict[str, bool]:
-        """Which games ship an upscaler Panel can replace, cached by install folder mtime."""
+    def compatibility(self, appids: list[str]) -> dict[str, dict]:
+        """What each game ships (or that it runs natively on Linux), cached by install folder mtime."""
         result = {}
         for appid in appids[:400]:
             installed = self._find(str(appid))
@@ -155,7 +155,8 @@ class UpscalerService:
                 continue
             cached = self._compat.get(installed.appid)
             if cached is None or cached[0] != stamp:
-                cached = (stamp, games.ships_upscaler(installed.root))
+                cached = (stamp, {"native": installed.native,
+                                  "inputs": [] if installed.native else games.shipped_upscalers(installed.root)})
                 self._compat[installed.appid] = cached
             result[installed.appid] = cached[1]
         return result

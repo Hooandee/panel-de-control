@@ -1,7 +1,7 @@
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useState, type FC } from "react";
 
-import { getUpscalersCompat, getUpscalersOverview } from "../api";
+import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
 import { GameCover } from "../components/GameCover";
 import { useI18n } from "../i18n";
@@ -20,7 +20,7 @@ export const EscaladoresSection: FC = () => {
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<GameEntry | null>(null);
-  const [compat, setCompat] = useState<Record<string, boolean>>({});
+  const [compat, setCompat] = useState<Record<string, GameCompat>>({});
   const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
 
   const refresh = useCallback(async () => {
@@ -92,6 +92,7 @@ export const EscaladoresSection: FC = () => {
             const install = overview.installs[String(game.liveAppid)];
             const build = install && overview.builds.find((b) => b.id === install.build);
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
+            const info = compat[String(game.liveAppid)];
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
@@ -99,22 +100,20 @@ export const EscaladoresSection: FC = () => {
                   <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {game.name}
                   </div>
-                  {install && (
-                    <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, marginTop: 2 }}>
-                      <Dot color={statusColor(install.status)} />
-                      <span style={{ color: theme.color.textMuted }}>{build ? buildLabel(build) : install.build}</span>
-                    </div>
-                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, marginTop: 2, minHeight: 16 }}>
+                    {install ? (
+                      <>
+                        <Dot color={statusColor(install.status)} />
+                        <span style={{ color: theme.color.textPrimary }}>{build ? buildLabel(build) : install.build}</span>
+                      </>
+                    ) : info ? (
+                      <span style={{ color: info.inputs.length ? theme.color.ok : theme.color.textMuted }}>
+                        {info.native ? t("up.list.linux") : info.inputs.length ? info.inputs.join(", ") : t("up.list.none")}
+                      </span>
+                    ) : null}
+                  </div>
                   {busy && <div style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.phase.prepare")}</div>}
                 </div>
-                {!install && compat[String(game.liveAppid)] && (
-                  <span style={{
-                    fontSize: theme.font.caption, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
-                    color: theme.color.ok, boxShadow: `inset 0 0 0 1px ${theme.color.ok}66`, flexShrink: 0,
-                  }}>
-                    {t("up.compatible")}
-                  </span>
-                )}
               </FocusableCard>
             );
           })}

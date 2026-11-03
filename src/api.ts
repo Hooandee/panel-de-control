@@ -1354,7 +1354,8 @@ export const getDuoArtwork = callable<[], Record<string, import("./themes/artwor
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
 
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
-export const getUpscalersCompat = callable<[appids: string[]], Record<string, boolean>>("get_upscalers_compat");
+export interface GameCompat { native: boolean; inputs: string[] }
+export const getUpscalersCompat = callable<[appids: string[]], Record<string, GameCompat>>("get_upscalers_compat");
 export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
 export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
 export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | null], GameDetail>("get_upscalers_game");

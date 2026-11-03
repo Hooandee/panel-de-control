@@ -221,7 +221,7 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
 
 def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([APPID, "999"]) == {APPID: True}
+    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"]}}
 
 
 def test_log_reader_takes_real_optiscaler_lines(tmp_path):
