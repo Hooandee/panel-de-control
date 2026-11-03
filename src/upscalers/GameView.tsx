@@ -33,7 +33,7 @@ import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, Upscaler
 const POLL_MS = 250;
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
 
-const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed", "helixsr_build_failed"]);
+const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed"]);
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -60,7 +60,6 @@ export const GameView: FC<{
   const [verify, setVerify] = useState<VerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
-  const [acceptNvidia, setAcceptNvidia] = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
   const [compat, setCompat] = useState<string | null>(null);
   useEffect(() => {
@@ -178,10 +177,9 @@ export const GameView: FC<{
   const selectedModels = selected?.models;
   const helix = selected?.engine === "helixsr";
   const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton";
-  const needsNvidia = selected?.way === "scaler" && install?.build !== selected.id;
   const installedBuild = builds.find((b) => b.id === install?.build);
   const reinstall = () => start(() => installUpscaler(appid, {
-    ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
+    ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   }));
 
@@ -226,7 +224,7 @@ export const GameView: FC<{
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
   const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
-    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat) || (needsNvidia && !acceptNvidia);
+    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
   const inputs = detail?.analysis.inputs ?? {};
   const usable = builds.filter((b) => b.available && b.supported && !buildBlocker(b, inputs, protonEnv));
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
@@ -435,7 +433,7 @@ export const GameView: FC<{
               ))}
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 
-              {helix && <Note>{t(selected?.way === "fsr" ? "up.helix.pick.fsr" : "up.helix.pick.dlss")}</Note>}
+              {helix && <Note>{t("up.helix.pick.fsr")}</Note>}
               {selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
               {!replacesFsr && (
                 <>
@@ -459,16 +457,6 @@ export const GameView: FC<{
             </>
           )}
 
-          {needsNvidia && (
-            <>
-              <Note>{t("up.helix.nvidia")}</Note>
-              <SegmentRow
-                value={acceptNvidia ? "yes" : null}
-                onChange={() => setAcceptNvidia(!acceptNvidia)}
-                options={[{ value: "yes", label: t("up.helix.nvidia.accept") }]}
-              />
-            </>
-          )}
 
           {detail.fg_plan && !replacesFsr && (
             <>
@@ -542,8 +530,7 @@ const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
   const label = job.phase === "download"
     ? t("up.phase.download", { done: megabytes(job.done), total: megabytes(job.total) })
     : t(`up.phase.${job.phase}`);
-  const step = job.phase === "build" ? job.step
-    : job.phase === "download" && pace
+  const step = job.phase === "download" && pace
       ? pace.rate < 1024 ? t("up.phase.stalled")
       : t(pace.eta !== null && pace.eta < 3600 ? "up.phase.pace" : "up.phase.rate", {
         rate: (pace.rate / (1024 * 1024)).toFixed(1), eta: formatEta(pace.eta ?? 0),

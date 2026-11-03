@@ -2,8 +2,10 @@
 
 HelixSR's licence forbids modifying or redistributing its files, so Panel only
 unpacks the official release into the user's HelixSR folder and drives it with
-the JSON bridge HelixSR Desktop uses. Everything runs as the user who owns the
-games, never as root, so the game folders keep their owner.
+the JSON bridge HelixSR Desktop uses. Only HLX FSR 4 (the FSR drop-in, built from
+AMD's MIT FSR SDK) is used; HLX DLSS is left out on purpose because building it
+takes NVIDIA's DLSS DLL apart for AMD GPUs, against NVIDIA's licence. Everything
+runs as the user who owns the games, never as root.
 """
 
 import json
@@ -12,28 +14,20 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 import zipfile
 from pathlib import Path
-from typing import Callable
 
 from user_session import session_for_uid, spawn_args
 
 RELEASE = "HelixSR-3.2.0"
-SCALER_VERSION = "2.1.0"
 COMPLETE = ".panel-complete"
 BRIDGE_TIMEOUT_S = 180
-BUILD_TIMEOUT_S = 45 * 60
 MAX_LOG_BYTES = 2 * 1024 * 1024
 
-_SAY = re.compile(r"^\[helixsr-setup\]\s+(.+)$")
-_DISPATCH = re.compile(r"render (\d{2,5})x(\d{2,5}) -> (\d{2,5})x(\d{2,5})")
-_FFX = re.compile(r"FFX upscaler: (HLX [\w ]+?) \(")
 # HLX FSR 4 logs its context once with the largest render size the game may send (Stellar Blade on
 # Performance still reports 1280x800), so it proves HLX runs but not the real input size.
 _HLX_FSR = re.compile(r"HLX-FSR-4 own runtime active: .*?output (\d{2,5})x(\d{2,5}), max render (\d{2,5})x(\d{2,5})")
 HLX_FSR_LOG = "HLX_FSR.log"
-_NETWORK_OFF = re.compile(r"network (?:is )?not running|red border", re.I)
 
 
 class HelixError(Exception):
@@ -48,7 +42,6 @@ class HelixSR:
         self.home = Path(home)
         self.release = self.home / ".local/share/HelixSR/panel" / RELEASE
         self.run = subprocess.run
-        self.popen = subprocess.Popen
 
     def ready(self) -> bool:
         return (self.release / COMPLETE).is_file()
@@ -120,57 +113,18 @@ class HelixSR:
         for path in [folder.parent, folder, *folder.rglob("*")]:
             os.chown(path, stat.st_uid, stat.st_gid, follow_symlinks=False)
 
-    def status(self) -> dict:
-        if not self.ready():
-            return {"downloaded": False}
-        answer = self._bridge("status")
-        return {
-            "downloaded": True,
-            "version": answer.get("version"),
-            "network": bool(answer.get("network_ready")),
-            "hlx": answer.get("hlx_ready"),
-        }
-
-    def build(self, step: Callable[[str], None], cancelled: Callable[[], bool]) -> dict:
-        """HelixSR's setup builds HLX DLSS's network once; --yes only after the user accepted NVIDIA's licence."""
-        if not self.ready():
-            raise HelixError("helixsr_missing")
-        argv, extra = self._spawn(["bash", str(self.release / "helixsr-setup.sh"), "--yes"])
-        try:
-            process = self.popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                 text=True, cwd=str(self.release), **extra)
-        except OSError as error:
-            raise HelixError("helixsr_build_failed", type(error).__name__) from None
-        deadline = time.monotonic() + BUILD_TIMEOUT_S
-        last = ""
-        for line in process.stdout:
-            if cancelled() or time.monotonic() > deadline:
-                process.kill()
-                raise HelixError("cancelled" if cancelled() else "helixsr_build_failed", last)
-            said = _SAY.match(line.strip())
-            if said:
-                last = said.group(1)[:160]
-                step(last)
-        if process.wait(timeout=60) != 0:
-            raise HelixError("helixsr_build_failed", last)
-        return self.status()
-
     # ---- games ----------------------------------------------------------------
-    def install(self, game: Path, way: str) -> dict:
-        args = ["--game", str(game), "--way", way]
-        if way == "scaler":
-            args += ["--scaler", str(self.release / "helixsr-scaler"), "--scaler-version", SCALER_VERSION]
-        return self._bridge("install", *args).get("game") or {}
+    def install(self, game: Path) -> dict:
+        return self._bridge("install", "--game", str(game), "--way", "fsr").get("game") or {}
 
     def remove(self, game: Path) -> dict:
         return self._bridge("remove", "--game", str(game)).get("game") or {}
 
 
-def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> dict:
-    """What HelixSR did: its own dispatch lines, and HelixSR Scaler's choice of upscaler."""
+def read_log(logs: list[Path], since: float | None = None) -> dict:
+    """HLX FSR 4 writes one line per context it creates; it proves HLX runs, not how far it scales."""
     facts: dict = {"present": False}
-    paths = [*logs, *(log.with_name(HLX_FSR_LOG) for log in logs), exe_folder / "OptiScaler.log"]
-    for path in dict.fromkeys(paths):
+    for path in dict.fromkeys([*logs, *(log.with_name(HLX_FSR_LOG) for log in logs)]):
         try:
             stat = path.stat()
             with open(path, "rb") as handle:
@@ -185,24 +139,13 @@ def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> 
         facts["present"] = True
         facts.pop("stale", None)
         for line in text.splitlines():
-            if match := _DISPATCH.search(line):
-                facts["resolution"] = {
-                    "render": [int(match.group(1)), int(match.group(2))],
-                    "output": [int(match.group(3)), int(match.group(4))],
-                }
-            elif match := _HLX_FSR.search(line):
+            if match := _HLX_FSR.search(line):
                 facts["upscaler"] = "HLX FSR 4"
                 facts["output"] = [int(match.group(1)), int(match.group(2))]
-            elif match := _FFX.search(line):
-                facts["upscaler"] = match.group(1).strip()
-            elif _NETWORK_OFF.search(line):
-                facts["network_off"] = True
     return facts
 
 
 def verdict(facts: dict) -> str:
     if not facts.get("present") or facts.get("stale"):
         return "not_run"
-    if (facts.get("resolution") or facts.get("upscaler")) and not facts.get("network_off"):
-        return "active"
-    return "loaded"
+    return "active" if facts.get("upscaler") else "loaded"

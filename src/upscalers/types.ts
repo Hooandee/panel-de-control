@@ -23,8 +23,7 @@ export interface UpscalerJob {
   kind: "install" | "uninstall";
   appid: string;
   state: "running" | "done" | "error";
-  phase: "prepare" | "download" | "unpack" | "build" | "copy" | "restore" | "done";
-  step?: string | null;
+  phase: "prepare" | "download" | "unpack" | "copy" | "restore" | "done";
   detail?: string | null;
   done: number;
   total: number;
@@ -66,7 +65,6 @@ export interface UpscalerChoice {
   fg_route?: FgRoute | null;
   model?: string | null;
   confirm_anti_cheat?: boolean;
-  accept_nvidia?: boolean;
   env?: string;
 }
 

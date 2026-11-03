@@ -21,7 +21,7 @@ HELIX_MARKER = "helixsr.json"
 # Proton's own FSR 4 switch: the official name and the per-GPU names custom builds keep.
 PROTON_FSR4_ENVS = ("FSR4_UPGRADE", "PROTON_FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE")
 # What HelixSR's bridge leaves in the game for each way; gone means a game update or verify removed it.
-_HELIX_FILES = {"fsr": "helixsr-install.json", "scaler": "HelixSR-Scaler.files"}
+HELIX_INSTALL_FILE = "helixsr-install.json"
 
 
 # Native Linux games run without Proton; OptiScaler only hooks Windows executables.
@@ -223,7 +223,7 @@ class UpscalerService:
             "recipe": recipes.applies(recipe),
             "recipe_info": _recipe_info(recipe),
             "fg_note": recipe.fg_note if recipe else None,
-            "fg_plan": None if installed.native or _helix_way(install) == "fsr" else _fg_plan(self.gpu, analysis, recipe, _generation(install),
+            "fg_plan": None if installed.native or _is_helix(install) else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
         }
 
@@ -400,9 +400,6 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
         if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
             raise UpscalerError("helixsr_no_fsr")
-        consent = bool(choice.get("accept_nvidia"))
-        if build.way == "scaler" and not consent and not (self.helix.ready() and self._helix("status")["network"]):
-            raise UpscalerError("helixsr_consent")
         entry = self._game_state(appid)
         left = self._replace(entry, installed)
         if left is not None:
@@ -417,20 +414,10 @@ class UpscalerService:
             self._update_job(phase="unpack")
             self._helix("unpack", archive)
             shutil.rmtree(archive.parent, ignore_errors=True)
-        if build.way == "scaler" and not self._helix("status")["network"]:
-            self._update_job(phase="build", step=None)
-            self._helix("build", lambda step: self._update_job(step=step), self._cancel.is_set)
-
         self._update_job(phase="copy")
-        game = self._helix("install", installed.root, build.way)
+        game = self._helix("install", installed.root)
         exe_folder = Path(game.get("exe_folder") or target)
-        options = _clean_options(choice if build.way == "scaler" else {**choice, "fg": "off"})
-        fg_plan = None
-        if build.way == "scaler":
-            recipe = self._recipe(appid, entry.get("identity"), installed.root)
-            fg_plan = _fg_plan(self.gpu, analysis, recipe, catalog.ASSETS[build.archive].generation, choice.get("fg_route"))
-            self._write_scaler_ini(exe_folder, {**catalog.BASE_INI, **_option_overrides(choice),
-                                                **catalog.fg_overrides(fg_plan, options["fg"] == "on")})
+        options = _clean_options({**choice, "fg": "off"})
         log = Path(game["log_path"]) if game.get("log_path") else exe_folder / "helixsr.log"
         meta = target / games.MANIFEST_DIR
         meta.mkdir(exist_ok=True)
@@ -439,10 +426,10 @@ class UpscalerService:
         now = time.time()
         entry["install"] = {
             "build": build.id, "engine": "helixsr", "way": build.way,
-            "proxy": game.get("scaler_dll") if build.way == "scaler" else None,
+            "proxy": None,
             "target": str(target), "exe": analysis["exe"], "exe_folder": str(exe_folder), "log": str(log),
-            "helix_file": str((exe_folder if build.way == "scaler" else log.parent) / _HELIX_FILES[build.way]),
-            "installed_at": now, "options": options, "native_dlls": [], "fg_plan": fg_plan,
+            "helix_file": str(log.parent / HELIX_INSTALL_FILE),
+            "installed_at": now, "options": options, "native_dlls": [], "fg_plan": None,
             "args": [], "added_args": [],
         }
         entry["history"].append({"build": build.id, "proxy": entry["install"]["proxy"], "at": now,
@@ -496,15 +483,6 @@ class UpscalerService:
             "args": list(old.get("added_args", [])),
             "env": {old["env"]: None} if old.get("engine") == "proton" else {},
         }
-
-    @staticmethod
-    def _write_scaler_ini(exe_folder: Path, overrides: dict[str, str]) -> None:
-        path = exe_folder / "OptiScaler.ini"
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-            path.write_text(ini.apply(text, overrides), encoding="utf-8")
-        except OSError:
-            raise UpscalerError("broken") from None
 
     def _helix(self, method: str, *args):
         try:
@@ -572,11 +550,11 @@ class UpscalerService:
         installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        if _helix_way(install) == "fsr":
+        if _is_helix(install) or install.get("engine") == "proton":
             install["options"] = _clean_options({**choice, "fg": "off"})
             self._save()
             return {"options": install["options"]}
-        path = Path(install["exe_folder"] if _is_helix(install) else install["target"]) / "OptiScaler.ini"
+        path = Path(install["target"]) / "OptiScaler.ini"
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -597,9 +575,9 @@ class UpscalerService:
     # ---- advanced: every OptiScaler.ini key ---------------------------------------------------
     def _ini_path(self, appid: str) -> tuple[dict, Path]:
         install = self._game_state(appid).get("install")
-        if not isinstance(install, dict) or install.get("engine") == "proton" or _helix_way(install) == "fsr":
+        if not isinstance(install, dict) or install.get("engine") in ("proton", "helixsr"):
             raise UpscalerError("not_patched")
-        return install, Path(install["exe_folder"] if _is_helix(install) else install["target"]) / "OptiScaler.ini"
+        return install, Path(install["target"]) / "OptiScaler.ini"
 
     def ini_schema(self, appid: str) -> dict:
         install, path = self._ini_path(appid)
@@ -874,19 +852,11 @@ def _is_helix(install: dict | None) -> bool:
     return isinstance(install, dict) and install.get("engine") == "helixsr"
 
 
-def _helix_way(install: dict | None) -> str | None:
-    return install.get("way") if _is_helix(install) else None
-
-
 def _facts(install: dict) -> dict:
     if install.get("engine") == "proton":
         return {"present": False, "unverifiable": True}
     if _is_helix(install):
-        facts = helixsr.read_log(Path(install["exe_folder"]), [Path(install["log"])], since=install.get("installed_at"))
-        if install.get("way") == "scaler":
-            scaler = logread.read(Path(install["exe_folder"]), since=install.get("installed_at"))
-            facts.update({key: scaler[key] for key in ("fg", "fg_state") if key in scaler})
-        return facts
+        return helixsr.read_log([Path(install["log"])], since=install.get("installed_at"))
     return logread.read(Path(install["target"]), since=install.get("installed_at"))
 
 

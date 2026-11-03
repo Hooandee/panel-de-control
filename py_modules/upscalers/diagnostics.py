@@ -136,13 +136,12 @@ def game_report(home: str, appid: str, entry: dict) -> dict:
     }
     if install and install.get("engine") == "helixsr":
         log = Path(install.get("log", ""))
-        facts = helixsr.read_log(Path(install.get("exe_folder", "")), [log], since=install.get("installed_at"))
+        facts = helixsr.read_log([log], since=install.get("installed_at"))
         report.update({
             "helixsr_files": Path(install.get("helix_file", "")).is_file(),
-            "ini": _ini_values(Path(install.get("exe_folder", "")) / "OptiScaler.ini"),
             "log_verdict": helixsr.verdict(facts),
             "log_facts": facts,
-            "log_excerpt": _tail(log),
+            "log_excerpt": _tail(log.with_name(helixsr.HLX_FSR_LOG)),
         })
     elif install:
         target = Path(install.get("target", ""))

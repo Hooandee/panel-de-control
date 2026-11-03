@@ -48,13 +48,12 @@ describe("withEnv", () => {
 describe("HelixSR builds", () => {
   it("are named after HelixSR's own upscalers", () => {
     expect(buildLabel({ family: "helixsr", version: "FSR 4", channel: "beta" })).toBe("HLX FSR 4 Beta");
-    expect(buildLabel({ family: "helixsr", version: "DLSS" })).toBe("HLX DLSS");
   });
 
-  it("HLX FSR 4 needs the game's FSR 3.1, HLX DLSS does not", () => {
+  it("HLX FSR 4 needs the game's FSR 3.1", () => {
     expect(buildBlocker({ way: "fsr" }, { dlss: [] })).toBe("needsFsr31");
     expect(buildBlocker({ way: "fsr" }, { fsr31: [] })).toBeNull();
-    expect(buildBlocker({ way: "scaler" }, {})).toBeNull();
+    expect(buildBlocker({ engine: "optiscaler" }, {})).toBeNull();
   });
 });
 

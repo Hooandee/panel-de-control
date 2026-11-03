@@ -43,7 +43,7 @@ class Build:
     extra_dir: str = ""
     # (model id, INI overrides); the first one is the default.
     models: tuple[tuple[str, dict[str, str]], ...] = ()
-    # "helixsr" builds go through HelixSR's own bridge; `way` is its scaler/fsr route.
+    # "helixsr" builds go through HelixSR's own bridge; `way` is its route (only the FSR drop-in).
     engine: str = "optiscaler"
     way: str = ""
 
@@ -58,13 +58,12 @@ ASSETS: dict[str, Asset] = {
             "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74", 561348,
             ("https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",), archive=True,
         ),
-        # Official release, unmodified (HelixSR Freeware License): HLX FSR 4 prebuilt, HLX DLSS built on the device.
+        # Official release, unmodified (HelixSR Freeware License). Only HLX FSR 4 (prebuilt, from AMD's MIT
+        # FSR SDK) is offered: HLX DLSS needs NVIDIA's DLSS DLL taken apart for AMD, which NVIDIA's licence forbids.
         Asset(
             HELIXSR_ARCHIVE, "HelixSR-3.2.0.zip",
             "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7", 217396302,
             ("https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip",),
-            # HelixSR Scaler 2.1.0 is OptiScaler 10: same FrameGen inputs/outputs and INI keys.
-            generation=10,
         ),
         Asset(
             OPTISCALER_ARCHIVE,
@@ -189,10 +188,6 @@ BUILDS: dict[str, Build] = {
         Build(
             "hlx-fsr4", "helixsr", "FSR 4", (*AMD, "intel"), image=3, cost=2,
             archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="fsr",
-        ),
-        Build(
-            "hlx-dlss", "helixsr", "DLSS", (*AMD, "intel"), image=3, cost=3,
-            archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="scaler",
         ),
     )
 }
