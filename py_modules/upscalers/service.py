@@ -470,6 +470,10 @@ class UpscalerService:
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
         self._helix("remove", root)
+        log = Path(install.get("log", ""))
+        for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
+            if generated.name and generated.is_file():
+                generated.unlink()
         shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
         return []
 

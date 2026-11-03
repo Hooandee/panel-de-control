@@ -790,8 +790,10 @@ def test_helixsr_fsr_drop_in_installs_verifies_and_removes(steam, helix_catalog,
     assert verdict["result"] == "active"
     assert verdict["facts"]["resolution"]["render"] == [640, 360]
 
+    _write(target / "HLX_FSR.log", "HLX-FSR-4 RADV: yes\n")
     service.uninstall(APPID)
     assert service.helix.calls[-1] == ("remove",)
+    assert not (target / "helixsr.log").exists() and not (target / "HLX_FSR.log").exists()
     assert not (target / games.MANIFEST_DIR).exists()
     assert service.game(APPID)["install"] is None
 
