@@ -1029,3 +1029,18 @@ def test_advanced_edits_keep_to_known_keys_and_values(steam, fake_catalog, proc)
                                 ("Menu.Scale", "1\n[x]", "ini_value")):
         with pytest.raises(UpscalerError, match=code):
             service.set_ini(APPID, dotted, value)
+
+
+def test_any_re_engine_game_gets_reframework_and_loses_the_warning(steam, fake_catalog, proc, monkeypatch):
+    _, game = steam
+    reframework = Asset("reframework-nightly", "REFramework.zip", hashlib.sha256(b"rf").hexdigest(), 2,
+                        ("http://invalid",), member="dinput8.dll")
+    monkeypatch.setitem(catalog.ASSETS, reframework.id, reframework)
+    _write(Path(fake_catalog) / "cache" / reframework.sha256 / "unpacked/dinput8.dll", b"reframework")
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, needs=("reframework",)))
+    _write(game / "re_chunk_000.pak")
+    service = _service(steam, fake_catalog, proc)
+    assert service.game(APPID)["recipe_info"]["needs"] == []
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert (game / "bin/x64_dx12/dinput8.dll").read_bytes() == b"reframework"
+    assert sorted(result["overrides"]) == ["dinput8=n,b", "dxgi=n,b"]

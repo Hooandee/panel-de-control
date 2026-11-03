@@ -8,7 +8,7 @@ recipe on install and undoes exactly what it added.
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
@@ -77,3 +77,19 @@ def applies(recipe: Recipe | None) -> bool:
 
 def recipe_for(appid: str) -> Recipe | None:
     return RECIPES.get(str(appid)) or WIKI.get(str(appid))
+
+
+# Every RE Engine game ships its packs as re_chunk_000.pak in the game root.
+RE_ENGINE_MARKER = "re_chunk_000.pak"
+REFRAMEWORK = {"dinput8.dll": "reframework-nightly"}
+
+
+def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
+    """Capcom's RE Engine only shows its upscaler to OptiScaler through REFramework (OptiScaler wiki)."""
+    if not (root / RE_ENGINE_MARKER).is_file():
+        return recipe
+    base = recipe or Recipe(str(appid))
+    if base.files:
+        return base
+    return replace(base, files=dict(REFRAMEWORK), native_dlls=(*base.native_dlls, "dinput8"),
+                   needs=tuple(n for n in base.needs if n != "reframework"))

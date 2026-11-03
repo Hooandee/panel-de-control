@@ -176,9 +176,10 @@ class UpscalerService:
         self._save()
         return entry["identity"]
 
-    def _recipe(self, appid: str, identity: dict | None):
+    def _recipe(self, appid: str, identity: dict | None, root: Path | None = None):
         steam_appid = identity.get("steam_appid") if identity else None
-        return recipes.recipe_for(str(steam_appid)) if steam_appid else recipes.recipe_for(appid)
+        recipe = recipes.recipe_for(str(steam_appid)) if steam_appid else recipes.recipe_for(appid)
+        return recipes.with_engine(recipe, appid, root) if root else recipe
 
     def search_games(self, term: str) -> list[dict]:
         return self.search(identify.clean_name(term) or term)[:8]
@@ -204,7 +205,7 @@ class UpscalerService:
             raise UpscalerError("not_installed")
         entry = self._game_state(appid)
         identity = self._identity(installed, entry)
-        recipe = self._recipe(appid, identity)
+        recipe = self._recipe(appid, identity, installed.root)
         analysis = NATIVE_ANALYSIS if installed.native else games.analyze(
             installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
         install = entry.get("install")
@@ -293,7 +294,7 @@ class UpscalerService:
             raise UpscalerError("updating" if update == "running" else "update_pending")
         if games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)))
+        recipe = self._recipe(appid, self._identity(installed, self._game_state(appid)), installed.root)
         analysis = games.analyze(installed.root, self._game_state(appid).get("exe"), recipe.exe if recipe else installed.exe)
         if not analysis["target"]:
             raise UpscalerError("no_exe")
@@ -322,7 +323,7 @@ class UpscalerService:
         if analysis["foreign"]:
             raise UpscalerError("foreign")
 
-        recipe = self._recipe(appid, entry.get("identity"))
+        recipe = self._recipe(appid, entry.get("identity"), installed.root)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
         assets = catalog.build_assets(build)
         if recipe:
@@ -426,7 +427,7 @@ class UpscalerService:
         options = _clean_options(choice if build.way == "scaler" else {**choice, "fg": "off"})
         fg_plan = None
         if build.way == "scaler":
-            recipe = self._recipe(appid, entry.get("identity"))
+            recipe = self._recipe(appid, entry.get("identity"), installed.root)
             fg_plan = _fg_plan(self.gpu, analysis, recipe, catalog.ASSETS[build.archive].generation, choice.get("fg_route"))
             self._write_scaler_ini(exe_folder, {**catalog.BASE_INI, **_option_overrides(choice),
                                                 **catalog.fg_overrides(fg_plan, options["fg"] == "on")})
@@ -582,7 +583,7 @@ class UpscalerService:
             raise UpscalerError("broken") from None
         plan = install.get("fg_plan")
         if installed and not installed.native:
-            recipe = self._recipe(appid, self._identity(installed, entry))
+            recipe = self._recipe(appid, self._identity(installed, entry), installed.root)
             analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
             plan = _fg_plan(self.gpu, analysis, recipe, _generation(install), choice.get("fg_route"))
         install["fg_plan"] = catalog.fg_route_plan(plan, choice.get("fg_route"))
@@ -759,7 +760,7 @@ class UpscalerService:
         exe = installed.exe
         if config is not None and not installed.native:
             entry = self._game_state(appid)
-            recipe = self._recipe(appid, self._identity(installed, entry))
+            recipe = self._recipe(appid, self._identity(installed, entry), installed.root)
             exe = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)["exe"]
         try:
             return self.lsfg.set_game(appid, installed.name, config, exe)
