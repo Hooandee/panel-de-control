@@ -216,7 +216,7 @@ class UpscalerService:
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
             "fg_note": recipe.fg_note if recipe else None,
-            "fg_plan": None if installed.native or _is_helix(install) else _fg_plan(self.gpu, analysis, recipe, _generation(install),
+            "fg_plan": None if installed.native or _helix_way(install) == "fsr" else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
         }
 
@@ -413,6 +413,13 @@ class UpscalerService:
         self._update_job(phase="copy")
         game = self._helix("install", installed.root, build.way)
         exe_folder = Path(game.get("exe_folder") or target)
+        options = _clean_options(choice if build.way == "scaler" else {**choice, "fg": "off"})
+        fg_plan = None
+        if build.way == "scaler":
+            recipe = self._recipe(appid, entry.get("identity"))
+            fg_plan = _fg_plan(self.gpu, analysis, recipe, catalog.ASSETS[build.archive].generation, choice.get("fg_route"))
+            self._write_scaler_ini(exe_folder, {**catalog.BASE_INI, **_option_overrides(choice),
+                                                **catalog.fg_overrides(fg_plan, options["fg"] == "on")})
         log = Path(game["log_path"]) if game.get("log_path") else exe_folder / "helixsr.log"
         meta = target / games.MANIFEST_DIR
         meta.mkdir(exist_ok=True)
@@ -424,7 +431,7 @@ class UpscalerService:
             "proxy": game.get("scaler_dll") if build.way == "scaler" else None,
             "target": str(target), "exe": analysis["exe"], "exe_folder": str(exe_folder), "log": str(log),
             "helix_file": str((exe_folder if build.way == "scaler" else log.parent) / _HELIX_FILES[build.way]),
-            "installed_at": now, "options": _clean_options(choice), "native_dlls": [], "fg_plan": None,
+            "installed_at": now, "options": options, "native_dlls": [], "fg_plan": fg_plan,
             "args": [], "added_args": [],
         }
         entry["history"].append({"build": build.id, "proxy": entry["install"]["proxy"], "at": now,
@@ -442,6 +449,15 @@ class UpscalerService:
             return {"files": 0, "overrides": [], "args": [], "launcher": installed.launcher[0]}
         self._save()
         return {"files": 0, "overrides": _overrides(entry["install"]), "args": []}
+
+    @staticmethod
+    def _write_scaler_ini(exe_folder: Path, overrides: dict[str, str]) -> None:
+        path = exe_folder / "OptiScaler.ini"
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            path.write_text(ini.apply(text, overrides), encoding="utf-8")
+        except OSError:
+            raise UpscalerError("broken") from None
 
     def _helix(self, method: str, *args):
         try:
@@ -503,18 +519,11 @@ class UpscalerService:
         installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
-        if _is_helix(install):
-            install["options"] = _clean_options(choice)
-            if install.get("way") == "scaler":
-                path = Path(install["exe_folder"]) / "OptiScaler.ini"
-                try:
-                    text = path.read_text(encoding="utf-8", errors="replace")
-                except OSError:
-                    raise UpscalerError("broken") from None
-                path.write_text(ini.apply(text, _option_overrides(choice, reset=True)), encoding="utf-8")
+        if _helix_way(install) == "fsr":
+            install["options"] = _clean_options({**choice, "fg": "off"})
             self._save()
             return {"options": install["options"]}
-        path = Path(install["target"]) / "OptiScaler.ini"
+        path = Path(install["exe_folder"] if _is_helix(install) else install["target"]) / "OptiScaler.ini"
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -734,9 +743,17 @@ def _is_helix(install: dict | None) -> bool:
     return isinstance(install, dict) and install.get("engine") == "helixsr"
 
 
+def _helix_way(install: dict | None) -> str | None:
+    return install.get("way") if _is_helix(install) else None
+
+
 def _facts(install: dict) -> dict:
     if _is_helix(install):
-        return helixsr.read_log(Path(install["exe_folder"]), [Path(install["log"])], since=install.get("installed_at"))
+        facts = helixsr.read_log(Path(install["exe_folder"]), [Path(install["log"])], since=install.get("installed_at"))
+        if install.get("way") == "scaler":
+            scaler = logread.read(Path(install["exe_folder"]), since=install.get("installed_at"))
+            facts.update({key: scaler[key] for key in ("fg", "fg_state") if key in scaler})
+        return facts
     return logread.read(Path(install["target"]), since=install.get("installed_at"))
 
 

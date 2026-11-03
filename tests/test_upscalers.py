@@ -756,7 +756,7 @@ class FakeHelix:
 
 @pytest.fixture
 def helix_catalog(monkeypatch, fake_catalog):
-    zipped = Asset(catalog.HELIXSR_ARCHIVE, "HelixSR.zip", "0" * 64, 10, ("http://invalid",))
+    zipped = Asset(catalog.HELIXSR_ARCHIVE, "HelixSR.zip", "0" * 64, 10, ("http://invalid",), generation=10)
     monkeypatch.setitem(catalog.ASSETS, zipped.id, zipped)
     for build in (
         Build("hlx-fsr4", "helixsr", "FSR 4", ("rdna2",), 3, 2, archive=zipped.id, engine="helixsr", way="fsr"),
@@ -849,3 +849,35 @@ def test_report_explains_a_helixsr_install(steam, helix_catalog, proc):
     assert entry["helixsr_files"] is True
     assert entry["log_verdict"] == "active"
     assert entry["log_excerpt"] == ["dispatch 1: render 640x360 -> 1280x720"]
+
+
+def test_helixsr_scaler_takes_panels_frame_generation_like_optiscaler_10(steam, helix_catalog, proc):
+    _, game = steam
+    exe = game / "bin/x64_dx12"
+    _write(exe / "amd_fidelityfx_framegeneration_dx12.dll")
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-dlss", "quality": "balanced", "fg": "on", "fg_route": "optiscaler"})
+
+    text = (exe / "OptiScaler.ini").read_text()
+    assert ini.read(text, "FrameGen.FGInput") == "upscaler"
+    assert ini.read(text, "FrameGen.Enabled") == "true"
+    assert ini.read(text, "QualityOverrides.QualityRatioBalanced") == "1.70"
+    assert ini.read(text, "Log.LogToFile") == "true"
+    assert service.game(APPID)["fg_plan"]["route"] == "optiscaler"
+
+    log = _write(exe / "OptiScaler.log", "FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0\nFrameGen.FGInput: upscaler\n")
+    future = time.time() + 5
+    os.utime(log, (future, future))
+    assert service.live(APPID)["fg"] is True
+
+    service.configure(APPID, {"build": "hlx-dlss", "quality": "balanced", "fg": "off"})
+    assert ini.read((exe / "OptiScaler.ini").read_text(), "FrameGen.FGInput") == "nofg"
+
+
+def test_helixsr_fsr_drop_in_never_claims_frame_generation(steam, helix_catalog, proc):
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4", "fg": "on"})
+    assert service.game(APPID)["install"]["options"]["fg"] == "off"
+    assert service.game(APPID)["fg_plan"] is None

@@ -63,6 +63,8 @@ ASSETS: dict[str, Asset] = {
             HELIXSR_ARCHIVE, "HelixSR-3.2.0.zip",
             "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7", 217396302,
             ("https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip",),
+            # HelixSR Scaler 2.1.0 is OptiScaler 10: same FrameGen inputs/outputs and INI keys.
+            generation=10,
         ),
         Asset(
             OPTISCALER_ARCHIVE,

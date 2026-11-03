@@ -163,7 +163,7 @@ export const GameView: FC<{
   const needsNvidia = selected?.way === "scaler" && install?.build !== selected.id;
   const installedBuild = builds.find((b) => b.id === install?.build);
   const reinstall = () => start(() => installUpscaler(appid, {
-    ...choice, ...(helix ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
+    ...choice, ...(selected?.way === "fsr" ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
   }));
 
   const apply = async () => {
@@ -292,7 +292,7 @@ export const GameView: FC<{
       {detail && install && gameRunning && !running && (
         <LivePanel
           appid={appid}
-          fg={install.options.fg === "on" && installedBuild?.engine !== "helixsr"}
+          fg={install.options.fg === "on" && installedBuild?.way !== "fsr"}
           menu={installedBuild?.way !== "fsr"}
           onActive={status === "pending" ? check : undefined}
         />
@@ -424,7 +424,7 @@ export const GameView: FC<{
             </>
           )}
 
-          {detail.fg_plan && !helix && (
+          {detail.fg_plan && selected?.way !== "fsr" && (
             <>
               <Label>{t("up.fg.title")}</Label>
               <SegmentRow
