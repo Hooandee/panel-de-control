@@ -1,8 +1,8 @@
-import bubbleCover from "../assets/bubble-cover.jpg";
 import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
 import luminousAtlasCover from "../assets/luminous-atlas-cover.jpg";
+import vidaCover from "../assets/vida-cover.jpg";
 import type { Lang } from "../i18n/languages";
 import { localizePublishedText, type PublishedThemeRelease } from "./remotePublication";
 
@@ -18,9 +18,9 @@ interface ThemePresentation {
 }
 
 const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
-  "hooandee-bubble": {
-    cssLoaderName: "Hooandee Bubble",
-    cover: bubbleCover,
+  "hooandee-vida": {
+    cssLoaderName: "Hooandee Vida",
+    cover: vidaCover,
     tagline: {
       es: "Un launcher con todo el espíritu de PS Vita",
       en: "A launcher with all the spirit of the PS Vita",
