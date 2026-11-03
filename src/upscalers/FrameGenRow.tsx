@@ -1,4 +1,4 @@
-import { Dropdown, Toggle } from "@decky/ui";
+import { Toggle } from "@decky/ui";
 import { useEffect, useState, type FC, type ReactNode } from "react";
 import { LuFeather, LuGauge, LuLayers } from "react-icons/lu";
 
@@ -9,7 +9,7 @@ import { useI18n } from "../i18n";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
 import { theme } from "../theme";
 import { withEnv } from "./model";
-import { ActionButton, Row } from "./parts";
+import { ActionButton, PickerButton, Row } from "./parts";
 import type { FgRoute } from "./types";
 
 const LAUNCH_ENV = ["ENABLE_GAMESCOPE_WSI", "LSFGVK_PROFILE"];
@@ -85,20 +85,22 @@ export const FrameGenRow: FC<{
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <Line icon={<LuLayers size={16} />} label={t("up.fg.title")}>
-        <Dropdown rgOptions={options} selectedOption={current} disabled={busy} onChange={(o) => void choose(o.data as Pick)} />
+        <PickerButton label={t("up.fg.title")} value={current} disabled={busy} onChange={(pick) => void choose(pick)}
+          options={options.map((o) => ({ value: o.data, label: o.label }))} />
       </Line>
       {profile && (
         <Line icon={<LuGauge size={16} />} label={t("up.lsfg.flow")}>
-          <Dropdown
-            rgOptions={(["quality", "balanced", "performance", "fastest"] as Flow[]).map((f) => ({ data: f, label: t(`up.lsfg.flow.${f}`) }))}
-            selectedOption={profile.flow}
+          <PickerButton
+            label={t("up.lsfg.flow")}
+            value={profile.flow}
             disabled={busy}
-            onChange={(o) => void run(() => saveLsfg({ ...profile, flow: o.data as Flow }))}
+            options={(["quality", "balanced", "performance", "fastest"] as Flow[]).map((f) => ({ value: f, label: t(`up.lsfg.flow.${f}`) }))}
+            onChange={(flow) => void run(() => saveLsfg({ ...profile, flow }))}
           />
         </Line>
       )}
       {profile && (
-        <Line icon={<LuFeather size={16} />} label={t("up.lsfg.light")}>
+        <Line icon={<LuFeather size={16} />} label={t("up.lsfg.light")} inline>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Toggle value={profile.performance} disabled={busy} onChange={(on) => void run(() => saveLsfg({ ...profile, performance: on }))} />
           </div>
@@ -122,11 +124,12 @@ export const FrameGenRow: FC<{
   );
 };
 
-const Line: FC<{ icon: ReactNode; label: string; children: ReactNode }> = ({ icon, label, children }) => (
-  <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
-    <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
-    <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>
-    <div style={{ minWidth: 150 }}>{children}</div>
+const Line: FC<{ icon: ReactNode; label: string; children: ReactNode; inline?: boolean }> = ({ icon, label, children, inline }) => (
+  <div style={{ display: "flex", flexDirection: inline ? "row" : "column", alignItems: inline ? "center" : "stretch", gap: theme.space.xs }}>
+    <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, flex: inline ? 1 : undefined, fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>
+      {icon}{label}
+    </span>
+    {children}
   </div>
 );
 

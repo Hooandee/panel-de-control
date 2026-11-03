@@ -1,5 +1,6 @@
-import { Focusable } from "@decky/ui";
+import { Focusable, Menu, MenuItem, showContextMenu } from "@decky/ui";
 import type { FC, ReactNode } from "react";
+import { LuCheck, LuChevronDown } from "react-icons/lu";
 
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { theme } from "../theme";
@@ -158,3 +159,43 @@ export const ActionButton: FC<{
     {label}
   </Focusable>
 );
+
+/** A value that opens Steam's own menu to change it: looks like Panel's buttons, chooses like Steam. */
+export function PickerButton<T extends string>({ label, value, options, onChange, disabled }: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  const current = options.find((o) => o.value === value)?.label ?? value;
+  const open = (anchor: EventTarget | null) => {
+    if (disabled) return;
+    showContextMenu(
+      <Menu label={label}>
+        {options.map((o) => (
+          <MenuItem key={o.value} onSelected={() => onChange(o.value)}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 14, display: "inline-flex" }}>{o.value === value ? <LuCheck size={14} /> : null}</span>
+              {o.label}
+            </span>
+          </MenuItem>
+        ))}
+      </Menu>,
+      anchor ?? window,
+    );
+  };
+  return (
+    <Focusable
+      onActivate={(e) => open(e.currentTarget)}
+      onClick={(e) => open(e.currentTarget)}
+      style={{
+        ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center",
+        gap: theme.space.xs, opacity: disabled ? 0.45 : 1, cursor: "pointer",
+      }}
+    >
+      <span style={{ flex: 1, fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>{current}</span>
+      <LuChevronDown size={16} color={theme.color.textMuted} />
+    </Focusable>
+  );
+}

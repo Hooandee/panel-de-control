@@ -331,7 +331,7 @@ export const ptBR: Record<string, string> = {
   "up.lsfg.install": "Instalar lsfg-vk",
   "up.lsfg.needLossless": "É preciso o Lossless Scaling da Steam para a geração de quadros dele",
   "up.lsfg.needBranch": "No Lossless Scaling, Propriedades, Betas, escolha o ramo lsfg-vk",
-  "up.lsfg.foreign": "Outra ferramenta o gerencia agora",
+  "up.lsfg.foreign": "Outra ferramenta gerencia o Lossless Scaling",
   "up.lsfg.onNote": "As mudanças valem na hora; se o jogo já estava aberto, reinicie-o na primeira vez",
   "up.lsfg.restart": "Reinicie o jogo para ativar",
   "up.lsfg.launchFailed": "Não foi possível salvar as opções de inicialização",

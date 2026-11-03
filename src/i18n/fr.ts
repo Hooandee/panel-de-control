@@ -331,7 +331,7 @@ export const fr: Record<string, string> = {
   "up.lsfg.install": "Installer lsfg-vk",
   "up.lsfg.needLossless": "Lossless Scaling sur Steam est nécessaire pour sa génération d'images",
   "up.lsfg.needBranch": "Dans Lossless Scaling, Propriétés, Bêtas, choisissez la branche lsfg-vk",
-  "up.lsfg.foreign": "Un autre outil le gère",
+  "up.lsfg.foreign": "Un autre outil gère Lossless Scaling",
   "up.lsfg.onNote": "Les changements s'appliquent tout de suite ; si le jeu était déjà ouvert, relancez-le la première fois",
   "up.lsfg.restart": "Relancez le jeu pour l'activer",
   "up.lsfg.launchFailed": "Les options de lancement n'ont pas pu être enregistrées",
