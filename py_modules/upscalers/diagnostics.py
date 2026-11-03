@@ -143,6 +143,8 @@ def game_report(home: str, appid: str, entry: dict) -> dict:
             "log_facts": facts,
             "log_excerpt": _tail(log.with_name(helixsr.HLX_FSR_LOG)),
         })
+    elif install and install.get("engine") == "proton":
+        report["log_verdict"] = "unverifiable"
     elif install:
         target = Path(install.get("target", ""))
         facts = logread.read(target, since=install.get("installed_at"))

@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import ownership
+
 HEROIC_DIRS = (".config/heroic", ".var/app/com.heroicgameslauncher.hgl/config/heroic")
 LUTRIS_DIRS = (  # (config dir, data dir); Lutris falls back to the data dir when ~/.config/lutris is missing
     (".config/lutris", ".local/share/lutris"),
@@ -186,6 +188,7 @@ def _heroic_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
     settings["enviromentOptions"] = env
     game.config.parent.mkdir(parents=True, exist_ok=True)
     game.config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    ownership.own_like_ancestor(game.config)
 
 
 def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
@@ -210,6 +213,7 @@ def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
     if not block:
         del lines[overrides]
     game.config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ownership.own_like_ancestor(game.config)
 
 
 def set_overrides(game: LauncherGame, dlls: list[str], remove: bool = False) -> None:

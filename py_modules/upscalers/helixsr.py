@@ -119,6 +119,23 @@ class HelixSR:
         return self._bridge("remove", "--game", str(game)).get("game") or {}
 
 
+def remove_by_hand(folder: Path) -> None:
+    """When HelixSR's release is gone (deleted, or a newer Panel ships another), put the game's FSR back from
+    the *.original.dll HelixSR's drop-in keeps, as its bridge would."""
+    try:
+        record = json.loads((folder / "helixsr-install.json").read_text())
+    except (OSError, ValueError):
+        record = {}
+    for name in record.get("files", []) if isinstance(record, dict) else []:
+        if not isinstance(name, str) or "/" in name:
+            continue
+        original = folder / Path(name).with_suffix(".original.dll").name
+        if original.is_file():
+            os.replace(original, folder / name)
+    for name in ("helixsr-install.json", "helixsr.ini"):
+        (folder / name).unlink(missing_ok=True)
+
+
 def read_log(logs: list[Path], since: float | None = None) -> dict:
     """HLX FSR 4 writes one line per context it creates; it proves HLX runs, not how far it scales."""
     facts: dict = {"present": False}

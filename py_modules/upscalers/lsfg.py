@@ -13,7 +13,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import games
+from . import games, ownership
 from .assets import sha256
 
 LOSSLESS_APPID = "993090"
@@ -72,11 +72,8 @@ class Lsfg:
         return data
 
     def _own(self, path: Path) -> None:
-        """Files in the user's home stay the user's: Decky runs this as root."""
-        if os.geteuid() != 0:
-            return
-        stat = self.home.stat()
-        os.chown(path, stat.st_uid, stat.st_gid, follow_symlinks=False)
+        """Files in the user's home, and the folders made for them, stay the user's: Decky runs this as root."""
+        ownership.own_with_parents(self.home, path)
 
     def _save(self, data: dict) -> None:
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,7 +137,8 @@ class Lsfg:
         if self.config_path.is_file() and not self._foreign():
             self.config_path.unlink()
         self._save({"files": {}, "profiles": {}, **({"foreign_backup": kept} if kept else {})})
-        return self.status()
+        # Games whose launch options still ask for a Panel profile that no longer exists.
+        return {**self.status(), "cleared": sorted({*data["profiles"], *data.get("paused", [])})}
 
     # ---- another tool's lsfg-vk --------------------------------------------------------------
     def adopt_foreign(self) -> dict:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -94,5 +94,14 @@ describe("recommended extra frames", () => {
     expect(recommendedPick("rdna2", { game: {} }, true)).toBe("lsfg-2");
     expect(recommendedPick("rdna3", { game: {}, optiscaler: {} }, true)).toBe("game");
     expect(recommendedPick("rdna3", { optiscaler: {} }, false)).toBeNull();
+  });
+});
+
+describe("launch options the user already had", () => {
+  it("are not counted as Panel's own", () => {
+    expect(alreadyThere('WINEDLLOVERRIDES="dxgi=n,b" FSR4_UPGRADE=1 %command%', ["dxgi=n,b", "winmm=n,b"], { FSR4_UPGRADE: "1" }))
+      .toEqual({ overrides: ["dxgi=n,b"], env: ["FSR4_UPGRADE"] });
+    const next = launchAfterJob('WINEDLLOVERRIDES="dxgi=n,b" %command%', { overrides: ["dxgi=n,b"], args: [] }, "install");
+    expect(next?.addedOverrides).toEqual([]);
   });
 });

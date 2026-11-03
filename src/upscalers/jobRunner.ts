@@ -56,6 +56,8 @@ async function applyLaunch(job: UpscalerJob, game: JobGame): Promise<JobNotice> 
     }
     return { key: "up.error.generic" };
   }
-  if (kind === "install" && next.added.length) await recordUpscalerArgs(game.appid, next.added).catch(() => undefined);
+  if (kind === "install" && job.state === "done") {
+    await recordUpscalerArgs(game.appid, next.added, next.addedOverrides, next.addedEnv).catch(() => undefined);
+  }
   return result.kept?.length ? { key: "up.kept", params: { count: result.kept.length } } : null;
 }

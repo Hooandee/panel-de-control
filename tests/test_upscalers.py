@@ -701,7 +701,7 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert tomllib.loads((home / lsfg.CONFIG).read_text())["profile"] == [{"name": "pdc-123", "multiplier": 1}]
     with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
         tool.set_game("123", "Game", {"multiplier": 7})
-    tool.uninstall()
+    assert tool.uninstall()["cleared"] == ["123"]
     assert not (home / ".local" / lsfg.LAYER_FILES[0]).exists() and not (home / lsfg.CONFIG).exists()
 
 
@@ -1156,3 +1156,41 @@ def test_a_failed_switch_still_reports_what_the_old_install_left(steam, helix_ca
     job = service.job()
     assert job["state"] == "error" and job["leftover"]["removed_overrides"] == ["dxgi=n,b"]
     assert service.game(APPID)["install"] is None
+
+
+def test_helixsr_comes_out_even_when_its_release_is_gone(steam, helix_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"hlx")
+    (target / "helixsr-install.json").write_text(json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    service.helix = FakeHelix(ready=False)
+    service.uninstall(APPID)
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"game fsr"
+    assert not (target / "helixsr-install.json").exists()
+    assert service.game(APPID)["install"] is None
+
+
+def test_removal_leaves_overrides_the_user_already_had(steam, fake_catalog, proc):
+    _, game = steam
+    _write(game / "bin/x64_dx12/dxgi.dll", b"reshade")
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    service.record_added_args(APPID, ["--launcher-skip"], [], [])
+    assert service.uninstall(APPID)["overrides"] == []
+    service.install(APPID, {"build": "fsr-test"})
+    service.record_added_args(APPID, [], ["dxgi=n,b"], [])
+    assert service.uninstall(APPID)["overrides"] == ["dxgi=n,b"]
+
+
+def test_hand_edits_survive_a_repair(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    (target / "OptiScaler.ini").write_text((target / "OptiScaler.ini").read_text() + SAMPLE_INI)
+    service.set_ini(APPID, "Menu.ShowFps", "true")
+    service.install(APPID, {"build": "fsr-test"})
+    assert ini.read((target / "OptiScaler.ini").read_text(), "Menu.ShowFps") == "true"

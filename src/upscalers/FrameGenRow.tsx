@@ -117,7 +117,11 @@ export const FrameGenRow: FC<{
         </>
       )}
       {status && !status.foreign && status.foreign_backup && (
-        <Row><ActionButton label={t("up.foreign.restore")} busy={busy} onPress={() => void run(async () => { setStatus(await restoreForeignLsfg()); })} /></Row>
+        <Row><ActionButton label={t("up.foreign.restore")} busy={busy} onPress={() => void run(async () => {
+          const restored = await restoreForeignLsfg();
+          await clearLsfgLaunch(restored.cleared ?? []);
+          setStatus(restored);
+        })} /></Row>
       )}
       {status && !status.foreign && (!status.lossless || !status.dll) && (
         <Hint>{t(!status.lossless ? "up.lsfg.needLossless" : "up.lsfg.needBranch")}</Hint>
@@ -140,3 +144,13 @@ const Hint: FC<{ children: ReactNode }> = ({ children }) => (
   <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.35 }}>{children}</span>
 );
 
+
+/** Steam shortcut ids sit above 2^31; regular Steam apps below. */
+async function clearLsfgLaunch(appids: string[]) {
+  for (const id of appids) {
+    const live = Number(id);
+    const details = await readAppDetails(live).catch(() => null);
+    const launch = details ? withEnv(details.launch, Object.fromEntries(LAUNCH_ENV.map((name) => [name, null]))) : null;
+    if (launch !== null) writeLaunchOptions(live, launch, live > 0x7fffffff);
+  }
+}

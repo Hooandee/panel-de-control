@@ -129,8 +129,23 @@ export interface LaunchChange {
   env?: Record<string, string | null>;
 }
 
+/** Which of these overrides and variables the launch options already carry, so removal leaves them alone. */
+export function alreadyThere(launch: string, overrides: string[], env: Record<string, string | null>): { overrides: string[]; env: string[] } {
+  const parsed = parse(launch);
+  const current = parsed.malformed ? null : split(getEnv(parsed, OVERRIDES));
+  return {
+    overrides: overrides.filter((o) => {
+      const [dll, mode] = o.split("=");
+      return !!current && current.mode === mode && current.names.includes(dll);
+    }),
+    env: Object.keys(env).filter((name) => !parsed.malformed && getEnv(parsed, name) !== null),
+  };
+}
+
 /** Launch options after an install (what it adds, minus what the install it replaced left) or a removal. */
-export function launchAfterJob(launch: string, change: LaunchChange, kind: "install" | "uninstall"): { value: string; added: string[] } | null {
+export function launchAfterJob(launch: string, change: LaunchChange, kind: "install" | "uninstall"): {
+  value: string; added: string[]; addedOverrides: string[]; addedEnv: string[];
+} | null {
   const reverted = kind === "install"
     ? revertLaunch(launch, change.removed_overrides ?? [], change.removed_args ?? [])
     : revertLaunch(launch, change.overrides ?? [], change.args ?? []);
@@ -138,7 +153,14 @@ export function launchAfterJob(launch: string, change: LaunchChange, kind: "inst
   const applied = kind === "install" ? applyLaunch(reverted, change.overrides ?? [], change.args ?? []) : { value: reverted, added: [] };
   if (applied === null) return null;
   const value = change.env && Object.keys(change.env).length ? withEnv(applied.value, change.env) : applied.value;
-  return value === null ? null : { value, added: applied.added };
+  if (value === null) return null;
+  const wanted = Object.fromEntries(Object.entries(change.env ?? {}).filter(([, v]) => v !== null));
+  const before = alreadyThere(reverted, change.overrides ?? [], wanted);
+  return {
+    value, added: applied.added,
+    addedOverrides: kind === "install" ? (change.overrides ?? []).filter((o) => !before.overrides.includes(o)) : [],
+    addedEnv: kind === "install" ? Object.keys(wanted).filter((k) => !before.env.includes(k)) : [],
+  };
 }
 
 export interface PaceSample { done: number; at: number }

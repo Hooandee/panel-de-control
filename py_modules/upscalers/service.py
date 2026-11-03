@@ -326,6 +326,8 @@ class UpscalerService:
 
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
         entry = self._game_state(appid)
+        previous = entry.get("install") if isinstance(entry.get("install"), dict) else {}
+        edited = previous.get("edited", {}) if previous.get("engine", "optiscaler") == "optiscaler" else {}
         left = self._replace(entry, installed)
         if left is not None:
             analysis = games.analyze(installed.root, entry.get("exe"), analysis["exe"])
@@ -378,8 +380,10 @@ class UpscalerService:
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
         }
-        manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
         managed = sorted(overrides)
+        # Hand edits from the advanced editor survive a repair or a new version.
+        overrides.update({k: v for k, v in edited.items() if k not in overrides})
+        manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
 
         now = time.time()
         entry["install"] = {
@@ -388,6 +392,7 @@ class UpscalerService:
             "native_dlls": list(recipe.native_dlls) if recipe else [],
             "fg_plan": fg_plan,
             "managed": managed,
+            "edited": dict(edited),
             "menu_key": recipe.menu_key if recipe else None,
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
@@ -492,14 +497,14 @@ class UpscalerService:
             return None
         self._drop(old, installed.root)
         if old.get("launcher"):
-            self._launcher_overrides(installed, old, remove=True)
+            try:
+                self._launcher_overrides(installed, old, remove=True)
+            except UpscalerError:
+                pass
         entry["install"] = None
         self._save()
-        left = {
-            "overrides": [] if old.get("launcher") else _overrides(old),
-            "args": list(old.get("added_args", [])),
-            "env": {old["env"]: None} if old.get("engine") == "proton" else {},
-        }
+        left = {"overrides": [] if old.get("launcher") else _owned_overrides(old),
+                "args": list(old.get("added_args", [])), "env": _owned_env(old)}
         # If the new install fails after this point, the error still tells the page what to take out.
         self._update_job(leftover={"removed_overrides": left["overrides"], "removed_args": left["args"], "env": left["env"]})
         return left
@@ -516,7 +521,10 @@ class UpscalerService:
             return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
-        self._helix("remove", root)
+        if self.helix.ready():
+            self._helix("remove", root)
+        else:
+            helixsr.remove_by_hand(Path(install.get("helix_file", "")).parent)
         log = Path(install.get("log", ""))
         for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
             if generated.name and generated.is_file():
@@ -607,17 +615,22 @@ class UpscalerService:
             raise UpscalerError("no_foreign")
         backup = self.state_path.parent / "foreign" / str(appid) / str(int(time.time()))
         backup.mkdir(parents=True, exist_ok=True)
+        # Recorded before anything moves and after every item, so an interrupted move stays restorable.
+        record = {"dir": str(backup), "target": str(target), "items": [], "swaps": [], "at": time.time()}
+        entry["foreign_backup"] = record
+        self._save()
         for name in items:
             shutil.move(str(target / name), str(backup / name))
+            record["items"].append(name)
+            self._save()
         for name in swaps:
             original = target / Path(name).with_suffix(".original.dll").name
             if (target / name).exists():
                 shutil.move(str(target / name), str(backup / name))
             os.replace(original, target / name)
-        entry["foreign_backup"] = {"dir": str(backup), "target": str(target), "items": items, "swaps": swaps,
-                                   "at": time.time()}
-        self._save()
-        return {"moved": [*items, *swaps]}
+            record["swaps"].append(name)
+            self._save()
+        return {"moved": [*record["items"], *record["swaps"]]}
 
     def restore_foreign(self, appid: str) -> dict:
         entry = self._game_state(appid)
@@ -630,17 +643,31 @@ class UpscalerService:
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         target, backup = Path(record["target"]), Path(record["dir"])
-        for name in record.get("swaps", []):
-            os.replace(target / name, target / Path(name).with_suffix(".original.dll").name)
+        restored, skipped = [], []
+        for name in list(record.get("swaps", [])):
+            if (target / name).exists():
+                os.replace(target / name, target / Path(name).with_suffix(".original.dll").name)
             if (backup / name).exists():
                 shutil.move(str(backup / name), str(target / name))
-        for name in record.get("items", []):
-            if (backup / name).exists() and not (target / name).exists():
+            restored.append(name)
+            record["swaps"].remove(name)
+        for name in list(record.get("items", [])):
+            if (target / name).exists():
+                skipped.append(name)
+                continue
+            if (backup / name).exists():
                 shutil.move(str(backup / name), str(target / name))
+            restored.append(name)
+            record["items"].remove(name)
+        ownership.own_like(target, [target / name for name in restored])
+        if skipped:
+            # Something new sits where the old file was: the copy stays until that is sorted out.
+            self._save()
+            return {"restored": restored, "kept": skipped}
         shutil.rmtree(backup, ignore_errors=True)
         entry.pop("foreign_backup", None)
         self._save()
-        return {"restored": [*record.get("items", []), *record.get("swaps", [])]}
+        return {"restored": restored}
 
     # ---- advanced: every OptiScaler.ini key ---------------------------------------------------
     def _ini_path(self, appid: str) -> tuple[dict, Path]:
@@ -690,12 +717,16 @@ class UpscalerService:
             raise UpscalerError("not_installed")
         kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
-            self._launcher_overrides(installed, install, remove=True)
+            try:
+                self._launcher_overrides(installed, install, remove=True)
+            except UpscalerError:
+                # The launcher's config moved or went away: nothing left there to undo.
+                pass
             result = {"kept": kept, "overrides": [], "args": [], "launcher": install["launcher"][0]}
         else:
-            result = {"kept": kept, "overrides": _overrides(install), "args": install.get("added_args", [])}
+            result = {"kept": kept, "overrides": _owned_overrides(install), "args": install.get("added_args", [])}
         if install.get("engine") == "proton":
-            result["env"] = {install["env"]: None}
+            result["env"] = _owned_env(install)
         entry["install"] = None
         self._save()
         return result
@@ -712,12 +743,17 @@ class UpscalerService:
             raise UpscalerError("launcher_write") from None
         install["launcher"] = list(installed.launcher)
 
-    def record_added_args(self, appid: str, args: list[str]) -> dict:
-        """Remember which launch arguments Panel added, so removal never strips the user's own."""
+    def record_added_args(self, appid: str, args: list[str], overrides: list[str] | None = None,
+                          env: list[str] | None = None) -> dict:
+        """Remember what Panel itself added to the launch options, so removal never strips the user's own."""
         install = self._game_state(appid).get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
         install["added_args"] = [a for a in args if a in install.get("args", [])]
+        if overrides is not None:
+            install["added_overrides"] = [o for o in overrides if o in _overrides(install)]
+        if env is not None:
+            install["added_env"] = [k for k in env if k == install.get("env")]
         self._save()
         return {"added_args": install["added_args"]}
 
@@ -807,8 +843,8 @@ class UpscalerService:
 
     def lsfg_restore_foreign(self) -> dict:
         try:
-            self.lsfg.uninstall()
-            return self.lsfg.restore_foreign()
+            cleared = self.lsfg.uninstall().get("cleared", [])
+            return {**self.lsfg.restore_foreign(), "cleared": cleared}
         except lsfg.LsfgError as error:
             raise UpscalerError(error.code) from None
 
@@ -908,6 +944,19 @@ def _managed_keys(install: dict) -> set[str]:
     build = catalog.BUILDS.get(str(install.get("build")))
     model_keys = {k for _, keys in (build.models if build else ()) for k in keys}
     return {*_ALWAYS_MANAGED, *install.get("managed", []), *(build.ini if build else {}), *model_keys}
+
+
+def _owned_overrides(install: dict) -> list[str]:
+    """Overrides Panel added; installs from before this was recorded own all of theirs."""
+    return list(install["added_overrides"]) if "added_overrides" in install else _overrides(install)
+
+
+def _owned_env(install: dict) -> dict:
+    if install.get("engine") != "proton":
+        return {}
+    if "added_env" in install and install["env"] not in install["added_env"]:
+        return {}
+    return {install["env"]: None}
 
 
 def _with_leftovers(result: dict, left: dict | None) -> dict:
