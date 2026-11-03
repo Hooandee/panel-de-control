@@ -392,7 +392,7 @@ export const GameView: FC<{
       {detail?.native && (
         <FrameGenRow
           appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning}
-          routes={{}} optiscaler={{ fg: "off", route: "game" }} gameHint="" onOptiscaler={() => undefined}
+          routes={{}} optiscaler={{ fg: "off", route: "game" }} gameHint="" gpu={overview.gpu} onOptiscaler={() => undefined}
         />
       )}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
@@ -505,6 +505,7 @@ export const GameView: FC<{
             routes={detail.fg_plan && !replacesFsr ? routes : {}}
             optiscaler={{ fg: choice.fg ?? "off", route }}
             gameHint={gameFgHint}
+            gpu={overview.gpu}
             onOptiscaler={(fg, fg_route) => setChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
           />
 

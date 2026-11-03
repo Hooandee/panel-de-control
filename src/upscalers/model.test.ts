@@ -87,3 +87,12 @@ describe("downloadPace", () => {
     expect(downloadPace({ done: 5, at: 0 }, { done: 5, at: 1000 }, 10).eta).toBeNull();
   });
 });
+
+describe("recommended extra frames", () => {
+  it("prefers Lossless on the Deck and the game's own generator elsewhere", async () => {
+    const { recommendedPick } = await import("./model");
+    expect(recommendedPick("rdna2", { game: {} }, true)).toBe("lsfg-2");
+    expect(recommendedPick("rdna3", { game: {}, optiscaler: {} }, true)).toBe("game");
+    expect(recommendedPick("rdna3", { optiscaler: {} }, false)).toBeNull();
+  });
+});

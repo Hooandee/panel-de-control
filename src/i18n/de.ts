@@ -339,6 +339,7 @@ export const de: Record<string, string> = {
   "up.lsfg.flow.balanced": "Ausgewogen",
   "up.lsfg.flow.performance": "Leistung",
   "up.fg.title": "Zusätzliche Bilder",
+  "up.fg.recommended": "{name}, empfohlen",
   "up.fg.off": "Aus",
   "up.fg.on": "An",
   "up.fg.explain": "Fügt zusätzliche Bilder zwischen den echten ein. Bewegungen wirken flüssiger, die Steuerung reagiert etwas später",

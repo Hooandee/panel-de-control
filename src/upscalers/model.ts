@@ -150,3 +150,11 @@ export function downloadPace(previous: PaceSample, current: PaceSample, total: n
   const rate = lastRate > 0 ? lastRate * 0.7 + instant * 0.3 : instant;
   return { rate, eta: rate > 0 ? Math.ceil((total - current.done) / rate) : null };
 }
+
+/** On the Deck OptiFG costs too much on top of upscaling (40 to 50 FPS measured) while Lossless reached 60. */
+export function recommendedPick(gpu: string, routes: Record<string, unknown>, lossless: boolean): "lsfg-2" | "game" | null {
+  if (gpu === "rdna2" && lossless) return "lsfg-2";
+  if ("game" in routes) return "game";
+  if (lossless) return "lsfg-2";
+  return null;
+}

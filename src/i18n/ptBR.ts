@@ -339,6 +339,7 @@ export const ptBR: Record<string, string> = {
   "up.lsfg.flow.balanced": "Equilibrado",
   "up.lsfg.flow.performance": "Desempenho",
   "up.fg.title": "Quadros extras",
+  "up.fg.recommended": "{name}, recomendado",
   "up.fg.off": "Não",
   "up.fg.on": "Sim",
   "up.fg.explain": "Cria quadros extras entre os reais. O movimento fica mais suave e os controles respondem um pouco mais tarde",

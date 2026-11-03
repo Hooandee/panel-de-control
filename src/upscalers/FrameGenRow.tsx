@@ -8,7 +8,7 @@ import {
 import { useI18n } from "../i18n";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
 import { theme } from "../theme";
-import { withEnv } from "./model";
+import { recommendedPick, withEnv } from "./model";
 import { ActionButton, PickerButton, Row } from "./parts";
 import type { FgRoute } from "./types";
 
@@ -26,8 +26,9 @@ export const FrameGenRow: FC<{
   routes: Partial<Record<FgRoute, unknown>>;
   optiscaler: { fg: "on" | "off"; route: FgRoute };
   gameHint: string;
+  gpu: string;
   onOptiscaler: (fg: "on" | "off", route: FgRoute | null) => void;
-}> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, optiscaler, gameHint, onOptiscaler }) => {
+}> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, optiscaler, gameHint, gpu, onOptiscaler }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<LsfgStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,13 +81,15 @@ export const FrameGenRow: FC<{
     ...("optiscaler" in routes ? [{ data: "optiscaler" as Pick, label: t("up.fg.pick.opti") }] : []),
     ...(lossless || profile ? MULTIPLIERS.map((m) => ({ data: `lsfg-${m}` as Pick, label: t("up.fg.pick.lsfg", { m }) })) : []),
   ];
+  const recommended = recommendedPick(gpu, routes, lossless || !!profile);
+  const labelled = options.map((o) => o.data === recommended ? { ...o, label: t("up.fg.recommended", { name: o.label }) } : o);
   const hint = current === "game" ? gameHint : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <Line icon={<LuLayers size={16} />} label={t("up.fg.title")}>
         <PickerButton label={t("up.fg.title")} value={current} disabled={busy} onChange={(pick) => void choose(pick)}
-          options={options.map((o) => ({ value: o.data, label: o.label }))} />
+          options={labelled.map((o) => ({ value: o.data, label: o.label }))} />
       </Line>
       {profile && (
         <Line icon={<LuGauge size={16} />} label={t("up.lsfg.flow")}>
@@ -136,3 +139,4 @@ const Line: FC<{ icon: ReactNode; label: string; children: ReactNode; inline?: b
 const Hint: FC<{ children: ReactNode }> = ({ children }) => (
   <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.35 }}>{children}</span>
 );
+
