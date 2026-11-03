@@ -126,7 +126,8 @@ EVERY_GPU = (*AMD, "intel", "unknown")
 BUILDS: dict[str, Build] = {
     build.id: build
     for build in (
-        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8).
+        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8). Left to itself v10
+        # picks INT8Lite on RDNA3 APUs; full INT8 runs as fast there and keeps a little more detail.
         Build(
             "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna3", "rdna35"), image=3, cost=2,
             assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
