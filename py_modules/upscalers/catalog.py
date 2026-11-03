@@ -128,13 +128,13 @@ EVERY_GPU = (*AMD, "intel", "unknown")
 BUILDS: dict[str, Build] = {
     build.id: build
     for build in (
-        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8). Left to itself v10
-        # picks INT8Lite on RDNA3 APUs; full INT8 runs as fast there and keeps a little more detail.
+        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8, 4 = INT8Lite).
+        # Lite is the default, as AMD's driver picks for APUs; full INT8 stays one tap away.
         Build(
             "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna3", "rdna35"), image=3, cost=2,
             assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
-            ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "2"},
-            models=(("full", {"FSR.Fsr4GpuSupport": "2"}), ("lite", {"FSR.Fsr4GpuSupport": "4"})),
+            ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "4"},
+            models=(("lite", {"FSR.Fsr4GpuSupport": "4"}), ("full", {"FSR.Fsr4GpuSupport": "2"})),
         ),
         # Valve's RDNA2 provider pair needs the 0.10 injector, which knows how to load it.
         Build(

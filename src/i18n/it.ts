@@ -321,7 +321,7 @@ export const it: Record<string, string> = {
   "up.section.model": "Modello",
   "up.model.full": "Completo",
   "up.model.lite": "Leggero",
-  "up.model.help": "Il leggero usa meno GPU; su alcune console va come il completo",
+  "up.model.help": "Il leggero usa meno GPU; il completo conserva un po' più di dettaglio fine",
   "up.fg.title": "Generazione di fotogrammi",
   "up.fg.off": "No",
   "up.fg.on": "Sì",

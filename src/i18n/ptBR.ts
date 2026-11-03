@@ -321,7 +321,7 @@ export const ptBR: Record<string, string> = {
   "up.section.model": "Modelo",
   "up.model.full": "Completo",
   "up.model.lite": "Leve",
-  "up.model.help": "O leve usa menos GPU; em alguns portáteis roda igual ao completo",
+  "up.model.help": "O leve usa menos GPU; o completo mantém um pouco mais de detalhe fino",
   "up.fg.title": "Geração de quadros",
   "up.fg.off": "Não",
   "up.fg.on": "Sim",

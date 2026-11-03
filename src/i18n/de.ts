@@ -321,7 +321,7 @@ export const de: Record<string, string> = {
   "up.section.model": "Modell",
   "up.model.full": "Vollständig",
   "up.model.lite": "Leicht",
-  "up.model.help": "Leicht braucht weniger GPU; auf manchen Handhelds läuft es gleich schnell wie Vollständig",
+  "up.model.help": "Leicht braucht weniger GPU; Vollständig zeigt etwas mehr feine Details",
   "up.fg.title": "Bildgenerierung",
   "up.fg.off": "Aus",
   "up.fg.on": "An",
