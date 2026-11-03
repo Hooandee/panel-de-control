@@ -29,7 +29,8 @@ MAX_LOG_BYTES = 2 * 1024 * 1024
 _SAY = re.compile(r"^\[helixsr-setup\]\s+(.+)$")
 _DISPATCH = re.compile(r"render (\d{2,5})x(\d{2,5}) -> (\d{2,5})x(\d{2,5})")
 _FFX = re.compile(r"FFX upscaler: (HLX [\w ]+?) \(")
-# HLX FSR 4 logs its context once, with the largest render size the game may send, not one line per frame.
+# HLX FSR 4 logs its context once with the largest render size the game may send (Stellar Blade on
+# Performance still reports 1280x800), so it proves HLX runs but not the real input size.
 _HLX_FSR = re.compile(r"HLX-FSR-4 own runtime active: .*?output (\d{2,5})x(\d{2,5}), max render (\d{2,5})x(\d{2,5})")
 HLX_FSR_LOG = "HLX_FSR.log"
 _NETWORK_OFF = re.compile(r"network (?:is )?not running|red border", re.I)
@@ -191,10 +192,7 @@ def read_log(exe_folder: Path, logs: list[Path], since: float | None = None) -> 
                 }
             elif match := _HLX_FSR.search(line):
                 facts["upscaler"] = "HLX FSR 4"
-                facts["resolution"] = {
-                    "render": [int(match.group(3)), int(match.group(4))],
-                    "output": [int(match.group(1)), int(match.group(2))],
-                }
+                facts["output"] = [int(match.group(1)), int(match.group(2))]
             elif match := _FFX.search(line):
                 facts["upscaler"] = match.group(1).strip()
             elif _NETWORK_OFF.search(line):

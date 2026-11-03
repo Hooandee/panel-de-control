@@ -160,8 +160,9 @@ def test_hlx_fsr4_proves_itself_in_its_own_log(tmp_path):
     _write(tmp_path / "HLX_FSR.log",
            "[10:03:58.951000] [I] HLX-FSR-4 RADV: yes\n"
            "[10:03:59.458000] [I] HLX-FSR-4 own runtime active: int8p-s-std-k01 (tier 9), output 1280x800, "
-           "max render 753x471, flags 0x19\n")
+           "max render 1280x800, flags 0x19\n")
     facts = helixsr.read_log(tmp_path, [tmp_path / "helixsr.log"])
     assert facts["upscaler"] == "HLX FSR 4"
-    assert facts["resolution"] == {"render": [753, 471], "output": [1280, 800]}
+    assert facts["output"] == [1280, 800]
+    assert "resolution" not in facts
     assert helixsr.verdict(facts) == "active"
