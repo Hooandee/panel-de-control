@@ -591,6 +591,8 @@ class UpscalerService:
         """Set another tool's OptiScaler or HelixSR aside (kept, restorable) so Panel's can go in cleanly."""
         installed, _analysis, target = self._guard(appid, True)
         entry = self._game_state(appid)
+        if isinstance(entry.get("install"), dict):
+            raise UpscalerError("still_patched")
         items, swaps = games.foreign_items(target), games.helix_swaps(target)
         if not items and not swaps:
             raise UpscalerError("no_foreign")

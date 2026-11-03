@@ -1070,7 +1070,8 @@ def test_unreal_plugin_libraries_deep_in_the_tree_are_found(tmp_path):
     assert result["inputs"]["dlss"] == ["FSD/Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll"]
     assert "streamline" in result["inputs"]
     assert result["inputs"]["fsr2"] == ["FSD/Binaries/Win64/FSD-Win64-Shipping.exe"]
-    assert games.shipped_upscalers(root) == ["DLSS", "FSR 2"]
+    # The list only opens the exe when no library says it already; the game page always does.
+    assert games.shipped_upscalers(root) == ["DLSS"]
 
 
 def test_optipatcher_goes_into_optiscalers_plugins_for_games_that_support_it(steam, fake_catalog, proc, monkeypatch):
@@ -1092,3 +1093,18 @@ def test_optipatcher_goes_into_optiscalers_plugins_for_games_that_support_it(ste
 def test_wiki_optipatcher_flag_makes_a_recipe():
     recipe = recipes.from_facts("1", {"optipatcher": True}, "wiki")
     assert recipe is not None and recipe.optipatcher
+
+
+def test_the_resolver_never_sets_aside_panels_own_install(steam, fake_catalog, proc):
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    with pytest.raises(UpscalerError, match="still_patched"):
+        service.adopt_foreign(APPID)
+
+
+def test_the_exe_is_only_searched_when_no_library_was_found(tmp_path, monkeypatch):
+    root = tmp_path / "game"
+    _write(root / "Game.exe", b"MZ" + b"\0" * 64)
+    _write(root / "nvngx_dlss.dll")
+    monkeypatch.setattr(games, "embedded_upscalers", lambda exe: pytest.fail("must not scan"))
+    assert games.shipped_upscalers(root) == ["DLSS"]

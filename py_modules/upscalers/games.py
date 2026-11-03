@@ -255,7 +255,7 @@ def shipped_upscalers(root: Path) -> list[str]:
                     continue
                 if largest is None or size > largest[0]:
                     largest = (size, current / file)
-    if largest:
+    if largest and not found:
         found |= embedded_upscalers(largest[1])
     return [SHIPPED_NAMES[kind] for kind in SHIPPED_NAMES if kind in found]
 
