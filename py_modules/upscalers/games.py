@@ -8,7 +8,7 @@ from pathlib import Path
 
 from steam_cleaner import vdf
 
-from . import pe
+from . import launchers, pe
 
 STATE_FULLY_INSTALLED = 4
 STATE_UPDATE_RUNNING = 256 | 1024
@@ -47,6 +47,8 @@ class Installed:
     exe: str | None = None
     shortcut: bool = False
     native: bool = False
+    # (launcher, game key, runner) for Heroic/Lutris shortcuts; overrides then go to the launcher.
+    launcher: tuple[str, str, str | None] | None = None
 
 
 def steam_roots(home: str) -> list[Path]:
@@ -90,6 +92,16 @@ def _unquote(value: object) -> str:
     return str(value or "").strip().strip('"')
 
 
+def from_launcher(home: str, appid: str, exe: str, launch_options: str) -> Installed | None:
+    found = launchers.identify(exe, launch_options)
+    if not found:
+        return None
+    game = launchers.find(home, *found)
+    if game is None:
+        return None
+    return Installed(appid, game.name, game.root, STATE_FULLY_INSTALLED, game.exe, True, game.native, found)
+
+
 def find_shortcut(home: str, appid: str) -> Installed | None:
     """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
     for root in steam_roots(home):
@@ -105,6 +117,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
             for entry in shortcuts.values() if isinstance(shortcuts, dict) else ():
                 if not isinstance(entry, dict) or str(entry.get("appid")) != appid:
                     continue
+                launched = from_launcher(home, appid, _unquote(entry.get("exe")), str(entry.get("launchoptions") or ""))
+                if launched:
+                    return launched
                 exe = Path(_unquote(entry.get("exe")))
                 start = Path(_unquote(entry.get("startdir"))) if _unquote(entry.get("startdir")) else exe.parent
                 if not start.is_dir():
@@ -119,10 +134,14 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
     return None
 
 
-def from_hint(appid: str, hint: dict | None) -> Installed | None:
+def from_hint(appid: str, hint: dict | None, home: str = "") -> Installed | None:
     """A shortcut described by Steam's own app details, for when shortcuts.vdf does not list it."""
     if not isinstance(hint, dict):
         return None
+    if home:
+        launched = from_launcher(home, appid, _unquote(hint.get("exe")), str(hint.get("opts") or ""))
+        if launched:
+            return launched
     exe = Path(_unquote(hint.get("exe")))
     start = Path(_unquote(hint.get("dir"))) if _unquote(hint.get("dir")) else exe.parent
     if not str(exe) or not start.is_dir():

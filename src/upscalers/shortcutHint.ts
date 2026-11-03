@@ -1,5 +1,6 @@
 export interface ShortcutHint {
   exe: string;
+  opts?: string;
   dir: string;
   name: string;
 }
@@ -7,6 +8,7 @@ export interface ShortcutHint {
 interface ShortcutDetails {
   strShortcutExe?: string;
   strShortcutStartDir?: string;
+  strLaunchOptions?: string;
 }
 
 const w = window as unknown as {
@@ -27,7 +29,9 @@ export function readShortcutHint(appid: number, name: string, timeoutMs = 1500):
       handle = register(appid, (details) => {
         window.clearTimeout(timer);
         handle?.unregister();
-        resolve(details?.strShortcutExe ? { exe: details.strShortcutExe, dir: details.strShortcutStartDir ?? "", name } : null);
+        resolve(details?.strShortcutExe
+          ? { exe: details.strShortcutExe, dir: details.strShortcutStartDir ?? "", name, opts: details.strLaunchOptions ?? "" }
+          : null);
       });
     } catch {
       window.clearTimeout(timer);

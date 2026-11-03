@@ -25,7 +25,7 @@ export interface UpscalerJob {
   done: number;
   total: number;
   error: string | null;
-  result?: { overrides?: string[]; args?: string[]; kept?: string[] };
+  result?: { overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" };
 }
 
 export interface UpscalersOverview {
@@ -94,6 +94,7 @@ export interface GameDetail {
   history: HistoryEntry[];
   recipe: boolean;
   fg_note?: "reflexOff" | null;
+  launcher?: "heroic" | "lutris" | null;
   shortcut: boolean;
   native: boolean;
   fg_plan: FgPlan | null;

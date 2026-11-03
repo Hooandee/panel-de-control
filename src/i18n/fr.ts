@@ -322,6 +322,8 @@ export const fr: Record<string, string> = {
   "up.model.full": "Complet",
   "up.model.lite": "Léger",
   "up.model.help": "Le léger sollicite moins le GPU ; le complet garde un peu plus de détails fins",
+  "up.launcher.heroic": "Jeu Heroic : Panel enregistre les réglages dans Heroic",
+  "up.launcher.lutris": "Jeu Lutris : Panel enregistre les réglages dans Lutris",
   "up.fg.title": "Génération d'images",
   "up.fg.off": "Non",
   "up.fg.on": "Oui",

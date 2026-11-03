@@ -10,7 +10,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, identify, ini, keys, logread, recipes
+from . import capture, catalog, diagnostics, games, identify, ini, keys, launchers, logread, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -143,7 +143,7 @@ class UpscalerService:
 
     def _find(self, appid: str) -> games.Installed | None:
         hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
-        return games.find_installed(self.home, appid) or games.from_hint(appid, hint)
+        return games.find_installed(self.home, appid) or games.from_hint(appid, hint, self.home)
 
     def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
         """Real game behind a non-Steam shortcut; worked out once, then remembered."""
@@ -176,7 +176,7 @@ class UpscalerService:
     def game(self, appid: str, hint: dict | None = None) -> dict:
         if isinstance(hint, dict) and hint.get("exe"):
             entry = self._game_state(appid)
-            clean = {k: str(hint.get(k) or "")[:1024] for k in ("exe", "dir", "name")}
+            clean = {k: str(hint.get(k) or "")[:1024] for k in ("exe", "dir", "name", "opts")}
             if entry.get("shortcut_hint") != clean:
                 entry["shortcut_hint"] = clean
                 self._save()
@@ -195,6 +195,7 @@ class UpscalerService:
             "updating": games.update_state(installed.state_flags),
             "shortcut": installed.shortcut,
             "native": installed.native,
+            "launcher": installed.launcher[0] if installed.launcher else None,
             "identity": identity,
             "analysis": analysis,
             "install": {**install, "status": self._status(install, entry)} if isinstance(install, dict) else None,
@@ -353,6 +354,16 @@ class UpscalerService:
             "build": build.id, "proxy": proxy, "at": now, "result": "pending", "exe": analysis["exe"],
         })
         entry["history"] = entry["history"][-HISTORY_LIMIT:]
+        if installed.launcher:
+            try:
+                self._launcher_overrides(installed, entry["install"], remove=False)
+            except UpscalerError:
+                self._remove(target)
+                entry["install"] = None
+                self._save()
+                raise
+            self._save()
+            return {"files": len(manifest["files"]), "overrides": [], "args": [], "launcher": installed.launcher[0]}
         self._save()
         return {"files": len(manifest["files"]), "overrides": _overrides(entry["install"]), "args": entry["install"]["args"]}
 
@@ -430,10 +441,26 @@ class UpscalerService:
             raise UpscalerError("running")
         self._update_job(phase="restore")
         kept = self._remove(Path(install["target"]))
-        result = {"kept": kept, "overrides": _overrides(install), "args": install.get("added_args", [])}
+        if install.get("launcher") and installed:
+            self._launcher_overrides(installed, install, remove=True)
+            result = {"kept": kept, "overrides": [], "args": [], "launcher": install["launcher"][0]}
+        else:
+            result = {"kept": kept, "overrides": _overrides(install), "args": install.get("added_args", [])}
         entry["install"] = None
         self._save()
         return result
+
+    def _launcher_overrides(self, installed: games.Installed, install: dict, remove: bool) -> None:
+        """Heroic/Lutris keep their own per-game environment; Steam's launch options never reach Wine."""
+        game = launchers.find(self.home, *installed.launcher) if installed.launcher else None
+        if game is None:
+            raise UpscalerError("launcher_missing")
+        dlls = [o.split("=", 1)[0] for o in _overrides(install)]
+        try:
+            launchers.set_overrides(game, dlls, remove=remove)
+        except OSError:
+            raise UpscalerError("launcher_write") from None
+        install["launcher"] = list(installed.launcher)
 
     def record_added_args(self, appid: str, args: list[str]) -> dict:
         """Remember which launch arguments Panel added, so removal never strips the user's own."""

@@ -585,3 +585,78 @@ def test_unified_fsr31_dll_counts_as_the_games_frame_generation(tmp_path):
     _write(root / "amd_fidelityfx_dx12.dll", b"ffx 3.1")
     inputs = games.analyze(root)["inputs"]
     assert inputs["fsr31"] and inputs["fsrfg"]
+
+
+# ---- Heroic and Lutris shortcuts ------------------------------------------------------------
+
+from upscalers import launchers
+
+
+def test_launcher_shortcuts_are_recognised():
+    assert launchers.identify('"flatpak"', 'run com.heroicgameslauncher.hgl --no-gui "heroic://launch?appName=Fortnite&runner=legendary"') == ("heroic", "Fortnite", "legendary")
+    assert launchers.identify("/usr/bin/heroic", '"heroic://launch/gog/1207658924"') == ("heroic", "1207658924", "gog")
+    assert launchers.identify('"/home/deck/.local/share/heroic/wrappers/legendary-Quail.desktop"', "") == ("heroic", "Quail", "legendary")
+    assert launchers.identify('"lutris"', "'lutris:rungameid/42'") == ("lutris", "42", None)
+    assert launchers.identify("/home/deck/.local/share/applications/lutris-witcher-3.sh", "") == ("lutris", "slug:witcher-3", None)
+    assert launchers.identify("/games/Game.exe", "-dx12") is None
+
+
+def test_heroic_game_gets_overrides_in_its_own_config(tmp_path):
+    home = tmp_path
+    game = tmp_path / "Games/Heroic/Quail"
+    _write(game / "Binaries/Quail.exe", b"MZ")
+    base = home / ".config/heroic"
+    _write(base / "legendaryConfig/legendary/installed.json", json.dumps({
+        "Quail": {"install_path": str(game), "executable": "Binaries/Quail.exe", "title": "Quail", "platform": "Windows"}}))
+    _write(base / "GamesConfig/Quail.json", json.dumps({"Quail": {"enviromentOptions": [
+        {"key": "WINEDLLOVERRIDES", "value": "winmm=n,b"}, {"key": "DXVK_HUD", "value": "1"}]}}))
+    found = launchers.find(str(home), "heroic", "Quail", "legendary")
+    assert found.root == game and found.exe == "Binaries/Quail.exe" and not found.native
+    launchers.set_overrides(found, ["dxgi"])
+    env = json.loads(found.config.read_text())["Quail"]["enviromentOptions"]
+    assert {"key": "WINEDLLOVERRIDES", "value": "winmm=n,b;dxgi=n,b"} in env and {"key": "DXVK_HUD", "value": "1"} in env
+    launchers.set_overrides(found, ["dxgi"], remove=True)
+    env = json.loads(found.config.read_text())["Quail"]["enviromentOptions"]
+    assert {"key": "WINEDLLOVERRIDES", "value": "winmm=n,b"} in env
+
+
+def test_lutris_game_gets_wine_overrides_in_its_yaml(tmp_path):
+    import sqlite3
+    home = tmp_path
+    data = home / ".local/share/lutris"
+    (data / "games").mkdir(parents=True)
+    with sqlite3.connect(data / "pga.db") as db:
+        db.execute("CREATE TABLE games (id INTEGER, name TEXT, slug TEXT, configpath TEXT)")
+        db.execute("INSERT INTO games VALUES (42, 'The Witcher 3', 'witcher-3', 'witcher-3-1700000000')")
+    exe = _write(tmp_path / "Games/witcher/bin/x64_dx12/witcher3.exe", b"MZ")
+    yml = data / "games/witcher-3-1700000000.yml"
+    yml.write_text(f"game:\n  exe: {exe}\n  prefix: /home/deck/Games/witcher\nsystem:\n  env:\n    DXVK_ASYNC: '1'\nwine:\n  version: ge-proton\n")
+    found = launchers.find(str(home), "lutris", "42")
+    assert found.root == exe.parent and found.exe == "witcher3.exe"
+    launchers.set_overrides(found, ["dxgi"])
+    text = yml.read_text()
+    assert "wine:\n  overrides:\n    dxgi: n,b\n  version: ge-proton" in text and "DXVK_ASYNC: '1'" in text
+    launchers.set_overrides(found, ["dxgi"], remove=True)
+    assert "overrides" not in yml.read_text() and "version: ge-proton" in yml.read_text()
+
+
+def test_heroic_shortcut_installs_with_overrides_in_heroic(steam, fake_catalog, proc):
+    home, _ = steam
+    game = home / "Games/Heroic/Quail"
+    _write(game / "Quail.exe", b"MZ" + b"\0" * 4096)
+    base = home / ".var/app/com.heroicgameslauncher.hgl/config/heroic"
+    _write(base / "legendaryConfig/legendary/installed.json", json.dumps({
+        "Quail": {"install_path": str(game), "executable": "Quail.exe", "title": "Quail", "platform": "Windows"}}))
+    hint = {"exe": '"flatpak"', "dir": "", "name": "Quail",
+            "opts": 'run com.heroicgameslauncher.hgl --no-gui "heroic://launch?appName=Quail&runner=legendary"'}
+    service = _service(steam, fake_catalog, proc)
+    detail = service.game("3000000001", hint)
+    assert detail["native"] is False and detail["analysis"]["exe"] == "Quail.exe"
+    result = service.install("3000000001", {"build": "fsr-test"})
+    assert result["overrides"] == [] and result["launcher"] == "heroic"
+    assert (game / "dxgi.dll").read_bytes() == b"injector"
+    env = json.loads((base / "GamesConfig/Quail.json").read_text())["Quail"]["enviromentOptions"]
+    assert env == [{"key": "WINEDLLOVERRIDES", "value": "dxgi=n,b"}]
+    removed = service.uninstall("3000000001")
+    assert removed["overrides"] == [] and not (game / "dxgi.dll").exists()
+    assert json.loads((base / "GamesConfig/Quail.json").read_text())["Quail"]["enviromentOptions"] == []

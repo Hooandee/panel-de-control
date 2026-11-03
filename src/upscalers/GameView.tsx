@@ -87,7 +87,9 @@ export const GameView: FC<{
 
   const finish = useCallback(async (finished: UpscalerJob) => {
     const result = finished.result;
-    if (finished.state === "done" && result?.overrides) {
+    if (finished.state === "done" && result?.launcher) {
+      if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
+    } else if (finished.state === "done" && result?.overrides) {
       const details = await readAppDetails(game.liveAppid);
       const overrides = result.overrides;
       const args = result.args ?? [];
@@ -239,6 +241,7 @@ export const GameView: FC<{
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
           )}
           {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
+          {detail.launcher && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t(`up.launcher.${detail.launcher}`)}</span>}
           {detail.native && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.native")}</span>}
           {detail.shortcut && !detail.native && (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
