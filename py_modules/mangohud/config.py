@@ -8,6 +8,7 @@ _DIRECTIVE = {
     "fps": "fps",
     "fps_metrics": "fps_metrics",
     "frametime": "frametime",
+    "frame_timing": "frame_timing",
     "frame_count": "frame_count",
     "show_fps_limit": "show_fps_limit",
     "time": "time",
@@ -119,9 +120,21 @@ _LABEL_DIRECTIVE = {"fps": "fps_text", "cpu": "cpu_text", "gpu": "gpu_text"}
 # interface (MangoHud reads the first token "1" as "all interfaces bar loopback").
 _VALUE_ON = {"device_battery": "gamepad", "fps_metrics": "avg", "network": "1"}
 
-# Value metrics have no clean =0 form. The four boolean renderers below also draw
-# whenever their directive is present, even when its parsed value is 0.
-_OMIT_WHEN_OFF = frozenset((*_VALUE_ON, "hdr", "refresh_rate", "winesync", "present_mode"))
+# Value metrics have no clean =0 form. These boolean renderers also draw
+# whenever present on supported MangoHud versions, even with a parsed value of 0.
+_OMIT_WHEN_OFF = frozenset((*_VALUE_ON, "hdr", "refresh_rate", "winesync", "present_mode", "display_server"))
+
+# MangoHud v0.8.1 src/hud_elements.cpp::sort_elements registers these standalone
+# callbacks even for =0. src/overlay.cpp::render_imgui adds a horizontal divider
+# after each callback, including those that draw nothing. Omit only those off
+# callbacks in horizontal ordered layouts; submetrics (notably frametime, whose
+# default is true) still need explicit =0. Custom presets do not use `inherit`.
+_HORIZONTAL_CALLBACKS = frozenset((
+    "version", "time", "gpu_stats", "cpu_stats", "core_load", "io_read", "io_write",
+    "arch", "wine", "procmem", "gamemode", "vkbasalt", "engine_version",
+    "vulkan_driver", "resolution", "show_fps_limit", "vram", "ram", "fps",
+    "gpu_name", "frame_timing", "media_player", "battery", "fsr", "frame_count", "fan",
+))
 
 # A drawn divider row (MangoHud has no first-class per-row separator in vertical
 # layout, so we emulate one with a custom_text line). MangoHud's font has a
@@ -435,10 +448,11 @@ def coerce_model(raw):
 
 
 def _style_lines(model):
-    # A MangoHud preset MERGES over Steam's default level, so we pin the layout
-    # basics: no fps-only collapse, table (not legacy) layout.
+    # Pin ordered layout. fps_only defaults to false in custom presets; emitting
+    # even fps_only=0 registers an empty callback and separator in horizontal mode.
     lines = ["fps_only=0", "legacy_layout=0", "hide_engine_names=1"]
     if model["layout"] == "horizontal":
+        lines.remove("fps_only=0")
         lines.append("horizontal=1")
     if model["compact"]:
         lines.append("hud_compact=1")
@@ -522,7 +536,7 @@ def _enable_lines(item, values, locale="es"):
 def to_directives(model, values=None):
     """The MangoHud directive lines for the full HUD. Because a preset merges over
     parser defaults, disabled real metrics are normally written as `=0`; renderers that
-    ignore that value are omitted. Enabled metrics are emitted in item order
+    ignore that value and empty horizontal callbacks are omitted. Enabled metrics are emitted in item order
     (== on-screen order) with custom text interleaved. pdc metrics have no directive;
     `values` (id -> value string) bakes their live value into the row."""
     model = coerce_model(model)
@@ -530,6 +544,8 @@ def to_directives(model, values=None):
     lines = _style_lines(model)
     for mid in _DIRECTIVE:
         if mid in enabled or mid in _OMIT_WHEN_OFF:
+            continue
+        if model["layout"] == "horizontal" and _DIRECTIVE[mid] in _HORIZONTAL_CALLBACKS:
             continue
         lines.append(f"{_DIRECTIVE[mid]}=0")
     for item in model["items"]:

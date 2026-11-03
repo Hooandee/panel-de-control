@@ -12,6 +12,7 @@ import { CleanerFilter, CleanerGame, CleanerSort, eligibleCaches, filterGames, f
 import { readCleanerMetadata, readInstalledCleanerMetadata } from "./steamMetadata";
 import type { CleanerController } from "./useSteamCleaner";
 import type { CleanerEntry } from "./types";
+import { cleanerForceSession } from "./forceSession";
 
 const column: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
 const caption: CSSProperties = themed(() => ({ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 }));
@@ -68,14 +69,24 @@ const EntryChoice: FC<{ entry: CleanerEntry; selected: boolean; disabled: boolea
   const title = t(`cleaner.kind.${entry.kind}`);
   const storage = libraryLabel(entry, t("cleaner.internalStorage"));
   const Check = selected ? LuSquareCheck : LuSquare;
+  const [confirming, setConfirming] = useState(false);
+  const toggle = () => {
+    if (!selected && entry.can_force && !cleanerForceSession.acknowledged) setConfirming(true);
+    else onToggle();
+  };
   return (
     <div style={{ ...column, gap: 4 }}>
-      <CleanerAction label={`${title} · ${storage}`} checked={selected} disabled={disabled || !!entry.blocked_reason} onActivate={onToggle} style={{ textAlign: "left", justifyContent: "flex-start", background: selected ? `${theme.color.accent}14` : theme.color.surface }}>
-        {entry.blocked_reason ? <LuShieldCheck size={17} style={{ flexShrink: 0 }} /> : <Check size={17} color={selected ? theme.color.accent : theme.color.textMuted} style={{ flexShrink: 0 }} />}
+      <CleanerAction label={`${title} · ${storage}`} checked={selected} disabled={disabled || (!!entry.blocked_reason && !entry.can_force)} onActivate={toggle} style={{ textAlign: "left", justifyContent: "flex-start", background: selected ? `${theme.color.accent}14` : theme.color.surface }}>
+        {entry.blocked_reason && !entry.can_force ? <LuShieldCheck size={17} style={{ flexShrink: 0 }} /> : <Check size={17} color={selected ? theme.color.accent : theme.color.textMuted} style={{ flexShrink: 0 }} />}
         <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block" }}>{title}</span><span style={caption}>{storage}</span></span>
         <span style={{ ...caption, flexShrink: 0, fontVariantNumeric: "tabular-nums", color: theme.color.textPrimary }}>{entry.bytes === null ? t("cleaner.sizeUnknown") : formatBytes(entry.bytes, lang)}</span>
       </CleanerAction>
-      {entry.blocked_reason && ACTIONABLE_REASONS.has(entry.blocked_reason) && <div style={{ ...caption, paddingInline: 8 }}>{t(cleanerReasonKey(entry.blocked_reason))}</div>}
+      {entry.blocked_reason && (entry.can_force || ACTIONABLE_REASONS.has(entry.blocked_reason)) && <div style={{ ...caption, paddingInline: 8 }}>{t(entry.can_force ? `cleaner.force.reason.${entry.blocked_reason}` : cleanerReasonKey(entry.blocked_reason))}</div>}
+      {confirming && !cleanerForceSession.acknowledged && <div style={{ ...column, padding: "4px 8px" }}>
+        <div style={caption}>{t("cleaner.force.warning")}</div>
+        <CleanerAction label={t("cleaner.force.accept")} disabled={disabled} onActivate={() => { cleanerForceSession.acknowledged = true; setConfirming(false); onToggle(); }}>{t("cleaner.force.accept")}</CleanerAction>
+        <CleanerAction label={t("cleaner.cancel")} onActivate={() => setConfirming(false)}>{t("cleaner.cancel")}</CleanerAction>
+      </div>}
       {!entry.blocked_reason && entry.warnings.filter((warning) => warning !== "prefix_data").map((warning) => <div key={warning} style={{ ...caption, paddingInline: 8 }}>{t(warning === "unknown_identity" ? "cleaner.warning.unknown_identity" : cleanerReasonKey(warning))}</div>)}
     </div>
   );
@@ -86,7 +97,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
   const [open, setOpen] = useState(false);
   const name = game.name || t("cleaner.unknownGame");
   const caches = eligibleCaches(game.entries);
-  const selectable = game.entries.filter((entry) => !entry.blocked_reason);
+  const selectable = game.entries.filter((entry) => !entry.blocked_reason || entry.can_force);
   const selectedCount = game.entries.filter((entry) => selected.has(entry.id)).length;
   const selectedKinds = [...new Set(game.entries.filter((entry) => selected.has(entry.id)).map((entry) => entry.kind))];
   const allSelected = selectable.length > 0 && selectable.every((entry) => selected.has(entry.id));
@@ -99,7 +110,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
     <div style={{ ...theme.card, ...column, gap: 0, padding: 6 }}>
       <Focusable flow-children="row" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <CleanerAction label={t(canSelectCaches ? "cleaner.selectGameCaches" : "cleaner.chooseGameData", { name })} checked={canSelectCaches ? allSelected ? true : partiallySelected ? "mixed" : false : undefined} disabled={disabled || selectable.length === 0} onActivate={canSelectCaches ? onCaches : () => setOpen(true)} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
+          <CleanerAction label={t(canSelectCaches ? "cleaner.selectGameCaches" : "cleaner.chooseGameData", { name })} checked={canSelectCaches ? allSelected ? true : partiallySelected ? "mixed" : false : undefined} disabled={disabled || selectable.length === 0} onActivate={canSelectCaches ? onCaches : () => setOpen(true)} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start", opacity: game.entries.every((entry) => entry.blocked_reason) && !selectedCount ? 0.6 : 1 }}>
             <GameCover urls={game.coverUrls} name={name} width={38} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: theme.font.body, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
@@ -146,10 +157,10 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
   const metadata = useMemo(readCleanerMetadata, [state?.scan_id]);
   const installedMetadata = useMemo(() => readInstalledCleanerMetadata(metadata), [metadata]);
   const games = useMemo(() => groupEntries(state?.entries ?? [], metadata).filter((game) => game.entries.some(
-    (entry) => !entry.blocked_reason || ACTIONABLE_REASONS.has(entry.blocked_reason),
+    (entry) => !entry.blocked_reason || entry.can_force || ACTIONABLE_REASONS.has(entry.blocked_reason),
   )), [state?.entries, metadata]);
   const shown = useMemo(() => filterGames(games, query, filter, sort, selected), [games, query, filter, sort, selected]);
-  const chosen = (state?.entries ?? []).filter((entry) => selected.has(entry.id) && !entry.blocked_reason);
+  const chosen = (state?.entries ?? []).filter((entry) => selected.has(entry.id) && (!entry.blocked_reason || entry.can_force));
   const chosenBytes = chosen.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
   const shownEntries = shown.flatMap((game) => game.entries);
   const shownCaches = eligibleCaches(shownEntries);
@@ -166,7 +177,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
   useEffect(() => {
     if (!entries) return;
     for (const entry of entries) labels.current.set(entry.id, entry);
-    const allowed = new Set(entries.filter((entry) => !entry.blocked_reason).map((entry) => entry.id));
+    const allowed = new Set(entries.filter((entry) => !entry.blocked_reason || entry.can_force).map((entry) => entry.id));
     setSelected((previous) => {
       const next = new Set([...previous].filter((id) => allowed.has(id)));
       return next.size === previous.size ? previous : next;
@@ -256,7 +267,11 @@ export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: bo
               <Notice warning>{t("cleaner.confirm.prefixWarning")}</Notice>
               <CleanerAction label={t("cleaner.confirm.delete")} danger disabled={busy} onActivate={() => void controller.execute(true)}><LuTrash2 size={16} /><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.confirm.delete")}</span><span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{formatBytes(plan.estimated_bytes, lang)}</span></CleanerAction>
               <CleanerAction label={t("cleaner.cancel")} disabled={busy} preferredFocus onActivate={controller.dismissPlan}>{t("cleaner.cancel")}</CleanerAction>
-            </Focusable> : <CleanerAction label={t("cleaner.cleanSelection")} primary disabled={busy} onActivate={() => void controller.prepare(chosen.map((entry) => entry.id))}><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.cleanSelection")}</span><span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{formatBytes(chosenBytes, lang)}</span></CleanerAction>}
+            </Focusable> : <CleanerAction label={t("cleaner.cleanSelection")} primary disabled={busy} onActivate={() => {
+              const ids = chosen.map((entry) => entry.id);
+              const forced = chosen.filter((entry) => entry.blocked_reason && entry.can_force).map((entry) => entry.id);
+              void (forced.length ? controller.prepare(ids, forced) : controller.prepare(ids));
+            }}><span style={{ flex: 1, textAlign: "left" }}>{t("cleaner.cleanSelection")}</span><span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{formatBytes(chosenBytes, lang)}</span></CleanerAction>}
           </CleanerActionTray>}
         </>}
       </div>

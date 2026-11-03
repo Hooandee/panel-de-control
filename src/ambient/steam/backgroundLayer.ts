@@ -94,29 +94,35 @@ async function screenSizedImage(doc: Document, url: string): Promise<HTMLImageEl
   return img;
 }
 
-/** Mounts the player page and waits until it reports playback, so the cross-fade never shows a black frame. */
-async function playingPage(doc: Document, slot: HTMLElement, url: string): Promise<HTMLIFrameElement> {
-  const frame = doc.createElement("iframe");
-  frame.allow = "autoplay";
-  frame.tabIndex = -1;
-  frame.style.border = "0";
-  frame.style.pointerEvents = "none";
-  frame.src = url;
-  slot.replaceChildren(frame);
-  const view = doc.defaultView;
-  await new Promise<void>((resolve) => {
-    const done = () => {
-      view?.removeEventListener("message", onMessage);
+type LoadResult = "ready" | "error" | "timeout" | "cancelled";
+/** Every attempt owns its listeners and deadline, including cancellation on replacement. */
+function waitForMedia(element: HTMLVideoElement | HTMLIFrameElement, signal: AbortSignal): Promise<LoadResult> {
+  return new Promise((resolve) => {
+    const view = element.ownerDocument.defaultView;
+    const done = (result: LoadResult) => {
       clearTimeout(timer);
-      resolve();
+      element.removeEventListener("loadeddata", ready);
+      element.removeEventListener("error", error);
+      view?.removeEventListener("message", message);
+      signal.removeEventListener("abort", cancel);
+      resolve(result);
     };
-    const onMessage = (event: MessageEvent) => {
-      if (event.source === frame.contentWindow && (event.data as { pdc?: { s?: string } } | null)?.pdc?.s === "playing") done();
+    const ready = () => done("ready");
+    const error = () => done("error");
+    const cancel = () => done("cancelled");
+    const message = (event: MessageEvent) => {
+      if (element.tagName !== "IFRAME" || event.source !== (element as HTMLIFrameElement).contentWindow) return;
+      const state = (event.data as { pdc?: { s?: string } } | null)?.pdc?.s;
+      if (state === "playing") ready();
+      else if (state === "error") error();
     };
-    const timer = setTimeout(done, PAGE_START_MS);
-    view?.addEventListener("message", onMessage);
+    const timer = setTimeout(() => done("timeout"), PAGE_START_MS);
+    if (element.tagName === "VIDEO") element.addEventListener("loadeddata", ready);
+    element.addEventListener("error", error);
+    view?.addEventListener("message", message);
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
   });
-  return frame;
 }
 
 function release(container: Element): void {
@@ -135,10 +141,14 @@ export class BackgroundLayer {
   private current: LayerMedia | null = null;
   private options: LayerOptions = { transition: "fade", nativeArt: "show", motion: "play", visible: true };
   private generation = 0;
+  private load: AbortController | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private fadeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly getDocument: () => Document | null,
     private readonly onVideoSize: (url: string, width: number, height: number) => void = () => undefined,
+    private readonly onLoadFailure: (detail: string) => void = () => undefined,
   ) {}
 
   get mounted(): boolean {
@@ -186,24 +196,44 @@ export class BackgroundLayer {
     const root = this.root;
     root.dataset.transition = options.transition;
     root.dataset.motion = options.motion;
-    if (options.nativeArt === "show") root.ownerDocument.documentElement.removeAttribute(ART_ATTR);
-    else root.ownerDocument.documentElement.setAttribute(ART_ATTR, options.nativeArt);
+    this.syncNativeArt();
     root.style.display = options.visible ? "" : "none";
-    if (!this.current || this.current.url !== media.url) void this.swap(media);
+    if (!this.current || this.current.url !== media.url || this.current.kind !== media.kind) void this.swap(media);
     this.syncVideos();
     return true;
   }
 
-  private async swap(media: LayerMedia): Promise<void> {
+  private syncNativeArt(): void {
+    if (!this.root) return;
+    const page = this.root.ownerDocument.documentElement;
+    if (!this.root.querySelector("[data-active]") || this.options.nativeArt === "show") page.removeAttribute(ART_ATTR);
+    else page.setAttribute(ART_ATTR, this.options.nativeArt);
+  }
+
+  private cancelPending(): void {
+    this.load?.abort();
+    this.load = null;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    if (this.fadeTimer !== null) clearTimeout(this.fadeTimer);
+    this.retryTimer = this.fadeTimer = null;
+  }
+
+  private async swap(media: LayerMedia, attempt = 0): Promise<void> {
     const root = this.root;
     const doc = this.getDocument();
     if (!root || !doc) return;
+    this.cancelPending();
     const generation = ++this.generation;
+    const load = new AbortController();
+    this.load = load;
     this.current = media;
     const slots = Array.from(root.querySelectorAll<HTMLElement>("[data-slot]"));
     const incoming = slots.find((slot) => !slot.hasAttribute("data-active")) ?? slots[0];
     const outgoing = slots.find((slot) => slot !== incoming);
+    release(incoming);
+    incoming.replaceChildren();
     let element: HTMLElement;
+    let result: LoadResult = "ready";
     if (media.kind === "video") {
       const video = doc.createElement("video");
       video.muted = true;
@@ -212,27 +242,50 @@ export class BackgroundLayer {
       video.preload = "auto";
       video.dataset.media = "";
       readableFrom(video, media.url);
-      video.src = media.url;
       incoming.replaceChildren(video);
-      await new Promise<void>((resolve) => {
-        video.addEventListener("loadeddata", () => resolve(), { once: true });
-        video.addEventListener("error", () => resolve(), { once: true });
-        setTimeout(resolve, 8000);
-      });
-      if (video.videoHeight > 0) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
+      const ready = waitForMedia(video, load.signal);
+      video.src = media.url;
+      result = await ready;
+      if (result === "ready" && generation === this.generation && video.videoHeight > 0) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
       element = video;
     } else if (media.kind === "page") {
-      element = await playingPage(doc, incoming, media.url);
+      const frame = doc.createElement("iframe");
+      frame.allow = "autoplay";
+      frame.tabIndex = -1;
+      frame.style.border = "0";
+      frame.style.pointerEvents = "none";
+      incoming.replaceChildren(frame);
+      const ready = waitForMedia(frame, load.signal);
+      frame.src = media.url;
+      result = await ready;
+      element = frame;
     } else {
       element = await screenSizedImage(doc, media.url);
     }
     if (generation !== this.generation || !this.root) return;
+    if (result !== "ready") {
+      release(incoming);
+      incoming.replaceChildren();
+      this.syncNativeArt();
+      if (result !== "cancelled") {
+        const delays = [1000, 3000];
+        const retrying = attempt < delays.length;
+        this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}`);
+        if (retrying) this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          if (generation === this.generation) void this.swap(media, attempt + 1);
+        }, delays[attempt]);
+      }
+      return;
+    }
     element.dataset.media = "";
     if (element.parentElement !== incoming) incoming.replaceChildren(element);
     incoming.setAttribute("data-active", "");
     outgoing?.removeAttribute("data-active");
+    this.syncNativeArt();
     this.syncVideos();
-    setTimeout(() => {
+    this.fadeTimer = setTimeout(() => {
+      this.fadeTimer = null;
       if (generation !== this.generation || !outgoing) return;
       release(outgoing);
       outgoing.replaceChildren();
@@ -257,6 +310,7 @@ export class BackgroundLayer {
   }
 
   private unmount(): void {
+    this.cancelPending();
     this.generation += 1;
     if (this.root) release(this.root);
     this.root?.remove();

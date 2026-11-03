@@ -12,7 +12,7 @@ export const getVersion = callable<[], string>("get_version");
 export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
 export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
 export const prepareSteamCleaner = callable<[
-  scanId: string, entryIds: string[],
+  scanId: string, entryIds: string[], forceEntryIds?: string[],
 ], CleanerPlan>("prepare_steam_cleaner");
 export const executeSteamCleaner = callable<[
   planId: string, confirmCompatdata: boolean,

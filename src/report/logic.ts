@@ -14,6 +14,7 @@ export const REPORT_CATEGORIES = [
   "audio",
   "launch",
   "themes",
+  "ambient",
   "other",
 ] as const;
 
