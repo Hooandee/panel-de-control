@@ -149,7 +149,7 @@ BUILDS: dict[str, Build] = {
         # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8, 4 = INT8Lite).
         # Lite is the default, as AMD's driver picks for APUs; full INT8 stays one tap away.
         Build(
-            "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna3", "rdna35"), image=3, cost=2,
+            "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna2", "rdna3", "rdna35"), image=3, cost=2,
             assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
             ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "4"},
             models=(("lite", {"FSR.Fsr4GpuSupport": "4"}), ("full", {"FSR.Fsr4GpuSupport": "2"})),
