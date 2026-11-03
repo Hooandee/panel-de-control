@@ -1108,3 +1108,16 @@ def test_the_exe_is_only_searched_when_no_library_was_found(tmp_path, monkeypatc
     _write(root / "nvngx_dlss.dll")
     monkeypatch.setattr(games, "embedded_upscalers", lambda exe: pytest.fail("must not scan"))
     assert games.shipped_upscalers(root) == ["DLSS"]
+
+
+def test_files_panel_leaves_in_a_game_belong_to_the_games_owner(steam, fake_catalog, proc, monkeypatch):
+    from upscalers import service as service_module
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    owned = []
+    monkeypatch.setattr(service_module.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(service_module.os, "chown", lambda path, uid, gid, follow_symlinks=True: owned.append(Path(path)))
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    for name in ("dxgi.dll", "OptiScaler.ini", "amdxcffx64.dll", "D3D12_Optiscaler", ".pdc-upscaler/manifest.json"):
+        assert target / name in owned, name

@@ -436,6 +436,7 @@ class UpscalerService:
         meta = target / games.MANIFEST_DIR
         meta.mkdir(exist_ok=True)
         atomic_json_save(str(meta / HELIX_MARKER), {"way": build.way, "release": helixsr.RELEASE})
+        _own_like(target, [meta])
 
         now = time.time()
         entry["install"] = {
@@ -540,6 +541,7 @@ class UpscalerService:
             self._remove(target)
             raise
         atomic_json_save(str(meta / "manifest.json"), manifest)
+        _own_like(target, [*(target / f for f in manifest["files"]), *(target / d for d in manifest["dirs"]), meta])
         return manifest
 
     @staticmethod
@@ -921,6 +923,22 @@ def _recipe_info(recipe) -> dict | None:
     if not recipe:
         return None
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args)}
+
+
+def _own_like(folder: Path, paths: list[Path]) -> None:
+    """Steam updates and verifies games as the user, so nothing Panel leaves in a game folder may stay root's."""
+    if os.geteuid() != 0:
+        return
+    try:
+        stat = folder.stat()
+    except OSError:
+        return
+    for path in paths:
+        for item in [path, *(path.rglob("*") if path.is_dir() else ())]:
+            try:
+                os.chown(item, stat.st_uid, stat.st_gid, follow_symlinks=False)
+            except OSError:
+                pass
 
 
 def _is_helix(install: dict | None) -> bool:
