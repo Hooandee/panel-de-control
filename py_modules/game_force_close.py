@@ -49,7 +49,7 @@ def normalize_appid(value: object) -> int | None:
     return number if 0 < number <= MAX_APPID else None
 
 
-def _read(proc_root: Path, pid: int) -> Process | None:
+def read_process(proc_root: Path, pid: int) -> Process | None:
     base = proc_root / str(pid)
     try:
         stat = (base / "stat").read_text(errors="replace")
@@ -97,13 +97,13 @@ def process_table(proc_root: str | os.PathLike[str] = "/proc") -> dict[int, Proc
         return table
     for entry in entries:
         if entry.name.isdecimal():
-            process = _read(root, int(entry.name))
+            process = read_process(root, int(entry.name))
             if process is not None:
                 table[process.pid] = process
     return table
 
 
-def _is_reaper_for(process: Process, appid: int) -> bool:
+def is_reaper_for(process: Process, appid: int) -> bool:
     if process.name != "reaper" and not (process.argv and os.path.basename(process.argv[0]) == "reaper"):
         return False
     marker = f"AppId={appid}"
@@ -146,12 +146,12 @@ def _subtree(
 
 def game_tree(table: dict[int, Process], appid: int, own_pid: int | None = None) -> list[Process]:
     """The reaper(s) for this app id and every descendant, minus anything protected."""
-    roots = [process for process in table.values() if _is_reaper_for(process, appid) and process.uid != 0]
+    roots = [process for process in table.values() if is_reaper_for(process, appid) and process.uid != 0]
     return _subtree(table, roots, {root.uid for root in roots}, own_pid) if roots else []
 
 
 def _alive(proc_root: Path, process: Process) -> bool:
-    current = _read(proc_root, process.pid)
+    current = read_process(proc_root, process.pid)
     # Same pid and start time is the same process; a zombie is already dead and cannot be signalled.
     return current is not None and current.start == process.start and current.state != "Z"
 

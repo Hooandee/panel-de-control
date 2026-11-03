@@ -28,6 +28,8 @@ import {
   getThemeStorage,
   setThemeStorage,
   forceCloseGame,
+  pauseThemeGame,
+  resumeThemeGame,
   prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -230,7 +232,7 @@ export default definePlugin(() => {
     subscribeQamDocument: onQamDocument,
     ambient: ambientThemeChannel,
     storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
-    games: createThemeGamesAccess({ forceClose: forceCloseGame }),
+    games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame }),
     subscribePackageChanges: onThemePackagesChanged,
   });
   const stopAmbient = startAmbient({
