@@ -29,8 +29,14 @@ export function renderHeight(outputHeight: number, quality: Quality): number {
 }
 
 export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {
-  const name = build.family === "xess" ? `XeSS ${build.version}` : `FSR ${build.version}`;
+  const name = build.family === "xess" ? `XeSS ${build.version}`
+    : build.family === "helixsr" ? `HLX ${build.version}` : `FSR ${build.version}`;
   return build.channel === "beta" ? `${name} Beta` : name;
+}
+
+/** Why a build cannot go into this game, or null: HLX FSR 4 only replaces a game's own FSR 3.1. */
+export function buildBlocker(build: Pick<BuildInfo, "way">, inputs: Record<string, unknown>): "needsFsr31" | null {
+  return build.way === "fsr" && !("fsr31" in inputs) ? "needsFsr31" : null;
 }
 
 // The composer treats `;` as a shell operator, so overrides stay one `names=mode` entry:

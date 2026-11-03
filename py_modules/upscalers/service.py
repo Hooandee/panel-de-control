@@ -10,13 +10,16 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import capture, catalog, diagnostics, games, identify, ini, keys, launchers, logread, lsfg, recipes
+from . import capture, catalog, diagnostics, games, helixsr, identify, ini, keys, launchers, logread, lsfg, recipes
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
+HELIX_MARKER = "helixsr.json"
+# What HelixSR's bridge leaves in the game for each way; gone means a game update or verify removed it.
+_HELIX_FILES = {"fsr": "helixsr-install.json", "scaler": "HelixSR-Scaler.files"}
 
 
 # Native Linux games run without Proton; OptiScaler only hooks Windows executables.
@@ -27,9 +30,10 @@ NATIVE_ANALYSIS = {
 
 
 class UpscalerError(Exception):
-    def __init__(self, code: str):
+    def __init__(self, code: str, detail: str = ""):
         super().__init__(code)
         self.code = code
+        self.detail = detail
 
 
 def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
@@ -55,7 +59,8 @@ def panel_resolution(drm: str = "/sys/class/drm") -> list[int] | None:
 
 def _overrides(install: dict) -> list[str]:
     """WINEDLLOVERRIDES entries Panel owns for an install: the proxy plus any recipe DLLs."""
-    names = [str(install.get("proxy", "dxgi.dll")).removesuffix(".dll"), *install.get("native_dlls", [])]
+    proxy = install.get("proxy", "dxgi.dll")
+    names = [*([str(proxy).removesuffix(".dll")] if proxy else []), *install.get("native_dlls", [])]
     return [f"{name}=n,b" for name in dict.fromkeys(names)]
 
 
@@ -71,6 +76,7 @@ class UpscalerService:
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self.lsfg = lsfg.Lsfg(home, Path(state_dir))
+        self.helix = helixsr.HelixSR(home)
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -114,10 +120,17 @@ class UpscalerService:
             "cached": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
             "installs": installs,
             "job": self.job(),
+            "helixsr": {"downloaded": self.helix.ready()},
         }
 
     def _status(self, install: dict, entry: dict) -> str:
         target = Path(install.get("target", ""))
+        if install.get("engine") == "helixsr":
+            ours = (target / games.MANIFEST_DIR / HELIX_MARKER).is_file()
+            if not ours or not Path(install.get("helix_file", "")).is_file():
+                return "broken"
+            history = entry.get("history") or []
+            return history[-1].get("result", "pending") if history else "pending"
         proxy = install.get("proxy") or ""
         if not (target / games.MANIFEST_DIR / "manifest.json").is_file() or not (target / proxy).is_file():
             return "broken"
@@ -203,7 +216,7 @@ class UpscalerService:
             "history": entry.get("history", [])[-HISTORY_LIMIT:],
             "recipe": bool(recipe),
             "fg_note": recipe.fg_note if recipe else None,
-            "fg_plan": None if installed.native else _fg_plan(self.gpu, analysis, recipe, _generation(install),
+            "fg_plan": None if installed.native or _is_helix(install) else _fg_plan(self.gpu, analysis, recipe, _generation(install),
                                                              (install or {}).get("options", {}).get("fg_route")),
         }
 
@@ -288,6 +301,8 @@ class UpscalerService:
             raise UpscalerError("unknown_build")
         if not catalog.build_supported(build, self.gpu) and not choice.get("force"):
             raise UpscalerError("unsupported_gpu")
+        if build.engine == "helixsr":
+            return self._install_helix(appid, build, choice)
         proxy = str(choice.get("proxy") or "dxgi.dll")
         if proxy not in catalog.PROXIES:
             raise UpscalerError("invalid_proxy")
@@ -295,8 +310,9 @@ class UpscalerService:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
         entry = self._game_state(appid)
         if isinstance(entry.get("install"), dict):
-            self._remove(Path(entry["install"]["target"]))
+            self._drop(entry["install"], installed.root)
             entry["install"] = None
+            analysis = games.analyze(installed.root, entry.get("exe"), analysis["exe"])
         if analysis["foreign"]:
             raise UpscalerError("foreign")
 
@@ -368,6 +384,79 @@ class UpscalerService:
         self._save()
         return {"files": len(manifest["files"]), "overrides": _overrides(entry["install"]), "args": entry["install"]["args"]}
 
+    def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        if build.way == "fsr" and "fsr31" not in analysis["inputs"]:
+            raise UpscalerError("helixsr_no_fsr")
+        consent = bool(choice.get("accept_nvidia"))
+        if build.way == "scaler" and not consent and not (self.helix.ready() and self._helix("status")["network"]):
+            raise UpscalerError("helixsr_consent")
+        entry = self._game_state(appid)
+        if isinstance(entry.get("install"), dict):
+            self._drop(entry["install"], installed.root)
+            entry["install"] = None
+            analysis = games.analyze(installed.root, entry.get("exe"), analysis["exe"])
+        if analysis["foreign"]:
+            raise UpscalerError("foreign")
+
+        if not self.helix.ready():
+            asset = catalog.ASSETS[build.archive]
+            self._update_job(phase="download", total=asset.size, done=0)
+            archive = self.cache.ensure(asset, lambda received: self._update_job(done=received), self._cancel.is_set)
+            self._update_job(phase="unpack")
+            self._helix("unpack", archive)
+            shutil.rmtree(archive.parent, ignore_errors=True)
+        if build.way == "scaler" and not self._helix("status")["network"]:
+            self._update_job(phase="build", step=None)
+            self._helix("build", lambda step: self._update_job(step=step), self._cancel.is_set)
+
+        self._update_job(phase="copy")
+        game = self._helix("install", installed.root, build.way)
+        exe_folder = Path(game.get("exe_folder") or target)
+        log = Path(game["log_path"]) if game.get("log_path") else exe_folder / "helixsr.log"
+        meta = target / games.MANIFEST_DIR
+        meta.mkdir(exist_ok=True)
+        atomic_json_save(str(meta / HELIX_MARKER), {"way": build.way, "release": helixsr.RELEASE})
+
+        now = time.time()
+        entry["install"] = {
+            "build": build.id, "engine": "helixsr", "way": build.way,
+            "proxy": game.get("scaler_dll") if build.way == "scaler" else None,
+            "target": str(target), "exe": analysis["exe"], "exe_folder": str(exe_folder), "log": str(log),
+            "helix_file": str((exe_folder if build.way == "scaler" else log.parent) / _HELIX_FILES[build.way]),
+            "installed_at": now, "options": _clean_options(choice), "native_dlls": [], "fg_plan": None,
+            "args": [], "added_args": [],
+        }
+        entry["history"].append({"build": build.id, "proxy": entry["install"]["proxy"], "at": now,
+                                 "result": "pending", "exe": analysis["exe"]})
+        entry["history"] = entry["history"][-HISTORY_LIMIT:]
+        if installed.launcher and _overrides(entry["install"]):
+            try:
+                self._launcher_overrides(installed, entry["install"], remove=False)
+            except UpscalerError:
+                self._drop(entry["install"], installed.root)
+                entry["install"] = None
+                self._save()
+                raise
+            self._save()
+            return {"files": 0, "overrides": [], "args": [], "launcher": installed.launcher[0]}
+        self._save()
+        return {"files": 0, "overrides": _overrides(entry["install"]), "args": []}
+
+    def _helix(self, method: str, *args):
+        try:
+            return getattr(self.helix, method)(*args)
+        except helixsr.HelixError as error:
+            raise UpscalerError(error.code, error.detail) from None
+
+    def _drop(self, install: dict, root: Path) -> list[str]:
+        """Take an install out of the game, whichever engine put it there."""
+        if not _is_helix(install):
+            return self._remove(Path(install["target"]))
+        self._helix("remove", root)
+        shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
+        return []
+
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str) -> dict:
         meta = target / games.MANIFEST_DIR
         backup = meta / "backup"
@@ -414,6 +503,17 @@ class UpscalerService:
         installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
+        if _is_helix(install):
+            install["options"] = _clean_options(choice)
+            if install.get("way") == "scaler":
+                path = Path(install["exe_folder"]) / "OptiScaler.ini"
+                try:
+                    text = path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    raise UpscalerError("broken") from None
+                path.write_text(ini.apply(text, _option_overrides(choice, reset=True)), encoding="utf-8")
+            self._save()
+            return {"options": install["options"]}
         path = Path(install["target"]) / "OptiScaler.ini"
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -441,7 +541,9 @@ class UpscalerService:
         if installed and games.running_under(installed.root, self.proc):
             raise UpscalerError("running")
         self._update_job(phase="restore")
-        kept = self._remove(Path(install["target"]))
+        if _is_helix(install) and installed is None:
+            raise UpscalerError("not_installed")
+        kept = self._drop(install, installed.root if installed else Path(install["target"]))
         if install.get("launcher") and installed:
             self._launcher_overrides(installed, install, remove=True)
             result = {"kept": kept, "overrides": [], "args": [], "launcher": install["launcher"][0]}
@@ -517,7 +619,7 @@ class UpscalerService:
             path = capture.take(self.state_path.parent / "compare", name)
         except capture.CaptureError as error:
             raise UpscalerError(error.code) from None
-        facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
+        facts = _facts(install)
         return {
             "id": name,
             "build": install.get("build"),
@@ -531,9 +633,9 @@ class UpscalerService:
         install = self._game_state(appid).get("install")
         if not isinstance(install, dict):
             return {"result": "not_patched"}
-        facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
+        facts = _facts(install)
         generating = bool(facts.get("fg")) and facts.get("fg_state", "true") == "true"
-        return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": generating}
+        return {"result": _verdict(install, facts), "resolution": facts.get("resolution"), "fg": generating}
 
     # ---- lsfg-vk -----------------------------------------------------------------------------
     def lsfg_status(self) -> dict:
@@ -580,8 +682,8 @@ class UpscalerService:
         install = entry.get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
-        result = logread.verdict(facts)
+        facts = _facts(install)
+        result = _verdict(install, facts)
         if self._status(install, entry) == "broken":
             result = "broken"
         history = entry.get("history") or []
@@ -607,6 +709,7 @@ class UpscalerService:
             "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
             "job": self.job(),
             "lsfg": self.lsfg.status(),
+            "helixsr": {"downloaded": self.helix.ready(), "release": helixsr.RELEASE},
             "games": [diagnostics.game_report(self.home, appid, entry) for appid, entry in touched[:12]],
         }
 
@@ -625,6 +728,20 @@ class UpscalerService:
                 if isinstance(entry.get("install"), dict)
             },
         }
+
+
+def _is_helix(install: dict | None) -> bool:
+    return isinstance(install, dict) and install.get("engine") == "helixsr"
+
+
+def _facts(install: dict) -> dict:
+    if _is_helix(install):
+        return helixsr.read_log(Path(install["exe_folder"]), [Path(install["log"])], since=install.get("installed_at"))
+    return logread.read(Path(install["target"]), since=install.get("installed_at"))
+
+
+def _verdict(install: dict, facts: dict) -> str:
+    return helixsr.verdict(facts) if _is_helix(install) else logread.verdict(facts)
 
 
 def _fg_plan(gpu: str, analysis: dict, recipe, generation: int, route: str | None) -> dict | None:

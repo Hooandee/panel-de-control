@@ -20,6 +20,7 @@ import { theme } from "../theme";
 import {
   EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   revertLaunch,
+  buildBlocker,
 } from "./model";
 import { LivePanel } from "./LivePanel";
 import { LsfgCard } from "./LsfgCard";
@@ -54,6 +55,7 @@ export const GameView: FC<{
   const [verify, setVerify] = useState<VerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
+  const [acceptNvidia, setAcceptNvidia] = useState(false);
   const [comparing, setComparing] = useState(false);
   const runningGame = useRunningGame();
   const gameRunning = runningGame?.liveAppid === game.liveAppid;
@@ -107,7 +109,8 @@ export const GameView: FC<{
         if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
       }
     } else if (finished.state === "error") {
-      setMessage(errorText(t, finished.error));
+      const text = errorText(t, finished.error);
+      setMessage(finished.detail && finished.error?.startsWith("helixsr") ? `${text} (${finished.detail})` : text);
     }
     await load();
     onChanged();
@@ -154,8 +157,14 @@ export const GameView: FC<{
     t(gameFgInput === "xefg" ? "up.fg.enableInGame.xess" : gameFgInput === "fsrfg" ? "up.fg.enableInGame.fsr" : "up.fg.enableInGame.dlss"),
     detail?.fg_note === "reflexOff" ? t("up.fg.note.reflexOff") : null,
   ].filter(Boolean).join(". ");
-  const selectedModels = builds.find((b) => b.id === choice.build)?.models;
-  const reinstall = () => start(() => installUpscaler(appid, { ...choice, confirm_anti_cheat: confirmAntiCheat }));
+  const selected = builds.find((b) => b.id === choice.build);
+  const selectedModels = selected?.models;
+  const helix = selected?.engine === "helixsr";
+  const needsNvidia = selected?.way === "scaler" && install?.build !== selected.id;
+  const installedBuild = builds.find((b) => b.id === install?.build);
+  const reinstall = () => start(() => installUpscaler(appid, {
+    ...choice, ...(helix ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
+  }));
 
   const apply = async () => {
     if (install && sameBuild) {
@@ -198,8 +207,10 @@ export const GameView: FC<{
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
   const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
-    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
-  const usable = builds.filter((b) => b.available && b.supported);
+    || (detail.analysis.anti_cheat && !install && !confirmAntiCheat) || (needsNvidia && !acceptNvidia);
+  const inputs = detail?.analysis.inputs ?? {};
+  const usable = builds.filter((b) => b.available && b.supported && !buildBlocker(b, inputs));
+  const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs));
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
@@ -278,7 +289,14 @@ export const GameView: FC<{
 
         </>
       )}
-      {detail && install && gameRunning && !running && <LivePanel appid={appid} fg={install.options.fg === "on"} onActive={status === "pending" ? check : undefined} />}
+      {detail && install && gameRunning && !running && (
+        <LivePanel
+          appid={appid}
+          fg={install.options.fg === "on" && installedBuild?.engine !== "helixsr"}
+          menu={installedBuild?.way !== "fsr"}
+          onActive={status === "pending" ? check : undefined}
+        />
+      )}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
 
@@ -369,27 +387,44 @@ export const GameView: FC<{
                 </>
               )}
               {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
+              {blockedBuilds.map((b) => <Note key={b.id}>{t("up.helix.needsFsr31", { name: buildLabel(b) })}</Note>)}
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 
-              <Label>{t("up.section.quality")}</Label>
-              <SegmentRow
-                vertical
-                value={choice.quality}
-                onChange={(quality) => setChoice({ ...choice, quality })}
-                options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
-              />
-              <Note>{t("up.quality.help")}</Note>
+              {helix && <Note>{t(selected?.way === "fsr" ? "up.helix.pick.fsr" : "up.helix.pick.dlss")}</Note>}
+              {selected?.way !== "fsr" && (
+                <>
+                  <Label>{t("up.section.quality")}</Label>
+                  <SegmentRow
+                    vertical
+                    value={choice.quality}
+                    onChange={(quality) => setChoice({ ...choice, quality })}
+                    options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
+                  />
+                  <Note>{t("up.quality.help")}</Note>
 
-              <Label>{t("up.section.sharpness")}</Label>
+                  <Label>{t("up.section.sharpness")}</Label>
+                  <SegmentRow
+                    value={choice.sharpness}
+                    onChange={(sharpness) => setChoice({ ...choice, sharpness })}
+                    options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          {needsNvidia && (
+            <>
+              <Note>{t("up.helix.nvidia")}</Note>
               <SegmentRow
-                value={choice.sharpness}
-                onChange={(sharpness) => setChoice({ ...choice, sharpness })}
-                options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
+                value={acceptNvidia ? "yes" : null}
+                onChange={() => setAcceptNvidia(!acceptNvidia)}
+                options={[{ value: "yes", label: t("up.helix.nvidia.accept") }]}
               />
             </>
           )}
 
-          {detail.fg_plan && (
+          {detail.fg_plan && !helix && (
             <>
               <Label>{t("up.fg.title")}</Label>
               <SegmentRow
@@ -447,11 +482,13 @@ const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
   const label = job.phase === "download"
     ? t("up.phase.download", { done: megabytes(job.done), total: megabytes(job.total) })
     : t(`up.phase.${job.phase}`);
+  const step = job.phase === "build" ? job.step : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
         <Spinner size={12} /> {label}
       </div>
+      {step && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{step}</span>}
       <div style={{ height: 4, borderRadius: 2, background: theme.color.hairline, overflow: "hidden" }}>
         <div
           data-pdc-up-motion

@@ -200,7 +200,9 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
         assert len(asset.sha256) == 64 and asset.urls
     for build in catalog.BUILDS.values():
         if build.available:
-            assert catalog.build_assets(build)[0].id == build.archive and catalog.ASSETS[build.archive].archive
+            assert catalog.build_assets(build)[0].id == build.archive
+            # HelixSR's ZIP is unpacked into the user's folder by helixsr.HelixSR, not by the cache.
+            assert catalog.ASSETS[build.archive].archive == (build.engine != "helixsr")
     assert catalog.preferred_build("rdna2") == "fsr-4.1.1-rdna2"
     assert logread.verdict({"present": False}) == "not_run"
 
@@ -708,3 +710,142 @@ def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
     assert (home / lsfg.CONFIG).read_text().startswith("version = 2")
     with pytest.raises(lsfg.LsfgError, match="lsfg_missing"):
         tool.set_game("123", "Game", {"multiplier": 2})
+
+
+class FakeHelix:
+    """HelixSR's bridge as the service sees it: install/remove write what the real one writes."""
+
+    def __init__(self, network=True, ready=True):
+        self.network = network
+        self._ready = ready
+        self.calls = []
+
+    def ready(self):
+        return self._ready
+
+    def status(self):
+        return {"downloaded": self._ready, "version": "3.2.0", "network": self.network, "hlx": True}
+
+    def build(self, step, cancelled):
+        self.calls.append(("build",))
+        step("downloading nvngx_dlss.dll")
+        self.network = True
+        return self.status()
+
+    def install(self, game, way):
+        self.calls.append(("install", way))
+        exe = game / "bin/x64_dx12"
+        if way == "fsr":
+            _write(exe / "amd_fidelityfx_upscaler_dx12.original.dll", b"game fsr")
+            _write(exe / "helixsr-install.json", "{}")
+            return {"installed": "fsr", "exe_folder": str(exe), "log_path": str(exe / "helixsr.log")}
+        _write(exe / "dxgi.dll", b"helixsr scaler")
+        _write(exe / "OptiScaler.ini", "[Upscalers]\nDx12Upscaler=auto\n")
+        _write(exe / "HelixSR-Scaler.files", "dxgi.dll\n")
+        return {"installed": "scaler", "exe_folder": str(exe), "scaler_dll": "dxgi.dll",
+                "log_path": str(exe / "HelixSR-fsrfg/helixsr.log")}
+
+    def remove(self, game):
+        self.calls.append(("remove",))
+        exe = game / "bin/x64_dx12"
+        for name in ("helixsr-install.json", "amd_fidelityfx_upscaler_dx12.original.dll", "dxgi.dll",
+                     "OptiScaler.ini", "HelixSR-Scaler.files"):
+            (exe / name).unlink(missing_ok=True)
+        return {"installed": None}
+
+
+@pytest.fixture
+def helix_catalog(monkeypatch, fake_catalog):
+    zipped = Asset(catalog.HELIXSR_ARCHIVE, "HelixSR.zip", "0" * 64, 10, ("http://invalid",))
+    monkeypatch.setitem(catalog.ASSETS, zipped.id, zipped)
+    for build in (
+        Build("hlx-fsr4", "helixsr", "FSR 4", ("rdna2",), 3, 2, archive=zipped.id, engine="helixsr", way="fsr"),
+        Build("hlx-dlss", "helixsr", "DLSS", ("rdna2",), 3, 3, archive=zipped.id, engine="helixsr", way="scaler"),
+    ):
+        monkeypatch.setitem(catalog.BUILDS, build.id, build)
+    return fake_catalog
+
+
+def test_helixsr_fsr_drop_in_installs_verifies_and_removes(steam, helix_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+
+    result = service.install(APPID, {"build": "hlx-fsr4"})
+
+    assert result["overrides"] == []
+    assert service.overview()["installs"][APPID]["status"] == "pending"
+    detail = service.game(APPID)
+    assert detail["analysis"]["foreign"] is False
+    assert detail["fg_plan"] is None
+
+    log = _write(target / "helixsr.log", "dispatch 1: render 640x360 -> 1280x720, jitter 0.2,0.1\n")
+    future = time.time() + 5
+    os.utime(log, (future, future))
+    verdict = service.verify(APPID)
+    assert verdict["result"] == "active"
+    assert verdict["facts"]["resolution"]["render"] == [640, 360]
+
+    service.uninstall(APPID)
+    assert service.helix.calls[-1] == ("remove",)
+    assert not (target / games.MANIFEST_DIR).exists()
+    assert service.game(APPID)["install"] is None
+
+
+def test_helixsr_status_breaks_when_its_files_go(steam, helix_catalog, proc):
+    _, game = steam
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (game / "bin/x64_dx12/helixsr-install.json").unlink()
+    assert service.overview()["installs"][APPID]["status"] == "broken"
+
+
+def test_helixsr_dlss_needs_nvidias_licence_accepted_before_building(steam, helix_catalog, proc):
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix(network=False)
+    service.begin("install", APPID)
+    with pytest.raises(UpscalerError, match="helixsr_consent"):
+        service.install(APPID, {"build": "hlx-dlss"})
+    assert service.helix.calls == []
+
+    result = service.install(APPID, {"build": "hlx-dlss", "accept_nvidia": True})
+    assert service.helix.calls == [("build",), ("install", "scaler")]
+    assert service.job()["step"] == "downloading nvngx_dlss.dll"
+    assert result["overrides"] == ["dxgi=n,b"]
+
+
+def test_helixsr_fsr_needs_the_games_fsr_31(steam, helix_catalog, proc):
+    _, game = steam
+    (game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll").unlink()
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    with pytest.raises(UpscalerError, match="helixsr_no_fsr"):
+        service.install(APPID, {"build": "hlx-fsr4"})
+
+
+def test_switching_from_helixsr_to_optiscaler_removes_helixsr_first(steam, helix_catalog, proc):
+    _, game = steam
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-dlss"})
+    service.install(APPID, {"build": "fsr-test"})
+    assert ("remove",) in service.helix.calls
+    assert (game / "bin/x64_dx12/dxgi.dll").read_bytes() == b"injector"
+
+
+def test_report_explains_a_helixsr_install(steam, helix_catalog, proc):
+    _, game = steam
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    log = _write(game / "bin/x64_dx12/helixsr.log", "dispatch 1: render 640x360 -> 1280x720\n")
+    future = time.time() + 5
+    os.utime(log, (future, future))
+    report = service.report()
+    entry = report["games"][0]
+    assert report["helixsr"]["release"] == "HelixSR-3.2.0"
+    assert entry["helixsr_files"] is True
+    assert entry["log_verdict"] == "active"
+    assert entry["log_excerpt"] == ["dispatch 1: render 640x360 -> 1280x720"]

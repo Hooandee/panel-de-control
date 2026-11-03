@@ -5,7 +5,7 @@ export type EasyMode = "image" | "balanced" | "fps";
 
 export interface BuildInfo {
   id: string;
-  family: "fsr" | "xess";
+  family: "fsr" | "xess" | "helixsr";
   version: string;
   image: number;
   cost: number;
@@ -14,6 +14,8 @@ export interface BuildInfo {
   supported: boolean;
   download_bytes: number;
   models?: string[];
+  engine?: "optiscaler" | "helixsr";
+  way?: "fsr" | "scaler" | null;
 }
 
 export interface UpscalerJob {
@@ -21,7 +23,9 @@ export interface UpscalerJob {
   kind: "install" | "uninstall";
   appid: string;
   state: "running" | "done" | "error";
-  phase: "prepare" | "download" | "copy" | "restore" | "done";
+  phase: "prepare" | "download" | "unpack" | "build" | "copy" | "restore" | "done";
+  step?: string | null;
+  detail?: string | null;
   done: number;
   total: number;
   error: string | null;
@@ -36,6 +40,7 @@ export interface UpscalersOverview {
   cached: string[];
   installs: Record<string, { build: string; proxy: string; status: UpscalerStatus }>;
   job: UpscalerJob | null;
+  helixsr?: { downloaded: boolean };
 }
 
 export type FgRoute = "game" | "optiscaler";
@@ -58,6 +63,7 @@ export interface UpscalerChoice {
   fg_route?: FgRoute | null;
   model?: string | null;
   confirm_anti_cheat?: boolean;
+  accept_nvidia?: boolean;
 }
 
 export interface HistoryEntry {

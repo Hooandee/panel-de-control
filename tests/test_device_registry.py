@@ -366,6 +366,9 @@ def test_gpu_generation():
     assert gpu_generation("intel", "Intel Core Ultra 7 258V") == "intel"
     assert gpu_generation("amd", "AMD Sephiroth") == "rdna2"
     assert gpu_generation("amd", "AMD Van Gogh") == "rdna2"
+    # Panel shows the real CPU model, which on Steam Deck is Valve's APU code, not the family name.
+    assert gpu_generation("amd", "AMD Custom APU 0405") == "rdna2"
+    assert gpu_generation("amd", "AMD Custom APU 0932") == "rdna2"
     assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
     assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna2"
     assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
 OPTISCALER_BETA = "optiscaler-10-nightly"
 LSFG_ARCHIVE = "lsfg-vk-2.0.0"
+HELIXSR_ARCHIVE = "helixsr-3.2.0"
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,9 @@ class Build:
     extra_dir: str = ""
     # (model id, INI overrides); the first one is the default.
     models: tuple[tuple[str, dict[str, str]], ...] = ()
+    # "helixsr" builds go through HelixSR's own bridge; `way` is its scaler/fsr route.
+    engine: str = "optiscaler"
+    way: str = ""
 
 
 _BLEEDING = "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download"
@@ -53,6 +57,12 @@ ASSETS: dict[str, Asset] = {
             LSFG_ARCHIVE, "lsfg-vk-2.0.0.tar.xz",
             "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74", 561348,
             ("https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",), archive=True,
+        ),
+        # Official release, unmodified (HelixSR Freeware License): HLX FSR 4 prebuilt, HLX DLSS built on the device.
+        Asset(
+            HELIXSR_ARCHIVE, "HelixSR-3.2.0.zip",
+            "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7", 217396302,
+            ("https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip",),
         ),
         Asset(
             OPTISCALER_ARCHIVE,
@@ -172,6 +182,14 @@ BUILDS: dict[str, Build] = {
             "xess", "xess", "2", EVERY_GPU, image=2, cost=2,
             ini={"Upscalers.Dx12Upscaler": "xess"},
         ),
+        Build(
+            "hlx-fsr4", "helixsr", "FSR 4", (*AMD, "intel"), image=3, cost=2,
+            archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="fsr",
+        ),
+        Build(
+            "hlx-dlss", "helixsr", "DLSS", (*AMD, "intel"), image=3, cost=3,
+            archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="scaler",
+        ),
     )
 }
 
@@ -206,6 +224,8 @@ def build_supported(build: Build, gpu: str) -> bool:
 
 
 def build_assets(build: Build) -> list[Asset]:
+    if build.engine == "helixsr":
+        return [ASSETS[build.archive]]
     ids = [build.archive, *build.assets, *build.replace.values()]
     if build.injector:
         ids.append(build.injector)
@@ -231,6 +251,8 @@ def describe(gpu: str) -> list[dict]:
             "supported": build_supported(build, gpu),
             "download_bytes": sum(asset.size for asset in build_assets(build)) if build.available else 0,
             "models": [model for model, _ in build.models],
+            "engine": build.engine,
+            "way": build.way or None,
         }
         for build in BUILDS.values()
     ]

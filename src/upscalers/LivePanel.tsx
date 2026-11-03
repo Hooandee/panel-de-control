@@ -8,7 +8,7 @@ import { ActionButton, Row } from "./parts";
 const POLL_MS = 1500;
 
 /** While the game runs: the real frame rate and OptiScaler's hotkeys, for devices without a keyboard. */
-export const LivePanel: FC<{ appid: string; fg: boolean; onActive?: () => void }> = ({ appid, fg, onActive }) => {
+export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActive?: () => void }> = ({ appid, fg, menu = true, onActive }) => {
   const { t } = useI18n();
   const [fps, setFps] = useState<number | null>(null);
   const [generating, setGenerating] = useState<boolean | null>(null);
@@ -66,7 +66,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; onActive?: () => void }
         )}
       </div>
       <Row>
-        <ActionButton label={t("up.live.menu")} onPress={() => press("menu")} busy={pressing === "menu"} disabled={pressing !== null} />
+        {menu && <ActionButton label={t("up.live.menu")} onPress={() => press("menu")} busy={pressing === "menu"} disabled={pressing !== null} />}
         {fg && (
           <ActionButton
             label={t(generating === false ? "up.live.resume" : "up.live.pause")}

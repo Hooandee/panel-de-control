@@ -7,7 +7,7 @@ from pathlib import Path
 
 from steam_cleaner import vdf
 
-from . import games, logread
+from . import games, helixsr, logread
 from .assets import sha256
 
 INI_KEYS = (
@@ -71,6 +71,17 @@ def _log_excerpt(target: Path) -> list[str]:
     return picked[-LOG_LINES:]
 
 
+def _tail(path: Path) -> list[str]:
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - 64 * 1024))
+            lines = handle.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+    return [line[:LINE_CHARS] for line in lines[-LOG_LINES:]]
+
+
 def _steam_config(home: str, appid: str) -> dict:
     """The compatibility tool and launch options Steam will actually use for the game."""
     result: dict = {}
@@ -123,7 +134,17 @@ def game_report(home: str, appid: str, entry: dict) -> dict:
         "history": (entry.get("history") or [])[-8:],
         "steam": _steam_config(home, appid),
     }
-    if install:
+    if install and install.get("engine") == "helixsr":
+        log = Path(install.get("log", ""))
+        facts = helixsr.read_log(Path(install.get("exe_folder", "")), [log], since=install.get("installed_at"))
+        report.update({
+            "helixsr_files": Path(install.get("helix_file", "")).is_file(),
+            "ini": _ini_values(Path(install.get("exe_folder", "")) / "OptiScaler.ini"),
+            "log_verdict": helixsr.verdict(facts),
+            "log_facts": facts,
+            "log_excerpt": _tail(log),
+        })
+    elif install:
         target = Path(install.get("target", ""))
         facts = logread.read(target, since=install.get("installed_at"))
         report.update({

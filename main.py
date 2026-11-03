@@ -1313,7 +1313,7 @@ class Plugin(AmbientRpc):
             job = service.job() or {}
             level = "INFO" if job.get("state") == "done" else "WARNING"
             _upscalers_journal(level, kind, appid=appid, state=job.get("state"), error=job.get("error"),
-                               detail=json.dumps(args[0] if args else {}, sort_keys=True)[:400])
+                               cause=job.get("detail"), detail=json.dumps(args[0] if args else {}, sort_keys=True)[:400])
 
         self._upscaler_executor.submit(work)
         return service.job() or {}
