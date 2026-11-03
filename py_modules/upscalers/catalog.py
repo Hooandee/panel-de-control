@@ -184,6 +184,8 @@ BUILDS: dict[str, Build] = {
             "xess", "xess", "2", EVERY_GPU, image=2, cost=2,
             ini={"Upscalers.Dx12Upscaler": "xess"},
         ),
+        # Proton-GE/EM and official Proton swap FSR 3.1 for FSR 4 themselves; the GPU and the game's Proton decide.
+        Build("proton-fsr4", "proton", "FSR 4", ("rdna3", "rdna4"), image=3, cost=2, engine="proton"),
         Build(
             "hlx-fsr4", "helixsr", "FSR 4", (*AMD, "intel"), image=3, cost=2,
             archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="fsr",
@@ -228,6 +230,8 @@ def build_supported(build: Build, gpu: str) -> bool:
 def build_assets(build: Build) -> list[Asset]:
     if build.engine == "helixsr":
         return [ASSETS[build.archive]]
+    if build.engine == "proton":
+        return []
     ids = [build.archive, *build.assets, *build.replace.values()]
     if build.injector:
         ids.append(build.injector)

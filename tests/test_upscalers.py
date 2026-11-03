@@ -199,7 +199,9 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
     for asset in catalog.ASSETS.values():
         assert len(asset.sha256) == 64 and asset.urls
     for build in catalog.BUILDS.values():
-        if build.available:
+        if build.engine == "proton":
+            assert catalog.build_assets(build) == []
+        elif build.available:
             assert catalog.build_assets(build)[0].id == build.archive
             # HelixSR's ZIP is unpacked into the user's folder by helixsr.HelixSR, not by the cache.
             assert catalog.ASSETS[build.archive].archive == (build.engine != "helixsr")
@@ -924,3 +926,42 @@ def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
     service = _service(steam, fake_catalog, proc)
     assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
+
+
+@pytest.fixture
+def proton_catalog(monkeypatch, fake_catalog):
+    build = Build("proton-fsr4", "proton", "FSR 4", ("rdna2",), 3, 2, engine="proton")
+    monkeypatch.setitem(catalog.BUILDS, build.id, build)
+    return fake_catalog
+
+
+def test_proton_fsr4_only_asks_proton_through_launch_options(steam, proton_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    before = sorted(p.name for p in target.iterdir())
+    service = _service(steam, proton_catalog, proc)
+    result = service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
+    assert result["env"] == {"FSR4_UPGRADE": "1"} and result["overrides"] == []
+    assert sorted(p.name for p in target.iterdir()) == before
+    assert service.overview()["installs"][APPID]["status"] == "pending"
+    assert service.verify(APPID)["result"] == "pending"
+    assert service.uninstall(APPID)["env"] == {"FSR4_UPGRADE": None}
+    with pytest.raises(UpscalerError, match="proton_env"):
+        service.install(APPID, {"build": "proton-fsr4", "env": "LD_PRELOAD"})
+
+
+def test_proton_fsr4_needs_the_games_fsr_31(steam, proton_catalog, proc):
+    _, game = steam
+    (game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll").unlink()
+    service = _service(steam, proton_catalog, proc)
+    with pytest.raises(UpscalerError, match="proton_no_fsr"):
+        service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
+
+
+def test_switching_from_optiscaler_to_proton_fsr4_takes_optiscaler_out(steam, proton_catalog, proc):
+    _, game = steam
+    service = _service(steam, proton_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    result = service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
+    assert not (game / "bin/x64_dx12/dxgi.dll").exists()
+    assert result["removed_overrides"] == ["dxgi=n,b"]

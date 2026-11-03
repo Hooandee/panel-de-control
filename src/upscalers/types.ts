@@ -5,7 +5,7 @@ export type EasyMode = "image" | "balanced" | "fps";
 
 export interface BuildInfo {
   id: string;
-  family: "fsr" | "xess" | "helixsr";
+  family: "fsr" | "xess" | "helixsr" | "proton";
   version: string;
   image: number;
   cost: number;
@@ -14,7 +14,7 @@ export interface BuildInfo {
   supported: boolean;
   download_bytes: number;
   models?: string[];
-  engine?: "optiscaler" | "helixsr";
+  engine?: "optiscaler" | "helixsr" | "proton";
   way?: "fsr" | "scaler" | null;
 }
 
@@ -29,7 +29,10 @@ export interface UpscalerJob {
   done: number;
   total: number;
   error: string | null;
-  result?: { overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" };
+  result?: {
+    overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris";
+    removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;
+  };
 }
 
 export interface UpscalersOverview {
@@ -64,6 +67,7 @@ export interface UpscalerChoice {
   model?: string | null;
   confirm_anti_cheat?: boolean;
   accept_nvidia?: boolean;
+  env?: string;
 }
 
 export interface HistoryEntry {

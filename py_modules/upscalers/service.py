@@ -18,6 +18,8 @@ _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
 HELIX_MARKER = "helixsr.json"
+# Proton's own FSR 4 switch: the official name and the per-GPU names custom builds keep.
+PROTON_FSR4_ENVS = ("FSR4_UPGRADE", "PROTON_FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE")
 # What HelixSR's bridge leaves in the game for each way; gone means a game update or verify removed it.
 _HELIX_FILES = {"fsr": "helixsr-install.json", "scaler": "HelixSR-Scaler.files"}
 
@@ -125,6 +127,9 @@ class UpscalerService:
 
     def _status(self, install: dict, entry: dict) -> str:
         target = Path(install.get("target", ""))
+        if install.get("engine") == "proton":
+            history = entry.get("history") or []
+            return history[-1].get("result", "pending") if history else "pending"
         if install.get("engine") == "helixsr":
             ours = (target / games.MANIFEST_DIR / HELIX_MARKER).is_file()
             if not ours or not Path(install.get("helix_file", "")).is_file():
@@ -304,14 +309,15 @@ class UpscalerService:
             raise UpscalerError("unsupported_gpu")
         if build.engine == "helixsr":
             return self._install_helix(appid, build, choice)
+        if build.engine == "proton":
+            return self._install_proton(appid, build, choice)
         if choice.get("proxy") and str(choice["proxy"]) not in catalog.PROXIES:
             raise UpscalerError("invalid_proxy")
 
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
         entry = self._game_state(appid)
-        if isinstance(entry.get("install"), dict):
-            self._drop(entry["install"], installed.root)
-            entry["install"] = None
+        left = self._replace(entry, installed)
+        if left is not None:
             analysis = games.analyze(installed.root, entry.get("exe"), analysis["exe"])
         if analysis["foreign"]:
             raise UpscalerError("foreign")
@@ -381,9 +387,11 @@ class UpscalerService:
                 self._save()
                 raise
             self._save()
-            return {"files": len(manifest["files"]), "overrides": [], "args": [], "launcher": installed.launcher[0]}
+            return _with_leftovers({"files": len(manifest["files"]), "overrides": [], "args": [],
+                                    "launcher": installed.launcher[0]}, left)
         self._save()
-        return {"files": len(manifest["files"]), "overrides": _overrides(entry["install"]), "args": entry["install"]["args"]}
+        return _with_leftovers({"files": len(manifest["files"]), "overrides": _overrides(entry["install"]),
+                                "args": entry["install"]["args"]}, left)
 
     def _install_helix(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
@@ -393,9 +401,8 @@ class UpscalerService:
         if build.way == "scaler" and not consent and not (self.helix.ready() and self._helix("status")["network"]):
             raise UpscalerError("helixsr_consent")
         entry = self._game_state(appid)
-        if isinstance(entry.get("install"), dict):
-            self._drop(entry["install"], installed.root)
-            entry["install"] = None
+        left = self._replace(entry, installed)
+        if left is not None:
             analysis = games.analyze(installed.root, entry.get("exe"), analysis["exe"])
         if analysis["foreign"]:
             raise UpscalerError("foreign")
@@ -447,9 +454,45 @@ class UpscalerService:
                 self._save()
                 raise
             self._save()
-            return {"files": 0, "overrides": [], "args": [], "launcher": installed.launcher[0]}
+            return _with_leftovers({"files": 0, "overrides": [], "args": [], "launcher": installed.launcher[0]}, left)
         self._save()
-        return {"files": 0, "overrides": _overrides(entry["install"]), "args": []}
+        return _with_leftovers({"files": 0, "overrides": _overrides(entry["install"]), "args": []}, left)
+
+    def _install_proton(self, appid: str, build: catalog.Build, choice: dict) -> dict:
+        """Proton swaps the game's FSR 3.1 for FSR 4 at launch: nothing is written into the game."""
+        env = str(choice.get("env") or "")
+        if env not in PROTON_FSR4_ENVS:
+            raise UpscalerError("proton_env")
+        installed, analysis, target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
+        if "fsr31" not in analysis["inputs"]:
+            raise UpscalerError("proton_no_fsr")
+        entry = self._game_state(appid)
+        left = self._replace(entry, installed)
+        now = time.time()
+        entry["install"] = {
+            "build": build.id, "engine": "proton", "env": env, "proxy": None, "target": str(target),
+            "exe": analysis["exe"], "installed_at": now, "options": _clean_options({**choice, "fg": "off"}),
+            "native_dlls": [], "fg_plan": None, "args": [], "added_args": [],
+        }
+        entry["history"].append({"build": build.id, "proxy": None, "at": now, "result": "pending", "exe": analysis["exe"]})
+        entry["history"] = entry["history"][-HISTORY_LIMIT:]
+        self._save()
+        return _with_leftovers({"files": 0, "overrides": [], "args": [], "env": {env: "1"}}, left)
+
+    def _replace(self, entry: dict, installed: games.Installed) -> dict | None:
+        """Take the game's current install out; what it left in the launch options comes back to undo."""
+        old = entry.get("install")
+        if not isinstance(old, dict):
+            return None
+        self._drop(old, installed.root)
+        if old.get("launcher"):
+            self._launcher_overrides(installed, old, remove=True)
+        entry["install"] = None
+        return {
+            "overrides": [] if old.get("launcher") else _overrides(old),
+            "args": list(old.get("added_args", [])),
+            "env": {old["env"]: None} if old.get("engine") == "proton" else {},
+        }
 
     @staticmethod
     def _write_scaler_ini(exe_folder: Path, overrides: dict[str, str]) -> None:
@@ -468,6 +511,8 @@ class UpscalerService:
 
     def _drop(self, install: dict, root: Path) -> list[str]:
         """Take an install out of the game, whichever engine put it there."""
+        if install.get("engine") == "proton":
+            return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
         self._helix("remove", root)
@@ -563,6 +608,8 @@ class UpscalerService:
             result = {"kept": kept, "overrides": [], "args": [], "launcher": install["launcher"][0]}
         else:
             result = {"kept": kept, "overrides": _overrides(install), "args": install.get("added_args", [])}
+        if install.get("engine") == "proton":
+            result["env"] = {install["env"]: None}
         entry["install"] = None
         self._save()
         return result
@@ -749,6 +796,18 @@ class UpscalerService:
         }
 
 
+def _with_leftovers(result: dict, left: dict | None) -> dict:
+    """Launch-option entries the replaced install added and the new one does not reuse."""
+    if not left:
+        return result
+    result["removed_overrides"] = [o for o in left["overrides"] if o not in result.get("overrides", [])]
+    result["removed_args"] = [a for a in left["args"] if a not in result.get("args", [])]
+    stale = {k: v for k, v in left["env"].items() if k not in result.get("env", {})}
+    if stale:
+        result["env"] = {**stale, **result.get("env", {})}
+    return result
+
+
 def _recipe_proxy(recipe) -> str | None:
     return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None
 
@@ -768,6 +827,8 @@ def _helix_way(install: dict | None) -> str | None:
 
 
 def _facts(install: dict) -> dict:
+    if install.get("engine") == "proton":
+        return {"present": False, "unverifiable": True}
     if _is_helix(install):
         facts = helixsr.read_log(Path(install["exe_folder"]), [Path(install["log"])], since=install.get("installed_at"))
         if install.get("way") == "scaler":
@@ -778,6 +839,8 @@ def _facts(install: dict) -> dict:
 
 
 def _verdict(install: dict, facts: dict) -> str:
+    if install.get("engine") == "proton":
+        return "pending"
     return helixsr.verdict(facts) if _is_helix(install) else logread.verdict(facts)
 
 

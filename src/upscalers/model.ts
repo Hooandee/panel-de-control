@@ -30,13 +30,25 @@ export function renderHeight(outputHeight: number, quality: Quality): number {
 
 export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {
   const name = build.family === "xess" ? `XeSS ${build.version}`
-    : build.family === "helixsr" ? `HLX ${build.version}` : `FSR ${build.version}`;
+    : build.family === "helixsr" ? `HLX ${build.version}`
+    : build.family === "proton" ? `${build.version} (Proton)` : `FSR ${build.version}`;
   return build.channel === "beta" ? `${name} Beta` : name;
 }
 
-/** Why a build cannot go into this game, or null: HLX FSR 4 only replaces a game's own FSR 3.1. */
-export function buildBlocker(build: Pick<BuildInfo, "way">, inputs: Record<string, unknown>): "needsFsr31" | null {
-  return build.way === "fsr" && !("fsr31" in inputs) ? "needsFsr31" : null;
+/** Why a build cannot go into this game, or null. HLX FSR 4 and Proton's FSR 4 only replace a game's own FSR 3.1. */
+export function buildBlocker(
+  build: Pick<BuildInfo, "way" | "engine">, inputs: Record<string, unknown>, protonEnv: string | null = null,
+): "needsFsr31" | "needsProton" | null {
+  const replacesFsr = build.way === "fsr" || build.engine === "proton";
+  if (replacesFsr && !("fsr31" in inputs)) return "needsFsr31";
+  if (build.engine === "proton" && !protonEnv) return "needsProton";
+  return null;
+}
+
+/** The FSR 4 switch the game's Proton understands on this GPU, or null. */
+export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string }[], visible: (pill: never) => boolean): string | null {
+  const pill = pills.find((p) => p.exclusiveGroup === "fsr4-upgrade" && visible(p as never));
+  return pill?.envName ?? null;
 }
 
 // The composer treats `;` as a shell operator, so overrides stay one `names=mode` entry:
@@ -107,4 +119,24 @@ export function withEnv(launch: string, env: Record<string, string | null>): str
   if (parsed.malformed) return null;
   for (const [name, value] of Object.entries(env)) parsed = setEnv(parsed, name, value);
   return serialize(parsed);
+}
+
+export interface LaunchChange {
+  overrides?: string[];
+  args?: string[];
+  removed_overrides?: string[];
+  removed_args?: string[];
+  env?: Record<string, string | null>;
+}
+
+/** Launch options after an install (what it adds, minus what the install it replaced left) or a removal. */
+export function launchAfterJob(launch: string, change: LaunchChange, kind: "install" | "uninstall"): { value: string; added: string[] } | null {
+  const reverted = kind === "install"
+    ? revertLaunch(launch, change.removed_overrides ?? [], change.removed_args ?? [])
+    : revertLaunch(launch, change.overrides ?? [], change.args ?? []);
+  if (reverted === null) return null;
+  const applied = kind === "install" ? applyLaunch(reverted, change.overrides ?? [], change.args ?? []) : { value: reverted, added: [] };
+  if (applied === null) return null;
+  const value = change.env && Object.keys(change.env).length ? withEnv(applied.value, change.env) : applied.value;
+  return value === null ? null : { value, added: applied.added };
 }

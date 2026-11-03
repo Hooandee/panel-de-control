@@ -16,11 +16,13 @@ import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
 import type { GameEntry } from "../launch/steamApi";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
+import { CATALOG, pillVisible } from "../launch/catalog";
+import type { GpuGen } from "../launch/proton";
+import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
-  EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
-  revertLaunch,
-  buildBlocker,
+  EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
+  buildBlocker, launchAfterJob, protonFsr4Env,
 } from "./model";
 import { LivePanel } from "./LivePanel";
 import { LsfgCard } from "./LsfgCard";
@@ -56,6 +58,16 @@ export const GameView: FC<{
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const [acceptNvidia, setAcceptNvidia] = useState(false);
+  const [compat, setCompat] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    readAppDetails(game.liveAppid).then((d) => { if (!cancelled) setCompat(d?.compatName ?? ""); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [game.liveAppid]);
+  const capabilities = useProtonCapabilities(compat ?? "", compat === null);
+  const protonEnv = capabilities.status === "ready"
+    ? protonFsr4Env(CATALOG, (pill) => pillVisible(pill, capabilities.envs, overview.gpu as GpuGen))
+    : null;
   const [comparing, setComparing] = useState(false);
   const runningGame = useRunningGame();
   const gameRunning = runningGame?.liveAppid === game.liveAppid;
@@ -96,16 +108,15 @@ export const GameView: FC<{
       const details = await readAppDetails(game.liveAppid);
       const overrides = result.overrides;
       const args = result.args ?? [];
+      const next = details ? launchAfterJob(details.launch, result, finished.kind) : null;
       if (finished.kind === "install") {
-        const next = details ? applyLaunch(details.launch, overrides, args) : null;
         if (next && writeLaunchOptions(game.liveAppid, next.value, game.isNonSteam)) {
           if (next.added.length) await recordUpscalerArgs(appid, next.added).catch(() => undefined);
         } else {
           setMessage(t("up.launch.failed", { value: `WINEDLLOVERRIDES="${overrides.map((o) => o.split("=")[0]).join(",")}=n,b" %command% ${args.join(" ")}`.trim() }));
         }
       } else {
-        const next = details ? revertLaunch(details.launch, overrides, args) : null;
-        if (next === null || !writeLaunchOptions(game.liveAppid, next, game.isNonSteam)) setMessage(t("up.error.generic"));
+        if (next === null || !writeLaunchOptions(game.liveAppid, next.value, game.isNonSteam)) setMessage(t("up.error.generic"));
         if (result.kept?.length) setMessage(t("up.kept", { count: result.kept.length }));
       }
     } else if (finished.state === "error") {
@@ -160,10 +171,12 @@ export const GameView: FC<{
   const selected = builds.find((b) => b.id === choice.build);
   const selectedModels = selected?.models;
   const helix = selected?.engine === "helixsr";
+  const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton";
   const needsNvidia = selected?.way === "scaler" && install?.build !== selected.id;
   const installedBuild = builds.find((b) => b.id === install?.build);
   const reinstall = () => start(() => installUpscaler(appid, {
-    ...choice, ...(selected?.way === "fsr" ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
+    ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat, accept_nvidia: acceptNvidia,
+    ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   }));
 
   const apply = async () => {
@@ -209,8 +222,8 @@ export const GameView: FC<{
   const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat) || (needsNvidia && !acceptNvidia);
   const inputs = detail?.analysis.inputs ?? {};
-  const usable = builds.filter((b) => b.available && b.supported && !buildBlocker(b, inputs));
-  const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs));
+  const usable = builds.filter((b) => b.available && b.supported && !buildBlocker(b, inputs, protonEnv));
+  const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
@@ -294,8 +307,8 @@ export const GameView: FC<{
       {detail && install && gameRunning && !running && (
         <LivePanel
           appid={appid}
-          fg={install.options.fg === "on" && installedBuild?.way !== "fsr"}
-          menu={installedBuild?.way !== "fsr"}
+          fg={install.options.fg === "on" && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton"}
+          menu={installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton"}
           onActive={status === "pending" ? check : undefined}
         />
       )}
@@ -389,11 +402,14 @@ export const GameView: FC<{
                 </>
               )}
               {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
-              {blockedBuilds.map((b) => <Note key={b.id}>{t("up.helix.needsFsr31", { name: buildLabel(b) })}</Note>)}
+              {blockedBuilds.map((b) => (
+                <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
+              ))}
               {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
 
               {helix && <Note>{t(selected?.way === "fsr" ? "up.helix.pick.fsr" : "up.helix.pick.dlss")}</Note>}
-              {selected?.way !== "fsr" && (
+              {selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
+              {!replacesFsr && (
                 <>
                   <Label>{t("up.section.quality")}</Label>
                   <SegmentRow
@@ -426,7 +442,7 @@ export const GameView: FC<{
             </>
           )}
 
-          {detail.fg_plan && selected?.way !== "fsr" && (
+          {detail.fg_plan && !replacesFsr && (
             <>
               <Label>{t("up.fg.title")}</Label>
               <SegmentRow

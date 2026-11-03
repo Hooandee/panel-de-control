@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLaunch, buildBlocker, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { applyLaunch, buildBlocker, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -55,5 +55,28 @@ describe("HelixSR builds", () => {
     expect(buildBlocker({ way: "fsr" }, { dlss: [] })).toBe("needsFsr31");
     expect(buildBlocker({ way: "fsr" }, { fsr31: [] })).toBeNull();
     expect(buildBlocker({ way: "scaler" }, {})).toBeNull();
+  });
+});
+
+describe("launchAfterJob", () => {
+  it("drops what the replaced install left and adds the new one", () => {
+    const next = launchAfterJob('WINEDLLOVERRIDES="dxgi=n,b" %command% -dx12', {
+      overrides: [], args: [], removed_overrides: ["dxgi=n,b"], removed_args: ["-dx12"], env: { FSR4_UPGRADE: "1" },
+    }, "install");
+    expect(next?.value).toBe("FSR4_UPGRADE=1 %command%");
+  });
+
+  it("takes Proton's switch out on removal", () => {
+    expect(launchAfterJob("FSR4_UPGRADE=1 %command%", { overrides: [], args: [], env: { FSR4_UPGRADE: null } }, "uninstall")?.value)
+      .toBe("");
+  });
+});
+
+describe("Proton FSR 4", () => {
+  it("needs FSR 3.1 in the game and a Proton that has the switch", () => {
+    expect(buildBlocker({ engine: "proton" }, {}, "FSR4_UPGRADE")).toBe("needsFsr31");
+    expect(buildBlocker({ engine: "proton" }, { fsr31: [] }, null)).toBe("needsProton");
+    expect(buildBlocker({ engine: "proton" }, { fsr31: [] }, "FSR4_UPGRADE")).toBeNull();
+    expect(buildLabel({ family: "proton", version: "FSR 4" })).toBe("FSR 4 (Proton)");
   });
 });
