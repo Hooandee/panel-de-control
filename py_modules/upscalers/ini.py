@@ -56,3 +56,53 @@ def read(text: str, dotted: str) -> str | None:
             if sep and name.strip() == key:
                 return value.strip()
     return None
+
+
+_DEFAULT = re.compile(r"Default \(auto\) is ([^\s,;]+)|Default is ([^\s,;]+)", re.I)
+_CHOICE_TOKEN = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+
+def _choices(help_lines: list[str]) -> list[str] | None:
+    """Allowed values from OptiScaler's own comment: `a, b, c - Default (auto) is a` or `true or false`."""
+    for line in reversed(help_lines):
+        listed, sep, _ = line.partition(" - Default")
+        if not sep:
+            continue
+        if listed.strip().lower() == "true or false":
+            return ["auto", "true", "false"]
+        listed = re.sub(r"\([^)]*\)", "", listed)
+        tokens = [part.strip().split(" ")[0] for part in listed.split(",")]
+        if len(tokens) > 1 and all(_CHOICE_TOKEN.match(t) for t in tokens) and not any(t[0].isdigit() for t in tokens):
+            return ["auto", *[t for t in tokens if t != "auto"]]
+    return None
+
+
+def schema(text: str, managed: set[str] = frozenset()) -> list[dict]:
+    """Every section and key with the help OptiScaler writes above it, its allowed values and default."""
+    sections: list[dict] = []
+    help_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        match = _SECTION.match(line)
+        if match:
+            sections.append({"name": match.group("name"), "keys": []})
+            help_lines = []
+        elif stripped.startswith(";"):
+            body = stripped.lstrip(";").strip()
+            if body and set(body) != {"-"}:
+                help_lines.append(body[:300])
+        elif "=" in stripped and sections:
+            key, _, value = stripped.partition("=")
+            dotted = f"{sections[-1]['name']}.{key.strip()}"
+            default = next((m.group(1) or m.group(2) for line_ in help_lines if (m := _DEFAULT.search(line_))), None)
+            choices = _choices(help_lines)
+            if choices and value.strip() and value.strip() not in choices:
+                choices.append(value.strip())
+            sections[-1]["keys"].append({
+                "key": key.strip(), "value": value.strip(), "help": help_lines[:12],
+                "choices": choices, "default": default, "managed": dotted in managed,
+            })
+            help_lines = []
+        elif not stripped:
+            help_lines = []
+    return [s for s in sections if s["keys"]]

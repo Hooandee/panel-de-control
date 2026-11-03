@@ -1354,6 +1354,14 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "configure", appid=str(appid), **result.get("options", {}))
         return result
 
+    async def get_upscaler_ini(self, appid: str) -> dict:
+        return await self._upscalers_call("ini_schema", str(appid))
+
+    async def set_upscaler_ini(self, appid: str, key: str, value: str) -> dict:
+        result = await self._upscalers_call("set_ini", str(appid), str(key), str(value))
+        _upscalers_journal("INFO", "ini_set", appid=str(appid), key=result["key"], value=result["value"])
+        return result
+
     async def verify_upscaler(self, appid: str) -> dict:
         result = await self._upscalers_call("verify", str(appid))
         _upscalers_journal("INFO", "verify", appid=str(appid), result=result.get("result"))

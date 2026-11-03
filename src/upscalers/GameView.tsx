@@ -24,6 +24,7 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   buildBlocker, downloadPace, launchAfterJob, protonFsr4Env, type PaceSample,
 } from "./model";
+import { AdvancedIni } from "./AdvancedIni";
 import { LivePanel } from "./LivePanel";
 import { LsfgCard } from "./LsfgCard";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
@@ -470,6 +471,8 @@ export const GameView: FC<{
           )}
 
           <LsfgCard appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning} />
+
+          {install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && !running && <AdvancedIni appid={appid} />}
 
           {detail.analysis.manual && detail.analysis.exe && (
             <Note>{t("up.detect.manual", { exe: detail.analysis.exe.split("/").pop() ?? detail.analysis.exe })}</Note>

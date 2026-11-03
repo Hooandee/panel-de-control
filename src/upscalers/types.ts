@@ -116,3 +116,17 @@ export interface VerifyResult {
   result: UpscalerStatus;
   facts: HistoryEntry["facts"] & { present?: boolean };
 }
+
+export interface IniKey {
+  key: string;
+  value: string;
+  help: string[];
+  choices: string[] | null;
+  default: string | null;
+  managed: boolean;
+}
+
+export interface IniSection {
+  name: string;
+  keys: IniKey[];
+}

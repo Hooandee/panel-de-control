@@ -364,6 +364,7 @@ class UpscalerService:
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
         }
         manifest = self._apply(target, sources, ini.apply(base_ini, overrides))
+        managed = sorted(overrides)
 
         now = time.time()
         entry["install"] = {
@@ -371,6 +372,7 @@ class UpscalerService:
             "installed_at": now, "options": _clean_options(choice),
             "native_dlls": list(recipe.native_dlls) if recipe else [],
             "fg_plan": fg_plan,
+            "managed": managed,
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
@@ -591,6 +593,41 @@ class UpscalerService:
         self._save()
         return {"options": install["options"]}
 
+    # ---- advanced: every OptiScaler.ini key ---------------------------------------------------
+    def _ini_path(self, appid: str) -> tuple[dict, Path]:
+        install = self._game_state(appid).get("install")
+        if not isinstance(install, dict) or install.get("engine") == "proton" or _helix_way(install) == "fsr":
+            raise UpscalerError("not_patched")
+        return install, Path(install["exe_folder"] if _is_helix(install) else install["target"]) / "OptiScaler.ini"
+
+    def ini_schema(self, appid: str) -> dict:
+        install, path = self._ini_path(appid)
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raise UpscalerError("broken") from None
+        return {"sections": ini.schema(text, _managed_keys(install))}
+
+    def set_ini(self, appid: str, dotted: str, value: str) -> dict:
+        """One key the user changed by hand; Panel's own keys stay Panel's so it never overwrites a choice silently."""
+        install, path = self._ini_path(appid)
+        value = str(value).strip()
+        if not value or len(value) > 200 or any(c in value for c in "\r\n[]"):
+            raise UpscalerError("ini_value")
+        text = path.read_text(encoding="utf-8", errors="replace")
+        section, _, key = str(dotted).partition(".")
+        entry = next((k for s in ini.schema(text) if s["name"] == section for k in s["keys"] if k["key"] == key), None)
+        if entry is None:
+            raise UpscalerError("ini_key")
+        if dotted in _managed_keys(install):
+            raise UpscalerError("ini_managed")
+        if entry["choices"] and value not in entry["choices"]:
+            raise UpscalerError("ini_value")
+        path.write_text(ini.apply(text, {dotted: value}), encoding="utf-8")
+        install.setdefault("edited", {})[dotted] = value
+        self._save()
+        return {"key": dotted, "value": value}
+
     def uninstall(self, appid: str) -> dict:
         entry = self._game_state(appid)
         install = entry.get("install")
@@ -794,6 +831,20 @@ class UpscalerService:
                 if isinstance(entry.get("install"), dict)
             },
         }
+
+
+_ALWAYS_MANAGED = {
+    *catalog.BASE_INI,
+    "QualityOverrides.QualityRatioOverrideEnabled", "Sharpness.OverrideSharpness", "Sharpness.Sharpness",
+    "FrameGen.Enabled", "FrameGen.FGInput", "FrameGen.FGOutput", "OptiFG.HUDFix",
+    *(f"QualityOverrides.QualityRatio{m}" for m in ("DLAA", "UltraQuality", "Quality", "Balanced", "Performance", "UltraPerformance")),
+}
+
+
+def _managed_keys(install: dict) -> set[str]:
+    build = catalog.BUILDS.get(str(install.get("build")))
+    model_keys = {k for _, keys in (build.models if build else ()) for k in keys}
+    return {*_ALWAYS_MANAGED, *install.get("managed", []), *(build.ini if build else {}), *model_keys}
 
 
 def _with_leftovers(result: dict, left: dict | None) -> dict:

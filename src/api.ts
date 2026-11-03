@@ -4,7 +4,7 @@ import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
 import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
-import type { GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./upscalers/types";
+import type { GameDetail, IniSection, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./upscalers/types";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
@@ -1363,6 +1363,8 @@ export const installUpscaler = callable<[appid: string, choice: UpscalerChoice],
 export const recordUpscalerArgs = callable<[appid: string, args: string[]], { added_args: string[] }>("record_upscaler_args");
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice], { options: UpscalerChoice }>("configure_upscaler");
+export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
+export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean; fps?: number | null }>("get_upscaler_live");
 export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4; flow: "quality" | "balanced" | "performance"; performance: boolean }
 export interface LsfgStatus { installed: boolean; foreign: boolean; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }

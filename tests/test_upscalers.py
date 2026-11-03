@@ -965,3 +965,67 @@ def test_switching_from_optiscaler_to_proton_fsr4_takes_optiscaler_out(steam, pr
     result = service.install(APPID, {"build": "proton-fsr4", "env": "FSR4_UPGRADE"})
     assert not (game / "bin/x64_dx12/dxgi.dll").exists()
     assert result["removed_overrides"] == ["dxgi=n,b"]
+
+
+SAMPLE_INI = """; -------------------------------------------------------
+[Upscalers]
+; -------------------------------------------------------
+; Select Upscaler for Dx12 games
+; xess, fsr21, fsr22, ffx (FSR 2.3; 3.1; 4.x), dlss
+; Default (auto) is DLSS when capable gpu
+Dx12Upscaler=fsr31
+
+[FrameGen]
+; Enables Frame Generation
+; true or false - Default (auto) is false
+Enabled=false
+
+; Selected FG Output
+; nofg, fsrfg (needs FFX, or loader), xefg, dlssg - Default (auto) is nofg
+FGOutput=nofg
+
+; Older name kept by some builds
+; nofg, fsrfg - Default (auto) is nofg
+FGLegacy=fsrfg30
+
+[Menu]
+; Menu scale
+; 0.5 - 2.0 - Default (auto) is 1.0
+Scale=auto
+
+; Show the FPS overlay
+; true or false - Default (auto) is false
+ShowFps=auto
+"""
+
+
+def test_ini_schema_reads_choices_and_defaults_from_optiscalers_comments():
+    schema = ini.schema(SAMPLE_INI, managed={"FrameGen.Enabled"})
+    sections = {s["name"]: s["keys"] for s in schema}
+    fg = {k["key"]: k for k in sections["FrameGen"]}
+    assert fg["Enabled"]["choices"] == ["auto", "true", "false"] and fg["Enabled"]["managed"]
+    assert fg["FGOutput"]["choices"] == ["auto", "nofg", "fsrfg", "xefg", "dlssg"]
+    assert fg["FGOutput"]["default"] == "nofg"
+    assert fg["FGLegacy"]["choices"] == ["auto", "nofg", "fsrfg", "fsrfg30"]
+    assert sections["Menu"][0]["choices"] is None and sections["Menu"][0]["value"] == "auto"
+    assert sections["Menu"][1]["choices"] == ["auto", "true", "false"]
+    assert sections["Upscalers"][0]["help"][0] == "Select Upscaler for Dx12 games"
+
+
+def test_advanced_edits_keep_to_known_keys_and_values(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    (target / "OptiScaler.ini").write_text(SAMPLE_INI + "[Log]\nLogToFile=true\n")
+    keys = {f"{s['name']}.{k['key']}": k for s in service.ini_schema(APPID)["sections"] for k in s["keys"]}
+    assert keys["Log.LogToFile"]["managed"]
+    service.set_ini(APPID, "Menu.ShowFps", "true")
+    service.set_ini(APPID, "Menu.Scale", "1.25")
+    text = (target / "OptiScaler.ini").read_text()
+    assert ini.read(text, "Menu.ShowFps") == "true" and ini.read(text, "Menu.Scale") == "1.25"
+    for dotted, value, code in (("Menu.ShowFps", "magic", "ini_value"), ("Menu.Nope", "1", "ini_key"),
+                                ("FrameGen.FGOutput", "xefg", "ini_managed"), ("Log.LogToFile", "false", "ini_managed"),
+                                ("Menu.Scale", "1\n[x]", "ini_value")):
+        with pytest.raises(UpscalerError, match=code):
+            service.set_ini(APPID, dotted, value)
