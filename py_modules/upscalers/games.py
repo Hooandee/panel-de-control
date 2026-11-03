@@ -30,7 +30,8 @@ INPUTS = {
     "xess": ("libxess.dll",),
     "streamline": ("sl.interposer.dll",),
     "dlssg": ("nvngx_dlssg.dll", "sl.dlss_g.dll"),
-    "fsrfg": ("amd_fidelityfx_framegeneration_dx12.dll",),
+    # FSR 3.1.0-3.1.3 ship upscaler and frame generation in one amd_fidelityfx_dx12.dll.
+    "fsrfg": ("amd_fidelityfx_framegeneration_dx12.dll", "amd_fidelityfx_dx12.dll"),
     "xefg": ("libxess_fg.dll",),
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")

@@ -577,3 +577,11 @@ def test_the_last_fg_toggle_wins(tmp_path):
                  "[I] FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0\n"
                  "[I] FSRFG_Dx12::Deactivate D3D12_Configure Enabled: false, result: FFX_API_RETURN_OK (0)\n")
     assert logread.read(log.parent)["fg_state"] == "false"
+
+
+def test_unified_fsr31_dll_counts_as_the_games_frame_generation(tmp_path):
+    root = tmp_path / "Game"
+    _write(root / "Game.exe", b"MZ")
+    _write(root / "amd_fidelityfx_dx12.dll", b"ffx 3.1")
+    inputs = games.analyze(root)["inputs"]
+    assert inputs["fsr31"] and inputs["fsrfg"]
