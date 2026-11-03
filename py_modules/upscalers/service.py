@@ -502,7 +502,8 @@ class UpscalerService:
         if not isinstance(install, dict):
             return {"result": "not_patched"}
         facts = logread.read(Path(install["target"]), since=install.get("installed_at"))
-        return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": bool(facts.get("fg"))}
+        generating = bool(facts.get("fg")) and facts.get("fg_state", "true") == "true"
+        return {"result": logread.verdict(facts), "resolution": facts.get("resolution"), "fg": generating}
 
     def press_key(self, appid: str, action: str) -> dict:
         """OptiScaler hotkeys for devices without a keyboard; only while the game runs."""

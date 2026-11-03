@@ -553,3 +553,21 @@ def test_virtual_key_press_writes_down_and_up(tmp_path, monkeypatch):
     assert calls[-2:] == [keys.UI_DEV_CREATE, keys.UI_DEV_DESTROY]
     with pytest.raises(keys.HotkeyError):
         keys.press("nope", str(device))
+
+
+def test_optifg_counts_as_running_once_its_context_exists(tmp_path):
+    lines = ("[I] FrameGen.FGInput: {}\n"
+             "[I] FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0\n")
+    log = _write(tmp_path / "OptiScaler.log", lines.format("upscaler"))
+    assert logread.read(log.parent)["fg"]
+    log.write_text(lines.format("fsrfg"))
+    facts = logread.read(log.parent)
+    assert "fg" not in facts and "fg_input" not in facts and "fg_context" not in facts
+
+
+def test_the_last_fg_toggle_wins(tmp_path):
+    log = _write(tmp_path / "OptiScaler.log",
+                 "[I] FrameGen.FGInput: upscaler\n"
+                 "[I] FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0\n"
+                 "[I] FSRFG_Dx12::Deactivate D3D12_Configure Enabled: false, result: FFX_API_RETURN_OK (0)\n")
+    assert logread.read(log.parent)["fg_state"] == "false"

@@ -21,6 +21,7 @@ import {
   EASY_MODES, QUALITIES, SHARPNESS, applyLaunch, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
   revertLaunch,
 } from "./model";
+import { LivePanel } from "./LivePanel";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
 
@@ -271,6 +272,7 @@ export const GameView: FC<{
 
         </>
       )}
+      {detail && install && gameRunning && !running && <LivePanel appid={appid} fg={install.options.fg === "on"} />}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
 

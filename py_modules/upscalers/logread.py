@@ -18,6 +18,9 @@ _FACTS = (
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
     ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
     ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
+    ("fg_state", re.compile(r"D3D12_Configure Enabled: (true|false), result|SetEnabled: (true|false), result")),
+    ("fg_input", re.compile(r"FrameGen\.FGInput: (\w+)")),
+    ("fg_context", re.compile(r"(FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0|XeFG context created)")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),
     ("resolution", re.compile(r"Render Resolution:\s*(\d{2,5})x(\d{2,5}),\s*Display Resolution\s*(\d{2,5})x(\d{2,5})")),
@@ -53,12 +56,18 @@ def read(target: Path, since: float | None = None) -> dict:
                     "output": [int(match.group(3)), int(match.group(4))],
                 }
             else:
-                facts[key] = match.group(1).strip()[:120]
+                facts[key] = next(g for g in match.groups() if g is not None).strip()[:120]
         if _ERROR.search(line):
             errors += 1
     # OptiScaler names its shared feature path CreateDLSSContext even for FSR 3.1 inputs.
     if facts.pop("ffx_input", None):
         facts["input"] = "FSR3"
+    # OptiFG starts generating as soon as its context exists and logs no activation until toggled;
+    # inputs from the game's own generator wait for the game to switch it on.
+    context = facts.pop("fg_context", None)
+    if context and facts.pop("fg_input", "").lower() == "upscaler":
+        facts.setdefault("fg", context)
+    facts.pop("fg_input", None)
     facts["errors"] = errors
     return facts
 
