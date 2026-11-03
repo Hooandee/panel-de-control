@@ -274,7 +274,7 @@ export const GameView: FC<{
 
         </>
       )}
-      {detail && install && gameRunning && !running && <LivePanel appid={appid} fg={install.options.fg === "on"} />}
+      {detail && install && gameRunning && !running && <LivePanel appid={appid} fg={install.options.fg === "on"} onActive={status === "pending" ? check : undefined} />}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
 

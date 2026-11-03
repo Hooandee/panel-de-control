@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 
 import { getUpscalerLive, pressUpscalerKey } from "../api";
 import { useI18n } from "../i18n";
@@ -8,18 +8,26 @@ import { ActionButton, Row } from "./parts";
 const POLL_MS = 1500;
 
 /** While the game runs: the real frame rate and OptiScaler's hotkeys, for devices without a keyboard. */
-export const LivePanel: FC<{ appid: string; fg: boolean }> = ({ appid, fg }) => {
+export const LivePanel: FC<{ appid: string; fg: boolean; onActive?: () => void }> = ({ appid, fg, onActive }) => {
   const { t } = useI18n();
   const [fps, setFps] = useState<number | null>(null);
   const [generating, setGenerating] = useState<boolean | null>(null);
   const [pressing, setPressing] = useState<"menu" | "fg" | null>(null);
   const [failed, setFailed] = useState(false);
 
+  const reported = useRef(false);
+  const activeRef = useRef(onActive);
+  activeRef.current = onActive;
+
   useEffect(() => {
     let alive = true;
     const read = async () => {
       const live = await getUpscalerLive(appid).catch(() => null);
       if (!alive || !live) return;
+      if (live.result === "active" && !reported.current) {
+        reported.current = true;
+        activeRef.current?.();
+      }
       setFps(live.fps ?? null);
       setGenerating(live.fg ?? null);
     };
