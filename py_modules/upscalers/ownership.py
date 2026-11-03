@@ -53,21 +53,29 @@ def own_with_parents(home: Path, path: Path) -> None:
 
 
 def own_like_ancestor(path: Path) -> None:
-    """A file root wrote among the user's files takes the owner of its nearest folder that isn't root's."""
+    """A file root wrote among the user's files takes the owner of its nearest folder that isn't root's.
+
+    Nothing changes if any step of the way is a symlink, so a link can never point root's chown elsewhere.
+    """
     if os.geteuid() != 0:
         return
     chain = [path]
     for parent in path.parents:
         try:
-            stat = parent.stat()
+            if any(os.path.islink(p) for p in (path, *chain, parent)):
+                return
+            stat = os.lstat(parent)
         except OSError:
             return
         if stat.st_uid != 0:
+            owner_root = os.path.realpath(parent)
             for item in chain:
-                if not item.is_symlink():
-                    try:
-                        os.chown(item, stat.st_uid, stat.st_gid, follow_symlinks=False)
-                    except OSError:
-                        pass
+                if os.path.commonpath([owner_root, os.path.realpath(item)]) != owner_root:
+                    return
+            for item in chain:
+                try:
+                    os.chown(item, stat.st_uid, stat.st_gid, follow_symlinks=False)
+                except OSError:
+                    pass
             return
         chain.append(parent)

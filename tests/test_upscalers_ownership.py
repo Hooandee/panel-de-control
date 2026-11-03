@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from upscalers import ownership
 
@@ -26,12 +27,29 @@ def test_new_launcher_config_takes_its_folders_owner(tmp_path, monkeypatch):
     real_stat = os.stat
     owned = []
 
-    class Stat:
-        def __init__(self, uid):
-            self.st_uid, self.st_gid = uid, uid
-
     monkeypatch.setattr(ownership.os, "geteuid", lambda: 0)
     monkeypatch.setattr(ownership.os, "chown", lambda path, uid, gid, follow_symlinks=True: owned.append((str(path), uid)))
-    monkeypatch.setattr(type(config), "stat", lambda self, **kw: Stat(0 if self.name == "GamesConfig" else 1000))
+    def fake_lstat(p, *args, **kwargs):
+        stat = real_stat(p, follow_symlinks=False)
+        return os.stat_result((stat.st_mode, stat.st_ino, stat.st_dev, stat.st_nlink,
+                               0 if Path(p).name == "GamesConfig" else 1000,
+                               0 if Path(p).name == "GamesConfig" else 1000, stat.st_size,
+                               stat.st_atime, stat.st_mtime, stat.st_ctime))
+
+    monkeypatch.setattr(ownership.os, "lstat", fake_lstat)
     ownership.own_like_ancestor(config)
     assert owned == [(str(config), 1000), (str(user / "Heroic/GamesConfig"), 1000)]
+
+
+def test_a_linked_folder_on_the_way_stops_everything(tmp_path, monkeypatch):
+    user, outside = tmp_path / "home", tmp_path / "etc"
+    (user / "Heroic").mkdir(parents=True)
+    outside.mkdir()
+    (user / "Heroic/GamesConfig").symlink_to(outside, target_is_directory=True)
+    config = user / "Heroic/GamesConfig/game.json"
+    config.write_text("{}")
+    owned = []
+    monkeypatch.setattr(ownership.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(ownership.os, "chown", lambda *a, **k: owned.append(a[0]))
+    ownership.own_like_ancestor(config)
+    assert owned == []
