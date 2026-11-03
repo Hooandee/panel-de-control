@@ -2694,3 +2694,26 @@ def test_claw_8_ex_keeps_firmware_route_when_rapl_is_absent(tmp_path):
     assert backend.supported is True
     assert "msi-wmi-platform" in backend.name
     assert [item["candidate"] for item in backend.probe_trace] == ["intel", "msi"]
+
+
+def test_every_intel_handheld_drives_both_rapl_surfaces(tmp_path):
+    root = str(tmp_path)
+    _mk_rapl(root)
+    _mk_rapl(root, base="intel-rapl/intel-rapl:0")
+
+    backend = select_backend(_p("msi_claw_8_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    assert backend.name.startswith("intel-rapl")
+    assert backend.set_tdp(12, False).ok is True
+    for base in ("intel-rapl-mmio/intel-rapl-mmio:0", "intel-rapl/intel-rapl:0"):
+        path = os.path.join(root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw")
+        with open(path) as handle:
+            assert int(handle.read()) == 12_000_000
+    assert backend.release() is True
+    for base, firmware in (
+        ("intel-rapl-mmio/intel-rapl-mmio:0", 30_000_000),
+        ("intel-rapl/intel-rapl:0", 30_000_000),
+    ):
+        path = os.path.join(root, "sys/devices/virtual/powercap", base, "constraint_0_power_limit_uw")
+        with open(path) as handle:
+            assert int(handle.read()) == firmware
