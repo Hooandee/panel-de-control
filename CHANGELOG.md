@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.82.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.0...panel-de-control-v0.82.1) (2026-11-03)
+
+
+### Español
+
+* **Tus canciones al elegir Mi música:** Si antes estabas escuchando la radio, ahora se reproducen las canciones de tu biblioteca en lugar de volver a la emisora anterior.
+* **Fondos que cargan con más cuidado:** Ambiente conserva el fondo anterior o el de Steam mientras carga un vídeo o tráiler, y vuelve a intentarlo si falla. Además, algunos cambios de apariencia ya no se confunden con un tema que sustituye el fondo.
+* **Tú decides qué limpiar:** Los juegos ya no desaparecen de Limpieza cuando Panel no puede comprobar si sus datos están en uso. Puedes revisar el motivo y marcarlos igualmente tras aceptar un aviso. Solo te lo pedirá una vez por sesión; después, la explicación queda junto a la entrada.
+* **Una gráfica para ver los tirones:** El HUD permite añadir una gráfica de frametime, que muestra cuánto tarda cada fotograma y ayuda a ver los picos. También se oculta correctamente «Display server» al desmarcarlo y se eliminan los separadores vacíos del HUD horizontal.
+* **Los botones del inventario quedan a mano:** Las fichas del inventario de Steam se mantienen dentro de la pantalla al crecer. Si no cabe todo, puedes desplazarte por su contenido y llegar a los controles con el mando.
+* **Reportar un problema de Ambiente:** Al enviar un reporte, ya puedes elegir Ambiente para los problemas de fondos, música o radio.
+
+### English
+
+* **Your songs when you choose My music:** If you were listening to the radio, your library's songs now play instead of returning to the previous station.
+* **Smoother background loading:** Ambient keeps the previous background or Steam's background visible while a video or trailer loads, and retries if it fails. Some appearance changes are also no longer mistaken for a theme that replaces the background.
+* **You choose what to clean:** Games no longer disappear from Cleanup when Panel cannot check whether their data is in use. You can review the reason and select them anyway after accepting a warning. You only need to accept it once per session; afterwards, the explanation stays beside the entry.
+* **A graph to help spot stutters:** The HUD now offers a frametime graph showing how long each frame takes, making spikes easier to spot. Unchecking “Display server” also hides it correctly, and empty separators are removed from the horizontal HUD.
+* **Inventory buttons stay within reach:** Steam inventory item panels stay on screen as they grow. If the content does not fit, you can scroll through it and reach the controls with your controller.
+* **Report an Ambient problem:** When sending a report, you can now choose Ambient for background, music or radio problems.
+
+### Italiano
+
+* **Le tue canzoni quando scegli La mia musica:** Se prima ascoltavi la radio, ora partono le canzoni della tua libreria invece di tornare alla stazione precedente.
+* **Sfondi che si caricano meglio:** Atmosfera mantiene lo sfondo precedente o quello di Steam mentre carica un video o un trailer e riprova se il caricamento fallisce. Alcune modifiche all'aspetto non vengono più scambiate per un tema che sostituisce lo sfondo.
+* **Decidi tu cosa pulire:** I giochi non scompaiono più da Pulizia quando Panel non riesce a verificare se i loro dati sono in uso. Puoi leggere il motivo e selezionarli comunque dopo aver accettato un avviso. Ti verrà chiesto solo una volta per sessione; poi la spiegazione resta accanto alla voce.
+* **Un grafico per individuare gli scatti:** Nell'HUD puoi aggiungere un grafico del frametime, che mostra quanto tempo richiede ogni fotogramma e aiuta a vedere i picchi. Disattivando «Display server» la voce viene nascosta correttamente e nell'HUD orizzontale non restano separatori vuoti.
+* **I pulsanti dell'inventario restano raggiungibili:** Le schede degli oggetti nell'inventario di Steam rimangono dentro lo schermo quando si espandono. Se il contenuto non entra tutto, puoi scorrerlo e raggiungere i comandi con il controller.
+* **Segnalare un problema di Atmosfera:** Quando invii una segnalazione, puoi scegliere Atmosfera per i problemi di sfondi, musica o radio.
+
+### Deutsch
+
+* **Deine Songs unter Meine Musik:** Wenn du vorher Radio gehört hast, werden jetzt die Songs aus deiner Bibliothek abgespielt, statt zum vorherigen Sender zurückzukehren.
+* **Hintergründe laden zuverlässiger:** Ambiente zeigt den bisherigen Hintergrund oder den Steam-Hintergrund weiter an, während ein Video oder Trailer lädt, und versucht es bei einem Fehler erneut. Einige Änderungen am Erscheinungsbild werden nicht mehr mit einem Theme verwechselt, das den Hintergrund ersetzt.
+* **Du entscheidest, was aufgeräumt wird:** Spiele verschwinden nicht mehr aus der Bereinigung, wenn Panel nicht prüfen kann, ob ihre Daten gerade verwendet werden. Du kannst den Grund lesen und sie nach Bestätigung eines Hinweises trotzdem auswählen. Die Bestätigung ist nur einmal pro Sitzung nötig; danach bleibt die Erklärung beim Eintrag stehen.
+* **Ein Diagramm, das Ruckler sichtbar macht:** Im HUD lässt sich jetzt ein Frametime-Diagramm einblenden. Es zeigt, wie lange jedes Bild braucht, und macht Spitzen leichter erkennbar. „Display server“ wird beim Abwählen korrekt ausgeblendet, und leere Trennlinien im horizontalen HUD entfallen.
+* **Inventarschaltflächen bleiben erreichbar:** Die Detailfenster im Steam-Inventar bleiben auf dem Bildschirm, wenn sie größer werden. Passt nicht alles hinein, kannst du durch den Inhalt scrollen und die Schaltflächen mit dem Controller erreichen.
+* **Probleme mit Ambiente melden:** Beim Senden eines Berichts kannst du jetzt Ambiente für Probleme mit Hintergründen, Musik oder Radio auswählen.
+
+### Português (Brasil)
+
+* **Suas músicas ao escolher Minha música:** Se você estava ouvindo rádio, agora as músicas da sua biblioteca começam a tocar em vez de voltar à estação anterior.
+* **Carregamento melhor dos fundos:** O Ambiente mantém o fundo anterior ou o do Steam enquanto carrega um vídeo ou trailer e tenta novamente se houver uma falha. Algumas mudanças de aparência deixam de ser confundidas com um tema que substitui o fundo.
+* **Você decide o que limpar:** Os jogos não somem mais da Limpeza quando o Panel não consegue verificar se os dados estão em uso. Você pode ler o motivo e selecioná-los mesmo assim depois de aceitar um aviso. Só precisa aceitar uma vez por sessão; depois, a explicação continua ao lado do item.
+* **Um gráfico para identificar engasgos:** O HUD permite adicionar um gráfico de frametime, que mostra quanto tempo cada quadro leva e ajuda a perceber os picos. Desmarcar “Display server” também oculta a informação corretamente, e os separadores vazios do HUD horizontal foram removidos.
+* **Os botões do inventário ficam ao alcance:** As fichas dos itens no inventário do Steam continuam dentro da tela quando aumentam. Se o conteúdo não couber inteiro, você pode rolar e chegar aos botões com o controle.
+* **Relatar um problema do Ambiente:** Ao enviar um relatório, você já pode escolher Ambiente para problemas com fundos, música ou rádio.
+
+### Français
+
+* **Tes morceaux quand tu choisis Ma musique :** Si tu écoutais la radio, ce sont maintenant les morceaux de ta bibliothèque qui démarrent, au lieu de revenir à la station précédente.
+* **Des fonds qui se chargent mieux :** Ambiance conserve le fond précédent ou celui de Steam pendant le chargement d'une vidéo ou d'une bande-annonce, et réessaie en cas d'échec. Certaines modifications d'apparence ne sont plus prises pour un thème qui remplace le fond.
+* **Tu décides quoi nettoyer :** Les jeux ne disparaissent plus du Nettoyage lorsque Panel ne peut pas vérifier si leurs données sont utilisées. Tu peux lire la raison et les sélectionner quand même après avoir accepté un avertissement. Cette confirmation n'est demandée qu'une fois par session ; ensuite, l'explication reste à côté de l'entrée.
+* **Un graphique pour repérer les saccades :** Tu peux ajouter au HUD un graphique de frametime, qui montre le temps nécessaire à chaque image et aide à repérer les pics. Décocher « Display server » masque correctement cette information, et les séparateurs vides du HUD horizontal ont été supprimés.
+* **Les boutons de l'inventaire restent accessibles :** Les fiches des objets de l'inventaire Steam restent dans l'écran lorsqu'elles s'agrandissent. Si tout ne tient pas, tu peux faire défiler le contenu et atteindre les commandes à la manette.
+* **Signaler un problème d'Ambiance :** Lorsque tu envoies un rapport, tu peux désormais choisir Ambiance pour les problèmes de fonds, de musique ou de radio.
+
 ## [0.82.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.81.3...panel-de-control-v0.82.0) (2026-11-02)
 
 ### Español
