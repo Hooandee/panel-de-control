@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.83.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.1...panel-de-control-v0.83.0) (2026-11-04)
+
+
+### Español
+
+* **La MSI Claw 8 EX AI+ ya aplica el TDP:** Panel de Control la reconoce como lo que es, con su rango de 8 a 35 W y los botones M1 y M2. El límite que eliges ahora sí cambia lo que consume el procesador; antes el control se movía pero el consumo seguía igual.
+* **TDP más fiable en Intel:** En portátiles Intel como la MSI Claw o la OneXPlayer 3, a veces el procesador se quedaba por debajo del TDP que ponías. Ahora se aplica el valor que eliges, y si dejas de controlar el TDP desde Panel de Control, la consola recupera el que tenía.
+* **Sin parones al volver del reposo:** Panel de Control ya no se queda congelado unos segundos al despertar la consola tras un reposo largo.
+
+### English
+
+* **The MSI Claw 8 EX AI+ now applies TDP:** Panel de Control recognizes it properly, with its 8 to 35 W range and the M1 and M2 buttons. The limit you choose now actually changes what the processor draws; before, the control moved but power stayed the same.
+* **More reliable TDP on Intel:** On Intel handhelds like the MSI Claw or the OneXPlayer 3, the processor sometimes stayed below the TDP you set. Now the value you choose is applied, and if you stop managing TDP from Panel de Control, the console gets back the one it had.
+* **No more freezes after sleep:** Panel de Control no longer freezes for a few seconds when the console wakes up from a long sleep.
+
+### Italiano
+
+* **La MSI Claw 8 EX AI+ ora applica il TDP:** Panel de Control la riconosce correttamente, con l'intervallo da 8 a 35 W e i pulsanti M1 e M2. Il limite che scegli ora cambia davvero il consumo del processore; prima il controllo si spostava ma il consumo restava uguale.
+* **TDP più affidabile su Intel:** Sulle console portatili Intel come la MSI Claw o la OneXPlayer 3, a volte il processore restava sotto il TDP impostato. Ora viene applicato il valore che scegli e, se smetti di gestire il TDP da Panel de Control, la console torna a quello che aveva.
+* **Niente blocchi dopo lo standby:** Panel de Control non si blocca più per qualche secondo quando la console si risveglia da uno standby lungo.
+
+### Deutsch
+
+* **Die MSI Claw 8 EX AI+ übernimmt jetzt die TDP:** Panel de Control erkennt sie richtig, mit ihrem Bereich von 8 bis 35 W und den Tasten M1 und M2. Das gewählte Limit verändert jetzt wirklich, wie viel der Prozessor verbraucht; vorher bewegte sich der Regler, aber der Verbrauch blieb gleich.
+* **Zuverlässigere TDP bei Intel:** Auf Intel-Handhelds wie der MSI Claw oder der OneXPlayer 3 blieb der Prozessor manchmal unter der eingestellten TDP. Jetzt wird der gewählte Wert übernommen, und wenn du die TDP nicht mehr über Panel de Control steuerst, bekommt die Konsole ihren vorherigen Wert zurück.
+* **Keine Hänger nach dem Ruhezustand:** Panel de Control friert nicht mehr für einige Sekunden ein, wenn die Konsole aus einem langen Ruhezustand aufwacht.
+
+### Português (Brasil)
+
+* **O MSI Claw 8 EX AI+ agora aplica o TDP:** O Panel de Control reconhece o aparelho corretamente, com a faixa de 8 a 35 W e os botões M1 e M2. O limite que você escolhe agora muda de verdade o consumo do processador; antes o controle se mexia, mas o consumo continuava igual.
+* **TDP mais confiável em Intel:** Em portáteis Intel como o MSI Claw ou o OneXPlayer 3, às vezes o processador ficava abaixo do TDP que você definia. Agora o valor escolhido é aplicado e, se você deixar de controlar o TDP pelo Panel de Control, o console volta ao que tinha.
+* **Sem travadas ao sair da suspensão:** O Panel de Control não fica mais travado por alguns segundos quando o console acorda depois de uma suspensão longa.
+
+### Français
+
+* **La MSI Claw 8 EX AI+ applique maintenant le TDP :** Panel de Control la reconnaît correctement, avec sa plage de 8 à 35 W et les boutons M1 et M2. La limite que tu choisis change maintenant vraiment la consommation du processeur ; avant, le réglage bougeait mais la consommation restait la même.
+* **TDP plus fiable sur Intel :** Sur les consoles portables Intel comme la MSI Claw ou la OneXPlayer 3, le processeur restait parfois en dessous du TDP choisi. Maintenant la valeur que tu choisis est appliquée et, si tu arrêtes de gérer le TDP depuis Panel de Control, la console retrouve celle qu'elle avait.
+* **Plus de blocages au réveil :** Panel de Control ne se fige plus quelques secondes quand la console se réveille après une longue mise en veille.
+
 ## [0.82.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.0...panel-de-control-v0.82.1) (2026-11-03)
 
 
