@@ -3,9 +3,41 @@
 ## [0.83.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.1...panel-de-control-v0.83.0) (2026-11-04)
 
 
-### Features
+### Español
 
-* **tdp:** support MSI Claw 8 EX AI+ and drive both RAPL surfaces on Intel ([#1113](https://github.com/Hooandee/panel-de-control/issues/1113)) ([cd5cff5](https://github.com/Hooandee/panel-de-control/commit/cd5cff5e16a1c2409dfebe31fac4c4698536eeec))
+* **La MSI Claw 8 EX AI+ ya aplica el TDP:** Panel la reconoce como lo que es, con su rango de 8 a 35 W y los botones M1 y M2. El límite que eliges ahora sí cambia lo que consume el procesador; antes el control se movía pero el consumo seguía igual.
+* **El TDP en Intel llega a lo que pides:** En las portátiles Intel, como la MSI Claw o la OneXPlayer 3, el límite se aplica completo aunque el sistema tuviera otro valor más bajo guardado. Si desactivas el control de TDP de Panel, vuelve el límite que tenía la consola antes.
+* **Sin parones al volver del reposo:** Panel ya no se queda congelado unos segundos al despertar la consola tras un reposo largo.
+
+### English
+
+* **The MSI Claw 8 EX AI+ now applies TDP:** Panel recognizes it properly, with its 8 to 35 W range and the M1 and M2 buttons. The limit you choose now actually changes what the processor draws; before, the control moved but power stayed the same.
+* **Intel TDP reaches what you ask for:** On Intel handhelds such as the MSI Claw or the OneXPlayer 3, the limit is applied in full even if the system had a lower value stored elsewhere. If you turn off Panel's TDP control, the console goes back to the limit it had before.
+* **No more freezes after sleep:** Panel no longer freezes for a few seconds when the console wakes up from a long sleep.
+
+### Italiano
+
+* **La MSI Claw 8 EX AI+ ora applica il TDP:** Panel la riconosce correttamente, con l'intervallo da 8 a 35 W e i pulsanti M1 e M2. Il limite che scegli ora cambia davvero il consumo del processore; prima il controllo si spostava ma il consumo restava uguale.
+* **Il TDP su Intel arriva dove chiedi:** Sulle console portatili Intel, come la MSI Claw o la OneXPlayer 3, il limite viene applicato per intero anche se il sistema aveva salvato altrove un valore più basso. Se disattivi il controllo del TDP di Panel, torna il limite che la console aveva prima.
+* **Niente blocchi dopo lo standby:** Panel non si blocca più per qualche secondo quando la console si risveglia da uno standby lungo.
+
+### Deutsch
+
+* **Die MSI Claw 8 EX AI+ übernimmt jetzt die TDP:** Panel erkennt sie richtig, mit ihrem Bereich von 8 bis 35 W und den Tasten M1 und M2. Das gewählte Limit verändert jetzt wirklich, wie viel der Prozessor verbraucht; vorher bewegte sich der Regler, aber der Verbrauch blieb gleich.
+* **Intel-TDP erreicht den gewünschten Wert:** Auf Intel-Handhelds wie der MSI Claw oder der OneXPlayer 3 wird das Limit vollständig übernommen, auch wenn das System an anderer Stelle einen niedrigeren Wert gespeichert hatte. Wenn du die TDP-Steuerung von Panel ausschaltest, gilt wieder das Limit, das die Konsole vorher hatte.
+* **Keine Hänger nach dem Ruhezustand:** Panel friert nicht mehr für einige Sekunden ein, wenn die Konsole aus einem langen Ruhezustand aufwacht.
+
+### Português (Brasil)
+
+* **O MSI Claw 8 EX AI+ agora aplica o TDP:** O Panel reconhece o aparelho corretamente, com a faixa de 8 a 35 W e os botões M1 e M2. O limite que você escolhe agora muda de verdade o consumo do processador; antes o controle se mexia, mas o consumo continuava igual.
+* **O TDP em Intel chega ao que você pede:** Nos portáteis Intel, como o MSI Claw ou o OneXPlayer 3, o limite é aplicado por inteiro mesmo que o sistema tivesse um valor mais baixo guardado em outro lugar. Se você desativar o controle de TDP do Panel, volta o limite que o console tinha antes.
+* **Sem travadas ao sair da suspensão:** O Panel não fica mais travado por alguns segundos quando o console acorda depois de uma suspensão longa.
+
+### Français
+
+* **La MSI Claw 8 EX AI+ applique maintenant le TDP :** Panel la reconnaît correctement, avec sa plage de 8 à 35 W et les boutons M1 et M2. La limite que tu choisis change maintenant vraiment la consommation du processeur ; avant, le réglage bougeait mais la consommation restait la même.
+* **Le TDP sur Intel atteint ce que tu demandes :** Sur les consoles portables Intel, comme la MSI Claw ou la OneXPlayer 3, la limite est appliquée entièrement même si le système avait enregistré ailleurs une valeur plus basse. Si tu désactives le contrôle du TDP de Panel, la console revient à la limite qu'elle avait avant.
+* **Plus de blocages au réveil :** Panel ne se fige plus quelques secondes quand la console se réveille après une longue mise en veille.
 
 ## [0.82.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.0...panel-de-control-v0.82.1) (2026-11-03)
 
