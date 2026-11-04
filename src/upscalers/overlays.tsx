@@ -142,6 +142,24 @@ export function hostOf(img: HTMLImageElement, tile: HTMLElement): HTMLElement {
   return inner.width > outer.width * 1.15 + 8 || inner.height > outer.height * 1.15 + 8 ? tile : parent;
 }
 
+/** A collection's collage: the one selectable item around the art shows several games. */
+export function isCollection(tile: HTMLElement): boolean {
+  let item: HTMLElement | null = tile;
+  for (let depth = 0; item && depth < 8 && !item.classList.contains("Focusable"); depth++) item = item.parentElement;
+  if (!item?.classList.contains("Focusable")) return false;
+  // Themes that draw their own cards make a whole row or screen one selectable item; that is not a collage.
+  const own = tile.getBoundingClientRect();
+  const outer = item.getBoundingClientRect();
+  if (outer.width > own.width * 2.5 || outer.height > own.height * 2.5) return false;
+  const appids = new Set<string>();
+  for (const img of Array.from(item.querySelectorAll("img"))) {
+    const appid = appidOf(img.src);
+    if (appid) appids.add(appid);
+    if (appids.size > 1) return true;
+  }
+  return false;
+}
+
 /** The visible tile an image belongs to: its ancestors while they stay the image's size, as every theme wraps art. */
 export function tileOf(img: HTMLImageElement): HTMLElement | null {
   const box = img.getBoundingClientRect();
@@ -152,6 +170,8 @@ export function tileOf(img: HTMLImageElement): HTMLElement | null {
     if (!parent || parent === img.ownerDocument.body) break;
     const outer = parent.getBoundingClientRect();
     if (outer.width > box.width * 1.15 + 8 || outer.height > box.height * 1.15 + 8) break;
+    // Collapsed layout wrappers (0×0 grid cells) are not the card.
+    if (outer.width < box.width * 0.5 || outer.height < box.height * 0.5) break;
     tile = parent;
   }
   return tile;
@@ -224,7 +244,11 @@ export const CoverBadges: FC = () => {
         if (box.width < 56 || box.height < 40 || box.width > limit) continue;
         const tile = tileOf(img);
         if (!tile) continue;
+        // Art parked in a collapsed wrapper has no card to sit on; the pill would float on its own.
+        const tileBox = tile.getBoundingClientRect();
+        if (tileBox.width < box.width * 0.5 || tileBox.height < box.height * 0.5) continue;
         if (ICON.test(img.src) && !isRound(tile, view)) continue;
+        if (isCollection(tile)) continue;
         const area = box.width * box.height;
         const seen = faces.get(tile);
         if (!seen || area > seen.area) faces.set(tile, { img, badge, area });

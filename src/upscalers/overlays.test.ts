@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@decky/ui", () => ({ findSP: () => null }));
 vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn() }));
 
-import { hostOf, tileOf } from "./overlays";
+import { hostOf, isCollection, tileOf } from "./overlays";
 
 function box(el: Element, width: number, height: number): void {
   el.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, width, height, right: width, bottom: height, toJSON: () => ({}) });
@@ -47,5 +47,46 @@ describe("cover badge placement", () => {
     box(img, 107, 160);
 
     expect(hostOf(img, tileBox)).toBe(tileBox);
+  });
+
+  it("leaves collection collages alone", () => {
+    const item = document.createElement("div");
+    item.className = "Focusable";
+    for (const appid of ["548430", "2246340"]) {
+      const cell = document.createElement("div");
+      const img = document.createElement("img");
+      img.src = `https://steamloopback.host/assets/${appid}/library_600x900.jpg`;
+      cell.appendChild(img);
+      item.appendChild(cell);
+    }
+    document.body.appendChild(item);
+    box(item, 185, 185);
+    box(item.querySelector("div")!, 103, 96);
+    expect(isCollection(item.querySelector("div")!)).toBe(true);
+
+    // A theme's whole home screen as one selectable item still badges each card.
+    box(item, 854, 534);
+    expect(isCollection(item.querySelector("div")!)).toBe(false);
+
+    const single = document.createElement("div");
+    single.className = "Focusable";
+    const img = document.createElement("img");
+    img.src = "https://steamloopback.host/assets/548430/library_600x900.jpg";
+    single.appendChild(img);
+    document.body.appendChild(single);
+    expect(isCollection(single)).toBe(false);
+  });
+
+  it("stops at the card when Steam wraps it in a collapsed grid cell", () => {
+    const cell = document.createElement("div");
+    const card = document.createElement("div");
+    const img = document.createElement("img");
+    card.appendChild(img);
+    cell.appendChild(card);
+    document.body.appendChild(cell);
+    box(cell, 0, 0);
+    box(card, 134, 201);
+    box(img, 134, 201);
+    expect(tileOf(img)).toBe(card);
   });
 });
