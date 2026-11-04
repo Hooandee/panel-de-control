@@ -907,8 +907,7 @@ def _read_int(path: str) -> int | None:
 
 
 def _measure_rapl_power(entries: list, directories: dict) -> None:
-    """Average package power over a short window, so a report can show whether the
-    package actually stays under the limit it reports."""
+    """Average power of each RAPL zone over a short window, to compare with its limits."""
     energy = {
         id(entry): _read_int(os.path.join(directories[id(entry)], "energy_uj"))
         for entry in entries
@@ -928,7 +927,7 @@ def _measure_rapl_power(entries: list, directories: dict) -> None:
             if wrap is None:
                 continue
             delta += wrap + 1
-        entry["package_w"] = round(delta / 1_000_000 / _RAPL_SAMPLE_S, 1)
+        entry["power_w"] = round(delta / 1_000_000 / _RAPL_SAMPLE_S, 1)
 
 
 def _snap_devfreq(root: str) -> list:

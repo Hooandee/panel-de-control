@@ -582,7 +582,6 @@ def test_a_normal_plug_after_a_quiet_spell_keeps_the_last_episode():
 
 
 def test_poller_reads_wakeup_count_off_the_event_loop():
-    # PDC-CKHF: after a 20 min suspend, reading wakeup_count blocked the loop 5 s.
     import asyncio
     import threading
 

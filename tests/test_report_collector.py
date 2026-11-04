@@ -1437,7 +1437,6 @@ def test_sysfs_snapshot_shows_cpu_boost_and_vendor_platform_drivers(tmp_path):
 
 
 def test_sysfs_snapshot_measures_rapl_package_power(tmp_path, monkeypatch):
-    # PDC-CKHF: a limit the package ignored was only provable with real watts.
     rapl = os.path.join(
         str(tmp_path),
         "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0",
@@ -1455,4 +1454,4 @@ def test_sysfs_snapshot_measures_rapl_package_power(tmp_path, monkeypatch):
 
     surfaces = sysfs_snapshot(root=str(tmp_path))["cpu_gpu_power"]["rapl"]
 
-    assert surfaces[0]["package_w"] == round(20 / report_collector._RAPL_SAMPLE_S, 1)
+    assert surfaces[0]["power_w"] == round(20 / report_collector._RAPL_SAMPLE_S, 1)

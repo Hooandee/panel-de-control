@@ -2654,7 +2654,7 @@ def _mk_claw_ex_dmi(root):
 
 
 def test_claw_8_ex_drives_both_rapl_surfaces_instead_of_unhonored_firmware(tmp_path):
-    # PDC-CKHF: msi-wmi-platform echoed 30 W while RAPL stayed at 40/50 W.
+    # msi-wmi-platform echoes the write while RAPL keeps the firmware 40/50 W.
     root = str(tmp_path)
     _mk_claw_ex_dmi(root)
     _mk_fw(root, "msi-wmi-platform")

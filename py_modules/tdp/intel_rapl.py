@@ -571,7 +571,7 @@ class IntelRaplBackend(TDPBackend):
                 os.path.basename(d): self._read_int(self._pl1_path(d))
                 for d in self._pl1_dirs
             }),
-            "firmware_pl1_w": watts(baseline["pl1_uw"]) if baseline else None,
+            "firmware_pl1_w": watts(baseline.get("pl1_uw") or {}) if baseline else None,
         }
 
     def _release_auto_state(self):

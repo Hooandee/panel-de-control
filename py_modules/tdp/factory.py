@@ -247,7 +247,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         return [intel] if desktop_cpu else []
     if key == "msi_claw_8_ex_ai_plus":
         # msi-wmi-platform echoes PL1/PL2 writes on this board while RAPL keeps the
-        # firmware limits (PDC-CKHF), so RAPL leads and firmware stays the fallback.
+        # firmware limits, so RAPL leads and firmware stays the fallback.
         return [intel, msi]
     if device.vendor == "intel":
         return [msi, intel]
