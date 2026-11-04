@@ -1,7 +1,6 @@
 import { findSP } from "@decky/ui";
 import { useEffect, useState, type FC } from "react";
 import { createPortal } from "react-dom";
-import { LuScaling } from "react-icons/lu";
 
 import { getUpscalerLive, getUpscalersOverview } from "../api";
 import { useI18n } from "../i18n";
@@ -340,29 +339,18 @@ export const InGameBadge: FC = () => {
           style={{
             // Top centre: Steam's performance overlay owns the top-left corner and the Quick Access Menu the right.
             // Opaque on purpose: over a running game the translucent fill showed as bare text on a Steam Deck.
-            position: "fixed", top: 14, left: "50%", zIndex: 2147483001, pointerEvents: "none",
-            display: "flex", alignItems: "center", gap: 10, padding: "6px 14px 6px 6px", borderRadius: 16,
-            background: "linear-gradient(180deg, #1e222c, #11141b)", color: "#f4f7fb",
-            boxShadow: "inset 0 0 0 1px rgba(111,227,161,.42), 0 8px 24px rgba(0,0,0,.45)",
-            font: "600 13px/16px 'Motiva Sans', 'Noto Sans', Arial, sans-serif", letterSpacing: 0.15,
-            opacity: visible ? 1 : 0, transform: visible ? "translate(-50%, 0) scale(1)" : "translate(-50%, -8px) scale(.96)",
+            position: "fixed", top: 10, left: "50%", zIndex: 2147483001, pointerEvents: "none",
+            display: "flex", alignItems: "baseline", gap: 8, padding: "3px 10px", borderRadius: 8,
+            background: "#15181e", color: "#eef1f5", whiteSpace: "nowrap",
+            font: "600 11px/15px 'Motiva Sans', 'Noto Sans', Arial, sans-serif",
+            opacity: visible ? 0.92 : 0, transform: visible ? "translate(-50%, 0)" : "translate(-50%, -6px)",
             transition: "opacity 320ms ease, transform 420ms cubic-bezier(.2,.8,.2,1)",
           }}
         >
-          <span style={{
-            display: "inline-flex", width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center", flex: "none",
-            color: "#6fe3a1", background: "#1d3a2c",
-          }}>
-            <LuScaling size={16} />
-          </span>
-          <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <span style={{ fontWeight: 700, fontSize: 13, color: "#f4f7fb" }}>{badge.label}</span>
-            {resolution && resolution[0] < resolution[1] && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(244,247,251,.68)", fontVariantNumeric: "tabular-nums" }}>
-                {t("up.resolution", { render: resolution[0], output: resolution[1] })}
-              </span>
-            )}
-          </span>
+          <span>{badge.label}</span>
+          {resolution && resolution[0] < resolution[1] && (
+            <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>
+          )}
         </div>,
         host,
       )}
