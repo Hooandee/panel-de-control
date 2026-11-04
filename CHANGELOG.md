@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.1...panel-de-control-v0.83.0) (2026-11-04)
+
+
+### Features
+
+* **tdp:** support MSI Claw 8 EX AI+ and drive both RAPL surfaces on Intel ([#1113](https://github.com/Hooandee/panel-de-control/issues/1113)) ([cd5cff5](https://github.com/Hooandee/panel-de-control/commit/cd5cff5e16a1c2409dfebe31fac4c4698536eeec))
+
 ## [0.82.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.0...panel-de-control-v0.82.1) (2026-11-03)
 
 
