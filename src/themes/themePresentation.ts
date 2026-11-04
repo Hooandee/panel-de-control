@@ -30,9 +30,9 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       fr: "Un launcher avec tout l'esprit de la PS Vita",
     },
     description: {
-      de: "Ein Launcher mit dem ganzen Geist der PS Vita. Deine Spiele schweben als Glasblasen über Seidenwellen, jedes mit seinem eigenen Tor, dazu eigene Freunde, Trophäen, Musik und Sounds. Ordne deine Seiten, gib jeder ihren Hintergrund und erlebe diese Konsole wieder auf deinem Handheld.",
-      "pt-BR": "Um launcher com todo o espírito do PS Vita. Seus jogos flutuam como bolhas de vidro sobre ondas de seda, cada um com seu próprio portal, com Amigos, Troféus, música e sons próprios. Organize suas páginas, dê a cada uma seu fundo e sinta de novo aquele console no seu portátil.",
-      fr: "Un launcher avec tout l'esprit de la PS Vita. Vos jeux flottent comme des bulles de verre sur des vagues de soie, chacun avec sa propre porte, avec ses propres Amis, Trophées, musique et sons. Organisez vos pages, donnez à chacune son fond et retrouvez cette console sur votre portable.",
+      de: "Ein Launcher mit dem ganzen Geist der PS Vita: Deine Spiele schweben als Glasblasen, mit eigenen Freunden, Trophäen, Musik und Sounds.",
+      "pt-BR": "Um launcher com todo o espírito do PS Vita: seus jogos flutuam como bolhas de vidro, com Amigos, Troféus, música e sons próprios.",
+      fr: "Un launcher avec tout l'esprit de la PS Vita : vos jeux flottent comme des bulles de verre, avec ses propres Amis, Trophées, musique et sons.",
     },
   },
   "hooandee-duo": {
