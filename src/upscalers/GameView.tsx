@@ -1,5 +1,5 @@
 import { openFilePicker } from "@decky/api";
-import { Focusable } from "@decky/ui";
+import { ConfirmModal, Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 
 import {
@@ -28,6 +28,8 @@ import { AdvancedIni } from "./AdvancedIni";
 import { onJobUpdate, trackJob } from "./jobRunner";
 import { LivePanel } from "./LivePanel";
 import { WikiFacts } from "./WikiFacts";
+import { restartGame } from "./restartGame";
+import { showModal } from "../navigation/showModal";
 import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
@@ -59,7 +61,7 @@ export const GameView: FC<{
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const [message, setMessage] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult | null>(null);
-  const [applied, setApplied] = useState<string | null>(null);
+  const [applied, setApplied] = useState<"now" | "restart" | "restarting" | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
@@ -180,7 +182,7 @@ export const GameView: FC<{
       setApplied(null);
       try {
         const result = await configureUpscaler(appid, choice);
-        if (gameRunning) setApplied(t(result.live ? "up.live.appliedNow" : "up.live.appliedNext"));
+        if (gameRunning) setApplied(result.live ? "now" : "restart");
         await load();
         onChanged();
       } catch (error) {
@@ -190,6 +192,23 @@ export const GameView: FC<{
     }
     await reinstall();
   };
+
+  const askRestart = () => showModal(
+    <ConfirmModal
+      strTitle={t("up.restart.title")}
+      strDescription={t("up.restart.body", { name: game.name })}
+      strOKButtonText={t("up.restart.ok")}
+      strCancelButtonText={t("up.bulk.cancel")}
+      onOK={async () => {
+        setApplied("restarting");
+        const ok = await restartGame(game.liveAppid);
+        if (!mounted.current) return;
+        setApplied(null);
+        if (!ok) setMessage(t("up.restart.failed"));
+      }}
+    />,
+    window,
+  );
 
   const foreignAction = async (action: (id: string) => Promise<unknown>) => {
     setMessage(null);
@@ -346,7 +365,14 @@ export const GameView: FC<{
       )}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
-      {applied && !message && <Note>{applied}</Note>}
+      {applied === "now" && !message && <Note>{t("up.live.appliedNow")}</Note>}
+      {applied === "restart" && !message && gameRunning && (
+        <>
+          <Note>{t("up.live.appliedNext")}</Note>
+          <Row><ActionButton label={t("up.restart.button")} onPress={askRestart} /></Row>
+        </>
+      )}
+      {applied === "restarting" && <Note>{t("up.restart.doing")}</Note>}
       {!running && job?.state === "error" && job.kind === "install" && RETRYABLE.has(job.error ?? "") && (
         <Row><ActionButton label={t("up.retry")} onPress={reinstall} /></Row>
       )}
