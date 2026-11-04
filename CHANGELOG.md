@@ -3,10 +3,29 @@
 ## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
 
 
-### Features
+### Español
 
-* **themes:** freeze the running game while a theme's menus are over it ([#1109](https://github.com/Hooandee/panel-de-control/issues/1109)) ([8d8155e](https://github.com/Hooandee/panel-de-control/commit/8d8155eea027ca723739cce815665dd0e6065fd0))
-* **themes:** present Vida, and describe every Hooandee theme in all six languages ([#1108](https://github.com/Hooandee/panel-de-control/issues/1108)) ([1343216](https://github.com/Hooandee/panel-de-control/commit/1343216627ae167faec268abe43dc7ec60f3d9ac))
+* **Menús fluidos con un juego abierto:** Los temas pueden pausar el juego mientras su menú está encima, así el menú va fluido aunque el juego sea muy exigente. El juego vuelve en cuanto regresas a él, y solo se pausa si el tema lo ofrece y tú activas su opción.
+
+### English
+
+* **Smooth menus with a game open:** Themes can pause the game while their menu is on top, so the menu stays smooth even with a demanding game. The game resumes as soon as you go back to it, and it only pauses if the theme offers it and you turn its option on.
+
+### Italiano
+
+* **Menu fluidi con un gioco aperto:** I temi possono mettere in pausa il gioco mentre il loro menu è sopra, così il menu resta fluido anche con un gioco esigente. Il gioco riprende appena ci torni e va in pausa solo se il tema lo offre e attivi la sua opzione.
+
+### Deutsch
+
+* **Flüssige Menüs bei offenem Spiel:** Themes können das Spiel anhalten, solange ihr Menü darüber liegt, damit das Menü auch bei einem anspruchsvollen Spiel flüssig bleibt. Das Spiel läuft weiter, sobald du zurückkehrst, und es wird nur angehalten, wenn das Theme das anbietet und du seine Option einschaltest.
+
+### Português (Brasil)
+
+* **Menus fluidos com um jogo aberto:** Os temas podem pausar o jogo enquanto o menu deles está por cima, assim o menu fica fluido mesmo com um jogo pesado. O jogo volta assim que você retorna a ele, e só é pausado se o tema oferecer isso e você ativar a opção.
+
+### Français
+
+* **Des menus fluides avec un jeu ouvert :** Les thèmes peuvent mettre le jeu en pause tant que leur menu est par-dessus, pour que le menu reste fluide même avec un jeu exigeant. Le jeu reprend dès que tu y reviens, et il ne se met en pause que si le thème le propose et que tu actives son option.
 
 ## [0.83.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.1...panel-de-control-v0.83.0) (2026-11-04)
 
