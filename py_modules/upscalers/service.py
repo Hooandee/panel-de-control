@@ -385,7 +385,7 @@ class UpscalerService:
         fg_plan = _fg_plan(self.gpu, analysis, recipe, archive_asset.generation, choice.get("fg_route"))
         wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
         panel = {
-            **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+            **catalog.BASE_INI, **_live_reload(base_ini), **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
             **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
             **catalog.model_overrides(build, choice.get("model")),
             **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
@@ -592,7 +592,7 @@ class UpscalerService:
             raise UpscalerError("not_patched")
         installed = self._find(appid)
         if installed and games.running_under(installed.root, self.proc):
-            raise UpscalerError("running")
+            return self._configure_running(install, choice)
         if _is_helix(install) or install.get("engine") == "proton":
             install["options"] = _clean_options({**choice, "fg": "off"})
             self._save()
@@ -614,6 +614,30 @@ class UpscalerService:
         install["options"] = _clean_options(choice)
         self._save()
         return {"options": install["options"]}
+
+    def _configure_running(self, install: dict, choice: dict) -> dict:
+        """Quality and sharpness while the game runs: written to the INI and, when the installed OptiScaler can
+        re-read them, applied at once; anything else waits for the game to close."""
+        current = _clean_options(install.get("options") or {})
+        wanted = _clean_options({**current, **choice})
+        if _is_helix(install) or install.get("engine") == "proton" or any(
+                wanted.get(k) != current.get(k) for k in ("fg", "fg_route", "model")):
+            raise UpscalerError("running")
+        path = Path(install["target"]) / "OptiScaler.ini"
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raise UpscalerError("broken") from None
+        path.write_text(ini.apply(text, _option_overrides(choice, reset=True)), encoding="utf-8")
+        install["options"] = wanted
+        self._save()
+        live = ini.read(text, RELOAD_SETTING) == RELOAD_KEY
+        if live:
+            try:
+                self.press("reload")
+            except keys.HotkeyError:
+                live = False
+        return {"options": install["options"], "live": live}
 
     # ---- another tool's install --------------------------------------------------------------
     def adopt_foreign(self, appid: str) -> dict:
@@ -984,6 +1008,15 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
     if stale:
         result["env"] = {**stale, **result.get("env", {})}
     return result
+
+
+RELOAD_SETTING = "Menu.ReloadScaleShortcutKey"
+RELOAD_KEY = "0x91"  # VK_SCROLL: no game is expected to need Scroll Lock
+
+
+def _live_reload(base_ini: str) -> dict[str, str]:
+    """Scroll Lock re-reads scale and sharpness, on OptiScaler builds whose INI offers the setting."""
+    return {RELOAD_SETTING: RELOAD_KEY} if ini.read(base_ini, RELOAD_SETTING) is not None else {}
 
 
 def _recipe_proxy(recipe) -> str | None:

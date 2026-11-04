@@ -1246,3 +1246,38 @@ def test_appimage_shortcut_on_the_desktop_is_a_linux_game_not_the_desktop_folder
     with pytest.raises(UpscalerError):
         service.install(str(shortcut_id), {"build": "fsr-test"})
     assert not (desktop / "HelixSR/setup/dxgi.dll").exists()
+
+
+def _running(proc, game):
+    _write(proc / "4242/cmdline", f"Z:{game}/bin/x64_dx12/witcher3.exe".replace("/", "\\"))
+
+
+def test_quality_changes_while_running_reload_live_on_builds_that_can(steam, fake_catalog, proc):
+    home, game = steam
+    unpacked_ini = next(Path(fake_catalog).rglob("OptiScaler.ini"), None)
+    service = _service(steam, fake_catalog, proc)
+    pressed = []
+    service.press = pressed.append
+    service.install(APPID, {"build": "fsr-test"})
+    target = Path(service.game(APPID)["install"]["target"])
+    _write(target / "OptiScaler.ini", (target / "OptiScaler.ini").read_text() + "[Menu]\nReloadScaleShortcutKey=0x91\n")
+    _running(proc, game)
+    result = service.configure(APPID, {"build": "fsr-test", "quality": "performance", "sharpness": "high"})
+    assert result["live"] is True and pressed == ["reload"]
+    text = (target / "OptiScaler.ini").read_text()
+    assert ini.read(text, "QualityOverrides.QualityRatioOverrideEnabled") == "true"
+    with pytest.raises(UpscalerError, match="running"):
+        service.configure(APPID, {"build": "fsr-test", "quality": "quality", "sharpness": "soft", "fg": "on"})
+
+
+def test_quality_changes_while_running_wait_for_restart_on_older_builds(steam, fake_catalog, proc):
+    home, game = steam
+    service = _service(steam, fake_catalog, proc)
+    pressed = []
+    service.press = pressed.append
+    service.install(APPID, {"build": "fsr-test"})
+    assert "Menu.ReloadScaleShortcutKey" not in service.game(APPID)["install"]["managed"]
+    _running(proc, game)
+    result = service.configure(APPID, {"build": "fsr-test", "quality": "balanced", "sharpness": "soft"})
+    assert result["live"] is False and pressed == []
+    assert service.game(APPID)["install"]["options"]["quality"] == "balanced"

@@ -1,7 +1,8 @@
 """A short-lived virtual keyboard for OptiScaler's in-game hotkeys on handhelds without a keyboard.
 
 OptiScaler only listens to keys: Insert opens its menu, End toggles frame generation, Page Up shows
-its FPS counter and Page Down cycles the counter's style. Gamescope
+its FPS counter, Page Down cycles the counter's style and, on builds with ReloadScaleShortcutKey,
+Scroll Lock re-reads the scale and sharpness settings. Gamescope
 picks up a new uinput keyboard like a plugged-in one, so the device lives just long enough to be
 enumerated, press the key and go away.
 """
@@ -13,7 +14,7 @@ import time
 
 UINPUT = "/dev/uinput"
 EV_SYN, EV_KEY, SYN_REPORT = 0x00, 0x01, 0x00
-KEYS = {"menu": 110, "fg": 107, "fps": 104, "fps_style": 109, "home": 102}  # INSERT, END, PAGEUP, PAGEDOWN, HOME
+KEYS = {"menu": 110, "fg": 107, "fps": 104, "fps_style": 109, "home": 102, "reload": 70}  # INSERT, END, PAGEUP, PAGEDOWN, HOME, SCROLLLOCK
 UI_SET_EVBIT = 0x40045564
 UI_SET_KEYBIT = 0x40045565
 UI_DEV_CREATE = 0x5501

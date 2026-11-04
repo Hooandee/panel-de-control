@@ -425,6 +425,8 @@ export const ptBR: Record<string, string> = {
   "up.wiki.applied": "Aplicado: {setting}",
   "up.wiki.applyFailed": "Não foi possível aplicar esse ajuste no OptiScaler.ini deste jogo",
   "up.wiki.open": "Abrir a ficha na wiki",
+  "up.live.appliedNow": "Aplicado com o jogo aberto",
+  "up.live.appliedNext": "Salvo: vale na próxima vez que você abrir o jogo",
   "up.bulk.title": "Vários jogos",
   "up.bulk.install": "Instalar nos compatíveis ({count})",
   "up.bulk.update": "Passar para a recomendada ({count})",

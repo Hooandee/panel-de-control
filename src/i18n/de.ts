@@ -425,6 +425,8 @@ export const de: Record<string, string> = {
   "up.wiki.applied": "Gesetzt: {setting}",
   "up.wiki.applyFailed": "Diese Einstellung ließ sich nicht in die OptiScaler.ini dieses Spiels schreiben",
   "up.wiki.open": "Wiki-Eintrag öffnen",
+  "up.live.appliedNow": "Im laufenden Spiel übernommen",
+  "up.live.appliedNext": "Gespeichert: gilt beim nächsten Start des Spiels",
   "up.bulk.title": "Mehrere Spiele",
   "up.bulk.install": "Auf kompatiblen installieren ({count})",
   "up.bulk.update": "Auf empfohlene wechseln ({count})",

@@ -425,6 +425,8 @@ export const it: Record<string, string> = {
   "up.wiki.applied": "Applicata: {setting}",
   "up.wiki.applyFailed": "Impossibile applicare questa impostazione all'OptiScaler.ini di questo gioco",
   "up.wiki.open": "Apri la scheda del wiki",
+  "up.live.appliedNow": "Applicato a gioco avviato",
+  "up.live.appliedNext": "Salvato: si applica la prossima volta che apri il gioco",
   "up.bulk.title": "Più giochi",
   "up.bulk.install": "Installa sui compatibili ({count})",
   "up.bulk.update": "Passa alla consigliata ({count})",

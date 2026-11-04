@@ -59,6 +59,7 @@ export const GameView: FC<{
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const [message, setMessage] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult | null>(null);
+  const [applied, setApplied] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
@@ -176,8 +177,10 @@ export const GameView: FC<{
   const apply = async () => {
     if (install && sameBuild) {
       setMessage(null);
+      setApplied(null);
       try {
-        await configureUpscaler(appid, choice);
+        const result = await configureUpscaler(appid, choice);
+        if (gameRunning) setApplied(t(result.live ? "up.live.appliedNow" : "up.live.appliedNext"));
         await load();
         onChanged();
       } catch (error) {
@@ -343,6 +346,7 @@ export const GameView: FC<{
       )}
       {running && job && <Progress job={job} />}
       {message && <Note tone="warn">{message}</Note>}
+      {applied && !message && <Note>{applied}</Note>}
       {!running && job?.state === "error" && job.kind === "install" && RETRYABLE.has(job.error ?? "") && (
         <Row><ActionButton label={t("up.retry")} onPress={reinstall} /></Row>
       )}
