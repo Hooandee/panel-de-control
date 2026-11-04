@@ -19,6 +19,7 @@ export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
 const IN_GAME_KEY = "pdc:upscalers:inGame";
 const START_MS = 6000;
 const LIVE_POLL_MS = 5000;
+const OVERVIEW_RETRY_MS = [2000, 5000, 15000, 30000, 60000];
 const STYLE_ID = "pdc-up-cover-style";
 const HOST_ID = "pdc-up-ingame";
 const COVER_IMAGE = /\/(?:assets|customimages|apps)\/(\d+)(?:\/|p\.|\.)/;
@@ -128,8 +129,17 @@ function appidOf(src: string): string | null {
   return src.match(COVER_IMAGE)?.[1] ?? null;
 }
 
+/**
+ * Where the pill goes: the box wrapping the image itself. Steam and the themes lift the focused tile with a
+ * z-index on an inner wrapper, so a pill on an outer wrapper ends up underneath it.
+ */
+export function hostOf(img: HTMLImageElement, tile: HTMLElement): HTMLElement {
+  const parent = img.parentElement;
+  return parent && tile.contains(parent) ? parent : tile;
+}
+
 /** The visible tile an image belongs to: its ancestors while they stay the image's size, as every theme wraps art. */
-function tileOf(img: HTMLImageElement): HTMLElement | null {
+export function tileOf(img: HTMLImageElement): HTMLElement | null {
   const box = img.getBoundingClientRect();
   let tile: HTMLElement | null = img.parentElement;
   if (!tile) return null;
@@ -148,12 +158,12 @@ function isRound(tile: HTMLElement, view: Window): boolean {
   return radius.endsWith("%") ? parseFloat(radius) >= 35 : parseFloat(radius) >= tile.getBoundingClientRect().width * 0.35;
 }
 
-function placeBadge(tile: HTMLElement, badge: Badge, view: Window): void {
-  let node = tile.querySelector<HTMLElement>(`:scope > .${BADGE_CLASS}`);
+function placeBadge(host: HTMLElement, tile: HTMLElement, badge: Badge, view: Window): void {
+  let node = host.querySelector<HTMLElement>(`:scope > .${BADGE_CLASS}`);
   if (!node) {
-    node = tile.ownerDocument.createElement("span");
+    node = host.ownerDocument.createElement("span");
     node.className = BADGE_CLASS;
-    tile.appendChild(node);
+    host.appendChild(node);
   }
   const width = tile.getBoundingClientRect().width;
   const small = width < 150;
@@ -166,8 +176,8 @@ function placeBadge(tile: HTMLElement, badge: Badge, view: Window): void {
   if (node.getAttribute("data-state") !== badge.state) node.setAttribute("data-state", badge.state);
   if (node.getAttribute("data-size") !== (small ? "s" : "m")) node.setAttribute("data-size", small ? "s" : "m");
   const style = view.getComputedStyle(tile);
-  if (style.position === "static" && tile.getAttribute(HOST_ATTR) !== "relative") tile.setAttribute(HOST_ATTR, "relative");
-  else if (!tile.hasAttribute(HOST_ATTR)) tile.setAttribute(HOST_ATTR, "own");
+  if (view.getComputedStyle(host).position === "static" && host.getAttribute(HOST_ATTR) !== "relative") host.setAttribute(HOST_ATTR, "relative");
+  else if (!host.hasAttribute(HOST_ATTR)) host.setAttribute(HOST_ATTR, "own");
   // Keep the pill inside rounded corners, whatever radius the theme gives its tiles; on round tiles it sits at the bottom.
   const radius = parseFloat(style.borderTopLeftRadius) || 0;
   const round = isRound(tile, view);
@@ -200,6 +210,7 @@ export const CoverBadges: FC = () => {
       pending = 0;
       const limit = view.innerWidth * 0.6;
       const marked = new Set<Element>();
+      const hosts = new Set<Element>();
       for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src*='/assets/'], img[src*='/customimages/'], img[src*='/apps/']"))) {
         const appid = appidOf(img.src);
         if (!appid || NOT_TILE.test(img.src)) continue;
@@ -211,10 +222,12 @@ export const CoverBadges: FC = () => {
         const badge = map[appid];
         if (!badge) continue;
         marked.add(tile);
-        placeBadge(tile, badge, view);
+        const host = hostOf(img, tile);
+        hosts.add(host);
+        placeBadge(host, tile, badge, view);
       }
       for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
-        if (node.parentElement && !marked.has(node.parentElement)) clearBadge(node.parentElement);
+        if (node.parentElement && !hosts.has(node.parentElement)) clearBadge(node.parentElement);
       }
     };
     const schedule = () => {
@@ -362,8 +375,19 @@ export const InGameBadge: FC = () => {
 export function startUpscalerOverlays(): () => void {
   const covers = registerGlobal("PanelDeControlUpscalerCovers", CoverBadges);
   const inGame = registerGlobal("PanelDeControlUpscalerInGame", InGameBadge);
-  getUpscalersOverview().then(publishOverview).catch(() => undefined);
+  let stopped = false;
+  let retry = 0;
+  const load = (attempt: number) => {
+    getUpscalersOverview().then((overview) => { if (!stopped) publishOverview(overview); }).catch(() => {
+      // Right after Steam starts the backend may not answer yet; covers would stay blank until Escaladores opened.
+      if (stopped) return;
+      retry = window.setTimeout(() => load(attempt + 1), OVERVIEW_RETRY_MS[Math.min(attempt, OVERVIEW_RETRY_MS.length - 1)]);
+    });
+  };
+  load(0);
   return () => {
+    stopped = true;
+    window.clearTimeout(retry);
     inGame();
     covers();
   };
