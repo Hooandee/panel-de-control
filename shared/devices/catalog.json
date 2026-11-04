@@ -282,6 +282,33 @@
       "vendor": "amd"
     },
     {
+      "chip": "Intel Arc G3 Extreme",
+      "display_name": "MSI Claw 8 EX AI+",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "MS-1T91"
+          ],
+          "product_name": null,
+          "sys_vendor": "Micro-Star International Co., Ltd."
+        }
+      ],
+      "experimental": true,
+      "key": "msi_claw_8_ex_ai_plus",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 17,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 8,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "intel"
+    },
+    {
       "chip": "Intel Core Ultra 7 258V",
       "display_name": "MSI Claw 8 AI+",
       "dmi_matches": [],

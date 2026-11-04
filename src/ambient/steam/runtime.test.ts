@@ -171,6 +171,47 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it("My music replaces a saved radio queue with local songs and pauses only while playing a game", async () => {
+    const configured = settings();
+    configured.music.enabled = true;
+    configured.music.source = "radio";
+    configured.music.inGameMediaLevel = 0;
+    configured.music.queue = [{ id: "remote:https://s.test/live", url: "https://s.test/live", title: "Radio", subtitle: "", art: "", kind: "audio", live: true }];
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.scanAmbientSources.mockResolvedValue({ collections: {}, music: [
+      { id: "local:song", name: "Song.mp3", kind: "audio" },
+      { id: "local:other", name: "Other.mp3", kind: "audio" },
+    ], truncated: false });
+    rpcMock.getAmbientMediaUrl.mockImplementation(async (id: string) => `http://127.0.0.1:1/m/t/${id}`);
+    audioStub();
+    const p = ports();
+    const runtime = new AmbientRuntime(p as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.waitFor(() => expect(runtime.getSnapshot().player.track?.live).toBe(true));
+      // Same selection sequence as the visible My music tile.
+      await runtime.updateSettings((s) => ({ ...s, music: { ...s.music, source: "music", enabled: true } }));
+      await runtime.playMyMusic();
+      expect(runtime.getSnapshot().player.queue.map((q) => q.track.id)).toEqual(["local:song", "local:other"]);
+      expect(runtime.getSnapshot().player.status).toBe("playing");
+      p.fireGame({ appid: "1", liveAppid: 1, name: "g" });
+      expect(runtime.getSnapshot().player.status).toBe("paused");
+      p.fireGame(null);
+      expect(runtime.getSnapshot().player.status).toBe("playing");
+    } finally { runtime.stop(); }
+  });
+
+  it("My music applies the saved volume when starting from a disabled empty queue", async () => {
+    const { runtime, audio } = await libraryFixture();
+    try {
+      await runtime.updateSettings((s) => ({ ...s, music: { ...s.music, volume: 0.23, videoOn: false } }));
+      await runtime.playMyMusic();
+      expect(runtime.getSnapshot().player.track?.id).toBe("local:song");
+      expect(audio.volume).toBe(0.23);
+      expect(runtime.getSnapshot().player.video).toBe(false);
+    } finally { runtime.stop(); }
+  });
+
   it("a paused queue comes back paused, ready to resume, after a restart", async () => {
     const configured = settings();
     configured.music.enabled = false;
@@ -657,6 +698,10 @@ describe("AmbientRuntime", () => {
   });
 
   it("a game resting selected on Home plays its trailer as the background, capped to a light rendition", async () => {
+    // Keep the player URL observable without issuing real loopback requests in happy-dom.
+    const frameUrls = new WeakMap<HTMLIFrameElement, string>();
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(function (this: HTMLIFrameElement, value: string) { frameUrls.set(this, value); });
+    vi.spyOn(HTMLIFrameElement.prototype, "src", "get").mockImplementation(function (this: HTMLIFrameElement) { return frameUrls.get(this) ?? ""; });
     document.body.innerHTML = '<div class="h-BasicHome"><section></section><div class="h-RecentGamesContainer"><img src="https://steamloopback.host/assets/1145360/library_hero_blur.jpg?c=0"></div></div>';
     rpcMock.getAmbientGameMedia.mockResolvedValue({ trailer: { url: "https://video.akamai.steamstatic.com/a.m3u8", poster: "", title: "" }, theme: null });
     const trailers = settings();
@@ -674,6 +719,10 @@ describe("AmbientRuntime", () => {
     expect(url.searchParams.get("maxh")).toBe("360");
     expect(url.searchParams.get("vol")).toBe("0");
     expect(rpcMock.getAmbientGameMedia).toHaveBeenCalledWith("1145360", expect.any(String), true);
+    frame.dispatchEvent(new Event("error"));
+    await vi.waitFor(() => expect(rpcMock.recordAmbientEvent).toHaveBeenCalledWith(
+      "playback_error", "background page error; attempt=1; retrying=true",
+    ));
     await runtime.updateSettings((s) => ({ ...s, background: { ...s.background, enabled: false } }));
     await vi.waitFor(() => expect(document.querySelector("#pdc-ambient-layer iframe")).toBeNull());
     expect(runtime.getSnapshot().state?.settings.background.gameTrailers).toBe(true);
@@ -805,7 +854,16 @@ describe("AmbientRuntime", () => {
     document.head.appendChild(style);
     const painter = document.createElement("div");
     painter.className = "h-ScrollArea";
-    painter.style.backgroundImage = "linear-gradient(red, blue)";
+    style.textContent = ".h-ScrollArea { background-image: linear-gradient(red, blue) }";
+    // happy-dom ignores sheet.disabled in its cascade; model that browser boundary.
+    const sheet = style.sheet!;
+    const readStyle = window.getComputedStyle.bind(window);
+    const styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+      const computed = readStyle(element, pseudo);
+      return element === painter && sheet.disabled
+        ? new Proxy(computed, { get: (target, key) => key === "backgroundImage" ? "none" : Reflect.get(target, key, target) })
+        : computed;
+    });
     painter.getBoundingClientRect = () => ({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => ({}) });
     document.body.appendChild(painter);
     const p = ports();
@@ -816,6 +874,7 @@ describe("AmbientRuntime", () => {
     await vi.waitFor(() => expect(runtime.getSnapshot().decision.conflict?.kind).toBe("other"), { timeout: 2000 });
     expect(p.notify).toHaveBeenCalledTimes(1);
     runtime.stop();
+    styleSpy.mockRestore();
     style.remove();
     painter.remove();
   });

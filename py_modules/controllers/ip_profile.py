@@ -51,6 +51,9 @@ DEVICE_BUTTONS = {
     "msi_claw_a8": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
+    "msi_claw_8_ex_ai_plus": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
     "zotac_gaming_zone": [
         ("LeftPaddle1", "L"), ("RightPaddle1", "R"),
     ],

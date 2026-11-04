@@ -1,3 +1,4 @@
+import { cleanerForceSession } from "./cleaner/forceSession";
 import { artworkImages, artworkGameTitle } from "./themes/artworkImages";
 import { listInstalledGames } from "./launch/steamApi";
 import { artworkAccess, configureArtworkHost, startArtworkHydration, registerArtworkEditor, getGeneralArtwork, getCustomArtwork, saveArtwork } from "./themes/artworkClient";
@@ -28,6 +29,8 @@ import {
   getThemeStorage,
   setThemeStorage,
   forceCloseGame,
+  pauseThemeGame,
+  resumeThemeGame,
   prepareEarlyThemeInstall,
   prepareRemoteThemeInstall,
   recordThemeFailure,
@@ -108,6 +111,7 @@ const StandardPluginContent: FC<{
 );
 
 export default definePlugin(() => {
+  cleanerForceSession.acknowledged = false;
   const deckyHost = window;
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
@@ -230,7 +234,7 @@ export default definePlugin(() => {
     subscribeQamDocument: onQamDocument,
     ambient: ambientThemeChannel,
     storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
-    games: createThemeGamesAccess({ forceClose: forceCloseGame }),
+    games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame }),
     subscribePackageChanges: onThemePackagesChanged,
   });
   const stopAmbient = startAmbient({

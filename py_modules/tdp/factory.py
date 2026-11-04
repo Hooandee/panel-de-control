@@ -175,7 +175,13 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
             ),
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
             write_max_ac=device.experimental_tdp_max_ac,
-            sync_surfaces=device.key in ("onexplayer_3", "desktop_pc"),
+            sync_surfaces=True,
+            # The desktop power coordinator captures and restores its own baseline.
+            baseline_path=(
+                None
+                if device.key == "desktop_pc"
+                else _runtime_lock_path(root, "intel-rapl-baseline.lock")
+            ),
         )
 
     def deck():
@@ -239,6 +245,10 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         # AMD desktop CPUs have no verifiable power path (ryzenadj reports success
         # without readback, AMD RAPL can confirm a write it ignores).
         return [intel] if desktop_cpu else []
+    if key == "msi_claw_8_ex_ai_plus":
+        # msi-wmi-platform echoes PL1/PL2 writes on this board while RAPL keeps the
+        # firmware limits, so RAPL leads and firmware stays the fallback.
+        return [intel, msi]
     if device.vendor == "intel":
         return [msi, intel]
     if key == "steam_machine":

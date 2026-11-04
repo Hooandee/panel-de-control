@@ -27,6 +27,8 @@ import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import decky_socket_guard
 import device_registry
+import device_tree
+import game_freeze
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
 from gamescope_stats import GamescopeStats
@@ -167,6 +169,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
+from steam_inventory_compat import SteamInventoryCompat
 from kiosk.rpc import plugin_dispatch, public_rpc_methods
 from kiosk import steam_game as kiosk_steam_game
 from kiosk import vitals as kiosk_vitals
@@ -245,6 +248,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
         ("_support_theme_storage", None),
+        ("_support_steam_inventory", None),
     ),
     "settings": (("_support_settings_state", None),),
 }
@@ -1179,9 +1183,9 @@ class Plugin(AmbientRpc):
         self._init()
         return await self._offload_steam_cleaner("inventory")
 
-    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str], force_entry_ids: list[str] | None = None) -> dict:
         self._init()
-        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids, force_entry_ids)
 
     async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
         self._init()
@@ -1442,6 +1446,43 @@ class Plugin(AmbientRpc):
             await asyncio.wait_for(kiosk.shutdown(), _KIOSK_STOP_TIMEOUT_S)
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("Kiosk shutdown incomplete: %s", error)
+
+    def _game_freezer(self) -> game_freeze.GameFreezer:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is None:
+            freezer = game_freeze.GameFreezer(
+                schedule=asyncio.get_running_loop().call_later,
+                cancel=lambda handle: handle.cancel(),
+                on_change=self._game_freeze_changed,
+            )
+            self._freezer = freezer
+        return freezer
+
+    def _game_freeze_changed(self, event: str, fields: dict) -> None:
+        decky.logger.info("Game %s (%s, %s processes)", event, fields.get("appid"), fields.get("processes"))
+        diary = journal.active
+        if diary is not None:
+            diary.write("INFO", "games", event, **fields)
+
+    async def pause_theme_game(self, appid, ms) -> bool:
+        """A theme's menus are over the running game: it freezes until `ms` from now (game_freeze), renewed by
+        calling again. Shortcut ids come as decimal strings."""
+        self._init()
+        # Validated on x86 handhelds only: on ARM the game runs under FEX and its process tree is unverified.
+        if getattr(self, "_freeze_on_arm", None) is None:
+            self._freeze_on_arm = device_tree.is_arm()
+        if self._freeze_on_arm:
+            return False
+        try:
+            return self._game_freezer().pause(appid, ms)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Game freeze failed (%s)", type(error).__name__)
+            return False
+
+    async def resume_theme_game(self) -> None:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is not None:
+            freezer.resume()
 
     async def get_proton_caps(self, compat_name: str = "") -> dict:
         """Which launch-option vars the installed Proton build supports."""
@@ -14232,6 +14273,26 @@ class Plugin(AmbientRpc):
         )
         log("Lifecycle transition %s", encoded)
 
+    def _support_steam_inventory(self) -> dict:
+        service = getattr(self, "_steam_inventory_compat", None)
+        return service.state() if service is not None else {"status": "stopped"}
+
+    def _start_steam_inventory_compat(self) -> None:
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_inventory_compat", None) is not None:
+            return
+
+        def report(event: dict) -> None:
+            if journal.active is not None:
+                journal.active.write("INFO", "steam_inventory", "compatibility", **event)
+
+        self._steam_inventory_compat = SteamInventoryCompat(journal=report)
+        self._steam_inventory_compat.start()
+
+    async def _stop_steam_inventory_compat(self) -> None:
+        service = getattr(self, "_steam_inventory_compat", None)
+        if service is not None:
+            await service.stop()
+
     async def _main(self) -> None:
         try:
             await self._startup()
@@ -14325,6 +14386,7 @@ class Plugin(AmbientRpc):
             self._start_auto_loop()
             self._start_audio_loop()
             self._start_support_watch()
+            self._start_steam_inventory_compat()
             self._kiosk_task = asyncio.create_task(self._kiosk.supervise())
             if self._developer_options_on() and self._settings.get("remote_access_enabled"):
                 await self._remote_access.set_enabled(True)
@@ -14345,6 +14407,9 @@ class Plugin(AmbientRpc):
         self._stop_pulse()
         self._prepare_shutdown()
         stage("prepared")
+        # A frozen game never outlives Panel.
+        if getattr(self, "_freezer", None) is not None:
+            self._freezer.resume()
         if getattr(self, "_screen_sleep", None) is not None:
             if self._eco_watch_task is not None:
                 self._eco_watch_task.cancel()
@@ -14366,6 +14431,8 @@ class Plugin(AmbientRpc):
         finally:
             self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
+        stage("inventory")
         decky.logger.info("Panel de Control unloaded")
         self._stop_journal()
 
@@ -14847,6 +14914,7 @@ class Plugin(AmbientRpc):
                 self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
         finally:
             self._finish_theme_shutdown_sync()
+        await self._stop_steam_inventory_compat()
         decky.logger.info("Panel de Control uninstalled")
         self._stop_journal()
 
@@ -14855,7 +14923,7 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
-        "get_theme_storage", "set_theme_storage", "force_close_game",
+        "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),

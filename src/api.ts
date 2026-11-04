@@ -12,7 +12,7 @@ export const getVersion = callable<[], string>("get_version");
 export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
 export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
 export const prepareSteamCleaner = callable<[
-  scanId: string, entryIds: string[],
+  scanId: string, entryIds: string[], forceEntryIds?: string[],
 ], CleanerPlan>("prepare_steam_cleaner");
 export const executeSteamCleaner = callable<[
   planId: string, confirmCompatdata: boolean,
@@ -1351,3 +1351,7 @@ export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_re
 
 export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
+
+// A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
+export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
+export const resumeThemeGame = callable<[], void>("resume_theme_game");

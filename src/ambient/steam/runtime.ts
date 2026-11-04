@@ -210,7 +210,11 @@ export class AmbientRuntime {
     private readonly channel: AmbientThemeChannel = new AmbientThemeChannel(),
     private readonly signalSettleMs = SIGNAL_SETTLE_MS,
   ) {
-    this.layer = new BackgroundLayer(spDocument, (url, _w, height) => this.maybeOptimize(url, height));
+    this.layer = new BackgroundLayer(
+      spDocument,
+      (url, _w, height) => this.maybeOptimize(url, height),
+      (detail) => void rpc.recordAmbientEvent("playback_error", detail).catch(() => undefined),
+    );
     this.channel.setFrameSource(() => this.layer.activeMedia());
     this.player = new AmbientPlayer(
       undefined,
@@ -1043,9 +1047,15 @@ export class AmbientRuntime {
   }
 
   /** Music the user starts by choice, so the selected game's soundtrack stays out of its way. */
-  playMyMusic(): Promise<void> {
-    this.preferUserMusic();
-    return this.startMusic();
+  async playMyMusic(): Promise<void> {
+    if (this.librarySession) return;
+    const tracks = await this.musicTracks();
+    if (this.librarySession) return;
+    const settings = this.settings();
+    if (!settings) return;
+    this.player.setVolume(settings.music.volume);
+    this.player.setVideoMode(settings.music.videoOn);
+    this.playTracks(tracks);
   }
 
   async startMusic(): Promise<void> {

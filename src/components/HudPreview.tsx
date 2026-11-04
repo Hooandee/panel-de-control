@@ -112,6 +112,15 @@ const HudPreviewComponent: FC<{
                 </div>
               );
             }
+            if (r.kind === "graph") {
+              return <div key={r.key} style={{ flexShrink: 0, width: horizontal ? 75 : base * 10, color: textColor(sepColor) }}>
+                {!horizontal && !model.compact && <div style={{ fontSize: fonts.small, WebkitTextStroke: 0 }}>Frametime</div>}
+                <svg role="img" aria-label={t("hud.preview.graphExample")} viewBox="0 0 180 44" style={{ display: "block", width: "100%", height: horizontal ? base * 0.85 : 25 }}>
+                  <path d="M0 42H180" stroke={textColor(sepColor)} strokeOpacity="0.25" fill="none" />
+                  <polyline points="0,31 6,30 12,31 18,29 24,31 30,30 36,30 42,12 48,30 54,31 60,29 66,30 72,31 78,30 84,29 90,30 96,31 102,6 108,28 114,30 120,31 126,30 132,29 138,31 144,30 150,31 156,28 162,30 168,31 174,30 180,31" fill="none" stroke={textColor(r.color)} strokeWidth="1.5" />
+                </svg>
+              </div>;
+            }
             if (r.kind === "group") {
               return (
                 <div key={r.key} style={{ display: "flex", gap: 6, whiteSpace: "nowrap" }}>

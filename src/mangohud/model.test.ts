@@ -399,3 +399,18 @@ describe("catalog + presets + groups", () => {
     expect(matchingPresetKey(metrics("gpu", "fps"), presets)).toBeNull();
   });
 });
+
+describe("frametime graph", () => {
+  it("is opt-in and independent of the numeric frametime and FPS", () => {
+    expect(DEFAULT_MODEL.items).not.toContainEqual({ kind: "metric", id: "frame_timing" });
+    const items = addMetricItem([], "frame_timing");
+    expect(items).toEqual([{ kind: "metric", id: "frame_timing" }]);
+    expect(addMetricItem(items, "frame_timing")).toEqual(items);
+    expect(toggleMetricItem(items, "frame_timing")).toEqual([]);
+  });
+  it("keeps graph order and uses the existing frametime colour", () => {
+    const model = { ...DEFAULT_MODEL, colors: { ...DEFAULT_MODEL.colors, frametime: "123456" }, items: metrics("fps", "frame_timing", "gpu") };
+    expect(previewRows(model).map(row => row.kind)).toEqual(["line", "graph", "group"]);
+    expect(previewRows(model)[1]).toMatchObject({ kind: "graph", color: "#123456" });
+  });
+});

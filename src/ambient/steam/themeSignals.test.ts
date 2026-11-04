@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./steamClasses", () => ({ steamClass: (key: string) => `h-${key}` }));
 
@@ -14,9 +14,25 @@ function surface(key: string, style: Partial<CSSStyleDeclaration>) {
   return el;
 }
 
+function loaderStyle(css: string) {
+  const style = document.createElement("style");
+  style.className = "css-loader-style";
+  style.textContent = css;
+  document.head.append(style);
+  let disabled = false;
+  // happy-dom does not apply CSSStyleSheet.disabled to the cascade; emulate that browser boundary.
+  Object.defineProperty(style.sheet!, "disabled", {
+    get: () => disabled,
+    set: (value: boolean) => { disabled = value; style.textContent = value ? "" : css; },
+  });
+  return style;
+}
+
 describe("theme signals", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     document.body.innerHTML = "";
+    document.head.innerHTML = "";
     document.documentElement.removeAttribute("style");
   });
 
@@ -38,19 +54,61 @@ describe("theme signals", () => {
   });
 
   it("one large painted surface is a confident third party", () => {
-    surface("ScrollArea", { backgroundImage: "linear-gradient(red, blue)" });
+    surface("ScrollArea", {});
+    loaderStyle(".h-ScrollArea { background-image: linear-gradient(red, blue) }");
     expect(detectThirdParty(document, true)).toEqual({ confidence: "high", id: "css:ScrollArea", candidates: ["css:ScrollArea"] });
   });
 
+  it("does not blame native backgrounds on cosmetic CSS Loader styles", () => {
+    surface("BackgroundGlass", { backgroundImage: "linear-gradient(black, gray)" });
+    const style = document.createElement("style");
+    style.className = "css-loader-style";
+    style.textContent = ".volume-label { display: none }";
+    document.head.append(style);
+    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
+    expect(style.sheet?.disabled).not.toBe(true);
+  });
+
   it("translucent surfaces are not painters", () => {
-    surface("ScrollArea", { backgroundColor: "rgba(0, 0, 0, 0.3)" });
+    surface("ScrollArea", {});
+    loaderStyle(".h-ScrollArea { background-color: rgba(0, 0, 0, 0.3) }");
     expect(detectThirdParty(document, true)).toEqual({ confidence: "none" });
   });
 
   it("several painters are ambiguous", () => {
-    surface("ScrollArea", { backgroundImage: "linear-gradient(red, blue)" });
-    surface("GamepadLibrary", { backgroundColor: "rgb(10, 10, 10)" });
+    surface("ScrollArea", {});
+    surface("GamepadLibrary", {});
+    loaderStyle(".h-ScrollArea { background-image: linear-gradient(red, blue) } .h-GamepadLibrary { background-color: rgb(10, 10, 10) }");
     expect(detectThirdParty(document, true).confidence).toBe("low");
+  });
+
+  it("ignores loader rules that leave the native background unchanged", () => {
+    surface("BackgroundGlass", { backgroundColor: "rgb(10, 10, 10)" });
+    loaderStyle(".h-BackgroundGlass { background-color: rgb(10, 10, 10) }");
+    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
+  });
+
+  it("does not enable a loader stylesheet that was already disabled", () => {
+    surface("ScrollArea", {});
+    const style = loaderStyle(".h-ScrollArea { background: red }");
+    const sheet = style.sheet!;
+    sheet.disabled = true;
+    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
+    expect(sheet.disabled).toBe(true);
+  });
+
+  it("restores loader styles and stays uncertain if a baseline style cannot be read", () => {
+    surface("ScrollArea", {});
+    const style = loaderStyle(".h-ScrollArea { background: red }");
+    const sheet = style.sheet!;
+    const read = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+      if (sheet.disabled) throw new Error("style unavailable");
+      return read(element, pseudo);
+    });
+    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
+    expect(sheet.disabled).toBe(false);
+    expect(style.textContent).toContain("background: red");
   });
 
   it("neutralizes only chosen painters, scoped to Panel owning the background", () => {

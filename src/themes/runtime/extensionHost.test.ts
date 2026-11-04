@@ -451,6 +451,37 @@ describe("ThemeExtensionRuntimeHost", () => {
     host.dispose();
   });
 
+  it("lets a theme freeze the game and thaws it when the theme goes", async () => {
+    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) };
+    const mountWith = (use: (context: ThemeExtensionMountContext) => void) => new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      games,
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          use(context);
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    let seen: ThemeExtensionMountContext["games"];
+    const idle = mountWith((context) => { seen = context.games; });
+    idle.reconcile(snapshot());
+    await settle();
+    expect(Object.isFrozen(seen)).toBe(true);
+    idle.dispose();
+    expect(games.resume).not.toHaveBeenCalled();
+
+    const pausing = mountWith((context) => { void context.games?.pause(400); });
+    pausing.reconcile(snapshot());
+    await settle();
+    expect(games.pause).toHaveBeenCalledWith(400);
+    pausing.dispose();
+    expect(games.resume).toHaveBeenCalledTimes(1);
+  });
+
   it("exposes a frozen navigation channel to ABI-v2 themes", async () => {
     const stopCapture = vi.fn();
     const navigation = {
@@ -943,7 +974,7 @@ describe("theme storage", () => {
   });
 
   it("offers game controls only when Panel provides them", async () => {
-    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const) });
+    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) });
     let seen: ThemeExtensionMountContext | undefined;
     const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
     host.reconcile(snapshot());
