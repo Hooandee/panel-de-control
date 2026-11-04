@@ -169,6 +169,11 @@ DEVICE_TABLE = (
                   charger_only_extra=True),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
                   5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
+    # Before the Claw 8 AI+: its "Claw 8" needle also matches this product name.
+    DeviceProfile("msi_claw_8_ex_ai_plus", "MSI Claw 8 EX AI+", "Intel Arc G3 Extreme", "intel",
+                  8, 17, 35, 35,
+                  dmi_matches=(DmiMatch(None, "Micro-Star International Co., Ltd.", ("MS-1T91",)),),
+                  experimental=True),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
                   8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
