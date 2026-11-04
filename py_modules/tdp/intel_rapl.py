@@ -429,7 +429,7 @@ class IntelRaplBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "intel-rapl powercap not present")
         if self._owned_payload is not None or self._runtime_lock_payload is not None:
-            if not self.release():
+            if not self._release_auto_state():
                 return TdpResult(
                     watts,
                     self.read_applied(),
@@ -558,14 +558,30 @@ class IntelRaplBackend(TDPBackend):
             return False
         return self._baseline_lock.clear()
 
-    def release(self):
+    def diagnostics(self) -> dict:
+        def watts(values):
+            return {
+                name: None if value is None else round(value / 1_000_000)
+                for name, value in values.items()
+            }
+
+        baseline = self._baseline_lock.load_payload()
+        return {
+            "pl1_surfaces": watts({
+                os.path.basename(d): self._read_int(self._pl1_path(d))
+                for d in self._pl1_dirs
+            }),
+            "firmware_pl1_w": watts(baseline["pl1_uw"]) if baseline else None,
+        }
+
+    def _release_auto_state(self):
         if self._runtime_lock_payload is not None:
             recovered = self._restore_payload("transaction")
             if not recovered["ok"]:
                 return False
         if self._owned_payload is None:
-            if self._ownership_recovery_pending:
-                return False
-        elif not self._restore_payload("ownership")["ok"]:
-            return False
-        return self._restore_baseline()
+            return not self._ownership_recovery_pending
+        return bool(self._restore_payload("ownership")["ok"])
+
+    def release(self):
+        return self._release_auto_state() and self._restore_baseline()

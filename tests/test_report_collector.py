@@ -1434,3 +1434,25 @@ def test_sysfs_snapshot_shows_cpu_boost_and_vendor_platform_drivers(tmp_path):
     assert cpu["cpufreq"][0]["current_khz"] == "3500000"
     assert cpu["cpufreq"][0]["boost_khz"] == "3500000 3400000 3300000"
     assert snap["platform"] == {"drivers": [{"name": "ps5-fan", "devices": ["ps5-fan"]}], "misc": ["ps5_buzzer"]}
+
+
+def test_sysfs_snapshot_measures_rapl_package_power(tmp_path, monkeypatch):
+    # PDC-CKHF: a limit the package ignored was only provable with real watts.
+    rapl = os.path.join(
+        str(tmp_path),
+        "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0",
+    )
+    _mk(os.path.join(rapl, "name"), "package-0\n")
+    _mk(os.path.join(rapl, "constraint_0_power_limit_uw"), "30000000\n")
+    _mk(os.path.join(rapl, "energy_uj"), "999000000\n")
+    _mk(os.path.join(rapl, "max_energy_range_uj"), "1000000000\n")
+
+    def elapse(seconds):
+        assert seconds == report_collector._RAPL_SAMPLE_S
+        _mk(os.path.join(rapl, "energy_uj"), "19000000\n")
+
+    monkeypatch.setattr(report_collector, "_sleep", elapse)
+
+    surfaces = sysfs_snapshot(root=str(tmp_path))["cpu_gpu_power"]["rapl"]
+
+    assert surfaces[0]["package_w"] == round(20 / report_collector._RAPL_SAMPLE_S, 1)

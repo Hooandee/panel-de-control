@@ -538,3 +538,17 @@ def test_release_without_manual_writes_leaves_firmware_untouched(tmp_path):
 
     assert backend.release() is True
     assert _read_uw(mmio, 0) == 33_000_000
+
+
+def test_diagnostics_show_driven_surfaces_and_recorded_firmware_pl1(tmp_path):
+    _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=25_000_000)
+    backend = _baseline_backend(tmp_path)
+    assert backend.diagnostics()["firmware_pl1_w"] is None
+
+    backend.set_tdp(12, False)
+
+    assert backend.diagnostics() == {
+        "pl1_surfaces": {"intel-rapl-mmio:0": 12, "intel-rapl:0": 12},
+        "firmware_pl1_w": {"intel-rapl-mmio:0": 40, "intel-rapl:0": 25},
+    }
