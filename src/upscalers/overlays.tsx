@@ -135,7 +135,11 @@ function appidOf(src: string): string | null {
  */
 export function hostOf(img: HTMLImageElement, tile: HTMLElement): HTMLElement {
   const parent = img.parentElement;
-  return parent && tile.contains(parent) ? parent : tile;
+  if (!parent || !tile.contains(parent)) return tile;
+  // A wrapper taller or wider than the tile is cropped by it (Eclipse's orbs): the pill would fall outside.
+  const inner = parent.getBoundingClientRect();
+  const outer = tile.getBoundingClientRect();
+  return inner.width > outer.width * 1.15 + 8 || inner.height > outer.height * 1.15 + 8 ? tile : parent;
 }
 
 /** The visible tile an image belongs to: its ancestors while they stay the image's size, as every theme wraps art. */
@@ -209,22 +213,38 @@ export const CoverBadges: FC = () => {
     const mark = () => {
       pending = 0;
       const limit = view.innerWidth * 0.6;
-      const marked = new Set<Element>();
-      const hosts = new Set<Element>();
+      // A tile can hold several copies of the art (Gallery's reflection, crossfade layers); the largest is the face.
+      const faces = new Map<HTMLElement, { img: HTMLImageElement; badge: Badge; area: number }>();
       for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src*='/assets/'], img[src*='/customimages/'], img[src*='/apps/']"))) {
         const appid = appidOf(img.src);
         if (!appid || NOT_TILE.test(img.src)) continue;
+        const badge = map[appid];
+        if (!badge) continue;
         const box = img.getBoundingClientRect();
         if (box.width < 56 || box.height < 40 || box.width > limit) continue;
         const tile = tileOf(img);
-        if (!tile || marked.has(tile)) continue;
+        if (!tile) continue;
         if (ICON.test(img.src) && !isRound(tile, view)) continue;
-        const badge = map[appid];
-        if (!badge) continue;
-        marked.add(tile);
-        const host = hostOf(img, tile);
+        const area = box.width * box.height;
+        const seen = faces.get(tile);
+        if (!seen || area > seen.area) faces.set(tile, { img, badge, area });
+      }
+      // A tilted face can measure smaller than its card and count as a tile of its own; one pill per card.
+      for (const [tile, face] of faces) {
+        let up = tile.parentElement;
+        for (let depth = 0; up && depth < 6; depth++, up = up.parentElement) {
+          const outer = faces.get(up);
+          if (!outer) continue;
+          if (outer.area >= face.area) faces.delete(tile);
+          else faces.delete(up);
+          break;
+        }
+      }
+      const hosts = new Set<Element>();
+      for (const [tile, face] of faces) {
+        const host = hostOf(face.img, tile);
         hosts.add(host);
-        placeBadge(host, tile, badge, view);
+        placeBadge(host, tile, face.badge, view);
       }
       for (const node of Array.from(doc.querySelectorAll(`.${BADGE_CLASS}`))) {
         if (node.parentElement && !hosts.has(node.parentElement)) clearBadge(node.parentElement);

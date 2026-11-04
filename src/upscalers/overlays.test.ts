@@ -33,4 +33,19 @@ describe("cover badge placement", () => {
     expect(tile).toBe(outer);
     expect(hostOf(img, tile)).toBe(art);
   });
+
+  it("falls back to the tile when the image's wrapper is cropped by a round tile", () => {
+    // Eclipse orbs: a portrait wrapper inside a smaller round clip.
+    const tileBox = document.createElement("div");
+    const wrapper = document.createElement("div");
+    const img = document.createElement("img");
+    wrapper.appendChild(img);
+    tileBox.appendChild(wrapper);
+    document.body.appendChild(tileBox);
+    box(tileBox, 107, 107);
+    box(wrapper, 107, 160);
+    box(img, 107, 160);
+
+    expect(hostOf(img, tileBox)).toBe(tileBox);
+  });
 });
