@@ -100,7 +100,6 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; g
           <TextField
             value={typeof sel === "string" ? sel : ""}
             onChange={(e) => ed.set(pill.id, e.target.value || null)}
-            // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
             placeholder={pill.placeholderKey ? t(pill.placeholderKey) : ""}
           />
         </div>

@@ -128,7 +128,6 @@ export const ParametrosSection: FC = () => {
           <TextField
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
             placeholder={t("params.search")}
           />
         )}
