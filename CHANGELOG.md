@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
+
+
+### Features
+
+* **themes:** freeze the running game while a theme's menus are over it ([#1109](https://github.com/Hooandee/panel-de-control/issues/1109)) ([8d8155e](https://github.com/Hooandee/panel-de-control/commit/8d8155eea027ca723739cce815665dd0e6065fd0))
+* **themes:** present Vida, and describe every Hooandee theme in all six languages ([#1108](https://github.com/Hooandee/panel-de-control/issues/1108)) ([1343216](https://github.com/Hooandee/panel-de-control/commit/1343216627ae167faec268abe43dc7ec60f3d9ac))
+
 ## [0.83.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.82.1...panel-de-control-v0.83.0) (2026-11-04)
 
 
