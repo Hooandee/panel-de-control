@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createThemeGamesAccess } from "./gamesAccess";
 
@@ -28,5 +28,35 @@ describe("theme games access", () => {
     expect(await createThemeGamesAccess({ forceClose: async () => ({ result: "exploded" }) }).forceClose(10))
       .toBe("failed");
     expect(await createThemeGamesAccess({ forceClose: async () => null }).forceClose(10)).toBe("failed");
+  });
+
+  describe("pause", () => {
+    const steam = globalThis as { SteamUIStore?: { MainRunningAppID?: unknown } };
+    afterEach(() => { delete steam.SteamUIStore; });
+
+    it("freezes the game Steam has in front, shortcuts included, and thaws on resume", async () => {
+      const pause = vi.fn(async () => true);
+      const resume = vi.fn(async () => {});
+      const games = createThemeGamesAccess({ forceClose: vi.fn(), pause, resume });
+      steam.SteamUIStore = { MainRunningAppID: 292030 };
+      expect(await games.pause(1000.4)).toBe(true);
+      steam.SteamUIStore = { MainRunningAppID: "12884901888000000000" };
+      expect(await games.pause(500)).toBe(true);
+      expect(pause).toHaveBeenNthCalledWith(1, "292030", 1000);
+      expect(pause).toHaveBeenNthCalledWith(2, "12884901888000000000", 500);
+      await games.resume();
+      expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    it("is false without a game, a usable time or a Panel that can freeze", async () => {
+      const pause = vi.fn(async () => true);
+      expect(await createThemeGamesAccess({ forceClose: vi.fn(), pause }).pause(1000)).toBe(false);
+      steam.SteamUIStore = { MainRunningAppID: 292030 };
+      expect(await createThemeGamesAccess({ forceClose: vi.fn(), pause }).pause(0)).toBe(false);
+      expect(await createThemeGamesAccess({ forceClose: vi.fn() }).pause(1000)).toBe(false);
+      expect(await createThemeGamesAccess({ forceClose: vi.fn(), pause: async () => { throw new Error("gone"); } }).pause(1000)).toBe(false);
+      await createThemeGamesAccess({ forceClose: vi.fn(), resume: async () => { throw new Error("gone"); } }).resume();
+      expect(pause).not.toHaveBeenCalled();
+    });
   });
 });

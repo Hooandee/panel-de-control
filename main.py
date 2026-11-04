@@ -27,6 +27,8 @@ import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import decky_socket_guard
 import device_registry
+import device_tree
+import game_freeze
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
 from gamescope_stats import GamescopeStats
@@ -1444,6 +1446,43 @@ class Plugin(AmbientRpc):
             await asyncio.wait_for(kiosk.shutdown(), _KIOSK_STOP_TIMEOUT_S)
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("Kiosk shutdown incomplete: %s", error)
+
+    def _game_freezer(self) -> game_freeze.GameFreezer:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is None:
+            freezer = game_freeze.GameFreezer(
+                schedule=asyncio.get_running_loop().call_later,
+                cancel=lambda handle: handle.cancel(),
+                on_change=self._game_freeze_changed,
+            )
+            self._freezer = freezer
+        return freezer
+
+    def _game_freeze_changed(self, event: str, fields: dict) -> None:
+        decky.logger.info("Game %s (%s, %s processes)", event, fields.get("appid"), fields.get("processes"))
+        diary = journal.active
+        if diary is not None:
+            diary.write("INFO", "games", event, **fields)
+
+    async def pause_theme_game(self, appid, ms) -> bool:
+        """A theme's menus are over the running game: it freezes until `ms` from now (game_freeze), renewed by
+        calling again. Shortcut ids come as decimal strings."""
+        self._init()
+        # Validated on x86 handhelds only: on ARM the game runs under FEX and its process tree is unverified.
+        if getattr(self, "_freeze_on_arm", None) is None:
+            self._freeze_on_arm = device_tree.is_arm()
+        if self._freeze_on_arm:
+            return False
+        try:
+            return self._game_freezer().pause(appid, ms)
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("Game freeze failed (%s)", type(error).__name__)
+            return False
+
+    async def resume_theme_game(self) -> None:
+        freezer = getattr(self, "_freezer", None)
+        if freezer is not None:
+            freezer.resume()
 
     async def get_proton_caps(self, compat_name: str = "") -> dict:
         """Which launch-option vars the installed Proton build supports."""
@@ -14368,6 +14407,9 @@ class Plugin(AmbientRpc):
         self._stop_pulse()
         self._prepare_shutdown()
         stage("prepared")
+        # A frozen game never outlives Panel.
+        if getattr(self, "_freezer", None) is not None:
+            self._freezer.resume()
         if getattr(self, "_screen_sleep", None) is not None:
             if self._eco_watch_task is not None:
                 self._eco_watch_task.cancel()
@@ -14881,7 +14923,7 @@ journal.trace_calls(
     Plugin,
     untraced=frozenset({
         "set_ui_active", "set_current_game", "set_ui_prefs", "kiosk_steam_result", "set_eco_screen",
-        "get_theme_storage", "set_theme_storage", "force_close_game",
+        "get_theme_storage", "set_theme_storage", "force_close_game", "pause_theme_game", "resume_theme_game",
     }),
     automatic=frozenset({"load_theme_extension"}),
     hidden_arguments=frozenset({"submit_report", "set_aside_theme_leftovers"}),

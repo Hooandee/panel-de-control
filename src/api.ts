@@ -1351,3 +1351,7 @@ export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_re
 
 export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
+
+// A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
+export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
+export const resumeThemeGame = callable<[], void>("resume_theme_game");
