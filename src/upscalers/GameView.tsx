@@ -34,6 +34,7 @@ import { holdPage, onDraft, showGame, writeDraft, type PageDraft } from "./pageM
 import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
+import { upscalerErrorCode } from "./errorCode";
 
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
 
@@ -116,7 +117,7 @@ export const GameView: FC<{
       }
       keepDraft.current = false;
     } catch (error) {
-      if (mounted.current) setLoadError(String((error as Error)?.message ?? "") || "generic");
+      if (mounted.current) setLoadError(upscalerErrorCode(error));
     }
   }, [appid, overview.preferred, overview.builds, game.isNonSteam, game.liveAppid, game.name]);
 
@@ -165,7 +166,7 @@ export const GameView: FC<{
       setJob(started);
       trackJob(started, { appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam });
     } catch (error) {
-      setMessage(errorText(t, String((error as Error)?.message ?? "")));
+      setMessage(errorText(t, upscalerErrorCode(error)));
     }
   };
 
@@ -205,7 +206,7 @@ export const GameView: FC<{
         await load();
         onChanged();
       } catch (error) {
-        setMessage(errorText(t, String((error as Error)?.message ?? "")));
+        setMessage(errorText(t, upscalerErrorCode(error)));
       }
       return;
     }
@@ -239,7 +240,7 @@ export const GameView: FC<{
       await load();
       onChanged();
     } catch (error) {
-      setMessage(errorText(t, String((error as Error)?.message ?? "")));
+      setMessage(errorText(t, upscalerErrorCode(error)));
     }
   };
 
@@ -257,11 +258,12 @@ export const GameView: FC<{
   };
 
   const pickExe = async () => {
+    const picked = await openFilePicker(0 as never, detail?.analysis.target ?? "/home", true, true, undefined, ["exe"]).catch(() => null);
+    if (!picked?.realpath) return;
     try {
-      const picked = await openFilePicker(0 as never, detail?.analysis.target ?? "/home", true, true, undefined, ["exe"]);
-      if (picked?.realpath) setDetail(await setUpscalersExe(appid, picked.realpath));
-    } catch (error) {
-      if (String((error as Error)?.message ?? "")) setMessage(t("up.error.invalid_exe"));
+      setDetail(await setUpscalersExe(appid, picked.realpath));
+    } catch {
+      setMessage(t("up.error.invalid_exe"));
     }
   };
 

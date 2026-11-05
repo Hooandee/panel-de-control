@@ -8,6 +8,7 @@ import { theme } from "../theme";
 import { setCompareGhost } from "./overlays";
 import { ActionButton, Label, Note, Row, SegmentRow, Spinner } from "./parts";
 import { holdPage } from "./pageMemory";
+import { upscalerErrorCode } from "./errorCode";
 
 
 export interface Shot {
@@ -87,7 +88,7 @@ export const CompareView: FC<{
     try {
       assign(await captureUpscalerFrame(appid));
     } catch (e) {
-      const code = String((e as Error)?.message ?? "");
+      const code = upscalerErrorCode(e);
       setError(t(code === "not_running" ? "up.compare.needGame" : "up.compare.failed"));
     } finally {
       setBusy(false);

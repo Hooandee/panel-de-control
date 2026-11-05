@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { ActionButton, Note, Row, Skeleton } from "./parts";
 import type { IniKey, IniSection } from "./types";
+import { upscalerErrorCode } from "./errorCode";
 
 /** Every OptiScaler.ini key, read from the installed file; the help is OptiScaler's own. */
 export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
@@ -43,7 +44,7 @@ export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
         : { ...s, keys: s.keys.map((k) => k.key === key.key ? { ...k, value } : k) }) ?? null);
       setMessage(t("up.ini.saved"));
     } catch (error) {
-      const code = String((error as Error)?.message ?? "");
+      const code = upscalerErrorCode(error);
       setMessage(t(`up.error.${code}`) === `up.error.${code}` ? t("up.error.generic") : t(`up.error.${code}`));
     }
   };

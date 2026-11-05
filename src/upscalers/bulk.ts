@@ -3,6 +3,7 @@ import type { GameEntry } from "../launch/steamApi";
 import { easyChoice } from "./model";
 import { onJobUpdate, trackJob } from "./jobRunner";
 import type { UpscalerChoice, UpscalerJob, UpscalersOverview } from "./types";
+import { upscalerErrorCode } from "./errorCode";
 
 export type BulkAction = "install" | "repair" | "update" | "remove";
 export const BULK_ACTIONS: BulkAction[] = ["install", "update", "repair", "remove"];
@@ -70,7 +71,7 @@ export async function runBulk(action: BulkAction, steps: BulkStep[], report: (pr
       if (end.state === "done") progress.done += 1;
       else progress.skipped.push({ name: step.game.name, reason: end.error ?? "generic" });
     } catch (error) {
-      progress.skipped.push({ name: step.game.name, reason: String((error as Error)?.message ?? "generic") });
+      progress.skipped.push({ name: step.game.name, reason: upscalerErrorCode(error) });
     }
   }
   progress.index = steps.length;
