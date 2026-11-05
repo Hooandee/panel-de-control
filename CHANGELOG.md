@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.1...panel-de-control-v0.84.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **tdp:** start from the machine's own power and hand it back on Legion ([#1133](https://github.com/Hooandee/panel-de-control/issues/1133)) ([9ddda0b](https://github.com/Hooandee/panel-de-control/commit/9ddda0b0ec71c576dd0d916a283d0838f5107e26))
+
 ## [0.84.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.0...panel-de-control-v0.84.1) (2026-11-05)
 
 ### Español
