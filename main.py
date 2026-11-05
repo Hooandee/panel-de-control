@@ -7061,6 +7061,69 @@ class Plugin(AmbientRpc):
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _seed_tdp_from_hardware(self) -> None:
+        """A fresh install takes the power the machine already runs as its starting
+        profile: Panel shows the dial without changing performance until it is moved."""
+        try:
+            self._seed_tdp_profile()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("TDP seed skipped: %s", type(error).__name__)
+
+    def _seed_tdp_profile(self) -> None:
+        store = self._tdp_profiles
+        backend = self._tdp_backend
+        if (
+            not store.seed_pending
+            or not getattr(backend, "seeds_from_readback", False)
+            or not self._tdp_supported()
+            or getattr(backend, "unit", "W") != "W"
+            or not getattr(backend, "readback", True)
+            or self._desktop_mode_on()
+            or self._settings.get("eco_enabled")
+            or self._low_battery_sidecar_active()
+            or read_on_ac()
+        ):
+            return
+        # The firmware caps power on low battery and may keep that cap until reboot;
+        # neither is the machine's own power.
+        percent = (self._battery.read() or {}).get("percent")
+        latched = self._settings.get("low_battery_hold_latched_boot")
+        if (
+            not isinstance(percent, (int, float))
+            or percent <= LOW_BATTERY_PERCENT
+            or (latched and latched == _current_boot_id())
+        ):
+            return
+        rails = self._observe_tdp_sync().surfaces.get(backend.name, {})
+
+        def applied(rail):
+            reading = rails.get(rail)
+            value = reading.applied_w if reading is not None else None
+            return value if isinstance(value, int) and value > 0 else None
+
+        sustained = applied("pl1") or applied(getattr(backend, "primary_rail", "pl1"))
+        if sustained is None:
+            return
+        limits = self._limits()
+        pl1 = max(limits.min_w, min(sustained, self._active_max(limits, False)))
+        rail_limits = backend.level_limits() or {}
+
+        def within_rail(rail, value):
+            ceiling = (rail_limits.get(rail) or {}).get("max")
+            return min(value, ceiling) if isinstance(ceiling, int) else value
+
+        pl2 = within_rail("pl2", applied("pl2") or pl1)
+        pl3 = within_rail("pl3", applied("pl3") or pl2)
+        if store.seed_global(pl1, pl2, pl3):
+            decky.logger.info(
+                "TDP profile seeded from hardware %s",
+                json.dumps({
+                    "backend": backend.name, "battery": percent,
+                    "read": {rail: applied(rail) for rail in ("pl1", "pl2", "pl3")},
+                    "seeded": store.effective(None),
+                }, sort_keys=True, separators=(",", ":")),
+            )
+
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
@@ -14335,6 +14398,7 @@ class Plugin(AmbientRpc):
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
+        await self._offload_call(self._seed_tdp_from_hardware)
         if self._tdp_control_on() and self._retired_experimental_tdp_unlock():
             retired = await self._retire_experimental_tdp_unlock_or_disable()
             if not retired.get("ok"):
