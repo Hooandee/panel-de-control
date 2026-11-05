@@ -1,5 +1,5 @@
 import { Dropdown, TextField } from "@decky/ui";
-import { useMemo, useState, type FC } from "react";
+import { useEffect, useMemo, useState, type FC } from "react";
 
 import { getUpscalerIni, setUpscalerIni } from "../api";
 import { useI18n } from "../i18n";
@@ -7,15 +7,20 @@ import { theme } from "../theme";
 import { ActionButton, Note, Row, Skeleton } from "./parts";
 import type { IniKey, IniSection } from "./types";
 import { upscalerErrorCode } from "./errorCode";
+import { holdPage } from "./pageMemory";
+
+// Steam's dropdown menu remounts the panel (pageMemory.ts); where the editor was waits here.
+let kept: { appid: string; query: string; expanded: string | null } | null = null;
 
 /** Every OptiScaler.ini key, read from the installed file; the help is OptiScaler's own. */
 export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const resumed = kept?.appid === appid ? kept : null;
+  const [open, setOpen] = useState(!!resumed);
   const [sections, setSections] = useState<IniSection[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [query, setQuery] = useState(resumed?.query ?? "");
+  const [expanded, setExpanded] = useState<string | null>(resumed?.expanded ?? null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = async () => {
@@ -26,6 +31,13 @@ export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
       setFailed(true);
     }
   };
+
+  useEffect(() => {
+    if (resumed) void load();
+  }, []);
+  useEffect(() => {
+    kept = open ? { appid, query, expanded } : null;
+  }, [appid, open, query, expanded]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -103,6 +115,7 @@ const IniRow: FC<{ section: string; entry: IniKey; onSave: (section: string, key
         <Dropdown
           rgOptions={entry.choices.map((c) => ({ data: c, label: c === entry.default ? `${c} (${t("up.ini.default")})` : c }))}
           selectedOption={entry.value}
+          onMenuWillOpen={(show) => { holdPage(); show(); }}
           onChange={(option) => onSave(section, entry, String(option.data))}
         />
       ) : (
