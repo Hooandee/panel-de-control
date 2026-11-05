@@ -10,7 +10,7 @@ import { CompactBackAction } from "../components/CompactBackAction";
 import { GameCover } from "../components/GameCover";
 import { useSectionBack } from "../components/sectionBack";
 import { useRunningGame } from "../tdp/useRunningGame";
-import { CompareView } from "./CompareView";
+import { CompareView, isComparing } from "./CompareView";
 import { openIdentityModal } from "./IdentityModal";
 import { readShortcutHint } from "./shortcutHint";
 import { useI18n } from "../i18n";
@@ -94,7 +94,7 @@ export const GameView: FC<{
   const protonEnv = capabilities.status === "ready"
     ? protonFsr4Env(CATALOG, (pill) => pillVisible(pill, capabilities.envs, overview.gpu as GpuGen))
     : null;
-  const [comparing, setComparing] = useState(false);
+  const [comparing, setComparing] = useState(() => isComparing(appid));
   const runningGame = useRunningGame();
   const gameRunning = runningGame?.liveAppid === game.liveAppid;
   const mounted = useRef(true);

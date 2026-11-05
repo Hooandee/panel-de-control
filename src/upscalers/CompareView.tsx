@@ -22,6 +22,11 @@ export interface Shot {
 const GHOST_LEVELS = { soft: 0.3, strong: 0.55 } as const;
 type Ghost = "off" | keyof typeof GHOST_LEVELS;
 
+// The comparison modal remounts the panel (pageMemory.ts); the shots wait here until Close.
+let kept: { appid: string; first: Shot | null; second: Shot | null; ghost: Ghost } | null = null;
+
+export const isComparing = (appid: string): boolean => kept?.appid === appid;
+
 const UPSCALER_NAMES: Record<string, string> = { fsr31: "FSR", fsr31_12: "FSR", fsr22: "FSR 2", xess: "XeSS", xess_12: "XeSS", dlss: "DLSS" };
 
 /** Panel only knows what it installed; a switch made in OptiScaler's own menu shows up as the log's upscaler. */
@@ -71,11 +76,20 @@ export const CompareView: FC<{
   onClose: () => void;
 }> = ({ appid, gameRunning, onClose }) => {
   const { t } = useI18n();
-  const [first, setFirst] = useState<Shot | null>(null);
-  const [second, setSecond] = useState<Shot | null>(null);
+  const resumed = kept?.appid === appid ? kept : null;
+  const [first, setFirst] = useState<Shot | null>(resumed?.first ?? null);
+  const [second, setSecond] = useState<Shot | null>(resumed?.second ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ghost, setGhost] = useState<Ghost>("soft");
+  const [ghost, setGhost] = useState<Ghost>(resumed?.ghost ?? "soft");
+
+  useEffect(() => {
+    kept = { appid, first, second, ghost };
+  }, [appid, first, second, ghost]);
+  const close = () => {
+    kept = null;
+    onClose();
+  };
 
   useEffect(() => {
     setCompareGhost(first && !second && ghost !== "off" ? { image: first.image, opacity: GHOST_LEVELS[ghost] } : null);
@@ -154,7 +168,7 @@ export const CompareView: FC<{
           <Spinner size={12} /> {t("up.compare.shooting")}
         </div>
       )}
-      <Row><ActionButton label={t("up.compare.close")} onPress={onClose} /></Row>
+      <Row><ActionButton label={t("up.compare.close")} onPress={close} /></Row>
     </div>
   );
 };
