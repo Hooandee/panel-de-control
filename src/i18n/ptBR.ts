@@ -991,6 +991,7 @@ export const ptBR: Record<string, string> = {
   "system.on": "Ligado",
   "system.off": "Desligado",
   "system.eco.title": "Modo de download",
+  "system.eco.autoExit": "Modo de download desativado ao retomar o uso do dispositivo.",
   "system.eco.desc": "Reduz o consumo de energia enquanto um jogo é baixado.",
   "system.eco.countdown": "A tela desliga em",
   "system.eco.row.tdp": "TDP",

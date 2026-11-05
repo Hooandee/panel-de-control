@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Español
+
+* Modo Descarga se desactiva al retomar el uso continuado de la máquina y recupera tus ajustes de rendimiento. Los reportes incluyen más información para investigar problemas de lentitud.
+
+### English
+
+* Download Mode turns off when you resume sustained use of your device and restores your performance settings. Reports include more information to help investigate slowdowns.
+
+### Italiano
+
+* La modalità Download si disattiva quando riprendi a usare il dispositivo in modo continuativo e ripristina le tue impostazioni di prestazioni. Le segnalazioni includono più informazioni per analizzare i rallentamenti.
+
+### Deutsch
+
+* Der Download-Modus wird deaktiviert, wenn du dein Gerät wieder länger bedienst, und stellt deine Leistungseinstellungen wieder her. Fehlerberichte enthalten mehr Informationen zur Untersuchung von Verlangsamungen.
+
+### Português (Brasil)
+
+* O Modo Download é desativado quando você volta a usar o dispositivo de forma contínua e restaura suas configurações de desempenho. Os relatos incluem mais informações para investigar lentidão.
+
+### Français
+
+* Le mode Téléchargement se désactive lorsque vous reprenez une utilisation prolongée de votre appareil et rétablit vos réglages de performances. Les rapports contiennent davantage d’informations pour analyser les ralentissements.
+
 ## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
 
 
