@@ -1,30 +1,36 @@
 # Changelog
 
-## Unreleased
+## [0.84.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.0...panel-de-control-v0.84.1) (2026-11-05)
 
 ### Español
 
-* Modo Descarga se desactiva al retomar el uso continuado de la máquina y recupera tus ajustes de rendimiento. Los reportes incluyen más información para investigar problemas de lentitud.
+* **Vuelve a usar la máquina sin acordarte del Modo Descarga:** Si empiezas a navegar y sigues usándola, se desactiva solo y recupera tus ajustes de rendimiento. Un toque para despertar la pantalla lo mantiene activo.
+* **Reportes más útiles:** Recogen mejor qué estaba consumiendo recursos y cómo estaban los ajustes de rendimiento, para ayudarnos a encontrar la causa de los problemas de lentitud.
 
 ### English
 
-* Download Mode turns off when you resume sustained use of your device and restores your performance settings. Reports include more information to help investigate slowdowns.
+* **Pick up your device without worrying about Download Mode:** When you start navigating and keep using it, Download Mode turns off automatically and restores your performance settings. A single tap to wake the screen leaves it on.
+* **More useful reports:** Reports give us a clearer picture of what was using resources and which performance settings were active, helping us track down slowdowns.
 
 ### Italiano
 
-* La modalità Download si disattiva quando riprendi a usare il dispositivo in modo continuativo e ripristina le tue impostazioni di prestazioni. Le segnalazioni includono più informazioni per analizzare i rallentamenti.
+* **Riprendi a usare il dispositivo senza pensare alla modalità Download:** Quando inizi a navigare e continui a usarlo, la modalità si disattiva da sola e ripristina le tue impostazioni di prestazioni. Un tocco per riattivare lo schermo la lascia attiva.
+* **Segnalazioni più utili:** Mostrano meglio cosa stava consumando risorse e quali impostazioni di prestazioni erano attive, aiutandoci a trovare la causa dei rallentamenti.
 
 ### Deutsch
 
-* Der Download-Modus wird deaktiviert, wenn du dein Gerät wieder länger bedienst, und stellt deine Leistungseinstellungen wieder her. Fehlerberichte enthalten mehr Informationen zur Untersuchung von Verlangsamungen.
+* **Nutze dein Gerät wieder, ohne an den Download-Modus denken zu müssen:** Wenn du durch die Menüs navigierst und das Gerät weiter bedienst, schaltet sich der Modus automatisch aus und stellt deine Leistungseinstellungen wieder her. Ein kurzes Antippen zum Aufwecken des Bildschirms lässt ihn aktiv.
+* **Aussagekräftigere Fehlerberichte:** Sie zeigen genauer, was Ressourcen verbraucht hat und welche Leistungseinstellungen aktiv waren. So können wir die Ursache von Verlangsamungen besser finden.
 
 ### Português (Brasil)
 
-* O Modo Download é desativado quando você volta a usar o dispositivo de forma contínua e restaura suas configurações de desempenho. Os relatos incluem mais informações para investigar lentidão.
+* **Volte a usar o dispositivo sem se preocupar com o Modo Download:** Ao começar a navegar e continuar usando o aparelho, o modo é desativado sozinho e suas configurações de desempenho são restauradas. Um toque para acender a tela mantém o modo ativo.
+* **Relatos mais úteis:** Mostram melhor o que estava consumindo recursos e quais configurações de desempenho estavam ativas, ajudando a encontrar a causa da lentidão.
 
 ### Français
 
-* Le mode Téléchargement se désactive lorsque vous reprenez une utilisation prolongée de votre appareil et rétablit vos réglages de performances. Les rapports contiennent davantage d’informations pour analyser les ralentissements.
+* **Reprenez votre appareil sans penser au mode Téléchargement :** Lorsque vous commencez à naviguer et continuez à l’utiliser, le mode se désactive tout seul et rétablit vos réglages de performances. Un simple appui pour réveiller l’écran le laisse actif.
+* **Des rapports plus utiles :** Ils montrent plus clairement ce qui consommait des ressources et les réglages de performances actifs, pour nous aider à trouver la cause des ralentissements.
 
 ## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
 
