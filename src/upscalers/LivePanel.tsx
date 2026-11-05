@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FC } from "react";
 import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { holdPage } from "./pageMemory";
 import { ActionButton, Row } from "./parts";
 
 const POLL_MS = 1500;
@@ -47,6 +48,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
     setFailed(false);
     try {
       // gamescope hands the key to the focused window: with the QAM open, Steam keeps it.
+      holdPage();
       Navigation.CloseSideMenus();
       await pressUpscalerKey(appid, action);
       if (action === "fg") setGenerating((value) => (value === null ? null : !value));
