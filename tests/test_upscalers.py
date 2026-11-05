@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, games, helixsr, ini, logread, recipes
+from upscalers import catalog, games, helixsr, ini, launchers, logread, lsfg, recipes
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -593,7 +593,6 @@ def test_unified_fsr31_dll_counts_as_the_games_frame_generation(tmp_path):
 
 # ---- Heroic and Lutris shortcuts ------------------------------------------------------------
 
-from upscalers import launchers
 
 
 def test_launcher_shortcuts_are_recognised():
@@ -668,7 +667,6 @@ def test_heroic_shortcut_installs_with_overrides_in_heroic(steam, fake_catalog, 
 
 # ---- lsfg-vk ----------------------------------------------------------------------------------
 
-from upscalers import lsfg
 
 
 def _lsfg_bundle(root):

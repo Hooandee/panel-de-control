@@ -194,7 +194,7 @@ def _heroic_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
 def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
     """Adds or drops `dll: n,b` lines under `wine:` → `overrides:`, leaving everything else as is."""
     lines = game.config.read_text(encoding="utf-8").splitlines()
-    wine = next((i for i, l in enumerate(lines) if l.rstrip() == "wine:"), None)
+    wine = next((i for i, line in enumerate(lines) if line.rstrip() == "wine:"), None)
     if wine is None:
         lines += ["wine:", "  overrides:"]
         wine = len(lines) - 2
@@ -206,7 +206,7 @@ def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
     block_end = overrides + 1
     while block_end < end and lines[block_end].startswith("    "):
         block_end += 1
-    block = [l for l in lines[overrides + 1:block_end] if l.strip().split(":", 1)[0].strip("'\"") not in dlls]
+    block = [line for line in lines[overrides + 1:block_end] if line.strip().split(":", 1)[0].strip("'\"") not in dlls]
     if not remove:
         block += [f"    {dll}: n,b" for dll in dlls]
     lines[overrides + 1:block_end] = block

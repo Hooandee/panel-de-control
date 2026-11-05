@@ -9,7 +9,6 @@ config file it wrote, and leaves another tool's install or config alone.
 """
 
 import json
-import os
 import shutil
 from pathlib import Path
 
