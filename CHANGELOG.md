@@ -3,9 +3,35 @@
 ## [0.84.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.1...panel-de-control-v0.84.2) (2026-11-05)
 
 
-### Bug Fixes
+### Español
 
-* **tdp:** start from the machine's own power and hand it back on Legion ([#1133](https://github.com/Hooandee/panel-de-control/issues/1133)) ([9ddda0b](https://github.com/Hooandee/panel-de-control/commit/9ddda0b0ec71c576dd0d916a283d0838f5107e26))
+* **Instalar Panel de Control ya no baja la potencia:** En las Legion y en la Steam Deck, la primera vez parte de los vatios que ya tenía la consola, así que los juegos van igual hasta que muevas el control. Antes empezaba con un valor más bajo; en una Legion Go S eran 15 W cuando SteamOS da hasta 33 W, y se notaba en los FPS.
+* **En la Legion Go y la Legion Go S, desactivar el TDP devuelve la potencia de SteamOS:** Si desactivas el control de TDP de Panel de Control o lo desinstalas, la consola vuelve a la potencia que le da SteamOS. Antes se quedaba con los últimos vatios de Panel de Control hasta reiniciar.
+
+### English
+
+* **Installing Panel de Control no longer lowers your power:** On Legion devices and the Steam Deck, it now starts from the watts your device was already using, so games run the same until you move the slider. Before, it started lower; on a Legion Go S that meant 15 W while SteamOS allows up to 33 W, and the drop showed in your FPS.
+* **On the Legion Go and Legion Go S, turning TDP off gives power back to SteamOS:** If you turn off Panel de Control's TDP control or uninstall it, your device goes back to the power SteamOS gives it. Before, it kept Panel de Control's last watts until you restarted.
+
+### Italiano
+
+* **Installare Panel de Control non abbassa più la potenza:** Sui Legion e sullo Steam Deck, la prima volta parte dai watt che la console stava già usando, quindi i giochi vanno come prima finché non sposti il cursore. Prima partiva da un valore più basso; su una Legion Go S erano 15 W mentre SteamOS arriva a 33 W, e si notava negli FPS.
+* **Su Legion Go e Legion Go S, disattivare il TDP restituisce la potenza di SteamOS:** Se disattivi il controllo del TDP di Panel de Control o lo disinstalli, la console torna alla potenza che le dà SteamOS. Prima restava con gli ultimi watt di Panel de Control fino al riavvio.
+
+### Deutsch
+
+* **Die Installation von Panel de Control senkt die Leistung nicht mehr:** Auf Legion-Geräten und dem Steam Deck startet es beim ersten Mal mit den Watt, die das Gerät schon nutzte. Spiele laufen also gleich, bis du den Regler bewegst. Vorher startete es niedriger; auf einer Legion Go S waren es 15 W, obwohl SteamOS bis zu 33 W erlaubt, und das sah man an den FPS.
+* **Auf Legion Go und Legion Go S gibt das Ausschalten des TDP die Leistung an SteamOS zurück:** Wenn du die TDP-Steuerung von Panel de Control ausschaltest oder es deinstallierst, kehrt das Gerät zu der Leistung zurück, die SteamOS ihm gibt. Vorher blieben bis zum Neustart die letzten Watt von Panel de Control aktiv.
+
+### Português (Brasil)
+
+* **Instalar o Panel de Control não reduz mais a potência:** Nos Legion e no Steam Deck, na primeira vez ele parte dos watts que o aparelho já usava, então os jogos rodam igual até você mexer no controle. Antes começava com um valor mais baixo; num Legion Go S eram 15 W enquanto o SteamOS libera até 33 W, e isso aparecia nos FPS.
+* **No Legion Go e no Legion Go S, desativar o TDP devolve a potência do SteamOS:** Se você desativar o controle de TDP do Panel de Control ou desinstalá-lo, o aparelho volta à potência que o SteamOS dá a ele. Antes ficava com os últimos watts do Panel de Control até reiniciar.
+
+### Français
+
+* **Installer Panel de Control ne baisse plus la puissance :** Sur les Legion et le Steam Deck, il part la première fois des watts que la console utilisait déjà, donc les jeux tournent pareil tant que tu ne touches pas au curseur. Avant, il démarrait plus bas ; sur une Legion Go S c’était 15 W alors que SteamOS va jusqu’à 33 W, et ça se voyait sur les FPS.
+* **Sur la Legion Go et la Legion Go S, désactiver le TDP rend la puissance à SteamOS :** Si tu désactives le contrôle du TDP de Panel de Control ou que tu le désinstalles, la console revient à la puissance que lui donne SteamOS. Avant, elle gardait les derniers watts de Panel de Control jusqu’au redémarrage.
 
 ## [0.84.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.0...panel-de-control-v0.84.1) (2026-11-05)
 
