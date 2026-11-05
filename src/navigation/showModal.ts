@@ -77,3 +77,17 @@ export const showModal: typeof showDeckyModal = (modal, parent, props) => {
     throw error;
   }
 };
+
+// Context menus close the QAM the same way: the caller runs the returned function once
+// the menu is done, picked or cancelled.
+export function rememberOpener(): () => void {
+  const doc = getQamDocument();
+  const opener = doc?.querySelector<HTMLElement>(".pdc-root .gpfocus") ?? null;
+  const label = opener ? controlLabel(opener) : "";
+  let done = false;
+  return () => {
+    if (done || !doc || !opener) return;
+    done = true;
+    returnFocus(doc, opener, label);
+  };
+}

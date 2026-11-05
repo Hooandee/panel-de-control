@@ -5,6 +5,8 @@ import { LuCheck, LuChevronDown } from "react-icons/lu";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { theme } from "../theme";
 import type { UpscalerStatus } from "./types";
+import { rememberOpener } from "../navigation/showModal";
+import { holdPage } from "./pageMemory";
 
 export const MOTION_CSS = `
 @keyframes pdc-up-spin { to { transform: rotate(360deg); } }
@@ -171,10 +173,12 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   const current = options.find((o) => o.value === value)?.label ?? value;
   const open = (anchor: EventTarget | null) => {
     if (disabled) return;
+    holdPage();
+    const back = rememberOpener();
     showContextMenu(
-      <Menu label={label}>
+      <Menu label={label} onCancel={back}>
         {options.map((o) => (
-          <MenuItem key={o.value} onSelected={() => onChange(o.value)}>
+          <MenuItem key={o.value} onSelected={() => { onChange(o.value); back(); }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 14, display: "inline-flex" }}>{o.value === value ? <LuCheck size={14} /> : null}</span>
               {o.label}
@@ -187,6 +191,7 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   };
   return (
     <Focusable
+      aria-label={label}
       onActivate={(e) => open(e.currentTarget)}
       onClick={(e) => open(e.currentTarget)}
       style={{

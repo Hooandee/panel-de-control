@@ -7,6 +7,7 @@ import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
 import { setCompareGhost } from "./overlays";
 import { ActionButton, Label, Note, Row, SegmentRow, Spinner } from "./parts";
+import { holdPage } from "./pageMemory";
 
 
 export interface Shot {
@@ -93,7 +94,10 @@ export const CompareView: FC<{
     }
   };
 
-  const open = (a: Shot, b: Shot) => showModal(<CompareModal first={a} second={b} />, window);
+  const open = (a: Shot, b: Shot) => {
+    holdPage();
+    showModal(<CompareModal first={a} second={b} />, window);
+  };
 
   return (
     <div style={{ ...theme.card, padding: theme.space.sm, display: "flex", flexDirection: "column", gap: theme.space.sm }}>

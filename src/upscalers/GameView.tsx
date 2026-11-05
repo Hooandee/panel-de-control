@@ -30,6 +30,7 @@ import { LivePanel } from "./LivePanel";
 import { WikiFacts } from "./WikiFacts";
 import { restartGame } from "./restartGame";
 import { showModal } from "../navigation/showModal";
+import { holdPage, onDraft, showGame, writeDraft, type PageDraft } from "./pageMemory";
 import { FrameGenRow } from "./FrameGenRow";
 import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
 import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
@@ -51,13 +52,30 @@ export const GameView: FC<{
   overview: UpscalersOverview;
   onBack: () => void;
   onChanged: () => void;
-}> = ({ game, overview, onBack, onChanged }) => {
+  draft?: PageDraft<UpscalerChoice> | null;
+}> = ({ game, overview, onBack, onChanged, draft }) => {
   const { t } = useI18n();
   const appid = String(game.liveAppid);
   const [detail, setDetail] = useState<GameDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"easy" | "custom">("easy");
-  const [choice, setChoice] = useState<UpscalerChoice>(() => easyChoice("game", overview.preferred));
+  const [mode, setMode] = useState<"easy" | "custom">(draft?.mode ?? "easy");
+  const [choice, setChoice] = useState<UpscalerChoice>(() => draft?.choice ?? easyChoice("game", overview.preferred));
+  const keepDraft = useRef(!!draft);
+  const changeChoice = (next: UpscalerChoice) => {
+    setChoice(next);
+    writeDraft(game.liveAppid, { mode, choice: next });
+  };
+  const changeMode = (next: "easy" | "custom") => {
+    setMode(next);
+    writeDraft(game.liveAppid, { mode: next, choice });
+  };
+  useEffect(() => {
+    showGame(game.liveAppid);
+    return onDraft(game.liveAppid, (next) => {
+      setMode(next.mode);
+      setChoice(next.choice as UpscalerChoice);
+    });
+  }, [game.liveAppid]);
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
   const [message, setMessage] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult | null>(null);
@@ -91,11 +109,12 @@ export const GameView: FC<{
       if (!mounted.current) return;
       setDetail(next);
       setLoadError(null);
-      if (next.install) {
+      if (next.install && !keepDraft.current) {
         const restored = restoredChoice(next.install.build, next.install.options, overview.builds, overview.preferred);
         setChoice(restored);
         setMode(easyModeOf(restored, overview.preferred) ? "easy" : "custom");
       }
+      keepDraft.current = false;
     } catch (error) {
       if (mounted.current) setLoadError(String((error as Error)?.message ?? "") || "generic");
     }
@@ -193,22 +212,25 @@ export const GameView: FC<{
     await reinstall();
   };
 
-  const askRestart = () => showModal(
-    <ConfirmModal
-      strTitle={t("up.restart.title")}
-      strDescription={t("up.restart.body", { name: game.name })}
-      strOKButtonText={t("up.restart.ok")}
-      strCancelButtonText={t("up.bulk.cancel")}
-      onOK={async () => {
-        setApplied("restarting");
-        const ok = await restartGame(game.liveAppid);
-        if (!mounted.current) return;
-        setApplied(null);
-        if (!ok) setMessage(t("up.restart.failed"));
-      }}
-    />,
-    window,
-  );
+  const askRestart = () => {
+    holdPage();
+    showModal(
+      <ConfirmModal
+        strTitle={t("up.restart.title")}
+        strDescription={t("up.restart.body", { name: game.name })}
+        strOKButtonText={t("up.restart.ok")}
+        strCancelButtonText={t("up.bulk.cancel")}
+        onOK={async () => {
+          setApplied("restarting");
+          const ok = await restartGame(game.liveAppid);
+          if (!mounted.current) return;
+          setApplied(null);
+          if (!ok) setMessage(t("up.restart.failed"));
+        }}
+      />,
+      window,
+    );
+  };
 
   const foreignAction = async (action: (id: string) => Promise<unknown>) => {
     setMessage(null);
@@ -426,7 +448,7 @@ export const GameView: FC<{
         <>
           <SegmentRow
             value={mode}
-            onChange={setMode}
+            onChange={changeMode}
             options={[{ value: "easy", label: t("up.mode.easy") }, { value: "custom", label: t("up.mode.custom") }]}
           />
 
@@ -434,7 +456,7 @@ export const GameView: FC<{
             <SegmentRow<EasyMode>
               vertical
               value={easyModeOf(choice, overview.preferred)}
-              onChange={(m) => setChoice(easyChoice(m, overview.preferred, choice.fg ?? "off"))}
+              onChange={(m) => changeChoice(easyChoice(m, overview.preferred, choice.fg ?? "off"))}
               options={EASY_MODES.map((m) => ({ value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`) }))}
             />
           ) : (
@@ -448,7 +470,7 @@ export const GameView: FC<{
               <SegmentRow
                 vertical
                 value={choice.build}
-                onChange={(build) => setChoice({ ...choice, build, model: null })}
+                onChange={(build) => changeChoice({ ...choice, build, model: null })}
                 options={usable.map((build: BuildInfo) => ({
                   value: build.id,
                   label: buildLabel(build),
@@ -465,7 +487,7 @@ export const GameView: FC<{
                   <Label>{t("up.section.model")}</Label>
                   <SegmentRow
                     value={choice.model ?? selectedModels![0]}
-                    onChange={(model) => setChoice({ ...choice, model })}
+                    onChange={(model) => changeChoice({ ...choice, model })}
                     options={selectedModels!.map((m) => ({ value: m, label: t(`up.model.${m}`) }))}
                   />
                   <Note>{t("up.model.help")}</Note>
@@ -493,7 +515,7 @@ export const GameView: FC<{
                   <SegmentRow
                     vertical
                     value={choice.quality ?? "game"}
-                    onChange={(quality) => setChoice({ ...choice, quality: quality === "game" ? null : quality })}
+                    onChange={(quality) => changeChoice({ ...choice, quality: quality === "game" ? null : quality })}
                     options={[
                       { value: "game" as const, label: t("up.quality.game") },
                       ...QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` })),
@@ -504,7 +526,7 @@ export const GameView: FC<{
                   <Label>{t("up.section.sharpness")}</Label>
                   <SegmentRow
                     value={choice.sharpness}
-                    onChange={(sharpness) => setChoice({ ...choice, sharpness })}
+                    onChange={(sharpness) => changeChoice({ ...choice, sharpness })}
                     options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
                   />
                 </>
@@ -522,7 +544,7 @@ export const GameView: FC<{
             optiscaler={{ fg: choice.fg ?? "off", route }}
             gameHint={gameFgHint}
             gpu={overview.gpu}
-            onOptiscaler={(fg, fg_route) => setChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
+            onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
           />
 
           {install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && !running && <AdvancedIni appid={appid} />}

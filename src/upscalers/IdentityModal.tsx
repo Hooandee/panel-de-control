@@ -7,6 +7,7 @@ import { showModal } from "../navigation/showModal";
 import { theme } from "../theme";
 import { ActionButton, Note, Spinner } from "./parts";
 import type { GameDetail } from "./types";
+import { holdPage } from "./pageMemory";
 
 const SEARCH_DELAY_MS = 450;
 
@@ -57,5 +58,6 @@ const IdentityModal: FC<{ appid: string; initial: string; onDone: (detail: GameD
 };
 
 export function openIdentityModal(appid: string, initial: string, onDone: (detail: GameDetail) => void): void {
+  holdPage();
   showModal(<IdentityModal appid={appid} initial={initial} onDone={onDone} />, window);
 }

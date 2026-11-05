@@ -14,13 +14,15 @@ import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen
 import { Label, SegmentRow } from "../upscalers/parts";
 import { buildLabel } from "../upscalers/model";
 import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
-import type { UpscalersOverview } from "../upscalers/types";
+import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
+import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
 
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
   const [overview, setOverview] = useState<UpscalersOverview | null>(null);
   const [failed, setFailed] = useState(false);
-  const [selected, setSelected] = useState<GameEntry | null>(null);
+  const [held] = useState(takeHeldPage);
+  const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
   const [compat, setCompat] = useState<Record<string, GameCompat>>({});
   const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
 
@@ -40,7 +42,10 @@ export const EscaladoresSection: FC = () => {
     setUpscalersSectionOpen(true);
     return () => setUpscalersSectionOpen(false);
   }, []);
-  const closeGame = useCallback(() => setSelected(null), []);
+  const closeGame = useCallback(() => {
+    showGame(null);
+    setSelected(null);
+  }, []);
 
   useEffect(() => {
     const open = () => {
@@ -70,7 +75,8 @@ export const EscaladoresSection: FC = () => {
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <style>{MOTION_CSS}</style>
       {selected && overview ? (
-        <GameView game={selected} overview={overview} onBack={closeGame} onChanged={refresh} />
+        <GameView game={selected} overview={overview} onBack={closeGame} onChanged={refresh}
+          draft={held?.appid === selected.liveAppid ? held.draft as PageDraft<UpscalerChoice> | null : null} />
       ) : (
         <>
           {failed && <span style={{ fontSize: theme.font.caption }}>{t("load.error")}</span>}
