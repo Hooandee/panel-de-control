@@ -345,7 +345,7 @@ class UpscalerService:
 
         recipe = self._recipe(appid, entry.get("identity"), installed)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
-        build = catalog.for_game(build, analysis["inputs"])
+        build = catalog.for_game(build, analysis["inputs"], self.gpu)
         assets = catalog.build_assets(build)
         if recipe:
             assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]

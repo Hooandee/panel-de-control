@@ -1279,7 +1279,7 @@ LOADER_INPUTS = {"fsr31": ["bin/x64_dx12/amd_fidelityfx_loader_dx12.dll", "bin/x
 
 
 def test_ffx_loader_games_get_optiscaler_10_for_xess():
-    xess = catalog.for_game(catalog.BUILDS["xess"], LOADER_INPUTS)
+    xess = catalog.for_game(catalog.BUILDS["xess"], LOADER_INPUTS, "intel")
     assert xess.archive == catalog.OPTISCALER_BETA
     assert xess.extra_dir == "OptiScaler"
     assert xess.ini == {"Upscalers.Dx12Upscaler": "xess", "FSR.Fsr4GpuSupport": "4"}
@@ -1287,9 +1287,18 @@ def test_ffx_loader_games_get_optiscaler_10_for_xess():
 
 def test_other_games_and_builds_keep_their_optiscaler():
     plain = {"fsr31": ["amd_fidelityfx_dx12.dll"]}
-    assert catalog.for_game(catalog.BUILDS["xess"], plain) is catalog.BUILDS["xess"]
-    for build_id in ("fsr-3.1", "fsr-4.1.1-rdna2", "fsr-4.0.2c", "fsr-4.1.2-beta", "hlx-fsr4", "proton-fsr4"):
-        assert catalog.for_game(catalog.BUILDS[build_id], LOADER_INPUTS) is catalog.BUILDS[build_id]
+    assert catalog.for_game(catalog.BUILDS["xess"], plain, "intel") is catalog.BUILDS["xess"]
+    for build_id in ("fsr-4.1.1-rdna2", "fsr-4.0.2c", "fsr-4.1.2-beta", "hlx-fsr4", "proton-fsr4"):
+        assert catalog.for_game(catalog.BUILDS[build_id], LOADER_INPUTS, "intel") is catalog.BUILDS[build_id]
+    assert catalog.for_game(catalog.BUILDS["fsr-3.1"], LOADER_INPUTS, "rdna3") is catalog.BUILDS["fsr-3.1"]
+
+
+def test_fsr31_moves_to_optiscaler_10_away_from_amd():
+    fsr31 = catalog.for_game(catalog.BUILDS["fsr-3.1"], LOADER_INPUTS, "intel")
+    assert fsr31.archive == catalog.OPTISCALER_BETA
+    assert "FSR.Fsr4Update" not in fsr31.ini
+    assert fsr31.ini["Upscalers.Dx12Upscaler"] == "fsr31"
+    assert fsr31.ini["FSR.Fsr4GpuSupport"] == "4"
 
 
 def test_generation_follows_the_archive_the_install_used():

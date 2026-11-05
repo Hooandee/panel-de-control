@@ -226,17 +226,17 @@ BASE_INI = {
 FFX_LOADER = "amd_fidelityfx_loader_dx12.dll"
 
 
-def for_game(build: Build, inputs: dict) -> Build:
+def for_game(build: Build, inputs: dict, gpu: str) -> Build:
     """The build as this game needs it. OptiScaler 0.9 never sees FSR calls made through the FidelityFX SDK 2
-    loader (Witcher 3 kept its own FSR 3.1 on an MSI Claw), so XeSS moves to OptiScaler 10 there."""
-    if build.id != "xess" or build.archive != OPTISCALER_ARCHIVE:
+    loader (Witcher 3 kept its own FSR 3.1 on an MSI Claw), so XeSS, and FSR 3.1 away from AMD, move to 10 there."""
+    if build.archive != OPTISCALER_ARCHIVE or not (build.id == "xess" or (build.id == "fsr-3.1" and gpu not in AMD)):
         return build
     if not any(PurePosixPath(str(path)).name.lower() == FFX_LOADER for path in inputs.get("fsr31", ())):
         return build
     # The loader only hands the game's FSR to OptiScaler when OptiScaler offers an FSR 4 model it prefers; with
     # `auto` on a GPU without FSR 4 nothing is offered and the game's FSR 3.1 runs untouched (MSI Claw, Witcher 3).
-    return replace(build, archive=OPTISCALER_BETA, extra_dir="OptiScaler",
-                   ini={**build.ini, "FSR.Fsr4GpuSupport": "4"})
+    ini = {key: value for key, value in build.ini.items() if key != "FSR.Fsr4Update"}
+    return replace(build, archive=OPTISCALER_BETA, extra_dir="OptiScaler", ini={**ini, "FSR.Fsr4GpuSupport": "4"})
 
 
 def preferred_build(gpu: str) -> str:
