@@ -25,6 +25,12 @@ export function easyModeOf(choice: UpscalerChoice, preferred: string): EasyMode 
   return EASY_MODES.find((mode) => EASY[mode].quality === choice.quality && EASY[mode].sharpness === choice.sharpness) ?? null;
 }
 
+/** An install's choice as the page starts from: its build only while this GPU can still take it, else the recommended one. */
+export function restoredChoice(build: string, options: Omit<UpscalerChoice, "build">, builds: BuildInfo[], preferred: string): UpscalerChoice {
+  const known = builds.find((b) => b.id === build);
+  return { ...options, build: known?.available && known.supported ? build : preferred };
+}
+
 export function renderHeight(outputHeight: number, quality: Quality): number {
   return Math.round(outputHeight / QUALITY_RATIO[quality]);
 }

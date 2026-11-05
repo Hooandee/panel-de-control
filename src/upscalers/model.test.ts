@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -109,5 +109,17 @@ describe("launch options the user already had", () => {
       .toEqual({ overrides: ["dxgi=n,b"], env: ["FSR4_UPGRADE"] });
     const next = launchAfterJob('WINEDLLOVERRIDES="dxgi=n,b" %command%', { overrides: ["dxgi=n,b"], args: [] }, "install");
     expect(next?.addedOverrides).toEqual([]);
+  });
+
+  it("starts from the installed build only while this GPU can still take it", () => {
+    const builds = [
+      { id: "xess", supported: true, available: true },
+      { id: "fsr-4.1.2-beta", supported: false, available: true },
+      { id: "old", supported: true, available: false },
+    ] as unknown as Parameters<typeof restoredChoice>[2];
+    const options = { quality: "balanced" as const, sharpness: "soft" as const };
+    expect(restoredChoice("xess", options, builds, "xess")).toEqual({ build: "xess", ...options });
+    expect(restoredChoice("fsr-4.1.2-beta", options, builds, "xess").build).toBe("xess");
+    expect(restoredChoice("old", options, builds, "xess").build).toBe("xess");
   });
 });

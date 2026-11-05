@@ -22,7 +22,7 @@ import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
-  buildBlocker, downloadPace, protonFsr4Env, type PaceSample,
+  buildBlocker, downloadPace, protonFsr4Env, restoredChoice, type PaceSample,
 } from "./model";
 import { AdvancedIni } from "./AdvancedIni";
 import { onJobUpdate, trackJob } from "./jobRunner";
@@ -92,14 +92,14 @@ export const GameView: FC<{
       setDetail(next);
       setLoadError(null);
       if (next.install) {
-        const restored: UpscalerChoice = { build: next.install.build, ...next.install.options };
+        const restored = restoredChoice(next.install.build, next.install.options, overview.builds, overview.preferred);
         setChoice(restored);
         setMode(easyModeOf(restored, overview.preferred) ? "easy" : "custom");
       }
     } catch (error) {
       if (mounted.current) setLoadError(String((error as Error)?.message ?? "") || "generic");
     }
-  }, [appid, overview.preferred, game.isNonSteam, game.liveAppid, game.name]);
+  }, [appid, overview.preferred, overview.builds, game.isNonSteam, game.liveAppid, game.name]);
 
   useEffect(() => {
     mounted.current = true;
