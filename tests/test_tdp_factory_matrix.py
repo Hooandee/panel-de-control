@@ -477,12 +477,21 @@ def test_go_s_83n6_release_hands_back_the_power_steamos_had(tmp_path):
 
 
 @pytest.mark.parametrize("key,product", [
-    ("legion_go_s", "83L3"), ("legion_go_2", "83N0"), ("legion_go_2", "83N1"), ("legion_go", "83E1"),
+    ("legion_go_s", "83L3"), ("legion_go_2", "83N1"), ("legion_go", "83E1"),
 ])
-def test_unvalidated_lenovo_models_keep_their_previous_release(tmp_path, key, product):
+def test_other_legions_hand_back_and_seed_too(tmp_path, key, product):
     root = str(tmp_path)
     backend = _lenovo(root, key, product)
-    assert backend.seeds_from_readback is False
+    assert backend.seeds_from_readback is True
+
+    assert backend.set_levels(10, 15, 20, ac=False).ok is True
+    assert backend.release() is True
+    assert _read_lenovo_rails(root) == (15, 15, 15)
+
+
+def test_legion_go_2_83n0_keeps_its_own_firmware_handoff(tmp_path):
+    root = str(tmp_path)
+    backend = _lenovo(root, "legion_go_2", "83N0")
 
     assert backend.set_levels(10, 10, 10, ac=False).ok is True
     assert backend.release() is True
