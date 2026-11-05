@@ -1369,6 +1369,8 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
     assert backend.diagnostics() == {
         "boost_capped_to_active": True,
         "ignored_live_maxes": {},
+        "ownership_recovery_pending": False,
+        "owns_state": False,
         "probe_live_max_on_ac": True,
         "readback_settle_ms": 750,
         "reported_live_bounds": {

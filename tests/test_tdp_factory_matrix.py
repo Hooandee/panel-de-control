@@ -1,3 +1,4 @@
+import pytest
 import os
 
 from device_profiles import DEVICE_TABLE, GENERIC
@@ -437,3 +438,73 @@ def test_zotac_writes_without_readback_when_ryzenadj_cannot_read(tmp_path):
     assert select_backend(_profile("onexplayer_superx"), root=str(tmp_path),
                           ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
                           os_id="steamos")._readback_fallback is False
+
+
+
+def _mk_lenovo_gamezone(root, profile):
+    base = os.path.join(root, "sys/class/platform-profile/platform-profile-1")
+    _write(os.path.join(base, "name"), "lenovo-wmi-gamezone")
+    _write(os.path.join(base, "profile"), profile)
+    _write(os.path.join(base, "choices"), "low-power balanced performance custom")
+    return os.path.join(base, "profile")
+
+
+def _read_lenovo_rails(root):
+    base = os.path.join(root, "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes")
+    return tuple(
+        int(open(os.path.join(base, attr, "current_value")).read())
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt")
+    )
+
+
+def _lenovo(root, key, product):
+    _mk_firmware(root, "lenovo-wmi-other-0")
+    _mk_lenovo_gamezone(root, "custom")
+    for name, value in (("sys_vendor", "LENOVO"), ("product_name", product)):
+        _write(os.path.join(root, "sys/class/dmi/id", name), value)
+    return select_backend(_profile(key), root=root, ryzenadj_resolve=lambda: None, os_id="steamos")
+
+
+def test_go_s_83n6_release_hands_back_the_power_steamos_had(tmp_path):
+    root = str(tmp_path)
+    backend = _lenovo(root, "legion_go_s", "83N6")
+    assert backend.seeds_from_readback is True
+
+    assert backend.set_levels(10, 15, 20, ac=False).ok is True
+    assert _read_lenovo_rails(root) == (10, 15, 20)
+    assert backend.release() is True
+    assert _read_lenovo_rails(root) == (15, 15, 15)
+
+
+@pytest.mark.parametrize("key,product", [
+    ("legion_go_s", "83L3"), ("legion_go_2", "83N0"), ("legion_go_2", "83N1"), ("legion_go", "83E1"),
+])
+def test_unvalidated_lenovo_models_keep_their_previous_release(tmp_path, key, product):
+    root = str(tmp_path)
+    backend = _lenovo(root, key, product)
+    assert backend.seeds_from_readback is False
+
+    assert backend.set_levels(10, 10, 10, ac=False).ok is True
+    assert backend.release() is True
+    assert _read_lenovo_rails(root) == (10, 10, 10)
+
+
+def test_go_s_83n6_failed_hand_back_never_locks_tdp_or_rewrites(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    backend = _lenovo(root, "legion_go_s", "83N6")
+    assert backend.set_levels(10, 15, 20, ac=False).ok is True
+    monkeypatch.setattr(
+        backend, "_rollback_transaction", lambda *a, **k: (False, ["pl1=ignored"]),
+    )
+
+    assert backend.release() is False
+    assert backend.safety_locked is False
+
+    writes = []
+    real_write = backend._write
+    monkeypatch.setattr(backend, "_write", lambda *a: writes.append(a) or real_write(*a))
+    assert backend.release() is True
+    assert writes == []
+
+    assert backend.set_levels(12, 15, 20, ac=False).ok is True
+    assert _read_lenovo_rails(root) == (12, 15, 20)
