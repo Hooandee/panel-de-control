@@ -19,7 +19,7 @@ const listeners = new Map<number, Set<Listener>>();
 export function showGame(appid: number | null): void {
   if (appid !== shown) draft = null;
   shown = appid;
-  if (appid === null) held = null;
+  if (appid === null || appid !== held?.appid) held = null;
 }
 
 export function writeDraft(appid: number, value: PageDraft): void {
@@ -42,8 +42,9 @@ export function holdPage(): void {
 }
 
 export function takeHeldPage(): { appid: number; draft: PageDraft | null } | null {
+  // Not consumed: some Decky builds mount the panel twice while the menu closes, and the first mount would
+  // leave the second with the list. Leaving the page (showGame) or the timeout clears it.
   const page = held;
-  held = null;
   if (!page || Date.now() > page.until) return null;
   return { appid: page.appid, draft: draft?.appid === page.appid ? draft.value : null };
 }

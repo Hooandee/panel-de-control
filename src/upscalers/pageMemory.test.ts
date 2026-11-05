@@ -13,6 +13,19 @@ describe("game page across Steam's QAM remount", () => {
     writeDraft(292030, { mode: "custom", choice: { build: "xess-2" } });
     holdPage();
     expect(takeHeldPage()).toEqual({ appid: 292030, draft: { mode: "custom", choice: { build: "xess-2" } } });
+  });
+
+  it("hands it back to a second mount too, as Decky 3.2.9 mounts the panel twice after a menu", () => {
+    showGame(292030);
+    holdPage();
+    expect(takeHeldPage()?.appid).toBe(292030);
+    expect(takeHeldPage()?.appid).toBe(292030);
+  });
+
+  it("drops the hold when another game opens", () => {
+    showGame(292030);
+    holdPage();
+    showGame(1091500);
     expect(takeHeldPage()).toBeNull();
   });
 
