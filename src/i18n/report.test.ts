@@ -12,6 +12,13 @@ import { translateForLang } from "./index";
 
 describe("report translations", () => {
   it.each([
+    ["es", "Ambiente"], ["en", "Ambient"], ["it", "Atmosfera"],
+    ["de", "Ambiente"], ["pt-BR", "Ambiente"], ["fr", "Ambiance"],
+  ] as const)("translates the Ambiente category in %s", (lang, expected) => {
+    expect(translateForLang(lang, "report.cat.ambient")).toBe(expected);
+  });
+
+  it.each([
     ["es", "Temas"],
     ["en", "Themes"],
     ["it", "Temi"],

@@ -34,7 +34,6 @@ const Field: FC<{ label: string; value: string; placeholder: string; onChange: (
     <TextField
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
       placeholder={placeholder}
     />
   </div>

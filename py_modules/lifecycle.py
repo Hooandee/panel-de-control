@@ -183,12 +183,24 @@ class LifecycleManager:
         if self._is_logarithmic_sample(self._poll_failures):
             self._emit("poll_failed", **failure)
 
-    def _read_input(self, stage, reader):
-        try:
-            return True, reader()
-        except Exception as exc:  # noqa: BLE001 - one bad reader must not kill the poller
-            self._record_poll_failure(stage, exc)
-            return False, None
+    def _sample_inputs(self):
+        samples = []
+        for stage, reader in (
+            ("read_wakeup", self._read_wakeup),
+            ("read_ac", self._read_ac),
+            ("read_suspend", self._read_suspend),
+        ):
+            try:
+                samples.append((stage, True, reader()))
+            except Exception as exc:  # noqa: BLE001 - one bad reader must not kill the poller
+                samples.append((stage, False, exc))
+        return samples
+
+    def _accept_sample(self, stage, ok, value):
+        if ok:
+            return True, value
+        self._record_poll_failure(stage, value)
+        return False, None
 
     def _fire_due(self, pending, cb, now, operation, ac):
         """Fire cb once (with live AC) if any scheduled time is due; return the times left."""
@@ -223,11 +235,11 @@ class LifecycleManager:
         recent = sum(1 for t in self._ac_changes if now - t <= self._AC_FLAP_WINDOW_S)
         return recent >= self._AC_FLAP_MIN_CHANGES or self._ac_stable_at is not None
 
-    def check(self, now, wall=None):
-        wakeup_ok, wc = self._read_input("read_wakeup", self._read_wakeup)
-        ac_ok, ac = self._read_input("read_ac", self._read_ac)
-        suspend_ok, suspend_time = self._read_input(
-            "read_suspend", self._read_suspend
+    def check(self, now, wall=None, samples=None):
+        if samples is None:
+            samples = self._sample_inputs()
+        (wakeup_ok, wc), (ac_ok, ac), (suspend_ok, suspend_time) = (
+            self._accept_sample(*sample) for sample in samples
         )
         if not wakeup_ok or not ac_ok:
             return
@@ -340,8 +352,11 @@ class LifecycleManager:
     async def run(self):
         while True:
             try:
+                # The kernel blocks wakeup_count reads while wakeup events are still
+                # being processed, which right after resume lasts seconds.
+                samples = await asyncio.to_thread(self._sample_inputs)
                 # Monotonic, so a clock jump after wake cannot stall a deferred re-apply.
-                self.check(time.monotonic(), time.time())
+                self.check(time.monotonic(), time.time(), samples)
             except Exception as exc:  # noqa: BLE001 - the poller must never die
                 self._record_poll_failure("check", exc)
             await asyncio.sleep(self._interval)

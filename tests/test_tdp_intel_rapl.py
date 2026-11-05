@@ -492,3 +492,63 @@ class TestIntelRapl:
         assert rails["pl2"].applied_w == 31
         assert b.guard_interval_s == 2.0
         assert b.read_tolerance_w == 1
+
+
+def _baseline_backend(tmp_path):
+    return IntelRaplBackend(
+        _FALLBACK,
+        root=str(tmp_path),
+        sync_surfaces=True,
+        baseline_path=str(tmp_path / "run/rapl-baseline.lock"),
+    )
+
+
+def test_release_hands_both_surfaces_back_to_their_firmware_pl1(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    msr = _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=25_000_000)
+    backend = _baseline_backend(tmp_path)
+
+    assert backend.set_tdp(12, False).ok is True
+    assert backend.set_tdp(15, False).ok is True
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (15_000_000, 15_000_000)
+
+    assert backend.release() is True
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (40_000_000, 25_000_000)
+    assert not os.path.exists(tmp_path / "run/rapl-baseline.lock")
+
+
+def test_baseline_survives_a_plugin_restart_in_the_same_boot(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    msr = _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=40_000_000)
+    assert _baseline_backend(tmp_path).set_tdp(12, False).ok is True
+
+    restarted = _baseline_backend(tmp_path)
+    assert restarted.set_tdp(20, False).ok is True
+    assert restarted.release() is True
+
+    assert (_read_uw(mmio, 0), _read_uw(msr, 0)) == (40_000_000, 40_000_000)
+
+
+def test_release_without_manual_writes_leaves_firmware_untouched(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=40_000_000)
+    backend = _baseline_backend(tmp_path)
+    with open(os.path.join(mmio, "constraint_0_power_limit_uw"), "w") as f:
+        f.write("33000000")
+
+    assert backend.release() is True
+    assert _read_uw(mmio, 0) == 33_000_000
+
+
+def test_diagnostics_show_driven_surfaces_and_recorded_firmware_pl1(tmp_path):
+    _mk_rapl(str(tmp_path), _MMIO, pl1_uw=40_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=25_000_000)
+    backend = _baseline_backend(tmp_path)
+    assert backend.diagnostics()["firmware_pl1_w"] is None
+
+    backend.set_tdp(12, False)
+
+    assert backend.diagnostics() == {
+        "pl1_surfaces": {"intel-rapl-mmio:0": 12, "intel-rapl:0": 12},
+        "firmware_pl1_w": {"intel-rapl-mmio:0": 40, "intel-rapl:0": 25},
+    }

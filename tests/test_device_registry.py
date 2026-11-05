@@ -488,3 +488,26 @@ def test_playstation_5_is_detected_by_exact_dmi(tmp_path):
 
 def test_playstation_5_name_from_another_vendor_stays_generic(tmp_path):
     assert _detect_dmi(tmp_path, "PlayStation 5", "OTHER").key == "generic"
+
+
+@pytest.mark.parametrize(
+    "product", ("Claw 8 EX AI+ CG3EM", "Claw 8 EX AI+ CG3EM Launch Pack")
+)
+def test_msi_claw_8_ex_is_recognised_by_board(tmp_path, product):
+    profile = _detect_dmi(
+        tmp_path, product, "Micro-Star International Co., Ltd.", "MS-1T91"
+    )
+
+    assert profile.key == "msi_claw_8_ex_ai_plus"
+    assert profile.vendor == "intel"
+    assert profile.experimental is True
+    assert (profile.tdp_min, profile.tdp_default, profile.tdp_max,
+            profile.tdp_max_charger) == (8, 17, 35, 35)
+
+
+def test_msi_claw_8_ai_plus_a2vm_stays_on_its_profile(tmp_path):
+    profile = _detect_dmi(
+        tmp_path, "Claw 8 AI+ A2VM", "Micro-Star International Co., Ltd.", "MS-1T52"
+    )
+
+    assert profile.key == "msi_claw_8_ai_plus"

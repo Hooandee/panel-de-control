@@ -13,7 +13,7 @@ export const getVersion = callable<[], string>("get_version");
 export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
 export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
 export const prepareSteamCleaner = callable<[
-  scanId: string, entryIds: string[],
+  scanId: string, entryIds: string[], forceEntryIds?: string[],
 ], CleanerPlan>("prepare_steam_cleaner");
 export const executeSteamCleaner = callable<[
   planId: string, confirmCompatdata: boolean,
@@ -1383,3 +1383,6 @@ export const captureUpscalerFrame = callable<[appid: string], import("./upscaler
 export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
 export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
 export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upscalers_job");
+// A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
+export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
+export const resumeThemeGame = callable<[], void>("resume_theme_game");

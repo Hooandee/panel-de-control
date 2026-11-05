@@ -63,7 +63,6 @@ export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
         <TextField
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          // @ts-expect-error Decky TextField forwards input attrs; placeholder is valid.
           placeholder={t("up.ini.search")}
         />
       )}

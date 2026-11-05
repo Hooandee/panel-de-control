@@ -91,3 +91,19 @@ describe("HudPreview typography", () => {
     expect(overlay.style.overflowY).toBe("");
   });
 });
+
+
+it("shows a static graph example only when selected, in either layout", () => {
+  const model = { ...DEFAULT_MODEL, items: [{ kind: "metric" as const, id: "frame_timing" as const }] };
+  const view = render(<HudPreview model={model} />);
+  const graph = screen.getByRole("img", { name: "copy:hud.preview.graphExample" });
+  expect(graph.querySelector("polyline")).toBeTruthy();
+  expect(graph.style.height).toBe("25px");
+  expect(screen.getByText("Frametime")).toBeTruthy();
+  view.rerender(<HudPreview model={{ ...model, layout: "horizontal" }} />);
+  expect(screen.queryByText("Frametime")).toBeNull();
+  expect(screen.getByRole("img", { name: "copy:hud.preview.graphExample" }).style.height).toBe("10.2px");
+  view.rerender(<HudPreview model={DEFAULT_MODEL} />);
+  expect(screen.queryByRole("img", { name: "copy:hud.preview.graphExample" })).toBeNull();
+  view.unmount();
+});

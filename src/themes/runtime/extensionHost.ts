@@ -259,6 +259,19 @@ function freezePatch(patch: CssLoaderPatch): Readonly<CssLoaderPatch> {
   return Object.freeze({ ...patch, options: Object.freeze([...patch.options]) });
 }
 
+// A game the theme froze thaws when the theme goes, not only when the backend's deadline passes.
+function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountScope): Readonly<ThemeExtensionGamesAccess> {
+  let release: (() => void) | null = null;
+  return Object.freeze({
+    forceClose: (appid: number | string) => games.forceClose(appid),
+    pause: (ms: number) => {
+      release ??= scope.track(() => { void games.resume(); });
+      return games.pause(ms);
+    },
+    resume: () => games.resume(),
+  });
+}
+
 function freezeTheme(theme: CssLoaderTheme): Readonly<CssLoaderTheme> {
   return Object.freeze({ ...theme, patches: Object.freeze(theme.patches.map(freezePatch)) });
 }
@@ -546,7 +559,7 @@ export class ThemeExtensionRuntimeHost {
         host: HOST_DESCRIPTOR,
         ...(scoped ? { ambient: scoped.access } : {}),
         ...(this.storage ? { storage: this.storage.forTheme(selection.descriptor.catalogId) } : {}),
-        ...(this.games ? { games: this.games } : {}),
+        ...(this.games ? { games: scopedGames(this.games, scope) } : {}),
         ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
           artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
             get: this.artwork.get,

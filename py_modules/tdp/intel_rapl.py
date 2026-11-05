@@ -72,6 +72,7 @@ class IntelRaplBackend(TDPBackend):
         auto_tdp_allowed: bool = True,
         write_max_ac: int | None = None,
         sync_surfaces: bool = False,
+        baseline_path: str | None = None,
     ) -> None:
         self._fallback = fallback
         self._write_limits = fallback.with_ac_max(write_max_ac)
@@ -92,6 +93,8 @@ class IntelRaplBackend(TDPBackend):
         self.auto_tdp_safe = bool(auto_tdp_allowed) and (
             len(self._auto_surfaces) == len(_RAPL_SURFACES)
         )
+        self._baseline_path = baseline_path
+        self._baseline_lock = RuntimeSafetyLock(baseline_path)
         self._runtime_lock_payload = self._safety_lock.load_payload()
         self._owned_payload = self._ownership_lock.load_payload()
         self._owns_state = False
@@ -426,13 +429,20 @@ class IntelRaplBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "intel-rapl powercap not present")
         if self._owned_payload is not None or self._runtime_lock_payload is not None:
-            if not self.release():
+            if not self._release_auto_state():
                 return TdpResult(
                     watts,
                     self.read_applied(),
                     False,
                     "RAPL AutoTDP state could not be restored",
                 )
+        if not self._capture_baseline():
+            return TdpResult(
+                watts,
+                self.read_applied(),
+                False,
+                "firmware PL1 could not be recorded for hand-back",
+            )
         target = self._write_limits.clamp(watts, ac)
         # A BIOS-locked surface refuses the write but still counts: the package
         # obeys the lowest PL1, so with several surfaces success is judged on that
@@ -532,7 +542,39 @@ class IntelRaplBackend(TDPBackend):
             return self._restore_payload("ownership")
         return {"ok": True, "detail": "no RAPL recovery pending"}
 
-    def release(self):
+    def _capture_baseline(self) -> bool:
+        if self._baseline_path is None or self._baseline_lock.load_payload() is not None:
+            return True
+        captured = self.capture_limit_uw()
+        return captured is not None and self._baseline_lock.persist_payload(
+            {"state": "baseline", "pl1_uw": captured}
+        )
+
+    def _restore_baseline(self) -> bool:
+        payload = self._baseline_lock.load_payload()
+        if payload is None:
+            return True
+        if not self.restore_limit_uw(payload.get("pl1_uw")):
+            return False
+        return self._baseline_lock.clear()
+
+    def diagnostics(self) -> dict:
+        def watts(values):
+            return {
+                name: None if value is None else round(value / 1_000_000)
+                for name, value in values.items()
+            }
+
+        baseline = self._baseline_lock.load_payload()
+        return {
+            "pl1_surfaces": watts({
+                os.path.basename(d): self._read_int(self._pl1_path(d))
+                for d in self._pl1_dirs
+            }),
+            "firmware_pl1_w": watts(baseline.get("pl1_uw") or {}) if baseline else None,
+        }
+
+    def _release_auto_state(self):
         if self._runtime_lock_payload is not None:
             recovered = self._restore_payload("transaction")
             if not recovered["ok"]:
@@ -540,3 +582,6 @@ class IntelRaplBackend(TDPBackend):
         if self._owned_payload is None:
             return not self._ownership_recovery_pending
         return bool(self._restore_payload("ownership")["ok"])
+
+    def release(self):
+        return self._release_auto_state() and self._restore_baseline()

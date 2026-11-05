@@ -19,6 +19,7 @@ import json
 import os
 import re
 import stat
+import time
 import urllib.parse
 
 import device_tree
@@ -625,6 +626,8 @@ def kernel_logs(
 # reads false → probe bug" from "node absent → truly unsupported". Bounded to keep
 # the bundle small and to never sweep /sys recursively.
 _SNAP_MAX_CHIPS = 32
+_RAPL_SAMPLE_S = 0.5
+_sleep = time.sleep
 _SNAP_MAX_NAMES = 128
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
@@ -878,6 +881,7 @@ def _snap_cpu_gpu_power(root: str) -> dict:
             ),
         })
 
+    directories = {}
     for surface in sorted(
         _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
     )[:_SNAP_MAX_CHIPS]:
@@ -885,13 +889,45 @@ def _snap_cpu_gpu_power(root: str) -> dict:
         pl2 = read_str(os.path.join(surface, "constraint_1_power_limit_uw"))
         if pl1 is None and pl2 is None:
             continue
-        out["rapl"].append({
+        entry = {
             "surface": os.path.basename(surface),
             "name": read_str(os.path.join(surface, "name")),
             "pl1_uw": pl1,
             "pl2_uw": pl2,
-        })
+        }
+        out["rapl"].append(entry)
+        directories[id(entry)] = surface
+    _measure_rapl_power(out["rapl"], directories)
     return out
+
+
+def _read_int(path: str) -> int | None:
+    value = read_str(path)
+    return int(value) if value is not None and value.isdigit() else None
+
+
+def _measure_rapl_power(entries: list, directories: dict) -> None:
+    """Average power of each RAPL zone over a short window, to compare with its limits."""
+    energy = {
+        id(entry): _read_int(os.path.join(directories[id(entry)], "energy_uj"))
+        for entry in entries
+    }
+    if all(value is None for value in energy.values()):
+        return
+    _sleep(_RAPL_SAMPLE_S)
+    for entry in entries:
+        directory = directories[id(entry)]
+        before = energy[id(entry)]
+        after = _read_int(os.path.join(directory, "energy_uj"))
+        if before is None or after is None:
+            continue
+        delta = after - before
+        if delta < 0:
+            wrap = _read_int(os.path.join(directory, "max_energy_range_uj"))
+            if wrap is None:
+                continue
+            delta += wrap + 1
+        entry["power_w"] = round(delta / 1_000_000 / _RAPL_SAMPLE_S, 1)
 
 
 def _snap_devfreq(root: str) -> list:
