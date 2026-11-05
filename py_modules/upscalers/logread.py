@@ -20,6 +20,8 @@ _FACTS = (
     ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
     ("fg_state", re.compile(r"D3D12_Configure Enabled: (true|false), result|SetEnabled: (true|false), result")),
     ("fg_input", re.compile(r"FrameGen\.FGInput: (\w+)")),
+    # The game's XeFG stays its own when OptiScaler cannot take over its library: no log line, no End key.
+    ("fg_blind", re.compile(r"XeFG passthrough: (false)\s*$")),
     ("fg_context", re.compile(r"(FSRFG_Dx12::CreateContext D3D12_CreateContext result: 0|XeFG context created)")),
     ("upscaler", re.compile(r"init successful for (.+?), upscaler changed")),
     ("fg", re.compile(r"(D3D12_Configure Enabled: true, result: (?:0\b|FFX_API_RETURN_OK)|SetEnabled: true, result: \w*SUCCESS|Nukem.{0,40}(?:initialized|loaded))", re.I)),

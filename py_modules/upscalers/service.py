@@ -851,8 +851,13 @@ class UpscalerService:
         if not isinstance(install, dict):
             return {"result": "not_patched"}
         facts = _facts(install)
-        generating = bool(facts.get("fg")) and facts.get("fg_state", "true") == "true"
-        return {"result": _verdict(install, facts), "resolution": facts.get("resolution"), "fg": generating}
+        blind = bool(facts.get("fg_blind"))
+        generating: bool | None = None
+        if not blind and "fg_state" in facts:
+            generating = facts["fg_state"] == "true" and bool(facts.get("fg"))
+        elif not blind and facts.get("fg"):
+            generating = True
+        return {"result": _verdict(install, facts), "resolution": facts.get("resolution"), "fg": generating, "fg_toggle": not blind}
 
     # ---- lsfg-vk -----------------------------------------------------------------------------
     def lsfg_status(self) -> dict:

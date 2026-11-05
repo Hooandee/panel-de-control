@@ -1367,7 +1367,7 @@ export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice
 export const refreshUpscalerWiki = callable<[appid?: string], { updated: boolean; fresh: boolean }>("refresh_upscaler_wiki");
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
-export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean; fps?: number | null }>("get_upscaler_live");
+export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] }; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null }>("get_upscaler_live");
 export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
 export interface LsfgStatus { installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
 export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");

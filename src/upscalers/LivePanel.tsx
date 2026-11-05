@@ -1,3 +1,4 @@
+import { Navigation } from "@decky/ui";
 import { useEffect, useRef, useState, type FC } from "react";
 
 import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
@@ -12,6 +13,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
   const { t } = useI18n();
   const [fps, setFps] = useState<number | null>(null);
   const [generating, setGenerating] = useState<boolean | null>(null);
+  const [toggle, setToggle] = useState(true);
   const [pressing, setPressing] = useState<UpscalerKey | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -30,6 +32,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
       }
       setFps(live.fps ?? null);
       setGenerating(live.fg ?? null);
+      setToggle(live.fg_toggle !== false);
     };
     void read();
     const timer = window.setInterval(read, POLL_MS);
@@ -43,6 +46,8 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
     setPressing(action);
     setFailed(false);
     try {
+      // gamescope hands the key to the focused window: with the QAM open, Steam keeps it.
+      Navigation.CloseSideMenus();
       await pressUpscalerKey(appid, action);
       if (action === "fg") setGenerating((value) => (value === null ? null : !value));
     } catch {
@@ -67,7 +72,7 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
       </div>
       <Row>
         {menu && <ActionButton label={t("up.live.menu")} onPress={() => press("menu")} busy={pressing === "menu"} disabled={pressing !== null} />}
-        {fg && (
+        {fg && toggle && (
           <ActionButton
             label={t(generating === false ? "up.live.resume" : "up.live.pause")}
             onPress={() => press("fg")}

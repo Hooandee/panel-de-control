@@ -475,6 +475,18 @@ def test_frame_generation_is_written_on_install_and_toggled_after(steam, fake_ca
     os.utime(log, (future, future))
     assert service.live(APPID)["fg"] is True
 
+    log.write_text("[I] FrameGen.FGInput: fsrfg\n")
+    os.utime(log, (future, future))
+    assert service.live(APPID)["fg"] is None
+    log.write_text("[I] FSRFG_Dx12::Deactivate D3D12_Configure Enabled: false, result: FFX_API_RETURN_OK (0)\n")
+    os.utime(log, (future, future))
+    assert service.live(APPID)["fg"] is False
+    log.write_text("[W] XeFGInputs::Redirect OptiScaler's library is missing exports of the game's, not redirecting\n"
+                   "[I] XeFGInputs::Hook XeFG passthrough: false\n")
+    os.utime(log, (future, future))
+    assert service.live(APPID)["fg"] is None
+    assert service.live(APPID)["fg_toggle"] is False
+
 
 def test_beta_build_uses_the_v10_subfolder_layout(steam, fake_catalog, proc, monkeypatch):
     _, game = steam
