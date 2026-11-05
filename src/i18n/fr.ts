@@ -991,6 +991,7 @@ export const fr: Record<string, string> = {
   "system.on": "activé",
   "system.off": "désactivé",
   "system.eco.title": "Mode téléchargement",
+  "system.eco.autoExit": "Mode téléchargement désactivé à la reprise de l’utilisation de l’appareil.",
   "system.eco.desc": "Réduit la consommation pendant le téléchargement de vos jeux.",
   "system.eco.countdown": "L'écran s'éteindra dans",
   "system.eco.row.tdp": "TDP",

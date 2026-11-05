@@ -236,3 +236,130 @@ def test_a_broken_lifecycle_source_never_stops_the_box(tmp_path):
     beat.tick()
     saved = json.loads((tmp_path / "pulse.json").read_text())
     assert "lifecycle" not in saved and beat.write_failures == 0
+
+
+def _cpu_process(root, pid, ticks, born=100, name='MainThread', appid='292030'):
+    directory = root / 'proc' / str(pid)
+    directory.mkdir(parents=True, exist_ok=True)
+    fields = ['0'] * 22
+    fields[0], fields[11], fields[19] = 'R', str(ticks), str(born)
+    (directory / 'stat').write_text(f'{pid} ({name}) ' + ' '.join(fields))
+    (directory / 'comm').write_text(name)
+    (directory / 'environ').write_bytes(f'SECRET=never-export\0SteamAppId={appid}\0'.encode())
+
+
+def test_process_cpu_uses_interval_and_identifies_game_without_exporting_environment(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    _cpu_process(tmp_path, 42, 100)
+    assert sampler.sample()['top_cpu'] == []
+    sampler.clock = lambda: 12.0
+    _cpu_process(tmp_path, 42, 500)
+    result = sampler.sample()
+    assert result['interval_s'] == 2.0
+    assert result['top_cpu'] == [{'pid': 42, 'name': 'MainThread', 'cpu_pct': 200.0, 'steam_appid': '292030'}]
+    assert 'SECRET' not in json.dumps(result)
+
+
+def test_process_cpu_never_attributes_reused_pid_or_negative_delta(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    _cpu_process(tmp_path, 42, 500)
+    sampler.sample()
+    sampler.clock = lambda: 12.0
+    _cpu_process(tmp_path, 42, 900, born=200)
+    assert sampler.sample()['top_cpu'] == []
+    sampler.clock = lambda: 14.0
+    _cpu_process(tmp_path, 42, 100, born=200)
+    assert sampler.sample()['top_cpu'] == []
+
+
+def test_performance_readbacks_are_real_and_missing_is_unknown(tmp_path):
+    assert pulse.performance_sample(str(tmp_path)) == {'boost': None, 'cpu_khz': None, 'power_caps_uw': []}
+    cpu = tmp_path / 'sys/devices/system/cpu/cpufreq'
+    (cpu / 'policy0').mkdir(parents=True)
+    (cpu / 'boost').write_text('0')
+    (cpu / 'policy0/scaling_cur_freq').write_text('1700000')
+    chip = tmp_path / 'sys/class/hwmon/hwmon0'
+    chip.mkdir(parents=True)
+    (chip / 'name').write_text('amdgpu')
+    (chip / 'power1_cap').write_text('3000000')
+    result = pulse.performance_sample(str(tmp_path))
+    assert result['boost'] == 0
+    assert result['cpu_khz'] == {'min': 1700000, 'max': 1700000}
+    assert result['power_caps_uw'] == [{'chip': 'amdgpu', 'rail': 'power1_cap', 'uw': 3000000}]
+
+
+def test_top_cpu_is_bounded_and_unknown_names_and_partial_appids_are_not_exported(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    for pid in range(10):
+        _cpu_process(tmp_path, pid, 100, name='private document ) title')
+    sampler.sample()
+    sampler.clock = lambda: 12.0
+    for pid in range(10):
+        _cpu_process(tmp_path, pid, 500 + pid, name='private document ) title')
+        (tmp_path / 'proc' / str(pid) / 'environ').write_bytes(b'SteamAppId=123')
+    result = sampler.sample()
+    assert len(result['top_cpu']) == 5
+    assert all(row['name'] == 'other' and row['steam_appid'] is None for row in result['top_cpu'])
+    assert 'private' not in json.dumps(result)
+    assert result['cpu_basis'] == 'one_logical_cpu'
+
+
+def test_process_disappearing_does_not_break_the_sampler(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    _cpu_process(tmp_path, 42, 100)
+    sampler.sample()
+    (tmp_path / 'proc/42/stat').unlink()
+    sampler.clock = lambda: 12.0
+    assert sampler.sample()['observed'] == 0
+
+
+def test_default_pulse_includes_process_cpu_and_performance(tmp_path):
+    beat = Pulse(str(tmp_path))
+    beat.tick()
+    saved = json.loads((tmp_path / 'pulse.json').read_text())['samples'][-1]
+    assert saved['process_cpu']['interval_s'] is None
+    assert 'boost' in saved['performance']
+
+
+def test_twelve_typical_samples_with_diagnostics_fit_existing_budget(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    for pid in range(5):
+        _cpu_process(tmp_path, pid, 100)
+    sampler.sample()
+    sampler.clock = lambda: 20.0
+    for pid in range(5):
+        _cpu_process(tmp_path, pid, 500)
+    sample = {**system_sample(str(tmp_path)), 'process_cpu': sampler.sample(),
+              'ctx': {'game': '292030', 'themes': ['Hooandee Gallery 0.9.57'], 'eco_enabled': True,
+                      'support_sample_age_s': 2, 'tdp_w': 3, 'w': 3, 'cpu_c': 50, 'gpu_c': 47, 'rpm': 2172, 'ac': True},
+              'proc': {name: {'n': 3, 'rss_mb': 1500} for name in pulse._WATCHED_PROCESSES}}
+    encoded = pulse._encode({'samples': [sample] * 12, 'recent': [{'m': 'x' * 160}] * 8})
+    assert len(json.loads(encoded)['samples']) == 12
+
+
+def test_known_process_cpu_is_kept_even_outside_top_five(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    for pid in range(6):
+        _cpu_process(tmp_path, pid, 100, name='steam' if pid == 0 else 'MainThread')
+    sampler.sample()
+    sampler.clock = lambda: 12.0
+    for pid in range(6):
+        _cpu_process(tmp_path, pid, 110 if pid == 0 else 500, name='steam' if pid == 0 else 'MainThread')
+    result = sampler.sample()
+    assert all(row['name'] != 'steam' for row in result['top_cpu'])
+    assert result['known_cpu_pct']['steam'] == 5.0
+    assert result['known_cpu_pct']['PluginLoader'] is None
+
+
+def test_known_cpu_is_unknown_if_a_group_member_has_no_valid_delta(tmp_path):
+    sampler = pulse.ProcessSampler(str(tmp_path), clock=lambda: 10.0, ticks_per_second=100)
+    _cpu_process(tmp_path, 10, 100, name='steamwebhelper')
+    sampler.sample()
+    _cpu_process(tmp_path, 11, 500, name='steamwebhelper')
+    sampler.clock = lambda: 12.0
+    assert sampler.sample()['known_cpu_pct']['steamwebhelper'] is None
+    sampler.clock = lambda: 14.0
+    assert sampler.sample()['known_cpu_pct']['steamwebhelper'] == 0.0
+    _cpu_process(tmp_path, 11, 100, born=200, name='steamwebhelper')
+    sampler.clock = lambda: 16.0
+    assert sampler.sample()['known_cpu_pct']['steamwebhelper'] is None

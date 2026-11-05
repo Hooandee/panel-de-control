@@ -9697,6 +9697,7 @@ class Plugin(AmbientRpc):
         """Manual control taken → exit download mode and restore the normal TDP/boost
         state. Brightness is NOT touched here (FE-only; the persistent controller
         stops driving it and the user keeps whatever they set)."""
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -9788,6 +9789,12 @@ class Plugin(AmbientRpc):
         finally:
             await asyncio.to_thread(watch.close)
 
+    async def _eco_performance_readback(self) -> dict:
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(pulse.performance_sample), timeout=0.5)
+        except Exception as error:  # noqa: BLE001
+            return {"error": type(error).__name__}
+
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
         back to) and apply the override (TDP min + boost off) via _reapply_all; on
@@ -9798,6 +9805,13 @@ class Plugin(AmbientRpc):
         # to black on exit (unrecoverable from the card). Keep the previous value then.
         if enabled and int(current_brightness) > 0:
             self._settings["eco_brightness"] = int(current_brightness)
+        diary = journal.active
+        generation = getattr(self, "_eco_request_generation", 0) + 1
+        self._eco_request_generation = generation
+        before_enabled = bool(self._settings.get("eco_enabled", False))
+        before = await self._eco_performance_readback() if diary is not None else None
+        if generation != self._eco_request_generation:
+            return self._eco_state()
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
@@ -9806,6 +9820,14 @@ class Plugin(AmbientRpc):
         else:
             await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
+        if diary is not None:
+            after = await self._eco_performance_readback()
+            try:
+                diary.write("INFO", "eco", "transition_readback", before_enabled=before_enabled,
+                            enabled=bool(self._settings.get("eco_enabled", False)),
+                            before=before, after=after)
+            except Exception:  # noqa: BLE001
+                pass
         return self._eco_state()
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
@@ -10655,6 +10677,7 @@ class Plugin(AmbientRpc):
         return self._scope_context_is_current(scope, appid, context_appid)
 
     def _exit_eco_for_cpu(self) -> None:
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -14482,6 +14505,11 @@ class Plugin(AmbientRpc):
         return {
             "game": self._current_appid,
             "themes": getattr(self, "_support_active_themes", None),
+            "eco_enabled": bool(self._settings.get("eco_enabled", False)),
+            "support_sample_age_s": (
+                round(max(0.0, time.monotonic() - sample["sampled_at_monotonic"]), 1)
+                if sample.get("sampled_at_monotonic") is not None else None
+            ),
             # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
             "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
             **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
@@ -14604,7 +14632,7 @@ class Plugin(AmbientRpc):
                 await self._journal_theme_folders(diary, theme_folders, rescan_themes)
                 rescan_themes = False
                 sample = await self._support_sample()
-                self._support_last_sample = sample
+                self._support_last_sample = {**sample, "sampled_at_monotonic": time.monotonic()}
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
                     diary.write("INFO", "state", reason, **sample)
