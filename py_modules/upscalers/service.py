@@ -345,6 +345,7 @@ class UpscalerService:
 
         recipe = self._recipe(appid, entry.get("identity"), installed)
         proxy = str(choice.get("proxy") or _recipe_proxy(recipe) or "dxgi.dll")
+        build = catalog.for_game(build, analysis["inputs"])
         assets = catalog.build_assets(build)
         if recipe:
             assets += [catalog.ASSETS[a] for a in dict.fromkeys(recipe.files.values()) if catalog.ASSETS[a] not in assets]
@@ -399,7 +400,7 @@ class UpscalerService:
 
         now = time.time()
         entry["install"] = {
-            "build": build.id, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
+            "build": build.id, "archive": build.archive, "proxy": proxy, "target": str(target), "exe": analysis["exe"],
             "installed_at": now, "options": _clean_options(choice),
             "native_dlls": list(recipe.native_dlls) if recipe else [],
             "fg_plan": fg_plan,
@@ -1040,8 +1041,10 @@ def _fg_plan(gpu: str, analysis: dict, recipe, generation: int, route: str | Non
 
 
 def _generation(install: dict | None) -> int:
-    build = catalog.BUILDS.get(str((install or {}).get("build")))
-    return catalog.ASSETS[build.archive].generation if build else 9
+    install = install or {}
+    build = catalog.BUILDS.get(str(install.get("build")))
+    archive = catalog.ASSETS.get(str(install.get("archive") or (build.archive if build else "")))
+    return archive.generation if archive else 9
 
 
 def _archive_sources(archive: Path, generation: int) -> dict[str, Path]:

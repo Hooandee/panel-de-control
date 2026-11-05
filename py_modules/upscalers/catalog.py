@@ -5,7 +5,8 @@ identity is its SHA-256; URLs are interchangeable mirrors, so moving a download
 never invalidates an install.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import PurePosixPath
 
 OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
 OPTISCALER_BETA = "optiscaler-10-nightly"
@@ -220,6 +221,22 @@ BASE_INI = {
     "Log.LogLevel": "2",
     "Menu.UseHQFont": "false",
 }
+
+
+FFX_LOADER = "amd_fidelityfx_loader_dx12.dll"
+
+
+def for_game(build: Build, inputs: dict) -> Build:
+    """The build as this game needs it. OptiScaler 0.9 never sees FSR calls made through the FidelityFX SDK 2
+    loader (Witcher 3 kept its own FSR 3.1 on an MSI Claw), so XeSS moves to OptiScaler 10 there."""
+    if build.id != "xess" or build.archive != OPTISCALER_ARCHIVE:
+        return build
+    if not any(PurePosixPath(str(path)).name.lower() == FFX_LOADER for path in inputs.get("fsr31", ())):
+        return build
+    # The loader only hands the game's FSR to OptiScaler when OptiScaler offers an FSR 4 model it prefers; with
+    # `auto` on a GPU without FSR 4 nothing is offered and the game's FSR 3.1 runs untouched (MSI Claw, Witcher 3).
+    return replace(build, archive=OPTISCALER_BETA, extra_dir="OptiScaler",
+                   ini={**build.ini, "FSR.Fsr4GpuSupport": "4"})
 
 
 def preferred_build(gpu: str) -> str:

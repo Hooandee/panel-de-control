@@ -1271,3 +1271,29 @@ def test_quality_change_while_running_keeps_the_other_options(steam, fake_catalo
     service.configure(APPID, {"build": "fsr-test", "quality": "balanced", "sharpness": "high"})
     assert service.game(APPID)["install"]["options"] == {
         "quality": "balanced", "sharpness": "high", "fg": "off", "fg_route": None, "model": None}
+
+
+# ---- OptiScaler generation per game ---------------------------------------------------------
+
+LOADER_INPUTS = {"fsr31": ["bin/x64_dx12/amd_fidelityfx_loader_dx12.dll", "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"]}
+
+
+def test_ffx_loader_games_get_optiscaler_10_for_xess():
+    xess = catalog.for_game(catalog.BUILDS["xess"], LOADER_INPUTS)
+    assert xess.archive == catalog.OPTISCALER_BETA
+    assert xess.extra_dir == "OptiScaler"
+    assert xess.ini == {"Upscalers.Dx12Upscaler": "xess", "FSR.Fsr4GpuSupport": "4"}
+
+
+def test_other_games_and_builds_keep_their_optiscaler():
+    plain = {"fsr31": ["amd_fidelityfx_dx12.dll"]}
+    assert catalog.for_game(catalog.BUILDS["xess"], plain) is catalog.BUILDS["xess"]
+    for build_id in ("fsr-3.1", "fsr-4.1.1-rdna2", "fsr-4.0.2c", "fsr-4.1.2-beta", "hlx-fsr4", "proton-fsr4"):
+        assert catalog.for_game(catalog.BUILDS[build_id], LOADER_INPUTS) is catalog.BUILDS[build_id]
+
+
+def test_generation_follows_the_archive_the_install_used():
+    from upscalers.service import _generation
+
+    assert _generation({"build": "xess"}) == 9
+    assert _generation({"build": "xess", "archive": catalog.OPTISCALER_BETA}) == 10
