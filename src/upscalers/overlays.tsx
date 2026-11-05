@@ -52,10 +52,12 @@ export function publishOverview(overview: UpscalersOverview): void {
   emit();
 }
 
-function useInstalls(): Record<string, Badge> {
+export function useInstalls(): Record<string, Badge> {
   const [value, setValue] = useState(installs);
   useEffect(() => {
     const update = () => setValue(installs);
+    // A publish between the first render and this effect would otherwise be lost until the next one.
+    update();
     listeners.add(update);
     return () => { listeners.delete(update); };
   }, []);
@@ -322,6 +324,7 @@ export const InGameBadge: FC = () => {
       setInSection(sectionOpen);
       setGhostShot(ghost);
     };
+    update();
     listeners.add(update);
     return () => { listeners.delete(update); };
   }, []);

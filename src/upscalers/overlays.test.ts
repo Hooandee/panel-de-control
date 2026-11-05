@@ -90,3 +90,28 @@ describe("cover badge placement", () => {
     expect(tileOf(img)).toBe(card);
   });
 });
+
+describe("installs published before the overlays subscribe", () => {
+  it("still reach a component whose subscription effect runs after the publish", async () => {
+    const { render, cleanup } = await import("@testing-library/react");
+    const { createElement, useLayoutEffect } = await import("react");
+    const { publishOverview, useInstalls } = await import("./overlays");
+    const seen: string[][] = [];
+    const Reader = () => {
+      seen.push(Object.keys(useInstalls()));
+      return null;
+    };
+    const EarlyPublish = () => {
+      useLayoutEffect(() => {
+        publishOverview({
+          installs: { "292030": { build: "fsr-3.1", status: "active" } },
+          builds: [{ id: "fsr-3.1", family: "fsr", version: "3.1.5" }],
+        } as never);
+      }, []);
+      return null;
+    };
+    render(createElement("div", null, createElement(Reader), createElement(EarlyPublish)));
+    expect(seen[seen.length - 1]).toEqual(["292030"]);
+    cleanup();
+  });
+});
