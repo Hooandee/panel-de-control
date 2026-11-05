@@ -26,6 +26,13 @@
 
 * Le mode Téléchargement se désactive lorsque vous reprenez une utilisation prolongée de votre appareil et rétablit vos réglages de performances. Les rapports contiennent davantage d’informations pour analyser les ralentissements.
 
+## [0.84.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.0...panel-de-control-v0.84.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* exit download mode on sustained activity ([#1127](https://github.com/Hooandee/panel-de-control/issues/1127)) ([9b0dc18](https://github.com/Hooandee/panel-de-control/commit/9b0dc18a1fc60f0fed6b0721e6013679bdb33922))
+
 ## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
 
 
