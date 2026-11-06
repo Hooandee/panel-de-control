@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.84.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.2...panel-de-control-v0.84.3) (2026-11-06)
+
+
+### Español
+
+* **Menos parpadeos al usar temas:** Corregida la comprobación de fondos que podía hacer aparecer el indicador de volumen sin tocarlo o provocar destellos en los menús. Se respeta el fondo que hayas elegido.
+* **El sonido del juego y tu música, a tu gusto:** Ahora puedes dar más protagonismo a uno u otra con un solo control de balance. Los controles de volumen por separado siguen en Más ajustes.
+* **Capturas directas a Imágenes en Windows:** Los temas compatibles pueden guardarlas sin abrir el explorador ni sacarte de Steam, también si tienes la carpeta Imágenes en otra ubicación.
+
+### English
+
+* **Less flicker when using themes:** Fixed a background check that could make the volume indicator appear on its own or cause menus to flash. Your chosen background is respected.
+* **Balance your game and your music:** A single balance control now lets you give either one more room. Separate volume controls are still available in More settings.
+* **Save screenshots straight to Pictures on Windows:** Compatible themes can save them without opening File Explorer or taking you out of Steam, even if your Pictures folder is stored elsewhere.
+
+### Italiano
+
+* **Meno sfarfallii con i temi:** Corretto un controllo degli sfondi che poteva far apparire da solo l’indicatore del volume o causare lampeggi nei menu. Lo sfondo che hai scelto viene rispettato.
+* **Il gioco e la tua musica, come piacciono a te:** Un solo controllo di bilanciamento permette di dare più spazio all’uno o all’altra. I volumi separati restano disponibili in Altre impostazioni.
+* **Screenshot direttamente in Immagini su Windows:** I temi compatibili possono salvarli senza aprire Esplora file né farti uscire da Steam, anche se la cartella Immagini si trova altrove.
+
+### Deutsch
+
+* **Weniger Flackern mit Themes:** Eine Hintergrundprüfung konnte die Lautstärkeanzeige von selbst einblenden oder Menüs kurz aufblitzen lassen. Das ist korrigiert, und dein gewählter Hintergrund bleibt berücksichtigt.
+* **Spiel und Musik nach deinem Geschmack:** Mit einem einzigen Balance-Regler kannst du jetzt entweder das Spiel oder deine Musik stärker hervorheben. Die getrennten Lautstärkeregler findest du weiterhin unter Weitere Einstellungen.
+* **Screenshots unter Windows direkt in Bilder speichern:** Unterstützte Themes können sie speichern, ohne den Explorer zu öffnen oder Steam zu verlassen, auch wenn dein Bilder-Ordner an einem anderen Ort liegt.
+
+### Português (Brasil)
+
+* **Menos piscadas ao usar temas:** Corrigida uma verificação dos fundos que podia fazer o indicador de volume aparecer sozinho ou os menus piscarem. O fundo que você escolheu continua sendo respeitado.
+* **O som do jogo e sua música do seu jeito:** Agora dá para destacar um ou outro com um único controle de balanço. Os controles de volume separados continuam em Mais configurações.
+* **Capturas direto para Imagens no Windows:** Os temas compatíveis podem salvá-las sem abrir o Explorador de Arquivos nem tirar você do Steam, mesmo que a pasta Imagens esteja em outro local.
+
+### Français
+
+* **Moins de clignotements avec les thèmes :** Une vérification des fonds pouvait faire apparaître toute seule la barre de volume ou faire clignoter les menus. C’est corrigé, et le fond que vous avez choisi est respecté.
+* **Le jeu et votre musique, comme vous les aimez :** Un seul curseur de balance permet désormais de donner plus de place à l’un ou à l’autre. Les volumes séparés restent disponibles dans Plus de réglages.
+* **Les captures directement dans Images sous Windows :** Les thèmes compatibles peuvent les enregistrer sans ouvrir l’Explorateur de fichiers ni vous faire quitter Steam, même si votre dossier Images se trouve ailleurs.
+
 ## [0.84.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.1...panel-de-control-v0.84.2) (2026-11-05)
 
 
