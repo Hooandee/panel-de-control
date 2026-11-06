@@ -33,8 +33,10 @@ import { restartGame } from "./restartGame";
 import { showModal } from "../navigation/showModal";
 import { holdPage, onDraft, showGame, writeDraft, type PageDraft } from "./pageMemory";
 import { FrameGenRow } from "./FrameGenRow";
+import { ModelPicker } from "./ModelPicker";
+import { replaceForeignInstallation } from "./foreignReplacement";
 import {
-  ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, PickerButton, Row, SegmentRow, Skeleton, Spinner, statusColor,
+  ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
 } from "./parts";
 import type { GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
 import { upscalerErrorCode } from "./errorCode";
@@ -86,6 +88,8 @@ export const GameView: FC<{
   const [applied, setApplied] = useState<"now" | "restart" | "restarting" | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
+  const [foreignBusy, setForeignBusy] = useState(false);
+  const foreignPending = useRef(false);
   const [compat, setCompat] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -188,10 +192,27 @@ export const GameView: FC<{
   const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton";
   const installedBuild = builds.find((b) => b.id === install?.build);
   const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton";
-  const reinstall = () => start(() => installUpscaler(appid, {
+  const installSelected = () => installUpscaler(appid, {
     ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
-  }));
+  });
+  const reinstall = () => start(installSelected);
+  const adoptAndInstall = async () => {
+    if (foreignPending.current || running || gameRunning || !selected?.available || !selected.supported
+      || !detail?.analysis.target || detail.updating || buildBlocker(selected, detail.analysis.inputs, protonEnv)
+      || (detail.analysis.anti_cheat && !confirmAntiCheat)) return;
+    foreignPending.current = true;
+    setForeignBusy(true);
+    try {
+      await replaceForeignInstallation(() => adoptForeignUpscaler(appid), installSelected, start, async () => {
+        await load();
+        onChanged();
+      });
+    } finally {
+      foreignPending.current = false;
+      if (mounted.current) setForeignBusy(false);
+    }
+  };
 
   const apply = async () => {
     if (install && sameBuild) {
@@ -287,10 +308,9 @@ export const GameView: FC<{
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
-  const blocked = !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
+  const blocked = foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
   const inputs = detail?.analysis.inputs ?? {};
-  const usable = builds.filter((b) => b.available && b.supported && !buildBlocker(b, inputs, protonEnv));
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
@@ -363,9 +383,10 @@ export const GameView: FC<{
           ) : (
             <StatusLine
               title={t("up.state.none")}
-              sub={preferredBuild ? t("up.state.recommended", { name: buildLabel(preferredBuild) }) : undefined}
             />
           )}
+          {!detail.native && <ModelPicker builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv}
+            disabled={running || foreignBusy} onChange={changeChoice} />}
           {wikiUpdating && (
             <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <Spinner size={10} /> {t("up.wiki.updating")}
@@ -399,10 +420,10 @@ export const GameView: FC<{
       {detail && !detail.native && (
         <>
           {detail.analysis.foreign && !install && (
-            <Row><ActionButton label={t("up.foreign.adopt")} onPress={() => void foreignAction(adoptForeignUpscaler)} /></Row>
+            <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !selected.supported || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (detail.analysis.anti_cheat && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
           )}
           {detail.foreign_backup && !install && !detail.analysis.foreign && (
-            <Row><ActionButton label={t("up.foreign.restore")} onPress={() => void foreignAction(restoreForeignUpscaler)} /></Row>
+            <Row><ActionButton label={t("up.foreign.restore")} disabled={foreignBusy || running || gameRunning} onPress={() => void foreignAction(restoreForeignUpscaler)} /></Row>
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
@@ -473,29 +494,6 @@ export const GameView: FC<{
           {advanced && (
             <>
               <ListCard>
-                <ValueLine label={t("up.section.version")} first>
-                  <PickerButton
-                    label={t("up.section.version")}
-                    value={choice.build}
-                    disabled={running}
-                    onChange={(build) => changeChoice({ ...choice, build, model: null })}
-                    options={usable.map((b) => ({
-                      value: b.id,
-                      label: b.id === overview.preferred ? t("up.version.recommended", { name: buildLabel(b) }) : buildLabel(b),
-                    }))}
-                  />
-                </ValueLine>
-                {(selectedModels?.length ?? 0) > 1 && (
-                  <ValueLine label={t("up.section.model")}>
-                    <PickerButton
-                      label={t("up.section.model")}
-                      value={choice.model ?? selectedModels![0]}
-                      disabled={running}
-                      onChange={(model) => changeChoice({ ...choice, model })}
-                      options={selectedModels!.map((m) => ({ value: m, label: t(`up.model.${m}`) }))}
-                    />
-                  </ValueLine>
-                )}
                 {playing && installedOptiscaler && (
                   <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
                 )}
@@ -606,16 +604,6 @@ const StatusLine: FC<{ icon?: ReactNode; title: string; sub?: string; tone?: "wa
       }}>{sub}</span>
     )}
   </>
-);
-
-const ValueLine: FC<{ label: string; first?: boolean; children: ReactNode }> = ({ label, first, children }) => (
-  <div style={{
-    display: "flex", alignItems: "center", gap: theme.space.sm, padding: `${theme.space.xs}px ${theme.space.xs}px ${theme.space.xs}px ${theme.space.md}px`,
-    borderTop: first ? "none" : `1px solid ${theme.color.hairline}`,
-  }}>
-    <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>
-    <div style={{ minWidth: 150 }}>{children}</div>
-  </div>
 );
 
 const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {

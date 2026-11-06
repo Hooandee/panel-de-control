@@ -1,5 +1,5 @@
 import { Focusable } from "@decky/ui";
-import { useRef, useState, type FC, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 import { LuCheck, LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
@@ -150,8 +150,8 @@ export const ActionButton: FC<{
   disabled?: boolean;
 }> = ({ label, onPress, primary, danger, busy, disabled }) => (
   <Focusable
-    onActivate={disabled || busy ? undefined : onPress}
-    onClick={disabled || busy ? undefined : onPress}
+    onActivate={() => { if (!disabled && !busy) onPress(); }}
+    onClick={() => { if (!disabled && !busy) onPress(); }}
     style={{
       ...theme.card,
       ...(primary ? { background: theme.color.accent, boxShadow: "none" } : {}),
@@ -167,49 +167,68 @@ export const ActionButton: FC<{
   </Focusable>
 );
 
-export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge }: {
+export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge, showLabel = false }: {
   label: string;
   value: T;
   options: { value: T; label: string; caption?: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
   badge?: ReactNode;
+  showLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLDivElement>(null);
+  const selectedOption = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef(false);
+  useEffect(() => {
+    if (!open && !restoreFocus.current) return;
+    const target = open ? selectedOption.current : trigger.current;
+    restoreFocus.current = false;
+    // Steam finishes activation on the old node before accepting the replacement focus.
+    const timer = window.setTimeout(() => {
+      if (target?.isConnected) navigation.focus(target);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const close = () => {
+    restoreFocus.current = true;
     setOpen(false);
-    if (trigger.current) navigation.focus(trigger.current);
   };
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const current = options.find((o) => o.value === value)?.label ?? value;
-  const toggle = () => { if (!disabled) setOpen(!open); };
+  const toggle = () => { if (!disabled) { if (open) close(); else setOpen(true); } };
   return (
-    <div style={{ ...theme.card, minWidth: 0, overflow: "hidden", opacity: disabled ? 0.45 : 1 }}>
+    <Focusable flow-children="column" style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", opacity: disabled ? 0.45 : 1 }}>
       <Focusable ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
         onActivate={toggle} onClick={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
-        style={{ padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs, cursor: "pointer" }}>
-        <span style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: theme.space.xs,
+        style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
+        <div style={{ ...theme.card, boxSizing: "border-box", width: "100%", padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs }}>
+        {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>}
+        <span style={{ flex: showLabel ? "0 1 auto" : 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: theme.space.xs,
           fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "normal", overflowWrap: "anywhere" }}>
           {current}{badge}
         </span>
         <LuChevronDown size={16} color={theme.color.textMuted} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined }} />
+        </div>
       </Focusable>
       {open && <Focusable role="radiogroup" aria-label={label} onCancel={(event) => { event.stopPropagation(); close(); }} flow-children="column" style={{ display: "flex", flexDirection: "column" }}>
-        {options.map((option) => {
+        {options.map((option, index) => {
           const select = () => { if (!disabled) { close(); onChange(option.value); } };
-          return <Focusable key={option.value} role="radio" aria-checked={option.value === value} aria-disabled={disabled}
+          return <Focusable key={option.value} ref={index === selectedIndex ? selectedOption : undefined} role="radio" aria-checked={option.value === value} aria-disabled={disabled}
             onActivate={select} onClick={select}
-            style={{ display: "flex", alignItems: "flex-start", gap: theme.space.xs, padding: `${theme.space.sm}px ${theme.space.md}px`,
+            style={{ width: "100%", minWidth: 0, cursor: "pointer" }}>
+            <div style={{ boxSizing: "border-box", width: "100%", display: "flex", alignItems: "flex-start", gap: theme.space.xs, padding: `${theme.space.sm}px ${theme.space.md}px`,
               borderTop: `1px solid ${theme.color.hairline}`, color: theme.color.textPrimary, fontSize: theme.font.body, whiteSpace: "normal", cursor: "pointer" }}>
             <span style={{ width: 16, flexShrink: 0, display: "flex", paddingTop: 2 }}>{option.value === value && <LuCheck size={14} />}</span>
             <span style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4, overflowWrap: "anywhere", lineHeight: 1.35 }}>
               {option.label}
               {option.caption && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{option.caption}</span>}
             </span>
+            </div>
           </Focusable>;
         })}
       </Focusable>}
-    </div>
+    </Focusable>
   );
 }
 
@@ -226,7 +245,7 @@ export const Notice: FC<{ icon: ReactNode; children: ReactNode; tone?: "warn" | 
 );
 
 export const ListCard: FC<{ children: ReactNode }> = ({ children }) => (
-  <Focusable flow-children="column" style={{ ...theme.card, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+  <Focusable flow-children="column" style={{ ...theme.card, padding: 0, display: "flex", flexDirection: "column" }}>
     {children}
   </Focusable>
 );
@@ -256,7 +275,7 @@ export const ListRow: FC<{
   disabled?: boolean;
   first?: boolean;
 }> = ({ label, onPress, detail, caption, on, chevron, danger, busy, disabled, first }) => {
-  const press = disabled || busy || !onPress ? undefined : onPress;
+  const press = onPress ? () => { if (!disabled && !busy) onPress(); } : undefined;
   return (
     <Focusable
       role={on === undefined ? undefined : "switch"}

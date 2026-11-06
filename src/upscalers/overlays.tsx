@@ -1,8 +1,8 @@
 import { findSP } from "@decky/ui";
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { createPortal } from "react-dom";
 
-import { getUpscalerLive, getUpscalersOverview } from "../api";
+import { getUpscalersOverview } from "../api";
 import { useI18n } from "../i18n";
 import { registerGlobal } from "../platform/globalComponent";
 import { OverGameComposition } from "../platform/overGameComposition";
@@ -10,6 +10,7 @@ import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useGameInFront } from "./gameInFront";
+import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
 import { badgeLabel } from "./model";
 import type { UpscalersOverview } from "./types";
@@ -19,7 +20,6 @@ export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
 
 const IN_GAME_KEY = "pdc:upscalers:inGame";
 const START_MS = 6000;
-const LIVE_POLL_MS = 5000;
 const OVERVIEW_RETRY_MS = [2000, 5000, 15000, 30000, 60000];
 const STYLE_ID = "pdc-up-cover-style";
 const HOST_ID = "pdc-up-ingame";
@@ -30,6 +30,8 @@ interface Badge {
   short: string;
   state: string;
   build: string;
+  fg: boolean;
+  fgRoute: string | null;
 }
 
 let installs: Record<string, Badge> = {};
@@ -47,7 +49,7 @@ export function publishOverview(overview: UpscalersOverview): void {
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
     const label = badgeLabel(build, install.options?.model, install.build);
-    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build };
+    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
   }
   installs = next;
   emit();
@@ -316,8 +318,14 @@ export const InGameBadge: FC = () => {
 
   useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [resolution, setResolution] = useState<[number, number] | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
+  const { live, lossless } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const resolution = live?.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null;
+  const active = !!live || !!lossless;
+  const fgLabel = lossless
+    ? `Lossless Scaling ×${lossless.multiplier} ${t(`up.lsfg.flow.${lossless.flow}`)}`
+    : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
+  const fgState = lossless || live?.fg == null ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
 
   useEffect(() => {
     const update = () => {
@@ -341,32 +349,20 @@ export const InGameBadge: FC = () => {
     return () => { node.remove(); };
   }, []);
 
-  const [active, setActive] = useState(false);
   const [startWindow, setStartWindow] = useState(false);
-
-  // Appear once OptiScaler has actually created the upscaler, not while the game is still loading.
+  const startedFor = useRef<number | null>(null);
+  const startTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    setActive(false);
+    startedFor.current = null;
     setStartWindow(false);
-    setResolution(null);
-    if (!badge || !running) return;
-    let alive = true;
-    let hideTimer = 0;
-    const poll = window.setInterval(async () => {
-      const live = await getUpscalerLive(String(running.liveAppid)).catch(() => null);
-      if (!alive || live?.result !== "active") return;
-      window.clearInterval(poll);
-      setResolution(live.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null);
-      setActive(true);
-      setStartWindow(true);
-      hideTimer = window.setTimeout(() => setStartWindow(false), START_MS);
-    }, LIVE_POLL_MS);
-    return () => {
-      alive = false;
-      window.clearInterval(poll);
-      window.clearTimeout(hideTimer);
-    };
-  }, [running?.liveAppid, badge?.build]);
+    return () => { if (startTimer.current) clearTimeout(startTimer.current); };
+  }, [running?.liveAppid]);
+  useEffect(() => {
+    if (!active || !running || startedFor.current === running.liveAppid) return;
+    startedFor.current = running.liveAppid;
+    setStartWindow(true);
+    startTimer.current = setTimeout(() => setStartWindow(false), START_MS);
+  }, [running?.liveAppid, active]);
 
   const sectionShown = inSection && !!surface?.visible;
   const visible = active && (sectionShown || (gameInFront && (mode === "always" || (mode === "start" && startWindow))));
@@ -395,23 +391,26 @@ export const InGameBadge: FC = () => {
         </>,
         host,
       )}
-      {badge && createPortal(
+      {(badge || fgLabel) && createPortal(
         <div
           style={{
             // Top centre: Steam's performance overlay owns the top-left corner and the Quick Access Menu the right.
             // Opaque on purpose: over a running game the translucent fill showed as bare text on a Steam Deck.
             position: "fixed", top: 10, left: "50%", zIndex: 2147483001, pointerEvents: "none",
-            display: "flex", alignItems: "baseline", gap: 8, padding: "3px 10px", borderRadius: 8,
-            background: "#15181e", color: "#eef1f5", whiteSpace: "nowrap",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            color: "#eef1f5", whiteSpace: "nowrap",
             font: "600 11px/15px 'Motiva Sans', 'Noto Sans', Arial, sans-serif",
             opacity: visible ? 0.92 : 0, transform: visible ? "translate(-50%, 0)" : "translate(-50%, -6px)",
             transition: "opacity 320ms ease, transform 420ms cubic-bezier(.2,.8,.2,1)",
           }}
         >
-          <span>{badge.label}</span>
-          {resolution && resolution[0] < resolution[1] && (
-            <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>
-          )}
+          {badge && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
+            <span>{badge.label}</span>
+            {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
+          </div>}
+          {fgLabel && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
+            <span>{fgLabel}</span><span style={{ color: "#9aa3ae" }}>{fgState}</span>
+          </div>}
         </div>,
         host,
       )}
