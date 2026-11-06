@@ -1,9 +1,10 @@
 import { Navigation } from "@decky/ui";
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 
 import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
 import { holdPage } from "./pageMemory";
+import { fpsCounterSnapshot, subscribeFpsCounter, toggleFpsCounter } from "./fpsCounter";
 import { Label, ListCard, ListRow, Note } from "./parts";
 
 const POLL_MS = 1500;
@@ -69,11 +70,19 @@ export const DuringPlay: FC<{
   onCompare: () => void;
 }> = ({ appid, optiscaler, fg, live, onGenerating, onCompare }) => {
   const { t } = useI18n();
-  const [counter, setCounter] = useState(false);
+  const counter = useSyncExternalStore(subscribeFpsCounter, () => fpsCounterSnapshot(appid));
   const [pressing, setPressing] = useState<UpscalerKey | null>(null);
   const [failed, setFailed] = useState(false);
 
   const press = async (action: UpscalerKey) => {
+    if (action === "fps") {
+      await toggleFpsCounter(appid, async () => {
+        holdPage();
+        Navigation.CloseSideMenus();
+        await pressUpscalerKey(appid, action);
+      });
+      return;
+    }
     setPressing(action);
     setFailed(false);
     try {
@@ -81,7 +90,6 @@ export const DuringPlay: FC<{
       holdPage();
       Navigation.CloseSideMenus();
       await pressUpscalerKey(appid, action);
-      if (action === "fps") setCounter((on) => !on);
       if (action === "fg") onGenerating(live.generating === null ? null : !live.generating);
     } catch {
       setFailed(true);
@@ -95,20 +103,20 @@ export const DuringPlay: FC<{
       <Label>{t("up.play.title")}</Label>
       <ListCard>
         {optiscaler && (
-          <ListRow first label={t("up.play.fps")} on={counter} busy={pressing === "fps"} disabled={pressing !== null && pressing !== "fps"}
+          <ListRow first label={t("up.play.fps")} on={counter.on} busy={counter.busy} disabled={pressing !== null}
             onPress={() => void press("fps")} />
         )}
         <ListRow first={!optiscaler} label={t("up.play.compare")} chevron onPress={onCompare} />
         {optiscaler && (
           <ListRow label={t("up.play.menu")} detail={t("up.play.menu.detail")} busy={pressing === "menu"}
-            disabled={pressing !== null && pressing !== "menu"} onPress={() => void press("menu")} />
+            disabled={counter.busy || (pressing !== null && pressing !== "menu")} onPress={() => void press("menu")} />
         )}
         {fg && live.canPause && (
           <ListRow label={t("up.play.pause")} on={live.generating === false} busy={pressing === "fg"}
-            disabled={pressing !== null && pressing !== "fg"} onPress={() => void press("fg")} />
+            disabled={counter.busy || (pressing !== null && pressing !== "fg")} onPress={() => void press("fg")} />
         )}
       </ListCard>
-      {failed && <Note tone="warn">{t("up.live.failed")}</Note>}
+      {(failed || counter.failed) && <Note tone="warn">{t("up.live.failed")}</Note>}
     </>
   );
 };

@@ -10,6 +10,7 @@ import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
 import { readString, writeString } from "../system/pdcStorage";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useGameInFront } from "./gameInFront";
+import { startFpsCounterSession } from "./fpsCounter";
 import { badgeLabel } from "./model";
 import type { UpscalersOverview } from "./types";
 
@@ -420,6 +421,7 @@ export const InGameBadge: FC = () => {
 
 /** Mounts covers and the in-game pill for the plugin's lifetime and loads the first overview. */
 export function startUpscalerOverlays(): () => void {
+  const stopCounterSession = startFpsCounterSession();
   const covers = registerGlobal("PanelDeControlUpscalerCovers", CoverBadges);
   const inGame = registerGlobal("PanelDeControlUpscalerInGame", InGameBadge);
   let stopped = false;
@@ -434,6 +436,7 @@ export function startUpscalerOverlays(): () => void {
   load(0);
   return () => {
     stopped = true;
+    stopCounterSession();
     window.clearTimeout(retry);
     inGame();
     covers();

@@ -386,7 +386,7 @@ const es: Record<string, string> = {
   "up.state.checked": "Comprobado la última partida: de {from}p a {to}p",
   "up.state.checkedNative": "Comprobado la última partida: a {to}p",
   "up.res.arrow": "{from}p → {to}p",
-  "up.sub.playing": "En partida",
+  "up.sub.playing": "Jugando",
   "up.sub.uses": "Usa {name}",
   "up.sub.usesBetter": "Usa {name}, se puede mejorar",
   "up.sub.foreign": "OptiScaler instalado a mano",
