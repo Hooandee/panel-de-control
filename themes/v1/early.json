@@ -3,6 +3,36 @@
   "themes": [
     {
       "schemaVersion": 1,
+      "catalogId": "hooandee-vida",
+      "cssLoaderName": "Hooandee Vida",
+      "displayName": {
+        "es": "Vida",
+        "en": "Vida",
+        "it": "Vida"
+      },
+      "description": {
+        "es": "Un launcher con todo el espíritu de PS Vita: tus juegos flotan como burbujas de cristal, con Amigos, Trofeos, música y sonidos propios.",
+        "en": "A launcher with all the spirit of the PS Vita: your games float as glass bubbles, with its own Friends, Trophies, music and sounds.",
+        "it": "Un launcher con tutto lo spirito di PS Vita: i tuoi giochi fluttuano come bolle di vetro, con Amici, Trofei, musica e suoni propri."
+      },
+      "author": "Hooandee",
+      "tags": [],
+      "minimumVersions": {
+        "panel": "0.84.0"
+      },
+      "early": {
+        "version": "0.1.720",
+        "artifacts": [
+          {
+            "version": "0.1.720",
+            "size": 2993772,
+            "sha256": "74256a388559fd0b45d17e72cf99cc8fa625e35c4b0f54a44acba81a4351c2bd"
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
       "catalogId": "hooandee-duo",
       "cssLoaderName": "Hooandee Duo",
       "displayName": {
@@ -21,8 +51,13 @@
         "panel": "0.80.0"
       },
       "early": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "artifacts": [
+          {
+            "version": "0.3.2",
+            "size": 362634,
+            "sha256": "612ae831af0ae3fea4cb9379d60ab9ebc382ae4ac2fb0a7301cbf8cd449779a7"
+          },
           {
             "version": "0.3.1",
             "size": 357737,
@@ -57,41 +92,6 @@
             "version": "0.1.4",
             "size": 251641,
             "sha256": "0323f2a8f3b395ae768f1c19f74db3ac6b362568d13a6d24f161d63584078411"
-          },
-          {
-            "version": "0.1.3",
-            "size": 251286,
-            "sha256": "c3a505d5208df317b818c65c4ef1a29d645999ffb97b9141dadeb510ff7e3aa8"
-          }
-        ]
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "catalogId": "hooandee-vida",
-      "cssLoaderName": "Hooandee Vida",
-      "displayName": {
-        "es": "Vida",
-        "en": "Vida",
-        "it": "Vida"
-      },
-      "description": {
-        "es": "Un launcher con todo el espíritu de PS Vita: tus juegos flotan como burbujas de cristal, con Amigos, Trofeos, música y sonidos propios.",
-        "en": "A launcher with all the spirit of the PS Vita: your games float as glass bubbles, with its own Friends, Trophies, music and sounds.",
-        "it": "Un launcher con tutto lo spirito di PS Vita: i tuoi giochi fluttuano come bolle di vetro, con Amici, Trofei, musica e suoni propri."
-      },
-      "author": "Hooandee",
-      "tags": [],
-      "minimumVersions": {
-        "panel": "0.84.0"
-      },
-      "early": {
-        "version": "0.1.720",
-        "artifacts": [
-          {
-            "version": "0.1.720",
-            "size": 2993772,
-            "sha256": "74256a388559fd0b45d17e72cf99cc8fa625e35c4b0f54a44acba81a4351c2bd"
           }
         ]
       }
