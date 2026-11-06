@@ -19,12 +19,6 @@ function loaderStyle(css: string) {
   style.className = "css-loader-style";
   style.textContent = css;
   document.head.append(style);
-  let disabled = false;
-  // happy-dom does not apply CSSStyleSheet.disabled to the cascade; emulate that browser boundary.
-  Object.defineProperty(style.sheet!, "disabled", {
-    get: () => disabled,
-    set: (value: boolean) => { disabled = value; style.textContent = value ? "" : css; },
-  });
   return style;
 }
 
@@ -59,14 +53,138 @@ describe("theme signals", () => {
     expect(detectThirdParty(document, true)).toEqual({ confidence: "high", id: "css:ScrollArea", candidates: ["css:ScrollArea"] });
   });
 
-  it("does not blame native backgrounds on cosmetic CSS Loader styles", () => {
+  it("does not attribute a native painter to a cosmetic loader or change live CSSOM", () => {
     surface("BackgroundGlass", { backgroundImage: "linear-gradient(black, gray)" });
-    const style = document.createElement("style");
-    style.className = "css-loader-style";
-    style.textContent = ".volume-label { display: none }";
-    document.head.append(style);
+    const style = loaderStyle(".volume-label { display: none }");
+    const setDisabled = vi.fn();
+    Object.defineProperty(style.sheet!, "disabled", { get: () => false, set: setDisabled });
     expect(detectThirdParty(document)).toEqual({ confidence: "none" });
-    expect(style.sheet?.disabled).not.toBe(true);
+    expect(setDisabled).not.toHaveBeenCalled();
+  });
+
+  it("keeps a loader painter confident with an extra native painter", () => {
+    surface("ScrollArea", {});
+    surface("BackgroundGlass", { backgroundImage: "linear-gradient(black, gray)" });
+    loaderStyle(".h-ScrollArea { background-image: linear-gradient(red, blue) }");
+    expect(detectThirdParty(document)).toEqual({ confidence: "high", id: "css:ScrollArea", candidates: ["css:ScrollArea"] });
+  });
+
+  it("does not attribute a loader background overridden by native inline paint", () => {
+    surface("ScrollArea", {backgroundColor:"rgb(1, 2, 3)"});
+    loaderStyle(".h-ScrollArea {background-color:rgb(10, 20, 30)}");
+    expect(detectThirdParty(document)).toEqual({confidence:"none"});
+  });
+
+  it("keeps unresolved loader variables low confidence", () => {
+    surface("ScrollArea", {backgroundColor:"rgb(1, 2, 3)"});
+    loaderStyle(".h-ScrollArea {background-color:var(--theme-background)}");
+    expect(detectThirdParty(document).confidence).toBe("low");
+  });
+
+  it("ignores loader paint in inactive media", () => {
+    surface("ScrollArea", {backgroundColor:"rgb(1, 2, 3)"});
+    loaderStyle("@media (min-width: 99999px) {.h-ScrollArea {background-color:rgb(1, 2, 3)}}");
+    expect(detectThirdParty(document)).toEqual({confidence:"none"});
+  });
+
+  it("does not claim a value equally explained by native CSS", () => {
+    surface("ScrollArea", {backgroundColor:"rgb(10, 20, 30)"});
+    loaderStyle(".h-ScrollArea {background-color:rgb(10, 20, 30)}");
+    expect(detectThirdParty(document).confidence).toBe("low");
+  });
+
+  it("attributes a matching pseudo-element without borrowing element or other-pseudo declarations", () => {
+    const el = surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea::before {background-image:linear-gradient(red, blue)}');
+    const nativeGet = window.getComputedStyle.bind(window);
+    const before = document.createElement("span").style;
+    Object.assign(before, {backgroundImage:"linear-gradient(red, blue)", content:'""', position:"fixed"});
+    const absent = document.createElement("span").style; absent.content = "none";
+    vi.spyOn(window, "getComputedStyle").mockImplementation((node, part) => node === el && part ? (part === "::before" ? before : absent) : nativeGet(node));
+    expect(detectThirdParty(document)).toEqual({confidence:"high",id:"css:ScrollArea::before",candidates:["css:ScrollArea::before"]});
+  });
+
+  it("matches functional selector lists without mistaking their commas for branches", () => {
+    surface("ScrollArea", {});
+    loaderStyle(':is(.missing, .h-ScrollArea) {background-color:rgb(10, 20, 30)}');
+    expect(detectThirdParty(document).confidence).toBe("high");
+  });
+
+  it("keeps unresolved native variables from granting high confidence", () => {
+    surface("ScrollArea", {});
+    const native = document.createElement("style");
+    native.textContent = '.h-ScrollArea {background-color:var(--native-paint)}'; document.head.append(native);
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)}');
+    expect(detectThirdParty(document).confidence).toBe("low");
+  });
+
+  it("does not let unrelated native functional selectors downgrade a literal loader painter", () => {
+    surface("ScrollArea", {});
+    const native = document.createElement("style");
+    native.textContent = ':is(.unrelated, .other) {background-color:var(--native-paint)}'; document.head.append(native);
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)}');
+    expect(detectThirdParty(document).confidence).toBe("high");
+  });
+
+  it("does not claim high confidence when native all can inherit the same paint", () => {
+    surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)}');
+    const native = document.createElement("style");
+    native.textContent = '.h-ScrollArea {all:inherit!important}'; document.head.append(native);
+    expect(detectThirdParty(document).confidence).not.toBe("high");
+  });
+
+  it("does not attribute Loader all-only inheritance as its own background", () => {
+    surface("ScrollArea", {backgroundColor:"rgb(10, 20, 30)"});
+    loaderStyle('.h-ScrollArea {all:inherit!important}');
+    expect(detectThirdParty(document)).toEqual({confidence:"none"});
+  });
+
+  it("keeps a Loader declaration combined with all ambiguous", () => {
+    surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30);all:inherit!important}');
+    expect(detectThirdParty(document).confidence).not.toBe("high");
+  });
+
+  it("does not grant high confidence when a separate Loader all rule resets its literal background", () => {
+    surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)} .h-ScrollArea {all:inherit!important}');
+    expect(detectThirdParty(document).confidence).not.toBe("high");
+  });
+
+  it("does not grant high confidence when adopted styles cannot be inspected", () => {
+    surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)}');
+    // Keep the computed-style fixture independent of happy-dom's internal stylesheet traversal.
+    const resolved = document.createElement("span").style;
+    resolved.backgroundColor = "rgb(10, 20, 30)"; resolved.content = "none";
+    vi.spyOn(window, "getComputedStyle").mockReturnValue(resolved);
+    vi.spyOn(document, "adoptedStyleSheets", "get").mockImplementation(() => { throw Error("unreadable"); });
+    expect(detectThirdParty(document).confidence).toBe("low");
+  });
+
+  it("reads adopted native sheets before attributing the same background to Loader", () => {
+    surface("ScrollArea", {});
+    loaderStyle('.h-ScrollArea {background-color:rgb(10, 20, 30)}');
+    const adopted = new CSSStyleSheet();
+    adopted.replaceSync('.h-ScrollArea {background-color:rgb(10, 20, 30)!important}');
+    const getter = vi.spyOn(document, "adoptedStyleSheets", "get").mockReturnValue([adopted]);
+    expect(detectThirdParty(document).confidence).toBe("low");
+    getter.mockRestore();
+  });
+
+  it("resolves loader backgrounds without disabling sheets or changing their rules", () => {
+    const el = surface("ScrollArea", {});
+    const style = loaderStyle(".h-ScrollArea { background-color: rgb(10, 20, 30) }");
+    const sheet = style.sheet!;
+    const originalRules = Array.from(sheet.cssRules, rule => rule.cssText);
+    const setDisabled = vi.fn();
+    Object.defineProperty(sheet, "disabled", { get: () => false, set: setDisabled });
+    expect(window.getComputedStyle(el).backgroundColor).toBe("rgb(10, 20, 30)");
+    expect(detectThirdParty(document).id).toBe("css:ScrollArea");
+    expect(setDisabled).not.toHaveBeenCalled();
+    expect(Array.from(sheet.cssRules, rule => rule.cssText)).toEqual(originalRules);
+    expect(window.getComputedStyle(el).backgroundColor).toBe("rgb(10, 20, 30)");
   });
 
   it("translucent surfaces are not painters", () => {
@@ -82,33 +200,14 @@ describe("theme signals", () => {
     expect(detectThirdParty(document, true).confidence).toBe("low");
   });
 
-  it("ignores loader rules that leave the native background unchanged", () => {
-    surface("BackgroundGlass", { backgroundColor: "rgb(10, 10, 10)" });
-    loaderStyle(".h-BackgroundGlass { background-color: rgb(10, 10, 10) }");
-    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
-  });
-
-  it("does not enable a loader stylesheet that was already disabled", () => {
-    surface("ScrollArea", {});
+  it("stays silent without enabling a disabled loader stylesheet", () => {
+    surface("ScrollArea", { backgroundColor: "rgb(10, 20, 30)" });
     const style = loaderStyle(".h-ScrollArea { background: red }");
-    const sheet = style.sheet!;
-    sheet.disabled = true;
+    const setDisabled = vi.fn();
+    Object.defineProperty(style.sheet!, "disabled", { get: () => true, set: setDisabled });
     expect(detectThirdParty(document)).toEqual({ confidence: "none" });
-    expect(sheet.disabled).toBe(true);
-  });
-
-  it("restores loader styles and stays uncertain if a baseline style cannot be read", () => {
-    surface("ScrollArea", {});
-    const style = loaderStyle(".h-ScrollArea { background: red }");
-    const sheet = style.sheet!;
-    const read = window.getComputedStyle.bind(window);
-    vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
-      if (sheet.disabled) throw new Error("style unavailable");
-      return read(element, pseudo);
-    });
-    expect(detectThirdParty(document)).toEqual({ confidence: "none" });
-    expect(sheet.disabled).toBe(false);
-    expect(style.textContent).toContain("background: red");
+    expect(style.sheet!.disabled).toBe(true);
+    expect(setDisabled).not.toHaveBeenCalled();
   });
 
   it("neutralizes only chosen painters, scoped to Panel owning the background", () => {

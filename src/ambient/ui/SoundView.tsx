@@ -8,6 +8,7 @@ import type { OverlayCorner, OverlayMode } from "../core/types";
 import { parseEmbedStream } from "../core/streams";
 import { isHls, parseYouTube } from "../core/youtube";
 import { favoriteToStation, type AmbientRuntime, type AmbientSnapshot } from "../steam/runtime";
+import { levelsForBalance, mixBalance } from "../core/mixBalance";
 import { trackSource } from "../steam/player";
 import { NowPlaying } from "./NowPlaying";
 import { Button, Caption, ChoiceRow, ToggleRow, CornerPicker, MoreSettings, SliderRow, Tile, TileStrip, cardStyle } from "./primitives";
@@ -116,8 +117,15 @@ export const SoundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRuntime 
       </TileStrip>
 
       <Caption>{t("ambient.mix.title")}</Caption>
-      <SliderRow label={t("ambient.mix.media")} value={music.inGameMediaLevel} min={0} max={100} step={5} format={level} onChange={(inGameMediaLevel) => setMusic({ inGameMediaLevel })} />
-      <SliderRow label={t("ambient.mix.game")} value={music.inGameGameLevel} min={0} max={100} step={5} format={(v) => `${v} %`} onChange={(inGameGameLevel) => setMusic({ inGameGameLevel })} />
+      <SliderRow
+        label={`${t("ambient.mix.game")} ↔ ${t("ambient.mix.media")}`}
+        value={mixBalance(music.inGameGameLevel, music.inGameMediaLevel)} min={-100} max={100} step={5}
+        format={(value) => { const mix = levelsForBalance(value, music.inGameGameLevel, music.inGameMediaLevel); return `${t("ambient.mix.game")} ${mix.game}% / ${t("ambient.mix.media")} ${mix.media}%`; }}
+        onChange={(value) => void runtime.updateSettings((s) => {
+          const mix = levelsForBalance(value, s.music.inGameGameLevel, s.music.inGameMediaLevel);
+          return { ...s, music: { ...s.music, inGameGameLevel: mix.game, inGameMediaLevel: mix.media } };
+        })}
+      />
       <ToggleRow label={t("ambient.game.themes")} description={t("ambient.game.themes.desc")} checked={settings.background.gameThemes} onChange={(gameThemes) => void runtime.updateSettings((s) => ({ ...s, background: { ...s.background, gameThemes } }))} />
       <ChoiceRow
         label={t("ambient.sound.overGame")}
@@ -127,6 +135,8 @@ export const SoundView: FC<{ snapshot: AmbientSnapshot; runtime: AmbientRuntime 
       />
 
       <MoreSettings id="ambient-sound-more" label={t("ambient.more")}>
+      <SliderRow label={t("ambient.mix.media")} value={music.inGameMediaLevel} min={0} max={100} step={5} format={level} onChange={(inGameMediaLevel) => setMusic({ inGameMediaLevel })} />
+      <SliderRow label={t("ambient.mix.game")} value={music.inGameGameLevel} min={0} max={100} step={5} format={(v) => `${v} %`} onChange={(inGameGameLevel) => setMusic({ inGameGameLevel })} />
         <CornerPicker label={t("ambient.overlay.corner")} value={music.overlayCorner} labels={corners} onChange={(overlayCorner) => setMusic({ overlayCorner })} />
         <SliderRow label={t("ambient.overlay.videoSize")} value={music.videoScale} min={20} max={70} step={5} format={(v) => `${v} %`} onChange={(videoScale) => setMusic({ videoScale })} />
         <ToggleRow label={t("ambient.music.qamPlayer")} description={t("ambient.music.qamPlayer.desc")} checked={music.qamPlayer} onChange={(qamPlayer) => setMusic({ qamPlayer })} />
