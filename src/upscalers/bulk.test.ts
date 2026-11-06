@@ -29,7 +29,7 @@ const compat = { "4": { native: false, inputs: ["dlss"] }, "5": { native: true, 
 describe("bulk actions", () => {
   it("installs only where it can and never over another install", () => {
     expect(bulkSteps("install", games, overview, compat).map((s) => s.game.name)).toEqual(["Fresh"]);
-    expect(bulkSteps("install", games, overview, compat)[0].choice).toMatchObject({ build: "fsr-new", quality: null });
+    expect(bulkSteps("install", games, overview, compat)[0].choice).toMatchObject({ build: "fsr-new", quality: "native" });
   });
 
   it("moves to the recommended build keeping each game's options", () => {

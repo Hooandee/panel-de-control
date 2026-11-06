@@ -3,37 +3,50 @@ import { useEffect, useRef, useState, type FC } from "react";
 
 import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
-import { theme } from "../theme";
 import { holdPage } from "./pageMemory";
-import { ActionButton, Row } from "./parts";
+import { Label, ListCard, ListRow, Note } from "./parts";
 
 const POLL_MS = 1500;
 
-/** While the game runs: the real frame rate and OptiScaler's hotkeys, for devices without a keyboard. */
-export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActive?: () => void }> = ({ appid, fg, menu = true, onActive }) => {
-  const { t } = useI18n();
-  const [fps, setFps] = useState<number | null>(null);
-  const [generating, setGenerating] = useState<boolean | null>(null);
-  const [toggle, setToggle] = useState(true);
-  const [pressing, setPressing] = useState<UpscalerKey | null>(null);
-  const [failed, setFailed] = useState(false);
+export interface UpscalerLive {
+  fps: number | null;
+  render: number | null;
+  output: number | null;
+  generating: boolean | null;
+  canPause: boolean;
+}
 
+/** What the running game reports through OptiScaler's log, polled while the page is open. */
+export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () => void): [UpscalerLive, (generating: boolean | null) => void] {
+  const [live, setLive] = useState<UpscalerLive>({ fps: null, render: null, output: null, generating: null, canPause: true });
   const reported = useRef(false);
   const activeRef = useRef(onActive);
   activeRef.current = onActive;
+  const pending = !!onActive;
 
   useEffect(() => {
+    reported.current = false;
+  }, [pending]);
+
+  useEffect(() => {
+    reported.current = false;
+    setLive({ fps: null, render: null, output: null, generating: null, canPause: true });
+    if (!enabled) return;
     let alive = true;
     const read = async () => {
-      const live = await getUpscalerLive(appid).catch(() => null);
-      if (!alive || !live) return;
-      if (live.result === "active" && !reported.current) {
+      const next = await getUpscalerLive(appid).catch(() => null);
+      if (!alive || !next) return;
+      if (next.result === "active" && activeRef.current && !reported.current) {
         reported.current = true;
         activeRef.current?.();
       }
-      setFps(live.fps ?? null);
-      setGenerating(live.fg ?? null);
-      setToggle(live.fg_toggle !== false);
+      setLive({
+        fps: next.fps ?? null,
+        render: next.resolution?.render[1] ?? null,
+        output: next.resolution?.output[1] ?? null,
+        generating: next.fg ?? null,
+        canPause: next.fg_toggle !== false,
+      });
     };
     void read();
     const timer = window.setInterval(read, POLL_MS);
@@ -41,7 +54,24 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
       alive = false;
       window.clearInterval(timer);
     };
-  }, [appid]);
+  }, [appid, enabled]);
+
+  return [live, (generating) => setLive((last) => ({ ...last, generating }))];
+}
+
+/** Tools that only make sense with the game open; OptiScaler's hotkeys for devices without a keyboard. */
+export const DuringPlay: FC<{
+  appid: string;
+  optiscaler: boolean;
+  fg: boolean;
+  live: UpscalerLive;
+  onGenerating: (generating: boolean | null) => void;
+  onCompare: () => void;
+}> = ({ appid, optiscaler, fg, live, onGenerating, onCompare }) => {
+  const { t } = useI18n();
+  const [counter, setCounter] = useState(false);
+  const [pressing, setPressing] = useState<UpscalerKey | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const press = async (action: UpscalerKey) => {
     setPressing(action);
@@ -51,7 +81,8 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
       holdPage();
       Navigation.CloseSideMenus();
       await pressUpscalerKey(appid, action);
-      if (action === "fg") setGenerating((value) => (value === null ? null : !value));
+      if (action === "fps") setCounter((on) => !on);
+      if (action === "fg") onGenerating(live.generating === null ? null : !live.generating);
     } catch {
       setFailed(true);
     } finally {
@@ -60,36 +91,24 @@ export const LivePanel: FC<{ appid: string; fg: boolean; menu?: boolean; onActiv
   };
 
   return (
-    <div style={{ ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: theme.space.xs }}>
-        <span style={{ fontWeight: 700, fontSize: theme.font.body + 6, color: theme.color.textPrimary, fontVariantNumeric: "tabular-nums" }}>
-          {fps === null ? "–" : Math.round(fps)}
-        </span>
-        <span style={{ flex: 1, fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>{t("up.live.fps")}</span>
-        {fg && generating !== null && (
-          <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>
-            {t(generating ? "up.live.generating" : "up.live.paused")}
-          </span>
+    <>
+      <Label>{t("up.play.title")}</Label>
+      <ListCard>
+        {optiscaler && (
+          <ListRow first label={t("up.play.fps")} on={counter} busy={pressing === "fps"} disabled={pressing !== null && pressing !== "fps"}
+            onPress={() => void press("fps")} />
         )}
-      </div>
-      <Row>
-        {menu && <ActionButton label={t("up.live.menu")} onPress={() => press("menu")} busy={pressing === "menu"} disabled={pressing !== null} />}
-        {fg && toggle && (
-          <ActionButton
-            label={t(generating === false ? "up.live.resume" : "up.live.pause")}
-            onPress={() => press("fg")}
-            busy={pressing === "fg"}
-            disabled={pressing !== null}
-          />
+        <ListRow first={!optiscaler} label={t("up.play.compare")} chevron onPress={onCompare} />
+        {optiscaler && (
+          <ListRow label={t("up.play.menu")} detail={t("up.play.menu.detail")} busy={pressing === "menu"}
+            disabled={pressing !== null && pressing !== "menu"} onPress={() => void press("menu")} />
         )}
-      </Row>
-      {menu && (
-        <Row>
-          <ActionButton label={t("up.live.fps.counter")} onPress={() => press("fps")} busy={pressing === "fps"} disabled={pressing !== null} />
-          <ActionButton label={t("up.live.fps.style")} onPress={() => press("fps_style")} busy={pressing === "fps_style"} disabled={pressing !== null} />
-        </Row>
-      )}
-      {failed && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{t("up.live.failed")}</span>}
-    </div>
+        {fg && live.canPause && (
+          <ListRow label={t("up.play.pause")} on={live.generating === false} busy={pressing === "fg"}
+            disabled={pressing !== null && pressing !== "fg"} onPress={() => void press("fg")} />
+        )}
+      </ListCard>
+      {failed && <Note tone="warn">{t("up.live.failed")}</Note>}
+    </>
   );
 };

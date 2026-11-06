@@ -1,34 +1,35 @@
-import { Toggle } from "@decky/ui";
 import { useEffect, useState, type FC, type ReactNode } from "react";
-import { LuFeather, LuGauge, LuLayers } from "react-icons/lu";
+import { LuArrowLeftRight, LuLayers, LuTriangleAlert } from "react-icons/lu";
 
 import {
   adoptForeignLsfg, getLsfgStatus, installLsfg, restoreForeignLsfg, setLsfgGame, type LsfgProfile, type LsfgStatus,
 } from "../api";
+import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { useI18n } from "../i18n";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
 import { theme } from "../theme";
-import { recommendedPick, withEnv } from "./model";
-import { ActionButton, PickerButton, Row } from "./parts";
+import { fgOffer, withEnv } from "./model";
+import { ActionButton, Label, ListCard, ListRow, Notice, PickerButton, Row } from "./parts";
 import type { FgRoute } from "./types";
 
 const LAUNCH_ENV = ["ENABLE_GAMESCOPE_WSI", "LSFGVK_PROFILE"];
-type Pick = "off" | FgRoute | `lsfg-${LsfgProfile["multiplier"]}`;
+type Pick = "off" | FgRoute | "lsfg";
 const MULTIPLIERS = [2, 3, 4, 5, 6] as const;
 type Flow = LsfgProfile["flow"];
 
-/** One choice for every way to add frames: the game's own, OptiScaler's, or Lossless Scaling's. */
+/** Frame generation where Panel de Control adds something: the game's own on another GPU, OptiScaler's, or Lossless Scaling. */
 export const FrameGenRow: FC<{
   appid: string;
   liveAppid: number;
   isNonSteam: boolean;
   gameRunning: boolean;
   routes: Partial<Record<FgRoute, unknown>>;
+  inputs: Record<string, unknown>;
   optiscaler: { fg: "on" | "off"; route: FgRoute };
-  gameHint: string;
+  installedRoute: FgRoute | null;
   gpu: string;
   onOptiscaler: (fg: "on" | "off", route: FgRoute | null) => void;
-}> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, optiscaler, gameHint, gpu, onOptiscaler }) => {
+}> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, inputs, optiscaler, installedRoute, gpu, onOptiscaler }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<LsfgStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,7 +41,10 @@ export const FrameGenRow: FC<{
 
   const profile = status?.profiles[appid] ?? null;
   const lossless = !!status && status.lossless && !!status.dll && !status.foreign;
-  const current: Pick = profile ? `lsfg-${profile.multiplier}` as Pick : optiscaler.fg === "on" ? optiscaler.route : "off";
+  const offer = fgOffer(routes, inputs, gpu, lossless || !!profile, installedRoute);
+  const gameInput = (routes.game as { input?: string } | undefined)?.input;
+  const dlssBridge = !offer.own && (gameInput === "dlssg" || gameInput === "nukems");
+  const current: Pick = profile ? "lsfg" : optiscaler.fg === "on" && offer.options.includes(optiscaler.route) ? optiscaler.route : "off";
 
   const saveLsfg = async (next: Partial<LsfgProfile> | null) => {
     const result = await setLsfgGame(appid, next);
@@ -65,85 +69,90 @@ export const FrameGenRow: FC<{
   };
 
   const choose = (pick: Pick) => run(async () => {
-    if (pick.startsWith("lsfg-")) {
+    if (pick === "lsfg") {
       if (!status?.installed) setStatus(await installLsfg());
-      await saveLsfg({ multiplier: Number(pick.slice(5)) as LsfgProfile["multiplier"], flow: profile?.flow ?? "balanced", performance: profile?.performance ?? true });
+      await saveLsfg({ multiplier: profile?.multiplier ?? 2, flow: profile?.flow ?? "balanced", performance: profile?.performance ?? true });
       onOptiscaler("off", null);
       return;
     }
     if (profile) await saveLsfg(null);
-    onOptiscaler(pick === "off" ? "off" : "on", pick === "off" ? null : pick as FgRoute);
+    onOptiscaler(pick === "off" ? "off" : "on", pick === "off" ? null : pick);
   });
 
-  const options: { data: Pick; label: string }[] = [
-    { data: "off", label: t("up.fg.pick.off") },
-    ...("game" in routes ? [{ data: "game" as Pick, label: t("up.fg.pick.game") }] : []),
-    ...("optiscaler" in routes ? [{ data: "optiscaler" as Pick, label: t("up.fg.pick.opti") }] : []),
-    ...(lossless || profile ? MULTIPLIERS.map((m) => ({ data: `lsfg-${m}` as Pick, label: t("up.fg.pick.lsfg", { m }) })) : []),
+  const needBranch = !!status && !status.foreign && status.lossless && !status.dll;
+  const foreignBackup = !!status && !status.foreign && !!status.foreign_backup;
+  if (!offer.own && offer.options.length === 0 && !profile && !status?.foreign && !foreignBackup && !needBranch) return null;
+
+  const options: { value: Pick; label: string; caption?: string }[] = [
+    { value: "off", label: t("up.fg.pick.off") },
+    ...offer.options.map((o) => ({ value: o as Pick, label: t(`up.fg.pick.${o === "game" && !dlssBridge ? "optiscaler" : o}`), caption: o === "optiscaler" || (o === "game" && !dlssBridge) ? undefined : t(`up.fg.pick.${o}.caption`, { name: gpu === "intel" ? "XeSS FG" : "FSR FG" }) })),
   ];
-  const recommended = recommendedPick(gpu, routes, lossless || !!profile);
-  const labelled = options.map((o) => o.data === recommended ? { ...o, label: t("up.fg.recommended", { name: o.label }) } : o);
-  const hint = current === "game" ? gameHint : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-      <Line icon={<LuLayers size={16} />} label={t("up.fg.title")}>
-        <PickerButton label={t("up.fg.title")} value={current} disabled={busy} onChange={(pick) => void choose(pick)}
-          options={labelled.map((o) => ({ value: o.data, label: o.label }))} />
-      </Line>
-      {profile && (
-        <Line icon={<LuGauge size={16} />} label={t("up.lsfg.flow")}>
-          <PickerButton
-            label={t("up.lsfg.flow")}
-            value={profile.flow}
-            disabled={busy}
-            options={(["quality", "balanced", "performance", "fastest"] as Flow[]).map((f) => ({ value: f, label: t(`up.lsfg.flow.${f}`) }))}
-            onChange={(flow) => void run(() => saveLsfg({ ...profile, flow }))}
-          />
-        </Line>
+      <Label>{t("up.fg.title")}</Label>
+      {offer.options.length > 0 && (
+        <PickerButton
+          label={t("up.fg.title")}
+          value={current}
+          disabled={busy}
+          onChange={(pick) => void choose(pick)}
+          options={options}
+          badge={current === "optiscaler" ? <ExperimentalBadge>{t("up.fg.experimental")}</ExperimentalBadge> : undefined}
+        />
       )}
       {profile && (
-        <Line icon={<LuFeather size={16} />} label={t("up.lsfg.light")} inline>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Toggle value={profile.performance} disabled={busy} onChange={(on) => void run(() => saveLsfg({ ...profile, performance: on }))} />
-          </div>
-        </Line>
+        <ListCard>
+          <PickerLine label={t("up.lsfg.multiplier")}>
+            <PickerButton
+              label={t("up.lsfg.multiplier")}
+              value={String(profile.multiplier)}
+              disabled={busy}
+              options={MULTIPLIERS.map((m) => ({ value: String(m), label: `×${m}` }))}
+              onChange={(m) => void run(() => saveLsfg({ ...profile, multiplier: Number(m) as LsfgProfile["multiplier"] }))}
+            />
+          </PickerLine>
+          <PickerLine label={t("up.lsfg.flow")}>
+            <PickerButton
+              label={t("up.lsfg.flow")}
+              value={profile.flow}
+              disabled={busy}
+              options={(["quality", "balanced", "performance", "fastest"] as Flow[]).map((f) => ({ value: f, label: t(`up.lsfg.flow.${f}`) }))}
+              onChange={(flow) => void run(() => saveLsfg({ ...profile, flow }))}
+            />
+          </PickerLine>
+          <ListRow label={t("up.lsfg.light")} on={profile.performance} disabled={busy}
+            onPress={() => void run(() => saveLsfg({ ...profile, performance: !profile.performance }))} />
+        </ListCard>
       )}
-      {hint && <Hint>{hint}</Hint>}
+      {offer.own && <Notice icon={<LuLayers size={16} />}>{t("up.fg.own", { name: t(`up.fg.own.${offer.own}`) })}</Notice>}
+      {current === "game" && dlssBridge && <Notice icon={<LuLayers size={16} />}>{t("up.fg.hint.dlss")}</Notice>}
+      {current === "optiscaler" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.fg.hint.opti")}</Notice>}
       {status?.foreign && (
         <>
-          <Hint>{t("up.lsfg.foreign")}</Hint>
-          <Row><ActionButton label={t("up.foreign.adopt")} busy={busy} onPress={() => void run(async () => { setStatus(await adoptForeignLsfg()); })} /></Row>
+          <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.lsfg.foreign")}</Notice>
+          <Row><ActionButton label={t("up.lsfg.adopt")} busy={busy} onPress={() => void run(async () => { setStatus(await adoptForeignLsfg()); })} /></Row>
         </>
       )}
-      {status && !status.foreign && status.foreign_backup && (
-        <Row><ActionButton label={t("up.foreign.restore")} busy={busy} onPress={() => void run(async () => {
+      {foreignBackup && (
+        <Row><ActionButton label={t("up.lsfg.restore")} busy={busy} onPress={() => void run(async () => {
           const restored = await restoreForeignLsfg();
           await clearLsfgLaunch(restored.cleared ?? []);
           setStatus(restored);
         })} /></Row>
       )}
-      {status && !status.foreign && (!status.lossless || !status.dll) && (
-        <Hint>{t(!status.lossless ? "up.lsfg.needLossless" : "up.lsfg.needBranch")}</Hint>
-      )}
+      {needBranch && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.lsfg.needBranch")}</Notice>}
       {message && <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{message}</span>}
     </div>
   );
 };
 
-const Line: FC<{ icon: ReactNode; label: string; children: ReactNode; inline?: boolean }> = ({ icon, label, children, inline }) => (
-  <div style={{ display: "flex", flexDirection: inline ? "row" : "column", alignItems: inline ? "center" : "stretch", gap: theme.space.xs }}>
-    <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, flex: inline ? 1 : undefined, fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>
-      {icon}{label}
-    </span>
-    {children}
+const PickerLine: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, padding: `${theme.space.xs}px ${theme.space.md}px`, borderBottom: `1px solid ${theme.color.hairline}` }}>
+    <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>
+    <div style={{ minWidth: 140 }}>{children}</div>
   </div>
 );
-
-const Hint: FC<{ children: ReactNode }> = ({ children }) => (
-  <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.35 }}>{children}</span>
-);
-
 
 /** Steam shortcut ids sit above 2^31; regular Steam apps below. */
 async function clearLsfgLaunch(appids: string[]) {

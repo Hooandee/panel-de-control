@@ -1,28 +1,13 @@
 import { addArg, getEnv, hasArg, parse, removeArg, serialize, setEnv } from "../launch/compose";
-import type { BuildInfo, EasyMode, Quality, Sharpness, UpscalerChoice } from "./types";
+import type { BuildInfo, FgRoute, Quality, UpscalerChoice } from "./types";
 
 const OVERRIDES = "WINEDLLOVERRIDES";
 
-export const EASY_MODES: EasyMode[] = ["game", "image", "balanced", "fps"];
-export const QUALITIES: Quality[] = ["quality", "balanced", "performance", "ultra"];
-export const SHARPNESS: Sharpness[] = ["off", "soft", "high"];
-export const QUALITY_RATIO: Record<Quality, number> = { quality: 1.5, balanced: 1.7, performance: 2.0, ultra: 3.0 };
+export const QUALITIES: Quality[] = ["native", "quality", "balanced", "performance"];
+export const QUALITY_RATIO: Record<Quality, number> = { native: 1.0, quality: 1.5, balanced: 1.7, performance: 2.0, ultra: 3.0 };
 
-const EASY: Record<EasyMode, { quality: Quality | null; sharpness: Sharpness }> = {
-  game: { quality: null, sharpness: "soft" },
-  image: { quality: "quality", sharpness: "soft" },
-  balanced: { quality: "balanced", sharpness: "soft" },
-  fps: { quality: "performance", sharpness: "high" },
-};
-
-export function easyChoice(mode: EasyMode, preferred: string, fg: "on" | "off" = "off"): UpscalerChoice {
-  return { build: preferred, ...EASY[mode], fg };
-}
-
-/** The easy preset a choice equals, or null once the user has changed any card. */
-export function easyModeOf(choice: UpscalerChoice, preferred: string): EasyMode | null {
-  if (choice.build !== preferred) return null;
-  return EASY_MODES.find((mode) => EASY[mode].quality === choice.quality && EASY[mode].sharpness === choice.sharpness) ?? null;
+export function defaultChoice(preferred: string, fg: "on" | "off" = "off"): UpscalerChoice {
+  return { build: preferred, quality: "native", sharpness: null, fg };
 }
 
 /** An install's choice as the page starts from: its build only while this GPU can still take it, else the recommended one. */
@@ -190,10 +175,25 @@ export function downloadPace(previous: PaceSample, current: PaceSample, total: n
   return { rate, eta: rate > 0 ? Math.ceil((total - current.done) / rate) : null };
 }
 
-/** On the Deck OptiFG costs too much on top of upscaling (40 to 50 FPS measured) while Lossless reached 60. */
-export function recommendedPick(gpu: string, routes: Record<string, unknown>, lossless: boolean): "lsfg-2" | "game" | null {
-  if (gpu === "rdna2" && lossless) return "lsfg-2";
-  if ("game" in routes) return "game";
-  if (lossless) return "lsfg-2";
-  return null;
+export type FgOption = FgRoute | "lsfg";
+export type OwnFg = "fsr" | "xess" | "dlss";
+
+/**
+ * What Panel de Control can add to a game's frame generation. A generator the game already runs on this GPU
+ * needs no option, only where to turn it on; DLSS FG off NVIDIA goes through OptiScaler, and OptiScaler's own
+ * only when the game brings none.
+ */
+export function fgOffer(
+  routes: Partial<Record<FgRoute, unknown>>, inputs: Record<string, unknown>, gpu: string, lossless: boolean, installedRoute: FgRoute | null = null,
+): { own: OwnFg | null; options: FgOption[] } {
+  const own: OwnFg | null = gpu === "intel" && "xefg" in inputs ? "xess"
+    : "fsrfg" in inputs ? "fsr"
+    : gpu === "nvidia" && "dlssg" in inputs ? "dlss" : null;
+  const gameInput = (routes.game as { input?: string } | undefined)?.input;
+  const options: FgOption[] = [];
+  if (!own && (gameInput === "dlssg" || gameInput === "nukems")) options.push("game");
+  else if (!own && !routes.game && "optiscaler" in routes) options.push("optiscaler");
+  if (installedRoute && !options.includes(installedRoute)) options.push(installedRoute);
+  if (lossless) options.push("lsfg");
+  return { own, options };
 }

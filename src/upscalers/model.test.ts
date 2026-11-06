@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, easyChoice, easyModeOf, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("adds the proxy override without touching other launch options", () => {
@@ -20,18 +20,10 @@ describe("upscaler model", () => {
     expect(withOverride('sh -c "x %command%"', "dxgi=n,b")).toBeNull();
   });
 
-  it("maps easy presets to cards and back", () => {
-    const choice = easyChoice("fps", "fsr-4.1.1-rdna2");
-    expect(easyModeOf(choice, "fsr-4.1.1-rdna2")).toBe("fps");
-    expect(easyModeOf({ ...choice, sharpness: "off" }, "fsr-4.1.1-rdna2")).toBeNull();
-    expect(easyModeOf(choice, "xess")).toBeNull();
+  it("starts new installs at native resolution and shows each quality's real height", () => {
+    expect(defaultChoice("fsr-4.1.2").quality).toBe("native");
+    expect(renderHeight(800, "native")).toBe(800);
     expect(renderHeight(800, "balanced")).toBe(471);
-  });
-
-  it("follows the game's own scaling mode by default", () => {
-    const choice = easyChoice("game", "fsr-4.1.2-beta");
-    expect(choice.quality).toBeNull();
-    expect(easyModeOf(choice, "fsr-4.1.2-beta")).toBe("game");
   });
 
   it("applies a recipe's dlls and args and reverts only what it added", () => {
@@ -94,12 +86,30 @@ describe("downloadPace", () => {
   });
 });
 
-describe("recommended extra frames", () => {
-  it("prefers Lossless on the Deck and the game's own generator elsewhere", async () => {
-    const { recommendedPick } = await import("./model");
-    expect(recommendedPick("rdna2", { game: {} }, true)).toBe("lsfg-2");
-    expect(recommendedPick("rdna3", { game: {}, optiscaler: {} }, true)).toBe("game");
-    expect(recommendedPick("rdna3", { optiscaler: {} }, false)).toBeNull();
+describe("frame generation offer", () => {
+  it("keeps an installed generator available to turn off without offering it to new installs", () => {
+    const routes = { game: { input: "fsrfg" }, optiscaler: {} };
+    expect(fgOffer(routes, { fsrfg: [] }, "rdna2", false, "game").options).toEqual(["game"]);
+    expect(fgOffer(routes, { fsrfg: [] }, "rdna2", false, "optiscaler").options).toEqual(["optiscaler"]);
+    expect(fgOffer(routes, { fsrfg: [] }, "rdna2", false, null).options).toEqual([]);
+    expect(fgOffer({}, {}, "rdna2", false, "game").options).toEqual(["game"]);
+    expect(fgOffer({ game: { input: "dlssg" } }, { dlssg: [] }, "rdna2", false, "game").options).toEqual(["game"]);
+  });
+
+  it("only points to the game's own generator when it already runs on this GPU", () => {
+    expect(fgOffer({ game: { input: "fsrfg" }, optiscaler: {} }, { fsrfg: [] }, "rdna2", false)).toEqual({ own: "fsr", options: [] });
+    expect(fgOffer({ game: { input: "xefg" } }, { xefg: [] }, "intel", true)).toEqual({ own: "xess", options: ["lsfg"] });
+    expect(fgOffer({ game: { input: "dlssg" } }, { dlssg: [] }, "nvidia", false)).toEqual({ own: "dlss", options: [] });
+  });
+
+  it("offers DLSS FG through OptiScaler off NVIDIA", () => {
+    expect(fgOffer({ game: { input: "dlssg" }, optiscaler: {} }, { dlssg: [] }, "rdna3", true)).toEqual({ own: null, options: ["game", "lsfg"] });
+  });
+
+  it("offers OptiScaler's own only when the game brings none", () => {
+    expect(fgOffer({ optiscaler: {} }, {}, "intel", false)).toEqual({ own: null, options: ["optiscaler"] });
+    expect(fgOffer({}, {}, "rdna2", false)).toEqual({ own: null, options: [] });
+    expect(fgOffer({}, {}, "rdna2", true)).toEqual({ own: null, options: ["lsfg"] });
   });
 });
 

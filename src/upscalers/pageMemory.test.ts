@@ -10,9 +10,9 @@ afterEach(() => {
 describe("game page across Steam's QAM remount", () => {
   it("hands back the open game and its unapplied choice after a menu", () => {
     showGame(292030);
-    writeDraft(292030, { mode: "custom", choice: { build: "xess-2" } });
+    writeDraft(292030, { choice: { build: "xess-2" }, advanced: false });
     holdPage();
-    expect(takeHeldPage()).toEqual({ appid: 292030, draft: { mode: "custom", choice: { build: "xess-2" } } });
+    expect(takeHeldPage()).toEqual({ appid: 292030, draft: { choice: { build: "xess-2" }, advanced: false } });
   });
 
   it("hands it back to a second mount too, as Decky 3.2.9 mounts the panel twice after a menu", () => {
@@ -53,11 +53,11 @@ describe("game page across Steam's QAM remount", () => {
     showGame(292030);
     const heard = vi.fn();
     const stop = onDraft(292030, heard);
-    writeDraft(292030, { mode: "easy", choice: { fg: "on", fg_route: "game" } });
-    writeDraft(1, { mode: "easy", choice: {} });
+    writeDraft(292030, { choice: { fg: "on", fg_route: "game" }, advanced: false });
+    writeDraft(1, { choice: {}, advanced: false });
     stop();
-    writeDraft(292030, { mode: "easy", choice: {} });
+    writeDraft(292030, { choice: {}, advanced: false });
     expect(heard).toHaveBeenCalledTimes(1);
-    expect(heard).toHaveBeenCalledWith({ mode: "easy", choice: { fg: "on", fg_route: "game" } });
+    expect(heard).toHaveBeenCalledWith({ choice: { fg: "on", fg_route: "game" }, advanced: false });
   });
 });

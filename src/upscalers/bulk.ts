@@ -1,6 +1,6 @@
 import { installUpscaler, uninstallUpscaler, type GameCompat } from "../api";
 import type { GameEntry } from "../launch/steamApi";
-import { easyChoice } from "./model";
+import { defaultChoice } from "./model";
 import { onJobUpdate, trackJob } from "./jobRunner";
 import type { UpscalerChoice, UpscalerJob, UpscalersOverview } from "./types";
 import { upscalerErrorCode } from "./errorCode";
@@ -31,7 +31,7 @@ export function bulkSteps(action: BulkAction, games: GameEntry[], overview: Upsc
     if (action === "remove") return install ? [{ game, choice: null }] : [];
     if (action === "install") {
       const info = compat[appid];
-      return !install && preferred && info && !info.native && info.inputs.length ? [{ game, choice: easyChoice("game", preferred.id) }] : [];
+      return !install && preferred && info && !info.native && info.inputs.length ? [{ game, choice: defaultChoice(preferred.id) }] : [];
     }
     if (!install || !optiscaler(overview, install.build)) return [];
     if (action === "repair") return install.status === "broken" ? [{ game, choice: keep(install.options, install.build) }] : [];

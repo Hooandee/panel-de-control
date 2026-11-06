@@ -3,8 +3,8 @@
 // applied would be lost. Openers hold the page here first; the next mount takes it back.
 
 export interface PageDraft<C = unknown> {
-  mode: "easy" | "custom";
   choice: C;
+  advanced: boolean;
 }
 
 type Listener = (draft: PageDraft) => void;

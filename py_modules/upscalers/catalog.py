@@ -209,7 +209,7 @@ PREFERRED = {
     "intel": "xess",
 }
 
-QUALITY_RATIOS = {"quality": 1.5, "balanced": 1.7, "performance": 2.0, "ultra": 3.0}
+QUALITY_RATIOS = {"native": 1.0, "quality": 1.5, "balanced": 1.7, "performance": 2.0, "ultra": 3.0}
 EASY_MODES = {"image": "quality", "balanced": "balanced", "fps": "performance"}
 SHARPNESS = {"off": None, "soft": 0.3, "high": 0.6}
 PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll")

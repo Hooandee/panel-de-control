@@ -1,6 +1,6 @@
 import { Focusable, Menu, MenuItem, showContextMenu } from "@decky/ui";
 import type { FC, ReactNode } from "react";
-import { LuCheck, LuChevronDown } from "react-icons/lu";
+import { LuCheck, LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { theme } from "../theme";
@@ -163,12 +163,13 @@ export const ActionButton: FC<{
 );
 
 /** A value that opens Steam's own menu to change it: looks like Panel's buttons, chooses like Steam. */
-export function PickerButton<T extends string>({ label, value, options, onChange, disabled }: {
+export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge }: {
   label: string;
   value: T;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; caption?: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  badge?: ReactNode;
 }) {
   const current = options.find((o) => o.value === value)?.label ?? value;
   const open = (anchor: EventTarget | null) => {
@@ -181,7 +182,10 @@ export function PickerButton<T extends string>({ label, value, options, onChange
           <MenuItem key={o.value} onSelected={() => { onChange(o.value); back(); }}>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 14, display: "inline-flex" }}>{o.value === value ? <LuCheck size={14} /> : null}</span>
-              {o.label}
+              <span style={{ display: "flex", flexDirection: "column" }}>
+                {o.label}
+                {o.caption && <span style={{ fontSize: theme.font.caption, opacity: 0.7 }}>{o.caption}</span>}
+              </span>
             </span>
           </MenuItem>
         ))}
@@ -199,8 +203,92 @@ export function PickerButton<T extends string>({ label, value, options, onChange
         gap: theme.space.xs, opacity: disabled ? 0.45 : 1, cursor: "pointer",
       }}
     >
-      <span style={{ flex: 1, fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>{current}</span>
+      <span style={{ flex: 1, display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+        {current}{badge}
+      </span>
       <LuChevronDown size={16} color={theme.color.textMuted} />
     </Focusable>
   );
 }
+
+/** A card note led by an icon, never a colour dot. */
+export const Notice: FC<{ icon: ReactNode; children: ReactNode; tone?: "warn" | "danger" }> = ({ icon, children, tone }) => (
+  <div style={{
+    ...theme.card, padding: `${theme.space.sm + 2}px ${theme.space.md}px`, display: "flex", alignItems: "flex-start", gap: theme.space.sm,
+    fontSize: theme.font.caption + 1, lineHeight: 1.35,
+    color: tone === "danger" ? theme.color.danger : tone === "warn" ? theme.color.warn : theme.color.textMuted,
+  }}>
+    <span style={{ display: "inline-flex", flexShrink: 0, marginTop: 1 }}>{icon}</span>
+    <span style={{ flex: 1 }}>{children}</span>
+  </div>
+);
+
+export const ListCard: FC<{ children: ReactNode }> = ({ children }) => (
+  <Focusable flow-children="column" style={{ ...theme.card, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    {children}
+  </Focusable>
+);
+
+const Switch: FC<{ on: boolean }> = ({ on }) => (
+  <span style={{
+    width: 38, height: 22, borderRadius: 20, position: "relative", flexShrink: 0,
+    background: on ? theme.color.accent : "rgba(255,255,255,0.14)",
+  }}>
+    <span style={{
+      position: "absolute", top: 2, [on ? "right" : "left"]: 2, width: 18, height: 18, borderRadius: "50%",
+      background: on ? theme.color.onAccent : "rgba(255,255,255,0.55)",
+    }} />
+  </span>
+);
+
+/** One line of a ListCard: a switch, a value, or a chevron that opens something. */
+export const ListRow: FC<{
+  label: string;
+  onPress?: () => void;
+  detail?: ReactNode;
+  caption?: string;
+  on?: boolean;
+  chevron?: boolean;
+  danger?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  first?: boolean;
+}> = ({ label, onPress, detail, caption, on, chevron, danger, busy, disabled, first }) => {
+  const press = disabled || busy || !onPress ? undefined : onPress;
+  return (
+    <Focusable
+      role={on === undefined ? undefined : "switch"}
+      aria-checked={on}
+      onActivate={press}
+      onClick={press}
+      style={{
+        display: "flex", alignItems: "center", gap: theme.space.sm, padding: `${theme.space.sm + 3}px ${theme.space.md}px`,
+        borderTop: first ? "none" : `1px solid ${theme.color.hairline}`, opacity: disabled ? 0.45 : 1, cursor: "pointer",
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontSize: theme.font.body, color: danger ? theme.color.danger : theme.color.textPrimary, fontWeight: danger ? 600 : 400 }}>{label}</span>
+        {caption && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{caption}</span>}
+      </span>
+      {busy && <Spinner size={12} />}
+      {detail !== undefined && <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted, textAlign: "right" }}>{detail}</span>}
+      {on !== undefined && <Switch on={on} />}
+      {chevron && <LuChevronRight size={16} color={theme.color.textMuted} />}
+    </Focusable>
+  );
+};
+
+export const Fold: FC<{ label: string; open: boolean; onToggle: () => void }> = ({ label, open, onToggle }) => (
+  <Focusable
+    aria-expanded={open}
+    onActivate={onToggle}
+    onClick={onToggle}
+    style={{
+      ...theme.card, padding: `${theme.space.sm + 3}px ${theme.space.md}px`, display: "flex", alignItems: "center",
+      fontSize: theme.font.body, color: theme.color.textMuted, cursor: "pointer",
+    }}
+  >
+    <span style={{ flex: 1 }}>{label}</span>
+    {open ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}
+  </Focusable>
+);

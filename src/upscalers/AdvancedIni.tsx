@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FC } from "react";
 import { getUpscalerIni, setUpscalerIni } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { ActionButton, Note, Row, Skeleton } from "./parts";
+import { ActionButton, ListRow, Note, Row, Skeleton } from "./parts";
 import type { IniKey, IniSection } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 import { holdPage } from "./pageMemory";
@@ -62,12 +62,12 @@ export const AdvancedIni: FC<{ appid: string }> = ({ appid }) => {
   };
 
   if (!open) {
-    return <Row><ActionButton label={t("up.ini.open")} onPress={() => { setOpen(true); void load(); }} /></Row>;
+    return <ListRow label={t("up.ini.open")} chevron onPress={() => { setOpen(true); void load(); }} />;
   }
 
   const count = sections?.reduce((n, s) => n + s.keys.length, 0) ?? 0;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, padding: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}` }}>
       <Row><ActionButton label={t("up.ini.close")} onPress={() => setOpen(false)} /></Row>
       <Note>{t("up.ini.note", { count })}</Note>
       {failed && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}

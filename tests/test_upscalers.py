@@ -1224,6 +1224,13 @@ def test_no_quality_leaves_the_games_own_scaling_mode_alone():
     assert forced["QualityOverrides.QualityRatioBalanced"] == "3.00"
 
 
+def test_native_quality_renders_at_screen_resolution():
+    from upscalers.service import _option_overrides
+    native = _option_overrides({"quality": "native"})
+    assert native["QualityOverrides.QualityRatioOverrideEnabled"] == "true"
+    assert native["QualityOverrides.QualityRatioPerformance"] == "1.00"
+
+
 def test_wiki_page_settings_apply_but_panel_keys_and_hand_edits_win(steam, fake_catalog, proc, monkeypatch):
     recipe = recipes.Recipe(APPID, status="works", wiki_settings={"Dxgi": "false", "NoSuchKey": "1"},
                             wiki_suggestions={"HUDFix": "true"})

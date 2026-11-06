@@ -1,9 +1,10 @@
 import { openFilePicker } from "@decky/api";
-import { ConfirmModal, Focusable } from "@decky/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
+import { ConfirmModal, Focusable, Navigation } from "@decky/ui";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
+import { LuArrowLeftRight, LuCircleCheck, LuCircleDashed, LuTriangleAlert } from "react-icons/lu";
 
 import {
-  cancelUpscalersJob, configureUpscaler, getUpscalersGame, installUpscaler,
+  cancelUpscalersJob, configureUpscaler, getUpscalersGame, installUpscaler, pressUpscalerKey,
   refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
@@ -21,22 +22,24 @@ import type { GpuGen } from "../launch/proton";
 import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
-  EASY_MODES, QUALITIES, SHARPNESS, buildLabel, easyChoice, easyModeOf, megabytes, renderHeight,
+  QUALITIES, badgeLabel, buildLabel, defaultChoice, megabytes, renderHeight,
   buildBlocker, downloadPace, protonFsr4Env, restoredChoice, type PaceSample,
 } from "./model";
 import { AdvancedIni } from "./AdvancedIni";
 import { onJobUpdate, trackJob } from "./jobRunner";
-import { LivePanel } from "./LivePanel";
+import { DuringPlay, useUpscalerLive } from "./LivePanel";
 import { WikiFacts } from "./WikiFacts";
 import { restartGame } from "./restartGame";
 import { showModal } from "../navigation/showModal";
 import { holdPage, onDraft, showGame, writeDraft, type PageDraft } from "./pageMemory";
 import { FrameGenRow } from "./FrameGenRow";
-import { ActionButton, BAR_COLUMN, Bars, Chip, Dot, Label, Note, Row, SegmentRow, Skeleton, Spinner, statusColor } from "./parts";
-import type { BuildInfo, EasyMode, FgRoute, GameDetail, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./types";
+import {
+  ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, PickerButton, Row, SegmentRow, Skeleton, Spinner, statusColor,
+} from "./parts";
+import type { GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 
-const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR", fsr2: "FSR", xess: "XeSS" };
+const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR 3.1", fsr2: "FSR 2", xess: "XeSS" };
 
 const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed"]);
 
@@ -59,22 +62,22 @@ export const GameView: FC<{
   const appid = String(game.liveAppid);
   const [detail, setDetail] = useState<GameDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"easy" | "custom">(draft?.mode ?? "easy");
-  const [choice, setChoice] = useState<UpscalerChoice>(() => draft?.choice ?? easyChoice("game", overview.preferred));
+  const [advanced, setAdvanced] = useState(draft?.advanced ?? false);
+  const [choice, setChoice] = useState<UpscalerChoice>(() => draft?.choice ?? defaultChoice(overview.preferred));
   const keepDraft = useRef(!!draft);
   const changeChoice = (next: UpscalerChoice) => {
     setChoice(next);
-    writeDraft(game.liveAppid, { mode, choice: next });
+    writeDraft(game.liveAppid, { choice: next, advanced });
   };
-  const changeMode = (next: "easy" | "custom") => {
-    setMode(next);
-    writeDraft(game.liveAppid, { mode: next, choice });
+  const toggleAdvanced = () => {
+    setAdvanced(!advanced);
+    writeDraft(game.liveAppid, { choice, advanced: !advanced });
   };
   useEffect(() => {
     showGame(game.liveAppid);
     return onDraft(game.liveAppid, (next) => {
-      setMode(next.mode);
       setChoice(next.choice as UpscalerChoice);
+      setAdvanced(next.advanced);
     });
   }, [game.liveAppid]);
   const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
@@ -83,7 +86,6 @@ export const GameView: FC<{
   const [applied, setApplied] = useState<"now" | "restart" | "restarting" | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
-  const [showBlocked, setShowBlocked] = useState(false);
   const [compat, setCompat] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +113,7 @@ export const GameView: FC<{
       setDetail(next);
       setLoadError(null);
       if (next.install && !keepDraft.current) {
-        const restored = restoredChoice(next.install.build, next.install.options, overview.builds, overview.preferred);
-        setChoice(restored);
-        setMode(easyModeOf(restored, overview.preferred) ? "easy" : "custom");
+        setChoice(restoredChoice(next.install.build, next.install.options, overview.builds, overview.preferred));
       }
       keepDraft.current = false;
     } catch (error) {
@@ -175,22 +175,19 @@ export const GameView: FC<{
   const builds = overview.builds;
   const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
-  const dirty = !install || !sameBuild || install.options.quality !== choice.quality || install.options.sharpness !== choice.sharpness
-    || (install.options.fg ?? "off") !== (choice.fg ?? "off")
-    || (choice.fg === "on" && (install.options.fg_route ?? null) !== (choice.fg_route ?? null))
-    || (install.options.model ?? null) !== (choice.model ?? null);
+  const qualityChanged = install?.options.quality !== choice.quality;
+  const modelChanged = (install?.options.model ?? null) !== (choice.model ?? null);
+  const fgChanged = (install?.options.fg ?? "off") !== (choice.fg ?? "off")
+    || (choice.fg === "on" && (install?.options.fg_route ?? null) !== (choice.fg_route ?? null));
+  const dirty = !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || fgChanged || modelChanged;
   const routes = detail?.fg_plan?.routes ?? {};
-  const route: FgRoute = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
-  const gameFgInput = (detail?.fg_plan?.routes?.game as { input?: string } | undefined)?.input;
-  const gameFgHint = [
-    t(gameFgInput === "xefg" ? "up.fg.enableInGame.xess" : gameFgInput === "fsrfg" ? "up.fg.enableInGame.fsr" : "up.fg.enableInGame.dlss"),
-    detail?.fg_note === "reflexOff" ? t("up.fg.note.reflexOff") : null,
-  ].filter(Boolean).join(". ");
+  const route = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
   const selected = builds.find((b) => b.id === choice.build);
   const selectedModels = selected?.models;
   const helix = selected?.engine === "helixsr";
   const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton";
   const installedBuild = builds.find((b) => b.id === install?.build);
+  const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton";
   const reinstall = () => start(() => installUpscaler(appid, {
     ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
@@ -211,6 +208,10 @@ export const GameView: FC<{
       return;
     }
     await reinstall();
+  };
+
+  const discard = () => {
+    if (install) changeChoice(restoredChoice(install.build, install.options, builds, overview.preferred));
   };
 
   const askRestart = () => {
@@ -267,6 +268,22 @@ export const GameView: FC<{
     }
   };
 
+  const [counterStyleFailed, setCounterStyleFailed] = useState(false);
+  const nextCounterStyle = async () => {
+    setCounterStyleFailed(false);
+    try {
+      // gamescope hands the key to the focused window: with the QAM open, Steam keeps it.
+      holdPage();
+      Navigation.CloseSideMenus();
+      await pressUpscalerKey(appid, "fps_style");
+    } catch {
+      setCounterStyleFailed(true);
+    }
+  };
+
+  const playing = !!install && gameRunning && !running;
+  const [live, setGenerating] = useUpscalerLive(appid, playing, status === "pending" ? check : undefined);
+
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
@@ -278,60 +295,84 @@ export const GameView: FC<{
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
-  const shownBuild = install?.build ?? preferredBuild?.id;
-  const tested = !!shownBuild && !!detail?.history.some((h) => h.build === shownBuild && h.result === "active");
-  const does = selected?.engine === "proton" ? "up.does.proton" : selected?.way === "fsr" ? "up.does.fsr" : "up.does.optiscaler";
-  const compatible = [...new Set(Object.keys(detail?.analysis.inputs ?? {}).map((k) => INPUT_NAMES[k]).filter(Boolean))];
+  const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
+  const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
+  const qualityName = (q: UpscalerChoice["quality"]) => (q ? t(`up.quality.${q}`) : t("up.quality.game"));
+  const changes = !install ? [] : [
+    !sameBuild && t("up.change.version", { from: buildLabel(installedBuild ?? { family: "fsr", version: install.build }), to: selected ? buildLabel(selected) : choice.build }),
+    qualityChanged && t("up.change.quality", { from: qualityName(install.options.quality), to: qualityName(choice.quality) }),
+    modelChanged && t("up.change.model", { from: t(`up.model.${install.options.model ?? selectedModels?.[0] ?? "lite"}`), to: t(`up.model.${choice.model ?? selectedModels?.[0] ?? "lite"}`) }),
+    fgChanged && t("up.change.fg", { from: fgName(t, install.options.fg, install.options.fg_route), to: fgName(t, choice.fg, choice.fg_route) }),
+  ].filter((line): line is string => !!line);
+
+  const subtitle = !detail ? null
+    : detail.native ? null
+    : playing ? t("up.sub.playing")
+    : install ? runs
+    : detail.analysis.foreign ? t("up.sub.foreign")
+    : uses.length ? t(preferredBuild ? "up.sub.usesBetter" : "up.sub.uses", { name: uses.join(", ") })
+    : null;
 
   return (
     <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       {!borrowedBack && <Row><CompactBackAction onBack={onBack} label={t("up.back")} /></Row>}
 
-      <div style={{ display: "flex", gap: theme.space.sm, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
-        <GameCover urls={game.coverUrls} name={game.name} width={40} />
-        <div style={{ fontWeight: 700, fontSize: theme.font.body + 1, lineHeight: 1.2, color: theme.color.textPrimary }}>{game.name}</div>
+      <div style={{ display: "flex", gap: theme.space.md, alignItems: "center", animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
+        <GameCover urls={game.coverUrls} name={game.name} width={48} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: theme.font.body + 1, lineHeight: 1.2, color: theme.color.textPrimary }}>{game.name}</div>
+          {subtitle && <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted }}>{subtitle}</span>}
+        </div>
       </div>
 
       {detail ? (
-        <div style={{
-          ...theme.card,
-          padding: `${theme.space.sm}px ${theme.space.md}px`,
-          display: "flex", flexDirection: "column", gap: 4,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
-            {install && <Dot color={statusColor(status)} />}
-            <span style={{ flex: 1, fontWeight: 700, fontSize: theme.font.body, color: theme.color.textPrimary }}>
-              {detail.native ? t("up.native.title") : install ? t(`up.status.${status}`) : t("up.status.none")}
-            </span>
-            {install
-              ? <Chip>{buildLabel(builds.find((b) => b.id === install.build) ?? { family: "fsr", version: "" })}</Chip>
-              : preferredBuild && !detail.native && <Chip>{buildLabel(preferredBuild)}</Chip>}
-          </div>
-          {tested && <span style={{ fontSize: theme.font.caption, color: theme.color.accent }}>{t("up.tested")}</span>}
+        <div style={{ ...theme.card, padding: `${theme.space.md}px`, display: "flex", flexDirection: "column", gap: 6 }}>
+          {detail.native ? (
+            <StatusLine title={t("up.native.title")} sub={t("up.native")} />
+          ) : playing ? (
+            <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                <StatusLine icon={<StatusIcon status={status} />} title={runs} />
+                {live.render !== null && live.output !== null && (
+                  <span style={{ fontSize: theme.font.caption + 2, color: theme.color.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                    {t("up.res.arrow", { from: live.render, to: live.output })}
+                  </span>
+                )}
+              </div>
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center", minWidth: 64, padding: `6px ${theme.space.md}px`,
+                borderRadius: 10, background: "rgba(255,255,255,0.06)",
+              }}>
+                <span style={{ fontSize: 24, lineHeight: 1, fontWeight: 700, color: theme.color.textPrimary, fontVariantNumeric: "tabular-nums" }}>
+                  {live.fps === null ? "–" : Math.round(live.fps)}
+                </span>
+                <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, letterSpacing: 0.6, marginTop: 2 }}>{t("up.live.fps")}</span>
+              </div>
+            </div>
+          ) : install ? (
+            <StatusLine
+              icon={<StatusIcon status={status} />}
+              title={status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
+              sub={status === "active" && render && output
+                ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
+                : status === "active" ? undefined : t(`up.status.${status}`)}
+              tone={status === "broken" ? "danger" : status === "loaded" ? "warn" : undefined}
+            />
+          ) : detail.analysis.foreign ? (
+            <StatusLine icon={<LuArrowLeftRight size={17} />} title={t("up.foreign.title")} sub={t("up.foreign.body")} />
+          ) : (
+            <StatusLine
+              title={t("up.state.none")}
+              sub={preferredBuild ? t("up.state.recommended", { name: buildLabel(preferredBuild) }) : undefined}
+            />
+          )}
           {wikiUpdating && (
             <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <Spinner size={10} /> {t("up.wiki.updating")}
             </span>
           )}
-          {install?.options.fg === "on" && facts?.fg && (
-            <span style={{ fontSize: theme.font.caption + 1, color: theme.color.textPrimary }}>{t("up.fg.active")}</span>
-          )}
-          {install?.options.fg === "on" && !facts?.fg && facts?.upscaler && detail.fg_plan?.source === "game" && (
-            <span style={{ fontSize: theme.font.caption, color: theme.color.warn }}>{gameFgHint}</span>
-          )}
-          {render && output && render < output && (
-            <div style={{ display: "flex", alignItems: "baseline", gap: theme.space.xs, color: theme.color.textPrimary }}>
-              <span style={{ fontSize: theme.font.body + 6, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{render}p</span>
-              <span style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>→</span>
-              <span style={{ fontSize: theme.font.body + 6, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{output}p</span>
-            </div>
-          )}
-          {!install && preferredBuild && !detail.native && (
-            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recommendedFor")}</span>
-          )}
           {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
           {detail.launcher && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t(`up.launcher.${detail.launcher}`)}</span>}
-          {detail.native && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.native")}</span>}
           {detail.shortcut && !detail.native && (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <span style={{ flex: 1 }}>
@@ -345,30 +386,35 @@ export const GameView: FC<{
             </div>
           )}
         </div>
-      ) : <Skeleton height={56} />}
+      ) : !loadError && <Skeleton height={64} />}
+
+      {!detail && !loadError && (
+        <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          <Spinner size={12} /> {t("up.detect.analyzing")}
+        </div>
+      )}
+      {loadError === "not_installed" && <Note tone="warn">{t("up.error.missingFolder")}</Note>}
+      {loadError && loadError !== "not_installed" && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
 
       {detail && !detail.native && (
         <>
-          {!detail.analysis.target && <Note tone="warn">{t("up.error.no_exe")}</Note>}
-          {detail.updating && <Note tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Note>}
           {detail.analysis.foreign && !install && (
-            <>
-              <Note tone="warn">{t("up.error.foreign")}</Note>
-              <Row><ActionButton label={t("up.foreign.adopt")} onPress={() => void foreignAction(adoptForeignUpscaler)} /></Row>
-            </>
+            <Row><ActionButton label={t("up.foreign.adopt")} onPress={() => void foreignAction(adoptForeignUpscaler)} /></Row>
           )}
           {detail.foreign_backup && !install && !detail.analysis.foreign && (
             <Row><ActionButton label={t("up.foreign.restore")} onPress={() => void foreignAction(restoreForeignUpscaler)} /></Row>
           )}
-          {detail.analysis.target && compatible.length === 0 && <Note tone="warn">{t("up.detect.noinputs")}</Note>}
-          {detail.recipe_info?.broken && <Note tone="warn">{t("up.recipe.broken")}</Note>}
-          {detail.recipe_info?.needs.map((need) => <Note key={need} tone="warn">{t(`up.recipe.need.${need}`)}</Note>)}
+          {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
+          {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
+          {detail.analysis.target && uses.length === 0 && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
+          {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
+          {detail.recipe_info?.needs.map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
           )}
           {detail.analysis.anti_cheat && !install && (
             <>
-              <Note tone="danger">{t("up.error.anti_cheat")}</Note>
+              <Notice icon={<LuTriangleAlert size={16} />} tone="danger">{t("up.error.anti_cheat")}</Notice>
               <SegmentRow
                 value={confirmAntiCheat ? "yes" : null}
                 onChange={() => setConfirmAntiCheat(!confirmAntiCheat)}
@@ -376,18 +422,127 @@ export const GameView: FC<{
               />
             </>
           )}
-
         </>
       )}
-      {detail && install && gameRunning && !running && (
-        <LivePanel
+
+      {detail && playing && !comparing && (
+        <DuringPlay
           appid={appid}
-          fg={install.options.fg === "on" && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton"}
-          menu={installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton"}
-          onActive={status === "pending" ? check : undefined}
+          optiscaler={installedOptiscaler}
+          fg={installedOptiscaler && install?.options.fg === "on"}
+          live={live}
+          onGenerating={setGenerating}
+          onCompare={() => setComparing(true)}
         />
       )}
+      {detail && install && comparing && (
+        <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
+      )}
+
+      {detail && !detail.native && !replacesFsr && (
+        <>
+          <Label>{t("up.section.quality")}</Label>
+          <SegmentRow
+            value={choice.quality && QUALITIES.includes(choice.quality) ? choice.quality : null}
+            onChange={(quality) => changeChoice({ ...choice, quality })}
+            options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
+          />
+        </>
+      )}
+      {detail && !detail.native && helix && <Note>{t("up.helix.pick.fsr")}</Note>}
+      {detail && !detail.native && selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
+
+      {detail && (
+        <FrameGenRow
+          appid={appid}
+          liveAppid={game.liveAppid}
+          isNonSteam={game.isNonSteam}
+          gameRunning={gameRunning}
+          routes={detail.native || !detail.fg_plan || replacesFsr ? {} : routes}
+          inputs={detail.native ? {} : inputs}
+          optiscaler={{ fg: choice.fg ?? "off", route }}
+          installedRoute={install?.options.fg === "on" ? install.options.fg_route ?? detail.fg_plan?.route ?? detail.fg_plan?.source ?? "game" : null}
+          gpu={overview.gpu}
+          onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
+        />
+      )}
+
+      {detail && !detail.native && (
+        <>
+          <Fold label={t("up.advanced")} open={advanced} onToggle={toggleAdvanced} />
+          {advanced && (
+            <>
+              <ListCard>
+                <ValueLine label={t("up.section.version")} first>
+                  <PickerButton
+                    label={t("up.section.version")}
+                    value={choice.build}
+                    disabled={running}
+                    onChange={(build) => changeChoice({ ...choice, build, model: null })}
+                    options={usable.map((b) => ({
+                      value: b.id,
+                      label: b.id === overview.preferred ? t("up.version.recommended", { name: buildLabel(b) }) : buildLabel(b),
+                    }))}
+                  />
+                </ValueLine>
+                {(selectedModels?.length ?? 0) > 1 && (
+                  <ValueLine label={t("up.section.model")}>
+                    <PickerButton
+                      label={t("up.section.model")}
+                      value={choice.model ?? selectedModels![0]}
+                      disabled={running}
+                      onChange={(model) => changeChoice({ ...choice, model })}
+                      options={selectedModels!.map((m) => ({ value: m, label: t(`up.model.${m}`) }))}
+                    />
+                  </ValueLine>
+                )}
+                {playing && installedOptiscaler && (
+                  <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
+                )}
+                {installedOptiscaler && !running && <AdvancedIni appid={appid} />}
+                <ListRow
+                  label={t("up.exe")}
+                  detail={detail.analysis.manual && detail.analysis.exe ? detail.analysis.exe.split("/").pop() : t("up.exe.auto")}
+                  chevron
+                  disabled={running}
+                  onPress={() => void pickExe()}
+                />
+                {detail.analysis.manual && (
+                  <ListRow label={t("up.detect.auto")} disabled={running} onPress={async () => setDetail(await setUpscalersExe(appid, null))} />
+                )}
+                {install && !running && <ListRow label={t("up.verify")} chevron busy={verifying} onPress={() => void check()} />}
+                {install && !running && (
+                  <ListRow danger label={t("up.remove")} caption={t("up.remove.caption")} onPress={() => start(() => uninstallUpscaler(appid))} />
+                )}
+              </ListCard>
+              {counterStyleFailed && <Note tone="warn">{t("up.live.failed")}</Note>}
+              {(selectedModels?.length ?? 0) > 1 && <Note>{t("up.model.help")}</Note>}
+              {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
+              {blockedBuilds.map((b) => (
+                <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
+              ))}
+              {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
+              {detail.history.length > 1 && (
+                <>
+                  <Label>{t("up.history")}</Label>
+                  {[...detail.history].reverse().slice(0, 5).map((entry) => {
+                    const build = builds.find((b) => b.id === entry.build);
+                    return (
+                      <div key={`${entry.at}`} style={{ display: "flex", justifyContent: "space-between", gap: theme.space.xs, fontSize: theme.font.caption }}>
+                        <span style={{ textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>{build ? buildLabel(build) : entry.build}</span>
+                        <span style={{ color: statusColor(entry.result) }}>{t(`up.history.${entry.result}`)}</span>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+
       {running && job && <Progress job={job} />}
+      {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
       {message && <Note tone="warn">{message}</Note>}
       {applied === "now" && !message && <Note>{t("up.live.appliedNow")}</Note>}
       {applied === "restart" && !message && gameRunning && (
@@ -402,183 +557,66 @@ export const GameView: FC<{
       )}
 
       {detail && !detail.native && !running && (status === "broken" || dirty) && (
-        <Row>
-          <ActionButton
-            primary
-            label={status === "broken" ? t("up.repair") : install ? t("up.save") : t("up.apply")}
-            onPress={status === "broken" ? reinstall : apply}
-            disabled={blocked}
-          />
-        </Row>
-      )}
-      {detail && !detail.native && !running && (status === "broken" || dirty) && !sameBuild && (
-        <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.35 }}>{t(does)}</span>
-      )}
-      {detail && !running && install && (
-        <Row>
-          <ActionButton label={t("up.verify")} onPress={check} busy={verifying} />
-          <ActionButton danger label={t("up.remove")} onPress={() => start(() => uninstallUpscaler(appid))} />
-        </Row>
-      )}
-      {detail && !running && install && !comparing && (
-        <Row><ActionButton label={t("up.compare.open")} onPress={() => setComparing(true)} /></Row>
-      )}
-      {detail && install && comparing && (
-        <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
-      )}
-      {detail?.native && (
-        <FrameGenRow
-          appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam} gameRunning={gameRunning}
-          routes={{}} optiscaler={{ fg: "off", route: "game" }} gameHint="" gpu={overview.gpu} onOptiscaler={() => undefined}
-        />
-      )}
-      {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
-
-      {!detail && !loadError && (
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-          <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            <Spinner size={12} /> {t("up.detect.analyzing")}
-          </div>
-          <Skeleton height={36} />
-          <Skeleton height={96} />
-        </div>
-      )}
-      {loadError === "not_installed" && <Note tone="warn">{t("up.error.missingFolder")}</Note>}
-      {loadError && loadError !== "not_installed" && <Row><ActionButton label={t("load.retry")} onPress={() => void load()} /></Row>}
-
-      {detail && !detail.native && (
-        <>
-          <SegmentRow
-            value={mode}
-            onChange={changeMode}
-            options={[{ value: "easy", label: t("up.mode.easy") }, { value: "custom", label: t("up.mode.custom") }]}
-          />
-
-          {mode === "easy" ? (
-            <SegmentRow<EasyMode>
-              vertical
-              value={easyModeOf(choice, overview.preferred)}
-              onChange={(m) => changeChoice(easyChoice(m, overview.preferred, choice.fg ?? "off"))}
-              options={EASY_MODES.map((m) => ({ value: m, label: t(`up.easy.${m}`), caption: t(`up.easy.caption.${m}`) }))}
-            />
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}` }}>
+          {status === "broken" ? (
+            <Row><ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} /></Row>
+          ) : !install ? (
+            <Row>
+              <ActionButton primary label={t("up.activate", { name: selected ? buildLabel(selected) : choice.build })} onPress={apply} disabled={blocked} />
+            </Row>
           ) : (
             <>
-              <Label aside={
-                <span style={{ display: "inline-flex", paddingRight: theme.space.sm + 4 }}>
-                  <span style={{ width: BAR_COLUMN, textAlign: "center" }}>{t("up.bar.image")}</span>
-                  <span style={{ width: BAR_COLUMN, textAlign: "center" }}>{t("up.bar.perf")}</span>
-                </span>
-              }>{t("up.section.version")}</Label>
-              <SegmentRow
-                vertical
-                value={choice.build}
-                onChange={(build) => changeChoice({ ...choice, build, model: null })}
-                options={usable.map((build: BuildInfo) => ({
-                  value: build.id,
-                  label: buildLabel(build),
-                  caption: (
-                    <span style={{ display: "inline-flex" }}>
-                      <Bars value={build.image} />
-                      <Bars value={4 - build.cost} />
-                    </span>
-                  ),
-                }))}
-              />
-              {(selectedModels?.length ?? 0) > 1 && (
-                <>
-                  <Label>{t("up.section.model")}</Label>
-                  <SegmentRow
-                    value={choice.model ?? selectedModels![0]}
-                    onChange={(model) => changeChoice({ ...choice, model })}
-                    options={selectedModels!.map((m) => ({ value: m, label: t(`up.model.${m}`) }))}
-                  />
-                  <Note>{t("up.model.help")}</Note>
-                </>
-              )}
-              {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
-              {blockedBuilds.length > 0 && (
-                <Row>
-                  <ActionButton
-                    label={showBlocked ? t("up.blocked.hide") : t("up.blocked.more", { count: blockedBuilds.length })}
-                    onPress={() => setShowBlocked(!showBlocked)}
-                  />
-                </Row>
-              )}
-              {showBlocked && blockedBuilds.map((b) => (
-                <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
+              {changes.map((line) => (
+                <span key={line} style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted, textAlign: "center" }}>{line}</span>
               ))}
-              {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
-
-              {helix && <Note>{t("up.helix.pick.fsr")}</Note>}
-              {selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
-              {!replacesFsr && (
-                <>
-                  <Label>{t("up.section.quality")}</Label>
-                  <SegmentRow
-                    vertical
-                    value={choice.quality ?? "game"}
-                    onChange={(quality) => changeChoice({ ...choice, quality: quality === "game" ? null : quality })}
-                    options={[
-                      { value: "game" as const, label: t("up.quality.game") },
-                      ...QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` })),
-                    ]}
-                  />
-                  <Note>{t("up.quality.help")}</Note>
-
-                  <Label>{t("up.section.sharpness")}</Label>
-                  <SegmentRow
-                    value={choice.sharpness}
-                    onChange={(sharpness) => changeChoice({ ...choice, sharpness })}
-                    options={SHARPNESS.map((s) => ({ value: s, label: t(`up.sharp.${s}`) }))}
-                  />
-                </>
-              )}
+              <Row>
+                <ActionButton label={t("up.discard")} onPress={discard} />
+                <ActionButton primary label={t("up.save")} onPress={apply} disabled={blocked} />
+              </Row>
             </>
           )}
-
-
-          <FrameGenRow
-            appid={appid}
-            liveAppid={game.liveAppid}
-            isNonSteam={game.isNonSteam}
-            gameRunning={gameRunning}
-            routes={detail.fg_plan && !replacesFsr ? routes : {}}
-            optiscaler={{ fg: choice.fg ?? "off", route }}
-            gameHint={gameFgHint}
-            gpu={overview.gpu}
-            onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
-          />
-
-          {install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && !running && <AdvancedIni appid={appid} />}
-
-          {detail.analysis.manual && detail.analysis.exe && (
-            <Note>{t("up.detect.manual", { exe: detail.analysis.exe.split("/").pop() ?? detail.analysis.exe })}</Note>
-          )}
-          <Row>
-            {detail.analysis.manual
-              ? <ActionButton label={t("up.detect.auto")} onPress={async () => setDetail(await setUpscalersExe(appid, null))} disabled={running} />
-              : <ActionButton label={t("up.detect.pick")} onPress={pickExe} disabled={running} />}
-          </Row>
-
-          {detail.history.length > 1 && (
-            <>
-              <Label>{t("up.history")}</Label>
-              {[...detail.history].reverse().slice(0, 5).map((entry) => {
-                const build = builds.find((b) => b.id === entry.build);
-                return (
-                  <div key={`${entry.at}`} style={{ display: "flex", justifyContent: "space-between", gap: theme.space.xs, fontSize: theme.font.caption }}>
-                    <span style={{ textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>{build ? buildLabel(build) : entry.build}</span>
-                    <span style={{ color: statusColor(entry.result) }}>{t(`up.history.${entry.result}`)}</span>
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </>
+        </div>
       )}
     </Focusable>
   );
 };
+
+function fgName(t: Translate, fg: "on" | "off" | undefined, route: string | null | undefined): string {
+  if (fg !== "on") return t("up.fg.pick.off");
+  return t(route === "optiscaler" ? "up.fg.pick.optiscaler" : "up.fg.pick.game");
+}
+
+const StatusIcon: FC<{ status: UpscalerStatus | null }> = ({ status }) => {
+  if (status === "active") return <LuCircleCheck size={17} color={theme.color.ok} />;
+  if (status === "broken") return <LuTriangleAlert size={17} color={theme.color.danger} />;
+  if (status === "loaded") return <LuTriangleAlert size={17} color={theme.color.warn} />;
+  return <LuCircleDashed size={17} color={theme.color.textMuted} />;
+};
+
+const StatusLine: FC<{ icon?: ReactNode; title: string; sub?: string; tone?: "warn" | "danger" }> = ({ icon, title, sub, tone }) => (
+  <>
+    <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+      {icon && <span style={{ display: "inline-flex", flexShrink: 0 }}>{icon}</span>}
+      <span style={{ fontWeight: 700, fontSize: theme.font.body + 1, color: theme.color.textPrimary }}>{title}</span>
+    </div>
+    {sub && (
+      <span style={{
+        fontSize: theme.font.caption + 1, lineHeight: 1.35,
+        color: tone === "danger" ? theme.color.danger : tone === "warn" ? theme.color.warn : theme.color.textMuted,
+      }}>{sub}</span>
+    )}
+  </>
+);
+
+const ValueLine: FC<{ label: string; first?: boolean; children: ReactNode }> = ({ label, first, children }) => (
+  <div style={{
+    display: "flex", alignItems: "center", gap: theme.space.sm, padding: `${theme.space.xs}px ${theme.space.xs}px ${theme.space.xs}px ${theme.space.md}px`,
+    borderTop: first ? "none" : `1px solid ${theme.color.hairline}`,
+  }}>
+    <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>
+    <div style={{ minWidth: 150 }}>{children}</div>
+  </div>
+);
 
 const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
   const { t } = useI18n();
