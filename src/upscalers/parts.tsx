@@ -99,8 +99,12 @@ export function SegmentRow<T extends string>({ options, value, onChange, vertica
             onClick={() => onChange(option.value)}
             style={{
               ...segmentItemStyle(active),
+              flexDirection: !vertical && option.caption ? "column" : "row",
+              minWidth: 0,
+              fontSize: !vertical && option.caption ? theme.font.caption - 1 : theme.font.body,
+              gap: !vertical && option.caption ? 2 : 5,
               justifyContent: vertical ? "space-between" : "center",
-              padding: `${theme.space.sm}px ${theme.space.sm}px`,
+              padding: `${theme.space.sm}px ${!vertical && option.caption ? 1 : theme.space.sm}px`,
               whiteSpace: "normal",
               textAlign: vertical ? "left" : "center",
               lineHeight: 1.2,
