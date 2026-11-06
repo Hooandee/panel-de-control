@@ -50,6 +50,11 @@ export function arbitrate(input: ArbiterInput): ArbiterDecision {
     const choice = input.claims[input.thirdParty.id];
     if (choice === "other") background = "other";
     else if (choice !== "panel") conflict = { kind: "other", id: input.thirdParty.id, name: null };
+  } else if (
+    input.thirdParty.confidence === "low" &&
+    input.thirdParty.candidates?.some((id) => input.claims[id] === "other")
+  ) {
+    background = "other";
   }
 
   let music: ArbiterDecision["music"] = "panel";
