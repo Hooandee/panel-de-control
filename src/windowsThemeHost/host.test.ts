@@ -77,6 +77,22 @@ describe("Windows theme host", () => {
     expect(findBigPictureDocument(scope)).toBe(document);
   });
 
+  it("exposes only the latest companion Pictures directory and clears it when unavailable", () => {
+    host = createWindowsThemeHost(scopeWith([]));
+    expect(host.status().picturesDirectory).toBeNull();
+    const base = { snapshot: snapshot(false), extensions: [] };
+    const picturesDirectory = "C:\\Users\\Player\\OneDrive\\Imágenes";
+    host.update({ ...base, revision: 1, picturesDirectory });
+    expect(host.status().picturesDirectory).toBe(picturesDirectory);
+    host.update({ ...base, revision: 1, picturesDirectory: "C:\\stale" });
+    expect(host.status().picturesDirectory).toBe(picturesDirectory);
+    host.update({ ...base, revision: 2, picturesDirectory: null });
+    expect(host.status().picturesDirectory).toBeNull();
+    host.update({ ...base, revision: 3, picturesDirectory });
+    host.update({ ...base, revision: 4 });
+    expect(host.status().picturesDirectory).toBeNull();
+  });
+
   it("mounts the enabled theme's runtime and reports it", async () => {
     host = createWindowsThemeHost(scopeWith([{ m_ID: "GamepadUI_Full_Root", doc: document }]));
 
