@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.2...panel-de-control-v0.84.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **duo:** background detection, audio balance and Windows Pictures ([#1136](https://github.com/Hooandee/panel-de-control/issues/1136)) ([111a4d6](https://github.com/Hooandee/panel-de-control/commit/111a4d6aa711d6b28df93f626beb092d48c11cc4))
+
 ## [0.84.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.1...panel-de-control-v0.84.2) (2026-11-05)
 
 
