@@ -1,3 +1,4 @@
+import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "react-icons/lu";
 import { Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useState, type FC } from "react";
 
@@ -11,9 +12,9 @@ import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
-import { Label, SegmentRow } from "../upscalers/parts";
+import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { buildLabel } from "../upscalers/model";
-import { Dot, MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
+import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
 
@@ -24,6 +25,9 @@ export const EscaladoresSection: FC = () => {
   const [held] = useState(takeHeldPage);
   const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
   const [compat, setCompat] = useState<Record<string, GameCompat>>({});
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
 
   const refresh = useCallback(async () => {
@@ -83,14 +87,29 @@ export const EscaladoresSection: FC = () => {
           {!overview && !failed && [0, 1, 2, 3].map((i) => <Skeleton key={i} height={64} />)}
           {overview && (
             <>
-              <Label>{t("up.inGame.title")}</Label>
-              <SegmentRow
-                value={inGame}
-                onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
-                options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
-              />
-              <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
-              <Label>{t("up.games")}</Label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <Label>{t("up.games")}</Label>
+                <Focusable role="button" aria-expanded={optionsOpen} onActivate={() => setOptionsOpen(!optionsOpen)} onClick={() => setOptionsOpen(!optionsOpen)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: 8, color: theme.color.textPrimary, fontSize: theme.font.caption }}>
+                  <LuSlidersHorizontal size={16} />{t("up.list.options")}
+                </Focusable>
+              </div>
+              <div style={{ display: optionsOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
+                <Fold label={t("up.inGame.title")} open={noticeOpen} onToggle={() => setNoticeOpen(!noticeOpen)} />
+                {noticeOpen && <SegmentRow
+                  value={inGame}
+                  onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
+                  options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
+                />}
+                <Fold label={t("up.list.manage")} open={bulkOpen} onToggle={() => setBulkOpen(!bulkOpen)} />
+                <div style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
+                  <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
+                </div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, fontSize: theme.font.caption, color: theme.color.textMuted, paddingBottom: 4 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuCircleCheck color={theme.color.ok} />{t("up.list.checked")}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuClock color={theme.color.accent} />{t("up.list.unchecked")}</span>
+              </div>
             </>
           )}
           {overview && games.length === 0 && (
@@ -111,7 +130,10 @@ export const EscaladoresSection: FC = () => {
                   <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, marginTop: 2, minHeight: 16 }}>
                     {install ? (
                       <>
-                        <Dot color={statusColor(install.status)} />
+                        <span title={t(install.status === "active" ? "up.list.checked" : install.status === "broken" ? "up.list.review" : "up.list.unchecked")}
+                          style={{ display: "flex", flexShrink: 0, color: statusColor(install.status) }}>
+                          {install.status === "active" ? <LuCircleCheck size={14} /> : install.status === "broken" ? <LuTriangleAlert size={14} /> : <LuClock size={14} />}
+                        </span>
                         <span style={{ color: theme.color.textPrimary }}>{build ? buildLabel(build) : install.build}</span>
                       </>
                     ) : info ? (
