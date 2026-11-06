@@ -19,12 +19,14 @@ import {
   type WindowsStorageWrite,
 } from "./storage";
 
-export const WINDOWS_THEME_HOST_VERSION = 6;
+export const WINDOWS_THEME_HOST_VERSION = 8;
 
 export interface WindowsThemeHostState {
   revision: number;
   snapshot: CssLoaderSnapshot;
   extensions: readonly ThemeExtensionPayload[];
+  /** Resolved by the signed-in user companion; absent means unavailable. */
+  picturesDirectory?: string | null;
 }
 
 export interface WindowsThemeHostStatus {
@@ -36,6 +38,7 @@ export interface WindowsThemeHostStatus {
   errors: readonly string[];
   gameSilenced: boolean;
   storage: WindowsStorageStatus;
+  picturesDirectory: string | null;
 }
 
 export interface WindowsThemeHost {
@@ -218,6 +221,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     errors: [...errors],
     gameSilenced: gameAudio.silenced(),
     storage: storage.status(),
+    picturesDirectory: state.picturesDirectory ?? null,
   });
 
   return Object.freeze({
@@ -228,6 +232,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
         revision: next.revision,
         snapshot: next.snapshot,
         extensions: next.extensions.map(parseThemeExtensionPayload),
+        picturesDirectory: typeof next.picturesDirectory === "string" && next.picturesDirectory.trim() ? next.picturesDirectory : null,
       };
       for (const listener of [...listeners]) listener();
       return status();
