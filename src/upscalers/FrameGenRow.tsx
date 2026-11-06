@@ -32,6 +32,7 @@ export const FrameGenRow: FC<{
 }> = ({ appid, liveAppid, isNonSteam, gameRunning, routes, inputs, optiscaler, installedRoute, gpu, onOptiscaler }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<LsfgStatus | null>(null);
+  const [requestedLossless, setRequestedLossless] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -40,11 +41,11 @@ export const FrameGenRow: FC<{
   }, []);
 
   const profile = status?.profiles[appid] ?? null;
-  const lossless = !!status && status.lossless && !!status.dll && !status.foreign;
+  const lossless = !!status && status.lossless && !!status.dll;
   const offer = fgOffer(routes, inputs, gpu, lossless || !!profile, installedRoute);
   const gameInput = (routes.game as { input?: string } | undefined)?.input;
   const dlssBridge = !offer.own && (gameInput === "dlssg" || gameInput === "nukems");
-  const current: Pick = profile ? "lsfg" : optiscaler.fg === "on" && offer.options.includes(optiscaler.route) ? optiscaler.route : "off";
+  const current: Pick = profile || requestedLossless ? "lsfg" : optiscaler.fg === "on" && offer.options.includes(optiscaler.route) ? optiscaler.route : "off";
 
   const saveLsfg = async (next: Partial<LsfgProfile> | null) => {
     const result = await setLsfgGame(appid, next);
@@ -68,13 +69,23 @@ export const FrameGenRow: FC<{
     }
   };
 
+  const enableLossless = async (ready: LsfgStatus | null) => {
+    if (!ready?.installed) setStatus(await installLsfg());
+    await saveLsfg({ multiplier: profile?.multiplier ?? 2, flow: profile?.flow ?? "balanced", performance: profile?.performance ?? true });
+    onOptiscaler("off", null);
+    setRequestedLossless(false);
+  };
+
   const choose = (pick: Pick) => run(async () => {
     if (pick === "lsfg") {
-      if (!status?.installed) setStatus(await installLsfg());
-      await saveLsfg({ multiplier: profile?.multiplier ?? 2, flow: profile?.flow ?? "balanced", performance: profile?.performance ?? true });
-      onOptiscaler("off", null);
+      if (status?.foreign) {
+        setRequestedLossless(true);
+        return;
+      }
+      await enableLossless(status);
       return;
     }
+    setRequestedLossless(false);
     if (profile) await saveLsfg(null);
     onOptiscaler(pick === "off" ? "off" : "on", pick === "off" ? null : pick);
   });
@@ -131,7 +142,7 @@ export const FrameGenRow: FC<{
       {status?.foreign && (
         <>
           <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.lsfg.foreign")}</Notice>
-          <Row><ActionButton label={t("up.lsfg.adopt")} busy={busy} onPress={() => void run(async () => { setStatus(await adoptForeignLsfg()); })} /></Row>
+          <Row><ActionButton label={t("up.lsfg.adopt")} busy={busy} onPress={() => void run(async () => { const adopted = await adoptForeignLsfg(); setStatus(adopted); if (requestedLossless) await enableLossless(adopted); })} /></Row>
         </>
       )}
       {foreignBackup && (

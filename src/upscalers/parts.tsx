@@ -1,12 +1,13 @@
-import { Focusable, Menu, MenuItem, showContextMenu } from "@decky/ui";
-import type { FC, ReactNode } from "react";
+import { Focusable } from "@decky/ui";
+import { useRef, useState, type FC, type ReactNode } from "react";
 import { LuCheck, LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
+import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { theme } from "../theme";
 import type { UpscalerStatus } from "./types";
-import { rememberOpener } from "../navigation/showModal";
-import { holdPage } from "./pageMemory";
+
+const navigation = createThemeNavigationAccess({ allowInactiveContext: true });
 
 export const MOTION_CSS = `
 @keyframes pdc-up-spin { to { transform: rotate(360deg); } }
@@ -166,7 +167,6 @@ export const ActionButton: FC<{
   </Focusable>
 );
 
-/** A value that opens Steam's own menu to change it: looks like Panel's buttons, chooses like Steam. */
 export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge }: {
   label: string;
   value: T;
@@ -175,43 +175,41 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   disabled?: boolean;
   badge?: ReactNode;
 }) {
-  const current = options.find((o) => o.value === value)?.label ?? value;
-  const open = (anchor: EventTarget | null) => {
-    if (disabled) return;
-    holdPage();
-    const back = rememberOpener();
-    showContextMenu(
-      <Menu label={label} onCancel={back}>
-        {options.map((o) => (
-          <MenuItem key={o.value} onSelected={() => { onChange(o.value); back(); }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 14, display: "inline-flex" }}>{o.value === value ? <LuCheck size={14} /> : null}</span>
-              <span style={{ display: "flex", flexDirection: "column" }}>
-                {o.label}
-                {o.caption && <span style={{ fontSize: theme.font.caption, opacity: 0.7 }}>{o.caption}</span>}
-              </span>
-            </span>
-          </MenuItem>
-        ))}
-      </Menu>,
-      anchor ?? window,
-    );
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    if (trigger.current) navigation.focus(trigger.current);
   };
+  const current = options.find((o) => o.value === value)?.label ?? value;
+  const toggle = () => { if (!disabled) setOpen(!open); };
   return (
-    <Focusable
-      aria-label={label}
-      onActivate={(e) => open(e.currentTarget)}
-      onClick={(e) => open(e.currentTarget)}
-      style={{
-        ...theme.card, padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center",
-        gap: theme.space.xs, opacity: disabled ? 0.45 : 1, cursor: "pointer",
-      }}
-    >
-      <span style={{ flex: 1, display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-        {current}{badge}
-      </span>
-      <LuChevronDown size={16} color={theme.color.textMuted} />
-    </Focusable>
+    <div style={{ ...theme.card, minWidth: 0, overflow: "hidden", opacity: disabled ? 0.45 : 1 }}>
+      <Focusable ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
+        onActivate={toggle} onClick={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
+        style={{ padding: `${theme.space.sm}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.xs, cursor: "pointer" }}>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: theme.space.xs,
+          fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "normal", overflowWrap: "anywhere" }}>
+          {current}{badge}
+        </span>
+        <LuChevronDown size={16} color={theme.color.textMuted} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined }} />
+      </Focusable>
+      {open && <Focusable role="radiogroup" aria-label={label} onCancel={(event) => { event.stopPropagation(); close(); }} flow-children="column" style={{ display: "flex", flexDirection: "column" }}>
+        {options.map((option) => {
+          const select = () => { if (!disabled) { close(); onChange(option.value); } };
+          return <Focusable key={option.value} role="radio" aria-checked={option.value === value} aria-disabled={disabled}
+            onActivate={select} onClick={select}
+            style={{ display: "flex", alignItems: "flex-start", gap: theme.space.xs, padding: `${theme.space.sm}px ${theme.space.md}px`,
+              borderTop: `1px solid ${theme.color.hairline}`, color: theme.color.textPrimary, fontSize: theme.font.body, whiteSpace: "normal", cursor: "pointer" }}>
+            <span style={{ width: 16, flexShrink: 0, display: "flex", paddingTop: 2 }}>{option.value === value && <LuCheck size={14} />}</span>
+            <span style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4, overflowWrap: "anywhere", lineHeight: 1.35 }}>
+              {option.label}
+              {option.caption && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{option.caption}</span>}
+            </span>
+          </Focusable>;
+        })}
+      </Focusable>}
+    </div>
   );
 }
 
