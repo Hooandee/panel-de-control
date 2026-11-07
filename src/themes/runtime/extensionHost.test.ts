@@ -980,7 +980,7 @@ describe("theme storage", () => {
     host.reconcile(snapshot());
     await settle();
     await settle();
-    expect(await seen?.games?.forceClose(730)).toBe("terminated");
+    expect(await seen?.games?.forceClose!(730)).toBe("terminated");
     host.dispose();
   });
 });

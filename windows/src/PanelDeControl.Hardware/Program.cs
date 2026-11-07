@@ -115,6 +115,11 @@ public static class Program
                     steamDevTools,
                     gameMixer,
                     new GameAudioPolicy(GameAudioSilencer.DefaultStatePath),
+                    GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token),
+                SuperviseAsync("themes.game_freeze", () => new GameFreezer(
+                    steamDevTools,
+                    gameMixer.Processes,
+                    new GameFreezePolicy(GameFreezer.DefaultStatePath, new NtGameProcessSuspender()),
                     GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token))
                 .ConfigureAwait(false);
             return 0;

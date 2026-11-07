@@ -148,6 +148,8 @@ module.exports = Object.freeze({
   abiVersion: 2,
   mount: (context) => {
     context.document.body.dataset.games = String("games" in context);
+    context.document.body.dataset.forceClose = String(Boolean(context.games && "forceClose" in context.games));
+    context.document.body.dataset.pause = String(typeof context.games?.pause === "function");
     void context.storage.set("layout", "grid").then((ok) => { context.document.body.dataset.saved = String(ok); });
     return () => {};
   },
@@ -163,10 +165,14 @@ module.exports = Object.freeze({
       .toEqual({ seeded: true, pending: 0 });
     await settle();
     expect(document.body.dataset.saved).toBe("true");
-    // Force close has no Windows equivalent yet: the runtime sees it as absent.
-    expect(document.body.dataset.games).toBe("false");
+    // Windows freezes the game (gamePause.ts) but has no force close: the theme sees only the pause.
+    expect(document.body.dataset.games).toBe("true");
+    expect(document.body.dataset.pause).toBe("true");
+    expect(document.body.dataset.forceClose).toBe("false");
     delete document.body.dataset.saved;
     delete document.body.dataset.games;
+    delete document.body.dataset.pause;
+    delete document.body.dataset.forceClose;
   });
 
   it("rejects a payload whose identity is malformed", () => {
