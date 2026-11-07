@@ -182,7 +182,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
   const geometryTimer = setInterval(syncQamGeometry, QAM_GEOMETRY_POLL_MS);
   syncQamGeometry();
 
-  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError);
+  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError, globalThis, gamePause.thawForRaise);
   const stopToastPosition = installOverlayToastPosition(scope, () => mounted.size > 0);
 
   const stopRuntime = startThemesRuntime({

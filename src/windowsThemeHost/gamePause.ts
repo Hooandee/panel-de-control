@@ -7,6 +7,9 @@ import { createThemeGamesAccess, type ThemeExtensionGamesAccess } from "../theme
 /** CDP binding the companion adds to SharedJSContext; calling it wakes the companion at once. */
 export const GAME_PAUSE_BINDING = "pdcHostGamePause";
 export const GAME_PAUSE_MAX_MS = 3000;
+/** How long the companion takes at most to thaw once the lease ends: the binding wakes it at once, and it rereads
+ * the lease every 250 ms while a game is frozen. */
+export const GAME_THAW_MS = 350;
 
 type PauseScope = typeof globalThis & { [GAME_PAUSE_BINDING]?: (payload: string) => void };
 
@@ -14,6 +17,8 @@ export interface HostGamePause {
   games: Readonly<ThemeExtensionGamesAccess>;
   /** The game the lease holds, while it lasts. */
   paused(now?: number): string | null;
+  /** Ends the lease before Steam raises the game's window; how long the companion may take to thaw it, or 0. */
+  thawForRaise(): number;
   dispose(): void;
 }
 
@@ -51,6 +56,12 @@ export function installHostGamePause(scope: typeof globalThis, clock: () => numb
     games,
     paused(now = clock()) {
       return appid !== null && now < until ? appid : null;
+    },
+    thawForRaise() {
+      // A lapsed lease has already been let go; it still waits, the companion may not have read it yet.
+      const held = appid !== null;
+      release();
+      return held ? GAME_THAW_MS : 0;
     },
     dispose: release,
   };

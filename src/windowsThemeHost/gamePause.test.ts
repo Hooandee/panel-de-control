@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { GAME_PAUSE_BINDING, GAME_PAUSE_MAX_MS, installHostGamePause } from "./gamePause";
+import { GAME_PAUSE_BINDING, GAME_PAUSE_MAX_MS, GAME_THAW_MS, installHostGamePause } from "./gamePause";
 
 const steam = globalThis as { SteamUIStore?: { MainRunningAppID?: unknown } };
 
@@ -42,6 +42,15 @@ describe("host game pause", () => {
     expect(await pause.games.pause(2500)).toBe(true);
     pause.dispose();
     expect(pause.paused()).toBeNull();
+  });
+
+  it("ends the lease before the game's window is raised and says how long to let it thaw", async () => {
+    const pause = installHostGamePause({} as typeof globalThis);
+    expect(pause.thawForRaise()).toBe(0);
+    await pause.games.pause(2500);
+    expect(pause.thawForRaise()).toBe(GAME_THAW_MS);
+    expect(pause.paused()).toBeNull();
+    expect(pause.thawForRaise()).toBe(0);
   });
 
   it("offers no force close, which stays Steam's on Windows", () => {

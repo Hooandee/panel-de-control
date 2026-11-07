@@ -105,6 +105,28 @@ describe("Steam button on Windows", () => {
     expect(errors).toEqual([]);
   });
 
+  it("lets a frozen game thaw before raising it: a frozen window does not come up and Steam goes back Home", () => {
+    vi.useFakeTimers();
+    const { scope, calls, navigate } = steam();
+    let held = true;
+    const thaw = () => { const wait = held ? 300 : 0; held = false; return wait; };
+    const stop = installSteamButtonHome(scope, () => true, log, globalThis, thaw);
+
+    navigate("/apprunning");
+    expect(calls).toEqual([]);
+    vi.advanceTimersByTime(299);
+    expect(calls).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(calls).toEqual(["overlay 10798923412957822976 0", "raise 10798923412957822976"]);
+
+    // Nothing frozen: raised at once, as before.
+    navigate("/library/home");
+    navigate("/apprunning");
+    expect(calls.slice(-1)).toEqual(["raise 10798923412957822976"]);
+    stop();
+    expect(errors).toEqual([]);
+  });
+
   it("leaves Steam alone while no theme runtime is mounted", () => {
     const { scope, calls, overlay, activate, navigate } = steam();
     const stop = installSteamButtonHome(scope, () => false, log);

@@ -77,6 +77,10 @@ export function installSteamButtonHome(
   isActive: () => boolean,
   log: SteamButtonLog,
   timers: Pick<typeof globalThis, "setInterval" | "clearInterval" | "setTimeout"> = globalThis,
+  // Lets a game a theme froze run again before its window is raised (gamePause.ts); how long to wait for it, 0 when
+  // nothing was frozen. A frozen window does not come up, and Big Picture keeping the focus on the running page
+  // sends it back Home (onBigPictureFocus), where the theme freezes the game again.
+  thawBeforeRaise: () => number = () => 0,
 ): () => void {
   const steam = scope as unknown as SteamButtonScope;
   const main = () => steam.SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance;
@@ -147,12 +151,22 @@ export function installSteamButtonHome(
     if (!isActive() || !pathname?.startsWith("/apprunning")) return;
     const gameId = runningGameId();
     if (!gameId) return;
+    const raise = () => {
+      try {
+        steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_HIDDEN);
+        void Promise.resolve(steam.SteamClient?.Apps?.RaiseWindowForGame?.(gameId)).catch(() => log("raise_game_failed"));
+      } catch {
+        log("raise_game_failed");
+      }
+    };
+    let wait = 0;
     try {
-      steam.SteamClient?.Overlay?.SetOverlayState?.(gameId, COMPOSITION_HIDDEN);
-      void Promise.resolve(steam.SteamClient?.Apps?.RaiseWindowForGame?.(gameId)).catch(() => log("raise_game_failed"));
+      wait = thawBeforeRaise();
     } catch {
-      log("raise_game_failed");
+      wait = 0;
     }
+    if (wait > 0) timers.setTimeout(raise, wait);
+    else raise();
   };
   const keepControllerOnBigPicture = () => {
     const window = main();
