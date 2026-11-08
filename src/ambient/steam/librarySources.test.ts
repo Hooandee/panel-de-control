@@ -31,11 +31,26 @@ describe("library sources", () => {
   it("the focused tile names the selected game, never the hero still fading out", () => {
     const home = document.createElement("div");
     home.innerHTML = '<img src="https://steamloopback.host/assets/1245620/library_hero_blur.jpg"><img src="https://steamloopback.host/assets/1912410/x/library_hero_blur.jpg"><div class="gpfocus"><img src="https://steamloopback.host/assets/1912410/h/library_capsule.jpg"></div>';
+    document.body.append(home);
     expect(selectedAppIdIn(home)).toBe("1912410");
     home.querySelector(".gpfocus")!.innerHTML = "<span>No art</span>";
     expect(selectedAppIdIn(home)).toBeNull();
     home.querySelector(".gpfocus")!.innerHTML = '<img src="https://steamloopback.host/customimages/3141592653p.png">';
     expect(selectedAppIdIn(home)).toBe("3141592653");
+  });
+
+  it("a carousel hidden under a theme's own Home selects nothing", () => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = '<div class="carousel"><img src="https://steamloopback.host/assets/413150/library_hero_blur.jpg"></div>';
+    document.body.append(wrapper);
+    const carousel = wrapper.querySelector(".carousel");
+    expect(selectedAppIdIn(carousel)).toBe("413150");
+    for (const hide of ["opacity: 0", "visibility: hidden", "display: none"]) {
+      wrapper.setAttribute("style", hide);
+      expect(selectedAppIdIn(carousel)).toBeNull();
+    }
+    wrapper.remove();
+    expect(selectedAppIdIn(carousel)).toBeNull();
   });
 
   it("tells store games from non-Steam shortcuts", () => {
