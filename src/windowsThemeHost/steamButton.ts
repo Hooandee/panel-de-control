@@ -52,7 +52,7 @@ interface SteamButtonScope {
     Apps?: { RaiseWindowForGame?(gameId: string): unknown };
   };
   SteamUIStore?: {
-    MainRunningAppID?: unknown;
+    MainRunningAppID?: number;
     RunningApps?: readonly { appid?: number; m_gameid?: string; gameid?: string }[];
     WindowStore?: {
       GamepadUIMainWindowInstance?: SteamWindowInstance;
@@ -105,7 +105,10 @@ export function installSteamButtonHome(
   const reactivateBigPicture = () => {
     for (const delay of REACTIVATE_DELAYS_MS) timers.setTimeout(activateBigPicture, delay);
   };
-  const runningGameId = () => gameIdFor(steam, main()?.MainRunningAppID ?? steam.SteamUIStore?.RunningApps?.[0]?.appid);
+  // On Windows only SteamUIStore carries the running game; the main window's own field stays undefined.
+  const runningAppId = () => main()?.MainRunningAppID || steam.SteamUIStore?.MainRunningAppID
+    || steam.SteamUIStore?.RunningApps?.[0]?.appid;
+  const runningGameId = () => gameIdFor(steam, runningAppId());
 
   const showBigPictureHome = (appId: number | undefined) => {
     const gameId = gameIdFor(steam, appId);
@@ -167,12 +170,7 @@ export function installSteamButtonHome(
         log("raise_game_failed");
       }
     };
-    let wait = 0;
-    try {
-      wait = thawBeforeRaise();
-    } catch {
-      wait = 0;
-    }
+    const wait = thawBeforeRaise();
     if (wait > 0) timers.setTimeout(raise, wait);
     else raise();
   };
@@ -244,8 +242,7 @@ export function installSteamButtonHome(
       if (`${current.m_history?.location?.pathname}|${current.BrowserWindow?.document?.hidden}` !== before) return;
       const doc = current.BrowserWindow?.document;
       const bigPictureInFront = doc?.hidden !== true && doc?.hasFocus?.() === true;
-      const running = current.MainRunningAppID || (typeof steam.SteamUIStore?.MainRunningAppID === "number" ? steam.SteamUIStore.MainRunningAppID : 0)
-        || steam.SteamUIStore?.RunningApps?.[0]?.appid;
+      const running = runningAppId();
       if (!bigPictureInFront && running) {
         showBigPictureHome(running);
         return;
