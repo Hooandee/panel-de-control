@@ -8,14 +8,15 @@
 export type ThemeForceCloseResult = "not_found" | "terminated" | "killed" | "failed" | "unavailable";
 
 export interface ThemeExtensionGamesAccess {
-  forceClose(appid: number | string): Promise<ThemeForceCloseResult>;
+  // Absent where Panel cannot close a game by force (Windows): a theme then offers no "force close".
+  forceClose?(appid: number | string): Promise<ThemeForceCloseResult>;
   // False when no game runs or nothing could be frozen.
   pause(ms: number): Promise<boolean>;
   resume(): Promise<void>;
 }
 
 export interface ThemeGamesBackend {
-  forceClose(appid: string): Promise<unknown>;
+  forceClose?(appid: string): Promise<unknown>;
   pause?(appid: string, ms: number): Promise<unknown>;
   resume?(): Promise<unknown>;
 }
@@ -38,19 +39,23 @@ function runningAppId(): string | null {
 const RESULTS = new Set<ThemeForceCloseResult>(["not_found", "terminated", "killed", "failed"]);
 
 export function createThemeGamesAccess(backend: ThemeGamesBackend): Readonly<ThemeExtensionGamesAccess> {
-  return Object.freeze({
-    async forceClose(appid: number | string): Promise<ThemeForceCloseResult> {
+  const close = backend.forceClose;
+  const forceClose = close
+    ? async (appid: number | string): Promise<ThemeForceCloseResult> => {
       // Shortcut game ids exceed 2^53, so they travel as decimal strings.
       const id = typeof appid === "number" && Number.isSafeInteger(appid) && appid > 0 ? String(appid) : appid;
       if (typeof id !== "string" || !/^[1-9]\d{0,19}$/.test(id)) return "failed";
       try {
-        const reply = await backend.forceClose(id);
+        const reply = await close.call(backend, id);
         const result = typeof reply === "object" && reply !== null ? (reply as { result?: unknown }).result : undefined;
         return RESULTS.has(result as ThemeForceCloseResult) ? result as ThemeForceCloseResult : "failed";
       } catch {
         return "unavailable";
       }
-    },
+    }
+    : undefined;
+  return Object.freeze({
+    ...(forceClose ? { forceClose } : {}),
     async pause(ms: number): Promise<boolean> {
       const appid = runningAppId();
       if (!appid || !backend.pause || !Number.isFinite(ms) || ms <= 0) return false;

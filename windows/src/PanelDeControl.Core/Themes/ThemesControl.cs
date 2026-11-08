@@ -35,6 +35,10 @@ public enum ThemesOperation
 
     [EnumMember(Value = "uninstall")]
     Uninstall = 8,
+
+    /// <summary>Game Bar opened from the Xbox button, which Windows kept from Steam: Steam's Home for the theme.</summary>
+    [EnumMember(Value = "steam_home")]
+    SteamHome = 9,
 }
 
 /// <summary>Why themes can or cannot reach Steam, as the widget explains it.</summary>
@@ -137,6 +141,8 @@ public sealed class ThemesRequest
 
     public static ThemesRequest RestartSteam() => new(ThemesOperation.RestartSteam);
 
+    public static ThemesRequest SteamHome() => new(ThemesOperation.SteamHome);
+
     internal void Validate()
     {
         bool Present(string? field) => !string.IsNullOrWhiteSpace(field) && field!.Length <= MaximumFieldLength;
@@ -145,7 +151,7 @@ public sealed class ThemesRequest
         var pathExpected = Operation == ThemesOperation.InstallEarly;
         var valid = Operation switch
         {
-            ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam =>
+            ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam or ThemesOperation.SteamHome =>
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.InstallEarly => Present(CatalogId) && ArchivePath is not null && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),

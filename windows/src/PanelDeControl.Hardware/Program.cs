@@ -71,6 +71,9 @@ public static class Program
             using var classTable = new ClassTableSource(ThemeLibrary.DefaultRoot);
             var steam = new SteamInstallation();
             var gameMixer = new CoreAudioGameMixer();
+            // Made here, under the Windows check: the analyzer does not carry it into the supervised lambdas.
+            Func<IReadOnlyDictionary<int, ProcessEntry>> gameProcesses = gameMixer.Processes;
+            var gameSuspender = new NtGameProcessSuspender();
             var themeService = new ThemeService(ThemeLibrary.DefaultRoot, themeChannel, steam, PackageTempFolder.ResolveOrUnavailable());
             var themeEngine = new SteamThemeEngine(
                 steamDevTools,
@@ -115,6 +118,11 @@ public static class Program
                     steamDevTools,
                     gameMixer,
                     new GameAudioPolicy(GameAudioSilencer.DefaultStatePath),
+                    GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token),
+                SuperviseAsync("themes.game_freeze", () => new GameFreezer(
+                    steamDevTools,
+                    gameProcesses,
+                    new GameFreezePolicy(GameFreezer.DefaultStatePath, gameSuspender),
                     GameAudioSilencer.ForegroundIsBigPicture).RunAsync(token), token))
                 .ConfigureAwait(false);
             return 0;

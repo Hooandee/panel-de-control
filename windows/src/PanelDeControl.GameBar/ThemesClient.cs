@@ -26,6 +26,8 @@ public sealed class ThemesClient
 
     public Task<ThemesResponse> RestartSteamAsync() => SendAsync(ThemesRequest.RestartSteam());
 
+    public Task<ThemesResponse> SteamHomeAsync() => SendAsync(ThemesRequest.SteamHome());
+
     public Task<ThemesResponse> UninstallAsync(string name) => SendAsync(ThemesRequest.Uninstall(name));
 
     private static async Task<ThemesResponse> SendAsync(ThemesRequest request)
