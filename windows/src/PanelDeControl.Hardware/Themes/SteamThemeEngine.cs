@@ -150,6 +150,33 @@ public sealed class SteamThemeEngine
         return shared is null ? null : await devTools.ConnectAsync(shared, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The Xbox button that Windows gave to Game Bar instead of Steam: the theme host presses Steam's Home in its place
+    /// (steamButton.ts pressHome). Returns what the host did, for the log.
+    /// </summary>
+    public async Task<string> PressSteamHomeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var session = await ConnectSharedContextAsync(cancellationToken).ConfigureAwait(false);
+            if (session is null)
+            {
+                return "no_steam";
+            }
+
+            var result = await session.EvaluateAsync(
+                $"(() => {{ try {{ return String(window.{HostGlobal}?.pressHome?.() ?? 'no_host'); }} catch {{ return 'error'; }} }})()",
+                cancellationToken).ConfigureAwait(false);
+            return result.ValueKind == JsonValueKind.String ? result.GetString() ?? "unknown" : "unknown";
+        }
+        catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException or HttpRequestException
+            or InvalidOperationException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return "unreachable";
+        }
+    }
+
     public async Task<bool> BringBigPictureToFrontAsync(CancellationToken cancellationToken)
     {
         var targets = await devTools.ListTargetsAsync(cancellationToken).ConfigureAwait(false);

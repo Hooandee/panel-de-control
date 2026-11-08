@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { installSteamButtonHome } from "./steamButton";
+import { installSteamButtonHome, PRESS_HOME_WAIT_MS } from "./steamButton";
 
 type Activated = (pid: number, appId: number, active: boolean, user: boolean) => void;
 
@@ -125,6 +125,56 @@ describe("Steam button on Windows", () => {
     expect(calls.slice(-1)).toEqual(["raise 10798923412957822976"]);
     stop();
     expect(errors).toEqual([]);
+  });
+
+  describe("the Xbox button Game Bar keeps from Steam (pressHome)", () => {
+    function withPage(hidden: boolean) {
+      const harness = steam();
+      const main = (harness.scope as unknown as { SteamUIStore: { WindowStore: { GamepadUIMainWindowInstance: { OnHomeButtonPressed?: () => void; BrowserWindow: { document: object } } } } }).SteamUIStore.WindowStore.GamepadUIMainWindowInstance;
+      main.OnHomeButtonPressed = () => { harness.calls.push("theme home"); };
+      Object.defineProperty(main.BrowserWindow.document, "hidden", { get: () => hidden });
+      return harness;
+    }
+
+    it("lets the theme answer its Steam button while Big Picture is in front", () => {
+      vi.useFakeTimers();
+      const { scope, calls, state } = withPage(false);
+      state.bigPictureFocused = true;
+      const home = installSteamButtonHome(scope, () => true, log);
+      expect(home.pressHome()).toBe("scheduled");
+      expect(calls).toEqual([]);
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
+      expect(calls).toEqual(["theme home"]);
+      home();
+    });
+
+    it("brings Big Picture Home over a game in front, as the overlay's button does", () => {
+      vi.useFakeTimers();
+      const { scope, calls, state } = withPage(true);
+      state.pathname = "/apprunning";
+      const home = installSteamButtonHome(scope, () => true, log);
+      home.pressHome();
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
+      expect(calls.slice(0, 3)).toEqual(["overlay 10798923412957822976 2", "home", "front"]);
+      expect(calls).not.toContain("theme home");
+      home();
+    });
+
+    it("stands down when Steam answered the button itself, and without a mounted theme", () => {
+      vi.useFakeTimers();
+      const { scope, calls, state, navigate } = withPage(false);
+      state.bigPictureFocused = true;
+      const home = installSteamButtonHome(scope, () => true, log);
+      home.pressHome();
+      navigate("/library/app/570");
+      vi.advanceTimersByTime(PRESS_HOME_WAIT_MS);
+      expect(calls).toEqual([]);
+      home();
+
+      const idle = installSteamButtonHome(withPage(false).scope, () => false, log);
+      expect(idle.pressHome()).toBe("inactive");
+      idle();
+    });
   });
 
   it("leaves Steam alone while no theme runtime is mounted", () => {

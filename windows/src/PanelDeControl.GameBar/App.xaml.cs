@@ -61,6 +61,7 @@ sealed partial class App : Application
             Window.Current.CoreWindow,
             frame);
         frame.Navigate(typeof(ControlPanelWidget), widget);
+        widget.GameBarDisplayModeChanged += OnGameBarDisplayModeChanged;
         Window.Current.Closed += OnWidgetClosed;
         Window.Current.Activate();
     }
@@ -78,6 +79,22 @@ sealed partial class App : Application
         Window.Current.Activate();
     }
 
+    // On some handhelds (ROG Xbox Ally X with Gaming Services 39.118) Windows keeps the Xbox button for Game Bar and
+    // Steam never sees it, so a Steam theme could not leave a game. Game Bar coming to the foreground is that press:
+    // the companion asks the theme host to answer it as Steam's Home (steamButton.ts pressHome), and stands down
+    // where Steam got the button too.
+    private static void OnGameBarDisplayModeChanged(XboxGameBarWidget sender, object args)
+    {
+        if (sender.GameBarDisplayMode != XboxGameBarDisplayMode.Foreground)
+        {
+            return;
+        }
+
+        _ = new ThemesClient().SteamHomeAsync().ContinueWith(
+            task => CrashLog.Write("steam-home", task.Exception),
+            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+    }
+
     // Game Bar loads the widget at sign-in even while hidden. The companion keeps Steam themed, so it
     // starts as soon as the package runs, not when the widget is first opened; a second copy exits.
     private static void StartCompanion()
@@ -92,6 +109,11 @@ sealed partial class App : Application
         Windows.UI.Core.CoreWindowEventArgs args)
     {
         DisposeCurrentPage();
+        if (widget is not null)
+        {
+            widget.GameBarDisplayModeChanged -= OnGameBarDisplayModeChanged;
+        }
+
         widget = null;
         Window.Current.Closed -= OnWidgetClosed;
     }

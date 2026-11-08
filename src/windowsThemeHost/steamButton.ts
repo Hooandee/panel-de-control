@@ -36,7 +36,7 @@ interface SteamWindowInstance {
   MainRunningAppID?: number;
   Navigator?: { Home?(): void };
   BrowserWindow?: (Pick<Window, "addEventListener" | "removeEventListener"> & {
-    document?: Pick<Document, "hasFocus">;
+    document?: Pick<Document, "hasFocus"> & { hidden?: boolean };
     SteamClient?: { Window?: { BringToFront?(): void } };
   }) | null;
   m_history?: SteamHistory;
@@ -52,6 +52,7 @@ interface SteamButtonScope {
     Apps?: { RaiseWindowForGame?(gameId: string): unknown };
   };
   SteamUIStore?: {
+    MainRunningAppID?: unknown;
     RunningApps?: readonly { appid?: number; m_gameid?: string; gameid?: string }[];
     WindowStore?: {
       GamepadUIMainWindowInstance?: SteamWindowInstance;
@@ -60,6 +61,13 @@ interface SteamButtonScope {
   };
   appStore?: { GetAppOverviewByAppID?(appId: number): { m_gameid?: string; gameid?: string } | undefined };
 }
+
+/** How long Steam's own answer to its button gets before the companion's press acts in its place. */
+export const PRESS_HOME_WAIT_MS = 350;
+
+/** Stops the Steam button handling; `pressHome` is the Xbox button seen by Game Bar instead of Steam (the companion
+ * calls it): the theme's own Steam button, or Big Picture's Home over a game. */
+export type SteamButtonHome = (() => void) & { pressHome(): string };
 
 /** Records a failure code; it reaches the companion as one of the host's errors. */
 export type SteamButtonLog = (code: string) => void;
@@ -81,7 +89,7 @@ export function installSteamButtonHome(
   // nothing was frozen. A frozen window does not come up, and Big Picture keeping the focus on the running page
   // sends it back Home (onBigPictureFocus), where the theme freezes the game again.
   thawBeforeRaise: () => number = () => 0,
-): () => void {
+): SteamButtonHome {
   const steam = scope as unknown as SteamButtonScope;
   const main = () => steam.SteamUIStore?.WindowStore?.GamepadUIMainWindowInstance;
   let lastGameRequest = -Infinity;
@@ -220,7 +228,38 @@ export function installSteamButtonHome(
   watchSteamWindow();
   const windowPoll = timers.setInterval(watchSteamWindow, OVERLAY_POLL_MS);
 
-  return () => {
+  // On some Windows handhelds (ROG Xbox Ally X, Gaming Services 39.118) Windows keeps the Xbox button for Game Bar
+  // and Steam never sees it, so no theme could leave a game. Panel's Game Bar widget hears Game Bar open and the
+  // companion presses Home here: over a game Big Picture comes back Home as with the overlay's button; with Big
+  // Picture in front, the theme's own Steam button answers (Vida: out of an app, then to the bubbles). Where Steam
+  // also got the button, its answer comes first and moves the page or Big Picture: this one then stands down.
+  const pressHome = (): string => {
+    if (!isActive()) return "inactive";
+    const window = main();
+    if (!window) return "no_window";
+    const before = `${window.m_history?.location?.pathname}|${window.BrowserWindow?.document?.hidden}`;
+    timers.setTimeout(() => {
+      const current = main();
+      if (!current || !isActive()) return;
+      if (`${current.m_history?.location?.pathname}|${current.BrowserWindow?.document?.hidden}` !== before) return;
+      const doc = current.BrowserWindow?.document;
+      const bigPictureInFront = doc?.hidden !== true && doc?.hasFocus?.() === true;
+      const running = current.MainRunningAppID || (typeof steam.SteamUIStore?.MainRunningAppID === "number" ? steam.SteamUIStore.MainRunningAppID : 0)
+        || steam.SteamUIStore?.RunningApps?.[0]?.appid;
+      if (!bigPictureInFront && running) {
+        showBigPictureHome(running);
+        return;
+      }
+      try {
+        current.OnHomeButtonPressed?.();
+      } catch {
+        log("steam_button_press_failed");
+      }
+    }, PRESS_HOME_WAIT_MS);
+    return "scheduled";
+  };
+
+  const stop = () => {
     timers.clearInterval(overlayPoll);
     timers.clearInterval(windowPoll);
     stopHistory?.();
@@ -238,4 +277,5 @@ export function installSteamButtonHome(
     }
     patched.clear();
   };
+  return Object.assign(stop, { pressHome });
 }

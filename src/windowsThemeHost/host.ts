@@ -51,6 +51,8 @@ export interface WindowsThemeHost {
   /** Writes theme runtimes made since the last settlement, oldest first; the companion persists them. */
   storageTake(): WindowsStorageWrite[];
   storageSettle(settlement: WindowsStorageSettlement): WindowsStorageStatus;
+  /** The Xbox button Game Bar kept from Steam (the companion calls it); see steamButton.ts. */
+  pressHome(): string;
   dispose(): void;
 }
 
@@ -246,6 +248,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     status,
     storageTake: storage.take,
     storageSettle: storage.settle,
+    pressHome: () => stopSteamButton.pressHome(),
     dispose() {
       stopRuntime();
       storage.dispose();
