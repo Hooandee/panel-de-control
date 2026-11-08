@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.3...panel-de-control-v0.84.4) (2026-11-08)
+
+
+### Bug Fixes
+
+* **themes:** game pause and the Xbox button on Windows ([#1152](https://github.com/Hooandee/panel-de-control/issues/1152)) ([af071b5](https://github.com/Hooandee/panel-de-control/commit/af071b5fd957d400bd8655931b13f055d1b18734))
+
 ## [0.84.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.2...panel-de-control-v0.84.3) (2026-11-06)
 
 
