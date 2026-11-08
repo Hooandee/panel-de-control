@@ -21,8 +21,13 @@
         "panel": "0.84.0"
       },
       "early": {
-        "version": "0.1.720",
+        "version": "0.1.721",
         "artifacts": [
+          {
+            "version": "0.1.721",
+            "size": 2992791,
+            "sha256": "cb28bb91f6ecc07b596c0c7efa3550600754074d6af950f7a58cb3686d76be28"
+          },
           {
             "version": "0.1.720",
             "size": 2993772,
