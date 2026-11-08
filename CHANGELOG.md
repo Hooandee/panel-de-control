@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.84.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.3...panel-de-control-v0.84.4) (2026-11-08)
+
+
+### Español
+
+* **El botón Xbox vuelve a sacarte del juego en Windows:** En la ROG Xbox Ally, Windows se queda ahora el botón Xbox para la Game Bar y Steam no lo recibía, así que con Vida o Duo no había forma de salir de un juego. Ahora te lleva al inicio del tema, también desde apps como Fotos o Trofeos. La Game Bar se sigue abriendo.
+* **Pausa del juego en los menús, ahora también en Windows:** Si la activas en tu tema (en Vida viene apagada), el juego se detiene mientras estás en sus menús y sigue al volver, como ya pasaba en SteamOS.
+
+### English
+
+* **The Xbox button takes you out of your game again on Windows:** On the ROG Xbox Ally, Windows now keeps the Xbox button for Game Bar and Steam never got it, so with Vida or Duo there was no way to leave a game. It now takes you to your theme's home, also from apps like Photos or Trophies. Game Bar still opens.
+* **Pause the game in menus, now on Windows too:** If you turn it on in your theme (it's off by default in Vida), your game stops while you're in its menus and picks up when you go back, as it already did on SteamOS.
+
+### Italiano
+
+* **Il tasto Xbox torna a farti uscire dal gioco su Windows:** Sulla ROG Xbox Ally, Windows ora tiene il tasto Xbox per la Game Bar e Steam non lo riceveva, quindi con Vida o Duo non c'era modo di uscire da un gioco. Ora ti porta alla home del tema, anche da app come Foto o Trofei. La Game Bar continua ad aprirsi.
+* **Pausa del gioco nei menu, ora anche su Windows:** Se la attivi nel tuo tema (in Vida è disattivata), il gioco si ferma mentre sei nei suoi menu e riprende quando torni, come già succedeva su SteamOS.
+
+### Deutsch
+
+* **Die Xbox-Taste bringt dich unter Windows wieder aus dem Spiel:** Auf dem ROG Xbox Ally behält Windows die Xbox-Taste jetzt für die Game Bar, und Steam bekam sie nicht mit. Mit Vida oder Duo kam man so nicht mehr aus einem Spiel heraus. Jetzt bringt sie dich zum Startbildschirm des Themes, auch aus Apps wie Fotos oder Trophäen. Die Game Bar öffnet sich weiterhin.
+* **Spielpause in den Menüs, jetzt auch unter Windows:** Wenn du sie in deinem Theme einschaltest (in Vida ist sie aus), hält das Spiel an, solange du in den Menüs bist, und läuft weiter, wenn du zurückkehrst, wie schon unter SteamOS.
+
+### Português (Brasil)
+
+* **O botão Xbox volta a tirar você do jogo no Windows:** No ROG Xbox Ally, o Windows agora reserva o botão Xbox para a Game Bar e o Steam não o recebia, então com Vida ou Duo não havia como sair de um jogo. Agora ele leva você ao início do tema, também a partir de apps como Fotos ou Troféus. A Game Bar continua abrindo.
+* **Pausa do jogo nos menus, agora também no Windows:** Se você ativá-la no seu tema (no Vida ela vem desligada), o jogo para enquanto você está nos menus e continua quando você volta, como já acontecia no SteamOS.
+
+### Français
+
+* **Le bouton Xbox vous fait de nouveau quitter le jeu sous Windows :** Sur la ROG Xbox Ally, Windows garde désormais le bouton Xbox pour la Game Bar et Steam ne le recevait pas : avec Vida ou Duo, impossible de quitter un jeu. Il vous ramène maintenant à l’accueil du thème, y compris depuis des apps comme Photos ou Trophées. La Game Bar s’ouvre toujours.
+* **Pause du jeu dans les menus, désormais aussi sous Windows :** Si vous l’activez dans votre thème (elle est désactivée par défaut dans Vida), le jeu s’arrête pendant que vous êtes dans ses menus et reprend à votre retour, comme c’était déjà le cas sous SteamOS.
+
 ## [0.84.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.2...panel-de-control-v0.84.3) (2026-11-06)
 
 
