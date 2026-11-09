@@ -51,7 +51,7 @@ def _members(path: Path) -> list[str]:
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             return [info.filename for info in archive.infolist() if not info.is_dir()]
-    result = subprocess.run(["bsdtar", "-tf", str(path)], capture_output=True, timeout=60, check=False)
+    result = subprocess.run(["bsdtar", "-tf", str(path.resolve())], capture_output=True, timeout=60, check=False)
     if result.returncode != 0:
         raise OSError("unreadable archive")
     return [line for line in result.stdout.decode("utf-8", "replace").splitlines() if line and not line.endswith("/")]
@@ -59,7 +59,8 @@ def _members(path: Path) -> list[str]:
 
 def _unsafe(member: str) -> bool:
     parts = PurePosixPath(member.replace("\\", "/")).parts
-    return member.startswith(("/", "\\")) or ":" in member or ".." in parts
+    # Member names reach bsdtar's command line: none may read as an option.
+    return member.startswith(("/", "\\")) or ":" in member or ".." in parts or any(part.startswith("-") for part in parts)
 
 
 def _locate(dependency, path: Path) -> dict[str, str]:
@@ -99,7 +100,7 @@ def _extract(path: Path, members: dict[str, str], destination: Path) -> None:
         return
     staging = Path(tempfile.mkdtemp(dir=destination, prefix=".unpack-"))
     try:
-        result = subprocess.run(["bsdtar", "-xf", str(path), "-C", str(staging), *members.values()],
+        result = subprocess.run(["bsdtar", "-xf", str(path), "-C", str(staging), "--", *members.values()],
                                 capture_output=True, timeout=300, check=False)
         if result.returncode != 0:
             raise UserFileError("unreadable")

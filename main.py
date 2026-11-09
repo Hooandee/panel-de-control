@@ -1383,7 +1383,7 @@ class Plugin(AmbientRpc):
     async def get_upscalers_game(self, appid: str, hint: dict | None = None) -> dict:
         return await self._upscalers_call("game", str(appid), hint if isinstance(hint, dict) else None)
 
-    async def get_upscaler_user_file_candidates(self, dependency_id: str) -> list:
+    async def get_upscaler_user_file_candidates(self, dependency_id: str) -> dict:
         return await self._upscalers_call("user_file_candidates", str(dependency_id))
 
     async def add_upscaler_user_file(self, appid: str, dependency_id: str, path: str) -> dict:

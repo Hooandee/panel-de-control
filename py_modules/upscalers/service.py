@@ -408,9 +408,11 @@ class UpscalerService:
             raise UpscalerError("unknown_dependency")
         return dependency
 
-    def user_file_candidates(self, dependency_id: str) -> list[dict]:
+    def user_file_candidates(self, dependency_id: str) -> dict:
         home = Path(self.home)
-        return user_deps.candidates(self._user_dependency(dependency_id), [home / "Downloads", home / "Descargas"])
+        folders = [home / "Downloads", home / "Descargas"]
+        folder = next((f for f in folders if f.is_dir()), home)
+        return {"folder": str(folder), "candidates": user_deps.candidates(self._user_dependency(dependency_id), folders)}
 
     def add_user_file(self, appid: str, dependency_id: str, path: str) -> dict:
         dependency = self._user_dependency(dependency_id)

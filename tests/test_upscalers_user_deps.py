@@ -33,8 +33,9 @@ def test_a_loose_dll_counts_and_a_wrong_archive_says_what_is_missing(tmp_path):
     assert user_deps.inspect(PLUGIN, tmp_path / "nope.zip")["reason"] == "unreadable"
 
 
-def test_archives_with_escaping_paths_are_refused(tmp_path):
-    archive = _zip(tmp_path / "bad.zip", {"../PDPerfPlugin.dll": b"MZ"})
+@pytest.mark.parametrize("member", ["../PDPerfPlugin.dll", "-T/etc/PDPerfPlugin.dll", "a/--x/PDPerfPlugin.dll"])
+def test_archives_with_escaping_or_option_like_paths_are_refused(tmp_path, member):
+    archive = _zip(tmp_path / "bad.zip", {member: b"MZ"})
     assert user_deps.inspect(PLUGIN, archive)["reason"] == "unsafe_archive"
 
 
@@ -86,7 +87,8 @@ def test_service_adopts_only_files_under_home_and_names_the_problem(tmp_path, mo
     service = UpscalerService(str(home), str(tmp_path / "state"), "rdna3", proc=str(tmp_path))
     monkeypatch.setattr(service, "game", lambda appid: {"appid": appid})
     good = _zip(home / "Downloads" / "UpscalerBasePlugin-502-1-1-2-1.zip", {"PDPerfPlugin.dll": b"MZ"})
-    assert service.user_file_candidates("puredark-upscaler-base")[0]["version"] == "1.1.2"
+    found = service.user_file_candidates("puredark-upscaler-base")
+    assert found["folder"] == str(home / "Downloads") and found["candidates"][0]["version"] == "1.1.2"
     assert service.add_user_file("2050650", "puredark-upscaler-base", str(good)) == {"appid": "2050650"}
     dependency = service_module.recipe_catalog.bundled().dependencies["puredark-upscaler-base"]
     assert service.user_files.status(dependency)["state"] == "ready"
