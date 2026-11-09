@@ -101,7 +101,7 @@ def from_facts(appid: str, entry: dict, source: str, page: dict | None = None) -
         appid,
         args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
         proxy=proxy if isinstance(proxy, str) else None,
-        needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
+        needs=tuple(dict.fromkeys(n for n in (*entry.get("needs", ()), *page.get("needs", ())) if n in NEEDS)),
         broken=status == "broken",
         optipatcher=bool(entry.get("optipatcher")),
         status=status,

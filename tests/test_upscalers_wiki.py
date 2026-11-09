@@ -116,6 +116,43 @@ def test_page_settings_split_plain_from_conditional_and_skip_autoapplied():
                      "suggestions": {"Vulkan": "true", "HUDFix": "true"}}
 
 
+RE4_PAGE = """[cols="1,1"]
+|===
+|**Upscaler Inputs**
+|DLSS, XeSS (read notes), +++<s>FSR2</s>+++
+
+|**Notes**
+a|
+* *To get OptiScaler to work with REFramework + UpscalerBasePlugin*:
+. Download PureDark's UpscalerBasePlugin **1.1.2**.
+** *PDPerfPlugin.dll* _from UpscalerBasePlugin also goes onto the root_
+|===
+"""
+
+
+def test_page_that_asks_for_puredarks_plugin_needs_a_separate_mod():
+    from upscalers import recipes
+    facts = wiki.parse_page(RE4_PAGE)
+    assert facts["needs"] == ["mod"]
+    recipe = recipes.from_facts("2050650", {"status": "works", "needs": ["reframework"]}, "test", facts)
+    assert recipe.needs == ("reframework", "mod")
+    assert "needs" not in wiki.parse_page(PAGE)
+
+
+def test_page_cached_by_an_older_parser_is_fetched_whole_again(tmp_path):
+    (tmp_path / "optiscaler-wiki-pages.json").write_text(json.dumps(
+        {"RE4": {"facts": {}, "etag": "old", "fetched_at": 1e6}}))
+    cache = wiki.WikiCache(tmp_path)
+    seen = []
+
+    def fetch(request, **_):
+        seen.append(request.get_header("If-none-match"))
+        return Response(RE4_PAGE.encode())
+
+    assert cache.refresh_page("RE4", fetch=fetch, now=lambda: 1e6 + 10)["updated"]
+    assert seen == [None] and cache.page_facts("RE4")["needs"] == ["mod"]
+
+
 def test_settings_resolve_only_to_one_known_key_with_an_accepted_value():
     assert wiki.resolve_settings(INI, {"Dxgi": "false", "HUDFix": "maybe", "Missing": "1", "LateAsiPluginsDelay": "500"}) == {
         "Spoofing.Dxgi": "false", "Plugins.LateAsiPluginsDelay": "500"}
