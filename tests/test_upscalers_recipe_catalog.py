@@ -255,6 +255,8 @@ def test_user_files_dependency_names_what_the_user_brings(catalog_dir):
     assert dependency.avoid_versions == ('1.2.0',)
     assert dependency.page_url == 'https://www.nexusmods.com/site/mods/502'
     assert dependency.files == {'PDPerfPlugin.dll': 'PDPerfPlugin.dll'}
+    assert dependency.download_url is None
+    assert rc.load().dependencies['puredark-upscaler-base'].download_url.endswith('?tab=files&file_id=2293')
 
 
 @pytest.mark.parametrize('change', [

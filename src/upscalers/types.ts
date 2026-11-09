@@ -165,6 +165,7 @@ export interface UserFile {
   id: string;
   name: string;
   page_url: string;
+  download_url?: string;
   version: string;
   installed_version: string | null;
   filename: string | null;

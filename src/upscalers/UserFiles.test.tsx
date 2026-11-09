@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   removeUpscalerUserFile: vi.fn(),
 }));
 const picker = vi.hoisted(() => ({ openFilePicker: vi.fn() }));
+const ui = vi.hoisted(() => ({ Navigation: { NavigateToExternalWeb: vi.fn() } }));
+vi.mock("@decky/ui", () => ui);
 vi.mock("../api", () => api);
 vi.mock("@decky/api", () => picker);
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string, vars?: Record<string, string>) => vars ? `${key} ${Object.values(vars).join(" ")}` : key }) }));
@@ -20,7 +22,7 @@ import { UserFiles } from "./UserFiles";
 import type { UserFile } from "./types";
 
 const missing: UserFile = { id: "puredark-upscaler-base", name: "UpscalerBasePlugin", page_url: "https://www.nexusmods.com/site/mods/502",
-  version: "1.1.2", installed_version: null, filename: null, state: "missing" };
+  download_url: "https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293", version: "1.1.2", installed_version: null, filename: null, state: "missing" };
 
 beforeEach(() => {
   api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/home/deck/Downloads", candidates: [
@@ -61,4 +63,13 @@ it("names the problem when the chosen file is not the right one", async () => {
   await act(async () => { render(<UserFiles appid="2050650" files={[missing]} onDetail={() => {}} />); });
   await act(async () => fireEvent.click(screen.getByText(/up.userFile.use/)));
   expect(screen.getByText("up.error.user_file_wrong")).toBeTruthy();
+});
+
+it("downloads from the file page and shows it is waiting for Downloads", async () => {
+  await act(async () => { render(<UserFiles appid="2050650" files={[missing]} onDetail={() => {}} />); });
+  await act(async () => fireEvent.click(screen.getByText(/up.userFile.download/)));
+  expect(ui.Navigation.NavigateToExternalWeb).toHaveBeenCalledWith("https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293");
+  expect(screen.getByText(/up.userFile.waiting\|up.cancel\|up.userFile.waitingCaption/)).toBeTruthy();
+  await act(async () => fireEvent.click(screen.getByText(/up.userFile.waiting/)));
+  expect(screen.queryByText(/up.userFile.waiting/)).toBeNull();
 });

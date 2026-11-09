@@ -53,6 +53,7 @@ class DependencySpec:
     page_url: str | None = None
     version: str | None = None
     avoid_versions: tuple[str, ...] = ()
+    download_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -264,7 +265,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             dependency = DependencySpec(identifier, kind, None, {}, 'winetricks', item['verb'],
                                         _strings(item.get('requires', []), _identifier))
         elif kind == 'user_files':
-            item = _object(item, ('kind', 'name', 'page_url', 'version', 'files'), ('avoid_versions', 'requires'))
+            item = _object(item, ('kind', 'name', 'page_url', 'version', 'files'), ('avoid_versions', 'requires', 'download_url'))
             if not isinstance(item['files'], dict) or not 0 < len(item['files']) <= 32:
                 raise CatalogError('invalid_file_dependency')
             # The archive's layout is the author's: each file is found by its name anywhere inside it.
@@ -274,7 +275,8 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             dependency = DependencySpec(identifier, kind, None, files, None, None,
                                         _strings(item.get('requires', []), _identifier),
                                         _text(item['name'], 80), _page_url(item['page_url']), _version(item['version']),
-                                        _strings(item.get('avoid_versions', []), _version, 16))
+                                        _strings(item.get('avoid_versions', []), _version, 16),
+                                        _page_url(item['download_url']) if 'download_url' in item else None)
         else:
             raise CatalogError('unsupported_dependency')
         dependencies[identifier] = dependency

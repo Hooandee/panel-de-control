@@ -201,6 +201,7 @@ class Store:
         ready = bool(meta) and all((self._folder(dependency) / "files" / m).is_file() for m in dependency.files.values())
         return {
             "id": dependency.id, "name": dependency.name, "page_url": dependency.page_url,
+            "download_url": getattr(dependency, "download_url", None) or dependency.page_url,
             "version": dependency.version, "installed_version": meta.get("version") if ready else None,
             "filename": meta.get("filename") if ready else None,
             "state": _state(dependency, meta.get("version")) if ready else "missing",

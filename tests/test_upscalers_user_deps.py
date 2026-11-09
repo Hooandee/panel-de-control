@@ -42,6 +42,7 @@ def test_archives_with_escaping_or_option_like_paths_are_refused(tmp_path, membe
 def test_store_keeps_the_choice_and_hands_out_the_files(tmp_path):
     store = user_deps.Store(tmp_path / "store")
     assert store.status(PLUGIN)["state"] == "missing"
+    assert store.status(PLUGIN)["download_url"] == PLUGIN.page_url
     assert store.sources(PLUGIN) == {}
     archive = _zip(tmp_path / "UpscalerBasePlugin-502-1-2-0-1700000000.zip", {"x/PDPerfPlugin.dll": b"MZnew"})
     status = store.adopt(PLUGIN, archive)

@@ -45,6 +45,7 @@ import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
 import { UserFiles } from "./UserFiles";
+import { takePendingReinstall } from "./userFileWatch";
 import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
@@ -297,6 +298,10 @@ export const GameView: FC<{
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
+  // A file picked up from Downloads while this page was closed still has to go into the installed game.
+  useEffect(() => {
+    if (detail?.install && !gameRunning && job?.state !== "running" && takePendingReinstall(appid)) reinstall();
+  }, [detail?.install, gameRunning, job?.state]);
   const retry = () => {
     const request = job ? readInstallRequest(appid, job.id) : null;
     trace("retry", request ?? choice);
