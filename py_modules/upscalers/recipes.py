@@ -170,6 +170,15 @@ RE_ENGINE_MARKER = "re_chunk_000.pak"
 REFRAMEWORK = {"dinput8.dll": "reframework-nightly"}
 
 
+def _dependency_files(recipe: Recipe) -> tuple[str, ...]:
+    """Files a curated recipe's dependencies place, e.g. the pd-upscaler REFramework build some games need."""
+    try:
+        ordered = recipe_catalog.bundled().dependency_order(recipe.dependencies)
+    except recipe_catalog.CatalogError:
+        return ()
+    return tuple(name for dependency in ordered for name in dependency.files)
+
+
 def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     """Compose the standard REFramework dependency from game files or known requirements."""
     if not (root / RE_ENGINE_MARKER).is_file() and not (recipe and "reframework" in recipe.needs):
@@ -178,7 +187,7 @@ def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
     keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
     files = dict(base.files)
-    if not any(name.lower() == "dinput8.dll" for name in files):
+    if not any(name.lower() == "dinput8.dll" for name in (*files, *_dependency_files(base))):
         files.update(REFRAMEWORK)
     native_dlls = {}
     for name in (*base.native_dlls, "dinput8"):

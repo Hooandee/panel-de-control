@@ -1,0 +1,30 @@
+{
+  "name": "Resident Evil 4",
+  "revision": 1,
+  "conditions": {
+    "engine": [
+      "optiscaler"
+    ],
+    "platform": [
+      "linux"
+    ],
+    "arch": [
+      "x86_64"
+    ]
+  },
+  "exe": "re4.exe",
+  "args": [],
+  "ini": {
+    "Spoofing.Dxgi": "false",
+    "Menu.OverlayMenu": "false"
+  },
+  "dependencies": [
+    "refw-pdup-re4",
+    "puredark-upscaler-base"
+  ],
+  "source_urls": [
+    "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-4-(2023)"
+  ],
+  "effective_api": "d3d12"
+}

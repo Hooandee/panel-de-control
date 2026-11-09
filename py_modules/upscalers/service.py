@@ -13,7 +13,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipes, scaler_transition, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -122,6 +122,7 @@ class UpscalerService:
         self.scaler_transitions = scaler_transition.Checkpoints(Path(state_dir))
         self.helix = helixsr.HelixSR(home)
         self.wiki = wiki.WikiCache(Path(state_dir))
+        self.user_files = user_deps.Store(Path(state_dir) / "user-files")
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -369,6 +370,7 @@ class UpscalerService:
                 automatic = auto_recipes.plan(recipe, installed)
                 recipe_info["automatic"] = ["Luma"] if automatic else []
                 recipe_info["automatic_builds"] = [b.id for b in catalog.BUILDS.values() if b.engine == "optiscaler"] if automatic else []
+                recipe_info["user_files"] = auto_recipes.user_files(automatic, self.user_files)
                 recipe_info["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
             except auto_recipes.RecipeError:
                 recipe_info["automatic"] = []
@@ -398,6 +400,38 @@ class UpscalerService:
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else selected["fg_plan"],
         }
+
+    # ---- files only the user can download ---------------------------------
+    def _user_dependency(self, dependency_id: str):
+        dependency = recipe_catalog.bundled().dependencies.get(str(dependency_id))
+        if dependency is None or dependency.kind != "user_files":
+            raise UpscalerError("unknown_dependency")
+        return dependency
+
+    def user_file_candidates(self, dependency_id: str) -> list[dict]:
+        home = Path(self.home)
+        return user_deps.candidates(self._user_dependency(dependency_id), [home / "Downloads", home / "Descargas"])
+
+    def add_user_file(self, appid: str, dependency_id: str, path: str) -> dict:
+        dependency = self._user_dependency(dependency_id)
+        chosen = Path(str(path))
+        allowed = (Path(self.home).resolve(), Path("/run/media"))
+        try:
+            resolved = chosen.resolve(strict=True)
+        except OSError:
+            raise UpscalerError("user_file_unreadable") from None
+        if not any(resolved.is_relative_to(root) for root in allowed):
+            raise UpscalerError("user_file_unreadable")
+        try:
+            self.user_files.adopt(dependency, resolved)
+        except user_deps.UserFileError as error:
+            raise UpscalerError("user_file_wrong" if error.code in ("missing_files", "ambiguous_files")
+                                else "user_file_unreadable") from None
+        return self.game(appid)
+
+    def remove_user_file(self, appid: str, dependency_id: str) -> dict:
+        self.user_files.remove(self._user_dependency(dependency_id))
+        return self.game(appid)
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
         installed = self._find(appid)
@@ -636,7 +670,7 @@ class UpscalerService:
         pinned_only: set[str] = set()
         paths, chosen = self._fetch_assets(needed(effective_build, recipe))
         try:
-            auto_recipes.sources(automatic, paths)
+            auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError:
             pinned_only = {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
@@ -676,7 +710,7 @@ class UpscalerService:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
 
         try:
-            sources = {**auto_recipes.sources(automatic, paths), **sources}
+            sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
@@ -722,7 +756,9 @@ class UpscalerService:
             except auto_recipes.RecipeError as error:
                 raise UpscalerError(error.code) from None
             existing = target / REFRAMEWORK_CONFIG
-            if recipe and "reframework-nightly" in recipe.files.values() and not existing.is_symlink():
+            reframework = recipe and ("reframework-nightly" in recipe.files.values()
+                                      or any(n.lower() == "dinput8.dll" for n in recipes._dependency_files(recipe)))
+            if reframework and not existing.is_symlink():
                 try:
                     current = existing.read_text(encoding="utf-8", errors="replace") if existing.is_file() and existing.stat().st_size < 1024 * 1024 else ""
                 except OSError:

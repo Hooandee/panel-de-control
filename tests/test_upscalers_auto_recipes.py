@@ -16,7 +16,7 @@ def automatic(steam, fake_catalog, proc, monkeypatch, tmp_path):
     monkeypatch.setattr(auto_recipes, 'assets', lambda selected: [])
     addon = tmp_path / 'addon'
     addon.write_bytes(b'addon')
-    monkeypatch.setattr(auto_recipes, 'sources', lambda selected, paths: {'Luma-test.addon': addon})
+    monkeypatch.setattr(auto_recipes, 'sources', lambda selected, paths, store=None: {'Luma-test.addon': addon})
     monkeypatch.setattr(auto_recipes, 'verbs', lambda selected: ('vcrun2022',))
     calls = []
     receipt = {'state': 'prepared'}
