@@ -431,7 +431,7 @@ export const it: Record<string, string> = {
   "up.list.linux": "Gioco Linux",
   "up.list.none": "Nessun upscaler proprio",
   "up.build.soonLine": "{name} arriva presto",
-  "up.build.amdOnly": "FSR 4 richiede una GPU AMD",
+  "up.build.mayNotRun": "Potrebbe non funzionare sulla tua GPU",
   "up.repair": "Ripara",
   "up.proton.note": "Proton sostituisce l'FSR 3.1 del gioco con FSR 4 all'avvio. Non tocca file, ma non lascia un registro che Panel possa controllare. Nel gioco, scegli AMD FSR",
   "up.proton.needsProton": "{name} richiede un Proton che lo includa, come Proton-GE",

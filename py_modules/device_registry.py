@@ -1,5 +1,6 @@
 import dataclasses
 import os
+import re
 
 from cpu.info import read_cpu_model
 import device_tree
@@ -98,26 +99,65 @@ def _detect_arm(root: str) -> DeviceProfile:
     )
 
 
-def gpu_generation(vendor: str, chip: str) -> str:
-    """AMD RDNA generation (or "intel"/"unknown") derived from the real chip name,
-    used to gate FSR/XeSS upgrade launch options. Best-effort by silicon family;
-    a wrong guess only shows/hides an upscaler pill. FSR4 = rdna3/rdna4 only.
-    """
+def gpu_generation(vendor: str, chip: str, root: str = "") -> str:
+    """AMD RDNA generation (or "intel"/"unknown") from the chip name, else from the GPU's PCI id when `root` is
+    given. It only shapes suggestions: Panel never refuses an upscaler over it."""
     if (vendor or "").lower() == "intel":
         return "intel"
     c = (chip or "").lower()
     if "van gogh" in c or "sephiroth" in c or "custom apu 0405" in c or "custom apu 0932" in c:
         return "rdna2"  # Steam Deck: family names, or Valve's APU codes as /proc/cpuinfo reports them
-    # Z2 A and Z2 Go are RDNA 2 class (no FSR4); keep them off the FSR4 path.
+    # Strix Point / Strix Halo, including the Z2 Extreme with or without "AI" in its name: RDNA 3.5
+    if "ryzen ai" in c or "ai max" in c or "hx 370" in c or "hx 365" in c or "z2 extreme" in c:
+        return "rdna35"
+    # Z2 A and Z2 Go are RDNA 2 class (no FSR4 Full).
     if "z2 a" in c or "z2 go" in c:
         return "rdna2"
-    # Strix Point / Strix Halo (Ryzen AI ...): RDNA 3.5
-    if "ryzen ai" in c or "ai max" in c or "hx 370" in c or "hx 365" in c:
-        return "rdna35"
-    # Z1 Extreme / Phoenix-Hawk (78x0/88x0): RDNA 3
-    if "z1 extreme" in c or "8840" in c or "7840" in c or "8640" in c:
+    # Rembrandt laptops and handhelds (6800U, 6600U, 7735U...): RDNA 2
+    if re.search(r"\b6[89]00(?:u|hs|hx|h)\b|\b6600u\b|\b7[3-7]35(?:u|hs|h)\b", c):
+        return "rdna2"
+    # Z1, Z1 Extreme and Z2 (Phoenix / Hawk Point) and their laptop siblings: RDNA 3
+    if re.search(r"\bz1\b|\bz2\b|7840|8840|8640|7640|8540|7540", c):
         return "rdna3"
-    return "unknown"
+    return pci_gpu_generation(root) if root else "unknown"
+
+
+# AMD integrated GPUs by PCI device id, for chips whose name says nothing (a custom APU, a new model).
+_AMD_PCI = {
+    "0x163f": "rdna2", "0x1435": "rdna2", "0x1681": "rdna2",            # Van Gogh, Sephiroth, Rembrandt (Z2 Go)
+    "0x15bf": "rdna3", "0x15c8": "rdna3", "0x1900": "rdna3", "0x1901": "rdna3",  # Phoenix, Phoenix 2, Hawk Point
+    "0x150e": "rdna35", "0x1586": "rdna35", "0x1114": "rdna35",          # Strix Point, Strix Halo, Krackan
+    # Discrete Radeon: RX 6000, RX 7000, RX 9000
+    "0x73bf": "rdna2", "0x73df": "rdna2", "0x73ef": "rdna2", "0x73ff": "rdna2", "0x743f": "rdna2",
+    "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
+    "0x7550": "rdna4", "0x7590": "rdna4",
+}
+
+
+def pci_gpu_generation(root: str = "/") -> str:
+    base = os.path.join(root, "sys/class/drm")
+    try:
+        cards = sorted(name for name in os.listdir(base) if re.fullmatch(r"card\d+", name))
+    except OSError:
+        return "unknown"
+    amd = False
+    for card in cards:
+        device = os.path.join(base, card, "device")
+        try:
+            with open(os.path.join(device, "vendor")) as f:
+                vendor = f.read().strip().lower()
+            with open(os.path.join(device, "device")) as f:
+                identifier = f.read().strip().lower()
+        except OSError:
+            continue
+        if vendor == "0x8086":
+            return "intel"
+        if vendor == "0x1002":
+            amd = True
+            if identifier in _AMD_PCI:
+                return _AMD_PCI[identifier]
+    # An AMD GPU this table doesn't know yet: newer than the table, so RDNA 3 class at least.
+    return "rdna3" if amd else "unknown"
 
 
 def detect(product_name: str | None = None, root: str = "/") -> DeviceProfile:

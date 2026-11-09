@@ -144,7 +144,8 @@ export const CATALOG: Pill[] = [
       { env: "PROTON_FSR4_UPGRADE", gpus: ["rdna4"] },
       { env: "PROTON_FSR4_RDNA3_UPGRADE", gpus: ["rdna3"] },
     ],
-    exclusiveGroup: "fsr4-upgrade", gpus: ["rdna3", "rdna4"],
+    // No GPU list: on a GPU Panel can't place it stays available, never hidden.
+    exclusiveGroup: "fsr4-upgrade",
     labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc",
   },
   { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },

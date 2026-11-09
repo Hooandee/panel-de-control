@@ -590,8 +590,6 @@ class UpscalerService:
             raise UpscalerError("unknown_build")
         if self.scaler_transitions.pending(appid) and build.engine not in ("optiscaler", "dll"):
             raise UpscalerError("transition_unsupported")
-        if not catalog.build_supported(build, self.gpu, self.device) and not choice.get("force"):
-            raise UpscalerError("unsupported_gpu")
         if build.engine == "dll":
             return self._install_dll(appid, build, choice)
         if build.engine == "helixsr":

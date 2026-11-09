@@ -1289,7 +1289,7 @@ class Plugin(AmbientRpc):
         service = UpscalerService(
             _user_home(),
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
-            device_registry.gpu_generation(self._device.vendor, chip),
+            device_registry.gpu_generation(self._device.vendor, chip, "/"),
             logger=decky.logger, device=self._device.key,
         )
         service.engine_game_running = lambda: bool(getattr(self, "_current_appid", None))
@@ -2671,7 +2671,7 @@ class Plugin(AmbientRpc):
         if self._chip:
             d["chip"] = self._chip
         # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
-        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"])
+        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"], "/")
         return d
 
     def _desktop_mode_on(self) -> bool:

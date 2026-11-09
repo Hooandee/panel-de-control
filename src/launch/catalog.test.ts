@@ -281,7 +281,9 @@ describe("pillVisible (Proton capability + GPU gating)", () => {
   it("uses official FSR4 only when supported and no custom-Proton variant exists", () => {
     expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "rdna3")).toBe(true);
     expect(pillVisible(pill("fsr4Official"), [], "rdna3")).toBe(false);
-    expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "rdna2")).toBe(false);
+    // Never hidden over the GPU: one Panel can't place still gets the switch.
+    expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "rdna2")).toBe(true);
+    expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "unknown")).toBe(true);
     expect(pillVisible(
       pill("fsr4Official"),
       ["FSR4_UPGRADE", "PROTON_FSR4_UPGRADE"],

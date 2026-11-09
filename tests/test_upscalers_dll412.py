@@ -46,11 +46,13 @@ def test_dll412_lite_metadata_and_sdk_assets_are_separate():
 
 
 @pytest.mark.parametrize("gpu", ["rdna3", "rdna35", "rdna4", "intel", "unknown"])
-def test_dll412_lite_rejects_other_gpu_before_install(steam, proc, tmp_path, gpu):
+def test_dll412_lite_installs_on_any_gpu_when_chosen(steam, proc, tmp_path, monkeypatch, gpu):
     service = _service(steam, tmp_path / "state", proc)
     service.gpu = gpu
-    with pytest.raises(UpscalerError, match="unsupported_gpu"):
-        service.install(APPID, {"build": BUILD})
+    calls = []
+    monkeypatch.setattr(service, "_install_dll", lambda appid, build, choice: calls.append(build.id) or {"ok": True})
+    assert service.install(APPID, {"build": BUILD}) == {"ok": True}
+    assert calls == [BUILD]
 
 
 def test_dll412_lite_mixed_targets_restore_original_bytes(steam, proc, tmp_path, monkeypatch):

@@ -304,7 +304,7 @@ export const GameView: FC<{
       : installSelected);
   };
   const adoptAndInstall = async () => {
-    if (foreignPending.current || running || gameRunning || !selected?.available || !selected.supported
+    if (foreignPending.current || running || gameRunning || !selected?.available
       || !detail?.analysis.target || detail.updating || buildBlocker(selected, detail.analysis.inputs, protonEnv)
       || (detail.analysis.anti_cheat && !confirmAntiCheat)) return;
     foreignPending.current = true;
@@ -474,7 +474,6 @@ export const GameView: FC<{
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
   const inputs = solution?.inputs ?? detail?.analysis.inputs ?? {};
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
-  const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
   const preferredBuild = builds.find((b) => b.id === preferred && b.available);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
@@ -569,7 +568,7 @@ export const GameView: FC<{
             />
           )}
           <LaunchMixNotice liveAppid={game.liveAppid} scaler={install ? runs : detail.analysis.foreign_identity?.engine === "helixsr" ? "HelixSR" : null} />
-          {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
+          {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} gpu={overview.gpu} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
             disabled={running || foreignBusy} onChange={changeChoice} />}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (
@@ -604,7 +603,7 @@ export const GameView: FC<{
       {detail && !detail.native && (
         <>
           {detail.analysis.foreign && detail.analysis.foreign_identity?.engine !== "helixsr" && !install && (
-            <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !selected.supported || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (detail.analysis.anti_cheat && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
+            <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (detail.analysis.anti_cheat && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
@@ -759,7 +758,6 @@ export const GameView: FC<{
                   </ListCard>
                   {counterStyleFailed && <Note tone="warn">{t("up.live.failed")}</Note>}
                   {(selectedModels?.length ?? 0) > 1 && <Note>{t("up.model.help")}</Note>}
-                  {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
                   {blockedBuilds.map((b) => (
                     <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
                   ))}

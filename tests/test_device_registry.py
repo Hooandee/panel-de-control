@@ -371,6 +371,39 @@ def test_gpu_generation():
     assert gpu_generation("amd", "AMD Custom APU 0932") == "rdna2"
     assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
     assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna2"
+    # Every handheld chip by its own name, not only the Extreme ones
+    assert gpu_generation("amd", "AMD Ryzen Z1") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen Z2 A") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 6800U with Radeon Graphics") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 7735U") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen 7 7840U w/ Radeon 780M Graphics") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen 5 7640U") == "rdna3"
+    assert gpu_generation("amd", "AMD Custom APU 1234") == "unknown"
+
+
+def _card(root, index, vendor, device):
+    folder = root / f"sys/class/drm/card{index}/device"
+    folder.mkdir(parents=True)
+    (folder / "vendor").write_text(vendor + "\n")
+    (folder / "device").write_text(device + "\n")
+
+
+@pytest.mark.parametrize(("vendor", "device", "expected"), [
+    ("0x1002", "0x15bf", "rdna3"), ("0x1002", "0x1681", "rdna2"), ("0x1002", "0x150e", "rdna35"),
+    ("0x1002", "0x7550", "rdna4"), ("0x1002", "0x9999", "rdna3"), ("0x8086", "0x64a0", "intel"),
+])
+def test_an_unnamed_chip_falls_back_to_its_gpu_pci_id(tmp_path, vendor, device, expected):
+    from device_registry import gpu_generation
+    _card(tmp_path, 0, vendor, device)
+    assert gpu_generation("amd", "AMD Custom APU 1234", str(tmp_path)) == expected
+
+
+def test_no_gpu_found_stays_unknown(tmp_path):
+    from device_registry import gpu_generation
+    assert gpu_generation("amd", "", str(tmp_path)) == "unknown"
     assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI 9 HX 370") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"

@@ -145,7 +145,7 @@ describe("launch options the user already had", () => {
     expect(next?.addedOverrides).toEqual([]);
   });
 
-  it("starts from the installed build only while this GPU can still take it", () => {
+  it("keeps the installed build even when this GPU may not run it", () => {
     const builds = [
       { id: "xess", supported: true, available: true },
       { id: "fsr-4.1.2-beta", supported: false, available: true },
@@ -153,7 +153,7 @@ describe("launch options the user already had", () => {
     ] as unknown as Parameters<typeof restoredChoice>[2];
     const options = { quality: "balanced" as const, sharpness: "soft" as const };
     expect(restoredChoice("xess", options, builds, "xess")).toEqual({ build: "xess", ...options });
-    expect(restoredChoice("fsr-4.1.2-beta", options, builds, "xess").build).toBe("xess");
+    expect(restoredChoice("fsr-4.1.2-beta", options, builds, "xess").build).toBe("fsr-4.1.2-beta");
     expect(restoredChoice("old", options, builds, "xess").build).toBe("xess");
   });
 });
