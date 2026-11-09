@@ -3,10 +3,59 @@
 ## [0.85.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.4...panel-de-control-v0.85.0) (2026-11-09)
 
 
-### Features
+### Español
 
-* **themes:** shared game groups, Home selection for Ambiente and cover logo placement ([#1166](https://github.com/Hooandee/panel-de-control/issues/1166)) ([feca0ec](https://github.com/Hooandee/panel-de-control/commit/feca0ecd670cd819d608a7d3569be44d336b59a5))
-* **upscalers:** Escaladores — pick an upscaler, Panel does the rest ([#1168](https://github.com/Hooandee/panel-de-control/issues/1168)) ([e10e41b](https://github.com/Hooandee/panel-de-control/commit/e10e41b17c681a63c01431fb67f1663edccd0624))
+* **Escaladores:** Elige para cada juego FSR 4 con OptiScaler, el cambio de DLL de FSR, HelixSR o el FSR 4 de Proton, y Panel de Control hace el resto: descarga la última versión verificada, instala lo que el juego necesite (como REFramework o Luma) y lo deja todo como estaba al quitarlo. Cada juego trae una sugerencia, pero puedes elegir la combinación que quieras.
+* **Generación de fotogramas:** Añade Mako o Lossless Scaling, o usa la del propio juego o la de OptiScaler.
+* **Cambios con el juego abierto:** La calidad y la nitidez se guardan para el próximo arranque, y una nueva versión se instala al cerrar el juego o al momento con «Reiniciar el juego».
+* **Grupos de juegos para todos los temas:** Crea grupos a mano o por reglas (instalados, tiempo jugado, compatibilidad con Deck, etiquetas y más) y todos los temas compatibles verán los mismos. También puedes importar tus pestañas de Tab Master.
+* **Ambiente en temas con inicio propio:** La banda sonora, el tráiler y el fondo del juego seleccionado ya funcionan en los temas que dibujan su propio inicio.
+* **Logo de las portadas a tu medida:** Ajusta el tamaño y la posición del logo desde el editor de portadas.
+
+### English
+
+* **Upscalers:** Pick FSR 4 through OptiScaler, an FSR DLL swap, HelixSR or Proton's FSR 4 for each game, and Panel de Control does the rest: it downloads the newest verified version, installs whatever the game needs (like REFramework or Luma) and puts everything back when you remove it. Each game comes with a suggestion, but you can choose any combination you like.
+* **Frame generation:** Add Mako or Lossless Scaling, or use the game's own or OptiScaler's.
+* **Changes while you play:** Quality and sharpness are saved for the next launch, and a new version installs when you close the game, or right away with "Restart the game".
+* **Game groups for every theme:** Create groups by hand or with rules (installed, time played, Deck compatibility, tags and more), and every compatible theme sees the same ones. You can also import your Tab Master tabs.
+* **Ambiente in themes with their own Home:** The selected game's soundtrack, trailer and background now work in themes that draw their own Home.
+* **Cover logos your way:** Adjust the logo's size and position in the cover editor.
+
+### Italiano
+
+* **Upscaler:** Scegli per ogni gioco FSR 4 con OptiScaler, la sostituzione della DLL di FSR, HelixSR o l’FSR 4 di Proton, e Panel de Control fa il resto: scarica l’ultima versione verificata, installa ciò che serve al gioco (come REFramework o Luma) e rimette tutto com’era quando lo rimuovi. Ogni gioco ha un suggerimento, ma puoi scegliere la combinazione che preferisci.
+* **Generazione dei fotogrammi:** Aggiungi Mako o Lossless Scaling, oppure usa quella del gioco o di OptiScaler.
+* **Modifiche a gioco aperto:** Qualità e nitidezza vengono salvate per il prossimo avvio, e una nuova versione si installa quando chiudi il gioco, o subito con «Riavvia il gioco».
+* **Gruppi di giochi per tutti i temi:** Crea gruppi a mano o con regole (installati, tempo di gioco, compatibilità con Deck, tag e altro) e tutti i temi compatibili vedranno gli stessi. Puoi anche importare le tue schede di Tab Master.
+* **Ambiente nei temi con una home propria:** La colonna sonora, il trailer e lo sfondo del gioco selezionato ora funzionano anche nei temi che disegnano la propria home.
+* **Logo delle copertine come vuoi tu:** Regola dimensione e posizione del logo dall’editor delle copertine.
+
+### Deutsch
+
+* **Upscaler:** Wähle für jedes Spiel FSR 4 über OptiScaler, den Austausch der FSR-DLL, HelixSR oder Protons FSR 4, und Panel de Control erledigt den Rest: Es lädt die neueste geprüfte Version, installiert, was das Spiel braucht (etwa REFramework oder Luma), und stellt beim Entfernen alles wieder her. Jedes Spiel bringt einen Vorschlag mit, du kannst aber jede Kombination wählen.
+* **Bildgenerierung:** Füge Mako oder Lossless Scaling hinzu oder nutze die des Spiels oder von OptiScaler.
+* **Änderungen bei laufendem Spiel:** Qualität und Schärfe werden für den nächsten Start gespeichert, und eine neue Version wird beim Schließen des Spiels installiert oder sofort mit „Spiel neu starten“.
+* **Spielgruppen für alle Themes:** Erstelle Gruppen von Hand oder mit Regeln (installiert, Spielzeit, Deck-Kompatibilität, Tags und mehr), und alle unterstützten Themes sehen dieselben. Du kannst auch deine Tab-Master-Tabs importieren.
+* **Ambiente in Themes mit eigenem Startbildschirm:** Soundtrack, Trailer und Hintergrund des ausgewählten Spiels funktionieren jetzt auch in Themes, die ihren eigenen Startbildschirm zeichnen.
+* **Cover-Logos nach deinem Geschmack:** Passe Größe und Position des Logos im Cover-Editor an.
+
+### Português (Brasil)
+
+* **Upscalers:** Escolha para cada jogo o FSR 4 com OptiScaler, a troca da DLL do FSR, o HelixSR ou o FSR 4 do Proton, e o Panel de Control faz o resto: baixa a versão verificada mais recente, instala o que o jogo precisar (como REFramework ou Luma) e deixa tudo como estava quando você remove. Cada jogo vem com uma sugestão, mas você pode escolher a combinação que quiser.
+* **Geração de quadros:** Adicione Mako ou Lossless Scaling, ou use a do próprio jogo ou a do OptiScaler.
+* **Mudanças com o jogo aberto:** Qualidade e nitidez ficam salvas para a próxima abertura, e uma nova versão é instalada quando você fecha o jogo, ou na hora com "Reiniciar o jogo".
+* **Grupos de jogos para todos os temas:** Crie grupos à mão ou com regras (instalados, tempo jogado, compatibilidade com o Deck, tags e mais), e todos os temas compatíveis veem os mesmos. Você também pode importar suas abas do Tab Master.
+* **Ambiente em temas com início próprio:** A trilha sonora, o trailer e o fundo do jogo selecionado agora funcionam nos temas que desenham o próprio início.
+* **Logo das capas do seu jeito:** Ajuste o tamanho e a posição do logo no editor de capas.
+
+### Français
+
+* **Upscalers :** Choisissez pour chaque jeu FSR 4 avec OptiScaler, le remplacement de la DLL FSR, HelixSR ou le FSR 4 de Proton, et Panel de Control s’occupe du reste : il télécharge la dernière version vérifiée, installe ce dont le jeu a besoin (comme REFramework ou Luma) et remet tout en place quand vous le retirez. Chaque jeu propose une suggestion, mais vous pouvez choisir la combinaison que vous voulez.
+* **Génération d’images :** Ajoutez Mako ou Lossless Scaling, ou utilisez celle du jeu ou celle d’OptiScaler.
+* **Des changements en cours de partie :** La qualité et la netteté sont enregistrées pour le prochain lancement, et une nouvelle version s’installe à la fermeture du jeu, ou tout de suite avec « Relancer le jeu ».
+* **Des groupes de jeux pour tous les thèmes :** Créez des groupes à la main ou avec des règles (installés, temps de jeu, compatibilité Deck, tags et plus), et tous les thèmes compatibles voient les mêmes. Vous pouvez aussi importer vos onglets Tab Master.
+* **Ambiente dans les thèmes avec leur propre accueil :** La bande-son, la bande-annonce et le fond du jeu sélectionné fonctionnent désormais dans les thèmes qui dessinent leur propre accueil.
+* **Le logo des jaquettes à votre goût :** Réglez la taille et la position du logo dans l’éditeur de jaquettes.
 
 ## [0.84.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.3...panel-de-control-v0.84.4) (2026-11-08)
 
