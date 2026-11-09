@@ -20,7 +20,8 @@ function friendIdentity(friend: Friend): { id: number; name: string; avatar?: st
     const id = steamid?.GetAccountID?.() ?? Number(BigInt.asUintN(32, BigInt(steamid?.ConvertTo64BitString?.() ?? "0")));
     if (!Number.isInteger(id) || id <= 0) return null;
     const avatar = typeof player.avatar_url_medium === 'string' && /^https:\/\//.test(player.avatar_url_medium) ? player.avatar_url_medium : undefined;
-    return { id, name: friend.m_strNickname || player.m_strNickname || player.m_strPlayerName || String(id), ...(avatar ? { avatar } : {}) };
+    const name = [friend.m_strNickname, player.m_strNickname, player.m_strPlayerName].map((value) => value?.trim()).find(Boolean) || String(id);
+    return { id, name, ...(avatar ? { avatar } : {}) };
   } catch {
     return null;
   }
