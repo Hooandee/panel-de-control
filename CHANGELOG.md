@@ -10,7 +10,7 @@
 
 ### Español
 
-* **FSR 4 en todas las consolas AMD:** El ROG Ally con Ryzen Z1 y la Legion Go 2 no se reconocían como AMD y Escaladores no dejaba usar FSR 4. Ahora se reconocen todas, y si el nombre del chip no basta, Panel de Control identifica la gráfica directamente.
+* **FSR 4 en todas las consolas AMD:** La ROG Ally con Ryzen Z1 y la Legion Go 2 no se reconocían como AMD y Escaladores no dejaba usar FSR 4. Ahora se reconocen todas, y si el nombre del chip no basta, Panel de Control identifica la gráfica directamente.
 * **Escaladores nunca te bloquea una versión:** Puedes elegir cualquiera. En gráficas AMD no verás avisos; en otras, las versiones que quizá no funcionen llevan una nota corta.
 
 ### English
