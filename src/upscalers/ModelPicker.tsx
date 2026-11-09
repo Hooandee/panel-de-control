@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { Bars, PickerButton } from "./parts";
-import { buildBlocker, buildLabel } from "./model";
+import { buildBlocker, buildLabel, offered } from "./model";
 import type { BuildInfo, UpscalerChoice } from "./types";
 
 function showScalerIcon(element: HTMLSpanElement | null) {
@@ -33,7 +33,8 @@ function supportsDllTargets(build: BuildInfo, targets: string[]): boolean {
   });
 }
 
-export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onChange, dllTargets = [], spatial = false, onSpatial, onPendingChoice, duo = false, appid = "" }: {
+export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onChange, dllTargets = [], spatial = false, onSpatial, onPendingChoice, duo = false, appid = "", gpu = "unknown" }: {
+  gpu?: string;
   duo?: boolean;
   appid?: string;
   onPendingChoice?: (pending: boolean) => void;
@@ -77,12 +78,16 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
     return model ? `${name} ${model === "lite" ? "Lite" : t(`up.model.${model}`)}` : name;
   };
   // What actually runs on this GPU, under the name: a pill beside it pushed the name onto two lines.
-  const named = (build: BuildInfo, label: string) => build.may_fallback
+  // A version this GPU may not run stays selectable, with a short line saying so.
+  const note = (build: BuildInfo) => offered(build, builds, gpu).warn ? t("up.build.mayNotRun")
+    : build.may_fallback ? t("up.build.mayUse", { version: build.may_fallback }) : null;
+  const named = (build: BuildInfo, label: string) => note(build)
     ? <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
       <span>{label}</span>
-      <span style={{ fontSize: theme.font.caption - 1, fontWeight: 400, color: theme.color.textMuted }}>{t("up.build.mayUse", { version: build.may_fallback })}</span>
+      <span style={{ fontSize: theme.font.caption - 1, fontWeight: 400, color: theme.color.textMuted }}>{note(build)}</span>
     </span> : label;
-  const options = builds.filter((build) => mode !== "mako" && build.available && build.supported && (mode === "dll" ? build.engine === "dll" && supportsDllTargets(build, dllTargets) : build.engine !== "dll") && !buildBlocker(build, inputs, protonEnv))
+  const options = builds.filter((build) => mode !== "mako" && build.available && offered(build, builds, gpu).show && (mode === "dll" ? build.engine === "dll" && supportsDllTargets(build, dllTargets) : build.engine !== "dll") && !buildBlocker(build, inputs, protonEnv))
+    .sort((a, b) => Number(b.supported) - Number(a.supported))
     .flatMap((build) => (build.models?.length ? build.models : [null]).map((model) => ({ build, model })));
   const selectedIndex = Math.max(0, options.findIndex(({ build, model }) => choice.build === build.id && (choice.model ?? build.models?.[0] ?? null) === model));
   return <Focusable flow-children="column" style={{ ...theme.card, padding: theme.space.sm, fontSize: theme.font.caption, lineHeight: 1.35, minWidth: 0, overflowWrap: "normal", wordBreak: "normal" }}>

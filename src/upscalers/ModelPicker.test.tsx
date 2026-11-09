@@ -12,10 +12,11 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const base: BuildInfo = { id: "fsr", family: "fsr", version: "4.1.2", image: 1, cost: 1, available: true, supported: true, download_bytes: 1, models: ["lite", "full"] };
 const choice: UpscalerChoice = { build: "fsr", quality: "balanced", sharpness: "soft", fg: "off" };
 
-it("shows a direct list of usable choices without unsupported rows or technical columns", () => {
+it("lists every version this GPU may not run too, with a short note, and no technical columns", () => {
   render(<ModelPicker builds={[base, { ...base, id: "unavailable", available: false }, { ...base, id: "unsupported", supported: false }]} choice={choice} inputs={{}} protonEnv={null} onChange={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "up.section.model" }));
-  expect(screen.getAllByRole("radio")).toHaveLength(2);
+  expect(screen.getAllByRole("radio")).toHaveLength(4);
+  expect(screen.getAllByText("up.build.mayNotRun")).toHaveLength(2);
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.getByText("up.bar.image")).toBeTruthy();
   expect(screen.getByText("up.bar.perf")).toBeTruthy();
@@ -54,7 +55,7 @@ it("cancels without changing the draft and restores trigger focus", async () => 
 });
 
 it("focuses the first available option when the current build is filtered out", async () => {
-  render(<ModelPicker builds={[{ ...base, supported: false }, { ...base, id: "other", version: "4.1.1", models: [] }]} choice={choice} inputs={{}} protonEnv={null} onChange={vi.fn()} />);
+  render(<ModelPicker builds={[{ ...base, available: false }, { ...base, id: "other", version: "4.1.1", models: [] }]} choice={choice} inputs={{}} protonEnv={null} onChange={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "up.section.model" }));
   await waitFor(() => expect(focus).toHaveBeenCalledWith(screen.getByRole("radio", { name: "FSR 4.1.1" })));
 });
@@ -171,4 +172,14 @@ it("tags a build that may fall back to another version without blocking it", () 
   expect(screen.getAllByText("up.build.mayUse")).toHaveLength(2);
   fireEvent.click(screen.getByRole("radio", { name: "FSR 4.1.2" }));
   expect(onChange).toHaveBeenCalledWith({ ...choice, build: "dll-fp8", model: null });
+});
+
+it("never flags anything on an AMD GPU and drops only another generation's copy of a version it already has", () => {
+  const otherGen = { ...base, id: "other-gen", supported: false };
+  const onlyThere = { ...base, id: "only-there", version: "4.0.2c", supported: false, models: [] };
+  render(<ModelPicker gpu="rdna3" builds={[base, otherGen, onlyThere]} choice={choice} inputs={{}} protonEnv={null} onChange={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "up.section.model" }));
+  expect(screen.queryByText("up.build.mayNotRun")).toBeNull();
+  expect(screen.getByRole("radio", { name: "FSR 4.0.2c" })).toBeTruthy();
+  expect(screen.getAllByRole("radio")).toHaveLength(3);
 });

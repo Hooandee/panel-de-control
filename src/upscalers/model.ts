@@ -10,10 +10,21 @@ export function defaultChoice(preferred: string, fg: "on" | "off" = "off"): Upsc
   return { build: preferred, quality: "native", sharpness: null, fg };
 }
 
-/** An install's choice as the page starts from: its build only while this GPU can still take it, else the recommended one. */
+/** An install's choice as the page starts from: its own build while it still exists, else the recommended one. */
 export function restoredChoice(build: string, options: Omit<UpscalerChoice, "build">, builds: BuildInfo[], preferred: string): UpscalerChoice {
   const known = builds.find((b) => b.id === build);
-  return { ...options, build: known?.available && known.supported ? build : preferred };
+  return { ...options, build: known?.available ? build : preferred };
+}
+
+/** Whether a version shows in the picker and whether it carries the "may not run" line. On an AMD GPU nothing is
+ *  flagged: a version made for another AMD generation is only hidden when this GPU already has its own variant of
+ *  the same version. Off AMD every version shows, flagged when Panel doesn't expect it to run. */
+export function offered(build: BuildInfo, builds: readonly BuildInfo[], gpu: string): { show: boolean; warn: boolean } {
+  if (build.supported) return { show: true, warn: false };
+  if (!gpu.startsWith("rdna")) return { show: true, warn: true };
+  const own = builds.some((other) => other.supported && other.available && other.family === build.family
+    && other.version === build.version && (other.engine ?? "optiscaler") === (build.engine ?? "optiscaler"));
+  return { show: !own, warn: false };
 }
 
 export function renderHeight(outputHeight: number, quality: Quality): number {
