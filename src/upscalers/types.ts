@@ -160,7 +160,25 @@ export interface IniSection {
   keys: IniKey[];
 }
 
+/** A file the recipe needs that only the user can download (e.g. from Nexus). */
+export interface UserFile {
+  id: string;
+  name: string;
+  page_url: string;
+  version: string;
+  installed_version: string | null;
+  filename: string | null;
+  state: "missing" | "ready" | "avoid" | "other_version";
+}
+
+export interface UserFileCandidate {
+  path: string;
+  filename: string;
+  version: string | null;
+}
+
 export interface RecipeInfo {
+  user_files?: UserFile[];
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;
   luma_detected?: boolean;
   automatic?: string[];
