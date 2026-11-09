@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.86.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.85.0...panel-de-control-v0.86.0) (2026-11-09)
+
+
+### Features
+
+* **report:** GPU PCI id and the upscaler versions offered on this GPU ([#1172](https://github.com/Hooandee/panel-de-control/issues/1172)) ([bd2633a](https://github.com/Hooandee/panel-de-control/commit/bd2633aa7c7c1b5e6a9da325d7df85f1021a2aa5))
+
+
+### Bug Fixes
+
+* **upscalers:** recognise every AMD handheld chip and never block a version over the GPU ([#1170](https://github.com/Hooandee/panel-de-control/issues/1170)) ([1cfa840](https://github.com/Hooandee/panel-de-control/commit/1cfa8405a105a005b303771854b21d79464d8af8))
+
 ## [0.85.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.4...panel-de-control-v0.85.0) (2026-11-09)
 
 
