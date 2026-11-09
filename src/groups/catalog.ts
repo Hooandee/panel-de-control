@@ -6,7 +6,8 @@ export interface RuleCatalog {
   collections: { id: string; name: string }[];
   tags: { id: number; name: string }[];
   features: { id: number; name: string }[];
-  friends: { id: string; name: string }[];
+  /** Friends by name, with their avatar when Steam has it. */
+  friends: { id: string; name: string; avatar?: string }[];
   folders: { id: string; name: string }[];
   cards: { id: string; name: string }[];
   groups: { id: string; name: string }[];

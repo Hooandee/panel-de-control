@@ -86,3 +86,11 @@ describe("createFriendOwnership", () => {
     expect(changes).toEqual([true, false]);
   });
 });
+
+describe("friends list", () => {
+  it("lists friends by name with their avatar", () => {
+    const player = (id: number, name: string, avatar?: string) => ({ m_steamid: { GetAccountID: () => id }, m_strPlayerName: name, ...(avatar ? { avatar_url_medium: avatar } : {}) });
+    const friends = createFriendOwnership({ friendStore: { allFriends: [player(2, "Zoe", "https://avatars.example/z.jpg"), player(1, "Ana"), player(3, "Bad", "javascript:x")] } }, () => {});
+    expect(friends.list()).toEqual([{ id: "1", name: "Ana" }, { id: "3", name: "Bad" }, { id: "2", name: "Zoe", avatar: "https://avatars.example/z.jpg" }]);
+  });
+});

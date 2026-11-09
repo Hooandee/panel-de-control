@@ -9,17 +9,18 @@ interface Overview {
   per_client_data?: { clientid?: string; installed?: boolean }[];
 }
 interface SteamId { GetAccountID?(): number; ConvertTo64BitString?(): string }
-interface Player { m_steamid?: SteamId; m_strPlayerName?: string; m_strNickname?: string }
+interface Player { m_steamid?: SteamId; m_strPlayerName?: string; m_strNickname?: string; avatar_url_medium?: string }
 /** Newer clients list players directly; older ones wrap them in `m_persona`. */
 type Friend = Player & { m_persona?: Player };
 
-function friendIdentity(friend: Friend): { id: number; name: string } | null {
+function friendIdentity(friend: Friend): { id: number; name: string; avatar?: string } | null {
   const player = friend.m_persona ?? friend;
   try {
     const steamid = player.m_steamid;
     const id = steamid?.GetAccountID?.() ?? Number(BigInt.asUintN(32, BigInt(steamid?.ConvertTo64BitString?.() ?? "0")));
     if (!Number.isInteger(id) || id <= 0) return null;
-    return { id, name: friend.m_strNickname || player.m_strNickname || player.m_strPlayerName || String(id) };
+    const avatar = typeof player.avatar_url_medium === 'string' && /^https:\/\//.test(player.avatar_url_medium) ? player.avatar_url_medium : undefined;
+    return { id, name: friend.m_strNickname || player.m_strNickname || player.m_strPlayerName || String(id), ...(avatar ? { avatar } : {}) };
   } catch {
     return null;
   }
@@ -163,7 +164,7 @@ export function createFriendOwnership(globals: SteamGlobals, onChange: () => voi
   let loading = false;
   const load = () => {
     if (loading || (owners && now() - loadedAt < 6 * 3600_000)) return;
-    const friends = (globals.friendStore?.allFriends ?? []).map(friendIdentity).filter((f): f is { id: number; name: string } => f !== null);
+    const friends = (globals.friendStore?.allFriends ?? []).map(friendIdentity).filter((f): f is NonNullable<ReturnType<typeof friendIdentity>> => f !== null);
     const fetch = globals.friendStore?.FetchOwnedGames;
     if (!fetch || !friends.length) { owners = new Map(); loadedAt = now(); return; }
     loading = true;
@@ -191,11 +192,11 @@ export function createFriendOwnership(globals: SteamGlobals, onChange: () => voi
       return owners ? owners.get(appId) ?? [] : null;
     },
     loading: () => loading,
-    list(): { id: string; name: string }[] {
+    list(): { id: string; name: string; avatar?: string }[] {
       return (globals.friendStore?.allFriends ?? []).flatMap((friend) => {
         const identity = friendIdentity(friend);
-        return identity ? [{ id: String(identity.id), name: identity.name }] : [];
-      });
+        return identity ? [{ id: String(identity.id), name: identity.name, ...(identity.avatar ? { avatar: identity.avatar } : {}) }] : [];
+      }).sort((a, b) => a.name.localeCompare(b.name));
     },
   };
 }
