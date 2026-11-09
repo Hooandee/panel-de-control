@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.86.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.85.0...panel-de-control-v0.86.0) (2026-11-09)
+
+
+### Español
+
+* **FSR 4 en todas las consolas AMD:** La ROG Ally con Ryzen Z1 y la Legion Go 2 no se reconocían como AMD y Escaladores no dejaba usar FSR 4. Ahora se reconocen todas, y si el nombre del chip no basta, Panel de Control identifica la gráfica directamente.
+* **Escaladores nunca te bloquea una versión:** Puedes elegir cualquiera. En gráficas AMD no verás avisos; en otras, las versiones que quizá no funcionen llevan una nota corta.
+* **Reportes más útiles:** Cuando nos envías un reporte, incluye tu gráfica y las versiones de Escaladores que te ofrecía Panel de Control, para encontrar el fallo sin tener que preguntarte.
+
+### English
+
+* **FSR 4 on every AMD handheld:** The ROG Ally with the Ryzen Z1 and the Legion Go 2 weren't recognised as AMD, so Upscalers wouldn't let you use FSR 4. They're all recognised now, and when the chip's name isn't enough, Panel de Control identifies the graphics chip directly.
+* **Upscalers never blocks a version:** You can pick any of them. On AMD graphics you won't see any warnings; elsewhere, versions that may not work carry a short note.
+* **More useful reports:** When you send us a report, it includes your graphics chip and the Upscalers versions Panel de Control offered you, so we can find the problem without having to ask.
+
+### Italiano
+
+* **FSR 4 su tutte le console AMD:** Il ROG Ally con Ryzen Z1 e il Legion Go 2 non venivano riconosciuti come AMD e Upscaler non permetteva di usare FSR 4. Ora vengono riconosciuti tutti e, quando il nome del chip non basta, Panel de Control identifica direttamente la scheda grafica.
+* **Upscaler non blocca mai una versione:** Puoi sceglierne qualsiasi. Sulle schede grafiche AMD non vedrai avvisi; sulle altre, le versioni che potrebbero non funzionare hanno una breve nota.
+* **Segnalazioni più utili:** Quando ci invii una segnalazione, include la tua scheda grafica e le versioni di Upscaler che Panel de Control ti offriva, così troviamo il problema senza doverti chiedere nulla.
+
+### Deutsch
+
+* **FSR 4 auf allen AMD-Handhelds:** Der ROG Ally mit Ryzen Z1 und der Legion Go 2 wurden nicht als AMD erkannt, daher ließ Upscaler FSR 4 nicht zu. Jetzt werden alle erkannt, und reicht der Chipname nicht aus, erkennt Panel de Control den Grafikchip direkt.
+* **Upscaler sperrt nie eine Version:** Du kannst jede wählen. Mit AMD-Grafik siehst du keine Warnungen; bei anderen tragen Versionen, die eventuell nicht laufen, einen kurzen Hinweis.
+* **Hilfreichere Berichte:** Wenn du uns einen Bericht schickst, enthält er deinen Grafikchip und die Upscaler-Versionen, die Panel de Control dir angeboten hat, damit wir das Problem finden, ohne nachfragen zu müssen.
+
+### Português (Brasil)
+
+* **FSR 4 em todos os portáteis AMD:** O ROG Ally com Ryzen Z1 e o Legion Go 2 não eram reconhecidos como AMD, e o Upscalers não deixava usar o FSR 4. Agora todos são reconhecidos e, quando o nome do chip não basta, o Panel de Control identifica a placa de vídeo diretamente.
+* **O Upscalers nunca bloqueia uma versão:** Você pode escolher qualquer uma. Em placas AMD você não verá avisos; nas outras, as versões que talvez não funcionem trazem uma nota curta.
+* **Relatórios mais úteis:** Quando você nos envia um relatório, ele inclui sua placa de vídeo e as versões do Upscalers que o Panel de Control oferecia, para encontrarmos o problema sem precisar perguntar.
+
+### Français
+
+* **FSR 4 sur toutes les consoles AMD :** La ROG Ally avec Ryzen Z1 et la Legion Go 2 n’étaient pas reconnues comme AMD, et Upscalers ne permettait pas d’utiliser FSR 4. Elles sont désormais toutes reconnues, et quand le nom de la puce ne suffit pas, Panel de Control identifie directement la puce graphique.
+* **Upscalers ne bloque jamais une version :** Vous pouvez choisir n’importe laquelle. Avec une puce graphique AMD, vous ne verrez aucun avertissement ; sur les autres, les versions qui risquent de ne pas fonctionner portent une courte note.
+* **Des rapports plus utiles :** Quand vous nous envoyez un rapport, il inclut votre puce graphique et les versions d’Upscalers que Panel de Control vous proposait, pour trouver le problème sans avoir à vous le demander.
+
 ## [0.85.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.4...panel-de-control-v0.85.0) (2026-11-09)
 
 
