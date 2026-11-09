@@ -984,3 +984,27 @@ describe("theme storage", () => {
     host.dispose();
   });
 });
+
+describe("shared groups", () => {
+  it("are offered to every theme and drop its subscriptions when it unmounts", async () => {
+    const unsubscribe = vi.fn();
+    const groups = {
+      list: vi.fn(() => []), subscribe: vi.fn(() => unsubscribe), save: vi.fn(), remove: vi.fn(), preview: vi.fn(() => []),
+      catalog: vi.fn(), importSources: vi.fn(), import: vi.fn(), migrate: vi.fn(),
+    };
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, groups: groups as never,
+      evaluate: () => Object.freeze({ abiVersion: 1 as const, mount(context: ThemeExtensionMountContext) { seen = context; context.groups?.subscribe(() => {}); return () => undefined; } }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(Object.isFrozen(seen?.groups)).toBe(true);
+    seen?.groups?.preview({ mode: "all", rules: [] });
+    expect(groups.preview).toHaveBeenCalled();
+    host.reconcile({ status: "ready", themes: [] });
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    host.dispose();
+  });
+});

@@ -8,6 +8,23 @@ interface Overview {
   metacritic_score?: number; review_percentage?: number; display_status?: number;
   per_client_data?: { clientid?: string; installed?: boolean }[];
 }
+interface SteamId { GetAccountID?(): number; ConvertTo64BitString?(): string }
+interface Player { m_steamid?: SteamId; m_strPlayerName?: string; m_strNickname?: string }
+/** Newer clients list players directly; older ones wrap them in `m_persona`. */
+type Friend = Player & { m_persona?: Player };
+
+function friendIdentity(friend: Friend): { id: number; name: string } | null {
+  const player = friend.m_persona ?? friend;
+  try {
+    const steamid = player.m_steamid;
+    const id = steamid?.GetAccountID?.() ?? Number(BigInt.asUintN(32, BigInt(steamid?.ConvertTo64BitString?.() ?? "0")));
+    if (!Number.isInteger(id) || id <= 0) return null;
+    return { id, name: friend.m_strNickname || player.m_strNickname || player.m_strPlayerName || String(id) };
+  } catch {
+    return null;
+  }
+}
+
 interface Collection { id?: string; displayName?: string; allApps?: readonly Overview[]; visibleApps?: readonly Overview[] }
 export interface SteamGlobals {
   appStore?: { GetAppOverviewByAppID?(id: number): Overview | undefined; m_mapStoreTagLocalization?: Map<number, string> };
@@ -21,8 +38,8 @@ export interface SteamGlobals {
   };
   installFolderStore?: { AllInstallFolders?: readonly { nFolderIndex?: number; strDriveName?: string; strUserLabel?: string; vecApps?: readonly { nAppID?: number }[] }[] };
   friendStore?: {
-    allFriends?: readonly { m_persona?: { m_steamid?: { ConvertTo64BitString?(): string }; m_strPlayerName?: string }; m_strNickname?: string }[];
-    FetchOwnedGames?(steamid: string): Promise<{ setApps?: Iterable<number> } | undefined>;
+    allFriends?: readonly Friend[];
+    FetchOwnedGames?(accountId: number): Promise<{ setApps?: Iterable<number> } | undefined>;
   };
   MicroSDeck?: {
     CardsAndGames?: readonly [{ uid?: string; name?: string }, readonly { uid?: string | number }[]][];
@@ -149,11 +166,11 @@ export function createFriendOwnership(globals: SteamGlobals, onLoaded: () => voi
     loading = true;
     const next = new Map<number, string[]>();
     void Promise.all(friends.map(async (friend) => {
-      const steamid = friend.m_persona?.m_steamid?.ConvertTo64BitString?.();
-      if (!steamid) return;
+      const identity = friendIdentity(friend);
+      if (!identity) return;
       try {
-        const games = await fetch.call(globals.friendStore, steamid);
-        for (const app of games?.setApps ?? []) next.set(app, [...(next.get(app) ?? []), steamid]);
+        const games = await fetch.call(globals.friendStore, identity.id);
+        for (const app of games?.setApps ?? []) next.set(app, [...(next.get(app) ?? []), String(identity.id)]);
       } catch { /* a private profile or a dropped request: that friend owns nothing we can see */ }
     })).finally(() => { owners = next; loadedAt = now(); loading = false; onLoaded(); });
   };
@@ -165,8 +182,8 @@ export function createFriendOwnership(globals: SteamGlobals, onLoaded: () => voi
     },
     list(): { id: string; name: string }[] {
       return (globals.friendStore?.allFriends ?? []).flatMap((friend) => {
-        const id = friend.m_persona?.m_steamid?.ConvertTo64BitString?.();
-        return id ? [{ id, name: friend.m_strNickname || friend.m_persona?.m_strPlayerName || id }] : [];
+        const identity = friendIdentity(friend);
+        return identity ? [{ id: String(identity.id), name: identity.name }] : [];
       });
     },
   };

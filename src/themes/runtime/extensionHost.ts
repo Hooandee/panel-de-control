@@ -1,3 +1,4 @@
+import type { ThemeGroupsAccess } from "../../groups/groupsClient";
 import type { ThemeArtworkAccess } from "../artwork";
 import type { CssLoaderPatch, CssLoaderSnapshot, CssLoaderTheme } from "../cssLoaderTypes";
 import type {
@@ -63,6 +64,8 @@ export interface ThemeExtensionMountContextV1 {
   navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
   /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
   storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Groups shared by every theme (hand-picked and rule based); absent on a Panel that does not offer them. */
+  groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
 }
@@ -78,6 +81,8 @@ export interface ThemeExtensionMountContextV2 {
   ambient?: Readonly<ThemeExtensionAmbientAccess>;
   /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
   storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Groups shared by every theme (hand-picked and rule based); absent on a Panel that does not offer them. */
+  groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
 }
@@ -122,6 +127,7 @@ interface ThemeExtensionRuntimeHostOptions {
   ambient?: AmbientChannelProvider;
   storage?: ThemeStorageProvider;
   games?: Readonly<ThemeExtensionGamesAccess>;
+  groups?: Readonly<ThemeGroupsAccess>;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -148,6 +154,21 @@ export function ambientThemeId(themeName: string): string {
 const AMBIENT_SURFACES = new Set(["home", "library"]);
 
 /** Scopes the channel to one mount so every claim a runtime forgets is released when it unmounts. */
+/** The shared groups, with the theme's subscriptions dropped when it unmounts. */
+function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: { track(release: () => void): () => void }): Readonly<ThemeGroupsAccess> {
+  return Object.freeze({
+    list: () => groups.list(),
+    subscribe: (listener: () => void) => scope.track(groups.subscribe(listener)),
+    save: (group: Parameters<ThemeGroupsAccess["save"]>[0]) => groups.save(group),
+    remove: (id: string) => groups.remove(id),
+    preview: (rules: Parameters<ThemeGroupsAccess["preview"]>[0], extra?: Parameters<ThemeGroupsAccess["preview"]>[1]) => groups.preview(rules, extra),
+    catalog: (language?: string) => groups.catalog(language),
+    importSources: () => groups.importSources(),
+    import: (ids: readonly string[]) => groups.import(ids),
+    migrate: (legacy: Parameters<ThemeGroupsAccess["migrate"]>[0]) => groups.migrate(legacy),
+  });
+}
+
 function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
   const releases = new Set<() => void>();
   const listeners = new Set<() => void>();
@@ -339,6 +360,7 @@ export class ThemeExtensionRuntimeHost {
   private readonly ambient: AmbientChannelProvider | undefined;
   private readonly storage: ThemeStorageProvider | undefined;
   private readonly games: Readonly<ThemeExtensionGamesAccess> | undefined;
+  private readonly groups: Readonly<ThemeGroupsAccess> | undefined;
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
@@ -360,7 +382,9 @@ export class ThemeExtensionRuntimeHost {
     ambient,
     storage,
     games,
+    groups,
   }: ThemeExtensionRuntimeHostOptions) {
+    this.groups = groups;
     this.ambient = ambient;
     this.storage = storage;
     this.games = games;
@@ -561,6 +585,7 @@ export class ThemeExtensionRuntimeHost {
         ...(scoped ? { ambient: scoped.access } : {}),
         ...(this.storage ? { storage: this.storage.forTheme(selection.descriptor.catalogId) } : {}),
         ...(this.games ? { games: scopedGames(this.games, scope) } : {}),
+        ...(this.groups ? { groups: scopedGroups(this.groups, scope) } : {}),
         ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
           artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
             get: this.artwork.get,
