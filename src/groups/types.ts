@@ -3,7 +3,7 @@
 export const RULE_TYPES = [
   "installed", "collection", "group", "name", "kind", "deckCompat", "steamosCompat", "tags", "features",
   "playtime", "lastPlayed", "released", "purchased", "size", "review", "achievements", "friends",
-  "familyShared", "demo", "comingSoon", "streamable", "sdCard", "installFolder", "all",
+  "familyShared", "demo", "comingSoon", "streamable", "sdCard", "installFolder", "games", "all",
 ] as const;
 export type RuleType = (typeof RULE_TYPES)[number];
 
@@ -30,6 +30,8 @@ export interface GroupDefinition {
   added: number[];
   /** Games kept out of a rule group even when they match. */
   hidden: number[];
+  /** App kinds outside the default universe this group also looks at (software, music, tools, videos). */
+  include?: Exclude<AppKind, "game" | "shortcut">[];
   /** Where an imported group came from, e.g. `tabmaster:<tab id>`; re-importing skips it. */
   importedFrom?: string;
   /** Id the group had in a theme before it moved to Panel, so pinned places still find it. */
@@ -67,6 +69,8 @@ export interface AppFacts {
   streamable: boolean;
   installFolder: string | null;
   sdCard: string | null;
+  /** On the microSD card in the slot right now. */
+  sdCardCurrent: boolean;
 }
 
 export interface EvaluationContext {

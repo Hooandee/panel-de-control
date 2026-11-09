@@ -1,7 +1,7 @@
 import { GROUP_LIMITS, type AppFacts, type AppKind, type EvaluationContext, type GroupDefinition, type Rule, type RuleSet } from "./types";
 
 const DAY = 86_400;
-const GB = 1e9;
+const GIB = 1024 ** 3;
 
 /** True or false when the rule can be decided, null when the app lacks the data (matches neither way). */
 type Verdict = boolean | null;
@@ -15,6 +15,8 @@ const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, 
 function compare(value: number, op: unknown, target: number): Verdict {
   if (op === "more") return value > target;
   if (op === "less") return value < target;
+  if (op === "atLeast") return value >= target;
+  if (op === "atMost") return value <= target;
   return null;
 }
 
@@ -23,10 +25,12 @@ function known(value: number, check: (value: number) => Verdict): Verdict {
 }
 
 function dated(value: number, params: Record<string, unknown>, now: number): Verdict {
+  if (params.op === "unknown") return value === 0;
   if (!value) return null;
   if (params.op === "before") return value < num(params.date);
   if (params.op === "after") return value > num(params.date);
   if (params.op === "within") return now - value <= num(params.days) * DAY;
+  if (params.op === "olderThan") return now - value > num(params.days) * DAY;
   return null;
 }
 
@@ -55,6 +59,9 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
       return members(definition, ctx, walk).includes(app.appId);
     }
     case "name": {
+      if (typeof p.pattern === "string" && p.pattern) {
+        try { return new RegExp(p.pattern, "i").test(app.name); } catch { return null; }
+      }
       const text = typeof p.text === "string" ? fold(p.text.trim()) : "";
       return text ? fold(app.name).includes(text) : null;
     }
@@ -69,11 +76,11 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
     case "features": return matchSet(list(p.ids, isNumber), app.features, p.match);
     case "playtime": return compare(app.playtimeMinutes, p.op, num(p.hours) * 60);
     case "lastPlayed":
-      if (p.op === "never") return app.lastPlayed === 0;
+      if (p.op === "never" || p.op === "unknown") return app.lastPlayed === 0;
       return known(app.lastPlayed, (value) => compare(ctx.now - value, p.op, num(p.days) * DAY));
     case "released": return dated(app.released, p, ctx.now);
     case "purchased": return dated(app.purchased, p, ctx.now);
-    case "size": return known(app.sizeBytes, (value) => compare(value, p.op, num(p.gb) * GB));
+    case "size": return known(app.sizeBytes, (value) => compare(value, p.op, num(p.gb) * GIB));
     case "review":
       return known(p.source === "metacritic" ? app.metacritic : app.reviewPercent, (value) => compare(value, p.op, num(p.value)));
     case "achievements":
@@ -90,7 +97,10 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
     case "demo": return app.demo;
     case "comingSoon": return app.comingSoon;
     case "streamable": return app.streamable;
-    case "sdCard": return typeof p.card === "string" && p.card ? app.sdCard === p.card : app.sdCard !== null;
+    case "sdCard":
+      if (p.card === "current") return app.sdCardCurrent;
+      return typeof p.card === "string" && p.card ? app.sdCard === p.card : app.sdCard !== null;
+    case "games": return list(p.ids, isNumber).includes(app.appId);
     case "installFolder": return app.installFolder === null || typeof p.folder !== "string" ? null : app.installFolder === p.folder;
     case "all": {
       if (walk.depth >= GROUP_LIMITS.depth) return null;
@@ -125,6 +135,7 @@ function members(group: GroupDefinition, ctx: EvaluationContext, walk: Walk): nu
   if (group.kind === "manual") return group.appIds.filter((id) => !hidden.has(id) && ctx.facts(id) !== undefined);
   const inner: Walk = { ctx, depth: 0, visiting: new Set([...walk.visiting, group.id]) };
   const kinds = namedKinds(group.rules);
+  for (const kind of group.include ?? []) kinds.add(kind);
   const candidates = [...ctx.universe, ...(ctx.extended ?? []).filter((id) => {
     const kind = ctx.facts(id)?.kind;
     return kind !== undefined && kinds.has(kind);

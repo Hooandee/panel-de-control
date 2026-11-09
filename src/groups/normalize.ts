@@ -56,6 +56,9 @@ export function normalizeGroup(value: unknown): GroupDefinition | null {
     if (!rules) return null;
     group.rules = rules;
   }
+  const include = Array.isArray(value.include) ? [...new Set(value.include.filter((kind): kind is NonNullable<GroupDefinition["include"]>[number] =>
+    kind === "software" || kind === "music" || kind === "tool" || kind === "video" || kind === "other"))] : [];
+  if (value.kind === "rules" && include.length) group.include = include;
   if (typeof value.importedFrom === "string" && TAG.test(value.importedFrom)) group.importedFrom = value.importedFrom;
   if (typeof value.legacyId === "string" && TAG.test(value.legacyId)) group.legacyId = value.legacyId;
   return group;

@@ -11,7 +11,7 @@ function app(appId: number, over: Partial<AppFacts> = {}): AppFacts {
     appId, name: `Game ${appId}`, kind: "game", installed: false, collections: [], tags: [], features: [],
     playtimeMinutes: 0, lastPlayed: 0, released: 0, purchased: 0, sizeBytes: 0, deckCompat: 0, steamosCompat: 0,
     metacritic: 0, reviewPercent: 0, achievementsPercent: 0, achievementsDone: 0, achievementsTotal: 0, familyShared: false, demo: false,
-    comingSoon: false, streamable: false, installFolder: null, sdCard: null, ...over,
+    comingSoon: false, streamable: false, installFolder: null, sdCard: null, sdCardCurrent: false, ...over,
   };
 }
 
@@ -23,7 +23,7 @@ const APPS = [
   app(2, { name: "Dead Cells", installed: false, tags: [3959], playtimeMinutes: 30, lastPlayed: NOW - 60 * DAY,
     released: NOW - 10 * DAY, sizeBytes: 1e9, deckCompat: 2, metacritic: 89, reviewPercent: 90, achievementsPercent: 10,
     achievementsDone: 3, achievementsTotal: 30, familyShared: true }),
-  app(3, { name: "Emulator", kind: "shortcut", installed: true, sdCard: "card-a", installFolder: "1" }),
+  app(3, { name: "Emulator", kind: "shortcut", installed: true, sdCard: "card-a", sdCardCurrent: true, installFolder: "1" }),
   app(4, { name: "Demo Thing", demo: true, comingSoon: true, deckCompat: 1 }),
   app(5, { name: "Soundtrack", kind: "music", installed: true }),
 ];
@@ -80,6 +80,15 @@ describe("evaluateGroup", () => {
     ["any sd card", r("sdCard"), [3]],
     ["one sd card", r("sdCard", { card: "card-b" }), []],
     ["install folder", r("installFolder", { folder: "1" }), [3]],
+    ["name pattern", r("name", { pattern: "^d(ead|emo)" }), [2, 4]],
+    ["broken pattern", r("name", { pattern: "(" }), []],
+    ["size in GiB at least", r("size", { op: "atLeast", gb: 15e9 / 1024 ** 3 }), [1]],
+    ["metacritic at most", r("review", { source: "metacritic", op: "atMost", value: 89 }), [2]],
+    ["release date unknown", r("released", { op: "unknown" }), [3, 4]],
+    ["last played older than", r("lastPlayed", { op: "more", days: 1 }), [1, 2]],
+    ["released older than", r("released", { op: "olderThan", days: 100 }), [1]],
+    ["sd card in the slot", r("sdCard", { card: "current" }), [3]],
+    ["games list", r("games", { ids: [4, 2] }), [2, 4]],
   ])("%s", (_name, rule, expected) => {
     expect(run([rule])).toEqual(expected);
   });
@@ -102,6 +111,10 @@ describe("evaluateGroup", () => {
   it("keeps added games and leaves hidden ones out", () => {
     const group = rules([r("installed")], "all", { added: [4], hidden: [3] });
     expect(evaluateGroup(group, ctx())).toEqual([1, 4]);
+  });
+
+  it("a group can also look at software, music or tools", () => {
+    expect(evaluateGroup(rules([r("installed")], "all", { include: ["music"] }), ctx())).toEqual([1, 3, 5]);
   });
 
   it("a manual group is its picked games minus hidden ones", () => {

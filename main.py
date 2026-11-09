@@ -49,6 +49,7 @@ from version import read_version
 from json_store import atomic_json_save
 from settings_store import SettingsStore
 import theme_artwork
+import theme_groups
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
 from tdp.diagnostics import run_operation as trace_tdp_operation
@@ -247,6 +248,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
+        ("_support_theme_groups", None),
         ("_support_theme_storage", None),
         ("_support_steam_inventory", None),
     ),
@@ -1385,6 +1387,39 @@ class Plugin(AmbientRpc):
             decky.logger.exception("DUO artwork persistence failed")
             return {"ok": False, "error": "save_failed"}
         return {"ok": True}
+
+    def _support_theme_groups(self) -> dict:
+        return theme_groups.summary(self._settings.get("theme_groups"))
+
+    async def get_theme_groups(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.store(self._settings.get("theme_groups")).get(account, [])
+
+    async def set_theme_groups(self, account: str, groups: list) -> dict:
+        self._init()
+        if not theme_groups.valid_account(account) or not isinstance(groups, list):
+            return {"ok": False, "error": "invalid_request"}
+        previous = self._settings.get("theme_groups", {})
+        updated = theme_groups.store(previous)
+        if account not in updated and len(updated) >= theme_groups.MAX_ACCOUNTS:
+            return {"ok": False, "error": "limit_reached"}
+        updated[account] = theme_groups.records(groups)
+        self._settings["theme_groups"] = updated
+        try:
+            self._save()
+        except Exception:
+            self._settings["theme_groups"] = previous
+            decky.logger.exception("Theme groups persistence failed")
+            return {"ok": False, "error": "save_failed"}
+        return {"ok": True, "groups": updated[account]}
+
+    async def get_tab_master_tabs(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.read_tab_master(Path(decky.DECKY_PLUGIN_SETTINGS_DIR).parent, account)
 
     async def get_developer_options(self) -> bool:
         self._init()

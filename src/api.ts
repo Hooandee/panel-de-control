@@ -1350,6 +1350,9 @@ export const answerRemoteAccessPairing = callable<[accept: boolean], RemoteAcces
 export const forgetRemoteAccessKeys = callable<[], RemoteAccessState>("forget_remote_access_keys");
 
 export const getDuoArtwork = callable<[], Record<string, import("./themes/artwork").GameArtwork>>("get_duo_artwork");
+export const getThemeGroups = callable<[account: string], unknown[]>("get_theme_groups");
+export const setThemeGroups = callable<[account: string, groups: unknown[]], { ok: boolean; error?: string; groups?: unknown[] }>("set_theme_groups");
+export const getTabMasterTabs = callable<[account: string], unknown[]>("get_tab_master_tabs");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
 
 // A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
