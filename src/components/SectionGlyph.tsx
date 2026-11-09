@@ -10,6 +10,7 @@ export function SectionGlyph({ id, fallback }: { id: string; fallback: ReactNode
     audio: <><path fill="currentColor" stroke="none" d="M5 18h8L25 8v32L13 30H5Z"/><g className="pdc-glyph-wave"><path d="M31 16c5 4 5 12 0 16m6-22c9 8 9 20 0 28"/></g></>,
     hud: <><rect x="5" y="7" width="38" height="34" rx="6" opacity=".4"/><path d="M12 33h24"/><g className="pdc-glyph-bars" fill="currentColor" stroke="none"><rect x="12" y="23" width="5" height="10" rx="2"/><rect x="22" y="17" width="5" height="16" rx="2"/><rect x="32" y="12" width="5" height="21" rx="2"/></g></>,
     params: <><rect x="4" y="7" width="40" height="34" rx="6" fill="currentColor" opacity=".15"/><rect x="4" y="7" width="40" height="34" rx="6"/><path d="M5 15h38" opacity=".6"/><circle cx="10" cy="11" r="1" fill="currentColor" stroke="none"/><path d="m12 22 6 5-6 5" strokeWidth="3.5"/><path className="pdc-glyph-scan" d="M24 32h11" strokeWidth="3.5"/></>,
+    upscalers: <><rect x="4" y="4" width="40" height="40" rx="8" fill="currentColor" opacity=".15"/><rect x="4" y="4" width="40" height="40" rx="8"/><g className="pdc-glyph-grow" fill="currentColor" stroke="none"><rect className="pdc-glyph-even-base" x="9" y="27" width="12" height="12" opacity=".4"/><rect className="pdc-glyph-even-dots" x="9" y="27" width="6" height="6" opacity=".75"/><rect className="pdc-glyph-even-dots" x="15" y="33" width="6" height="6" opacity=".75"/></g><g className="pdc-glyph-retract"><path d="M24 24 37 11m-9 0h9v9"/></g></>,
     cleaner: <><path d="m8 10-4 21v6a5 5 0 0 0 5 5h30a5 5 0 0 0 5-5v-6l-4-21Z" fill="currentColor" opacity=".18"/><path d="M26 10H10L5 30v7a4 4 0 0 0 4 4h30a4 4 0 0 0 4-4v-7l-2-9M5 30h38"/><circle cx="35" cy="35" r="2" fill="currentColor" stroke="none"/><path className="pdc-glyph-pulse" fill="currentColor" stroke="none" d="m35 3 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/></>,
     ambient: <><rect x="4" y="6" width="40" height="36" rx="6" fill="currentColor" opacity=".12"/><rect x="4" y="6" width="40" height="36" rx="6"/><path fill="currentColor" stroke="none" d="m6 36 12-16 10 12 6-7 8 11v4H6Z"/><g className="pdc-glyph-wave"><circle cx="33" cy="17" r="5" fill="currentColor" stroke="none"/></g></>,
     themes: <><path fill="currentColor" opacity=".3" d="M24 5C-2 5-1 42 20 42c11 0-1-10 7-10h8C50 32 48 5 24 5Z"/><path d="M24 5C-2 5-1 42 20 42c11 0-1-10 7-10h8C50 32 48 5 24 5Z"/><g className="pdc-glyph-pulse" fill="currentColor" stroke="none"><circle cx="14" cy="17" r="3"/><circle cx="25" cy="12" r="3"/><circle cx="35" cy="20" r="3"/></g></>,
@@ -29,6 +30,14 @@ export const sectionGlyphStyles = `
 .pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-wave { animation:pdc-glyph-wave 580ms ease-out both; }
 .pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-scan { animation:pdc-glyph-scan 520ms ease-out both; }
 .pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-bars { animation:pdc-glyph-bars 520ms ease-out both; transform-origin:24px 34px; }
+.pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-retract { animation:pdc-glyph-retract 1000ms ease both; transform-origin:24px 24px; }
+.pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-grow { animation:pdc-glyph-grow 1000ms cubic-bezier(.45,0,.2,1) both; transform-origin:15px 33px; }
+.pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-even-base { animation:pdc-glyph-even-base 1000ms ease-in-out both; }
+.pdc-dashboard-card:is(:hover,:focus-within,.gpfocus,.pdc-dashboard-card-focused) .pdc-glyph-even-dots { animation:pdc-glyph-even-dots 1000ms ease-in-out both; }
+@keyframes pdc-glyph-grow { 0%{transform:none} 45%,72%{transform:translate(9px,-9px) scale(2.2)} 100%{transform:none} }
+@keyframes pdc-glyph-even-base { 0%,20%{opacity:.4} 50%,72%{opacity:.6} 100%{opacity:.4} }
+@keyframes pdc-glyph-even-dots { 0%,20%{opacity:.75} 50%,72%{opacity:0} 100%{opacity:.75} }
+@keyframes pdc-glyph-retract { 0%{transform:scale(1);opacity:1} 35%,75%{transform:scale(0);opacity:0} 100%{transform:scale(1);opacity:1} }
 @keyframes pdc-glyph-spin { from{transform:rotate(-150deg)} to{transform:rotate(0)} }
 @keyframes pdc-glyph-turn { 0%{transform:rotate(-35deg)} 70%{transform:rotate(5deg)} 100%{transform:rotate(0)} }
 @keyframes pdc-glyph-pulse { 0%{opacity:.4;transform:scale(.8)} 55%{opacity:1;transform:scale(1.08)} 100%{transform:scale(1)} }

@@ -41,6 +41,7 @@ const persistentServices = vi.hoisted(() => {
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory, openFilePicker: vi.fn(), toaster: { toast: vi.fn() } }));
 vi.mock("./ambient", () => ({ startAmbient: ambient.start, ambientThemeChannel: {}, AmbienteSection: () => null, AmbientPlayerBlock: () => null }));
 vi.mock("./platform/gameSessions", () => ({ createGameSessionPort: () => ({}) }));
+vi.mock("./upscalers/overlays", () => ({ startUpscalerOverlays: () => () => {} }));
 vi.mock("./deckyInternal", async (original) => ({ ...(await original<object>()), adoptStaleActivePlugin: () => () => {} }));
 vi.mock("./platform/power", () => ({ createPowerPort: () => ({}) }));
 vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) }));

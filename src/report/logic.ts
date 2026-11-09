@@ -13,6 +13,7 @@ export const REPORT_CATEGORIES = [
   "system",
   "audio",
   "launch",
+  "upscalers",
   "themes",
   "ambient",
   "other",

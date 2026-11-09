@@ -141,3 +141,18 @@ describe("EmuDeck/SRM preservation", () => {
     expect(serialize(p)).toBe(s);
   });
 });
+describe("quoted Wine override groups", () => {
+  it("accepts literal semicolons inside quoted DLL values only", () => {
+    for (const value of ['"winmm=b;dxgi=n,b"', "'winmm=b;dxgi=n,b'"]) {
+      const input = `WINEDLLOVERRIDES=${value} ~/.local/bin/mako-run --preset fast %command% -dx12`;
+      expect(parse(input).malformed).toBe(false);
+      expect(serialize(parse(input))).toBe(input);
+    }
+  });
+  it("keeps shell operators, expansions and quoted command scripts read-only", () => {
+    for (const input of ['WINEDLLOVERRIDES=dxgi=n,b;touch nope %command%', 'WINEDLLOVERRIDES="dxgi=n,b"; touch nope %command%', 'WINEDLLOVERRIDES="$(touch nope);dxgi=n,b" %command%', 'sh -c "%command%; echo hi"', 'OTHER="a;b" %command%']) {
+      expect(parse(input).malformed).toBe(true);
+      expect(serialize(parse(input))).toBe(input);
+    }
+  });
+});

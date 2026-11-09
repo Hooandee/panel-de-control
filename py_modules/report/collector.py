@@ -36,7 +36,8 @@ _SCRUB_KEY = re.compile(
     r"serial|uuid|\bmac\b|mac_?addr|hostname|host_name|^(?:user|username)$",
     re.I,
 )
-_HOME_PATH = re.compile(r"/home/[^/\s:\"']+")
+# Wine logs write the same home as Z:\home\<user>.
+_HOME_PATH = re.compile(r"[\\/]home[\\/][^\\/\s:\"']+")
 # Firmware versions are shared by every unit of a model and decide firmware bugs, but
 # look like serials to _SERIAL_RUN ("S0CN27WW"). Their values skip only that rule.
 _FIRMWARE_VERSION_KEYS = frozenset(

@@ -1,0 +1,364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Panel de Control game recipe documents",
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "catalog_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "schema_version",
+        "catalog_version"
+      ],
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/",
+          "maxLength": 2048
+        },
+        "source_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/",
+          "maxLength": 2048
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "format": {
+          "const": "zip"
+        }
+      },
+      "required": [
+        "url",
+        "source_url",
+        "sha256",
+        "size",
+        "filename",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "dependency": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "game_files"
+            },
+            "asset": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "files": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 2048,
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+              }
+            },
+            "requires": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+              },
+              "uniqueItems": true,
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "kind",
+            "asset",
+            "files"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "proton_dependency"
+            },
+            "provider": {
+              "const": "winetricks"
+            },
+            "verb": {
+              "enum": [
+                "vcrun2022",
+                "msvcrt40"
+              ]
+            },
+            "requires": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+              },
+              "uniqueItems": true,
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "kind",
+            "provider",
+            "verb"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "game": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "conditions": {
+          "type": "object",
+          "properties": {
+            "engine": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "optiscaler",
+                  "dll",
+                  "helixsr",
+                  "proton",
+                  "mako"
+                ]
+              }
+            },
+            "platform": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "linux",
+                  "windows",
+                  "darwin",
+                  "android"
+                ]
+              }
+            },
+            "arch": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "x86_64",
+                  "aarch64"
+                ]
+              }
+            },
+            "game_builds": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,19}$"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "engine",
+            "platform",
+            "arch"
+          ],
+          "additionalProperties": false
+        },
+        "exe": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!.*//)[^/](?:.*[^/])?$"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^--?[A-Za-z0-9][A-Za-z0-9_=.-]*$",
+            "maxLength": 128
+          }
+        },
+        "ini": {
+          "type": "object",
+          "maxProperties": 128,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_]+\\.[A-Za-z0-9_]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+          },
+          "uniqueItems": true,
+          "maxItems": 128
+        },
+        "source_urls": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^https://github\\.com/",
+            "maxLength": 2048
+          }
+        },
+        "tested_game_builds": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,19}$"
+          }
+        },
+        "tested_at": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ReShade.ini": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "Luma.SRUserType"
+              ],
+              "properties": {
+                "Luma.SRUserType": {
+                  "const": "2"
+                },
+                "OVERLAY.TutorialProgress": {
+                  "const": "4"
+                }
+              }
+            }
+          }
+        },
+        "recommended_input": {
+          "type": "string",
+          "enum": [
+            "dlss",
+            "fsr31",
+            "fsr2",
+            "xess"
+          ]
+        },
+        "effective_api": {
+          "enum": [
+            "d3d11",
+            "d3d12",
+            "vulkan"
+          ]
+        },
+        "quality_owner": {
+          "enum": [
+            "panel",
+            "game"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "revision",
+        "conditions",
+        "exe",
+        "args",
+        "ini",
+        "dependencies",
+        "source_urls"
+      ],
+      "additionalProperties": false
+    },
+    "assets": {
+      "type": "object",
+      "maxProperties": 512,
+      "additionalProperties": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "maxProperties": 512,
+      "additionalProperties": {
+        "$ref": "#/$defs/dependency"
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/metadata"
+    },
+    {
+      "$ref": "#/$defs/game"
+    },
+    {
+      "$ref": "#/$defs/assets"
+    },
+    {
+      "$ref": "#/$defs/dependencies"
+    }
+  ]
+}

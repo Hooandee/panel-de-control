@@ -52,6 +52,7 @@ import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
@@ -71,6 +72,7 @@ import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
 import { ambientThemeChannel, startAmbient } from "./ambient";
+import { startUpscalerOverlays } from "./upscalers/overlays";
 import { adoptStaleActivePlugin } from "./deckyInternal";
 import { createGameSessionPort } from "./platform/gameSessions";
 import { createPowerPort } from "./platform/power";
@@ -204,6 +206,7 @@ export default definePlugin(() => {
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
+  resumePendingInstalls();
   const stopSteamPerformanceOwnership = startSteamPerformanceOwnership();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();
@@ -244,6 +247,7 @@ export default definePlugin(() => {
     subscribePackageChanges: onThemePackagesChanged,
     groups: themeGroups,
   });
+  const stopUpscalerOverlays = startUpscalerOverlays();
   const stopAmbient = startAmbient({
     gameSessions: createGameSessionPort(),
     power: createPowerPort(),
@@ -285,6 +289,7 @@ export default definePlugin(() => {
       stopThemesRuntime();
       themeGroups.stop();
       stopAmbient();
+      stopUpscalerOverlays();
       stopArtworkHydration();
       releaseArtworkEditor();
       releaseArtworkHost();

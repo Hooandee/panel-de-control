@@ -463,13 +463,15 @@ describe("French catalog", () => {
       "dispositif",
       "RVB",
       "le panneau",
-      "Panel de Control",
       "Veuillez",
       "screenshot",
       "Hors Steam",
       "version anticipée",
     ]) {
       expect(catalog, rejected).not.toContain(rejected);
+    }
+    for (const [key, value] of Object.entries(frenchCatalog())) {
+      if (!key.startsWith("up.")) expect(value, key).not.toContain("Panel de Control");
     }
     expect(catalog).not.toMatch(/(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/u);
   });

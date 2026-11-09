@@ -106,8 +106,8 @@ def gpu_generation(vendor: str, chip: str) -> str:
     if (vendor or "").lower() == "intel":
         return "intel"
     c = (chip or "").lower()
-    if "van gogh" in c or "sephiroth" in c:
-        return "rdna2"  # Steam Deck
+    if "van gogh" in c or "sephiroth" in c or "custom apu 0405" in c or "custom apu 0932" in c:
+        return "rdna2"  # Steam Deck: family names, or Valve's APU codes as /proc/cpuinfo reports them
     # Z2 A and Z2 Go are RDNA 2 class (no FSR4); keep them off the FSR4 path.
     if "z2 a" in c or "z2 go" in c:
         return "rdna2"

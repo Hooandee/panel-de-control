@@ -4,6 +4,7 @@ import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
 import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
+import type { GameDetail, IniSection, UpscalerChoice, UpscalerJob, UpscalersOverview, VerifyResult } from "./upscalers/types";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
@@ -1355,6 +1356,62 @@ export const setThemeGroups = callable<[account: string, groups: unknown[]], { o
 export const getTabMasterTabs = callable<[account: string], unknown[]>("get_tab_master_tabs");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
 
+export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
+export interface GameCompat { native: boolean; inputs: string[]; preferred?: string }
+export const getUpscalersCompat = callable<[appids: string[]], Record<string, GameCompat>>("get_upscalers_compat");
+export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
+export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
+export const getUpscalersGame = callable<[appid: string, hint?: import("./upscalers/shortcutHint").ShortcutHint | null], GameDetail>("get_upscalers_game");
+export const setUpscalersExe = callable<[appid: string, exe: string | null], GameDetail>("set_upscalers_exe");
+export const installUpscaler = callable<[appid: string, choice: UpscalerChoice], UpscalerJob>("install_upscaler");
+export const recordUpscalerArgs = callable<[appid: string, args: string[], overrides?: string[], env?: string[]], { added_args: string[] }>("record_upscaler_args");
+export const beginScalerTransition = callable<[appid: string], { token: string; restore: UpscalerJob["result"] | null; recovery: boolean; previous_mako: MakoProfile | null }>("begin_scaler_transition");
+export const finishScalerTransition = callable<[appid: string, token: string, rollback: boolean], UpscalerJob["result"] | null>("finish_scaler_transition");
+export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
+export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice | { fg: "off" }], { options: UpscalerChoice; live?: boolean }>("configure_upscaler");
+export const refreshUpscalerWiki = callable<[appid?: string], { updated: boolean; fresh: boolean }>("refresh_upscaler_wiki");
+export interface UpscalerImageSettings {
+  supported: boolean;
+  sharpness: { enabled: boolean | null; value: number | null } | null;
+  int8: "auto" | "on" | "off" | null;
+  managed: boolean;
+  reason?: string;
+}
+export interface UpscalerImagePatch {
+  sharpness?: { enabled: boolean; value: number };
+  int8?: "auto" | "on" | "off";
+}
+export const getUpscalerImageSettings = callable<[appid: string], UpscalerImageSettings>("get_upscaler_image_settings");
+export const setUpscalerImageSettings = callable<[appid: string, values: UpscalerImagePatch], UpscalerImageSettings>("set_upscaler_image_settings");
+export const restoreUpscalerImageSettings = callable<[appid: string], UpscalerImageSettings>("restore_upscaler_image_settings");
+export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
+export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
+export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
+export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
+export const refreshFrameGenEngine = callable<[engine: "mako" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
+export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
+export const adoptForeignLsfg = callable<[], LsfgStatus>("adopt_foreign_lsfg");
+export const restoreForeignLsfg = callable<[], LsfgStatus>("restore_foreign_lsfg");
+export const adoptForeignUpscaler = callable<[appid: string], { moved: string[] }>("adopt_foreign_upscaler");
+export const restoreForeignUpscaler = callable<[appid: string], { restored: string[] }>("restore_foreign_upscaler");
+export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
+export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
+export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
+export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: LsfgProfile["flow"]; performance: boolean }
+export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; profiles: Record<string, MakoProfile> }
+export const getMakoStatus = callable<[appid?: string], MakoStatus>("get_mako_status");
+export const installMako = callable<[], MakoStatus>("install_mako");
+export const setMakoGame = callable<[appid: string, config: Partial<MakoProfile> | null], { env: Record<string, string>; wrappers: string[]; profile: MakoProfile | null }>("set_mako_game");
+export const getMakoRuntime = callable<[appid: string], { observed: boolean; active?: boolean | null; scaling_active?: boolean; spatial_resolution?: { render: [number, number]; output: [number, number] } | null; spatial_methods?: { requested_method?: string; active_method?: string }; scaling_inactive_reason?: "gamescope-presentation-target-no-headroom" | null; role?: string; requested?: Record<string, number | boolean | string>; applied?: Record<string, number | boolean | string>; pending?: Partial<Record<"frame_generation_private" | "spatial_private" | "swapchain_recreation" | "process_restart", boolean>>; error?: string | null }>("get_mako_runtime");
+export const getUpscalerLaunchReceipt = callable<[appid: string, owner: string], import("./upscalers/launchOwnership").LaunchReceipt | null>("get_upscaler_launch_receipt");
+export const setUpscalerLaunchReceipt = callable<[appid: string, owner: string, receipt: import("./upscalers/launchOwnership").LaunchReceipt], boolean>("set_upscaler_launch_receipt");
+export type UpscalerKey = "menu" | "fg" | "fps" | "fps_style";
+export const pressUpscalerKey = callable<[appid: string, action: UpscalerKey], { pressed: string }>("press_upscaler_key");
+export const captureUpscalerFrame = callable<[appid: string], import("./upscalers/CompareView").Shot>("capture_upscaler_frame");
+export const verifyUpscaler = callable<[appid: string], VerifyResult>("verify_upscaler");
+export const getUpscalersJob = callable<[], UpscalerJob | null>("get_upscalers_job");
+export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upscalers_job");
 // A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
 export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
 export const resumeThemeGame = callable<[], void>("resume_theme_game");
