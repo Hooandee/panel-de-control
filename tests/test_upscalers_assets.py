@@ -11,6 +11,35 @@ from upscalers.catalog import Asset
 PAYLOAD = bytes(range(256)) * 4096
 
 
+def test_7z_members_share_the_verified_unpack_and_keep_exact_paths(tmp_path, monkeypatch):
+    cache = AssetCache(tmp_path)
+    payload = b"verified archive"
+    digest = hashlib.sha256(payload).hexdigest()
+    first = Asset("loader", "sdk.7z", digest, len(payload), ("http://invalid",), member="bin/loader.dll")
+    second = Asset("provider", "sdk.7z", digest, len(payload), ("http://invalid",), member="bin/provider.dll")
+    cache.file(first).parent.mkdir(parents=True)
+    cache.file(first).write_bytes(payload)
+    unpacked = []
+    def unpack(asset):
+        unpacked.append(asset.id)
+        folder = cache.unpacked(asset)
+        (folder / "bin").mkdir(parents=True)
+        (folder / "bin/loader.dll").write_bytes(b"loader")
+        (folder / "bin/provider.dll").write_bytes(b"provider")
+        (folder / ".complete").write_text(digest)
+    monkeypatch.setattr(cache, "_unpack", unpack)
+    assert cache.ensure(first, lambda _: None, lambda: False).read_bytes() == b"loader"
+    assert cache.ensure(second, lambda _: None, lambda: False).read_bytes() == b"provider"
+    assert unpacked == ["loader"]
+
+
+def test_member_rejects_parent_traversal_before_cache_access(tmp_path):
+    cache = AssetCache(tmp_path)
+    asset = Asset("bad", "sdk.7z", "abc", 1, ("http://invalid",), member="../outside.dll")
+    with pytest.raises(AssetError, match="unsafe_archive"):
+        cache.ensure(asset, lambda _: None, lambda: False)
+
+
 def _asset(urls=("http://mirror-a/file", "http://mirror-b/file"), payload=PAYLOAD):
     return Asset("thing", "thing.bin", hashlib.sha256(payload).hexdigest(), len(payload), urls)
 

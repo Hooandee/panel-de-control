@@ -47,6 +47,7 @@ import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed, prefsHydrated, readString, writeString } from "./system/pdcStorage";
@@ -200,6 +201,7 @@ export default definePlugin(() => {
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
+  resumePendingInstalls();
   const stopSteamPerformanceOwnership = startSteamPerformanceOwnership();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
   const stopQamDocumentActivity = startQamDocumentActivity();

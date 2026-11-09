@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import shlex
 import time
 from pathlib import Path
 
@@ -67,6 +68,186 @@ def _service(steam, state, proc, search=lambda term: []):
     service = UpscalerService(str(home), str(state), "rdna2", proc=str(proc))
     service.search = search
     return service
+
+
+@pytest.fixture
+def dll_catalog(fake_catalog, monkeypatch):
+    payload = b"standalone upscaler"
+    asset = Asset("dll-test", "amd_fidelityfx_upscaler_dx12.dll", hashlib.sha256(payload).hexdigest(), len(payload), ("http://invalid",))
+    monkeypatch.setitem(catalog.ASSETS, asset.id, asset)
+    monkeypatch.setitem(catalog.BUILDS, "dll-test", Build("dll-test", "fsr", "4.0.2c", ("rdna2",), 2, 3,
+                        replace={asset.filename: asset.id}, engine="dll", way="fsr"))
+    _write(Path(fake_catalog) / "cache" / asset.sha256 / asset.filename, payload)
+    return fake_catalog
+
+
+def test_dll_install_preserves_exact_paths_names_and_original_bytes(steam, dll_catalog, proc):
+    _, game = steam
+    original = game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+    other = _write(game / "other/AMD_FIDELITYFX_UPSCALER_DX12.DLL", b"other original")
+    log = _write(game / "OptiScaler.log", b"unrelated log")
+    service = _service(steam, dll_catalog, proc)
+    assert service.game(APPID)["analysis"]["dll_targets"] == [original.relative_to(game).as_posix(), other.relative_to(game).as_posix()]
+    result = service.install(APPID, {"build": "dll-test"})
+    assert result["overrides"] == [] and result["args"] == []
+    assert original.read_bytes() == other.read_bytes() == b"standalone upscaler"
+    assert not (game / "OptiScaler.ini").exists()
+    assert not (original.parent / "dxgi.dll").exists()
+    assert service.game(APPID)["install"]["status"] == "not_run"
+    assert service.game(APPID)["fg_plan"] is None
+    assert service.verify(APPID)["result"] == "not_run"
+    assert service.diagnose(APPID)["log_verdict"] == "unverifiable"
+    service.uninstall(APPID)
+    assert original.read_bytes() == b"x"
+    assert other.read_bytes() == b"other original"
+    assert log.read_bytes() == b"unrelated log"
+    assert not (game / games.MANIFEST_DIR).exists()
+
+
+def test_dll_reinstall_after_a_game_update_backs_up_the_updated_file(steam, dll_catalog, proc):
+    _, game = steam
+    relative = "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test"})
+    (game / relative).write_bytes(b"updated by game")
+    assert service.game(APPID)["install"]["status"] == "broken"
+    assert service.verify(APPID)["result"] == "broken"
+    assert service.uninstall(APPID)["kept"] == [relative]
+    assert (game / relative).read_bytes() == b"updated by game"
+    assert (game / games.MANIFEST_DIR / "backup" / relative).read_bytes() == b"x"
+    service.install(APPID, {"build": "dll-test"})
+    assert (game / games.MANIFEST_DIR / "backup" / relative).read_bytes() == b"updated by game"
+    service.uninstall(APPID)
+    assert (game / relative).read_bytes() == b"updated by game"
+    assert not (game / games.MANIFEST_DIR).exists()
+
+
+def test_dll_mode_refuses_combined_library_and_symlink_instead_of_renaming(steam, dll_catalog, proc):
+    _, game = steam
+    original = game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+    original.unlink()
+    combined = _write(original.with_name("amd_fidelityfx_dx12.dll"), b"combined ABI")
+    original.symlink_to(combined)
+    service = _service(steam, dll_catalog, proc)
+    assert service.game(APPID)["analysis"]["dll_targets"] == [combined.relative_to(game).as_posix()]
+    with pytest.raises(UpscalerError, match="dll_unsupported"):
+        service.install(APPID, {"build": "dll-test"})
+    assert combined.read_bytes() == b"combined ABI"
+
+
+def test_dll_reinstall_restores_original_before_replacing_and_has_no_ini_controls(steam, dll_catalog, proc):
+    _, game = steam
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test"})
+    service.install(APPID, {"build": "dll-test"})
+    with pytest.raises(UpscalerError, match="dll_no_options"):
+        service.configure(APPID, {"quality": "balanced"})
+    with pytest.raises(UpscalerError, match="not_patched"):
+        service.ini_schema(APPID)
+    service.uninstall(APPID)
+    assert (game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+
+
+def test_dll_legacy_package_renames_loader_preserves_existing_fg_and_restores(steam, dll_catalog, proc, monkeypatch):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    provider = folder / "amd_fidelityfx_upscaler_dx12.dll"
+    provider.unlink()
+    legacy = _write(folder / "AMD_FIDELITYFX_DX12.DLL", b"original combined")
+    fg = _write(folder / "amd_fidelityfx_framegeneration_dx12.dll", b"original separate FG")
+    build = catalog.BUILDS["dll-test"]
+    for name in ("amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_framegeneration_dx12.dll"):
+        payload = name.encode()
+        asset = Asset(name, "sdk.7z", hashlib.sha256(payload).hexdigest(), len(payload), ("http://invalid",), member=name)
+        monkeypatch.setitem(catalog.ASSETS, name, asset)
+        monkeypatch.setitem(build.replace, name, name)
+        _write(Path(dll_catalog) / "cache" / asset.sha256 / "unpacked" / name, payload)
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test"})
+    assert legacy.read_bytes() == b"amd_fidelityfx_loader_dx12.dll"
+    assert provider.read_bytes() == b"standalone upscaler"
+    assert fg.read_bytes() == b"original separate FG"
+    assert not (folder / "amd_fidelityfx_loader_dx12.dll").exists()
+    service.install(APPID, {"build": "dll-test"})
+    service.uninstall(APPID)
+    assert legacy.read_bytes() == b"original combined"
+    assert not provider.exists()
+    assert fg.read_bytes() == b"original separate FG"
+
+
+def test_dll_loader_package_adds_provider_beside_real_loader(steam, dll_catalog, proc, monkeypatch):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    provider = folder / "amd_fidelityfx_upscaler_dx12.dll"
+    provider.unlink()
+    name = "amd_fidelityfx_loader_dx12.dll"
+    loader = _write(folder / name, b"old loader")
+    payload = b"new loader"
+    asset = Asset(name, "sdk.zip", hashlib.sha256(payload).hexdigest(), len(payload), ("http://invalid",), member=name)
+    monkeypatch.setitem(catalog.ASSETS, name, asset)
+    monkeypatch.setitem(catalog.BUILDS["dll-test"].replace, name, name)
+    _write(Path(dll_catalog) / "cache" / asset.sha256 / "unpacked" / name, payload)
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test"})
+    assert loader.read_bytes() == payload
+    assert provider.read_bytes() == b"standalone upscaler"
+    service.uninstall(APPID)
+    assert loader.read_bytes() == b"old loader"
+    assert not provider.exists()
+
+
+def test_dll_provider_only_preserves_existing_loader_and_ignores_optiscaler_logs(steam, dll_catalog, proc, monkeypatch):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    loader = _write(folder / "AMD_FIDELITYFX_LOADER_DX12.DLL", b"existing compatible loader")
+    unrelated_log = _write(game / "OptiScaler.log", b"old log")
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "dll-test"})
+    assert loader.read_bytes() == b"existing compatible loader"
+    monkeypatch.setattr(logread, "read", lambda *args, **kwargs: pytest.fail("DLL mode must not read OptiScaler logs"))
+    assert service.live(APPID) == {"result": "not_run", "resolution": None, "fg": None, "fg_toggle": False}
+    service.install(APPID, {"build": "dll-test"})
+    service.uninstall(APPID)
+    assert loader.read_bytes() == b"existing compatible loader"
+    assert unrelated_log.read_bytes() == b"old log"
+    assert (folder / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+
+
+def test_dll_provider_only_rejects_loader_without_provider_in_its_folder(steam, dll_catalog, proc):
+    _, game = steam
+    loader = _write(game / "different/amd_fidelityfx_loader_dx12.dll", b"loader without provider")
+    service = _service(steam, dll_catalog, proc)
+    with pytest.raises(UpscalerError, match="dll_unsupported"):
+        service.install(APPID, {"build": "dll-test"})
+    assert loader.read_bytes() == b"loader without provider"
+    assert (game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
+
+
+def test_dll_mode_does_not_remove_optiscaler_when_its_provider_was_not_native(steam, dll_catalog, proc):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    (folder / "amd_fidelityfx_upscaler_dx12.dll").unlink()
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    assert service.game(APPID)["analysis"]["dll_targets"] == []
+    with pytest.raises(UpscalerError, match="dll_no_target"):
+        service.install(APPID, {"build": "dll-test"})
+    assert service.game(APPID)["install"]["build"] == "fsr-test"
+    assert (folder / "dxgi.dll").read_bytes() == b"injector"
+    assert (folder / "OptiScaler.ini").is_file()
+
+
+def test_dll_mode_can_replace_optiscaler_when_native_provider_is_backed_up(steam, dll_catalog, proc):
+    _, game = steam
+    folder = game / "bin/x64_dx12"
+    service = _service(steam, dll_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    assert service.game(APPID)["analysis"]["dll_targets"] == ["bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"]
+    service.install(APPID, {"build": "dll-test"})
+    assert service.game(APPID)["install"]["engine"] == "dll"
+    assert not (folder / "dxgi.dll").exists()
+    service.uninstall(APPID)
+    assert (folder / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
 
 
 @pytest.fixture
@@ -202,11 +383,44 @@ def test_catalog_hashes_are_well_formed_and_every_build_resolves():
         if build.engine == "proton":
             assert catalog.build_assets(build) == []
         elif build.available:
-            assert catalog.build_assets(build)[0].id == build.archive
-            # HelixSR's ZIP is unpacked into the user's folder by helixsr.HelixSR, not by the cache.
-            assert catalog.ASSETS[build.archive].archive == (build.engine != "helixsr")
+            if build.engine == "dll":
+                assert {asset.id for asset in catalog.build_assets(build)} == set(build.replace.values()) | set(build.legacy_replace.values())
+                assert all(asset.id not in {catalog.OPTISCALER_ARCHIVE, catalog.OPTISCALER_BETA} for asset in catalog.build_assets(build))
+            else:
+                assert catalog.build_assets(build)[0].id == build.archive
+                # HelixSR's ZIP is unpacked into the user's folder by helixsr.HelixSR, not by the cache.
+                assert catalog.ASSETS[build.archive].archive == (build.engine != "helixsr")
     assert catalog.preferred_build("rdna2") == "fsr-4.1.2-beta"
     assert logread.verdict({"present": False}) == "not_run"
+
+
+@pytest.mark.parametrize("api, expected", [("Dx12", "ffx"), ("Dx11", "ffx_12"), ("Vulkan", "ffx_12")])
+def test_rdna2_411_uses_nightly_with_valve_provider_and_ffx_codes(api, expected):
+    build = catalog.BUILDS["fsr-4.1.1-rdna2"]
+    assert not build.injector
+    assert build.archive == catalog.OPTISCALER_BETA
+    assert "nightly-20261102/" in catalog.ASSETS[build.archive].urls[0]
+    assert build.extra_dir == "OptiScaler"
+    assert build.assets == ("amdxcffx64-4.1.1-valve", "amdxc64-rdna2")
+    assert build.ini["FSR.Fsr4GpuSupport"] == "2"
+    assert build.ini["Plugins.LoadCustomAmdxc64OnRdna2"] == "true"
+    assert not {"FSR.Fsr4Update", "FSR.Fsr4ForceModel"} & build.ini.keys()
+    assert ini.read(ini.apply("[FSR]\nUpscalerIndex=0\n", build.ini), "FSR.UpscalerIndex") == "1"
+    key = f"Upscalers.{api}Upscaler"
+    assert ini.read(ini.apply("", build.ini), key) == expected
+    for legacy_id in ("fsr-4.1.1", "fsr-4.0.2c"):
+        assert catalog.BUILDS[legacy_id].ini[key] == ("fsr31" if api == "Dx12" else "fsr31_12")
+
+
+def test_fsr315_selects_first_provider_of_094_without_driver_update():
+    build = catalog.BUILDS["fsr-3.1"]
+    assert build.version == "3.1.5"
+    assert build.archive == catalog.OPTISCALER_ARCHIVE
+    assert "v0.9.4/" in catalog.ASSETS[build.archive].urls[0]
+    configured = ini.apply("[FSR]\nUpscalerIndex=1\nFsr4Update=true\n", build.ini)
+    assert ini.read(configured, "FSR.UpscalerIndex") == "0"
+    assert ini.read(configured, "FSR.Fsr4Update") == "false"
+    assert ini.read(configured, "Upscalers.Dx12Upscaler") == "fsr31"
 
 
 def test_panel_resolution_prefers_the_internal_panel(tmp_path):
@@ -221,7 +435,7 @@ def test_panel_resolution_prefers_the_internal_panel(tmp_path):
 
 def test_compatibility_flags_games_that_ship_an_upscaler(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"]}}
+    assert service.compatibility([APPID, "999"]) == {APPID: {"native": False, "inputs": ["DLSS", "FSR 3.1"], "preferred": "fsr-4.1.2-beta"}}
 
 
 def test_log_reader_takes_real_optiscaler_lines(tmp_path):
@@ -237,7 +451,9 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["proxy"] == "dxgi.dll"
     assert facts["upscaler"] == "fsr31"
     assert facts["input"] == "DLSS"
-    assert facts["resolution"] == {"render": [936, 624], "output": [1440, 960]}
+    assert facts["initial_resolution"] == {"render": [936, 624], "output": [1440, 960]}
+    assert "resolution" not in facts
+    assert facts["resolution_source"] == "initialization_only"
     assert facts["errors"] == 1
     assert logread.verdict(facts) == "active"
 
@@ -302,7 +518,10 @@ def test_report_explains_an_install_from_the_bundle_alone(steam, fake_catalog, p
 
     report = service.report()
     game_report = report["games"][0]
-    assert game_report["steam"] == {"compat_tool": "proton_experimental", "launch_options": 'WINEDLLOVERRIDES="dxgi=n,b" %command%'}
+    assert game_report["steam"]["compat_tool"] == "proton_experimental"
+    assert "launch_options" not in game_report["steam"]
+    assert game_report["steam"]["launch_diagnostics"]["command_placeholder"] is True
+    assert game_report["steam"]["launch_diagnostics"]["dll_overrides"] == [{"name": "dxgi", "mode": "n,b"}]
     assert game_report["manifest"]["changed"] == ["amdxcffx64.dll"]
     assert game_report["ini"]["FSR.Fsr4Update"] == "true"
     assert game_report["log_verdict"] == "loaded"
@@ -699,7 +918,8 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert not (home / ".local/bin/lsfg-vk-ui").exists()
     result = tool.set_game("123", "Game", {"multiplier": 3, "flow": "performance", "performance": True},
                            exe="bin/Game.exe")
-    assert result["env"] == {"ENABLE_GAMESCOPE_WSI": "0", "LSFGVK_PROFILE": "pdc-123"}
+    assert result["env"] == {"ENABLE_GAMESCOPE_WSI": "0", "LSFGVK_PROFILE": "pdc-123",
+                             "LSFGVK_CONFIG": shlex.quote(str(home / lsfg.CONFIG))}
     config = (home / lsfg.CONFIG).read_text()
     import tomllib
     parsed = tomllib.loads(config)
@@ -733,9 +953,13 @@ class FakeHelix:
     def __init__(self, ready=True):
         self._ready = ready
         self.calls = []
+        self.release = Path("HelixSR-3.2.0")
 
     def ready(self):
         return self._ready
+
+    def digest(self):
+        return None
 
     def install(self, game):
         self.calls.append(("install",))
@@ -1029,19 +1253,20 @@ def test_another_tools_optiscaler_is_set_aside_and_can_come_back(steam, fake_cat
     assert service.game(APPID)["foreign_backup"] is None
 
 
-def test_helixsr_manager_install_gives_the_game_its_fsr_back(steam, fake_catalog, proc):
+def test_helixsr_manager_install_is_preserved_until_full_adoption_supported(steam, fake_catalog, proc):
     _, game = steam
     target = game / "bin/x64_dx12"
     (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"helixsr")
     _write(target / "amd_fidelityfx_upscaler_dx12.original.dll", b"game fsr")
-    _write(target / "helixsr-install.json", json.dumps({"helixsr": "1.8.1", "files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    marker = json.dumps({"helixsr": "1.8.1", "files": ["amd_fidelityfx_upscaler_dx12.dll"]})
+    _write(target / "helixsr-install.json", marker)
     service = _service(steam, fake_catalog, proc)
-    service.adopt_foreign(APPID)
-    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"game fsr"
-    assert not (target / "amd_fidelityfx_upscaler_dx12.original.dll").exists()
-    service.restore_foreign(APPID)
+    with pytest.raises(UpscalerError, match="foreign_helix"):
+        service.adopt_foreign(APPID)
     assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"helixsr"
     assert (target / "amd_fidelityfx_upscaler_dx12.original.dll").read_bytes() == b"game fsr"
+    assert (target / "helixsr-install.json").read_text() == marker
+    assert not service._game_state(APPID).get("foreign_backup")
 
 
 def test_lsfg_from_another_tool_is_set_aside_then_restored(steam, tmp_path):
@@ -1259,7 +1484,7 @@ def test_appimage_shortcut_on_the_desktop_is_a_linux_game_not_the_desktop_folder
         {"appid": shortcut_id, "name": "Uncharted", "exe": f'"{app}"', "start": f'"{desktop}"'},
     ]))
     service = _service(steam, fake_catalog, proc)
-    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": []}
+    assert service.compatibility([str(shortcut_id)])[str(shortcut_id)] == {"native": True, "inputs": [], "preferred": "fsr-4.1.2-beta"}
     with pytest.raises(UpscalerError):
         service.install(str(shortcut_id), {"build": "fsr-test"})
     assert not (desktop / "HelixSR/setup/dxgi.dll").exists()
@@ -1301,7 +1526,8 @@ def test_ffx_loader_games_get_optiscaler_10_for_xess():
     xess = catalog.for_game(catalog.BUILDS["xess"], LOADER_INPUTS, "intel")
     assert xess.archive == catalog.OPTISCALER_BETA
     assert xess.extra_dir == "OptiScaler"
-    assert xess.ini == {"Upscalers.Dx12Upscaler": "xess", "FSR.Fsr4GpuSupport": "4"}
+    assert xess.ini == {"Upscalers.Dx12Upscaler": "xess", "Upscalers.Dx11Upscaler": "xess_12",
+                        "Upscalers.VulkanUpscaler": "xess", "FSR.Fsr4GpuSupport": "4"}
 
 
 def test_other_games_and_builds_keep_their_optiscaler():
@@ -1325,3 +1551,33 @@ def test_generation_follows_the_archive_the_install_used():
 
     assert _generation({"build": "xess"}) == 9
     assert _generation({"build": "xess", "archive": catalog.OPTISCALER_BETA}) == 10
+
+
+def test_restoring_another_tools_lsfg_never_drops_a_file_that_came_back(steam, tmp_path):
+    home, _ = steam
+    for relative in lsfg.LAYER_FILES:
+        _write(home / ".local" / relative, b"theirs")
+    _write(home / lsfg.CONFIG, "version = 2\n")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    tool.adopt_foreign()
+    _write(home / lsfg.CONFIG, "version = 3\n")
+    tool.restore_foreign()
+    assert (home / lsfg.CONFIG).read_text() == "version = 3\n"
+    assert tool.status()["foreign_backup"]
+    (home / lsfg.CONFIG).unlink()
+    tool.restore_foreign()
+    assert (home / lsfg.CONFIG).read_text() == "version = 2\n"
+    assert not tool.status()["foreign_backup"]
+
+
+@pytest.mark.parametrize("build, dx11, vulkan", [("fsr-3.1", "fsr31", "fsr31"), ("xess", "xess_12", "xess")])
+def test_dx11_and_vulkan_games_run_the_chosen_upscaler(build, dx11, vulkan):
+    ini = catalog.BUILDS[build].ini
+    assert (ini["Upscalers.Dx11Upscaler"], ini["Upscalers.VulkanUpscaler"]) == (dx11, vulkan)
+
+
+def test_fp8_sdk_providers_say_they_may_fall_back_off_rdna4():
+    described = {item["id"]: item for item in catalog.describe("rdna3")}
+    assert described["fsr-4.1.2-dll"]["may_fallback"] == "3.1.6"
+    assert described["fsr-4.1.2-lite-igpu-dll"]["may_fallback"] is None
+    assert {item["id"]: item for item in catalog.describe("rdna4")}["fsr-4.1.2-dll"]["may_fallback"] is None

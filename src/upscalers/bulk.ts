@@ -1,7 +1,7 @@
-import { installUpscaler, uninstallUpscaler, type GameCompat } from "../api";
+import { uninstallUpscaler, type GameCompat } from "../api";
 import type { GameEntry } from "../launch/steamApi";
 import { defaultChoice } from "./model";
-import { onJobUpdate, trackJob } from "./jobRunner";
+import { onJobUpdate, startInstallJob, trackJob, type JobUpdate } from "./jobRunner";
 import type { UpscalerChoice, UpscalerJob, UpscalersOverview } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 
@@ -24,9 +24,9 @@ function keep(options: Partial<UpscalerChoice> | undefined, build: string): Upsc
 
 /** The games each action would touch: installs only through OptiScaler builds, the rest stays per game. */
 export function bulkSteps(action: BulkAction, games: GameEntry[], overview: UpscalersOverview, compat: Record<string, GameCompat>): BulkStep[] {
-  const preferred = overview.builds.find((b) => b.id === overview.preferred && b.available && b.supported);
   return games.flatMap((game): BulkStep[] => {
     const appid = String(game.liveAppid);
+    const preferred = overview.builds.find((b) => b.id === (compat[appid]?.preferred ?? overview.preferred) && b.available && b.supported);
     const install = overview.installs[appid];
     if (action === "remove") return install ? [{ game, choice: null }] : [];
     if (action === "install") {
@@ -40,14 +40,19 @@ export function bulkSteps(action: BulkAction, games: GameEntry[], overview: Upsc
   });
 }
 
-function finished(job: UpscalerJob): Promise<UpscalerJob> {
+function finished(job: UpscalerJob): Promise<JobUpdate> {
   return new Promise((resolve) => {
-    const stop = onJobUpdate(({ job: next, finished: done }) => {
-      if (next.id !== job.id || !done) return;
+    const stop = onJobUpdate((update) => {
+      if (update.job.id !== job.id || !update.finished) return;
       stop();
-      resolve(next);
+      resolve(update);
     });
   });
+}
+
+function failure({ job, notice }: JobUpdate): string | null {
+  if (job.state !== "done") return job.error ?? "generic";
+  return notice && notice.key !== "up.kept" ? "launch_failed" : null;
 }
 
 let cancelled = false;
@@ -64,12 +69,12 @@ export async function runBulk(action: BulkAction, steps: BulkStep[], report: (pr
     const appid = String(step.game.liveAppid);
     report({ ...progress, index, current: step.game.name });
     try {
-      const job = action === "remove" ? await uninstallUpscaler(appid) : await installUpscaler(appid, step.choice!);
+      const job = action === "remove" ? await uninstallUpscaler(appid) : await startInstallJob({ appid, liveAppid: step.game.liveAppid, isNonSteam: step.game.isNonSteam }, step.choice!);
       const result = finished(job);
       trackJob(job, { appid, liveAppid: step.game.liveAppid, isNonSteam: step.game.isNonSteam });
-      const end = await result;
-      if (end.state === "done") progress.done += 1;
-      else progress.skipped.push({ name: step.game.name, reason: end.error ?? "generic" });
+      const reason = failure(await result);
+      if (reason) progress.skipped.push({ name: step.game.name, reason });
+      else progress.done += 1;
     } catch (error) {
       progress.skipped.push({ name: step.game.name, reason: upscalerErrorCode(error) });
     }

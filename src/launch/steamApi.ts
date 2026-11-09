@@ -168,7 +168,7 @@ export function readAppDetails(appid: number, timeoutMs = 1200): Promise<AppDeta
 /** Write a game's launch-options string. Non-Steam shortcuts have their own setter.
  *  Returns false when no setter exists or the call throws — callers must not report
  *  success (or adopt the new baseline) unless this returns true. */
-export function writeLaunchOptions(appid: number, value: string, isNonSteam = false): boolean {
+export function writeLaunchOptions(appid: number, value: string, isNonSteam = false, redactValue = false): boolean {
   try {
     const apps = w.SteamClient?.Apps;
     const setter =
@@ -180,10 +180,10 @@ export function writeLaunchOptions(appid: number, value: string, isNonSteam = fa
       return false;
     }
     setter.call(apps, appid, value);
-    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, value: value.slice(0, 300) });
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, ...(redactValue ? { redacted: true } : { value: value.slice(0, 300) }) });
     return true;
   } catch (error) {
-    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: String(error).slice(0, 120) }, false);
+    recordUiEvent("launch", "set_options", { appid, nonSteam: isNonSteam, error: redactValue ? "setter_failed" : String(error).slice(0, 120) }, false);
     return false;
   }
 }

@@ -16,7 +16,7 @@ function steam(): { apps?: SteamApps; overview(appid: number): Overview | undefi
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Closes the running game the way Steam's own «Exit game» does and opens it again; false when it would not close. */
-export async function restartGame(liveAppid: number): Promise<boolean> {
+export async function restartGame(liveAppid: number, whileClosed?: () => Promise<void>): Promise<boolean> {
   const { apps, overview } = steam();
   if (!apps?.TerminateApp || !apps.RunGame) return false;
   // Shortcuts launch by their 64-bit game id, not by the 32-bit app id.
@@ -28,6 +28,11 @@ export async function restartGame(liveAppid: number): Promise<boolean> {
     await wait(POLL_MS);
   }
   await wait(SETTLE_MS);
-  apps.RunGame(gameId, "", -1, 100);
+  try {
+    if (whileClosed) await whileClosed();
+  } finally {
+    // The game always opens again, even when what had to happen while it was closed failed.
+    apps.RunGame(gameId, "", -1, 100);
+  }
   return true;
 }

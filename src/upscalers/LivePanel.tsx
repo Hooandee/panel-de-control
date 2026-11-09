@@ -1,9 +1,8 @@
-import { Navigation } from "@decky/ui";
 import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 
-import { getUpscalerLive, pressUpscalerKey, type UpscalerKey } from "../api";
+import { getUpscalerLive, type UpscalerKey } from "../api";
 import { useI18n } from "../i18n";
-import { holdPage } from "./pageMemory";
+import { pressUpscalerKeyInGame } from "./gameHotkey";
 import { fpsCounterSnapshot, subscribeFpsCounter, toggleFpsCounter } from "./fpsCounter";
 import { Label, ListCard, ListRow, Note } from "./parts";
 
@@ -15,11 +14,12 @@ export interface UpscalerLive {
   output: number | null;
   generating: boolean | null;
   canPause: boolean;
+  active: boolean;
 }
 
 /** What the running game reports through OptiScaler's log, polled while the page is open. */
 export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () => void): [UpscalerLive, (generating: boolean | null) => void] {
-  const [live, setLive] = useState<UpscalerLive>({ fps: null, render: null, output: null, generating: null, canPause: true });
+  const [live, setLive] = useState<UpscalerLive>({ fps: null, render: null, output: null, generating: null, canPause: true, active: false });
   const reported = useRef(false);
   const activeRef = useRef(onActive);
   activeRef.current = onActive;
@@ -31,7 +31,7 @@ export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () =
 
   useEffect(() => {
     reported.current = false;
-    setLive({ fps: null, render: null, output: null, generating: null, canPause: true });
+    setLive({ fps: null, render: null, output: null, generating: null, canPause: true, active: false });
     if (!enabled) return;
     let alive = true;
     const read = async () => {
@@ -47,6 +47,7 @@ export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () =
         output: next.resolution?.output[1] ?? null,
         generating: next.fg ?? null,
         canPause: next.fg_toggle !== false,
+        active: next.result === "active",
       });
     };
     void read();
@@ -76,20 +77,13 @@ export const DuringPlay: FC<{
 
   const press = async (action: UpscalerKey) => {
     if (action === "fps") {
-      await toggleFpsCounter(appid, async () => {
-        holdPage();
-        Navigation.CloseSideMenus();
-        await pressUpscalerKey(appid, action);
-      });
+      await toggleFpsCounter(appid, () => pressUpscalerKeyInGame(appid, action));
       return;
     }
     setPressing(action);
     setFailed(false);
     try {
-      // gamescope hands the key to the focused window: with the QAM open, Steam keeps it.
-      holdPage();
-      Navigation.CloseSideMenus();
-      await pressUpscalerKey(appid, action);
+      await pressUpscalerKeyInGame(appid, action);
       if (action === "fg") onGenerating(live.generating === null ? null : !live.generating);
     } catch {
       setFailed(true);

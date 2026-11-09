@@ -23,6 +23,7 @@ from . import ownership
 
 RELEASE = "HelixSR-3.2.0"
 COMPLETE = ".panel-complete"
+CURRENT = "current"
 BRIDGE_TIMEOUT_S = 180
 MAX_LOG_BYTES = 2 * 1024 * 1024
 
@@ -42,11 +43,27 @@ class HelixError(Exception):
 class HelixSR:
     def __init__(self, home: str):
         self.home = Path(home)
-        self.release = self.home / ".local/share/HelixSR/panel" / RELEASE
+        self.root = self.home / ".local/share/HelixSR/panel"
+        self.release = self._current()
         self.run = subprocess.run
+
+    def _current(self) -> Path:
+        try:
+            name = (self.root / CURRENT).read_text().strip()
+        except OSError:
+            name = ""
+        return self.root / (name if re.fullmatch(r"HelixSR-\d+\.\d+\.\d+", name) else RELEASE)
 
     def ready(self) -> bool:
         return (self.release / COMPLETE).is_file()
+
+    def digest(self) -> str | None:
+        """SHA-256 of the archive this release came from; None for one unpacked before Panel recorded it."""
+        try:
+            value = (self.release / COMPLETE).read_text().strip()
+        except OSError:
+            return None
+        return value if re.fullmatch(r"[0-9a-f]{64}", value) else None
 
     # ---- running HelixSR's own tools as the user -----------------------------
     def _spawn(self, argv: list[str]) -> tuple[list[str], dict]:
@@ -79,12 +96,16 @@ class HelixSR:
         return answer
 
     # ---- release --------------------------------------------------------------
-    def unpack(self, archive: Path) -> None:
+    def unpack(self, archive: Path, digest: str = "") -> None:
         """Extract the official ZIP's release folder as it is; nothing else it carries."""
-        parent = self.release.parent
+        name = Path(archive).stem
+        if not re.fullmatch(r"HelixSR-\d+\.\d+\.\d+", name):
+            name = RELEASE
+        release = self.root / name
+        parent = self.root
         parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=parent, prefix=".unpack-"))
-        prefix = f"{RELEASE}/"
+        prefix = f"{name}/"
         try:
             with zipfile.ZipFile(archive) as zipped:
                 for info in zipped.infolist():
@@ -99,10 +120,14 @@ class HelixSR:
                         shutil.copyfileobj(source, out)
             if not (staging / "setup/helixsr_bridge.py").is_file():
                 raise HelixError("unpack_failed", "bridge missing")
-            (staging / COMPLETE).write_text(RELEASE)
+            (staging / COMPLETE).write_text(digest or name)
             self._own(staging)
-            shutil.rmtree(self.release, ignore_errors=True)
-            os.replace(staging, self.release)
+            shutil.rmtree(release, ignore_errors=True)
+            os.replace(staging, release)
+            (parent / CURRENT).write_text(name)
+            previous, self.release = self.release, release
+            if previous != release and previous.parent == parent:
+                shutil.rmtree(previous, ignore_errors=True)
         except (zipfile.BadZipFile, OSError) as error:
             raise HelixError("unpack_failed", type(error).__name__) from None
         finally:
@@ -136,6 +161,22 @@ def remove_by_hand(folder: Path) -> None:
         (folder / name).unlink(missing_ok=True)
 
 
+def read_install_log(install: dict) -> dict:
+    if install.get("engine") != "helixsr":
+        return {"present": False}
+    logs = [Path(install["log"])] if install.get("log") else []
+    since = install.get("installed_at")
+    if since is not None and install.get("target") and install.get("helix_file"):
+        root = Path(install["target"])
+        storage = root / "_storage_"
+        runtime = storage / HLX_FSR_LOG
+        if (Path(install["helix_file"]).is_file()
+                and (storage / "amd_fidelityfx_upscaler_dx12.dll").is_file()
+                and runtime.resolve().is_relative_to(root.resolve())):
+            logs.append(runtime)
+    return read_log(logs, since=since)
+
+
 def read_log(logs: list[Path], since: float | None = None) -> dict:
     """HLX FSR 4 writes one line per context it creates; it proves HLX runs, not how far it scales."""
     facts: dict = {"present": False}
@@ -149,13 +190,16 @@ def read_log(logs: list[Path], since: float | None = None) -> dict:
         except OSError:
             continue
         if since is not None and stat.st_mtime < since:
-            facts.setdefault("stale", True)
+            if not facts["present"]:
+                facts["stale"] = True
             continue
         facts["present"] = True
         facts.pop("stale", None)
+        facts.setdefault("path", str(path))
         for line in text.splitlines():
             if match := _HLX_FSR.search(line):
                 facts["upscaler"] = "HLX FSR 4"
+                facts["path"] = str(path)
                 facts["output"] = [int(match.group(1)), int(match.group(2))]
     return facts
 

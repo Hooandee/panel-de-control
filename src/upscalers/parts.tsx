@@ -5,6 +5,7 @@ import { LuCheck, LuChevronDown, LuChevronRight } from "react-icons/lu";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { theme } from "../theme";
+import { DuoDropdown } from "./DuoDropdown";
 import type { UpscalerStatus } from "./types";
 
 const navigation = createThemeNavigationAccess({ allowInactiveContext: true });
@@ -80,11 +81,13 @@ export interface SegmentOption<T extends string> {
 }
 
 /** Panel's own segmented look (themes restyle it by its default values, so they are kept untouched). */
-export function SegmentRow<T extends string>({ options, value, onChange, vertical = false }: {
+export function SegmentRow<T extends string>({ options, value, onChange, vertical = false, disabled = false, compact = false }: {
   options: SegmentOption<T>[];
   value: T | null;
   onChange: (value: T) => void;
   vertical?: boolean;
+  disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <Focusable
@@ -96,16 +99,17 @@ export function SegmentRow<T extends string>({ options, value, onChange, vertica
         return (
           <Focusable
             key={option.value}
-            onActivate={() => onChange(option.value)}
-            onClick={() => onChange(option.value)}
+            onActivate={() => { if (!disabled) onChange(option.value); }}
+            onClick={() => { if (!disabled) onChange(option.value); }}
             style={{
               ...segmentItemStyle(active),
+              opacity: disabled ? 0.45 : 1,
               flexDirection: !vertical && option.caption ? "column" : "row",
               minWidth: 0,
-              fontSize: !vertical && option.caption ? theme.font.caption - 1 : theme.font.body,
+              fontSize: !vertical && (compact || option.caption) ? theme.font.caption - 1 : theme.font.body,
               gap: !vertical && option.caption ? 2 : 5,
               justifyContent: vertical ? "space-between" : "center",
-              padding: `${theme.space.sm}px ${!vertical && option.caption ? 1 : theme.space.sm}px`,
+              padding: `${theme.space.sm}px ${!vertical && (compact || option.caption) ? 1 : theme.space.sm}px`,
               whiteSpace: "normal",
               textAlign: vertical ? "left" : "center",
               lineHeight: 1.2,
@@ -167,14 +171,17 @@ export const ActionButton: FC<{
   </Focusable>
 );
 
-export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge, showLabel = false }: {
+export function PickerButton<T extends string>({ label, value, options, onChange, disabled, badge, showLabel = false, duo = false, controlId, ready = true }: {
   label: string;
   value: T;
-  options: { value: T; label: string; caption?: string }[];
+  options: { value: T; label: ReactNode; caption?: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
   badge?: ReactNode;
   showLabel?: boolean;
+  duo?: boolean;
+  controlId?: string;
+  ready?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLDivElement>(null);
@@ -197,6 +204,15 @@ export function PickerButton<T extends string>({ label, value, options, onChange
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const current = options.find((o) => o.value === value)?.label ?? value;
   const toggle = () => { if (!disabled) { if (open) close(); else setOpen(true); } };
+  if (duo) return <div style={{ ...theme.card, minWidth: 0, maxWidth: "100%", display: "flex", alignItems: "center", gap: theme.space.xs, padding: theme.space.sm }}>
+    {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body }}>{label}</span>}
+    <div style={{ flex: showLabel ? "0 1 112px" : 1, minWidth: 0, maxWidth: "100%" }}>
+    <DuoDropdown controlId={controlId ?? label} label={label} value={value} disabled={disabled} ready={ready} badge={badge}
+      options={options.map((option) => ({ value: option.value, label: option.caption
+        ? <span style={{ display: "flex", flexDirection: "column" }}>{option.label}<span style={{ fontSize: theme.font.caption }}>{option.caption}</span></span>
+        : option.label }))} onChange={onChange} />
+    </div>
+  </div>;
   return (
     <Focusable flow-children="column" style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", opacity: disabled ? 0.45 : 1 }}>
       <Focusable ref={trigger} role="button" aria-label={label} aria-expanded={open} aria-disabled={disabled}
@@ -206,8 +222,9 @@ export function PickerButton<T extends string>({ label, value, options, onChange
         {showLabel && <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label}</span>}
         <span style={{ flex: showLabel ? "0 1 auto" : 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: theme.space.xs,
           fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, whiteSpace: "normal", overflowWrap: "anywhere" }}>
-          {current}{badge}
+          {current}
         </span>
+        {badge && <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", alignSelf: "center", flexShrink: 0 }}>{badge}</span>}
         <LuChevronDown size={16} color={theme.color.textMuted} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined }} />
         </div>
       </Focusable>

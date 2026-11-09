@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   modal: null as ReactNode | null,
   submitReport: vi.fn(async () => ({ ok: true, code: "PDC-TEST" })),
   steamDiagnostics: vi.fn(),
+  upscalersContext: vi.fn(() => ({ status: "available", running: { live_appid: "123", stable_appid: "123", name: "Game" } })),
   steamOverlay: {
     snapshot_status: "available",
     resolver: "global",
@@ -74,6 +75,7 @@ vi.mock("../api", () => ({
   submitReport: mocks.submitReport,
 }));
 
+vi.mock("../report/upscalersContext", () => ({ upscalersReportContext: mocks.upscalersContext }));
 vi.mock("../launch/reportContext", () => ({ launchReportContext: vi.fn(async () => ({})) }));
 vi.mock("../mangohud/steamOverlay", () => ({
   steamOverlay: { diagnostics: mocks.steamDiagnostics },
@@ -85,6 +87,20 @@ vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children: ReactNode 
 import { openReportModal } from "./ReportModal";
 
 describe("ReportModal request type", () => {
+  it("submits Escaladores with its separate running-game context", async () => {
+    openReportModal();
+    render(mocks.modal);
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.upscalers" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "FSR does not activate" } });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["upscalers"], "FSR does not activate", expect.objectContaining({
+        upscalers: { status: "available", running: { live_appid: "123", stable_appid: "123", name: "Game" } },
+      }),
+    ));
+  });
+
   beforeEach(() => {
     mocks.steamDiagnostics.mockReturnValue(mocks.steamOverlay);
   });

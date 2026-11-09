@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
+  it("keeps the last measured output height after an unverifiable DLL result", () => {
+    const history = [
+      { facts: { resolution: { render: [640, 360], output: [1280, 720] } } },
+      { facts: { present: false, unverifiable: true } },
+    ];
+    expect(lastOutputHeight(history)).toBe(720);
+    expect(renderHeight(lastOutputHeight(history) ?? 1280, "quality")).toBe(480);
+    expect(lastOutputHeight([...history, { facts: { resolution: { render: [0, 0], output: [0, 0] } } }])).toBe(720);
+    expect(lastOutputHeight([])).toBeUndefined();
+  });
+
   it("adds the proxy override without touching other launch options", () => {
     expect(withOverride("", "dxgi=n,b")).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command%');
     expect(withOverride('WINEDLLOVERRIDES="winmm=n,b" mangohud %command% -dx12', "dxgi=n,b"))
       .toBe('WINEDLLOVERRIDES="winmm,dxgi=n,b" mangohud %command% -dx12');
-    expect(withOverride('WINEDLLOVERRIDES="dxgi=b" %command%', "dxgi=n,b")).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command%');
-    expect(withOverride('WINEDLLOVERRIDES="winmm=b" %command%', "dxgi=n,b")).toBeNull();
+    expect(withOverride('WINEDLLOVERRIDES="dxgi=b" %command%', "dxgi=n,b")).toBeNull();
+    expect(withOverride('WINEDLLOVERRIDES="winmm=b" %command%', "dxgi=n,b")).toBe('WINEDLLOVERRIDES="winmm=b;dxgi=n,b" %command%');
   });
 
   it("removes only its own override", () => {
@@ -18,6 +29,19 @@ describe("upscaler model", () => {
 
   it("refuses to rewrite launch options it cannot model", () => {
     expect(withOverride('sh -c "x %command%"', "dxgi=n,b")).toBeNull();
+  });
+
+  it("preserves ordered mixed DLL modes and custom wrappers through installation and removal", () => {
+    const original = 'WINEDLLOVERRIDES="winmm=b;version=n,b" LSFGVK_PROFILE="my profile" ~/.local/bin/mako-launch --quality high ~/lsfg %command% -dx12';
+    const applied = applyLaunch(original, ["dxgi=n,b"], ["--launcher-skip"]);
+    expect(applied?.value).toContain('WINEDLLOVERRIDES="winmm=b;version,dxgi=n,b"');
+    expect(revertLaunch(applied!.value, ["dxgi=n,b"], applied!.added)).toBe(original);
+    expect(alreadyThere(original, ["version=n,b"], {}).overrides).toEqual(["version=n,b"]);
+  });
+
+  it("does not replace an existing DLL mode or ambiguous duplicate assignment", () => {
+    expect(withOverride('WINEDLLOVERRIDES="DXGI=b;version=n,b" %command%', "dxgi=n,b")).toBeNull();
+    expect(withOverride('WINEDLLOVERRIDES="dxgi=n,b" WINEDLLOVERRIDES="version=b" %command%', "dinput8=n,b")).toBeNull();
   });
 
   it("starts new installs at native resolution and shows each quality's real height", () => {
@@ -132,4 +156,9 @@ describe("launch options the user already had", () => {
     expect(restoredChoice("fsr-4.1.2-beta", options, builds, "xess").build).toBe("xess");
     expect(restoredChoice("old", options, builds, "xess").build).toBe("xess");
   });
+});
+
+it("keeps previously installed routes available for user choice", () => {
+  expect(fgOffer({}, { fsrfg: [] }, "rdna3", true, "optiscaler")).toEqual({ own: "fsr", options: ["optiscaler", "lsfg"] });
+  expect(fgOffer({ optiscaler: {} }, {}, "rdna3", false, null).options).toEqual(["optiscaler"]);
 });

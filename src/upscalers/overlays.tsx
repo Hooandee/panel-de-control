@@ -13,7 +13,7 @@ import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
 import { badgeLabel } from "./model";
-import type { UpscalersOverview } from "./types";
+import type { BuildInfo, UpscalersOverview } from "./types";
 
 export type InGameMode = "off" | "start" | "always";
 export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
@@ -25,11 +25,21 @@ const STYLE_ID = "pdc-up-cover-style";
 const HOST_ID = "pdc-up-ingame";
 const COVER_IMAGE = /\/(?:assets|customimages|apps)\/(\d+)(?:\/|p\.|\.)/;
 
+type ProviderFamily = "fsr" | "xess" | "dlss";
+const PROVIDER_NAMES: Record<ProviderFamily, string> = { fsr: "FSR", xess: "XeSS", dlss: "DLSS" };
+
+function providerOf(build: BuildInfo | undefined): ProviderFamily | null {
+  if (!build) return null;
+  return build.family === "xess" ? "xess" : "fsr";
+}
+
 interface Badge {
   label: string;
   short: string;
   state: string;
   build: string;
+  engine: string | null;
+  provider: ProviderFamily | null;
   fg: boolean;
   fgRoute: string | null;
 }
@@ -49,7 +59,7 @@ export function publishOverview(overview: UpscalersOverview): void {
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
     const label = badgeLabel(build, install.options?.model, install.build);
-    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
+    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
   }
   installs = next;
   emit();
@@ -319,9 +329,17 @@ export const InGameBadge: FC = () => {
   useEffect(() => subscribeQamSurface(setSurface), []);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const badge = running ? map[String(running.liveAppid)] : undefined;
-  const { live, lossless } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
+  const { live, lossless, makoResolutionWarning, makoMultiplier, makoSpatial } = useOverlayLive(running ? String(running.liveAppid) : null, !!badge);
   const resolution = live?.resolution ? [live.resolution.render[1], live.resolution.output[1]] : null;
-  const active = !!live || !!lossless;
+  const installedDll = badge?.engine === "dll" && badge.state === "not_run";
+  const hasContent = installedDll || !!live || !!lossless || makoResolutionWarning || makoMultiplier !== null || !!makoSpatial;
+  const observedFamily = live?.provider_family ?? null;
+  const otherProvider = !!observedFamily && !!badge?.provider && badge.engine !== "dll" && observedFamily !== badge.provider;
+  const observedName = live?.provider_name ?? (observedFamily ? PROVIDER_NAMES[observedFamily] : null);
+  const observedProvider = otherProvider
+    ? [observedName, live?.provider_version].filter(Boolean).join(" ")
+    : live?.provider_source === "optiscaler_log" && live.provider_name && live.provider_version
+      ? `${live.provider_name} ${live.provider_version}` : null;
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} ${t(`up.lsfg.flow.${lossless.flow}`)}`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
@@ -358,14 +376,15 @@ export const InGameBadge: FC = () => {
     return () => { if (startTimer.current) clearTimeout(startTimer.current); };
   }, [running?.liveAppid]);
   useEffect(() => {
-    if (!active || !running || startedFor.current === running.liveAppid) return;
+    if (!hasContent || !running || startedFor.current === running.liveAppid) return;
     startedFor.current = running.liveAppid;
     setStartWindow(true);
     startTimer.current = setTimeout(() => setStartWindow(false), START_MS);
-  }, [running?.liveAppid, active]);
+  }, [running?.liveAppid, hasContent]);
 
   const sectionShown = inSection && !!surface?.visible;
-  const visible = active && (sectionShown || (gameInFront && (mode === "always" || (mode === "start" && startWindow))));
+  const visible = hasContent && (sectionShown || (gameInFront && (mode === "always" || (mode === "start" && startWindow))));
+  const scalerShown = !!badge && (installedDll || !!live || !visible);
   if (!host) return null;
   const ghostShown = !!ghostShot && !!running;
   return (
@@ -391,7 +410,7 @@ export const InGameBadge: FC = () => {
         </>,
         host,
       )}
-      {(badge || fgLabel) && createPortal(
+      {(badge || fgLabel || makoResolutionWarning || makoMultiplier !== null || makoSpatial) && createPortal(
         <div
           style={{
             // Top centre: Steam's performance overlay owns the top-left corner and the Quick Access Menu the right.
@@ -404,9 +423,18 @@ export const InGameBadge: FC = () => {
             transition: "opacity 320ms ease, transform 420ms cubic-bezier(.2,.8,.2,1)",
           }}
         >
-          {badge && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>{badge.label}</span>
+          {scalerShown && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
+            <span>{observedProvider ?? badge!.label}</span>
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
+          </div>}
+          {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
+            <span>Mako</span><span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{`${makoSpatial.render.join("×")} → ${makoSpatial.output.join("×")}`}</span>
+          </div>}
+          {makoResolutionWarning && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", color: "#ffbe63" }}>
+            {t("up.overlay.makoResolution")}
+          </div>}
+          {makoMultiplier !== null && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
+            <span>{`Mako ×${makoMultiplier}`}</span><span style={{ color: "#9aa3ae" }}>{t("up.overlay.generating")}</span>
           </div>}
           {fgLabel && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
             <span>{fgLabel}</span><span style={{ color: "#9aa3ae" }}>{fgState}</span>

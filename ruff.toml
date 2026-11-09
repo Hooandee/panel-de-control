@@ -1,2 +1,6 @@
 [lint]
 select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# Shared pytest fixtures are imported by name into the test modules that use them.
+"tests/test_*.py" = ["F401", "F811"]

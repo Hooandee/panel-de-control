@@ -52,3 +52,9 @@ describe("badge label", () => {
     expect(badgeLabel(undefined, null, "fsr-gone")).toEqual({ full: "fsr-gone", short: "fsr-gone" });
   });
 });
+
+it("uses each recipe recommendation for installs and avoids downgrading it on update", () => {
+  const recommendations = { ...compat, "4": { ...compat["4"], preferred: "fsr-old" }, "1": { native: false, inputs: ["dlss"], preferred: "fsr-old" } };
+  expect(bulkSteps("install", games, overview, recommendations)[0].choice?.build).toBe("fsr-old");
+  expect(bulkSteps("update", games, overview, recommendations)).toEqual([]);
+});

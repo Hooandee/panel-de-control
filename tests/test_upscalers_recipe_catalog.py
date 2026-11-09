@@ -1,0 +1,240 @@
+import json
+import shutil
+
+import pytest
+
+from py_modules.upscalers import recipe_catalog as rc, recipes
+
+
+@pytest.fixture
+def catalog_dir(tmp_path):
+    destination = tmp_path / 'recipes'
+    shutil.copytree(rc.CATALOG_PATH, destination)
+    return destination
+
+
+def edit(directory, filename, change):
+    path = directory / filename
+    data = json.loads(path.read_text())
+    change(data)
+    path.write_text(json.dumps(data))
+
+
+def test_pinned_remake_and_dependency_order():
+    catalog = rc.load()
+    game = catalog.match('1462040', 'optiscaler', 'linux', 'amd64')
+    assert game.exe == 'End/Binaries/Win64/ff7remake_.exe'
+    assert game.args == ('-dx11',)
+    assert game.ini == {'Plugins.LoadReshade': 'true', 'Hotfix.CreateD3D12DeviceForLuma': 'false'}
+    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-ff7']
+    asset = catalog.assets['luma-ff7-800']
+    assert asset.sha256 == 'eb5186525da7af03951a2fd681e857c7191c9f5d7dcb5e40bb4c8372be222cfd'
+    assert asset.size == 136693836
+    files = catalog.dependencies['luma-ff7'].files
+    assert len(files) == 147
+    assert files['ReShade64.dll'] == 'dxgi.dll'
+    assert 'dxgi.dll' not in files
+
+
+def test_conditions_use_actual_host(monkeypatch):
+    monkeypatch.setattr(rc.host_platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
+    catalog = rc.load()
+    assert catalog.match('1462040', 'optiscaler')
+    for engine, platform, arch in [('dll', 'linux', 'x86_64'), ('optiscaler', 'windows', 'x86_64'), ('optiscaler', 'linux', 'aarch64')]:
+        assert catalog.match('1462040', engine, platform, arch) is None
+    assert catalog.match('99999', 'optiscaler') is None
+
+
+def test_recipe_preserves_wiki_and_existing_rules():
+    recipe = recipes.recipe_for('1462040', platform='linux', arch='x86_64')
+    assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
+    assert 'luma' in recipe.needs
+    assert recipe.catalog_revision == 5
+    assert recipe.catalog_version == 4
+    assert '-dx11' in recipe.args
+    assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
+    assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
+    assert recipes.recipe_for('870780').ini['Spoofing.Dxgi'] == 'false'
+
+
+@pytest.mark.parametrize('filename,change', [
+    ('catalog.json', lambda d: d.update(schema_version=True)),
+    ('catalog.json', lambda d: d.update(script='echo bad')),
+    ('dependencies.json', lambda d: d['vcrun2022'].update(verb='run')),
+    ('dependencies.json', lambda d: d['vcrun2022'].update(verb=[])),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(asset=[])),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(requires=['missing'])),
+    ('dependencies.json', lambda d: d['vcrun2022'].update(requires=['luma-ff7'])),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(files={'../evil':'dxgi.dll'})),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(files={'foo':'/evil'})),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(files={'foo':'a\\b'})),
+    ('dependencies.json', lambda d: d['luma-ff7'].update(files={'A.dll':'a','a.dll':'b'})),
+    ('assets.json', lambda d: d['luma-ff7-800'].update(url='https://github.com:wrong/a')),
+    ('assets.json', lambda d: d['luma-ff7-800'].update(url='https://user@github.com/a')),
+    ('assets.json', lambda d: d['luma-ff7-800'].update(url='http://localhost/a')),
+    ('assets.json', lambda d: d['luma-ff7-800'].update(sha256='no')),
+    ('assets.json', lambda d: d['luma-ff7-800'].update(size=True)),
+    ('games/1462040.json', lambda d: d.update(args=['-dx11;echo'])),
+    ('games/1462040.json', lambda d: d.update(dependencies=['luma-ff7','luma-ff7'])),
+])
+def test_invalid_catalog_rejected(catalog_dir, filename, change):
+    edit(catalog_dir, filename, change)
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_duplicate_json_key_rejected(catalog_dir):
+    (catalog_dir / 'catalog.json').write_text('{"schema_version":1,"schema_version":1,"catalog_version":1}')
+    with pytest.raises(rc.CatalogError, match='duplicate_key'):
+        rc.load(catalog_dir)
+
+
+def test_symlink_rejected(catalog_dir, tmp_path):
+    path = catalog_dir / 'games/1462040.json'
+    moved = tmp_path / 'game.json'
+    path.rename(moved)
+    path.symlink_to(moved)
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_oversized_file_rejected(catalog_dir):
+    (catalog_dir / 'catalog.json').write_text(' ' * (2 * 1024 * 1024 + 1))
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_bundled_fails_closed(monkeypatch):
+    rc.bundled.cache_clear()
+    def fail():
+        raise rc.CatalogError('broken')
+    monkeypatch.setattr(rc, 'load', fail)
+    try:
+        assert not rc.bundled().games
+    finally:
+        rc.bundled.cache_clear()
+
+
+def test_tested_builds_are_informational():
+    catalog = rc.load()
+    entry = catalog.match('1462040', 'optiscaler', 'linux', 'x86_64', game_build='999')
+    assert entry.tested_game_builds == ('21888968',)
+    assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64')
+
+
+def test_optional_build_condition_requires_observed_match(catalog_dir):
+    edit(catalog_dir, 'games/1462040.json', lambda d: d['conditions'].update(game_builds=['21888968']))
+    catalog = rc.load(catalog_dir)
+    assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64', game_build='21888968')
+    assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64', game_build='999') is None
+    assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64') is None
+
+
+@pytest.mark.parametrize('change', [
+    lambda d: d.update(tested_game_builds=[21888968]),
+    lambda d: d.update(tested_game_builds=['21888968', '21888968']),
+    lambda d: d.update(tested_at='2026-02-30'),
+    lambda d: d.update(tested_at='20261107'),
+    lambda d: d.update(tested_at='2026-11-07', tested_game_builds=[]),
+    lambda d: d['conditions'].update(game_builds=[]),
+    lambda d: d['conditions'].update(game_builds=['../1']),
+])
+def test_invalid_build_evidence_rejected(catalog_dir, change):
+    edit(catalog_dir, 'games/1462040.json', change)
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_recipe_for_forwards_build_condition(catalog_dir, monkeypatch):
+    edit(catalog_dir, 'games/1462040.json', lambda d: d['conditions'].update(game_builds=['21888968']))
+    catalog = rc.load(catalog_dir)
+    monkeypatch.setattr(rc, 'bundled', lambda: catalog)
+    assert recipes.recipe_for('1462040', platform='linux', arch='x86_64', game_build='21888968').dependencies
+    assert not recipes.recipe_for('1462040', platform='linux', arch='x86_64', game_build='999').dependencies
+
+
+@pytest.mark.parametrize('configuration', [
+    {'../ReShade.ini': {'Luma.SRUserType': '2'}},
+    {'ReShade.ini': {'INSTALL.BasePath': '/outside'}},
+    {'ReShade.ini': {'Luma.SRUserType': '2\nOther=3'}},
+    {'ReShade.ini': {'Luma.SRUserType': 2}},
+])
+def test_configuration_allowlist(catalog_dir, configuration):
+    edit(catalog_dir, 'games/1462040.json', lambda d: d.update(configuration=configuration))
+    with pytest.raises(rc.CatalogError, match='unsupported_configuration'):
+        rc.load(catalog_dir)
+
+
+def test_witcher_input_guidance_preserves_existing_rules_and_wiki():
+    live = recipes.Recipe('292030', inputs=('FSR2', 'XeSS'), status='works')
+    recipe = recipes.recipe_for('292030', live, platform='linux', arch='x86_64')
+    assert recipe.recommended_input == 'xess'
+    assert recipe.exe == 'bin/x64_dx12/witcher3.exe'
+    assert recipe.args == ('--launcher-skip', '-dx12')
+    assert recipe.fg_note == 'reflexOff'
+    assert recipe.inputs == ('FSR2', 'XeSS')
+    assert recipe.dependencies == ()
+    assert recipes.recipe_for('292030', engine='dll', platform='linux', arch='x86_64').recommended_input is None
+    assert recipes.recipe_for('292030', platform='windows', arch='x86_64').recommended_input is None
+    assert recipes.recipe_for('870780', platform='linux', arch='x86_64').recommended_input is None
+
+
+@pytest.mark.parametrize('value', ['fsr4', '', True, None, ['xess']])
+def test_invalid_recommended_input_rejected(catalog_dir, value):
+    edit(catalog_dir, 'games/292030.json', lambda data: data.update(recommended_input=value))
+    with pytest.raises(rc.CatalogError, match='invalid_recommended_input'):
+        rc.load(catalog_dir)
+
+@pytest.mark.parametrize('key,value', [('effective_api', 'dx99'), ('effective_api', None), ('quality_owner', 'luma'), ('quality_owner', [])])
+def test_solution_metadata_rejects_unknown_values(catalog_dir, key, value):
+    edit(catalog_dir, 'games/1462040.json', lambda data: data.update({key: value}))
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+@pytest.mark.parametrize('value', ['', True, None, [], '../fsr-4.1.2-beta'])
+def test_invalid_recommended_build_rejected(catalog_dir, value):
+    edit(catalog_dir, 'games/1462040.json', lambda data: data.update(recommended_build=value))
+    with pytest.raises(rc.CatalogError, match='invalid_recommended_build'):
+        rc.load(catalog_dir)
+
+
+def test_remake_recommends_supported_build_without_changing_global_default():
+    from py_modules.upscalers import catalog
+    recipe = recipes.recipe_for('1462040', platform='linux', arch='x86_64')
+    assert recipe.recommended_build == 'fsr-4.1.2-beta'
+    for gpu in ('rdna2', 'rdna3', 'rdna35'):
+        assert catalog.preferred_build(gpu, recipe) == 'fsr-4.1.2-beta'
+    assert catalog.BUILDS[recipe.recommended_build].models[0][0] == 'lite'
+    assert catalog.preferred_build('intel', recipe) == 'xess'
+    assert catalog.preferred_build('rdna4', recipe) == 'fsr-4.1.1'
+    assert catalog.preferred_build('rdna3') == 'fsr-4.1.1'
+    windows = recipes.recipe_for('1462040', platform='windows', arch='x86_64')
+    assert catalog.preferred_build('rdna3', windows) == 'fsr-4.1.1'
+
+
+def test_luma_411_uses_new_engine_and_preserves_driver_provider():
+    from py_modules.upscalers import catalog
+    recipe = recipes.recipe_for('1462040', platform='linux', arch='x86_64')
+    original = catalog.BUILDS['fsr-4.1.1']
+    variant = catalog.for_game(original, {}, 'rdna3', recipe)
+    assert variant.id == original.id
+    assert variant.version == '4.1.1'
+    assert variant.assets == ('amdxcffx64-4.1.1',)
+    assert variant.archive == catalog.OPTISCALER_BETA
+    assert variant.extra_dir == 'OptiScaler'
+    assert variant.ini == {
+        'Upscalers.Dx12Upscaler': 'ffx', 'Upscalers.Dx11Upscaler': 'ffx_12',
+        'Upscalers.VulkanUpscaler': 'ffx_12', 'FSR.Fsr4GpuSupport': '2', 'FSR.UpscalerIndex': '1',
+    }
+    assert catalog.for_game(original, {}, 'rdna3') is original
+    windows = recipes.recipe_for('1462040', platform='windows', arch='x86_64')
+    assert catalog.for_game(original, {}, 'rdna3', windows) is original
+    other = catalog.BUILDS['fsr-4.1.2-beta']
+    assert catalog.for_game(other, {}, 'rdna3', recipe) is other
+
+
+def test_hidden_files_beside_the_recipes_are_ignored(catalog_dir):
+    (catalog_dir / 'games' / '.DS_Store').write_bytes(b'\x00')
+    assert rc.load(catalog_dir).match('1462040', 'optiscaler', 'linux', 'amd64') is not None

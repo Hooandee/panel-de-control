@@ -6,7 +6,7 @@ vi.mock("@decky/ui", () => ({ Navigation: {} }));
 vi.mock("../api", () => ({ getUpscalerLive: vi.fn(), pressUpscalerKey: vi.fn() }));
 vi.mock("../i18n", () => ({ useI18n: vi.fn() }));
 vi.mock("./parts", () => ({ Label: vi.fn(), ListCard: vi.fn(), ListRow: vi.fn(), Note: vi.fn() }));
-vi.mock("./pageMemory", () => ({ holdPage: vi.fn() }));
+vi.mock("./gameHotkey", () => ({ pressUpscalerKeyInGame: vi.fn() }));
 
 import { getUpscalerLive } from "../api";
 import { useUpscalerLive } from "./LivePanel";

@@ -1,0 +1,10 @@
+{
+  "luma-ff7-800": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-800/Luma-Final_Fantasy_VII_Remake.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+    "sha256": "eb5186525da7af03951a2fd681e857c7191c9f5d7dcb5e40bb4c8372be222cfd",
+    "size": 136693836,
+    "filename": "Luma-Final_Fantasy_VII_Remake.zip",
+    "format": "zip"
+  }
+}

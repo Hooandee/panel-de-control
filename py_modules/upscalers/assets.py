@@ -60,7 +60,10 @@ class AssetCache:
         return self.root / asset.sha256 / "unpacked"
 
     def member(self, asset: Asset) -> Path:
-        return self.unpacked(asset) / str(asset.member)
+        relative = Path(str(asset.member))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise AssetError("unsafe_archive")
+        return self.unpacked(asset) / relative
 
     def ready(self, asset: Asset) -> bool:
         if asset.archive:
@@ -84,8 +87,14 @@ class AssetCache:
         return self.member(asset) if asset.member else self.file(asset)
 
     def _extract_member(self, asset: Asset) -> None:
-        """Copy one named file out of a verified zip, never anything else it carries."""
+        """Resolve one catalog member from a verified ZIP or the existing safe 7z unpacker."""
         target = self.member(asset)
+        if self.file(asset).suffix.lower() == ".7z":
+            if not (self.unpacked(asset) / ".complete").is_file():
+                self._unpack(asset)
+            if not target.is_file() or target.is_symlink():
+                raise AssetError("unpack_failed")
+            return
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(self.file(asset)) as archive:
@@ -130,7 +139,7 @@ class AssetCache:
     def _check_space(self, asset: Asset) -> None:
         have = self.partial(asset).stat().st_size if self.partial(asset).is_file() else 0
         # Archives are unpacked next to the download, so they need room for both.
-        need = asset.size - have + (asset.size * 2 if asset.archive else 0)
+        need = asset.size - have + (asset.size * 2 if asset.archive or asset.member else 0)
         free = shutil.disk_usage(self.root if self.root.exists() else self.root.parent).free
         if free < need:
             raise AssetError("no_space", str(need - free))

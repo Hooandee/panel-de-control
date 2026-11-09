@@ -12,9 +12,12 @@ export interface BuildInfo {
   channel?: "stable" | "beta";
   supported: boolean;
   download_bytes: number;
+  dll_names?: string[];
+  dll_legacy_names?: string[];
   models?: string[];
-  engine?: "optiscaler" | "helixsr" | "proton";
+  engine?: "optiscaler" | "helixsr" | "proton" | "dll";
   way?: "fsr" | "scaler" | null;
+  may_fallback?: string | null;
 }
 
 export interface UpscalerJob {
@@ -22,7 +25,7 @@ export interface UpscalerJob {
   kind: "install" | "uninstall";
   appid: string;
   state: "running" | "done" | "error";
-  phase: "prepare" | "download" | "unpack" | "copy" | "restore" | "done";
+  phase: "prepare" | "resolve" | "dependencies" | "download" | "unpack" | "copy" | "restore" | "done";
   detail?: string | null;
   done: number;
   total: number;
@@ -57,6 +60,21 @@ export interface FgPlan {
   routes?: Partial<Record<FgRoute, unknown>>;
 }
 
+export interface ResolvedSolution {
+  effective_api: "d3d11" | "d3d12" | "vulkan" | null;
+  api_source: "recipe" | "detected" | "unknown";
+  quality: { owner: "panel" | "game"; reason: string | null };
+  fg_plan: FgPlan | null;
+  offered_fg_plan?: FgPlan | null;
+  warning_reason?: string | null;
+  blocked_reason: string | null;
+  dependencies: string[];
+  recipe_revision: number | null;
+  inputs?: Record<string, string[]>;
+  input_reconciled?: boolean;
+  recommended_input?: string | null;
+}
+
 export interface UpscalerChoice {
   build: string;
   quality: Quality | null;
@@ -78,10 +96,14 @@ export interface HistoryEntry {
 }
 
 export interface GameDetail {
+  preferred?: string;
+  solution?: ResolvedSolution | null;
+  solutions?: Record<string, ResolvedSolution>;
   appid: string;
   name: string;
   updating: "running" | "pending" | null;
   analysis: {
+    dll_targets?: string[];
     candidates: { exe: string; apis: string[] }[];
     exe: string | null;
     apis: string[];
@@ -90,6 +112,7 @@ export interface GameDetail {
     inputs: Partial<Record<"fsr31" | "fsr2" | "dlss" | "xess" | "streamline", string[]>>;
     anti_cheat: boolean;
     foreign: boolean;
+    foreign_identity?: { engine: "helixsr" | "optiscaler" | "unknown"; variant: "dlss" | "fsr" | "unknown"; evidence: string[]; manifest_error: boolean } | null;
   };
   install: {
     build: string;
@@ -98,6 +121,8 @@ export interface GameDetail {
     installed_at: number;
     options: { quality: Quality | null; sharpness: Sharpness | null; fg?: "on" | "off"; fg_route?: FgRoute | null; model?: string | null };
     status: UpscalerStatus;
+    /** From the first launch after the quality last changed: whether the game asked OptiScaler for its size. */
+    quality_check?: { result: "respected" | "ignored"; input: string | null; ratio: number } | null;
   } | null;
   history: HistoryEntry[];
   recipe: boolean;
@@ -131,6 +156,11 @@ export interface IniSection {
 }
 
 export interface RecipeInfo {
+  recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;
+  luma_detected?: boolean;
+  automatic?: string[];
+  automatic_builds?: string[];
+  blocked?: boolean;
   needs: ("reframework" | "nvngx_dlss" | "anti_cheat_off" | "luma" | "mod")[];
   broken: boolean;
   proxy: string | null;

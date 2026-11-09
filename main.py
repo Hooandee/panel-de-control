@@ -169,6 +169,7 @@ from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from upscalers import UpscalerError, UpscalerService
+from upscalers import diagnostics as upscaler_diagnostics
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
 from steam_inventory_compat import SteamInventoryCompat
@@ -1287,8 +1288,9 @@ class Plugin(AmbientRpc):
             _user_home(),
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "upscalers"),
             device_registry.gpu_generation(self._device.vendor, chip),
-            logger=decky.logger,
+            logger=decky.logger, device=self._device.key,
         )
+        service.engine_game_running = lambda: bool(getattr(self, "_current_appid", None))
         self._upscaler_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upscalers")
         self._upscaler_service = service
         return service
@@ -1297,11 +1299,47 @@ class Plugin(AmbientRpc):
         self._init()
         loop = asyncio.get_running_loop()
         service = await loop.run_in_executor(None, self._upscalers)
+        actions = {"configure", "set_identity", "set_exe", "record_added_args", "refresh_wiki", "set_ini",
+                   "verify", "capture_frame", "lsfg_install", "lsfg_adopt_foreign", "lsfg_restore_foreign",
+                   "adopt_foreign", "restore_foreign", "lsfg_uninstall", "lsfg_game", "mako_install", "mako_game", "press_key", "set_image_settings", "restore_image_settings", "begin_scaler_transition", "finish_scaler_transition"}
+        tracked = method in actions
+        appid = str(args[0]) if args and args[0] is not None else "global"
+        requested = upscaler_diagnostics.fields(args[1] if len(args) > 1 else None, upscaler_diagnostics.REQUEST_KEYS)
+        if method == "set_ini" and len(args) > 2:
+            requested = await loop.run_in_executor(None, lambda: service.diagnostic_ini_request(appid, args[1], args[2]))
+        elif method == "lsfg_game":
+            requested["enabled"] = len(args) > 1 and args[1] is not None
+        elif method == "mako_game" and (len(args) <= 1 or args[1] is None):
+            requested.update(enabled=False, scaling_enabled=False)
+        elif method == "set_image_settings" and len(args) > 1 and isinstance(args[1], dict):
+            requested = {}
+            if args[1].get("int8") in ("auto", "on", "off"):
+                requested["int8"] = args[1]["int8"]
+            sharpness = args[1].get("sharpness")
+            if isinstance(sharpness, dict):
+                if type(sharpness.get("enabled")) is bool:
+                    requested["enabled"] = sharpness["enabled"]
+                value = sharpness.get("value")
+                if type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1:
+                    requested["value"] = value
+        elif method == "press_key" and len(args) > 1:
+            requested = {"key_action": str(args[1])[:40]}
+        if tracked:
+            await loop.run_in_executor(None, lambda: service.record_action(appid, method, "started", requested))
         try:
-            return await loop.run_in_executor(None, lambda: getattr(service, method)(*args))
-        except UpscalerError as error:
-            _upscalers_journal("WARNING", "refused", action=method, code=error.code)
-            raise RuntimeError(error.code) from None
+            result = await loop.run_in_executor(None, lambda: getattr(service, method)(*args))
+        except Exception as error:
+            code = error.code if isinstance(error, UpscalerError) else type(error).__name__
+            if tracked:
+                await loop.run_in_executor(None, lambda: service.record_action(appid, method, "error", requested, code))
+            _upscalers_journal("WARNING", "refused", action=method, appid=appid, code=code)
+            if isinstance(error, UpscalerError):
+                raise RuntimeError(error.code) from None
+            raise
+        if tracked:
+            await loop.run_in_executor(None, lambda: service.record_action(appid, method, "done", requested))
+            _upscalers_journal("INFO", "action_done", action=method, appid=appid)
+        return result
 
     async def _upscalers_job(self, kind: str, appid: str, method: str, *args) -> dict:
         self._init()
@@ -1310,14 +1348,18 @@ class Plugin(AmbientRpc):
         try:
             service.begin(kind, appid)
         except UpscalerError as error:
-            raise RuntimeError(error.code) from None
+            code = error.code
+            await loop.run_in_executor(None, lambda: service.record_action(appid, kind, "refused", args[0] if args else None, code))
+            _upscalers_journal("WARNING", "refused", action=kind, appid=appid, code=code)
+            raise RuntimeError(code) from None
+        _upscalers_journal("INFO", "job_started", action=kind, appid=appid, job_id=(service.job() or {}).get("id"))
 
         def work() -> None:
             service.run(getattr(service, method), appid, *args)
             job = service.job() or {}
             level = "INFO" if job.get("state") == "done" else "WARNING"
             _upscalers_journal(level, kind, appid=appid, state=job.get("state"), error=job.get("error"),
-                               cause=job.get("detail"), detail=json.dumps(args[0] if args else {}, sort_keys=True)[:400])
+                               job_id=job.get("id"), requested=upscaler_diagnostics.fields(args[0] if args else None, upscaler_diagnostics.REQUEST_KEYS))
 
         self._upscaler_executor.submit(work)
         return service.job() or {}
@@ -1353,6 +1395,12 @@ class Plugin(AmbientRpc):
                                           None if overrides is None else [str(o) for o in overrides],
                                           None if env is None else [str(k) for k in env])
 
+    async def begin_scaler_transition(self, appid: str) -> dict:
+        return await self._upscalers_call("begin_scaler_transition", str(appid))
+
+    async def finish_scaler_transition(self, appid: str, token: str, rollback: bool = False) -> dict | None:
+        return await self._upscalers_call("finish_scaler_transition", str(appid), str(token), bool(rollback))
+
     async def uninstall_upscaler(self, appid: str) -> dict:
         return await self._upscalers_job("uninstall", str(appid), "uninstall")
 
@@ -1367,12 +1415,25 @@ class Plugin(AmbientRpc):
             _upscalers_journal("INFO", "wiki_refresh", **result)
         return result
 
+    async def get_upscaler_image_settings(self, appid: str) -> dict:
+        return await self._upscalers_call("image_settings", str(appid))
+
+    async def set_upscaler_image_settings(self, appid: str, values: dict) -> dict:
+        result = await self._upscalers_call("set_image_settings", str(appid), values)
+        _upscalers_journal("INFO", "image_settings", appid=str(appid), settings=result)
+        return result
+
+    async def restore_upscaler_image_settings(self, appid: str) -> dict:
+        result = await self._upscalers_call("restore_image_settings", str(appid))
+        _upscalers_journal("INFO", "image_settings_restored", appid=str(appid), settings=result)
+        return result
+
     async def get_upscaler_ini(self, appid: str) -> dict:
         return await self._upscalers_call("ini_schema", str(appid))
 
     async def set_upscaler_ini(self, appid: str, key: str, value: str) -> dict:
         result = await self._upscalers_call("set_ini", str(appid), str(key), str(value))
-        _upscalers_journal("INFO", "ini_set", appid=str(appid), key=result["key"], value=result["value"])
+        _upscalers_journal("INFO", "ini_set", appid=str(appid), key=result["key"])
         return result
 
     async def verify_upscaler(self, appid: str) -> dict:
@@ -1391,6 +1452,9 @@ class Plugin(AmbientRpc):
         await self._apply_stats_reader()
         fps = self._gamescope_perf.fps()
         return {**result, "fps": round(fps, 1) if fps is not None else None}
+
+    async def refresh_framegen_engine(self, engine: str, apply: bool = False) -> dict:
+        return await self._upscalers_call("refresh_engine", engine, apply)
 
     async def get_lsfg_status(self) -> dict:
         return await self._upscalers_call("lsfg_status")
@@ -1430,6 +1494,24 @@ class Plugin(AmbientRpc):
         _upscalers_journal("INFO", "lsfg_game", appid=str(appid), profile=result.get("profile"))
         return result
 
+    async def get_mako_status(self, appid: str | None = None) -> dict:
+        return await self._upscalers_call("mako_status", str(appid) if appid is not None else None)
+
+    async def install_mako(self) -> dict:
+        return await self._upscalers_call("mako_install")
+
+    async def set_mako_game(self, appid: str, config: dict | None = None) -> dict:
+        return await self._upscalers_call("mako_game", str(appid), config)
+
+    async def get_mako_runtime(self, appid: str) -> dict:
+        return await self._upscalers_call("mako_runtime", str(appid))
+
+    async def get_upscaler_launch_receipt(self, appid: str, owner: str) -> dict | None:
+        return await self._upscalers_call("get_launch_receipt", str(appid), owner)
+
+    async def set_upscaler_launch_receipt(self, appid: str, owner: str, receipt: dict | None = None) -> bool:
+        return await self._upscalers_call("set_launch_receipt", str(appid), owner, receipt)
+
     async def press_upscaler_key(self, appid: str, action: str) -> dict:
         result = await self._upscalers_call("press_key", str(appid), str(action))
         _upscalers_journal("INFO", "key", appid=str(appid), action=str(action))
@@ -1441,13 +1523,21 @@ class Plugin(AmbientRpc):
 
     async def cancel_upscalers_job(self) -> dict | None:
         service = getattr(self, "_upscaler_service", None)
-        return service.cancel() if service is not None else None
+        job = service.cancel() if service is not None else None
+        if job:
+            await asyncio.get_running_loop().run_in_executor(None, lambda: service.record_action(str(job.get("appid")), "cancel", "requested"))
+            _upscalers_journal("INFO", "cancel_requested", appid=job.get("appid"), job_id=job.get("id"))
+        return job
 
-    async def _upscalers_report(self) -> dict:
+    async def _upscalers_report(self, context=None) -> dict:
+        frontend = upscaler_diagnostics.frontend_context(context.get("upscalers") if isinstance(context, dict) else None)
+        backend = {"source": "current_game", "stable_appid": str(getattr(self, "_current_appid", "") or "")[:160],
+                   "name": str(getattr(self, "_current_game_name", "") or "")[:160]}
         try:
-            return await self._upscalers_call("report")
-        except Exception:  # noqa: BLE001
-            return {"error": "diagnostics_unavailable"}
+            result = await asyncio.wait_for(self._upscalers_call("report", frontend), timeout=4)
+        except Exception as error:  # noqa: BLE001
+            result = {"error": "diagnostics_unavailable", "reason": type(error).__name__, "frontend": frontend}
+        return {**result, "backend_running": backend}
 
     async def diagnose_upscaler(self, appid: str) -> dict:
         return await self._upscalers_call("diagnose", str(appid))
@@ -1461,6 +1551,7 @@ class Plugin(AmbientRpc):
         service = getattr(self, "_upscaler_service", None)
         if service is not None:
             service.cancel()
+            service.lsfg.close()
         executor = getattr(self, "_upscaler_executor", None)
         if executor is not None:
             executor.shutdown(wait=False, cancel_futures=True)
@@ -2891,7 +2982,7 @@ class Plugin(AmbientRpc):
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
-            "upscalers": await self._upscalers_report(),
+            "upscalers": await self._upscalers_report(context),
             "ambient": self.ambient_diagnostics(),
             "themes": self._with_theme_display(
                 await _safe(self._offload_theme_call(self._theme_report_diagnostics)), context
@@ -3142,6 +3233,7 @@ class Plugin(AmbientRpc):
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
         frontend.pop("theme_display", None)
+        frontend.pop("upscalers", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,

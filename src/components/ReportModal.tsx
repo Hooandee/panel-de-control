@@ -18,6 +18,7 @@ import {
 import { steamOverlay } from "../mangohud/steamOverlay";
 import { FocusRoot } from "./FocusRoot";
 import { launchReportContext } from "../launch/reportContext";
+import { upscalersReportContext } from "../report/upscalersContext";
 import { quickAccessTabDiagnostics } from "../deckyInternal";
 import { getQamDocument } from "../qamDocument";
 import { displayReport } from "../themes/themeHealth";
@@ -174,6 +175,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
       selected.includes("hud") ? steamOverlay.diagnostics() : undefined,
       themeDisplay,
     );
+    if (selected.includes("upscalers")) context.upscalers = upscalersReportContext();
     submitReport(selected, text, context)
       .then((r) => {
         setResult(r);

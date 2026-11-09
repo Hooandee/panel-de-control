@@ -1,5 +1,5 @@
 import { addArg, getEnv, hasArg, parse, removeArg, serialize, setEnv } from "../launch/compose";
-import type { BuildInfo, FgRoute, Quality, UpscalerChoice } from "./types";
+import type { BuildInfo, FgRoute, HistoryEntry, Quality, UpscalerChoice } from "./types";
 
 const OVERRIDES = "WINEDLLOVERRIDES";
 
@@ -18,6 +18,14 @@ export function restoredChoice(build: string, options: Omit<UpscalerChoice, "bui
 
 export function renderHeight(outputHeight: number, quality: Quality): number {
   return Math.round(outputHeight / QUALITY_RATIO[quality]);
+}
+
+export function lastOutputHeight(history: readonly Pick<HistoryEntry, "facts">[]): number | undefined {
+  for (let index = history.length - 1; index >= 0; index--) {
+    const output = history[index].facts?.resolution?.output;
+    if (output?.length === 2 && output.every((size) => Number.isFinite(size) && size > 0)) return output[1];
+  }
+  return undefined;
 }
 
 /** What runs, as short as a cover allows: the family and version, with Lite when FSR 4 runs its Lite model. */
@@ -41,6 +49,7 @@ export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { chan
 export function buildBlocker(
   build: Pick<BuildInfo, "way" | "engine">, inputs: Record<string, unknown>, protonEnv: string | null = null,
 ): "needsFsr31" | "needsProton" | null {
+  if (build.engine === "dll") return null;
   const replacesFsr = build.way === "fsr" || build.engine === "proton";
   if (replacesFsr && !("fsr31" in inputs)) return "needsFsr31";
   if (build.engine === "proton" && !protonEnv) return "needsProton";
@@ -53,36 +62,57 @@ export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string
   return pill?.envName ?? null;
 }
 
-// The composer treats `;` as a shell operator, so overrides stay one `names=mode` entry:
-// Wine accepts several DLL names sharing a mode, separated by commas.
-function split(value: string | null): { names: string[]; mode: string } | null {
-  const raw = (value ?? "").replace(/^"|"$/g, "").trim();
-  if (!raw) return { names: [], mode: "" };
-  const eq = raw.indexOf("=");
-  if (eq <= 0) return null;
-  return { names: raw.slice(0, eq).split(",").map((n) => n.trim()).filter(Boolean), mode: raw.slice(eq + 1) };
+interface OverrideGroup { names: string[]; mode: string }
+
+function split(value: string | null): OverrideGroup[] | null {
+  const raw = (value ?? "").replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (!raw) return [];
+  const groups: OverrideGroup[] = [];
+  const seen = new Set<string>();
+  for (const group of raw.split(";")) {
+    const match = /^([^=]+)=((?:n|b)(?:,(?:n|b))?|)$/.exec(group.trim());
+    if (!match) return null;
+    const names = match[1].split(",").map((name) => name.trim());
+    if (names.some((name) => !/^[\w.*-]+$/.test(name) || seen.has(name.toLowerCase()))) return null;
+    for (const name of names) seen.add(name.toLowerCase());
+    groups.push({ names, mode: match[2] });
+  }
+  return groups;
 }
 
-/** Launch options with `override` (e.g. `dxgi=n,b`) in WINEDLLOVERRIDES; null when it cannot be merged safely. */
+function saveOverrides(parsed: ReturnType<typeof parse>, groups: OverrideGroup[]): string {
+  const value = groups.length ? `"${groups.map((g) => `${g.names.join(",")}=${g.mode}`).join(";")}"` : null;
+  if (value === null || getEnv(parsed, OVERRIDES) === null) return serialize(setEnv(parsed, OVERRIDES, value));
+  return serialize({ ...parsed, envs: parsed.envs.map((e) => e.name === OVERRIDES ? { ...e, value } : e) });
+}
+
+/** Conflicting existing modes require an explicit ownership receipt before replacement. */
 export function withOverride(launch: string, override: string): string | null {
   const parsed = parse(launch);
-  if (parsed.malformed) return null;
-  const [dll, mode] = override.split("=");
-  const current = split(getEnv(parsed, OVERRIDES));
-  if (!current) return null;
-  const others = current.names.filter((name) => name !== dll);
-  if (others.length && current.mode !== mode) return null;
-  return serialize(setEnv(parsed, OVERRIDES, `"${[...others, dll].join(",")}=${mode}"`));
+  if (parsed.malformed || parsed.envs.filter((e) => e.name === OVERRIDES).length > 1) return null;
+  const wanted = split(override);
+  const groups = split(getEnv(parsed, OVERRIDES));
+  if (!groups || !wanted || wanted.length !== 1 || wanted[0].names.length !== 1) return null;
+  const { names: [dll], mode } = wanted[0];
+  const existing = groups.find((g) => g.names.some((name) => name.toLowerCase() === dll.toLowerCase()));
+  if (existing) return existing.mode === mode ? launch : null;
+  const last = groups[groups.length - 1];
+  if (last?.mode === mode) last.names.push(dll);
+  else groups.push({ names: [dll], mode });
+  return saveOverrides(parsed, groups);
 }
 
 export function withoutOverride(launch: string, override: string): string | null {
   const parsed = parse(launch);
-  if (parsed.malformed) return null;
-  const [dll, mode] = override.split("=");
-  const current = split(getEnv(parsed, OVERRIDES));
-  if (!current || current.mode !== mode || !current.names.includes(dll)) return serialize(parsed);
-  const others = current.names.filter((name) => name !== dll);
-  return serialize(setEnv(parsed, OVERRIDES, others.length ? `"${others.join(",")}=${mode}"` : null));
+  if (parsed.malformed || parsed.envs.filter((e) => e.name === OVERRIDES).length > 1) return null;
+  const wanted = split(override);
+  const groups = split(getEnv(parsed, OVERRIDES));
+  if (!groups || !wanted || wanted.length !== 1 || wanted[0].names.length !== 1) return null;
+  const { names: [dll], mode } = wanted[0];
+  const existing = groups.find((g) => g.names.some((name) => name.toLowerCase() === dll.toLowerCase()));
+  if (!existing || existing.mode !== mode) return launch;
+  existing.names = existing.names.filter((name) => name.toLowerCase() !== dll.toLowerCase());
+  return saveOverrides(parsed, groups.filter((g) => g.names.length));
 }
 
 export function megabytes(bytes: number): string {
@@ -138,7 +168,7 @@ export function alreadyThere(launch: string, overrides: string[], env: Record<st
   return {
     overrides: overrides.filter((o) => {
       const [dll, mode] = o.split("=");
-      return !!current && current.mode === mode && current.names.includes(dll);
+      return !!current && current.some((g) => g.mode === mode && g.names.some((name) => name.toLowerCase() === dll.toLowerCase()));
     }),
     env: Object.keys(env).filter((name) => !parsed.malformed && getEnv(parsed, name) !== null),
   };

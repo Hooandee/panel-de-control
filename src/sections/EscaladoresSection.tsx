@@ -1,6 +1,6 @@
 import { LuCircleCheck, LuClock, LuSlidersHorizontal, LuTriangleAlert } from "react-icons/lu";
 import { Focusable } from "@decky/ui";
-import { useCallback, useEffect, useMemo, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useState, type FC, type ComponentProps } from "react";
 
 import { getUpscalersCompat, getUpscalersOverview, type GameCompat } from "../api";
 import { FocusableCard } from "../components/FocusableCard";
@@ -17,6 +17,8 @@ import { buildLabel } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
+
+const NavigationGroup = Focusable as FC<ComponentProps<typeof Focusable> & { childFocusDisabled?: boolean }>;
 
 export const EscaladoresSection: FC = () => {
   const { t } = useI18n();
@@ -76,10 +78,10 @@ export const EscaladoresSection: FC = () => {
   }, [appids]);
 
   return (
-    <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+    <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <style>{MOTION_CSS}</style>
       {selected && overview ? (
-        <GameView game={selected} overview={overview} onBack={closeGame} onChanged={refresh}
+        <GameView key={selected.liveAppid} game={selected} overview={overview} onBack={closeGame} onChanged={refresh}
           draft={held?.appid === selected.liveAppid ? held.draft as PageDraft<UpscalerChoice> | null : null} />
       ) : (
         <>
@@ -94,7 +96,7 @@ export const EscaladoresSection: FC = () => {
                   <LuSlidersHorizontal size={16} />{t("up.list.options")}
                 </Focusable>
               </div>
-              <div style={{ display: optionsOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
+              <NavigationGroup flow-children="column" childFocusDisabled={!optionsOpen} aria-hidden={!optionsOpen} style={{ display: optionsOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
                 <Fold label={t("up.inGame.title")} open={noticeOpen} onToggle={() => setNoticeOpen(!noticeOpen)} />
                 {noticeOpen && <SegmentRow
                   value={inGame}
@@ -102,10 +104,10 @@ export const EscaladoresSection: FC = () => {
                   options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
                 />}
                 <Fold label={t("up.list.manage")} open={bulkOpen} onToggle={() => setBulkOpen(!bulkOpen)} />
-                <div style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
+                <NavigationGroup flow-children="column" childFocusDisabled={!bulkOpen} aria-hidden={!bulkOpen} style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
                   <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
-                </div>
-              </div>
+                </NavigationGroup>
+              </NavigationGroup>
               <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, fontSize: theme.font.caption, color: theme.color.textMuted, paddingBottom: 4 }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuCircleCheck color={theme.color.ok} />{t("up.list.checked")}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuClock color={theme.color.accent} />{t("up.list.unchecked")}</span>

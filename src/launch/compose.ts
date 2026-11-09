@@ -73,6 +73,13 @@ function tokenize(s: string): { tokens: string[]; unbalanced: boolean } {
 // Shell operators / expansions our simple model can't safely rewrite around.
 const SHELL_OPS_RE = /[;&|`<>$]|\$\(/;
 
+function hasShellOperators(tokens: string[]): boolean {
+  return tokens.some((token) => {
+    const wine = /^WINEDLLOVERRIDES=(["'])[a-zA-Z0-9_.*=,;\s-]*\1$/.test(token);
+    return SHELL_OPS_RE.test(wine ? token.replace(/;/g, "") : token);
+  });
+}
+
 function toEnv(token: string): EnvVar {
   const eq = token.indexOf("=");
   return { name: token.slice(0, eq), value: token.slice(eq + 1) };
@@ -93,7 +100,7 @@ export function parse(str: string): Parsed {
   // Read-only (never mutate) when the string is beyond our simple 3-zone model:
   // dangling quote/escape, shell operators, more than one %command%, or a %command%
   // that isn't a standalone token (e.g. embedded in a quoted `sh -c "…%command%"`).
-  if (unbalanced || /[\r\n]/.test(raw) || SHELL_OPS_RE.test(raw) || cmdCount > 1 || rawCmdCount !== cmdCount) {
+  if (unbalanced || /[\r\n]/.test(raw) || hasShellOperators(tokens) || cmdCount > 1 || rawCmdCount !== cmdCount) {
     return { ...empty, malformed: true };
   }
 

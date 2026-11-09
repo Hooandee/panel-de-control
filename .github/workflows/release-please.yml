@@ -11,6 +11,7 @@ on:
       - "src/**"
       - "kiosk/**"
       - "py_modules/**"
+      - "game-recipes/**"
       - "main.py"
       - "package.json"
       - "pnpm-lock.yaml"

@@ -27,7 +27,7 @@ let kept: { appid: string; first: Shot | null; second: Shot | null; ghost: Ghost
 
 export const isComparing = (appid: string): boolean => kept?.appid === appid;
 
-const UPSCALER_NAMES: Record<string, string> = { fsr31: "FSR", fsr31_12: "FSR", fsr22: "FSR 2", xess: "XeSS", xess_12: "XeSS", dlss: "DLSS" };
+const UPSCALER_NAMES: Record<string, string> = { "FSR 3.X": "FSR", fsr31: "FSR", fsr31_12: "FSR", fsr22: "FSR 2", xess: "XeSS", xess_12: "XeSS", dlss: "DLSS" };
 
 /** Panel only knows what it installed; a switch made in OptiScaler's own menu shows up as the log's upscaler. */
 function shotLabel(t: (key: string) => string, order: "first" | "second", shot: Shot): string {

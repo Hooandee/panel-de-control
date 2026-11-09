@@ -12,6 +12,8 @@ import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from . import recipe_catalog
+
 WIKI_FILE = Path(__file__).with_name("recipes_wiki.json")
 NEEDS = ("reframework", "nvngx_dlss", "anti_cheat_off", "luma", "mod")
 STATUSES = ("works", "broken", "partial")
@@ -42,6 +44,13 @@ class Recipe:
     wiki_settings: dict[str, str] = field(default_factory=dict)
     wiki_suggestions: dict[str, str] = field(default_factory=dict)
     source: str = "panel"
+    dependencies: tuple[str, ...] = ()
+    catalog_revision: int | None = None
+    catalog_version: int | None = None
+    recommended_input: str | None = None
+    effective_api: str | None = None
+    quality_owner: str = "panel"
+    recommended_build: str | None = None
 
 
 RECIPES: dict[str, Recipe] = {
@@ -50,6 +59,8 @@ RECIPES: dict[str, Recipe] = {
         # REDlauncher waits for a click under Proton; DX12 is the build that ships the upscalers.
         # graphics.xml: FSR Frame Generation is disabled while Reflex is on.
         Recipe("292030", exe="bin/x64_dx12/witcher3.exe", args=("--launcher-skip", "-dx12"), fg_note="reflexOff"),
+        # ControlLauncher also loads the proxy before OptiScaler can apply its Control_DX12 spoofing exception.
+        Recipe("870780", ini={"Spoofing.Dxgi": "false"}),
         # RE Engine exposes its upscaler to OptiScaler only through REFramework.
         Recipe("2054970", files={"dinput8.dll": "reframework-nightly"}, native_dlls=("dinput8",)),
         # Monster Hunter Wilds wiki entry: on AMD/Intel Streamline's own spoof already unlocks DLSS; DXGI spoofing
@@ -110,7 +121,7 @@ WIKI = _wiki()
 def applies(recipe: Recipe | None) -> bool:
     """Whether installing changes anything because of the recipe."""
     return bool(recipe and (recipe.exe or recipe.args or recipe.files or recipe.native_dlls or recipe.ini
-                            or recipe.fg or recipe.proxy or recipe.optipatcher or recipe.wiki_settings))
+                            or recipe.fg or recipe.proxy or recipe.optipatcher or recipe.wiki_settings or recipe.dependencies))
 
 
 def combine(hand: Recipe | None, wiki: Recipe | None) -> Recipe | None:
@@ -141,8 +152,17 @@ def with_wiki(recipe: Recipe | None, live: Recipe | None) -> Recipe | None:
                    proxy=live.proxy or recipe.proxy)
 
 
-def recipe_for(appid: str, live: Recipe | None = None) -> Recipe | None:
-    return combine(RECIPES.get(str(appid)), with_wiki(WIKI.get(str(appid)), live))
+def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optiscaler",
+               platform: str | None = None, arch: str | None = None, game_build: str | None = None) -> Recipe | None:
+    catalog = recipe_catalog.bundled()
+    entry = catalog.match(appid, engine, platform, arch, game_build=game_build)
+    hand = RECIPES.get(str(appid))
+    if entry:
+        hand = replace(hand or Recipe(entry.appid), exe=entry.exe, args=entry.args, ini=dict(entry.ini),
+                      dependencies=entry.dependencies, catalog_revision=entry.revision,
+                      catalog_version=catalog.catalog_version, source="game-recipes",
+                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build)
+    return combine(hand, with_wiki(WIKI.get(str(appid)), live))
 
 
 # Every RE Engine game ships its packs as re_chunk_000.pak in the game root.
@@ -151,13 +171,17 @@ REFRAMEWORK = {"dinput8.dll": "reframework-nightly"}
 
 
 def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
-    """Capcom's RE Engine only shows its upscaler to OptiScaler through REFramework (OptiScaler wiki)."""
-    if not (root / RE_ENGINE_MARKER).is_file():
+    """Compose the standard REFramework dependency from game files or known requirements."""
+    if not (root / RE_ENGINE_MARKER).is_file() and not (recipe and "reframework" in recipe.needs):
         return recipe
     base = recipe or Recipe(str(appid))
     # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
     keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
-    if base.files:
-        return replace(base, **keys)
-    return replace(base, files=dict(REFRAMEWORK), native_dlls=(*base.native_dlls, "dinput8"),
+    files = dict(base.files)
+    if not any(name.lower() == "dinput8.dll" for name in files):
+        files.update(REFRAMEWORK)
+    native_dlls = {}
+    for name in (*base.native_dlls, "dinput8"):
+        native_dlls.setdefault(name.lower(), name)
+    return replace(base, files=files, native_dlls=tuple(native_dlls.values()),
                    needs=tuple(n for n in base.needs if n != "reframework"), **keys)

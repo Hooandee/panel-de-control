@@ -1,13 +1,14 @@
 import { openFilePicker } from "@decky/api";
-import { ConfirmModal, Focusable, Navigation } from "@decky/ui";
+import { ConfirmModal, Focusable } from "@decky/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
-import { LuArrowLeftRight, LuCircleCheck, LuCircleDashed, LuTriangleAlert } from "react-icons/lu";
+import { LuArrowLeftRight, LuInfo, LuCircleCheck, LuCircleDashed, LuTriangleAlert } from "react-icons/lu";
 
 import {
-  cancelUpscalersJob, configureUpscaler, getUpscalersGame, installUpscaler, pressUpscalerKey,
+  cancelUpscalersJob, configureUpscaler, getUpscalersGame,
   refreshUpscalerWiki, setUpscalersExe, uninstallUpscaler, verifyUpscaler, adoptForeignUpscaler, restoreForeignUpscaler,
 } from "../api";
 import { CompactBackAction } from "../components/CompactBackAction";
+import { recordUiEvent } from "../system/uiEvents";
 import { GameCover } from "../components/GameCover";
 import { useSectionBack } from "../components/sectionBack";
 import { useRunningGame } from "../tdp/useRunningGame";
@@ -22,27 +23,38 @@ import type { GpuGen } from "../launch/proton";
 import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
-  QUALITIES, badgeLabel, buildLabel, defaultChoice, megabytes, renderHeight,
-  buildBlocker, downloadPace, protonFsr4Env, restoredChoice, type PaceSample,
+  QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
+  buildBlocker, protonFsr4Env, restoredChoice,
 } from "./model";
+import { scalerSwitching } from "./scalerTransition";
+import { MakoScaling } from "./MakoScaling";
+import { getMakoStatus } from "../api";
+import { ImageControls, type ImageControlsHandle } from "./ImageControls";
 import { AdvancedIni } from "./AdvancedIni";
-import { onJobUpdate, trackJob } from "./jobRunner";
+import { clearInstallRequest, onJobUpdate, readInstallJobId, readInstallRequest, startInstallJob, takeJobNotice, trackJob, waitForJobCompletion } from "./jobRunner";
 import { DuringPlay, useUpscalerLive } from "./LivePanel";
+import { pressUpscalerKeyInGame } from "./gameHotkey";
 import { WikiFacts } from "./WikiFacts";
 import { restartGame } from "./restartGame";
+import { cancelPendingInstall, holdForRestart, onPendingInstalls, pendingInstall, queueForGameExit, runPendingInstall, takePendingFailure } from "./pendingInstall";
 import { showModal } from "../navigation/showModal";
 import { holdPage, onDraft, showGame, writeDraft, type PageDraft } from "./pageMemory";
+import { LaunchMixNotice } from "./LaunchMixNotice";
+import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
+import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
 import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
 } from "./parts";
-import type { GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
+import type { BuildInfo, GameDetail, UpscalerChoice, UpscalerJob, UpscalerStatus, UpscalersOverview, VerifyResult } from "./types";
 import { upscalerErrorCode } from "./errorCode";
 
 const INPUT_NAMES: Record<string, string> = { dlss: "DLSS", fsr31: "FSR 3.1", fsr2: "FSR 2", xess: "XeSS" };
 
+// Games whose saved changes wait for the next launch; kept across leaving the page until the game closes.
+const savedForNextLaunch = new Set<string>();
 const RETRYABLE = new Set(["download_failed", "hash_mismatch", "size_mismatch", "no_space", "helixsr_failed"]);
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -50,7 +62,14 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 function errorText(t: Translate, code: string | null | undefined): string {
   const key = `up.error.${code}`;
   const text = t(key);
-  return text === key ? t("up.error.generic") : text;
+  return text === key ? t(code?.startsWith("prefix_") ? "up.error.prefix_failed" : "up.error.generic") : text;
+}
+
+function jobErrorText(t: Translate, job: UpscalerJob): string {
+  const text = job.error === "no_space" && job.detail
+    ? t("up.error.no_space", { mb: megabytes(Number(job.detail)) })
+    : errorText(t, job.error);
+  return job.detail && job.error?.startsWith("helixsr") ? `${text} (${job.detail})` : text;
 }
 
 export const GameView: FC<{
@@ -62,16 +81,66 @@ export const GameView: FC<{
 }> = ({ game, overview, onBack, onChanged, draft }) => {
   const { t } = useI18n();
   const appid = String(game.liveAppid);
+  const themes = useThemes();
+  const duo = themes.cards.some((card) => card.id === "hooandee-duo" && card.active)
+    || themes.snapshot.themes.some((theme) => theme.name === "Hooandee Duo" && theme.enabled);
   const [detail, setDetail] = useState<GameDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(draft?.advanced ?? false);
-  const [choice, setChoice] = useState<UpscalerChoice>(() => draft?.choice ?? defaultChoice(overview.preferred));
+  const [choice, setChoice] = useState<UpscalerChoice>(() => pendingInstall(appid) ?? readInstallRequest(appid) ?? draft?.choice ?? defaultChoice(overview.preferred));
+  const [queued, setQueued] = useState(() => pendingInstall(appid));
+  useEffect(() => onPendingInstalls(() => {
+    setQueued(pendingInstall(appid));
+    const failed = takePendingFailure(appid);
+    if (failed) setMessage(errorText(t, failed));
+  }), [appid]);
+  const [pendingModel, setPendingModel] = useState(false);
+  const [switchingScaler, setSwitchingScaler] = useState(() => scalerSwitching(appid));
+  useEffect(() => {
+    const refresh = () => setSwitchingScaler(scalerSwitching(appid));
+    refresh();
+    window.addEventListener("pdc-scaler-switch", refresh);
+    return () => window.removeEventListener("pdc-scaler-switch", refresh);
+  }, [appid]);
+  const [spatial, setSpatial] = useState(false);
+  const [spatialInstalled, setSpatialInstalled] = useState(false);
+  const spatialSelected = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    spatialSelected.current = false;
+    setSpatial(false);
+    setPendingModel(false);
+    setSpatialInstalled(false);
+    const refresh = (initial = false) => { void getMakoStatus(appid).then(status => {
+      if (!alive) return;
+      const installed = !!status.profiles[appid]?.scaling_enabled;
+      setSpatialInstalled(installed);
+      if (initial && !spatialSelected.current) setSpatial(installed);
+    }).catch(() => {}); };
+    const changed = () => refresh();
+    refresh(true);
+    window.addEventListener("pdc-mako-changed", changed);
+    return () => { alive = false; window.removeEventListener("pdc-mako-changed", changed); };
+  }, [appid]);
+  const selectSpatial = (value: boolean) => { spatialSelected.current = true; setSpatial(value); };
   const keepDraft = useRef(!!draft);
+  const initialDefault = useRef(!draft && !readInstallRequest(appid));
+  const preferred = detail?.preferred ?? overview.preferred;
+  const trace = (action: string, next: UpscalerChoice = choice, ok = true) => {
+    recordUiEvent("upscalers", action, {
+      appid, stage: action === "restart_result" ? "result" : "intent",
+      build: next.build, model: next.model, quality: next.quality,
+      sharpness: next.sharpness, fg: next.fg, fg_route: next.fg_route,
+    }, ok);
+  };
   const changeChoice = (next: UpscalerChoice) => {
+    initialDefault.current = false;
+    trace("select", next);
     setChoice(next);
     writeDraft(game.liveAppid, { choice: next, advanced });
   };
   const toggleAdvanced = () => {
+    recordUiEvent("upscalers", "advanced", { appid, open: !advanced });
     setAdvanced(!advanced);
     writeDraft(game.liveAppid, { choice, advanced: !advanced });
   };
@@ -82,10 +151,24 @@ export const GameView: FC<{
       setAdvanced(next.advanced);
     });
   }, [game.liveAppid]);
-  const [job, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
-  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => { writeDraft(game.liveAppid, { choice, advanced }); }, [game.liveAppid, choice, advanced]);
+  const [trackedJob, setJob] = useState<UpscalerJob | null>(overview.job?.appid === appid ? overview.job : null);
+  const job = trackedJob?.appid === appid ? trackedJob : null;
+  const [message, setMessage] = useState<string | null>(() => {
+    const notice = takeJobNotice(appid);
+    if (job?.state === "error") return jobErrorText(t, job);
+    return notice ? t(notice.key, notice.params) : null;
+  });
   const [verify, setVerify] = useState<VerifyResult | null>(null);
-  const [applied, setApplied] = useState<"now" | "restart" | "restarting" | null>(null);
+  const [applied, setAppliedState] = useState<"now" | "restart" | "restarting" | null>(
+    savedForNextLaunch.has(appid) ? "restart" : null);
+  const setApplied = (next: "now" | "restart" | "restarting" | null) => {
+    if (next === "restart") savedForNextLaunch.add(appid);
+    else if (next !== "restarting") savedForNextLaunch.delete(appid);
+    setAppliedState(next);
+  };
+  const imageControls = useRef<ImageControlsHandle | null>(null);
+  const [imageDirty, setImageDirty] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [confirmAntiCheat, setConfirmAntiCheat] = useState(false);
   const [foreignBusy, setForeignBusy] = useState(false);
@@ -103,9 +186,14 @@ export const GameView: FC<{
   const [comparing, setComparing] = useState(() => isComparing(appid));
   const runningGame = useRunningGame();
   const gameRunning = runningGame?.liveAppid === game.liveAppid;
+  useEffect(() => {
+    if (!gameRunning && savedForNextLaunch.has(appid)) {
+      savedForNextLaunch.delete(appid);
+      setAppliedState((last) => last === "restart" ? null : last);
+    }
+  }, [gameRunning, appid]);
   const mounted = useRef(true);
-  const lastFacts = detail?.history.map((h) => h.facts).filter(Boolean).pop();
-  const height = lastFacts?.resolution?.output[1] ?? overview.display?.[1] ?? 800;
+  const height = lastOutputHeight(detail?.history ?? []);
   const backOverride = useMemo(() => ({ label: t("up.back"), onBack }), [t, onBack]);
   const borrowedBack = useSectionBack(backOverride);
 
@@ -116,9 +204,15 @@ export const GameView: FC<{
       if (!mounted.current) return;
       setDetail(next);
       setLoadError(null);
-      if (next.install && !keepDraft.current) {
-        setChoice(restoredChoice(next.install.build, next.install.options, overview.builds, overview.preferred));
+      const request = pendingInstall(appid) ?? readInstallRequest(appid);
+      if (request) setChoice(request);
+      else if (next.install && !keepDraft.current) {
+        setChoice(restoredChoice(next.install.build, next.install.options, overview.builds, next.preferred ?? overview.preferred));
       }
+      else if (initialDefault.current && !next.install) {
+        setChoice(defaultChoice(next.preferred ?? overview.preferred));
+      }
+      initialDefault.current = false;
       keepDraft.current = false;
     } catch (error) {
       if (mounted.current) setLoadError(upscalerErrorCode(error));
@@ -146,11 +240,9 @@ export const GameView: FC<{
     if (next.appid !== appid || !mounted.current) return;
     setJob(next);
     if (!finished) return;
+    takeJobNotice(appid);
     if (next.state === "error") {
-      const text = next.error === "no_space" && next.detail
-        ? t("up.error.no_space", { mb: megabytes(Number(next.detail)) })
-        : errorText(t, next.error);
-      setMessage(next.detail && next.error?.startsWith("helixsr") ? `${text} (${next.detail})` : text);
+      setMessage(jobErrorText(t, next));
     } else if (notice) {
       setMessage(t(notice.key, notice.params));
     }
@@ -170,6 +262,7 @@ export const GameView: FC<{
       setJob(started);
       trackJob(started, { appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam });
     } catch (error) {
+      recordUiEvent("upscalers", "action_error", { appid, code: upscalerErrorCode(error) }, false);
       setMessage(errorText(t, upscalerErrorCode(error)));
     }
   };
@@ -179,24 +272,37 @@ export const GameView: FC<{
   const builds = overview.builds;
   const status = install?.status ?? null;
   const sameBuild = install?.build === choice.build;
-  const qualityChanged = install?.options.quality !== choice.quality;
-  const modelChanged = (install?.options.model ?? null) !== (choice.model ?? null);
-  const fgChanged = (install?.options.fg ?? "off") !== (choice.fg ?? "off")
-    || (choice.fg === "on" && (install?.options.fg_route ?? null) !== (choice.fg_route ?? null));
-  const dirty = !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || fgChanged || modelChanged;
-  const routes = detail?.fg_plan?.routes ?? {};
-  const route = choice.fg_route ?? (detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? "game");
+  const solution = detail?.solutions?.[choice.build] ?? (detail?.install?.build === choice.build ? detail.solution : null);
+  const qualityMode = qualityControl(detail, solution, sameBuild);
+  const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
+  const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
+    !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
+  const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null);
+  const dirty = !awaitingExit && (spatialInstalled || !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || modelChanged);
+  const selectedFgPlan = solution ? solution.offered_fg_plan ?? solution.fg_plan : detail?.fg_plan;
+  const routes = selectedFgPlan?.routes ?? {};
+  const route = choice.fg_route ?? (selectedFgPlan?.route ?? selectedFgPlan?.source ?? "game");
   const selected = builds.find((b) => b.id === choice.build);
   const selectedModels = selected?.models;
   const helix = selected?.engine === "helixsr";
-  const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton";
+  const replacesFsr = selected?.way === "fsr" || selected?.engine === "proton" || selected?.engine === "dll";
   const installedBuild = builds.find((b) => b.id === install?.build);
-  const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton";
-  const installSelected = () => installUpscaler(appid, {
-    ...choice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+  const externalHelix = !install && detail?.analysis.foreign_identity?.engine === "helixsr";
+  const installedOptiscaler = !!install && installedBuild?.way !== "fsr" && installedBuild?.engine !== "proton" && installedBuild?.engine !== "dll";
+  const installedRoute = install?.options.fg_route ?? detail?.fg_plan?.route ?? detail?.fg_plan?.source ?? null;
+  const scalerChoice = { ...choice, fg: install?.options.fg ?? "off" as const, fg_route: install?.options.fg_route ?? null };
+  const installSelected = () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
+    ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
+  const retry = () => {
+    const request = job ? readInstallRequest(appid, job.id) : null;
+    trace("retry", request ?? choice);
+    return start(request
+      ? () => startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, request)
+      : installSelected);
+  };
   const adoptAndInstall = async () => {
     if (foreignPending.current || running || gameRunning || !selected?.available || !selected.supported
       || !detail?.analysis.target || detail.updating || buildBlocker(selected, detail.analysis.inputs, protonEnv)
@@ -215,11 +321,25 @@ export const GameView: FC<{
   };
 
   const apply = async () => {
-    if (install && sameBuild) {
+    trace("apply");
+    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged)) {
+      // The running game holds OptiScaler's files: the new version goes in as soon as it closes.
+      queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
+        ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
+        ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
+      });
+      setMessage(null);
+      setApplied(null);
+      return;
+    }
+    if (install && sameBuild && !spatialInstalled) {
       setMessage(null);
       setApplied(null);
       try {
-        const result = await configureUpscaler(appid, choice);
+        const requestId = readInstallJobId(appid);
+        const result = await configureUpscaler(appid, scalerChoice);
+        if (modelChanged) setVerify(null);
+        if (requestId) clearInstallRequest(appid, requestId);
         if (gameRunning) setApplied(result.live ? "now" : "restart");
         await load();
         onChanged();
@@ -231,11 +351,44 @@ export const GameView: FC<{
     await reinstall();
   };
 
+  const applyFrameGeneration = async (fg: "on" | "off", fg_route: UpscalerChoice["fg_route"]) => {
+    trace("frame_generation", { ...choice, fg, fg_route });
+    if (blocked || running) throw new Error("blocked");
+    const configureInstalled = !!install && (sameBuild || fg === "off");
+    const fgSolution = detail?.solutions?.[configureInstalled ? install!.build : choice.build];
+    const next = { ...(configureInstalled ? restoredChoice(install!.build, install!.options, builds, preferred) : choice), fg, fg_route };
+    if (configureInstalled) {
+      const requestId = readInstallJobId(appid);
+      const recoveryOnly = fg === "off" && install?.options.fg === "on" && !!fgSolution
+        && (!!fgSolution.blocked_reason || !installedRoute || !fgSolution.fg_plan?.routes?.[installedRoute]);
+      const result = await configureUpscaler(appid, recoveryOnly ? { fg: "off" } : next);
+      if (requestId) clearInstallRequest(appid, requestId);
+      if (gameRunning) setApplied(result.live ? "now" : "restart");
+      keepDraft.current = true;
+      changeChoice({ ...choice, fg, fg_route });
+      await load();
+      onChanged();
+    } else if (fg === "on") {
+      const started = await startInstallJob({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, { ...next, confirm_anti_cheat: confirmAntiCheat });
+      setJob(started);
+      await waitForJobCompletion(started.id);
+    }
+  };
+
+  const saveAll = async () => {
+    // Image settings go first: a new version carries the saved sharpness over into its fresh INI.
+    if (imageDirty && !(await imageControls.current?.save())) return;
+    if (dirty) await apply();
+  };
+
   const discard = () => {
-    if (install) changeChoice(restoredChoice(install.build, install.options, builds, overview.preferred));
+    trace("discard");
+    cancelPendingInstall(appid);
+    if (install) changeChoice(restoredChoice(install.build, install.options, builds, preferred));
   };
 
   const askRestart = () => {
+    trace("restart_prompt");
     holdPage();
     showModal(
       <ConfirmModal
@@ -245,10 +398,22 @@ export const GameView: FC<{
         strCancelButtonText={t("up.bulk.cancel")}
         onOK={async () => {
           setApplied("restarting");
-          const ok = await restartGame(game.liveAppid);
+          const release = holdForRestart(appid);
+          let ok = false;
+          let failure: string | null = null;
+          try {
+            ok = await restartGame(game.liveAppid, () => runPendingInstall(appid));
+          } catch (error) {
+            ok = true;
+            failure = upscalerErrorCode(error);
+          } finally {
+            release();
+          }
+          trace("restart_result", choice, ok);
           if (!mounted.current) return;
           setApplied(null);
-          if (!ok) setMessage(t("up.restart.failed"));
+          if (failure) setMessage(errorText(t, failure));
+          else if (!ok) setMessage(t("up.restart.failed"));
         }}
       />,
       window,
@@ -293,10 +458,7 @@ export const GameView: FC<{
   const nextCounterStyle = async () => {
     setCounterStyleFailed(false);
     try {
-      // gamescope hands the key to the focused window: with the QAM open, Steam keeps it.
-      holdPage();
-      Navigation.CloseSideMenus();
-      await pressUpscalerKey(appid, "fps_style");
+      await pressUpscalerKeyInGame(appid, "fps_style");
     } catch {
       setCounterStyleFailed(true);
     }
@@ -308,28 +470,46 @@ export const GameView: FC<{
   const facts = verify?.facts ?? detail?.history[detail.history.length - 1]?.facts;
   const render = facts?.resolution?.render[1] ?? null;
   const output = facts?.resolution?.output[1] ?? null;
-  const blocked = foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
+  const blocked = switchingScaler || foreignBusy || !detail?.analysis.target || !!detail.updating || (detail.analysis.foreign && !install)
     || (detail.analysis.anti_cheat && !install && !confirmAntiCheat);
-  const inputs = detail?.analysis.inputs ?? {};
+  const inputs = solution?.inputs ?? detail?.analysis.inputs ?? {};
   const blockedBuilds = builds.filter((b) => b.available && b.supported && buildBlocker(b, inputs, protonEnv));
   const amdMissing = !overview.gpu.startsWith("rdna") && builds.some((b) => b.available && !b.supported && b.family === "fsr");
   const coming = builds.filter((b) => !b.available && b.supported);
-  const preferredBuild = builds.find((b) => b.id === overview.preferred && b.available);
+  const preferredBuild = builds.find((b) => b.id === preferred && b.available);
   const runs = badgeLabel(installedBuild, install?.options.model, install?.build ?? "").full;
   const uses = [...new Set(Object.keys(inputs).map((k) => INPUT_NAMES[k]).filter(Boolean))];
   const qualityName = (q: UpscalerChoice["quality"]) => (q ? t(`up.quality.${q}`) : t("up.quality.game"));
+  const installedEngine = installedBuild?.engine ?? "optiscaler";
+  const selectedEngine = selected?.engine ?? "optiscaler";
+  const optiscalerRecipe = !spatial && !pendingModel && !externalHelix && selectedEngine === "optiscaler";
+  const recommendedInputKey = solution ? solution.recommended_input : detail?.recipe_info?.recommended_input;
+  const scalerSeenWorking = sameBuild && (status === "active" || (playing && live.active));
+  // Locked quality already names the input to pick, right under the selector.
+  const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
+  const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
+    ? INPUT_NAMES[recommendedInputKey] : null;
+  const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
+  const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
+  const modeChanged = installedEngine !== selectedEngine && [installedEngine, selectedEngine].every((engine) => engine === "dll" || engine === "optiscaler");
+  const pendingBuildLabel = (build: BuildInfo | undefined, model: string | null | undefined, fallback: string) => {
+    if (!build) return fallback;
+    const name = buildLabel({ ...build, channel: undefined });
+    const variant = build.models?.length ? model ?? build.models[0] : null;
+    return variant ? `${name} ${variant === "lite" ? "Lite" : t(`up.model.${variant}`)}` : name;
+  };
+  const versionChangeLabel = (label: string, engine: string) => modeChanged ? `${label} (${engine === "dll" ? t("up.mode.dll") : "OptiScaler"})` : label;
   const changes = !install ? [] : [
-    !sameBuild && t("up.change.version", { from: buildLabel(installedBuild ?? { family: "fsr", version: install.build }), to: selected ? buildLabel(selected) : choice.build }),
+    !sameBuild && t("up.change.version", { from: versionChangeLabel(pendingBuildLabel(installedBuild, install.options.model, install.build), installedEngine), to: versionChangeLabel(pendingBuildLabel(selected, choice.model, choice.build), selectedEngine) }),
     qualityChanged && t("up.change.quality", { from: qualityName(install.options.quality), to: qualityName(choice.quality) }),
-    modelChanged && t("up.change.model", { from: t(`up.model.${install.options.model ?? selectedModels?.[0] ?? "lite"}`), to: t(`up.model.${choice.model ?? selectedModels?.[0] ?? "lite"}`) }),
-    fgChanged && t("up.change.fg", { from: fgName(t, install.options.fg, install.options.fg_route), to: fgName(t, choice.fg, choice.fg_route) }),
+    modelChanged && !!installedBuild?.models?.length && !!selectedModels?.length && t("up.change.model", { from: t(`up.model.${install.options.model ?? installedBuild.models[0]}`), to: t(`up.model.${choice.model ?? selectedModels?.[0] ?? "lite"}`) }),
   ].filter((line): line is string => !!line);
 
   const subtitle = !detail ? null
     : detail.native ? null
     : playing ? t("up.sub.playing")
     : install ? runs
-    : detail.analysis.foreign ? t("up.sub.foreign")
+    : detail.analysis.foreign ? externalHelix ? "" : t("up.sub.foreign")
     : uses.length ? t(preferredBuild ? "up.sub.usesBetter" : "up.sub.uses", { name: uses.join(", ") })
     : null;
 
@@ -347,7 +527,9 @@ export const GameView: FC<{
 
       {detail ? (
         <div style={{ ...theme.card, padding: `${theme.space.md}px`, display: "flex", flexDirection: "column", gap: 6 }}>
-          {detail.native ? (
+          {spatialInstalled && (spatial || !install) ? (
+            <StatusLine title={t("up.state.installed", { name: "Mako" })} />
+          ) : detail.native ? (
             <StatusLine title={t("up.native.title")} sub={t("up.native")} />
           ) : playing ? (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
@@ -375,24 +557,26 @@ export const GameView: FC<{
               title={status === "active" ? t("up.state.working", { name: runs }) : status === "broken" ? t("up.status.broken") : t("up.state.installed", { name: runs })}
               sub={status === "active" && render && output
                 ? t(render < output ? "up.state.checked" : "up.state.checkedNative", { from: render, to: output })
-                : status === "active" ? undefined : t(`up.status.${status}`)}
+                : status === "active" ? undefined : installedBuild?.engine === "dll" && status === "not_run"
+                  ? t("up.status.dll_not_run") : t(`up.status.${status}`)}
               tone={status === "broken" ? "danger" : status === "loaded" ? "warn" : undefined}
             />
           ) : detail.analysis.foreign ? (
-            <StatusLine icon={<LuArrowLeftRight size={17} />} title={t("up.foreign.title")} sub={t("up.foreign.body")} />
+            <StatusLine icon={<LuArrowLeftRight size={17} />} title={detail.analysis.foreign_identity?.engine === "helixsr" ? `HelixSR${detail.analysis.foreign_identity.variant === "unknown" ? "" : ` ${detail.analysis.foreign_identity.variant.toUpperCase()}`}` : t("up.foreign.title")} sub={detail.analysis.foreign_identity?.engine === "helixsr" ? t("up.helix.foreign", { name: "HelixSR" }) : t("up.foreign.body")} />
           ) : (
             <StatusLine
               title={t("up.state.none")}
             />
           )}
-          {!detail.native && <ModelPicker builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv}
+          <LaunchMixNotice liveAppid={game.liveAppid} scaler={install ? runs : detail.analysis.foreign_identity?.engine === "helixsr" ? "HelixSR" : null} />
+          {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
             disabled={running || foreignBusy} onChange={changeChoice} />}
+          {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (
             <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <Spinner size={10} /> {t("up.wiki.updating")}
             </span>
           )}
-          {detail.recipe && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.recipe")}</span>}
           {detail.launcher && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t(`up.launcher.${detail.launcher}`)}</span>}
           {detail.shortcut && !detail.native && (
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -419,17 +603,16 @@ export const GameView: FC<{
 
       {detail && !detail.native && (
         <>
-          {detail.analysis.foreign && !install && (
+          {detail.analysis.foreign && detail.analysis.foreign_identity?.engine !== "helixsr" && !install && (
             <Row><ActionButton label={t("up.foreign.adopt")} busy={foreignBusy} disabled={running || gameRunning || !selected?.available || !selected.supported || !detail.analysis.target || !!detail.updating || !!buildBlocker(selected, detail.analysis.inputs, protonEnv) || (detail.analysis.anti_cheat && !confirmAntiCheat)} onPress={() => void adoptAndInstall()} /></Row>
-          )}
-          {detail.foreign_backup && !install && !detail.analysis.foreign && (
-            <Row><ActionButton label={t("up.foreign.restore")} disabled={foreignBusy || running || gameRunning} onPress={() => void foreignAction(restoreForeignUpscaler)} /></Row>
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
-          {detail.analysis.target && uses.length === 0 && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
+          {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
           {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
-          {detail.recipe_info?.needs.map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {detail.recipe_info?.needs.filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
+          {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
           )}
@@ -446,6 +629,70 @@ export const GameView: FC<{
         </>
       )}
 
+
+      {detail && spatial && <MakoScaling key={appid} appid={appid} liveAppid={game.liveAppid} isNonSteam={game.isNonSteam}
+        disabled={running || foreignBusy || gameRunning || switchingScaler || !!detail.updating} gameRunning={gameRunning} mixed={!install && detail.analysis.foreign} onChanged={() => { void load(); onChanged(); }} />}
+
+      {detail && !pendingModel && !spatial && !detail.native && !externalHelix && !replacesFsr && qualityMode.mode !== "game" && (
+        <>
+          <Label>{t("up.section.quality")}</Label>
+          <SegmentRow compact disabled={qualityMode.mode === "locked"}
+            value={choice.quality && QUALITIES.includes(choice.quality) ? choice.quality : null}
+            onChange={(quality) => changeChoice({ ...choice, quality })}
+            options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: height === undefined ? undefined : `${renderHeight(height, q)}p` }))}
+          />
+        </>
+      )}
+      {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
+      {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
+      {recommendedInput && <Notice icon={<LuInfo size={16} />}>
+        {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
+      </Notice>}
+      {detail && !spatial && !detail.native && (installedOptiscaler || detail.analysis.foreign_identity?.engine === "helixsr") && (
+        <ImageControls key={`${appid}:${detail.analysis.target}:${install?.build ?? "foreign"}`}
+          appid={appid} disabled={running || foreignBusy || (gameRunning && !installedOptiscaler) || switchingScaler || !!detail.updating}
+          gameRunning={gameRunning} revision={JSON.stringify(install?.options ?? null)}
+          ref={imageControls} onDirty={setImageDirty}
+          onSavedForNextLaunch={() => setApplied("restart")} />
+      )}
+      {detail && !detail.native && helix && <Note>{t("up.helix.pick.fsr")}</Note>}
+      {detail && !detail.native && selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
+
+      {detail && !pendingModel && !spatial && !detail.native && !externalHelix && !running && (status === "broken" || dirty || imageDirty || install) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}` }}>
+          {status === "broken" ? (
+            <Row><ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} /></Row>
+          ) : !install ? (
+            <Row>
+              <ActionButton primary label={t("up.activate", { name: badgeLabel(selected, choice.model, choice.build).full })} onPress={apply} disabled={blocked} />
+            </Row>
+          ) : dirty || imageDirty ? (
+            <>
+              {dirty && changes.map((line) => (
+                <span key={line} style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted, textAlign: "center" }}>{line}</span>
+              ))}
+              <Row>
+                <ActionButton label={t("up.discard")} onPress={() => { discard(); imageControls.current?.discard(); }} />
+                <ActionButton primary label={t("up.save")} onPress={saveAll} disabled={blocked} />
+              </Row>
+            </>
+          ) : (
+            <Row><ActionButton label={t("up.deactivate", { name: runs })} disabled={blocked || gameRunning} onPress={() => start(() => uninstallUpscaler(appid))} /></Row>
+          )}
+        </div>
+      )}
+
+      {applied === "now" && !message && <Note>{t("up.live.appliedNow")}</Note>}
+      {(applied === "restart" || awaitingExit) && !message && gameRunning && (
+        <InView>
+          <Note>{t(awaitingExit ? "up.live.appliedOnExit" : "up.live.appliedNext")}</Note>
+          <Row>
+            {awaitingExit && <ActionButton label={t("up.discard")} onPress={discard} />}
+            <ActionButton primary={awaitingExit} label={t("up.restart.button")} onPress={askRestart} />
+          </Row>
+        </InView>
+      )}
+      {applied === "restarting" && <Note>{t("up.restart.doing")}</Note>}
       {detail && playing && !comparing && (
         <DuringPlay
           appid={appid}
@@ -460,129 +707,96 @@ export const GameView: FC<{
         <CompareView appid={appid} gameRunning={gameRunning} onClose={() => setComparing(false)} />
       )}
 
-      {detail && !detail.native && !replacesFsr && (
-        <>
-          <Label>{t("up.section.quality")}</Label>
-          <SegmentRow
-            value={choice.quality && QUALITIES.includes(choice.quality) ? choice.quality : null}
-            onChange={(quality) => changeChoice({ ...choice, quality })}
-            options={QUALITIES.map((q) => ({ value: q, label: t(`up.quality.${q}`), caption: `${renderHeight(height, q)}p` }))}
-          />
-        </>
-      )}
-      {detail && !detail.native && helix && <Note>{t("up.helix.pick.fsr")}</Note>}
-      {detail && !detail.native && selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
-
       {detail && (
-        <FrameGenRow
+        <FrameGenRow duo={duo} disabled={running || foreignBusy}
+          onApplyOptiscaler={applyFrameGeneration} optiscalerDisabled={blocked}
           appid={appid}
           liveAppid={game.liveAppid}
           isNonSteam={game.isNonSteam}
           gameRunning={gameRunning}
-          routes={detail.native || !detail.fg_plan || replacesFsr ? {} : routes}
+          recommendedRoutes={solution ? solution.fg_plan?.routes ?? {} : undefined}
+          routes={detail.native || !selectedFgPlan || replacesFsr ? {} : routes}
           inputs={detail.native ? {} : inputs}
           optiscaler={{ fg: choice.fg ?? "off", route }}
           installedRoute={install?.options.fg === "on" ? install.options.fg_route ?? detail.fg_plan?.route ?? detail.fg_plan?.source ?? "game" : null}
           gpu={overview.gpu}
           onOptiscaler={(fg, fg_route) => changeChoice({ ...choice, fg, fg_route: fg_route ?? choice.fg_route ?? null })}
-        />
-      )}
-
-      {detail && !detail.native && (
-        <>
-          <Fold label={t("up.advanced")} open={advanced} onToggle={toggleAdvanced} />
-          {advanced && (
+          renderAdvanced={(restore) => detail.native ? restore && (
             <>
-              <ListCard>
-                {playing && installedOptiscaler && (
-                  <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
-                )}
-                {installedOptiscaler && !running && <AdvancedIni appid={appid} />}
-                <ListRow
-                  label={t("up.exe")}
-                  detail={detail.analysis.manual && detail.analysis.exe ? detail.analysis.exe.split("/").pop() : t("up.exe.auto")}
-                  chevron
-                  disabled={running}
-                  onPress={() => void pickExe()}
-                />
-                {detail.analysis.manual && (
-                  <ListRow label={t("up.detect.auto")} disabled={running} onPress={async () => setDetail(await setUpscalersExe(appid, null))} />
-                )}
-                {install && !running && <ListRow label={t("up.verify")} chevron busy={verifying} onPress={() => void check()} />}
-                {install && !running && (
-                  <ListRow danger label={t("up.remove")} caption={t("up.remove.caption")} onPress={() => start(() => uninstallUpscaler(appid))} />
-                )}
-              </ListCard>
-              {counterStyleFailed && <Note tone="warn">{t("up.live.failed")}</Note>}
-              {(selectedModels?.length ?? 0) > 1 && <Note>{t("up.model.help")}</Note>}
-              {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
-              {blockedBuilds.map((b) => (
-                <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
-              ))}
-              {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
-              {detail.history.length > 1 && (
+              <div role="separator" style={{ borderTop: `1px solid ${theme.color.hairline}`, marginTop: theme.space.md, paddingTop: theme.space.sm }} />
+              <Fold label={t("up.advanced")} open={advanced} onToggle={toggleAdvanced} />
+              {advanced && <ListCard>{restore}</ListCard>}
+            </>
+          ) : (
+            <>
+              <div role="separator" style={{ borderTop: `1px solid ${theme.color.hairline}`, marginTop: theme.space.md, paddingTop: theme.space.sm }} />
+              <Fold label={t("up.advanced")} open={advanced} onToggle={toggleAdvanced} />
+              {advanced && (
                 <>
-                  <Label>{t("up.history")}</Label>
-                  {[...detail.history].reverse().slice(0, 5).map((entry) => {
-                    const build = builds.find((b) => b.id === entry.build);
-                    return (
-                      <div key={`${entry.at}`} style={{ display: "flex", justifyContent: "space-between", gap: theme.space.xs, fontSize: theme.font.caption }}>
-                        <span style={{ textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>{build ? buildLabel(build) : entry.build}</span>
-                        <span style={{ color: statusColor(entry.result) }}>{t(`up.history.${entry.result}`)}</span>
-                      </div>
-                    );
-                  })}
+                  <ListCard>
+                    {restore}
+                    {detail.foreign_backup && !install && !detail.analysis.foreign && (
+                      <ListRow label={t("up.foreign.restore")} disabled={foreignBusy || running || gameRunning} onPress={() => void foreignAction(restoreForeignUpscaler)} />
+                    )}
+                    {playing && installedOptiscaler && (
+                      <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
+                    )}
+                    {installedOptiscaler && !running && <AdvancedIni appid={appid} />}
+                    <ListRow
+                      label={t("up.exe")}
+                      detail={detail.analysis.manual && detail.analysis.exe ? detail.analysis.exe.split("/").pop() : t("up.exe.auto")}
+                      chevron
+                      disabled={running}
+                      onPress={() => void pickExe()}
+                    />
+                    {detail.analysis.manual && (
+                      <ListRow label={t("up.detect.auto")} disabled={running} onPress={async () => setDetail(await setUpscalersExe(appid, null))} />
+                    )}
+                    {install && !running && <ListRow label={t("up.verify")} chevron busy={verifying} onPress={() => void check()} />}
+                    {install && !running && (
+                      <ListRow danger label={t("up.remove")} caption={t("up.remove.caption")} onPress={() => start(() => uninstallUpscaler(appid))} />
+                    )}
+                  </ListCard>
+                  {counterStyleFailed && <Note tone="warn">{t("up.live.failed")}</Note>}
+                  {(selectedModels?.length ?? 0) > 1 && <Note>{t("up.model.help")}</Note>}
+                  {amdMissing && <Note>{t("up.build.amdOnly")}</Note>}
+                  {blockedBuilds.map((b) => (
+                    <Note key={b.id}>{t(buildBlocker(b, inputs, protonEnv) === "needsProton" ? "up.proton.needsProton" : "up.helix.needsFsr31", { name: buildLabel(b) })}</Note>
+                  ))}
+                  {coming.map((b) => <Note key={b.id}>{t("up.build.soonLine", { name: buildLabel(b) })}</Note>)}
+                  {detail.history.length > 1 && (
+                    <>
+                      <Label>{t("up.history")}</Label>
+                      {[...detail.history].reverse().slice(0, 5).map((entry) => {
+                        const build = builds.find((b) => b.id === entry.build);
+                        return (
+                          <div key={`${entry.at}`} style={{ display: "flex", justifyContent: "space-between", gap: theme.space.xs, fontSize: theme.font.caption }}>
+                            <span style={{ textDecoration: entry.result === "loaded" ? "line-through" : "none" }}>{build ? buildLabel(build) : entry.build}</span>
+                            <span style={{ color: statusColor(entry.result) }}>{t(`up.history.${entry.result}`)}</span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </>
               )}
             </>
           )}
-        </>
+        />
       )}
 
-      {running && job && <Progress job={job} />}
+      {running && job && <JobProgress job={job} />}
       {running && <Row><ActionButton label={t("up.cancel")} onPress={async () => { await cancelUpscalersJob(); }} /></Row>}
-      {message && <Note tone="warn">{message}</Note>}
-      {applied === "now" && !message && <Note>{t("up.live.appliedNow")}</Note>}
-      {applied === "restart" && !message && gameRunning && (
-        <>
-          <Note>{t("up.live.appliedNext")}</Note>
-          <Row><ActionButton label={t("up.restart.button")} onPress={askRestart} /></Row>
-        </>
-      )}
-      {applied === "restarting" && <Note>{t("up.restart.doing")}</Note>}
+      {message && <InView><Note tone="warn">{message}</Note></InView>}
       {!running && job?.state === "error" && job.kind === "install" && RETRYABLE.has(job.error ?? "") && (
-        <Row><ActionButton label={t("up.retry")} onPress={reinstall} /></Row>
+        <Row><ActionButton label={t("up.retry")} onPress={retry} /></Row>
       )}
 
-      {detail && !detail.native && !running && (status === "broken" || dirty) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}` }}>
-          {status === "broken" ? (
-            <Row><ActionButton primary label={t("up.repair")} onPress={reinstall} disabled={blocked} /></Row>
-          ) : !install ? (
-            <Row>
-              <ActionButton primary label={t("up.activate", { name: selected ? buildLabel(selected) : choice.build })} onPress={apply} disabled={blocked} />
-            </Row>
-          ) : (
-            <>
-              {changes.map((line) => (
-                <span key={line} style={{ fontSize: theme.font.caption + 1, color: theme.color.textMuted, textAlign: "center" }}>{line}</span>
-              ))}
-              <Row>
-                <ActionButton label={t("up.discard")} onPress={discard} />
-                <ActionButton primary label={t("up.save")} onPress={apply} disabled={blocked} />
-              </Row>
-            </>
-          )}
-        </div>
-      )}
+
     </Focusable>
   );
 };
 
-function fgName(t: Translate, fg: "on" | "off" | undefined, route: string | null | undefined): string {
-  if (fg !== "on") return t("up.fg.pick.off");
-  return t(route === "optiscaler" ? "up.fg.pick.optiscaler" : "up.fg.pick.game");
-}
 
 const StatusIcon: FC<{ status: UpscalerStatus | null }> = ({ status }) => {
   if (status === "active") return <LuCircleCheck size={17} color={theme.color.ok} />;
@@ -606,50 +820,31 @@ const StatusLine: FC<{ icon?: ReactNode; title: string; sub?: string; tone?: "wa
   </>
 );
 
-const Progress: FC<{ job: UpscalerJob }> = ({ job }) => {
-  const { t } = useI18n();
-  const determinate = job.phase === "download" && job.total > 0;
-  const ratio = determinate ? Math.min(1, job.done / job.total) : 0;
-  const sample = useRef<PaceSample | null>(null);
-  const [pace, setPace] = useState<{ rate: number; eta: number | null } | null>(null);
+/** Brings a just-shown result into view: saving reloads the page and leaves it scrolled to the top. */
+const InView: FC<{ children: ReactNode }> = ({ children }) => {
+  const box = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (job.phase !== "download") return;
-    const now = { done: job.done, at: Date.now() };
-    if (sample.current && now.at - sample.current.at >= 900) {
-      setPace((last) => downloadPace(sample.current!, now, job.total, last?.rate ?? 0));
-      sample.current = now;
-    } else if (!sample.current) {
-      sample.current = now;
-    }
-  }, [job.phase, job.done, job.total]);
-  const label = job.phase === "download"
-    ? t("up.phase.download", { done: megabytes(job.done), total: megabytes(job.total) })
-    : t(`up.phase.${job.phase}`);
-  const step = job.phase === "download" && pace
-      ? pace.rate < 1024 ? t("up.phase.stalled")
-      : t(pace.eta !== null && pace.eta < 3600 ? "up.phase.pace" : "up.phase.rate", {
-        rate: (pace.rate / (1024 * 1024)).toFixed(1), eta: formatEta(pace.eta ?? 0),
-      })
-      : null;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, animation: "pdc-up-in 200ms ease" }} data-pdc-up-motion>
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption + 1 }}>
-        <Spinner size={12} /> {label}
-      </div>
-      {step && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{step}</span>}
-      <div style={{ height: 4, borderRadius: 2, background: theme.color.hairline, overflow: "hidden" }}>
-        <div
-          data-pdc-up-motion
-          style={{
-            height: "100%", width: determinate ? `${ratio * 100}%` : "35%", background: theme.color.accent,
-            transition: "width 200ms linear", animation: determinate ? "none" : "pdc-up-shimmer 1.2s ease-in-out infinite",
-          }}
-        />
-      </div>
-    </div>
-  );
+    const timer = window.setTimeout(() => box.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div ref={box} style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>{children}</div>;
 };
 
-function formatEta(seconds: number): string {
-  return seconds < 60 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
+type QualityControl = { mode: "panel" } | { mode: "locked"; input: string } | { mode: "game" };
+
+/** Who sets the render size: Panel through OptiScaler, nobody yet because the game uses its own FSR, or the game. */
+function qualityControl(detail: GameDetail | null, solution: { quality: { owner: string }; recommended_input?: string | null } | null | undefined,
+  sameBuild: boolean): QualityControl {
+  if (solution?.quality.owner === "game") return { mode: "game" };
+  const inputs = detail?.analysis.inputs ?? {};
+  const asking = ["dlss", "xess"].filter((kind) => (inputs as Record<string, unknown>)[kind]);
+  const check = sameBuild ? detail?.install?.quality_check : null;
+  if (check?.result === "respected") return { mode: "panel" };
+  const onlyOwnFsr = !asking.length && ["fsr31", "fsr2"].some((kind) => (inputs as Record<string, unknown>)[kind]);
+  if (onlyOwnFsr) return { mode: "game" };
+  if (check?.result === "ignored") {
+    const preferred = solution?.recommended_input && asking.includes(solution.recommended_input) ? solution.recommended_input : asking.includes("xess") ? "xess" : "dlss";
+    return { mode: "locked", input: INPUT_NAMES[preferred] };
+  }
+  return { mode: "panel" };
 }

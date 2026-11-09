@@ -37,11 +37,11 @@ INPUTS = {
     "xefg": ("libxess_fg.dll",),
 }
 ANTI_CHEAT = ("easyanticheat", "battleye", "eac_launcher", "beservice")
-FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json")
+FOREIGN_MARKERS = ("OptiScaler.ini", "OptiScaler.log", "FRAMEGEN_PATCH", "helixsr-install.json", "HelixSR-Scaler.files")
 # What other tools leave beside the exe: OptiScaler's own files, Decky-Framegen's marker, HelixSR's records.
 FOREIGN_ITEMS = (
     "OptiScaler.ini", "OptiScaler.log", "OptiScaler", "D3D12_Optiscaler", "D3D12_OptiScaler", "FRAMEGEN_PATCH",
-    "helixsr-install.json", "helixsr.ini", "helixsr.log", "HLX_FSR.log",
+    "helixsr-install.json", "HelixSR-Scaler.files", "helixsr.ini", "helixsr.log", "HLX_FSR.log",
 )
 PROXY_NAMES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll", "d3d12.dll")
 _SCAN_LIMIT = 96 * 1024 * 1024
@@ -58,6 +58,7 @@ class Installed:
     native: bool = False
     # (launcher, game key, runner) for Heroic/Lutris shortcuts; overrides then go to the launcher.
     launcher: tuple[str, str, str | None] | None = None
+    build_id: str | None = None
 
 
 def steam_roots(home: str) -> list[Path]:
@@ -187,7 +188,8 @@ def find_installed(home: str, appid: str) -> Installed | None:
                 flags = int(state.get("stateflags", 0))
             except (TypeError, ValueError):
                 flags = 0
-            return Installed(appid, str(state.get("name") or appid), root, flags)
+            return Installed(appid, str(state.get("name") or appid), root, flags,
+                             build_id=str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None)
     return find_shortcut(home, appid)
 
 
@@ -272,6 +274,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     """
     exes: list[tuple[int, Path, int]] = []
     inputs: dict[str, list[str]] = {key: [] for key in INPUTS}
+    dll_targets: list[str] = []
     anti_cheat = False
     for current, files in _walk(root):
         ours = _installed_by_panel(current)
@@ -280,6 +283,10 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
             anti_cheat = True
         for file in files:
             lower = file.lower()
+            path = current / file
+            # Combined libraries need a loader plus effect providers, checked against the chosen build.
+            if lower in {"amd_fidelityfx_upscaler_dx12.dll", "amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_dx12.dll"} and lower not in ours and path.is_file() and not path.is_symlink():
+                dll_targets.append(path.relative_to(root).as_posix())
             if any(marker in lower for marker in ANTI_CHEAT):
                 anti_cheat = True
             for kind, names in INPUTS.items():
@@ -328,6 +335,9 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         for kind in embedded_upscalers(root / selected["exe"]):
             if not inputs[kind]:
                 inputs[kind].append(selected["exe"])
+    foreign = bool(target) and not (target / MANIFEST_DIR).exists() and any(
+        (target / marker).exists() for marker in FOREIGN_MARKERS
+    )
     return {
         "candidates": candidates[:6],
         "exe": selected["exe"] if selected else None,
@@ -335,11 +345,11 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
         "manual": manual,
         "target": str(target) if target else None,
         "inputs": {kind: sorted(paths)[:4] for kind, paths in inputs.items() if paths},
+        "dll_targets": sorted(dll_targets),
         "streamline": streamline_major(root / sorted(inputs["streamline"])[0]) if inputs["streamline"] else None,
         "anti_cheat": anti_cheat,
-        "foreign": bool(target) and not (target / MANIFEST_DIR).exists() and any(
-            (target / marker).exists() for marker in FOREIGN_MARKERS
-        ),
+        "foreign": foreign,
+        "foreign_identity": foreign_identity(target) if foreign else None,
     }
 
 
@@ -393,6 +403,109 @@ def is_optiscaler(path: Path) -> bool:
     except OSError:
         return False
     return False
+
+
+
+_FOREIGN_READ_LIMIT = 256 * 1024
+
+
+def _foreign_text(target: Path, name: str) -> str | None:
+    path = target / name
+    try:
+        if target.is_symlink() or any((target / parent).is_symlink() for parent in Path(name).parents):
+            return None
+        if path.is_symlink() or not path.is_file():
+            return None
+        with path.open("rb") as handle:
+            data = handle.read(_FOREIGN_READ_LIMIT + 1)
+        if len(data) > _FOREIGN_READ_LIMIT:
+            return None
+        return data.decode("utf-8")
+    except (OSError, UnicodeError):
+        return None
+
+
+def _scaler_manifest(target: Path) -> tuple[str | None, bool]:
+    text = _foreign_text(target, "HelixSR-Scaler.files")
+    if text is None or len(text.splitlines()) > 512:
+        return None, True
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "# HelixSR Scaler, installed by HelixSR Desktop":
+        return None, True
+    layouts = [line.removeprefix("# layout=").strip() for line in lines if line.startswith("# layout=")]
+    names = [line.removeprefix("name=").strip() for line in lines if line.startswith("name=")]
+    files = [line.strip() for line in lines if line.strip() and not line.startswith(("#", "name="))]
+    if len(layouts) != 1 or len(names) != 1 or names[0] not in PROXY_NAMES or len(files) != len(set(files)):
+        return None, True
+    for name in files:
+        path = Path(name)
+        if (path.is_absolute() or ".." in path.parts or "\\" in name or ":" in name or "\x00" in name
+                or name != path.as_posix() or any((target / part).is_symlink() for part in (path, *path.parents))):
+            return None, True
+    if layouts[0] != "ngx":
+        return None, True
+    required = (names[0], "OptiScaler.ini", "HelixSR/helixsr.dll")
+    if not all(name in files and (target / name).is_file() for name in required):
+        return None, True
+    config = _foreign_text(target, "OptiScaler.ini")
+    if config is None or "HelixSR Scaler" not in config or "[HelixSR]" not in config:
+        return None, True
+    try:
+        for name in (names[0], "HelixSR/helixsr.dll"):
+            fd = os.open(target / name, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as handle:
+                if handle.read(2) != b"MZ":
+                    return None, True
+    except OSError:
+        return None, True
+    return "dlss", False
+
+
+def foreign_identity(target: Path) -> dict:
+    evidence: list[str] = []
+    variants: set[str] = set()
+    manifest_error = False
+    marker = target / "helixsr-install.json"
+    helix = marker.exists() or marker.is_symlink()
+    if helix:
+        evidence.append("helixsr-install.json")
+        try:
+            record = json.loads(_foreign_text(target, "helixsr-install.json") or "")
+            manifest_error = not isinstance(record, dict)
+            if isinstance(record, dict) and "files" in record:
+                manifest_error = not isinstance(record["files"], list) or any(
+                    not isinstance(name, str) for name in record["files"]
+                )
+        except (ValueError, RecursionError):
+            manifest_error = True
+    scaler_marker = target / "HelixSR-Scaler.files"
+    if scaler_marker.exists() or scaler_marker.is_symlink():
+        helix = True
+        evidence.append("HelixSR-Scaler.files")
+        variant, invalid = _scaler_manifest(target)
+        manifest_error = manifest_error or invalid
+        if variant:
+            variants.add(variant)
+    for name in ("OptiScaler.log", "helixsr.log", "HLX_FSR.log", "HelixSR-fsrfg/helixsr.log", "_storage_/HLX_FSR.log"):
+        content = _foreign_text(target, name)
+        if content is None:
+            continue
+        if re.search(r"FFX upscaler:\s*HLX DLSS\b", content):
+            helix = True
+            variants.add("dlss")
+            evidence.append(f"{name}:HLX DLSS")
+        if "HLX-FSR-4 own runtime active:" in content:
+            helix = True
+            variants.add("fsr")
+            evidence.append(f"{name}:HLX FSR 4")
+    if helix:
+        return {"engine": "helixsr", "variant": next(iter(variants)) if len(variants) == 1 and not manifest_error else "unknown",
+                "evidence": evidence, "manifest_error": manifest_error}
+    for name in ("OptiScaler.ini", "OptiScaler.log"):
+        if _foreign_text(target, name) is not None:
+            evidence.append(name)
+    return {"engine": "optiscaler" if evidence else "unknown", "variant": "unknown",
+            "evidence": evidence, "manifest_error": False}
 
 
 def foreign_items(target: Path) -> list[str]:

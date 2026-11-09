@@ -39,6 +39,7 @@ jobs:
               - ".github/workflows/release-please.yml"
               - "main.py"
               - "py_modules/**"
+              - "game-recipes/**"
               - "scripts/*.py"
               - "scripts/**/*.py"
               - "tests/*.py"

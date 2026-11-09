@@ -13,3 +13,14 @@ def _host_is_not_a_desktop(monkeypatch):
         "_is_desktop_host",
         lambda root: False if root == "/" else real(root),
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_release_lookups(monkeypatch):
+    # Tests install the catalog's pinned assets; the newest-release lookup never reaches the network here.
+    from upscalers import latest
+
+    def offline(url):
+        raise OSError("offline in tests")
+
+    monkeypatch.setattr(latest, "_fetch", offline)
