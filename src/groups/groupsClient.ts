@@ -22,6 +22,8 @@ export interface ThemeGroupsAccess {
   import(ids: readonly string[]): Promise<ThemeGroup[]>;
   /** Moves a theme's own hand-picked groups here once; running it again changes nothing. */
   migrate(legacy: readonly { id: string; name: string; appIds: readonly number[] }[]): Promise<void>;
+  /** What is still loading, so an editor can say so instead of showing a count that will change. */
+  status(): { friends: "idle" | "loading" | "ready" };
 }
 
 export interface GroupsHost {
@@ -50,8 +52,11 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
   let groups: ThemeGroup[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
   let writes: Promise<unknown> = Promise.resolve();
+  let friendsAsked = false;
   const friends = createFriendOwnership(globals, () => {
-    if (definitions.some((group) => usesFriends(group.rules?.rules))) { recompute(); notify(); }
+    friendsAsked = true;
+    if (!friends.loading() && definitions.some((group) => usesFriends(group.rules?.rules))) recompute();
+    notify();
   }, now);
 
   const notify = () => listeners.forEach((listener) => { try { listener(); } catch { /* one theme never breaks another */ } });
@@ -181,6 +186,7 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
       }).slice(0, Math.max(0, GROUP_LIMITS.groups - definitions.length));
       if (moved.length) await persist([...definitions, ...moved]);
     },
+    status: () => ({ friends: friends.loading() ? "loading" : friendsAsked ? "ready" : "idle" }),
     stop() {
       listeners.clear();
       if (timer) clearInterval(timer);

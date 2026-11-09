@@ -990,7 +990,7 @@ describe("shared groups", () => {
     const unsubscribe = vi.fn();
     const groups = {
       list: vi.fn(() => []), subscribe: vi.fn(() => unsubscribe), save: vi.fn(), remove: vi.fn(), preview: vi.fn(() => []),
-      catalog: vi.fn(), importSources: vi.fn(), import: vi.fn(), migrate: vi.fn(),
+      catalog: vi.fn(), importSources: vi.fn(), import: vi.fn(), migrate: vi.fn(), status: vi.fn(),
     };
     let seen: ThemeExtensionMountContext | undefined;
     const host = new ThemeExtensionRuntimeHost({

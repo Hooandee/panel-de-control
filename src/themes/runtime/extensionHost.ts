@@ -166,6 +166,7 @@ function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: { track(releas
     importSources: () => groups.importSources(),
     import: (ids: readonly string[]) => groups.import(ids),
     migrate: (legacy: Parameters<ThemeGroupsAccess["migrate"]>[0]) => groups.migrate(legacy),
+    status: () => groups.status(),
   });
 }
 

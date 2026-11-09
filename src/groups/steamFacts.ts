@@ -153,26 +153,36 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
   return { facts, universe, extended, signature };
 }
 
-/** Friends who own each app, loaded once per session and kept for six hours. */
-export function createFriendOwnership(globals: SteamGlobals, onLoaded: () => void, now = () => Date.now()) {
+/**
+ * Friends who own each app, loaded once per session and kept for six hours. Steam answers one friend at a time,
+ * so the load runs a few requests at once in the background (all of them together froze Big Picture).
+ */
+export function createFriendOwnership(globals: SteamGlobals, onChange: () => void, now = () => Date.now(), parallel = 3) {
   let owners: Map<number, string[]> | null = null;
   let loadedAt = 0;
   let loading = false;
   const load = () => {
     if (loading || (owners && now() - loadedAt < 6 * 3600_000)) return;
-    const friends = globals.friendStore?.allFriends ?? [];
+    const friends = (globals.friendStore?.allFriends ?? []).map(friendIdentity).filter((f): f is { id: number; name: string } => f !== null);
     const fetch = globals.friendStore?.FetchOwnedGames;
-    if (!fetch) { owners = new Map(); return; }
+    if (!fetch || !friends.length) { owners = new Map(); loadedAt = now(); return; }
     loading = true;
+    onChange();
     const next = new Map<number, string[]>();
-    void Promise.all(friends.map(async (friend) => {
-      const identity = friendIdentity(friend);
-      if (!identity) return;
-      try {
-        const games = await fetch.call(globals.friendStore, identity.id);
-        for (const app of games?.setApps ?? []) next.set(app, [...(next.get(app) ?? []), String(identity.id)]);
-      } catch { /* a private profile or a dropped request: that friend owns nothing we can see */ }
-    })).finally(() => { owners = next; loadedAt = now(); loading = false; onLoaded(); });
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < friends.length) {
+        const friend = friends[cursor++];
+        try {
+          const games = await fetch.call(globals.friendStore, friend.id);
+          for (const app of games?.setApps ?? []) next.set(app, [...(next.get(app) ?? []), String(friend.id)]);
+        } catch { /* a private profile or a dropped request: that friend owns nothing we can see */ }
+        // Give the page a frame between answers.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(parallel, friends.length) }, worker))
+      .finally(() => { owners = next; loadedAt = now(); loading = false; onChange(); });
   };
   return {
     /** Starts the first load; until it finishes, every app reads as not known yet. */
@@ -180,6 +190,7 @@ export function createFriendOwnership(globals: SteamGlobals, onLoaded: () => voi
       load();
       return owners ? owners.get(appId) ?? [] : null;
     },
+    loading: () => loading,
     list(): { id: string; name: string }[] {
       return (globals.friendStore?.allFriends ?? []).flatMap((friend) => {
         const identity = friendIdentity(friend);

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { readSteam, steamAccount, type SteamGlobals } from "./steamFacts";
+import { createFriendOwnership, readSteam, steamAccount, type SteamGlobals } from "./steamFacts";
 
 const o = (appid: number, over: Record<string, unknown> = {}) => ({ appid, display_name: `A${appid}`, app_type: 1, ...over });
 
@@ -60,5 +60,29 @@ describe("readSteam", () => {
   it("survives stores that throw", () => {
     const broken: SteamGlobals = { collectionStore: { GetCollection: () => { throw new TypeError("forEach"); }, get userCollections(): never { throw new Error("x"); } } };
     expect(readSteam(broken).universe).toEqual([]);
+  });
+});
+
+describe("createFriendOwnership", () => {
+  it("asks Steam for a few friends at a time and reports while it loads", async () => {
+    let inFlight = 0, peak = 0;
+    const friend = (id: number) => ({ m_steamid: { GetAccountID: () => id }, m_strPlayerName: `F${id}` });
+    const globals: SteamGlobals = { friendStore: {
+      allFriends: Array.from({ length: 10 }, (_, i) => friend(i + 1)),
+      FetchOwnedGames: async (id: number) => {
+        inFlight++; peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        inFlight--;
+        return { setApps: id % 2 ? [10] : [20] };
+      },
+    } };
+    const changes: boolean[] = [];
+    const friends = createFriendOwnership(globals, () => changes.push(friends.loading()));
+    expect(friends.owners(10)).toBeNull();
+    expect(friends.loading()).toBe(true);
+    await vi.waitFor(() => expect(friends.loading()).toBe(false));
+    expect(peak).toBeLessThanOrEqual(3);
+    expect(friends.owners(10)).toEqual(["1", "3", "5", "7", "9"]);
+    expect(changes).toEqual([true, false]);
   });
 });
