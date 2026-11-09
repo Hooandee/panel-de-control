@@ -1936,6 +1936,9 @@ class UpscalerService:
                 reports.append({"appid": appid, "error": type(error).__name__})
         return {
             "gpu": self.gpu, "device": self.device, "frontend": context,
+            # What the user was offered on this GPU, so a "not supported" complaint shows what Panel showed.
+            "builds": [diagnostics.fields(row, ("id", "supported", "may_fallback"))
+                       for row in catalog.describe(self.gpu, self.device) if row.get("available")],
             "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
             "environment": diagnostics.environment(),
             "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],

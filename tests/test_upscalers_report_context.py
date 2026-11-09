@@ -1,7 +1,7 @@
 import json
 
 from test_upscalers import APPID, _service, _write, steam, fake_catalog, proc
-from upscalers import diagnostics
+from upscalers import catalog, diagnostics
 from upscalers.service import UpscalerError, UpscalerService
 
 
@@ -182,3 +182,10 @@ def test_report_keeps_what_the_user_did_and_each_install_state_once():
     events = diagnostics.report_actions(actions)
     assert [e["action"] for e in events] == ["install", "install", "configure"]
     assert ["snapshot" in e for e in events] == [True, False, True]
+
+
+def test_report_lists_the_versions_offered_on_this_gpu(steam, fake_catalog, proc):
+    service = _service(steam, fake_catalog, proc)
+    builds = service.report()["builds"]
+    assert builds and all(set(row) <= {"id", "supported", "may_fallback"} for row in builds)
+    assert {row["id"] for row in builds} == {b.id for b in catalog.BUILDS.values() if b.available}

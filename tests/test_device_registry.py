@@ -544,3 +544,12 @@ def test_msi_claw_8_ai_plus_a2vm_stays_on_its_profile(tmp_path):
     )
 
     assert profile.key == "msi_claw_8_ai_plus"
+
+
+def test_reports_say_where_the_gpu_generation_came_from(tmp_path):
+    from device_registry import gpu_facts
+    _card(tmp_path, 0, "0x1002", "0x15c8")
+    assert gpu_facts("amd", "AMD Ryzen Z1", str(tmp_path)) == {
+        "generation": "rdna3", "source": "name", "pci": [{"card": "card0", "vendor": "0x1002", "device": "0x15c8"}]}
+    assert gpu_facts("amd", "AMD Custom APU 1234", str(tmp_path))["source"] == "pci"
+    assert gpu_facts("amd", "AMD Custom APU 1234", str(tmp_path / "none")) == {"generation": "unknown", "source": "unknown", "pci": []}
