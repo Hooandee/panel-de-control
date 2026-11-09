@@ -1,6061 +1,678 @@
 {
  "source": "optiscaler-wiki@288adff",
  "recipes": {
-  "3210": {
-   "name": "Painkiller Demo",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "251570": {
-   "name": "7 Days To Die",
-   "status": "works",
-   "needs": [
-    "anti_cheat_off"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "7-Days-to-Die",
-   "page_facts": {
-    "proxy": "version.dll",
-    "suggestions": {
-     "Vulkan": "true",
-     "VulkanExtensionSpoofing": "true"
-    }
-   }
-  },
-  "252330": {
-   "name": "Slender: The Arrival",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "261550": {
-   "name": "Mount & Blade II Bannerlord",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "269190": {
-   "name": "Edge of Eternity",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "275850": {
-   "name": "No Man’s Sky",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "No-Man's-Sky"
-  },
-  "293760": {
-   "name": "Automation - The Car Company Tycoon Game",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "315210": {
-   "name": "Suicide Squad: Kill the Justice League",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Suicide-Squad-Kill-The-Justice-League"
-  },
-  "355790": {
-   "name": "Styx: Shards of Darkness",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "368260": {
-   "name": "Marvel's Midnight Suns",
-   "status": "works",
-   "proxy": "d3d12.dll",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Marvels-Midnight-Suns",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "391220": {
-   "name": "Rise of the Tomb Raider",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Rise-of-the-Tomb-Raider"
-  },
-  "403640": {
-   "name": "Dishonored 2",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Dishonored-2",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false",
-     "DontUseNTShared": "true"
-    }
-   }
-  },
-  "414340": {
-   "name": "Hellblade: Senua’s Sacrifice",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Hellblade-Senuas-Sacrifice",
-   "page_facts": {
-    "linux": true
-   }
-  },
-  "418370": {
-   "name": "Resident Evil 7 Biohazard",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Resident-Evil-7-Biohazard"
-  },
-  "424840": {
-   "name": "Little Nightmares",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "427290": {
-   "name": "Vampyr",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "428660": {
-   "name": "Deliver Us the Moon",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "440900": {
-   "name": "Conan Exiles Enhanced",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "447040": {
-   "name": "Watch Dogs 2",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Watch-Dogs-2"
-  },
-  "447290": {
-   "name": "Redeemer Enhanced Edition",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "458430": {
-   "name": "Steel Seed",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "460930": {
-   "name": "Tom Clancy's Ghost Recon Wildlands",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Tom-Clancys-Ghost-Recon-Wildlands"
-  },
-  "464060": {
-   "name": "RUINER",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "474960": {
-   "name": "Quantum Break",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Quantum-Break"
-  },
-  "480490": {
-   "name": "Prey (2017)",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Prey-Luma-Remastered-mod"
-  },
-  "482400": {
-   "name": "System Shock (2023)",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "494840": {
-   "name": "UBOAT",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "515960": {
-   "name": "Martha is Dead",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "517710": {
-   "name": "Redout Enhanced Edition",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "526870": {
-   "name": "Satisfactory",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "532210": {
-   "name": "Life is Strange 2",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Life-is-Strange-2"
-  },
-  "532790": {
-   "name": "Vampire: The Masquerade - Bloodlines 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "534380": {
-   "name": "Dying Light 2",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Dying-Light-2"
-  },
-  "548430": {
-   "name": "Deep Rock Galactic",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "552520": {
-   "name": "Far Cry 5",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Far-Cry-5"
-  },
-  "574090": {
-   "name": "MOTHERGUNSHIP",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "582160": {
-   "name": "Assassin's Creed Origins",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Assassins-Creed-Origins"
-  },
-  "601150": {
-   "name": "Devil May Cry 5",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Devil-May-Cry-5"
-  },
-  "606160": {
-   "name": "ROUTINE",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "606280": {
-   "name": "Darksiders III",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "607080": {
-   "name": "Psychonauts 2",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "617290": {
-   "name": "Remnant: From the Ashes",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "668580": {
-   "name": "Atomic Heart",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "673130": {
-   "name": "Amid Evil",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "680420": {
-   "name": "Outriders",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "692850": {
-   "name": "Bloodstained: Ritual of the Night",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "692890": {
-   "name": "Roboquest",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "695330": {
-   "name": "Season: A Letter to the Future",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "698670": {
-   "name": "Scorn",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "Scorn",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "699130": {
-   "name": "World War Z",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "703680": {
-   "name": "Cursed Deal",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "707030": {
-   "name": "POSTAL 4: No Regerts",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "POSTAL-4-No-Regerts"
-  },
-  "717790": {
-   "name": "Hold Your Own",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "730390": {
-   "name": "Raji: An Ancient Epic",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "731040": {
-   "name": "The Invincible",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "735350": {
-   "name": "Bottle Pilgrim Redux",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "738520": {
-   "name": "Breathedge",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "742420": {
-   "name": "Saints Row",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "747660": {
-   "name": "Five Nights at Freddy’s: Security Breach",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "750130": {
-   "name": "The Sinking City Remastered",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "750920": {
-   "name": "Shadow of the Tomb Raider",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Shadow-of-the-Tomb-Raider",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "754890": {
-   "name": "Firmament",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "768200": {
-   "name": "Smalland: Survive the Wilds",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "775620": {
-   "name": "Fight or Flight",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "780310": {
-   "name": "The Riftbreaker",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "782330": {
-   "name": "Doom Eternal",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "DOOM-Eternal",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "784080": {
-   "name": "MechWarrior 5: Mercenaries",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "805550": {
-   "name": "Assetto Corsa Competizione",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "813630": {
-   "name": "Supraland",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "814380": {
-   "name": "Sekiro: Shadows Die Twice",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "SekiroTSR"
-  },
-  "831050": {
-   "name": "Dolmen",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "835960": {
-   "name": "The Talos Principle 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "The-Talos-Principle-2"
-  },
-  "860510": {
-   "name": "Little Nightmares II",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "867150": {
-   "name": "Influx Redux",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "870780": {
-   "name": "CONTROL Ultimate Edition",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Control-Ultimate-Edition"
-  },
-  "874450": {
-   "name": "Lunacy: Saint Rhodes",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "883710": {
-   "name": "Resident Evil 2 (2019)",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Resident-Evil-2-(2019"
-  },
-  "886060": {
-   "name": "Redout: Space Assault",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "889910": {
-   "name": "Hell Pie",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "921570": {
-   "name": "OCTOPATH TRAVELER",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "934700": {
-   "name": "Dead Island 2",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "Dead-Island-2",
-   "page_facts": {
-    "suggestions": {
-     "HUDFix": "true"
-    }
-   }
-  },
-  "936720": {
-   "name": "Wrench",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "949230": {
-   "name": "Cities: Skylines II",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "952060": {
-   "name": "Resident Evil 3 (2020)",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Resident-Evil-3-(2020"
-  },
-  "954740": {
-   "name": "Terminator: Resistance",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "955050": {
-   "name": "Bright Memory",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "976590": {
-   "name": "Bus Simulator 21",
-   "status": "works",
-   "needs": [
-    "nvngx_dlss"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "979690": {
-   "name": "The Ascent",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "986130": {
-   "name": "Shadows of Doubt",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "990080": {
-   "name": "Hogwarts Legacy",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Hogwarts-Legacy"
-  },
-  "990380": {
-   "name": "METAL EDEN",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "996580": {
-   "name": "Spyro Reignited Trilogy",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1013140": {
-   "name": "Outcast: A New Beginning",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1013910": {
-   "name": "Arons Adventure",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "1016800": {
-   "name": "Chernobylite",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1036890": {
-   "name": "Shadow Warrior 3",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1056960": {
-   "name": "Wolfenstein: Youngblood",
-   "status": "partial",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1065310": {
-   "name": "Evil West",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1080110": {
-   "name": "F1 2020",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1084160": {
-   "name": "Jagged Alliance 3",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1086940": {
-   "name": "Baldur’s Gate 3",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1088850": {
-   "name": "Marvel's Guardians of the Galaxy",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Guardians-of-the-Galaxy",
-   "page_facts": {
-    "proxy": "version.dll"
-   }
-  },
-  "1091500": {
-   "name": "Cyberpunk 2077",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Cyberpunk-2077"
-  },
-  "1096200": {
-   "name": "The Orville – Interactive Fan Experience",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1105590": {
-   "name": "Dream Cycle",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1106840": {
-   "name": "Hydroneer",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1107750": {
-   "name": "Faraday Protocol",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1110910": {
-   "name": "Mortal Shell",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1119840": {
-   "name": "Sands of Aura",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1128920": {
-   "name": "EVERSPACE 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1129570": {
-   "name": "Industry Giant 4",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1129580": {
-   "name": "Medieval Dynasty",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "1133870": {
-   "name": "Space Engineers 2",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ],
-   "page": "Space-Engineers-2"
-  },
-  "1134100": {
-   "name": "Frozenheim",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1139900": {
-   "name": "Ghostrunner",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Ghostrunner",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "1140100": {
-   "name": "The Persistence",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1142710": {
-   "name": "Total War: WARHAMMER III",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Total-War-WARHAMMER-III"
-  },
-  "1144200": {
-   "name": "Ready or Not",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "Ready-or-Not"
-  },
-  "1145630": {
-   "name": "BEAST: False Prophet",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1149460": {
-   "name": "ICARUS",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1151640": {
-   "name": "Horizon Zero Dawn Complete Edition",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Horizon-Zero-Dawn",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1153410": {
-   "name": "JDM: Japanese Drift Master",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1153640": {
-   "name": "Chorus",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1154030": {
-   "name": "Titan Quest II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1154830": {
-   "name": "Scathe",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1159690": {
-   "name": "Voidtrain",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1160220": {
-   "name": "Paradise Killer",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1164940": {
-   "name": "Trepang2",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Trepang2"
-  },
-  "1165990": {
-   "name": "Kiln",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1171690": {
-   "name": "Wayfinder",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1172380": {
-   "name": "STAR WARS Jedi: Fallen Order",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "STAR-WARS-Jedi-Fallen-Order",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false",
-     "DontUseNTShared": "true"
-    }
-   }
-  },
-  "1172650": {
-   "name": "INDUSTRIA",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1173220": {
-   "name": "Bleak Faith: Forsaken",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1174180": {
-   "name": "Red Dead Redemption 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Red-Dead-Redemption-II",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "1178830": {
-   "name": "Bright Memory: Infinite",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "1182900": {
-   "name": "A Plague Tale: Requiem",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "A-Plague-Tale-Requiem"
-  },
-  "1186640": {
-   "name": "Pumpkin Jack",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1190970": {
-   "name": "House Flipper 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1192810": {
-   "name": "Romancelvania",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1198970": {
-   "name": "I Am Jesus Christ",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1203190": {
-   "name": "Wreckfest 2",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1203620": {
-   "name": "Enshrouded",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Enshrouded",
-   "page_facts": {
-    "proxy": "winmm.dll",
-    "linux": true
-   }
-  },
-  "1222370": {
-   "name": "Necromunda: Hired Gun",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1227690": {
-   "name": "Severed Steel",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "1230530": {
-   "name": "Atlas Fallen: Reign Of Sand",
-   "status": "broken"
-  },
-  "1234430": {
-   "name": "Ad Infinitum",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1244460": {
-   "name": "Jurassic World Evolution 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1245620": {
-   "name": "Elden Ring",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Elden-Ring-(ERSS‐FG"
-  },
-  "1248130": {
-   "name": "Farming Simulator 22",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1249800": {
-   "name": "Xuan-Yuan Sword VII",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1249970": {
-   "name": "Test Drive Unlimited Solar Crown",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1251300": {
-   "name": "Last Floor",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1252330": {
-   "name": "Deathloop",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1255560": {
-   "name": "Myst (2021)",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1260320": {
-   "name": "Party Animals",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1265780": {
-   "name": "The Lord of the Rings: Gollum",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1266700": {
-   "name": "Destroy All Humans! 2 – Reprobed",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "1269370": {
-   "name": "171",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "171"
-  },
-  "1271700": {
-   "name": "HOT WHEELS UNLEASHED",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1272080": {
-   "name": "PAYDAY 3",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "PAYDAY-3"
-  },
-  "1277130": {
-   "name": "Deathbound",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1282100": {
-   "name": "Remnant II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1283400": {
-   "name": "Steelrising",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1285190": {
-   "name": "Borderlands 4",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Borderlands-4"
-  },
-  "1286680": {
-   "name": "Tiny Tina’s Wonderlands",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "Tiny-Tinas-Wonderlands",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1288320": {
-   "name": "Way of the Hunter",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Way-of-the-Hunter"
-  },
-  "1291680": {
-   "name": "Apocalypse 2.0",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1293160": {
-   "name": "The Medium",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "The-Medium"
-  },
-  "1293730": {
-   "name": "Broken Pieces",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1294810": {
-   "name": "Redfall",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1294880": {
-   "name": "Blind Fate: Edo no Yami",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1296010": {
-   "name": "Stay in the Light",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1297900": {
-   "name": "Gothic 1 Remake",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1298140": {
-   "name": "Fobia – St. Dinfna Hotel",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1299690": {
-   "name": "Gori: Cuddly Carnage",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1307710": {
-   "name": "Grid Legends",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "1308360": {
-   "name": "Gun Jam",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1309620": {
-   "name": "Bears in Space",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1310410": {
-   "name": "Alone in the Dark (2024)",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1314000": {
-   "name": "Achilles: Legends Untold",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1316680": {
-   "name": "VLADiK BRUTAL",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1321680": {
-   "name": "Hello Neighbor 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1324130": {
-   "name": "Stranded: Alien Dawn",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1325200": {
-   "name": "Nioh 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Nioh-2-The-Complete-Edition",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1326470": {
-   "name": "Sons of the Forest",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1330430": {
-   "name": "Celestial Empire",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1330470": {
-   "name": "F.I.S.T.: Forged In Shadow Torch",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1332010": {
-   "name": "Stray",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1332430": {
-   "name": "Chip 'n Clawz vs The Brainioids",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1336380": {
-   "name": "Gripper",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1340990": {
-   "name": "Rise of the Ronin",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Rise-of-the-Ronin"
-  },
-  "1342490": {
-   "name": "Daemon x Machina Titanic Scion",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1343240": {
-   "name": "Thymesia",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "Thymesia",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1345890": {
-   "name": "Deliver Us Mars",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1351000": {
-   "name": "Gangs of Sherwood",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1351210": {
-   "name": "Gord",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "1358700": {
-   "name": "Stranger of Paradise: Final Fantasy Origin",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1361210": {
-   "name": "Warhammer 40,000: Darktide",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1363080": {
-   "name": "Manor Lords",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1368140": {
-   "name": "Corsair Cove",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1370050": {
-   "name": "Trek to Yomi",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1371980": {
-   "name": "No Rest For The Wicked",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1373960": {
-   "name": "INDIKA",
-   "status": "works",
-   "proxy": "d3d12.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "INDIKA",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1374490": {
-   "name": "Runescape: Dragonwilds",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1376200": {
-   "name": "KARMA: The Dark World",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1377700": {
-   "name": "Empyreal",
-   "status": "works",
-   "inputs": [
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1378990": {
-   "name": "Crash Bandicoot 4: It’s About Time",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1383570": {
-   "name": "Ballex 2: The Hanging Gardens",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1384160": {
-   "name": "GUILTY GEAR -STRIVE-",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1386900": {
-   "name": "Observer: System Redux",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1390670": {
-   "name": "Escape from Naraka",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1392860": {
-   "name": "Little Nightmares III",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1399080": {
-   "name": "The DioField Chronicle",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "1429850": {
-   "name": "Sumerian Six",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1430680": {
-   "name": "Clash: Artifacts of Chaos",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "1430930": {
-   "name": "Thief's Shelter",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1432750": {
-   "name": "Chionophile",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1442430": {
-   "name": "Storage Hunter Simulator",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1443630": {
-   "name": "Turbo Sloths",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1446780": {
-   "name": "Monster Hunter Rise",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Monster-Hunter-Rise",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1448440": {
-   "name": "Wo Long: Fallen Dynasty",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1449110": {
-   "name": "The Outer Worlds 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1462040": {
-   "name": "FINAL FANTASY VII REMAKE INTERGRADE",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "FINAL-FANTASY-VII-REMAKE-INTERGRADE"
-  },
-  "1466060": {
-   "name": "Tainted Grail: The Fall of Avalon",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1469610": {
-   "name": "Last Train Home",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1471410": {
-   "name": "SYNTHETIK 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1475810": {
-   "name": "Ghostwire: Tokyo",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "1477940": {
-   "name": "Unknown 9: Awakening",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "1479730": {
-   "name": "Commandos: Origins",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1486920": {
-   "name": "Tempest Rising",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1489970": {
-   "name": "Highrise City",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1491410": {
-   "name": "Eternal Strands",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1493640": {
-   "name": "Banishers: Ghosts of New Eden",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Banishers-Ghosts-of-New-Eden"
-  },
-  "1496590": {
-   "name": "Tchia",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1496790": {
-   "name": "Gotham Knights",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Gotham-Knights"
-  },
-  "1501750": {
-   "name": "Lords of the Fallen (2023)",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1506440": {
-   "name": "Batora: Lost Haven",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1515640": {
-   "name": "Arcadegeddon",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1519090": {
-   "name": "Welcome to ParadiZe",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "1522870": {
-   "name": "Supraland Six Inches Under",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1530470": {
-   "name": "Daymare - 1994 Sandcastle",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1532690": {
-   "name": "Blacktail",
-   "status": "works",
-   "needs": [
-    "nvngx_dlss"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1542110": {
-   "name": "Daydream: Forgotten Sorrow",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1544020": {
-   "name": "The Callisto Protocol",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "The-Callisto-Protocol",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1544360": {
-   "name": "LEGO Builder’s Journey",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1546970": {
-   "name": "Grand Theft Auto III – Definitive Edition",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "proxy": "d3d12.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Grand-Theft-Auto-III-‐-Definitive-Edition",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1546990": {
-   "name": "Grand Theft Auto: Vice City – Definitive Edition",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "proxy": "d3d12.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Grand-Theft-Auto-Vice-City-‐-Definitive-Edition",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1547000": {
-   "name": "Grand Theft Auto: San Andreas – Definitive Edition",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "proxy": "d3d12.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Grand-Theft-Auto-San-Andreas-‐-Definitive-Edition",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1549690": {
-   "name": "SPRAWL",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1549970": {
-   "name": "Aliens: Fireteam Elite",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Luma-Unreal-Engine-Luma-UE"
-  },
-  "1550270": {
-   "name": "Togges",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1550730": {
-   "name": "Ikonei Island: An Earthlock Adventure",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1551360": {
-   "name": "Forza Horizon 5",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Forza-Horizon-5",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1551980": {
-   "name": "Clive Barker's Hellraiser: Revival",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1558830": {
-   "name": "Ripout",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1564220": {
-   "name": "Q.U.B.E. 10th Anniversary",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1566690": {
-   "name": "Outpost: Infinity Siege",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1577240": {
-   "name": "Cions of Vega",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1577250": {
-   "name": "The Chant",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1582650": {
-   "name": "Caravan SandWitch",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ],
-   "page": "Caravan-Sandwitch"
-  },
-  "1583230": {
-   "name": "High on Life",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "High-on-Life",
-   "page_facts": {
-    "settings": {
-     "ColorResourceBarrier": "4",
-     "MotionVectorResourceBarrier": "8",
-     "HUDFix": "true"
-    }
-   }
-  },
-  "1592360": {
-   "name": "Kitten Burst",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1593500": {
-   "name": "God of War (2018)",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "God-of-War-2018"
-  },
-  "1599660": {
-   "name": "Sackboy: A Big Adventure",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Sackboy-‐-A-Big-Adventure"
-  },
-  "1601570": {
-   "name": "The Alters",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1601580": {
-   "name": "Frostpunk 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Frostpunk-2"
-  },
-  "1602080": {
-   "name": "Soulstice",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1620730": {
-   "name": "Hell is Us",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Hell-is-Us",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "1621560": {
-   "name": "Black One: Blood Brothers",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1622630": {
-   "name": "Otherskin",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1622910": {
-   "name": "Still Wakes the Deep",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "Still-Wakes-the-Deep"
-  },
-  "1623440": {
-   "name": "Time Breaker",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1623730": {
-   "name": "Palworld",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Palworld"
-  },
-  "1627720": {
-   "name": "Lies of P",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Lies-of-P"
-  },
-  "1630110": {
-   "name": "Gungrave G.O.R.E",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1636440": {
-   "name": "SILENT HILL: Townfall",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1645630": {
-   "name": "Ferocious",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1649240": {
-   "name": "Returnal",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Returnal"
-  },
-  "1659040": {
-   "name": "HITMAN World of Assassination",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "HITMAN-3-World-of-Assassination"
-  },
-  "1659420": {
-   "name": "UNCHARTED: Legacy of Thieves Collection",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "UNCHARTED-Legacy-of-Thieves-Collection"
-  },
-  "1662690": {
-   "name": "Twin Stones: The Journey of Bukka",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1663640": {
-   "name": "The Last Oricru",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1664220": {
-   "name": "Trail Out",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1668130": {
-   "name": "Orbit.Industries",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1669480": {
-   "name": "Firefighting Simulator: Ignite",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1671360": {
-   "name": "Ereban: Shadow Legacy",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1676130": {
-   "name": "Deadlink",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1677110": {
-   "name": "Lightyear Frontier",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1677280": {
-   "name": "Company of Heroes 3",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "1680880": {
-   "name": "Forspoken",
-   "status": "works",
-   "proxy": "d3d12.dll",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Forspoken",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "1681430": {
-   "name": "RoboCop: Rogue City",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "Robocop-Rogue-City"
-  },
-  "1684350": {
-   "name": "The Thaumaturge",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "The-Thaumaturge"
-  },
-  "1687950": {
-   "name": "Persona 5 Royal",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Persona-5-Royal"
-  },
-  "1692250": {
-   "name": "F1 22",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1693980": {
-   "name": "Dead Space (2023)",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Dead-Space-(2023"
-  },
-  "1702010": {
-   "name": "Sengoku Dynasty",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1712100": {
-   "name": "Carmageddon: Rogue Shift",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1712350": {
-   "name": "Riven (2024)",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1715130": {
-   "name": "Crysis Remastered",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1715280": {
-   "name": "AirportSim",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1716740": {
-   "name": "Starfield",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Starfield"
-  },
-  "1721060": {
-   "name": "Mandragora: Whispers of the Witch Tree",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1723780": {
-   "name": "Finnish Cottage Simulator",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1729740": {
-   "name": "Luto",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1731070": {
-   "name": "Asterigos: Curse of the Stars",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "Asterigos-Curse-of-the-Stars"
-  },
-  "1752780": {
-   "name": "City of Springs",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1766740": {
-   "name": "Choo Choo Charles",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1771300": {
-   "name": "Kingdom Come: Deliverance II",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Kingdom-Come-Deliverance-II"
-  },
-  "1774580": {
-   "name": "STAR WARS Jedi: Survivor",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "STAR-WARS-Jedi-Survivor"
-  },
-  "1778820": {
-   "name": "TEKKEN 8",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "1778840": {
-   "name": "Spirit of the North 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Spirit-of-the-North-2"
-  },
-  "1783560": {
-   "name": "The Last Caretaker",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1790930": {
-   "name": "Crisol: Theater of Idols",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1796470": {
-   "name": "Haste",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1799930": {
-   "name": "Redout 2",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ],
-   "page": "Redout-2"
-  },
-  "1801520": {
-   "name": "Zombieville USA 3D",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1805480": {
-   "name": "Like a Dragon: Ishin!",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1807810": {
-   "name": "The Axis Unseen",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1812450": {
-   "name": "Bellwright",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1817070": {
-   "name": "Marvel’s Spider-Man Remastered",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Marvels-Spider‐Man-Remastered"
-  },
-  "1817190": {
-   "name": "Marvel's Spider-Man: Miles Morales",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Marvels-Spider‐Man-Miles-Morales"
-  },
-  "1817230": {
-   "name": "Hi-Fi RUSH",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1817800": {
-   "name": "Oddsparks: An Automation Adventure",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1820140": {
-   "name": "SlavicPunk: Oldtimer",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1832040": {
-   "name": "Flintlock: The Siege of Dawn",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Flintlock-The-Siege-of-Dawn"
-  },
-  "1836730": {
-   "name": "Echo Point Nova",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Echo-Point-Nova",
-   "page_facts": {
-    "settings": {
-     "Dx12Upscaler": "fsr31"
-    }
-   }
-  },
-  "1839940": {
-   "name": "Dakar Desert Rally",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1840080": {
-   "name": "Homeworld 3",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "1843310": {
-   "name": "Funko Fusion",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1843540": {
-   "name": "Akimbot",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1845910": {
-   "name": "Dragon Age: The Veilguard",
-   "status": "works",
-   "proxy": "winmm.dll",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1846380": {
-   "name": "Need For Speed Unbound",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ],
-   "page": "Need-For-Speed-Unbound"
-  },
-  "1849250": {
-   "name": "EA Sports WRC",
-   "status": "broken"
-  },
-  "1850570": {
-   "name": "Death Stranding: Director’s Cut",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Death-Stranding-Director's-Cut"
-  },
-  "1857950": {
-   "name": "VEIN",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1863430": {
-   "name": "Dragonkin: The Banished",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1866130": {
-   "name": "Morbid Metal",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1869290": {
-   "name": "Supraworld",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Supraworld"
-  },
-  "1881120": {
-   "name": "Titan Station",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1888930": {
-   "name": "The Last of Us Part I",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "The-Last-of-Us-Part-I"
-  },
-  "1895880": {
-   "name": "Ratchet & Clank: Rift Apart",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Ratchet-&-Clank-Rift-Apart"
-  },
-  "1898300": {
-   "name": "ASKA",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1902960": {
-   "name": "Lost Records: Bloom and Rage",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1903340": {
-   "name": "Clair Obscur: Expedition 33",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Clair-Obscur-Expedition-33"
-  },
-  "1920490": {
-   "name": "The Outer Worlds: Spacer's Choice Edition",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ],
-   "page": "The-Outer-Worlds-Spacers-Choice-Edition"
-  },
-  "1926270": {
-   "name": "Bloodhound",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1926520": {
-   "name": "Ambulance Life: A Paramedic Simulator",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "1928980": {
-   "name": "Nightingale",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1929610": {
-   "name": "Demonologist",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1931180": {
-   "name": "Lost Skies",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1931730": {
-   "name": "Fort Solis",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "1933000": {
-   "name": "Luna Abyss",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1934570": {
-   "name": "South of Midnight",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1938010": {
-   "name": "Wild Hearts",
-   "status": "works",
-   "proxy": "winmm.dll",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Wild-Hearts"
-  },
-  "1939970": {
-   "name": "Nobody Wants To Die",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "1941540": {
-   "name": "Mafia: The Old Country",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Mafia-The-Old-Country"
-  },
-  "1943730": {
-   "name": "Wicked Island",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1946700": {
-   "name": "Layers of Fear (2023)",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "1949030": {
-   "name": "Sherlock Holmes: The Awakened",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1954200": {
-   "name": "Kena: Bridge of Spirits",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1962700": {
-   "name": "Subnautica 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Subnautica-2",
-   "page_facts": {
-    "linux": true
-   }
-  },
-  "1963210": {
-   "name": "Valkyrie Elysium",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1966410": {
-   "name": "Aphelion",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "1971870": {
-   "name": "Mortal Kombat 1",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "1977170": {
-   "name": "Jusant",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1981570": {
-   "name": "Land of the Vikings",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1981610": {
-   "name": "Wanted: Dead",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "1997660": {
-   "name": "GreedFall - The Dying World",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2001120": {
-   "name": "Split Fiction",
-   "status": "works",
-   "inputs": [
-    "FSR3"
-   ]
-  },
-  "2001760": {
-   "name": "Beast of Reincarnation",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR4"
-   ],
-   "page": "Beast-of-Reincarnation"
-  },
-  "2005090": {
-   "name": "EVOTINCTION",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2009100": {
-   "name": "Immortals of Aveum",
-   "status": "works",
-   "proxy": "d3d12.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "Immortals-of-Aveum",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "2019760": {
-   "name": "Necrophosis",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2050650": {
-   "name": "Resident Evil 4 (2023)",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Resident-Evil-4-(2023"
-  },
-  "2054970": {
-   "name": "Dragon’s Dogma II",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "Dragons-Dogma-2"
-  },
-  "2055590": {
-   "name": "Star Overdrive",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "2058180": {
-   "name": "Judgment",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2058190": {
-   "name": "Lost Judgment",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "2067160": {
-   "name": "Simulakros",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2069250": {
-   "name": "High On Life 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2072450": {
-   "name": "Like A Dragon: Infinite Wealth",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Like-a-Dragon-Infinite-Wealth"
-  },
-  "2075100": {
-   "name": "Chernobylite 2: Exclusion Zone",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2075800": {
-   "name": "STAR WARS Zero Company",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2081080": {
-   "name": "Capes",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2087030": {
-   "name": "Shatterline",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2091020": {
-   "name": "Blades of Fire",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2092840": {
-   "name": "The Occultist",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2096600": {
-   "name": "Crysis 2 Remastered",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2096610": {
-   "name": "Crysis 3 Remastered",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Crysis-3-Remastered"
-  },
-  "2101960": {
-   "name": "Cronos: The New Dawn",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Cronos-The-New-Dawn",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2102450": {
-   "name": "Enotria: The Last Song",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "2104890": {
-   "name": "Roadcraft",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "2124490": {
-   "name": "SILENT HILL 2 (2024)",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Silent-Hill-2-Remake"
-  },
-  "2129530": {
-   "name": "REANIMAL",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "REANIMAL"
-  },
-  "2133520": {
-   "name": "Ertugrul of Ulukayin",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2138710": {
-   "name": "Sifu",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2144740": {
-   "name": "Ghostrunner 2",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ],
-   "page": "Ghostrunner-2",
-   "page_facts": {
-    "proxy": "winmm.dll",
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2153350": {
-   "name": "Brothers: A Tale of Two Sons Remake",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2154070": {
-   "name": "INDUSTRIA 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2161700": {
-   "name": "Persona 3 Reload",
-   "status": "works",
-   "needs": [
-    "mod"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Persona-3-Reload",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "2162020": {
-   "name": "Strayed Lights",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2163330": {
-   "name": "Yet Another Zombie Survivors",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2172010": {
-   "name": "Until Dawn",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2176430": {
-   "name": "Testament: The Order of High Human",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2176580": {
-   "name": "Flipscapes",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "2183900": {
-   "name": "Warhammer 40,000: Space Marine 2",
-   "status": "works",
-   "needs": [
-    "anti_cheat_off"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2202120": {
-   "name": "63 Days",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "2206210": {
-   "name": "GYLT",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "2208780": {
-   "name": "Psycho Fear",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2215200": {
-   "name": "LEGO Batman : Legacy of the Dark Knight",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2215430": {
-   "name": "Ghost of Tsushima DIRECTOR'S CUT",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Ghost-of-Tsushima-DIRECTORS-CUT",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2215490": {
-   "name": "Project Borealis: Prologue",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2218400": {
-   "name": "Greedland",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "2223840": {
-   "name": "The Casting of Frank Stone",
-   "status": "works",
-   "proxy": "winmm.dll",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "2229940": {
-   "name": "[REDACTED]",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "2233120": {
-   "name": "A Quiet Place: The Road Ahead",
-   "status": "works",
-   "proxy": "winmm.dll",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2239550": {
-   "name": "Watch Dogs: Legion",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2239710": {
-   "name": "Into the Dead: Our Darkest Days",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2246340": {
-   "name": "Monster Hunter Wilds",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Monster-Hunter-Wilds"
-  },
-  "2253100": {
-   "name": "Everwind Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2254890": {
-   "name": "The Killing Antidote",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2255370": {
-   "name": "Directive 8020",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2257590": {
-   "name": "Alien Agent X",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2272250": {
-   "name": "Forgive me Father 2",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Forgive-me-Father-2"
-  },
-  "2275780": {
-   "name": "Roundtrip",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2277560": {
-   "name": "WUCHANG: Fallen Feathers",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "WUCHANG-Fallen-Feathers"
-  },
-  "2287330": {
-   "name": "Empire of the Ants",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2300320": {
-   "name": "Farming Simulator 25",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "2300840": {
-   "name": "Subliminal",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2304440": {
-   "name": "Creatures of Ava",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2315050": {
-   "name": "We Were Here Tomorrow Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2316580": {
-   "name": "Tales of Kenzera: ZAU",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "2322010": {
-   "name": "God of War Ragnarok",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "God-of-War-Ragnarok",
-   "page_facts": {
-    "suggestions": {
-     "FGType": "nofg",
-     "UseFGSwapChain": "false"
-    }
-   }
-  },
-  "2336440": {
-   "name": "Once Alive",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "2344520": {
-   "name": "Diablo IV",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Diablo-4"
-  },
-  "2358720": {
-   "name": "Black Myth: Wukong",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "FSR4",
-    "XeSS"
-   ],
-   "page": "Black-Myth-Wukong"
-  },
-  "2362060": {
-   "name": "CODE VEIN II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2375530": {
-   "name": "Descenders Next",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2375550": {
-   "name": "Like a Dragon Gaiden: The Man Who Erased His Name",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2384580": {
-   "name": "DYNASTY WARRIORS: ORIGINS",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "DYNASTY-WARRIORS-ORIGINS"
-  },
-  "2397300": {
-   "name": "Half Sword",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2399830": {
-   "name": "Ark: Survival Ascended",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2404880": {
-   "name": "Car Dealer Simulator",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2405060": {
-   "name": "Kiborg",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2407270": {
-   "name": "AI Limit",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "AI-Limit"
-  },
-  "2410180": {
-   "name": "Portal: Prelude RTX",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Portal-Prelude-RTX",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "2412960": {
-   "name": "Breathedge 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2416450": {
-   "name": "MOUSE: P.I. For Hire",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2417610": {
-   "name": "METAL GEAR SOLID DELTA: SNAKE EATER",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Metal-Gear-Solid-Δ-Snake-Eater"
-  },
-  "2420110": {
-   "name": "Horizon Forbidden West Complete Edition",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Horizon-Forbidden-West-Complete-Edition",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2427410": {
-   "name": "STALKER: Shadow of Chornobyl Enhanced Edition",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "STALKER-Enhanced-Editions"
-  },
-  "2427430": {
-   "name": "STALKER: Call of Prypiat Enhanced Edition",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "STALKER-Enhanced-Editions"
-  },
-  "2428810": {
-   "name": "LEGO Horizon Adventures",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2429240": {
-   "name": "Soulslinger: Envoy of Death",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2429270": {
-   "name": "The RPG",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2432860": {
-   "name": "Menace",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2438680": {
-   "name": "Airborne Empire",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "2440510": {
-   "name": "Forza Motorsport",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2448020": {
-   "name": "Yooka-Replaylee",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2456740": {
-   "name": "InZOI",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "InZOI"
-  },
-  "2457220": {
-   "name": "Avowed",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "Avowed"
-  },
-  "2458560": {
-   "name": "Zoochosis",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2461850": {
-   "name": "Senua’s Saga: Hellblade II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "Senua's-Saga-Hellblade-II"
-  },
-  "2464280": {
-   "name": "Tormented Souls 2",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2464530": {
-   "name": "VOIN",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2468200": {
-   "name": "DDoD",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2471320": {
-   "name": "THE RIFT Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2472770": {
-   "name": "Automate It: Factory Puzzle",
-   "status": "works",
-   "inputs": [
-    "FSR3"
-   ]
-  },
-  "2479650": {
-   "name": "SpongeBob SquarePants: Titans of the Tide",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2479770": {
-   "name": "Troublemaker 2 - Beyond Dream",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "2483190": {
-   "name": "Forza Horizon 6",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2486780": {
-   "name": "Glaciered Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2487150": {
-   "name": "Deconstruction Simulator",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2488620": {
-   "name": "F1 24",
-   "status": "works",
-   "inputs": [
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2489330": {
-   "name": "Whiskerwood",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2490990": {
-   "name": "Visions of Mana",
-   "status": "works",
-   "inputs": [
-    "FSR2"
-   ]
-  },
-  "2498910": {
-   "name": "Technofumer",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "2500750": {
-   "name": "Only Climb: Better Together",
-   "status": "works",
-   "inputs": [
-    "FSR3"
-   ]
-  },
-  "2510710": {
-   "name": "Kunitsu-Gami: Path of the Goddess",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2515020": {
-   "name": "FINAL FANTASY XVI",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "FINAL-FANTASY-XVI"
-  },
-  "2517220": {
-   "name": "Entity: The Black Day",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2518410": {
-   "name": "Moroi",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2522430": {
-   "name": "Break Arts III",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2523720": {
-   "name": "Gears of War: Reloaded",
-   "status": "broken"
-  },
-  "2527390": {
-   "name": "Dead Rising Deluxe Remaster",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "2531310": {
-   "name": "The Last of Us Part II Remastered",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "The-Last-of-Us-Part-II-Remastered"
-  },
-  "2537590": {
-   "name": "Microsoft Flight Simulator 2024",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2538880": {
-   "name": "Spirit X Strike",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "2542020": {
-   "name": "Duskfade Demo",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "2545710": {
-   "name": "Tony Hawk's Pro Skater 3 + 4",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Tony-Hawk's-Pro-Skater-3-4"
-  },
-  "2561580": {
-   "name": "Horizon Zero Dawn Remastered",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Horizon-Zero-Dawn-Remastered",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2565550": {
-   "name": "Beyond Hanwell",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2569760": {
-   "name": "The Mound: Omen of Cthulhu",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2584270": {
-   "name": "Mortal Shell II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2585830": {
-   "name": "Promise Mascot Agency",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2591280": {
-   "name": "F1 Manager 2024",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2599300": {
-   "name": "Dead Signal",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2605790": {
-   "name": "Deep Rock Galactic: Rogue Core",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2613980": {
-   "name": "Memory’s Reach Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2615540": {
-   "name": "VOID/BREAKER",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2623040": {
-   "name": "Robots at Midnight",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2623190": {
-   "name": "The Elder Scrolls IV: Oblivion Remastered",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "The-Elder-Scrolls-IV-Oblivion-Remastered"
-  },
-  "2627260": {
-   "name": "NINJA GAIDEN 4",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "NINJA-GAIDEN-4"
-  },
-  "2634950": {
-   "name": "Tokyo Xtreme Racer",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2638890": {
-   "name": "Onimusha: Way of the Sword",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Onimusha-Way-of-the-Sword"
-  },
-  "2640030": {
-   "name": "Wonderball",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2643390": {
-   "name": "Star Trek: Voyager - Across the Unknown",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2646460": {
-   "name": "Soulmask",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Soulmask"
-  },
-  "2649240": {
-   "name": "FINAL FANTASY XIV: Dawntrail",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Final-Fantasy-XIV-Dawntrail",
-   "page_facts": {
-    "proxy": "winmm.dll",
-    "linux": true
-   }
-  },
-  "2651280": {
-   "name": "Marvel's Spider‐Man 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Marvels-Spider‐Man-2",
-   "page_facts": {
-    "settings": {
-     "Dxgi": "false"
-    }
-   }
-  },
-  "2661300": {
-   "name": "Grounded 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2663530": {
-   "name": "POOLS",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "POOLS"
-  },
-  "2668430": {
-   "name": "The Legend of Heroes: Trails through Daybreak II",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2668510": {
-   "name": "Red Dead Redemption",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Red-Dead-Redemption"
-  },
-  "2677660": {
-   "name": "Indiana Jones and the Great Circle",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Indiana-Jones-and-the-Great-Circle"
-  },
-  "2679460": {
-   "name": "Metaphor: ReFantazio",
-   "status": "works",
-   "needs": [
-    "luma"
-   ],
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Metaphor-ReFantazio"
-  },
-  "2680010": {
-   "name": "The First Berserker: Khazan",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "The-First-Berserker-Khazan"
-  },
-  "2686630": {
-   "name": "Voyagers of Nera",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2688950": {
-   "name": "Planet Coaster 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2694490": {
-   "name": "Path of Exile 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Path-of-Exile-2",
-   "page_facts": {
-    "linux": true
-   }
-  },
-  "2695940": {
-   "name": "Panicore",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2697940": {
-   "name": "Ascend to ZERO",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2720920": {
-   "name": "Astrobotanica",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2746680": {
-   "name": "Darkwatch",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2753000": {
-   "name": "GOALS",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2760560": {
-   "name": "Cthulhu: The Cosmic Abyss",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2764750": {
-   "name": "The Other Side",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2776940": {
-   "name": "Echoes of Yi: Samsara",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2787320": {
-   "name": "Revenge of the Savage Planet",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Revenge-of-the-Savage-Planet"
-  },
-  "2795230": {
-   "name": "ODDRoom",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2804990": {
-   "name": "CODE EXIT Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2806050": {
-   "name": "Halo: Campaign Evolved",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ],
-   "page": "Halo-Campaign-Evolved"
-  },
-  "2806640": {
-   "name": "The Talos Principle: Reawakened",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3",
-    "XeSS"
-   ]
-  },
-  "2814860": {
-   "name": "Vindictus: Defying Fate",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2820820": {
-   "name": "Jotunnslayer - Hordes of Hel",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2821610": {
-   "name": "Echoes of the End",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Echoes-of-the-End"
-  },
-  "2825860": {
-   "name": "The Sinking City 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2828710": {
-   "name": "Valor Mortis",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2840000": {
-   "name": "Lumina Veil",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2840770": {
-   "name": "Avatar: Frontiers of Pandora",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Avatar-Frontiers-of-Pandora"
-  },
-  "2842040": {
-   "name": "Star Wars Outlaws",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Star-Wars-Outlaws"
-  },
-  "2852190": {
-   "name": "Monster Hunter Stories 3: Twisted Reflection",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Monster-Hunter-Stories-3-Twisted-Reflection"
-  },
-  "2863640": {
-   "name": "The Midnight Walk",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "The-Midnight-Walk"
-  },
-  "2879840": {
-   "name": "Escape Simulator 2 Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2893820": {
-   "name": "Of Ash and Steel Demo",
-   "status": "works",
-   "args": [
-    "-dx12"
-   ],
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2909400": {
-   "name": "FINAL FANTASY VII REBIRTH",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "FINAL-FANTASY-VII-REBIRTH"
-  },
-  "2926900": {
-   "name": "MAVRIX by Matt Jones",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2929250": {
-   "name": "over the hill Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2933080": {
-   "name": "Crime Boss: Rockay City",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "2933130": {
-   "name": "The Lord of the Rings: Return to Moria",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ]
-  },
-  "2947440": {
-   "name": "SILENT HILL f",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Silent-Hill-f"
-  },
-  "2948730": {
-   "name": "THE JOY OF CREATION",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2950340": {
-   "name": "LEGO Harry Potter Collection",
-   "status": "works",
-   "inputs": [
-    "FSR3"
-   ]
-  },
-  "2953480": {
-   "name": "Lunar Eclipse",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "2958130": {
-   "name": "Jurassic World Evolution 3",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "2975950": {
-   "name": "Solasta II",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "2978540": {
-   "name": "Gaming Cafe Simulator",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "2989180": {
-   "name": "Darwin's Paradox",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3000460": {
-   "name": "The Path into the Abyss",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "3002850": {
-   "name": "Fairy Tail 2",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "3008130": {
-   "name": "Dying Light The Beast",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Dying-Light-The-Beast"
-  },
-  "3010850": {
-   "name": "Gears of War: E-Day",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR4",
-    "XeSS"
-   ],
-   "page": "Gears-of-War-E‐Day",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "3017860": {
-   "name": "Doom: The Dark Ages",
-   "status": "works",
-   "inputs": [
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Doom-The-Dark-Ages",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "3035570": {
-   "name": "Assassin’s Creed Mirage",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Assassins-Creed-Mirage"
-  },
-  "3037180": {
-   "name": "Deep Space 7",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3041230": {
-   "name": "Windrose",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3043580": {
-   "name": "Keeper",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Keeper"
-  },
-  "3043760": {
-   "name": "Hellbreak",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3050900": {
-   "name": "ROMEO IS A DEAD MAN",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "ROMEO-IS-A-DEAD-MAN"
-  },
-  "3054690": {
-   "name": "NORSE: Oath of Blood Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3058630": {
-   "name": "Assetto Corsa EVO",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "3059520": {
-   "name": "F1 25",
-   "status": "works",
-   "inputs": [
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3061810": {
-   "name": "Like a Dragon: Pirate Yakuza in Hawaii",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ]
-  },
-  "3071240": {
-   "name": "Voodoo Fishin'",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3072120": {
-   "name": "Backrooms Lost Runners Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3107900": {
-   "name": "Liminalcore",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ]
-  },
-  "3112260": {
-   "name": "Virtua Fighter 5 R.E.V.O. World Stage",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "3123410": {
-   "name": "Atelier Yumia: The Alchemist of Memories & the Envisioned Land",
-   "status": "works",
-   "inputs": [
-    "XeSS"
-   ]
-  },
-  "3124540": {
-   "name": "Far Far West",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3130220": {
-   "name": "Sagas of Lumin",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3144860": {
-   "name": "WILL: Follow the Light",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3156770": {
-   "name": "Witchfire",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR2",
-    "XeSS"
-   ],
-   "page": "Witchfire"
-  },
-  "3159330": {
-   "name": "Assassin’s Creed Shadows",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Assassins-Creed-Shadows"
-  },
-  "3164330": {
-   "name": "Infinity Nikki",
-   "status": "works",
-   "proxy": "version.dll",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "3166290": {
-   "name": "POLYARIS Demo",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "3176060": {
-   "name": "Emissary Zero",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3224960": {
-   "name": "Pizzapocalypse",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3228590": {
-   "name": "Deadzone Rogue",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3240220": {
-   "name": "Grand Theft Auto V Enhanced",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Grand-Theft-Auto-V-Enhanced"
-  },
-  "3247570": {
-   "name": "Anchor Quest for Atlantis",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3254050": {
-   "name": "The Black Ice",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3265250": {
-   "name": "MindsEye",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3268960": {
-   "name": "Brawlers of the West",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3280350": {
-   "name": "DEATH STRANDING 2: ON THE BEACH",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "DEATH-STRANDING-2-ON-THE-BEACH"
-  },
-  "3287520": {
-   "name": "NINJA GAIDEN 2 Black",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "NINJA-GAIDEN-2-Black",
-   "page_facts": {
-    "proxy": "winmm.dll"
-   }
-  },
-  "3288210": {
-   "name": "Super Meat Boy 3D",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Super-Meat-Boy-3D"
-  },
-  "3290690": {
-   "name": "Styx: Blades of Greed",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3301490": {
-   "name": "RealmWalker",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3333250": {
-   "name": "Crimson Oath",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3335310": {
-   "name": "Remothered: Red Nun's Legacy",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3352690": {
-   "name": "Dead Take",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "3357650": {
-   "name": "PRAGMATA",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "PRAGMATA"
-  },
-  "3368050": {
-   "name": "Mr. Photographer - Into The Light",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3372950": {
-   "name": "Ashgard: Infinity Mask",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3375780": {
-   "name": "Trails in the Sky 1st Chapter",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Trails-in-the-Sky-1st-Chapter"
-  },
-  "3378960": {
-   "name": "Lost Soul Aside",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3404260": {
-   "name": "Dead as Disco",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3419520": {
-   "name": "Quarantine Zone: The Last Check",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Quarantine-Zone-The-Last-Check",
-   "page_facts": {
-    "settings": {
-     "FsrNonLinearColorSpace": "true"
-    },
-    "suggestions": {
-     "HUDFix": "true",
-     "HUDFixImmediate": "true"
-    }
-   }
-  },
-  "3437660": {
-   "name": "Project Songbird Teaser: Faceless",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3440070": {
-   "name": "Dinoblade",
-   "status": "works",
-   "inputs": [
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3446240": {
-   "name": "Eastern Era",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3448650": {
-   "name": "Aliens: Fireteam Elite 2",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3450310": {
-   "name": "Europa Universalis V",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3477260": {
-   "name": "Demon Tides Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3489700": {
-   "name": "Stellar Blade",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Stellar-Blade"
-  },
-  "3513350": {
-   "name": "Wuthering Waves",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Wuthering-Waves",
-   "page_facts": {
-    "linux": true
-   }
-  },
-  "3527760": {
-   "name": "RoboCop: Rogue City – Unfinished Business",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Robocop-Rogue-City-‐-Unfinished-Business"
-  },
-  "3564740": {
-   "name": "Where Winds Meet",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3566840": {
-   "name": "Bleak Haven",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "3587020": {
-   "name": "Dream Eaters.exe",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3596700": {
-   "name": "TerraTech Legion",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3634520": {
-   "name": "Samson",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3638110": {
-   "name": "Shadow Project Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "3655390": {
-   "name": "Alien: Rogue Incursion Evolved Edition",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Alien-Rogue-Incursion-Evolved-Edition"
-  },
-  "3660710": {
-   "name": "Armatus Demo",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "3669870": {
-   "name": "CONTROL Resonant",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "CONTROL-Resonant"
-  },
-  "3679080": {
-   "name": "The Seven Deadly Sins: Origin",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3681010": {
-   "name": "Nioh 3",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ],
-   "page": "Nioh-3"
-  },
-  "3681810": {
-   "name": "Blue Protocol: Star Resonance",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3683770": {
-   "name": "Boba Cafe Simulator",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3696100": {
-   "name": "CoopRooms Demo",
-   "status": "works",
-   "inputs": [
-    "FSR3.1"
-   ]
-  },
-  "3710560": {
-   "name": "Protocol:Terminate Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3751260": {
-   "name": "The Blood of Dawnwalker",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "The-Blood-of-Dawnwalker"
-  },
-  "3751950": {
-   "name": "Assassin's Creed Black Flag Resynced",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Assassins-Creed-Black-Flag-Resynced"
-  },
-  "3764200": {
-   "name": "Resident Evil 9 Requiem",
-   "status": "works",
-   "needs": [
-    "reframework"
-   ],
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "Resident-Evil-9-Requiem"
-  },
-  "3768760": {
-   "name": "007 First Light",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ],
-   "page": "007-First-Light"
-  },
-  "3775710": {
-   "name": "LANESPLIT Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3844340": {
-   "name": "Dreams Far Away",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3850990": {
-   "name": "687 Days on Mars Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3869850": {
-   "name": "Welcome to the Game III",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3872430": {
-   "name": "SCP: Project Pneuma Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3875670": {
-   "name": "Winemaker Simulator",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "3906060": {
-   "name": "Echo 91",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3916260": {
-   "name": "Psalm 2",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3916440": {
-   "name": "771",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3917090": {
-   "name": "Assetto Corsa Rally",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Assetto-Corsa-Rally"
-  },
-  "3920610": {
-   "name": "FATAL FRAME II: Crimson Butterfly REMAKE",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3933150": {
-   "name": "FixForce",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3949040": {
-   "name": "RV There Yet?",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "3949550": {
-   "name": "1666: Amsterdam",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "3998460": {
-   "name": "Ranch Simulator",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4024480": {
-   "name": "MINOS Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "XeSS"
-   ]
-  },
-  "4030360": {
-   "name": "Undertaker",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4094350": {
-   "name": "Online: 404 Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "4094660": {
-   "name": "Rivage",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "4119360": {
-   "name": "It Reaches",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4144680": {
-   "name": "DEAD OR ALIVE 6 Last Round",
-   "status": "works",
-   "proxy": "d3d12.dll",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "DEAD-OR-ALIVE-6-Last-Round",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "4215750": {
-   "name": "The Alley Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4219940": {
-   "name": "The Hollow Complex Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "4225980": {
-   "name": "Trails in the Sky 2nd Chapter",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR2"
-   ],
-   "page": "Trails-in-the-Sky-2nd-Chapter"
-  },
-  "4235230": {
-   "name": "Werewolf: The Inner Beast",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4254180": {
-   "name": "Zouhri: The Cursed Blood Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4265610": {
-   "name": "Matcho Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "4317690": {
-   "name": "Crimson Moon",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ],
-   "page": "Crimson-Moon"
-  },
-  "4362740": {
-   "name": "Paresis II Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "4570720": {
-   "name": "DragonSword : Awakening",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS",
-    "FSR3"
-   ],
-   "page": "DragonSword-Awakening"
-  },
-  "4633360": {
-   "name": "Project: Station Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "4732690": {
-   "name": "Arknights: Endfield",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ],
-   "page": "Arknights-Endfield",
-   "page_facts": {
-    "proxy": "d3d12.dll"
-   }
-  },
-  "4793190": {
-   "name": "Smile Protocol Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS"
-   ]
-  },
-  "4804160": {
-   "name": "SHROT Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "4825100": {
-   "name": "Curse Of The Abandoned Floor Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1",
-    "XeSS"
-   ]
-  },
-  "5095070": {
-   "name": "The Unworthy Demo",
-   "status": "works",
-   "inputs": [
-    "DLSS",
-    "FSR3.1"
-   ]
-  },
-  "5130460": {
-   "name": "Guns of Eschaton Demo",
-   "status": "works",
-   "optipatcher": true,
-   "inputs": [
-    "DLSS"
-   ]
-  }
+  "3210": {"name":"Painkiller Demo","status":"works","inputs":["XeSS"]},
+  "251570": {"name":"7 Days To Die","status":"works","needs":["anti_cheat_off"],"inputs":["DLSS"],"page":"7-Days-to-Die","page_facts":{"proxy":"version.dll","suggestions":{"Vulkan":"true","VulkanExtensionSpoofing":"true"}}},
+  "252330": {"name":"Slender: The Arrival","status":"works","inputs":["DLSS"]},
+  "261550": {"name":"Mount & Blade II Bannerlord","status":"works","inputs":["DLSS"]},
+  "269190": {"name":"Edge of Eternity","status":"works","inputs":["DLSS"]},
+  "275850": {"name":"No Man’s Sky","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"No-Man's-Sky"},
+  "293760": {"name":"Automation - The Car Company Tycoon Game","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "315210": {"name":"Suicide Squad: Kill the Justice League","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"],"page":"Suicide-Squad-Kill-The-Justice-League"},
+  "355790": {"name":"Styx: Shards of Darkness","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "368260": {"name":"Marvel's Midnight Suns","status":"works","proxy":"d3d12.dll","inputs":["DLSS"],"page":"Marvels-Midnight-Suns","page_facts":{"proxy":"d3d12.dll"}},
+  "391220": {"name":"Rise of the Tomb Raider","status":"works","inputs":["DLSS"],"page":"Rise-of-the-Tomb-Raider"},
+  "403640": {"name":"Dishonored 2","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Dishonored-2","page_facts":{"settings":{"Dxgi":"false","DontUseNTShared":"true"}}},
+  "414340": {"name":"Hellblade: Senua’s Sacrifice","status":"works","inputs":["DLSS"],"page":"Hellblade-Senuas-Sacrifice","page_facts":{"linux":true}},
+  "418370": {"name":"Resident Evil 7 Biohazard","status":"works","needs":["reframework"],"inputs":["DLSS","XeSS"],"page":"Resident-Evil-7-Biohazard"},
+  "424840": {"name":"Little Nightmares","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "427290": {"name":"Vampyr","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "428660": {"name":"Deliver Us the Moon","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "440900": {"name":"Conan Exiles Enhanced","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "447040": {"name":"Watch Dogs 2","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Watch-Dogs-2"},
+  "447290": {"name":"Redeemer Enhanced Edition","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "458430": {"name":"Steel Seed","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "460930": {"name":"Tom Clancy's Ghost Recon Wildlands","status":"works","needs":["mod"],"inputs":["DLSS"],"page":"Tom-Clancys-Ghost-Recon-Wildlands"},
+  "464060": {"name":"RUINER","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "474960": {"name":"Quantum Break","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Quantum-Break"},
+  "480490": {"name":"Prey (2017)","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Prey-Luma-Remastered-mod"},
+  "482400": {"name":"System Shock (2023)","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "494840": {"name":"UBOAT","status":"works","inputs":["DLSS"]},
+  "515960": {"name":"Martha is Dead","status":"works","inputs":["DLSS"]},
+  "517710": {"name":"Redout Enhanced Edition","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "526870": {"name":"Satisfactory","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "532210": {"name":"Life is Strange 2","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Life-is-Strange-2"},
+  "532790": {"name":"Vampire: The Masquerade - Bloodlines 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "534380": {"name":"Dying Light 2","status":"works","inputs":["DLSS","XeSS"],"page":"Dying-Light-2"},
+  "548430": {"name":"Deep Rock Galactic","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "552520": {"name":"Far Cry 5","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Far-Cry-5"},
+  "574090": {"name":"MOTHERGUNSHIP","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "582160": {"name":"Assassin's Creed Origins","status":"works","needs":["mod"],"inputs":["DLSS"],"page":"Assassins-Creed-Origins"},
+  "601150": {"name":"Devil May Cry 5","status":"works","needs":["reframework"],"inputs":["DLSS"],"page":"Devil-May-Cry-5"},
+  "606160": {"name":"ROUTINE","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "606280": {"name":"Darksiders III","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "607080": {"name":"Psychonauts 2","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "617290": {"name":"Remnant: From the Ashes","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "668580": {"name":"Atomic Heart","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "673130": {"name":"Amid Evil","status":"works","inputs":["DLSS"]},
+  "680420": {"name":"Outriders","status":"works","inputs":["DLSS"]},
+  "692850": {"name":"Bloodstained: Ritual of the Night","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "692890": {"name":"Roboquest","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "695330": {"name":"Season: A Letter to the Future","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "698670": {"name":"Scorn","status":"works","inputs":["FSR2"],"page":"Scorn","page_facts":{"settings":{"Dxgi":"false"}}},
+  "699130": {"name":"World War Z","status":"works","inputs":["FSR2"]},
+  "703680": {"name":"Cursed Deal","status":"works","inputs":["DLSS","FSR3.1"]},
+  "707030": {"name":"POSTAL 4: No Regerts","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"POSTAL-4-No-Regerts"},
+  "717790": {"name":"Hold Your Own","status":"works","inputs":["DLSS"]},
+  "730390": {"name":"Raji: An Ancient Epic","status":"works","inputs":["DLSS"]},
+  "731040": {"name":"The Invincible","status":"works","inputs":["DLSS","FSR2"]},
+  "735350": {"name":"Bottle Pilgrim Redux","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "738520": {"name":"Breathedge","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "742420": {"name":"Saints Row","status":"works","inputs":["FSR2"]},
+  "747660": {"name":"Five Nights at Freddy’s: Security Breach","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "750130": {"name":"The Sinking City Remastered","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "750920": {"name":"Shadow of the Tomb Raider","status":"works","inputs":["DLSS","XeSS"],"page":"Shadow-of-the-Tomb-Raider","page_facts":{"settings":{"Dxgi":"false"}}},
+  "754890": {"name":"Firmament","status":"works","inputs":["DLSS"]},
+  "768200": {"name":"Smalland: Survive the Wilds","status":"works","inputs":["DLSS","FSR2"]},
+  "775620": {"name":"Fight or Flight","status":"works","inputs":["DLSS","FSR2","XeSS"]},
+  "780310": {"name":"The Riftbreaker","status":"works","inputs":["XeSS"]},
+  "782330": {"name":"Doom Eternal","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"DOOM-Eternal","page_facts":{"proxy":"winmm.dll"}},
+  "784080": {"name":"MechWarrior 5: Mercenaries","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "805550": {"name":"Assetto Corsa Competizione","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "813630": {"name":"Supraland","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "814380": {"name":"Sekiro: Shadows Die Twice","status":"works","needs":["mod"],"inputs":["DLSS"],"page":"SekiroTSR"},
+  "831050": {"name":"Dolmen","status":"works","inputs":["DLSS"]},
+  "835960": {"name":"The Talos Principle 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"The-Talos-Principle-2"},
+  "860510": {"name":"Little Nightmares II","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "867150": {"name":"Influx Redux","status":"works","inputs":["DLSS","FSR3.1"]},
+  "870780": {"name":"CONTROL Ultimate Edition","status":"works","inputs":["DLSS"],"page":"Control-Ultimate-Edition"},
+  "874450": {"name":"Lunacy: Saint Rhodes","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "883710": {"name":"Resident Evil 2 (2019)","status":"works","needs":["reframework"],"inputs":["DLSS","XeSS"],"page":"Resident-Evil-2-(2019"},
+  "886060": {"name":"Redout: Space Assault","status":"works","inputs":["DLSS"]},
+  "889910": {"name":"Hell Pie","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "921570": {"name":"OCTOPATH TRAVELER","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "934700": {"name":"Dead Island 2","status":"works","inputs":["FSR2"],"page":"Dead-Island-2","page_facts":{"suggestions":{"HUDFix":"true"}}},
+  "936720": {"name":"Wrench","status":"works","inputs":["DLSS"]},
+  "949230": {"name":"Cities: Skylines II","status":"works","inputs":["DLSS"]},
+  "952060": {"name":"Resident Evil 3 (2020)","status":"works","needs":["reframework"],"inputs":["DLSS","XeSS"],"page":"Resident-Evil-3-(2020"},
+  "954740": {"name":"Terminator: Resistance","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "955050": {"name":"Bright Memory","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "976590": {"name":"Bus Simulator 21","status":"works","needs":["nvngx_dlss"],"inputs":["DLSS"]},
+  "979690": {"name":"The Ascent","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "986130": {"name":"Shadows of Doubt","status":"works","inputs":["DLSS"]},
+  "990080": {"name":"Hogwarts Legacy","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Hogwarts-Legacy"},
+  "990380": {"name":"METAL EDEN","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "996580": {"name":"Spyro Reignited Trilogy","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1013140": {"name":"Outcast: A New Beginning","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1013910": {"name":"Arons Adventure","status":"works","inputs":["DLSS","FSR2"]},
+  "1016800": {"name":"Chernobylite","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1036890": {"name":"Shadow Warrior 3","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1056960": {"name":"Wolfenstein: Youngblood","status":"partial","inputs":["DLSS"]},
+  "1065310": {"name":"Evil West","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1080110": {"name":"F1 2020","status":"works","inputs":["DLSS"]},
+  "1084160": {"name":"Jagged Alliance 3","status":"works","inputs":["DLSS","XeSS"]},
+  "1086940": {"name":"Baldur’s Gate 3","status":"works","inputs":["DLSS"]},
+  "1088850": {"name":"Marvel's Guardians of the Galaxy","status":"works","inputs":["DLSS"],"page":"Guardians-of-the-Galaxy","page_facts":{"proxy":"version.dll"}},
+  "1091500": {"name":"Cyberpunk 2077","status":"works","inputs":["DLSS","FSR3","FSR3.1","XeSS"],"page":"Cyberpunk-2077"},
+  "1096200": {"name":"The Orville – Interactive Fan Experience","status":"works","inputs":["DLSS"]},
+  "1105590": {"name":"Dream Cycle","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1106840": {"name":"Hydroneer","status":"works","inputs":["DLSS"]},
+  "1107750": {"name":"Faraday Protocol","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1110910": {"name":"Mortal Shell","status":"works","inputs":["DLSS"]},
+  "1119840": {"name":"Sands of Aura","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1128920": {"name":"EVERSPACE 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1129570": {"name":"Industry Giant 4","status":"works","inputs":["DLSS"]},
+  "1129580": {"name":"Medieval Dynasty","status":"works","inputs":["XeSS"]},
+  "1133870": {"name":"Space Engineers 2","status":"works","inputs":["FSR3.1"],"page":"Space-Engineers-2"},
+  "1134100": {"name":"Frozenheim","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1139900": {"name":"Ghostrunner","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"],"page":"Ghostrunner","page_facts":{"proxy":"winmm.dll"}},
+  "1140100": {"name":"The Persistence","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1142710": {"name":"Total War: WARHAMMER III","status":"works","needs":["mod"],"inputs":["DLSS"],"page":"Total-War-WARHAMMER-III"},
+  "1144200": {"name":"Ready or Not","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"Ready-or-Not"},
+  "1145630": {"name":"BEAST: False Prophet","status":"works","inputs":["DLSS"]},
+  "1149460": {"name":"ICARUS","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1151640": {"name":"Horizon Zero Dawn Complete Edition","status":"works","inputs":["DLSS"],"page":"Horizon-Zero-Dawn","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1153410": {"name":"JDM: Japanese Drift Master","status":"works","inputs":["DLSS","XeSS"]},
+  "1153640": {"name":"Chorus","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1154030": {"name":"Titan Quest II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "1154830": {"name":"Scathe","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1159690": {"name":"Voidtrain","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1160220": {"name":"Paradise Killer","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1164940": {"name":"Trepang2","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"],"page":"Trepang2"},
+  "1165990": {"name":"Kiln","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1171690": {"name":"Wayfinder","status":"works","inputs":["DLSS"]},
+  "1172380": {"name":"STAR WARS Jedi: Fallen Order","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"STAR-WARS-Jedi-Fallen-Order","page_facts":{"settings":{"Dxgi":"false","DontUseNTShared":"true"}}},
+  "1172650": {"name":"INDUSTRIA","status":"works","inputs":["DLSS"]},
+  "1173220": {"name":"Bleak Faith: Forsaken","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1174180": {"name":"Red Dead Redemption 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"],"page":"Red-Dead-Redemption-II","page_facts":{"proxy":"winmm.dll"}},
+  "1178830": {"name":"Bright Memory: Infinite","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS","FSR2","XeSS"]},
+  "1182900": {"name":"A Plague Tale: Requiem","status":"works","inputs":["DLSS"],"page":"A-Plague-Tale-Requiem"},
+  "1186640": {"name":"Pumpkin Jack","status":"works","inputs":["DLSS"]},
+  "1190970": {"name":"House Flipper 2","status":"works","inputs":["DLSS"]},
+  "1192810": {"name":"Romancelvania","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1198970": {"name":"I Am Jesus Christ","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1203190": {"name":"Wreckfest 2","status":"works","inputs":["DLSS","FSR3"]},
+  "1203620": {"name":"Enshrouded","status":"works","inputs":["DLSS"],"page":"Enshrouded","page_facts":{"proxy":"winmm.dll","linux":true}},
+  "1222370": {"name":"Necromunda: Hired Gun","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1227690": {"name":"Severed Steel","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "1230530": {"name":"Atlas Fallen: Reign Of Sand","status":"broken"},
+  "1234430": {"name":"Ad Infinitum","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1244460": {"name":"Jurassic World Evolution 2","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1245620": {"name":"Elden Ring","status":"works","needs":["mod"],"inputs":["FSR3.1","XeSS"],"page":"Elden-Ring-(ERSS‐FG"},
+  "1248130": {"name":"Farming Simulator 22","status":"works","inputs":["DLSS","FSR3"]},
+  "1249800": {"name":"Xuan-Yuan Sword VII","status":"works","inputs":["DLSS"]},
+  "1249970": {"name":"Test Drive Unlimited Solar Crown","status":"works","inputs":["DLSS"]},
+  "1251300": {"name":"Last Floor","status":"works","inputs":["DLSS"]},
+  "1252330": {"name":"Deathloop","status":"works","inputs":["DLSS"]},
+  "1255560": {"name":"Myst (2021)","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1260320": {"name":"Party Animals","status":"works","inputs":["DLSS"]},
+  "1265780": {"name":"The Lord of the Rings: Gollum","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1266700": {"name":"Destroy All Humans! 2 – Reprobed","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "1269370": {"name":"171","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"171"},
+  "1271700": {"name":"HOT WHEELS UNLEASHED","status":"works","inputs":["DLSS"]},
+  "1272080": {"name":"PAYDAY 3","status":"works","inputs":["DLSS","FSR3","XeSS"],"page":"PAYDAY-3"},
+  "1277130": {"name":"Deathbound","status":"works","args":["-dx12"],"inputs":["DLSS","FSR3"]},
+  "1282100": {"name":"Remnant II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"]},
+  "1283400": {"name":"Steelrising","status":"works","inputs":["DLSS"]},
+  "1285190": {"name":"Borderlands 4","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Borderlands-4"},
+  "1286680": {"name":"Tiny Tina’s Wonderlands","status":"works","inputs":["FSR2"],"page":"Tiny-Tinas-Wonderlands","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1288320": {"name":"Way of the Hunter","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"],"page":"Way-of-the-Hunter"},
+  "1291680": {"name":"Apocalypse 2.0","status":"works","inputs":["DLSS"]},
+  "1293160": {"name":"The Medium","status":"works","inputs":["DLSS"],"page":"The-Medium"},
+  "1293730": {"name":"Broken Pieces","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1294810": {"name":"Redfall","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1294880": {"name":"Blind Fate: Edo no Yami","status":"works","inputs":["DLSS"]},
+  "1296010": {"name":"Stay in the Light","status":"works","inputs":["DLSS"]},
+  "1297900": {"name":"Gothic 1 Remake","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1298140": {"name":"Fobia – St. Dinfna Hotel","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1299690": {"name":"Gori: Cuddly Carnage","status":"works","inputs":["DLSS","XeSS"]},
+  "1307710": {"name":"Grid Legends","status":"works","inputs":["XeSS"]},
+  "1308360": {"name":"Gun Jam","status":"works","inputs":["DLSS"]},
+  "1309620": {"name":"Bears in Space","status":"works","inputs":["DLSS"]},
+  "1310410": {"name":"Alone in the Dark (2024)","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1314000": {"name":"Achilles: Legends Untold","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1316680": {"name":"VLADiK BRUTAL","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1321680": {"name":"Hello Neighbor 2","status":"works","inputs":["DLSS"]},
+  "1324130": {"name":"Stranded: Alien Dawn","status":"works","inputs":["DLSS"]},
+  "1325200": {"name":"Nioh 2","status":"works","inputs":["DLSS"],"page":"Nioh-2-The-Complete-Edition","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1326470": {"name":"Sons of the Forest","status":"works","inputs":["DLSS","FSR3"]},
+  "1330430": {"name":"Celestial Empire","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "1330470": {"name":"F.I.S.T.: Forged In Shadow Torch","status":"works","inputs":["DLSS"]},
+  "1332010": {"name":"Stray","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1332430": {"name":"Chip 'n Clawz vs The Brainioids","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "1336380": {"name":"Gripper","status":"works","inputs":["DLSS"]},
+  "1340990": {"name":"Rise of the Ronin","status":"works","inputs":["DLSS"],"page":"Rise-of-the-Ronin"},
+  "1342490": {"name":"Daemon x Machina Titanic Scion","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1343240": {"name":"Thymesia","status":"works","inputs":["FSR2"],"page":"Thymesia","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1345890": {"name":"Deliver Us Mars","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"]},
+  "1351000": {"name":"Gangs of Sherwood","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1351210": {"name":"Gord","status":"works","inputs":["DLSS","FSR2","XeSS"]},
+  "1358700": {"name":"Stranger of Paradise: Final Fantasy Origin","status":"works","inputs":["DLSS"]},
+  "1361210": {"name":"Warhammer 40,000: Darktide","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "1363080": {"name":"Manor Lords","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1368140": {"name":"Corsair Cove","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1370050": {"name":"Trek to Yomi","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1371980": {"name":"No Rest For The Wicked","status":"works","inputs":["DLSS"]},
+  "1373960": {"name":"INDIKA","status":"works","proxy":"d3d12.dll","optipatcher":true,"inputs":["DLSS"],"page":"INDIKA","page_facts":{"proxy":"d3d12.dll"}},
+  "1374490": {"name":"Runescape: Dragonwilds","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1376200": {"name":"KARMA: The Dark World","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "1377700": {"name":"Empyreal","status":"works","inputs":["FSR3","XeSS"]},
+  "1378990": {"name":"Crash Bandicoot 4: It’s About Time","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1383570": {"name":"Ballex 2: The Hanging Gardens","status":"works","inputs":["DLSS"]},
+  "1384160": {"name":"GUILTY GEAR -STRIVE-","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1386900": {"name":"Observer: System Redux","status":"works","inputs":["DLSS"]},
+  "1390670": {"name":"Escape from Naraka","status":"works","inputs":["DLSS"]},
+  "1392860": {"name":"Little Nightmares III","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1399080": {"name":"The DioField Chronicle","status":"works","inputs":["XeSS"]},
+  "1429850": {"name":"Sumerian Six","status":"works","inputs":["DLSS"]},
+  "1430680": {"name":"Clash: Artifacts of Chaos","status":"works","args":["-dx12"],"inputs":["FSR2"]},
+  "1430930": {"name":"Thief's Shelter","status":"works","inputs":["DLSS"]},
+  "1432750": {"name":"Chionophile","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1442430": {"name":"Storage Hunter Simulator","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1443630": {"name":"Turbo Sloths","status":"works","inputs":["DLSS"]},
+  "1446780": {"name":"Monster Hunter Rise","status":"works","inputs":["DLSS"],"page":"Monster-Hunter-Rise","page_facts":{"proxy":"d3d12.dll"}},
+  "1448440": {"name":"Wo Long: Fallen Dynasty","status":"works","inputs":["DLSS","XeSS"]},
+  "1449110": {"name":"The Outer Worlds 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1462040": {"name":"FINAL FANTASY VII REMAKE INTERGRADE","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"FINAL-FANTASY-VII-REMAKE-INTERGRADE"},
+  "1466060": {"name":"Tainted Grail: The Fall of Avalon","status":"works","inputs":["DLSS"]},
+  "1469610": {"name":"Last Train Home","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1471410": {"name":"SYNTHETIK 2","status":"works","inputs":["DLSS"]},
+  "1475810": {"name":"Ghostwire: Tokyo","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "1477940": {"name":"Unknown 9: Awakening","status":"works","inputs":["FSR2"]},
+  "1479730": {"name":"Commandos: Origins","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "1486920": {"name":"Tempest Rising","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"]},
+  "1489970": {"name":"Highrise City","status":"works","inputs":["DLSS"]},
+  "1491410": {"name":"Eternal Strands","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1493640": {"name":"Banishers: Ghosts of New Eden","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"],"page":"Banishers-Ghosts-of-New-Eden"},
+  "1496590": {"name":"Tchia","status":"works","inputs":["DLSS"]},
+  "1496790": {"name":"Gotham Knights","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"Gotham-Knights"},
+  "1501750": {"name":"Lords of the Fallen (2023)","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1506440": {"name":"Batora: Lost Haven","status":"works","inputs":["DLSS"]},
+  "1515640": {"name":"Arcadegeddon","status":"works","inputs":["DLSS","XeSS"]},
+  "1519090": {"name":"Welcome to ParadiZe","status":"works","inputs":["FSR2"]},
+  "1522870": {"name":"Supraland Six Inches Under","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1530470": {"name":"Daymare - 1994 Sandcastle","status":"works","inputs":["DLSS","XeSS"]},
+  "1532690": {"name":"Blacktail","status":"works","needs":["nvngx_dlss"],"optipatcher":true,"inputs":["DLSS"]},
+  "1542110": {"name":"Daydream: Forgotten Sorrow","status":"works","inputs":["DLSS"]},
+  "1544020": {"name":"The Callisto Protocol","status":"works","inputs":["FSR2"],"page":"The-Callisto-Protocol","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1544360": {"name":"LEGO Builder’s Journey","status":"works","inputs":["DLSS"]},
+  "1546970": {"name":"Grand Theft Auto III – Definitive Edition","status":"works","args":["-dx12"],"proxy":"d3d12.dll","optipatcher":true,"inputs":["DLSS"],"page":"Grand-Theft-Auto-III-‐-Definitive-Edition","page_facts":{"proxy":"d3d12.dll"}},
+  "1546990": {"name":"Grand Theft Auto: Vice City – Definitive Edition","status":"works","args":["-dx12"],"proxy":"d3d12.dll","optipatcher":true,"inputs":["DLSS"],"page":"Grand-Theft-Auto-Vice-City-‐-Definitive-Edition","page_facts":{"proxy":"d3d12.dll"}},
+  "1547000": {"name":"Grand Theft Auto: San Andreas – Definitive Edition","status":"works","args":["-dx12"],"proxy":"d3d12.dll","optipatcher":true,"inputs":["DLSS"],"page":"Grand-Theft-Auto-San-Andreas-‐-Definitive-Edition","page_facts":{"proxy":"d3d12.dll"}},
+  "1549690": {"name":"SPRAWL","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1549970": {"name":"Aliens: Fireteam Elite","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Luma-Unreal-Engine-Luma-UE"},
+  "1550270": {"name":"Togges","status":"works","inputs":["DLSS"]},
+  "1550730": {"name":"Ikonei Island: An Earthlock Adventure","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1551360": {"name":"Forza Horizon 5","status":"works","inputs":["DLSS","XeSS"],"page":"Forza-Horizon-5","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1551980": {"name":"Clive Barker's Hellraiser: Revival","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1558830": {"name":"Ripout","status":"works","inputs":["DLSS"]},
+  "1564220": {"name":"Q.U.B.E. 10th Anniversary","status":"works","inputs":["DLSS"]},
+  "1566690": {"name":"Outpost: Infinity Siege","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "1577240": {"name":"Cions of Vega","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1577250": {"name":"The Chant","status":"works","inputs":["DLSS"]},
+  "1582650": {"name":"Caravan SandWitch","status":"works","inputs":["FSR3.1"],"page":"Caravan-Sandwitch"},
+  "1583230": {"name":"High on Life","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"High-on-Life","page_facts":{"settings":{"ColorResourceBarrier":"4","MotionVectorResourceBarrier":"8","HUDFix":"true"}}},
+  "1592360": {"name":"Kitten Burst","status":"works","inputs":["DLSS"]},
+  "1593500": {"name":"God of War (2018)","status":"works","inputs":["DLSS"],"page":"God-of-War-2018"},
+  "1599660": {"name":"Sackboy: A Big Adventure","status":"works","inputs":["DLSS"],"page":"Sackboy-‐-A-Big-Adventure"},
+  "1601570": {"name":"The Alters","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1601580": {"name":"Frostpunk 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Frostpunk-2"},
+  "1602080": {"name":"Soulstice","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1620730": {"name":"Hell is Us","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Hell-is-Us","page_facts":{"settings":{"Dxgi":"false"}}},
+  "1621560": {"name":"Black One: Blood Brothers","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1622630": {"name":"Otherskin","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1622910": {"name":"Still Wakes the Deep","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"Still-Wakes-the-Deep"},
+  "1623440": {"name":"Time Breaker","status":"works","inputs":["DLSS"]},
+  "1623730": {"name":"Palworld","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Palworld"},
+  "1627720": {"name":"Lies of P","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Lies-of-P"},
+  "1630110": {"name":"Gungrave G.O.R.E","status":"works","inputs":["DLSS"]},
+  "1636440": {"name":"SILENT HILL: Townfall","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "1645630": {"name":"Ferocious","status":"works","inputs":["DLSS"]},
+  "1649240": {"name":"Returnal","status":"works","inputs":["DLSS","XeSS"],"page":"Returnal"},
+  "1659040": {"name":"HITMAN World of Assassination","status":"works","inputs":["DLSS","XeSS"],"page":"HITMAN-3-World-of-Assassination"},
+  "1659420": {"name":"UNCHARTED: Legacy of Thieves Collection","status":"works","inputs":["DLSS","FSR2"],"page":"UNCHARTED-Legacy-of-Thieves-Collection"},
+  "1662690": {"name":"Twin Stones: The Journey of Bukka","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1663640": {"name":"The Last Oricru","status":"works","inputs":["DLSS"]},
+  "1664220": {"name":"Trail Out","status":"works","inputs":["DLSS"]},
+  "1668130": {"name":"Orbit.Industries","status":"works","inputs":["DLSS"]},
+  "1669480": {"name":"Firefighting Simulator: Ignite","status":"works","inputs":["DLSS","FSR3"]},
+  "1671360": {"name":"Ereban: Shadow Legacy","status":"works","inputs":["DLSS"]},
+  "1676130": {"name":"Deadlink","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1677110": {"name":"Lightyear Frontier","status":"works","inputs":["DLSS"]},
+  "1677280": {"name":"Company of Heroes 3","status":"works","inputs":["FSR2"]},
+  "1680880": {"name":"Forspoken","status":"works","proxy":"d3d12.dll","inputs":["DLSS"],"page":"Forspoken","page_facts":{"proxy":"d3d12.dll"}},
+  "1681430": {"name":"RoboCop: Rogue City","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"Robocop-Rogue-City"},
+  "1684350": {"name":"The Thaumaturge","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"The-Thaumaturge"},
+  "1687950": {"name":"Persona 5 Royal","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Persona-5-Royal"},
+  "1692250": {"name":"F1 22","status":"works","inputs":["DLSS"]},
+  "1693980": {"name":"Dead Space (2023)","status":"works","inputs":["DLSS","FSR2"],"page":"Dead-Space-(2023"},
+  "1702010": {"name":"Sengoku Dynasty","status":"works","inputs":["DLSS"]},
+  "1712100": {"name":"Carmageddon: Rogue Shift","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1712350": {"name":"Riven (2024)","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1715130": {"name":"Crysis Remastered","status":"works","inputs":["DLSS"]},
+  "1715280": {"name":"AirportSim","status":"works","inputs":["DLSS"]},
+  "1716740": {"name":"Starfield","status":"works","inputs":["DLSS"],"page":"Starfield"},
+  "1721060": {"name":"Mandragora: Whispers of the Witch Tree","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1723780": {"name":"Finnish Cottage Simulator","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "1729740": {"name":"Luto","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1731070": {"name":"Asterigos: Curse of the Stars","status":"works","inputs":["FSR2"],"page":"Asterigos-Curse-of-the-Stars"},
+  "1752780": {"name":"City of Springs","status":"works","inputs":["DLSS","XeSS"]},
+  "1766740": {"name":"Choo Choo Charles","status":"works","inputs":["DLSS"]},
+  "1771300": {"name":"Kingdom Come: Deliverance II","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Kingdom-Come-Deliverance-II"},
+  "1774580": {"name":"STAR WARS Jedi: Survivor","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"STAR-WARS-Jedi-Survivor"},
+  "1778820": {"name":"TEKKEN 8","status":"works","optipatcher":true,"inputs":["DLSS","FSR2","XeSS"]},
+  "1778840": {"name":"Spirit of the North 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Spirit-of-the-North-2"},
+  "1783560": {"name":"The Last Caretaker","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1790930": {"name":"Crisol: Theater of Idols","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1796470": {"name":"Haste","status":"works","inputs":["DLSS"]},
+  "1799930": {"name":"Redout 2","status":"works","inputs":["XeSS"],"page":"Redout-2"},
+  "1801520": {"name":"Zombieville USA 3D","status":"works","inputs":["DLSS"]},
+  "1805480": {"name":"Like a Dragon: Ishin!","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1807810": {"name":"The Axis Unseen","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "1812450": {"name":"Bellwright","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "1817070": {"name":"Marvel’s Spider-Man Remastered","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Marvels-Spider‐Man-Remastered"},
+  "1817190": {"name":"Marvel's Spider-Man: Miles Morales","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Marvels-Spider‐Man-Miles-Morales"},
+  "1817230": {"name":"Hi-Fi RUSH","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1817800": {"name":"Oddsparks: An Automation Adventure","status":"works","inputs":["DLSS"]},
+  "1820140": {"name":"SlavicPunk: Oldtimer","status":"works","inputs":["DLSS"]},
+  "1832040": {"name":"Flintlock: The Siege of Dawn","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"Flintlock-The-Siege-of-Dawn"},
+  "1836730": {"name":"Echo Point Nova","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Echo-Point-Nova","page_facts":{"settings":{"Dx12Upscaler":"fsr31"}}},
+  "1839940": {"name":"Dakar Desert Rally","status":"works","inputs":["DLSS"]},
+  "1840080": {"name":"Homeworld 3","status":"works","inputs":["DLSS","FSR2","XeSS"]},
+  "1843310": {"name":"Funko Fusion","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "1843540": {"name":"Akimbot","status":"works","inputs":["DLSS"]},
+  "1845910": {"name":"Dragon Age: The Veilguard","status":"works","proxy":"winmm.dll","inputs":["DLSS","XeSS"]},
+  "1846380": {"name":"Need For Speed Unbound","status":"works","inputs":["DLSS","FSR2","XeSS"],"page":"Need-For-Speed-Unbound"},
+  "1849250": {"name":"EA Sports WRC","status":"broken"},
+  "1850570": {"name":"Death Stranding: Director’s Cut","status":"works","inputs":["DLSS","XeSS"],"page":"Death-Stranding-Director's-Cut"},
+  "1857950": {"name":"VEIN","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1863430": {"name":"Dragonkin: The Banished","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1866130": {"name":"Morbid Metal","status":"works","inputs":["DLSS"]},
+  "1869290": {"name":"Supraworld","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Supraworld"},
+  "1881120": {"name":"Titan Station","status":"works","inputs":["DLSS"]},
+  "1888930": {"name":"The Last of Us Part I","status":"works","inputs":["DLSS","FSR3.1"],"page":"The-Last-of-Us-Part-I"},
+  "1895880": {"name":"Ratchet & Clank: Rift Apart","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Ratchet-&-Clank-Rift-Apart"},
+  "1898300": {"name":"ASKA","status":"works","inputs":["DLSS"]},
+  "1902960": {"name":"Lost Records: Bloom and Rage","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1903340": {"name":"Clair Obscur: Expedition 33","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"Clair-Obscur-Expedition-33"},
+  "1920490": {"name":"The Outer Worlds: Spacer's Choice Edition","status":"works","inputs":["FSR2"],"page":"The-Outer-Worlds-Spacers-Choice-Edition"},
+  "1926270": {"name":"Bloodhound","status":"works","args":["-dx12"],"inputs":["DLSS","FSR3"]},
+  "1926520": {"name":"Ambulance Life: A Paramedic Simulator","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "1928980": {"name":"Nightingale","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "1929610": {"name":"Demonologist","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1931180": {"name":"Lost Skies","status":"works","inputs":["DLSS"]},
+  "1931730": {"name":"Fort Solis","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"]},
+  "1933000": {"name":"Luna Abyss","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1934570": {"name":"South of Midnight","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1938010": {"name":"Wild Hearts","status":"works","proxy":"winmm.dll","inputs":["DLSS"],"page":"Wild-Hearts"},
+  "1939970": {"name":"Nobody Wants To Die","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"]},
+  "1941540": {"name":"Mafia: The Old Country","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Mafia-The-Old-Country"},
+  "1943730": {"name":"Wicked Island","status":"works","inputs":["DLSS"]},
+  "1946700": {"name":"Layers of Fear (2023)","status":"works","optipatcher":true,"inputs":["DLSS","FSR2","XeSS"]},
+  "1949030": {"name":"Sherlock Holmes: The Awakened","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1954200": {"name":"Kena: Bridge of Spirits","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1962700": {"name":"Subnautica 2","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Subnautica-2","page_facts":{"linux":true}},
+  "1963210": {"name":"Valkyrie Elysium","status":"works","inputs":["DLSS"]},
+  "1966410": {"name":"Aphelion","status":"works","inputs":["DLSS","FSR3.1"]},
+  "1971870": {"name":"Mortal Kombat 1","status":"works","optipatcher":true,"inputs":["DLSS","FSR2","FSR3.1","XeSS"]},
+  "1977170": {"name":"Jusant","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "1981570": {"name":"Land of the Vikings","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "1981610": {"name":"Wanted: Dead","status":"works","inputs":["DLSS"]},
+  "1997660": {"name":"GreedFall - The Dying World","status":"works","inputs":["DLSS"]},
+  "2001120": {"name":"Split Fiction","status":"works","inputs":["FSR3"]},
+  "2001760": {"name":"Beast of Reincarnation","status":"works","optipatcher":true,"inputs":["DLSS","FSR4"],"page":"Beast-of-Reincarnation"},
+  "2005090": {"name":"EVOTINCTION","status":"works","inputs":["DLSS"]},
+  "2009100": {"name":"Immortals of Aveum","status":"works","proxy":"d3d12.dll","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"Immortals-of-Aveum","page_facts":{"proxy":"d3d12.dll"}},
+  "2019760": {"name":"Necrophosis","status":"works","inputs":["DLSS"]},
+  "2050650": {"name":"Resident Evil 4 (2023)","status":"works","needs":["reframework"],"inputs":["DLSS","XeSS"],"page":"Resident-Evil-4-(2023"},
+  "2054970": {"name":"Dragon’s Dogma II","status":"works","inputs":["DLSS","FSR3"],"page":"Dragons-Dogma-2"},
+  "2055590": {"name":"Star Overdrive","status":"works","inputs":["DLSS","FSR3"]},
+  "2058180": {"name":"Judgment","status":"works","inputs":["DLSS"]},
+  "2058190": {"name":"Lost Judgment","status":"works","inputs":["XeSS"]},
+  "2067160": {"name":"Simulakros","status":"works","inputs":["DLSS"]},
+  "2069250": {"name":"High On Life 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2072450": {"name":"Like A Dragon: Infinite Wealth","status":"works","inputs":["DLSS","XeSS"],"page":"Like-a-Dragon-Infinite-Wealth"},
+  "2075100": {"name":"Chernobylite 2: Exclusion Zone","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2075800": {"name":"STAR WARS Zero Company","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2081080": {"name":"Capes","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2087030": {"name":"Shatterline","status":"works","inputs":["DLSS"]},
+  "2091020": {"name":"Blades of Fire","status":"works","inputs":["DLSS"]},
+  "2092840": {"name":"The Occultist","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2096600": {"name":"Crysis 2 Remastered","status":"works","inputs":["DLSS"]},
+  "2096610": {"name":"Crysis 3 Remastered","status":"works","inputs":["DLSS"],"page":"Crysis-3-Remastered"},
+  "2101960": {"name":"Cronos: The New Dawn","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Cronos-The-New-Dawn","page_facts":{"settings":{"Dxgi":"false"}}},
+  "2102450": {"name":"Enotria: The Last Song","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS","FSR3","XeSS"]},
+  "2104890": {"name":"Roadcraft","status":"works","inputs":["DLSS","FSR3"]},
+  "2124490": {"name":"SILENT HILL 2 (2024)","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Silent-Hill-2-Remake"},
+  "2129530": {"name":"REANIMAL","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"REANIMAL"},
+  "2133520": {"name":"Ertugrul of Ulukayin","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2138710": {"name":"Sifu","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2144740": {"name":"Ghostrunner 2","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS","FSR2","XeSS"],"page":"Ghostrunner-2","page_facts":{"proxy":"winmm.dll","settings":{"Dxgi":"false"}}},
+  "2153350": {"name":"Brothers: A Tale of Two Sons Remake","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2154070": {"name":"INDUSTRIA 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2161700": {"name":"Persona 3 Reload","status":"works","needs":["mod"],"inputs":["DLSS","XeSS"],"page":"Persona-3-Reload","page_facts":{"proxy":"d3d12.dll"}},
+  "2162020": {"name":"Strayed Lights","status":"works","inputs":["DLSS"]},
+  "2163330": {"name":"Yet Another Zombie Survivors","status":"works","inputs":["DLSS"]},
+  "2172010": {"name":"Until Dawn","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2176430": {"name":"Testament: The Order of High Human","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2176580": {"name":"Flipscapes","status":"works","inputs":["FSR3.1"]},
+  "2183900": {"name":"Warhammer 40,000: Space Marine 2","status":"works","needs":["anti_cheat_off"],"inputs":["DLSS","FSR3.1"]},
+  "2202120": {"name":"63 Days","status":"works","inputs":["XeSS"]},
+  "2206210": {"name":"GYLT","status":"works","inputs":["FSR2"]},
+  "2208780": {"name":"Psycho Fear","status":"works","inputs":["DLSS"]},
+  "2215200": {"name":"LEGO Batman : Legacy of the Dark Knight","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "2215430": {"name":"Ghost of Tsushima DIRECTOR'S CUT","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Ghost-of-Tsushima-DIRECTORS-CUT","page_facts":{"settings":{"Dxgi":"false"}}},
+  "2215490": {"name":"Project Borealis: Prologue","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"]},
+  "2218400": {"name":"Greedland","status":"works","inputs":["DLSS","FSR3"]},
+  "2223840": {"name":"The Casting of Frank Stone","status":"works","proxy":"winmm.dll","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"]},
+  "2229940": {"name":"[REDACTED]","status":"works","inputs":["XeSS"]},
+  "2233120": {"name":"A Quiet Place: The Road Ahead","status":"works","proxy":"winmm.dll","inputs":["DLSS"]},
+  "2239550": {"name":"Watch Dogs: Legion","status":"works","inputs":["DLSS"]},
+  "2239710": {"name":"Into the Dead: Our Darkest Days","status":"works","inputs":["DLSS"]},
+  "2246340": {"name":"Monster Hunter Wilds","status":"works","needs":["reframework"],"inputs":["DLSS","FSR3.1","XeSS"],"page":"Monster-Hunter-Wilds"},
+  "2253100": {"name":"Everwind Demo","status":"works","inputs":["DLSS","XeSS"]},
+  "2254890": {"name":"The Killing Antidote","status":"works","inputs":["DLSS"]},
+  "2255370": {"name":"Directive 8020","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2257590": {"name":"Alien Agent X","status":"works","inputs":["DLSS"]},
+  "2272250": {"name":"Forgive me Father 2","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"],"page":"Forgive-me-Father-2"},
+  "2275780": {"name":"Roundtrip","status":"works","inputs":["DLSS"]},
+  "2277560": {"name":"WUCHANG: Fallen Feathers","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"WUCHANG-Fallen-Feathers"},
+  "2287330": {"name":"Empire of the Ants","status":"works","inputs":["DLSS"]},
+  "2300320": {"name":"Farming Simulator 25","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "2300840": {"name":"Subliminal","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2304440": {"name":"Creatures of Ava","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2315050": {"name":"We Were Here Tomorrow Demo","status":"works","inputs":["DLSS"]},
+  "2316580": {"name":"Tales of Kenzera: ZAU","status":"works","inputs":["DLSS","FSR2","XeSS"]},
+  "2322010": {"name":"God of War Ragnarok","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"God-of-War-Ragnarok","page_facts":{"suggestions":{"FGType":"nofg","UseFGSwapChain":"false"}}},
+  "2336440": {"name":"Once Alive","status":"works","inputs":["DLSS","FSR3"]},
+  "2344520": {"name":"Diablo IV","status":"works","inputs":["DLSS"],"page":"Diablo-4"},
+  "2358720": {"name":"Black Myth: Wukong","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","FSR4","XeSS"],"page":"Black-Myth-Wukong"},
+  "2362060": {"name":"CODE VEIN II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2375530": {"name":"Descenders Next","status":"works","inputs":["DLSS"]},
+  "2375550": {"name":"Like a Dragon Gaiden: The Man Who Erased His Name","status":"works","inputs":["DLSS"]},
+  "2384580": {"name":"DYNASTY WARRIORS: ORIGINS","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"DYNASTY-WARRIORS-ORIGINS"},
+  "2397300": {"name":"Half Sword","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2399830": {"name":"Ark: Survival Ascended","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2404880": {"name":"Car Dealer Simulator","status":"works","args":["-dx12"],"inputs":["DLSS","FSR3.1"]},
+  "2405060": {"name":"Kiborg","status":"works","inputs":["DLSS"]},
+  "2407270": {"name":"AI Limit","status":"works","inputs":["DLSS"],"page":"AI-Limit"},
+  "2410180": {"name":"Portal: Prelude RTX","status":"works","inputs":["DLSS","XeSS"],"page":"Portal-Prelude-RTX","page_facts":{"proxy":"winmm.dll"}},
+  "2412960": {"name":"Breathedge 2","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2416450": {"name":"MOUSE: P.I. For Hire","status":"works","inputs":["DLSS"]},
+  "2417610": {"name":"METAL GEAR SOLID DELTA: SNAKE EATER","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Metal-Gear-Solid-Δ-Snake-Eater"},
+  "2420110": {"name":"Horizon Forbidden West Complete Edition","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Horizon-Forbidden-West-Complete-Edition","page_facts":{"settings":{"Dxgi":"false"}}},
+  "2427410": {"name":"STALKER: Shadow of Chornobyl Enhanced Edition","status":"works","inputs":["DLSS","FSR3.1"],"page":"STALKER-Enhanced-Editions"},
+  "2427430": {"name":"STALKER: Call of Prypiat Enhanced Edition","status":"works","inputs":["DLSS","FSR3.1"],"page":"STALKER-Enhanced-Editions"},
+  "2428810": {"name":"LEGO Horizon Adventures","status":"works","inputs":["DLSS"]},
+  "2429240": {"name":"Soulslinger: Envoy of Death","status":"works","inputs":["DLSS"]},
+  "2429270": {"name":"The RPG","status":"works","inputs":["DLSS","XeSS"]},
+  "2432860": {"name":"Menace","status":"works","inputs":["DLSS"]},
+  "2438680": {"name":"Airborne Empire","status":"works","inputs":["XeSS"]},
+  "2440510": {"name":"Forza Motorsport","status":"works","inputs":["DLSS"]},
+  "2448020": {"name":"Yooka-Replaylee","status":"works","inputs":["DLSS"]},
+  "2456740": {"name":"InZOI","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"InZOI"},
+  "2457220": {"name":"Avowed","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"Avowed"},
+  "2458560": {"name":"Zoochosis","status":"works","inputs":["DLSS"]},
+  "2461850": {"name":"Senua’s Saga: Hellblade II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"Senua's-Saga-Hellblade-II"},
+  "2464280": {"name":"Tormented Souls 2","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "2464530": {"name":"VOIN","status":"works","args":["-dx12"],"inputs":["DLSS","XeSS"]},
+  "2468200": {"name":"DDoD","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2471320": {"name":"THE RIFT Demo","status":"works","inputs":["DLSS"]},
+  "2472770": {"name":"Automate It: Factory Puzzle","status":"works","inputs":["FSR3"]},
+  "2479650": {"name":"SpongeBob SquarePants: Titans of the Tide","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2479770": {"name":"Troublemaker 2 - Beyond Dream","status":"works","inputs":["FSR2"]},
+  "2483190": {"name":"Forza Horizon 6","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2486780": {"name":"Glaciered Demo","status":"works","inputs":["DLSS"]},
+  "2487150": {"name":"Deconstruction Simulator","status":"works","inputs":["DLSS","XeSS"]},
+  "2488620": {"name":"F1 24","status":"works","inputs":["FSR3.1","XeSS"]},
+  "2489330": {"name":"Whiskerwood","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2490990": {"name":"Visions of Mana","status":"works","inputs":["FSR2"]},
+  "2498910": {"name":"Technofumer","status":"works","inputs":["DLSS","FSR2"]},
+  "2500750": {"name":"Only Climb: Better Together","status":"works","inputs":["FSR3"]},
+  "2510710": {"name":"Kunitsu-Gami: Path of the Goddess","status":"works","inputs":["DLSS"]},
+  "2515020": {"name":"FINAL FANTASY XVI","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"FINAL-FANTASY-XVI"},
+  "2517220": {"name":"Entity: The Black Day","status":"works","inputs":["DLSS","XeSS"]},
+  "2518410": {"name":"Moroi","status":"works","inputs":["DLSS"]},
+  "2522430": {"name":"Break Arts III","status":"works","inputs":["DLSS"]},
+  "2523720": {"name":"Gears of War: Reloaded","status":"broken"},
+  "2527390": {"name":"Dead Rising Deluxe Remaster","status":"works","inputs":["DLSS","FSR3","XeSS"]},
+  "2531310": {"name":"The Last of Us Part II Remastered","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"The-Last-of-Us-Part-II-Remastered"},
+  "2537590": {"name":"Microsoft Flight Simulator 2024","status":"works","inputs":["DLSS"]},
+  "2538880": {"name":"Spirit X Strike","status":"works","inputs":["FSR3.1"]},
+  "2542020": {"name":"Duskfade Demo","status":"works","inputs":["FSR3.1"]},
+  "2545710": {"name":"Tony Hawk's Pro Skater 3 + 4","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Tony-Hawk's-Pro-Skater-3-4"},
+  "2561580": {"name":"Horizon Zero Dawn Remastered","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Horizon-Zero-Dawn-Remastered","page_facts":{"settings":{"Dxgi":"false"}}},
+  "2565550": {"name":"Beyond Hanwell","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2569760": {"name":"The Mound: Omen of Cthulhu","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2584270": {"name":"Mortal Shell II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2585830": {"name":"Promise Mascot Agency","status":"works","inputs":["DLSS","XeSS"]},
+  "2591280": {"name":"F1 Manager 2024","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2599300": {"name":"Dead Signal","status":"works","inputs":["DLSS"]},
+  "2605790": {"name":"Deep Rock Galactic: Rogue Core","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2613980": {"name":"Memory’s Reach Demo","status":"works","inputs":["DLSS"]},
+  "2615540": {"name":"VOID/BREAKER","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2623040": {"name":"Robots at Midnight","status":"works","inputs":["DLSS"]},
+  "2623190": {"name":"The Elder Scrolls IV: Oblivion Remastered","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"The-Elder-Scrolls-IV-Oblivion-Remastered"},
+  "2627260": {"name":"NINJA GAIDEN 4","status":"works","inputs":["DLSS","FSR2"],"page":"NINJA-GAIDEN-4"},
+  "2634950": {"name":"Tokyo Xtreme Racer","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2638890": {"name":"Onimusha: Way of the Sword","status":"works","needs":["reframework"],"inputs":["DLSS","FSR3.1"],"page":"Onimusha-Way-of-the-Sword"},
+  "2640030": {"name":"Wonderball","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2643390": {"name":"Star Trek: Voyager - Across the Unknown","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2646460": {"name":"Soulmask","status":"works","inputs":["DLSS"],"page":"Soulmask"},
+  "2649240": {"name":"FINAL FANTASY XIV: Dawntrail","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Final-Fantasy-XIV-Dawntrail","page_facts":{"proxy":"winmm.dll","linux":true}},
+  "2651280": {"name":"Marvel's Spider‐Man 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Marvels-Spider‐Man-2","page_facts":{"settings":{"Dxgi":"false"}}},
+  "2661300": {"name":"Grounded 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2663530": {"name":"POOLS","status":"works","inputs":["DLSS"],"page":"POOLS"},
+  "2668430": {"name":"The Legend of Heroes: Trails through Daybreak II","status":"works","inputs":["DLSS"]},
+  "2668510": {"name":"Red Dead Redemption","status":"works","inputs":["DLSS"],"page":"Red-Dead-Redemption"},
+  "2677660": {"name":"Indiana Jones and the Great Circle","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Indiana-Jones-and-the-Great-Circle"},
+  "2679460": {"name":"Metaphor: ReFantazio","status":"works","needs":["luma"],"inputs":["DLSS"],"page":"Metaphor-ReFantazio"},
+  "2680010": {"name":"The First Berserker: Khazan","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"The-First-Berserker-Khazan"},
+  "2686630": {"name":"Voyagers of Nera","status":"works","inputs":["DLSS"]},
+  "2688950": {"name":"Planet Coaster 2","status":"works","inputs":["DLSS"]},
+  "2694490": {"name":"Path of Exile 2","status":"works","inputs":["DLSS"],"page":"Path-of-Exile-2","page_facts":{"linux":true}},
+  "2695940": {"name":"Panicore","status":"works","inputs":["DLSS","XeSS"]},
+  "2697940": {"name":"Ascend to ZERO","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2720920": {"name":"Astrobotanica","status":"works","inputs":["DLSS"]},
+  "2746680": {"name":"Darkwatch","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2753000": {"name":"GOALS","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "2760560": {"name":"Cthulhu: The Cosmic Abyss","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2764750": {"name":"The Other Side","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2776940": {"name":"Echoes of Yi: Samsara","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2787320": {"name":"Revenge of the Savage Planet","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Revenge-of-the-Savage-Planet"},
+  "2795230": {"name":"ODDRoom","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "2804990": {"name":"CODE EXIT Demo","status":"works","inputs":["DLSS"]},
+  "2806050": {"name":"Halo: Campaign Evolved","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"],"page":"Halo-Campaign-Evolved"},
+  "2806640": {"name":"The Talos Principle: Reawakened","status":"works","optipatcher":true,"inputs":["DLSS","FSR3","XeSS"]},
+  "2814860": {"name":"Vindictus: Defying Fate","status":"works","inputs":["DLSS"]},
+  "2820820": {"name":"Jotunnslayer - Hordes of Hel","status":"works","inputs":["DLSS"]},
+  "2821610": {"name":"Echoes of the End","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Echoes-of-the-End"},
+  "2825860": {"name":"The Sinking City 2","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "2828710": {"name":"Valor Mortis","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2840000": {"name":"Lumina Veil","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2840770": {"name":"Avatar: Frontiers of Pandora","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Avatar-Frontiers-of-Pandora"},
+  "2842040": {"name":"Star Wars Outlaws","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Star-Wars-Outlaws"},
+  "2852190": {"name":"Monster Hunter Stories 3: Twisted Reflection","status":"works","inputs":["DLSS","FSR3.1"],"page":"Monster-Hunter-Stories-3-Twisted-Reflection"},
+  "2863640": {"name":"The Midnight Walk","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"The-Midnight-Walk"},
+  "2879840": {"name":"Escape Simulator 2 Demo","status":"works","inputs":["DLSS"]},
+  "2893820": {"name":"Of Ash and Steel Demo","status":"works","args":["-dx12"],"optipatcher":true,"inputs":["DLSS"]},
+  "2909400": {"name":"FINAL FANTASY VII REBIRTH","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"FINAL-FANTASY-VII-REBIRTH"},
+  "2926900": {"name":"MAVRIX by Matt Jones","status":"works","inputs":["DLSS"]},
+  "2929250": {"name":"over the hill Demo","status":"works","inputs":["DLSS"]},
+  "2933080": {"name":"Crime Boss: Rockay City","status":"works","inputs":["DLSS","XeSS"]},
+  "2933130": {"name":"The Lord of the Rings: Return to Moria","status":"works","optipatcher":true,"inputs":["DLSS","FSR2"]},
+  "2947440": {"name":"SILENT HILL f","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Silent-Hill-f"},
+  "2948730": {"name":"THE JOY OF CREATION","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2950340": {"name":"LEGO Harry Potter Collection","status":"works","inputs":["FSR3"]},
+  "2953480": {"name":"Lunar Eclipse","status":"works","inputs":["DLSS","FSR3.1"]},
+  "2958130": {"name":"Jurassic World Evolution 3","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "2975950": {"name":"Solasta II","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "2978540": {"name":"Gaming Cafe Simulator","status":"works","inputs":["FSR3.1"]},
+  "2989180": {"name":"Darwin's Paradox","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3000460": {"name":"The Path into the Abyss","status":"works","inputs":["FSR3.1"]},
+  "3002850": {"name":"Fairy Tail 2","status":"works","inputs":["XeSS"]},
+  "3008130": {"name":"Dying Light The Beast","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Dying-Light-The-Beast"},
+  "3010850": {"name":"Gears of War: E-Day","status":"works","optipatcher":true,"inputs":["DLSS","FSR4","XeSS"],"page":"Gears-of-War-E‐Day","page_facts":{"proxy":"d3d12.dll"}},
+  "3017860": {"name":"Doom: The Dark Ages","status":"works","inputs":["FSR3.1","XeSS"],"page":"Doom-The-Dark-Ages","page_facts":{"proxy":"winmm.dll"}},
+  "3035570": {"name":"Assassin’s Creed Mirage","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Assassins-Creed-Mirage"},
+  "3037180": {"name":"Deep Space 7","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3041230": {"name":"Windrose","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "3043580": {"name":"Keeper","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Keeper"},
+  "3043760": {"name":"Hellbreak","status":"works","inputs":["DLSS"]},
+  "3050900": {"name":"ROMEO IS A DEAD MAN","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"ROMEO-IS-A-DEAD-MAN"},
+  "3054690": {"name":"NORSE: Oath of Blood Demo","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "3058630": {"name":"Assetto Corsa EVO","status":"works","inputs":["DLSS","FSR3"]},
+  "3059520": {"name":"F1 25","status":"works","inputs":["FSR3.1","XeSS"]},
+  "3061810": {"name":"Like a Dragon: Pirate Yakuza in Hawaii","status":"works","inputs":["DLSS","FSR2","XeSS"]},
+  "3071240": {"name":"Voodoo Fishin'","status":"works","inputs":["DLSS"]},
+  "3072120": {"name":"Backrooms Lost Runners Demo","status":"works","inputs":["DLSS"]},
+  "3107900": {"name":"Liminalcore","status":"works","inputs":["DLSS","FSR3"]},
+  "3112260": {"name":"Virtua Fighter 5 R.E.V.O. World Stage","status":"works","inputs":["DLSS","XeSS"]},
+  "3123410": {"name":"Atelier Yumia: The Alchemist of Memories & the Envisioned Land","status":"works","inputs":["XeSS"]},
+  "3124540": {"name":"Far Far West","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "3130220": {"name":"Sagas of Lumin","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3144860": {"name":"WILL: Follow the Light","status":"works","inputs":["DLSS"]},
+  "3156770": {"name":"Witchfire","status":"works","optipatcher":true,"inputs":["DLSS","FSR2","XeSS"],"page":"Witchfire"},
+  "3159330": {"name":"Assassin’s Creed Shadows","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Assassins-Creed-Shadows"},
+  "3164330": {"name":"Infinity Nikki","status":"works","proxy":"version.dll","inputs":["DLSS","XeSS"]},
+  "3166290": {"name":"POLYARIS Demo","status":"works","inputs":["FSR3.1"]},
+  "3176060": {"name":"Emissary Zero","status":"works","inputs":["DLSS"]},
+  "3224960": {"name":"Pizzapocalypse","status":"works","inputs":["DLSS"]},
+  "3228590": {"name":"Deadzone Rogue","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "3240220": {"name":"Grand Theft Auto V Enhanced","status":"works","inputs":["DLSS","FSR3.1"],"page":"Grand-Theft-Auto-V-Enhanced"},
+  "3247570": {"name":"Anchor Quest for Atlantis","status":"works","inputs":["DLSS"]},
+  "3254050": {"name":"The Black Ice","status":"works","inputs":["DLSS"]},
+  "3265250": {"name":"MindsEye","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "3268960": {"name":"Brawlers of the West","status":"works","inputs":["DLSS"]},
+  "3280350": {"name":"DEATH STRANDING 2: ON THE BEACH","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"DEATH-STRANDING-2-ON-THE-BEACH"},
+  "3287520": {"name":"NINJA GAIDEN 2 Black","status":"works","optipatcher":true,"inputs":["DLSS","XeSS"],"page":"NINJA-GAIDEN-2-Black","page_facts":{"proxy":"winmm.dll"}},
+  "3288210": {"name":"Super Meat Boy 3D","status":"works","optipatcher":true,"inputs":["DLSS"],"page":"Super-Meat-Boy-3D"},
+  "3290690": {"name":"Styx: Blades of Greed","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "3301490": {"name":"RealmWalker","status":"works","inputs":["DLSS"]},
+  "3333250": {"name":"Crimson Oath","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "3335310": {"name":"Remothered: Red Nun's Legacy","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3352690": {"name":"Dead Take","status":"works","inputs":["DLSS","XeSS"]},
+  "3357650": {"name":"PRAGMATA","status":"works","needs":["reframework"],"inputs":["DLSS","FSR3.1"],"page":"PRAGMATA"},
+  "3368050": {"name":"Mr. Photographer - Into The Light","status":"works","inputs":["DLSS"]},
+  "3372950": {"name":"Ashgard: Infinity Mask","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "3375780": {"name":"Trails in the Sky 1st Chapter","status":"works","inputs":["DLSS","FSR2"],"page":"Trails-in-the-Sky-1st-Chapter"},
+  "3378960": {"name":"Lost Soul Aside","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "3404260": {"name":"Dead as Disco","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "3419520": {"name":"Quarantine Zone: The Last Check","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Quarantine-Zone-The-Last-Check","page_facts":{"settings":{"FsrNonLinearColorSpace":"true"},"suggestions":{"HUDFix":"true","HUDFixImmediate":"true"}}},
+  "3437660": {"name":"Project Songbird Teaser: Faceless","status":"works","inputs":["DLSS"]},
+  "3440070": {"name":"Dinoblade","status":"works","inputs":["FSR3.1","XeSS"]},
+  "3446240": {"name":"Eastern Era","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3448650": {"name":"Aliens: Fireteam Elite 2","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "3450310": {"name":"Europa Universalis V","status":"works","inputs":["DLSS"]},
+  "3477260": {"name":"Demon Tides Demo","status":"works","inputs":["DLSS"]},
+  "3489700": {"name":"Stellar Blade","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Stellar-Blade"},
+  "3513350": {"name":"Wuthering Waves","status":"works","inputs":["DLSS","FSR3.1"],"page":"Wuthering-Waves","page_facts":{"linux":true}},
+  "3527760": {"name":"RoboCop: Rogue City – Unfinished Business","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Robocop-Rogue-City-‐-Unfinished-Business"},
+  "3564740": {"name":"Where Winds Meet","status":"works","inputs":["DLSS"]},
+  "3566840": {"name":"Bleak Haven","status":"works","inputs":["FSR3.1"]},
+  "3587020": {"name":"Dream Eaters.exe","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3596700": {"name":"TerraTech Legion","status":"works","inputs":["DLSS"]},
+  "3634520": {"name":"Samson","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "3638110": {"name":"Shadow Project Demo","status":"works","inputs":["DLSS","XeSS"]},
+  "3655390": {"name":"Alien: Rogue Incursion Evolved Edition","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"],"page":"Alien-Rogue-Incursion-Evolved-Edition"},
+  "3660710": {"name":"Armatus Demo","status":"works","inputs":["FSR3.1"]},
+  "3669870": {"name":"CONTROL Resonant","status":"works","inputs":["DLSS","FSR3.1"],"page":"CONTROL-Resonant"},
+  "3679080": {"name":"The Seven Deadly Sins: Origin","status":"works","inputs":["DLSS"]},
+  "3681010": {"name":"Nioh 3","status":"works","inputs":["DLSS","XeSS"],"page":"Nioh-3"},
+  "3681810": {"name":"Blue Protocol: Star Resonance","status":"works","inputs":["DLSS"]},
+  "3683770": {"name":"Boba Cafe Simulator","status":"works","inputs":["DLSS"]},
+  "3696100": {"name":"CoopRooms Demo","status":"works","inputs":["FSR3.1"]},
+  "3710560": {"name":"Protocol:Terminate Demo","status":"works","inputs":["DLSS"]},
+  "3751260": {"name":"The Blood of Dawnwalker","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"The-Blood-of-Dawnwalker"},
+  "3751950": {"name":"Assassin's Creed Black Flag Resynced","status":"works","inputs":["DLSS","FSR3.1","XeSS"],"page":"Assassins-Creed-Black-Flag-Resynced"},
+  "3764200": {"name":"Resident Evil 9 Requiem","status":"works","needs":["reframework"],"inputs":["DLSS","FSR3.1"],"page":"Resident-Evil-9-Requiem"},
+  "3768760": {"name":"007 First Light","status":"works","inputs":["DLSS","FSR3.1"],"page":"007-First-Light"},
+  "3775710": {"name":"LANESPLIT Demo","status":"works","inputs":["DLSS"]},
+  "3844340": {"name":"Dreams Far Away","status":"works","inputs":["DLSS"]},
+  "3850990": {"name":"687 Days on Mars Demo","status":"works","inputs":["DLSS"]},
+  "3869850": {"name":"Welcome to the Game III","status":"works","inputs":["DLSS"]},
+  "3872430": {"name":"SCP: Project Pneuma Demo","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3875670": {"name":"Winemaker Simulator","status":"works","inputs":["DLSS","FSR3.1"]},
+  "3906060": {"name":"Echo 91","status":"works","inputs":["DLSS"]},
+  "3916260": {"name":"Psalm 2","status":"works","inputs":["DLSS"]},
+  "3916440": {"name":"771","status":"works","inputs":["DLSS"]},
+  "3917090": {"name":"Assetto Corsa Rally","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Assetto-Corsa-Rally"},
+  "3920610": {"name":"FATAL FRAME II: Crimson Butterfly REMAKE","status":"works","inputs":["DLSS"]},
+  "3933150": {"name":"FixForce","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "3949040": {"name":"RV There Yet?","status":"works","optipatcher":true,"inputs":["DLSS"]},
+  "3949550": {"name":"1666: Amsterdam","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "3998460": {"name":"Ranch Simulator","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1"]},
+  "4024480": {"name":"MINOS Demo","status":"works","inputs":["DLSS","XeSS"]},
+  "4030360": {"name":"Undertaker","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4094350": {"name":"Online: 404 Demo","status":"works","inputs":["DLSS"]},
+  "4094660": {"name":"Rivage","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"]},
+  "4119360": {"name":"It Reaches","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4144680": {"name":"DEAD OR ALIVE 6 Last Round","status":"works","proxy":"d3d12.dll","inputs":["DLSS"],"page":"DEAD-OR-ALIVE-6-Last-Round","page_facts":{"proxy":"d3d12.dll"}},
+  "4215750": {"name":"The Alley Demo","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4219940": {"name":"The Hollow Complex Demo","status":"works","inputs":["DLSS"]},
+  "4225980": {"name":"Trails in the Sky 2nd Chapter","status":"works","inputs":["DLSS","FSR2"],"page":"Trails-in-the-Sky-2nd-Chapter"},
+  "4235230": {"name":"Werewolf: The Inner Beast","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4254180": {"name":"Zouhri: The Cursed Blood Demo","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4265610": {"name":"Matcho Demo","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "4317690": {"name":"Crimson Moon","status":"works","optipatcher":true,"inputs":["DLSS","FSR3.1","XeSS"],"page":"Crimson-Moon"},
+  "4362740": {"name":"Paresis II Demo","status":"works","inputs":["DLSS"]},
+  "4570720": {"name":"DragonSword : Awakening","status":"works","optipatcher":true,"inputs":["DLSS","FSR3"],"page":"DragonSword-Awakening"},
+  "4633360": {"name":"Project: Station Demo","status":"works","inputs":["DLSS"]},
+  "4732690": {"name":"Arknights: Endfield","status":"works","inputs":["DLSS"],"page":"Arknights-Endfield","page_facts":{"proxy":"d3d12.dll"}},
+  "4793190": {"name":"Smile Protocol Demo","status":"works","inputs":["DLSS"]},
+  "4804160": {"name":"SHROT Demo","status":"works","inputs":["DLSS","FSR3.1"]},
+  "4825100": {"name":"Curse Of The Abandoned Floor Demo","status":"works","inputs":["DLSS","FSR3.1","XeSS"]},
+  "5095070": {"name":"The Unworthy Demo","status":"works","inputs":["DLSS","FSR3.1"]},
+  "5130460": {"name":"Guns of Eschaton Demo","status":"works","optipatcher":true,"inputs":["DLSS"]}
  }
 }

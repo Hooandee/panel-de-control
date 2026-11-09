@@ -2040,10 +2040,6 @@ def _build_solution(gpu, analysis, recipe, build, automatic, blocked):
     return result
 
 
-def _fg_plan(gpu: str, analysis: dict, recipe, generation: int, route: str | None) -> dict | None:
-    return solution_plan.resolve(gpu, analysis, recipe, generation, route=route)["fg_plan"]
-
-
 def _generation(install: dict | None) -> int:
     install = install or {}
     build = catalog.BUILDS.get(str(install.get("build")))
