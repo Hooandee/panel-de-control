@@ -40,7 +40,7 @@ export interface ThemeExtensionAmbientAccess {
   frame(): HTMLImageElement | HTMLVideoElement | null;
   /**
    * The game selected on a Home the theme draws itself, so Ambiente can play its soundtrack and trailer.
-   * `null` when nothing is selected. Dropped when the theme unmounts. Absent on older Panels.
+   * `null` when nothing is selected. Dropped on unmount; absent on older Panels.
    */
   select?(appid: string | number | null): void;
 }
@@ -178,10 +178,8 @@ function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string):
     frame: () => provider.frame?.() ?? null,
     ...(provider.select ? {
       select(appid: string | number | null) {
-        const value = appid === null || appid === undefined ? null : String(appid);
-        const previous = releaseSelection;
-        releaseSelection = provider.select!(themeId, value);
-        if (previous && previous !== releaseSelection) releases.delete(previous);
+        if (releaseSelection) releases.delete(releaseSelection);
+        releaseSelection = provider.select!(themeId, appid == null ? null : String(appid));
         releases.add(releaseSelection);
       },
     } : {}),

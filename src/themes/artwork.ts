@@ -12,12 +12,12 @@ export interface GameArtwork {
   logoPositionY?: number;
 }
 /**
- * Where the logo sits on a cover. Its box (78 % x 36 %, centred at 50/50) slides to the cover's edges and the
- * logo moves inside it the same way, so 0 and 100 put it against the edge. Themes reproduce the same placement.
+ * The logo box (78 % x 36 %) slides to the cover's edges and the logo moves inside it the same way, so 0 and
+ * 100 put it against the edge. Themes must reproduce this placement.
  */
 export function logoPlacement(art: Pick<GameArtwork, "logoPositionX" | "logoPositionY">): { left: string; top: string; objectPosition: string } {
   const x = art.logoPositionX ?? 50, y = art.logoPositionY ?? 50;
-  return { left: `${11 + (x - 50) / 50 * 11}%`, top: `${27 + (y - 50) / 50 * 27}%`, objectPosition: `${x}% ${y}%` };
+  return { left: `${x * 11 / 50}%`, top: `${y * 27 / 50}%`, objectPosition: `${x}% ${y}%` };
 }
 export const LOGO_SCALE_MIN = 50;
 export const LOGO_SCALE_MAX = 200;

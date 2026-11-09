@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { steamArtworkUrl } from "./artwork";
-import { logoPlacement } from "./artwork";
+import { logoPlacement, steamArtworkUrl } from "./artwork";
 describe("Steam artwork paths", () => {
   it("accepts Steam registered custom and asset paths", () => {
     expect(steamArtworkUrl("/customimages/12p.png?v=4")).toBe("https://steamloopback.host/customimages/12p.png?v=4");

@@ -54,9 +54,11 @@ function ArtworkEditor({ appId, closeModal }: { appId?: number; closeModal?: () 
       <SliderField label={es ? "Posición horizontal" : "Horizontal position"} value={draft.positionX} min={0} max={100} step={1} disabled={!loaded || busy} onChange={(positionX) => setDraft({ ...draft, positionX })} />
       <SliderField label={es ? "Posición vertical" : "Vertical position"} value={draft.positionY} min={0} max={100} step={1} disabled={!loaded || busy} onChange={(positionY) => setDraft({ ...draft, positionY })} />
       <ToggleField label="Logo" checked={draft.showLogo} disabled={!loaded || busy} onChange={(showLogo) => setDraft({ ...draft, showLogo })} />
-      {draft.showLogo && <SliderField label={es ? "Posición horizontal del logo" : "Logo horizontal position"} value={draft.logoPositionX ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionX) => setDraft({ ...draft, logoPositionX })} />}
-      {draft.showLogo && <SliderField label={es ? "Posición vertical del logo" : "Logo vertical position"} value={draft.logoPositionY ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionY) => setDraft({ ...draft, logoPositionY })} />}
-      {draft.showLogo && <SliderField label={es ? "Tamaño del logo" : "Logo size"} value={draft.logoScale ?? 100} min={LOGO_SCALE_MIN} max={LOGO_SCALE_MAX} step={5} showValue valueSuffix="%" disabled={!loaded || busy} onChange={(logoScale) => setDraft({ ...draft, logoScale })} />}
+      {draft.showLogo && <>
+        <SliderField label={es ? "Posición horizontal del logo" : "Logo horizontal position"} value={draft.logoPositionX ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionX) => setDraft({ ...draft, logoPositionX })} />
+        <SliderField label={es ? "Posición vertical del logo" : "Logo vertical position"} value={draft.logoPositionY ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionY) => setDraft({ ...draft, logoPositionY })} />
+        <SliderField label={es ? "Tamaño del logo" : "Logo size"} value={draft.logoScale ?? 100} min={LOGO_SCALE_MIN} max={LOGO_SCALE_MAX} step={5} showValue valueSuffix="%" disabled={!loaded || busy} onChange={(logoScale) => setDraft({ ...draft, logoScale })} />
+      </>}
       <ToggleField label={es ? "Título" : "Title"} checked={draft.showTitle} disabled={!loaded || busy} onChange={(showTitle) => setDraft({ ...draft, showTitle })} />
       {error && <p role="alert">{error}</p>}
       <DialogButton disabled={!loaded || busy || !id} onClick={() => void save({ ...draft, image: draft.image ? image ?? null : null })}>{es ? "Guardar" : "Save"}</DialogButton>

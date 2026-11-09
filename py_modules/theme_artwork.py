@@ -1,9 +1,6 @@
 import math
 from urllib.parse import unquote, urlparse
 
-LOGO_SCALE_MIN = 50
-LOGO_SCALE_MAX = 200
-
 
 def normalize(value, *, general=False):
     if not isinstance(value, dict):
@@ -33,18 +30,12 @@ def normalize(value, *, general=False):
         if not isinstance(value.get(key), bool):
             raise ValueError("invalid_visibility")
         result[key] = value[key]
-    # Optional; absent means 100%.
-    if "logoScale" in value:
-        scale = value["logoScale"]
-        if isinstance(scale, bool) or not isinstance(scale, (float, int)) or not math.isfinite(scale) or not LOGO_SCALE_MIN <= scale <= LOGO_SCALE_MAX:
-            raise ValueError("invalid_logo_scale")
-        result["logoScale"] = scale
-    # Optional logo position in percent of the cover; absent means centred (50).
-    for key in ("logoPositionX", "logoPositionY"):
+    # Optional; absent means 100 % size and a centred logo.
+    for key, low, high, error in (("logoScale", 50, 200, "invalid_logo_scale"), ("logoPositionX", 0, 100, "invalid_logo_position"), ("logoPositionY", 0, 100, "invalid_logo_position")):
         if key in value:
             number = value[key]
-            if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number) or not 0 <= number <= 100:
-                raise ValueError("invalid_logo_position")
+            if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number) or not low <= number <= high:
+                raise ValueError(error)
             result[key] = number
     return result
 
