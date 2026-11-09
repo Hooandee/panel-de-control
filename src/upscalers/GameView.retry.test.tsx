@@ -230,6 +230,7 @@ it.each([undefined, false, true])("shows the Luma prerequisite only when not det
   await act(async () => { render(<GameView {...props} />); });
   expect(!!screen.queryByText("up.recipe.need.luma")).toBe(!detected);
   expect(screen.queryByText("up.recipe.need.mod")).toBeTruthy();
+  expect(screen.queryByText("up.detect.noinputs")).toBeNull();
 });
 
 it("removes the Luma requirement when choosing Mako", async () => {

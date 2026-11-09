@@ -607,7 +607,7 @@ export const GameView: FC<{
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
-          {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
+          {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && !detail.recipe_info?.needs.includes("mod") && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
           {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
           {detail.recipe_info?.needs.filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
           {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
