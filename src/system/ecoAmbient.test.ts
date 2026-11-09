@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   getEcoState: vi.fn(),
   setEcoScreen: vi.fn(),
+  setEco: vi.fn(),
+  toast: vi.fn(),
+  recordUiEvent: vi.fn(),
   setBrightness: vi.fn(),
   showBlackout: vi.fn((_onTap: () => void) => {}),
   hideBlackout: vi.fn(),
@@ -14,10 +17,12 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@decky/api", () => ({
+  toaster: { toast: h.toast },
   addEventListener: (_e: string, cb: () => void) => (h.raw = cb),
   removeEventListener: () => {},
 }));
-vi.mock("../api", () => ({ getEcoState: h.getEcoState, setEcoScreen: h.setEcoScreen }));
+vi.mock("../api", () => ({ getEcoState: h.getEcoState, setEcoScreen: h.setEcoScreen, setEco: h.setEco }));
+vi.mock("./uiEvents", () => ({ recordUiEvent: h.recordUiEvent }));
 vi.mock("../i18n", () => ({ translate: (k: string) => k }));
 vi.mock("./ecoBlackout", () => ({ showBlackout: h.showBlackout, hideBlackout: h.hideBlackout }));
 vi.mock("./ecoCountdown", () => ({
@@ -58,6 +63,11 @@ describe("download mode screen", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     h.started = 0;
+    h.setEco.mockImplementation(async () => {
+      const disabled = state({ enabled: false });
+      h.getEcoState.mockResolvedValue(disabled);
+      return disabled;
+    });
     h.getEcoState.mockResolvedValue(state({ enabled: false }));
     h.setEcoScreen.mockResolvedValue({ ok: true, asleep: true });
     stop = startEcoAmbient();
@@ -67,6 +77,145 @@ describe("download mode screen", () => {
     stop();
     vi.clearAllMocks();
     vi.useRealTimers();
+  });
+
+
+  it("does not exit on enable, a Steam active state, or one wake tap", async () => {
+    enable();
+    h.steam(true);
+    h.raw();
+    await tick(12000);
+    expect(h.setEco).not.toHaveBeenCalled();
+    expect(h.toast).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("exits after ten seconds of repeated input (panel=%s)", async (panel) => {
+    enable(panel);
+    h.raw();
+    for (let i = 0; i < 3; i++) {
+      await tick(3000);
+      h.raw();
+    }
+    await tick(999);
+    expect(h.setEco).not.toHaveBeenCalled();
+    await tick(1);
+    expect(h.setEco).toHaveBeenCalledExactlyOnceWith(false, 40);
+    expect(h.toast).toHaveBeenCalledTimes(1);
+    expect(h.recordUiEvent).toHaveBeenCalledWith("system", "eco_auto_exit", { reason: "sustained_activity", source: "wake_input", duration_ms: 10000, input_count: 4, max_gap_ms: 3000 }, true);
+    if (!panel) expect(h.setBrightness).toHaveBeenLastCalledWith(0.4);
+    await tick(15000);
+    expect(h.setEco).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a fresh window after a pause in input", async () => {
+    enable();
+    h.raw();
+    await tick(6000);
+    h.raw();
+    await tick(3000);
+    h.raw();
+    await tick(1000);
+    expect(h.setEco).not.toHaveBeenCalled();
+  });
+
+  it("cancels the activity window on Steam idle and on unload", async () => {
+    enable();
+    for (let i = 0; i < 3; i++) { h.raw(); await tick(3000); }
+    h.steam(false);
+    await tick(1000);
+    expect(h.setEco).not.toHaveBeenCalled();
+    h.raw();
+    stop();
+    stop = () => {};
+    await tick(12000);
+    expect(h.setEco).not.toHaveBeenCalled();
+  });
+
+  it("does not count time across a suspended or blocked event loop", async () => {
+    enable();
+    for (let i = 0; i < 3; i++) { h.raw(); await tick(3000); }
+    vi.setSystemTime(Date.now() + 60000);
+    h.raw();
+    await tick(1000);
+    expect(h.setEco).not.toHaveBeenCalled();
+  });
+
+  it("logs failed exits, keeps Eco active and retries only after renewed sustained input", async () => {
+    h.setEco.mockRejectedValueOnce(new Error("unavailable"));
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    expect(h.setEco).toHaveBeenCalledTimes(1);
+    expect(h.toast).not.toHaveBeenCalled();
+    expect(h.recordUiEvent).toHaveBeenCalledWith("system", "eco_auto_exit", expect.objectContaining({ reason: "sustained_activity", source: "wake_input", duration_ms: 10000 }), false);
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    expect(h.setEco).toHaveBeenCalledTimes(2);
+    expect(h.toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not announce success if the backend still reports Eco enabled", async () => {
+    h.setEco.mockResolvedValueOnce(state());
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    expect(h.toast).not.toHaveBeenCalled();
+    expect(h.recordUiEvent).toHaveBeenCalledWith("system", "eco_auto_exit", expect.objectContaining({ reason: "sustained_activity", source: "wake_input", duration_ms: 10000 }), false);
+  });
+
+  it("ignores a delayed exit response after the user re-enables Eco", async () => {
+    let resolve!: (value: unknown) => void;
+    h.setEco.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    expect(h.setEco).toHaveBeenCalledTimes(1);
+    setEcoActiveHint(false, 40, true);
+    enable();
+    resolve(state({ enabled: false }));
+    await tick(0);
+    expect(h.toast).not.toHaveBeenCalled();
+    await goIdle();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(true);
+  });
+
+  it("does not poll stale enabled state while an exit is pending", async () => {
+    let resolve!: (value: unknown) => void;
+    h.setEco.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    h.getEcoState.mockClear();
+    await tick(3000);
+    expect(h.getEcoState).not.toHaveBeenCalled();
+    resolve(state({ enabled: false }));
+    await tick(0);
+  });
+
+  it("resumes polling after an exit timeout and ignores its late response", async () => {
+    let resolve!: (value: unknown) => void;
+    h.setEco.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    h.getEcoState.mockClear();
+    await tick(10000);
+    expect(h.toast).not.toHaveBeenCalled();
+    expect(h.recordUiEvent).toHaveBeenCalledWith("system", "eco_auto_exit", expect.any(Object), false);
+    await tick(3000);
+    expect(h.getEcoState).toHaveBeenCalled();
+    resolve(state({ enabled: false }));
+    await tick(0);
+    expect(h.toast).not.toHaveBeenCalled();
+  });
+
+  it("ignores an old exit response after unload and restart", async () => {
+    let resolve!: (value: unknown) => void;
+    h.setEco.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    enable();
+    for (let i = 0; i < 4; i++) { h.raw(); await tick(2500); }
+    stop();
+    stop = startEcoAmbient();
+    await tick(0);
+    resolve(state({ enabled: false }));
+    await tick(0);
+    expect(h.toast).not.toHaveBeenCalled();
+    await goIdle();
+    expect(h.setEcoScreen).toHaveBeenLastCalledWith(true);
   });
 
   it("counts down on Steam idle, then sleeps the panel; Steam activity wakes it", async () => {

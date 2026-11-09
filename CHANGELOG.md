@@ -1,5 +1,142 @@
 # Changelog
 
+## [0.84.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.3...panel-de-control-v0.84.4) (2026-11-08)
+
+
+### Español
+
+* **El botón Xbox vuelve a sacarte del juego en Windows:** En la ROG Xbox Ally, Windows se queda ahora el botón Xbox para la Game Bar y Steam no lo recibía, así que con Vida o Duo no había forma de salir de un juego. Ahora te lleva al inicio del tema, también desde apps como Fotos o Trofeos. La Game Bar se sigue abriendo.
+* **Pausa del juego en los menús, ahora también en Windows:** Si la activas en tu tema (en Vida viene apagada), el juego se detiene mientras estás en sus menús y sigue al volver, como ya pasaba en SteamOS.
+
+### English
+
+* **The Xbox button takes you out of your game again on Windows:** On the ROG Xbox Ally, Windows now keeps the Xbox button for Game Bar and Steam never got it, so with Vida or Duo there was no way to leave a game. It now takes you to your theme's home, also from apps like Photos or Trophies. Game Bar still opens.
+* **Pause the game in menus, now on Windows too:** If you turn it on in your theme (it's off by default in Vida), your game stops while you're in its menus and picks up when you go back, as it already did on SteamOS.
+
+### Italiano
+
+* **Il tasto Xbox torna a farti uscire dal gioco su Windows:** Sulla ROG Xbox Ally, Windows ora tiene il tasto Xbox per la Game Bar e Steam non lo riceveva, quindi con Vida o Duo non c'era modo di uscire da un gioco. Ora ti porta alla home del tema, anche da app come Foto o Trofei. La Game Bar continua ad aprirsi.
+* **Pausa del gioco nei menu, ora anche su Windows:** Se la attivi nel tuo tema (in Vida è disattivata), il gioco si ferma mentre sei nei suoi menu e riprende quando torni, come già succedeva su SteamOS.
+
+### Deutsch
+
+* **Die Xbox-Taste bringt dich unter Windows wieder aus dem Spiel:** Auf dem ROG Xbox Ally behält Windows die Xbox-Taste jetzt für die Game Bar, und Steam bekam sie nicht mit. Mit Vida oder Duo kam man so nicht mehr aus einem Spiel heraus. Jetzt bringt sie dich zum Startbildschirm des Themes, auch aus Apps wie Fotos oder Trophäen. Die Game Bar öffnet sich weiterhin.
+* **Spielpause in den Menüs, jetzt auch unter Windows:** Wenn du sie in deinem Theme einschaltest (in Vida ist sie aus), hält das Spiel an, solange du in den Menüs bist, und läuft weiter, wenn du zurückkehrst, wie schon unter SteamOS.
+
+### Português (Brasil)
+
+* **O botão Xbox volta a tirar você do jogo no Windows:** No ROG Xbox Ally, o Windows agora reserva o botão Xbox para a Game Bar e o Steam não o recebia, então com Vida ou Duo não havia como sair de um jogo. Agora ele leva você ao início do tema, também a partir de apps como Fotos ou Troféus. A Game Bar continua abrindo.
+* **Pausa do jogo nos menus, agora também no Windows:** Se você ativá-la no seu tema (no Vida ela vem desligada), o jogo para enquanto você está nos menus e continua quando você volta, como já acontecia no SteamOS.
+
+### Français
+
+* **Le bouton Xbox vous fait de nouveau quitter le jeu sous Windows :** Sur la ROG Xbox Ally, Windows garde désormais le bouton Xbox pour la Game Bar et Steam ne le recevait pas : avec Vida ou Duo, impossible de quitter un jeu. Il vous ramène maintenant à l’accueil du thème, y compris depuis des apps comme Photos ou Trophées. La Game Bar s’ouvre toujours.
+* **Pause du jeu dans les menus, désormais aussi sous Windows :** Si vous l’activez dans votre thème (elle est désactivée par défaut dans Vida), le jeu s’arrête pendant que vous êtes dans ses menus et reprend à votre retour, comme c’était déjà le cas sous SteamOS.
+
+## [0.84.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.2...panel-de-control-v0.84.3) (2026-11-06)
+
+
+### Español
+
+* **Menos parpadeos al usar temas:** Corregida la comprobación de fondos que podía hacer aparecer el indicador de volumen sin tocarlo o provocar destellos en los menús. Se respeta el fondo que hayas elegido.
+* **El sonido del juego y tu música, a tu gusto:** Ahora puedes dar más protagonismo a uno u otra con un solo control de balance. Los controles de volumen por separado siguen en Más ajustes.
+* **Capturas directas a Imágenes en Windows:** Los temas compatibles pueden guardarlas sin abrir el explorador ni sacarte de Steam, también si tienes la carpeta Imágenes en otra ubicación.
+
+### English
+
+* **Less flicker when using themes:** Fixed a background check that could make the volume indicator appear on its own or cause menus to flash. Your chosen background is respected.
+* **Balance your game and your music:** A single balance control now lets you give either one more room. Separate volume controls are still available in More settings.
+* **Save screenshots straight to Pictures on Windows:** Compatible themes can save them without opening File Explorer or taking you out of Steam, even if your Pictures folder is stored elsewhere.
+
+### Italiano
+
+* **Meno sfarfallii con i temi:** Corretto un controllo degli sfondi che poteva far apparire da solo l’indicatore del volume o causare lampeggi nei menu. Lo sfondo che hai scelto viene rispettato.
+* **Il gioco e la tua musica, come piacciono a te:** Un solo controllo di bilanciamento permette di dare più spazio all’uno o all’altra. I volumi separati restano disponibili in Altre impostazioni.
+* **Screenshot direttamente in Immagini su Windows:** I temi compatibili possono salvarli senza aprire Esplora file né farti uscire da Steam, anche se la cartella Immagini si trova altrove.
+
+### Deutsch
+
+* **Weniger Flackern mit Themes:** Eine Hintergrundprüfung konnte die Lautstärkeanzeige von selbst einblenden oder Menüs kurz aufblitzen lassen. Das ist korrigiert, und dein gewählter Hintergrund bleibt berücksichtigt.
+* **Spiel und Musik nach deinem Geschmack:** Mit einem einzigen Balance-Regler kannst du jetzt entweder das Spiel oder deine Musik stärker hervorheben. Die getrennten Lautstärkeregler findest du weiterhin unter Weitere Einstellungen.
+* **Screenshots unter Windows direkt in Bilder speichern:** Unterstützte Themes können sie speichern, ohne den Explorer zu öffnen oder Steam zu verlassen, auch wenn dein Bilder-Ordner an einem anderen Ort liegt.
+
+### Português (Brasil)
+
+* **Menos piscadas ao usar temas:** Corrigida uma verificação dos fundos que podia fazer o indicador de volume aparecer sozinho ou os menus piscarem. O fundo que você escolheu continua sendo respeitado.
+* **O som do jogo e sua música do seu jeito:** Agora dá para destacar um ou outro com um único controle de balanço. Os controles de volume separados continuam em Mais configurações.
+* **Capturas direto para Imagens no Windows:** Os temas compatíveis podem salvá-las sem abrir o Explorador de Arquivos nem tirar você do Steam, mesmo que a pasta Imagens esteja em outro local.
+
+### Français
+
+* **Moins de clignotements avec les thèmes :** Une vérification des fonds pouvait faire apparaître toute seule la barre de volume ou faire clignoter les menus. C’est corrigé, et le fond que vous avez choisi est respecté.
+* **Le jeu et votre musique, comme vous les aimez :** Un seul curseur de balance permet désormais de donner plus de place à l’un ou à l’autre. Les volumes séparés restent disponibles dans Plus de réglages.
+* **Les captures directement dans Images sous Windows :** Les thèmes compatibles peuvent les enregistrer sans ouvrir l’Explorateur de fichiers ni vous faire quitter Steam, même si votre dossier Images se trouve ailleurs.
+
+## [0.84.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.1...panel-de-control-v0.84.2) (2026-11-05)
+
+
+### Español
+
+* **Instalar Panel de Control ya no baja la potencia:** En las Legion y en la Steam Deck, la primera vez parte de los vatios que ya tenía la consola, así que los juegos van igual hasta que muevas el control. Antes empezaba con un valor más bajo; en una Legion Go S eran 15 W cuando SteamOS da hasta 33 W, y se notaba en los FPS.
+* **En la Legion Go y la Legion Go S, desactivar el TDP devuelve la potencia de SteamOS:** Si desactivas el control de TDP de Panel de Control o lo desinstalas, la consola vuelve a la potencia que le da SteamOS. Antes se quedaba con los últimos vatios de Panel de Control hasta reiniciar.
+
+### English
+
+* **Installing Panel de Control no longer lowers your power:** On Legion devices and the Steam Deck, it now starts from the watts your device was already using, so games run the same until you move the slider. Before, it started lower; on a Legion Go S that meant 15 W while SteamOS allows up to 33 W, and the drop showed in your FPS.
+* **On the Legion Go and Legion Go S, turning TDP off gives power back to SteamOS:** If you turn off Panel de Control's TDP control or uninstall it, your device goes back to the power SteamOS gives it. Before, it kept Panel de Control's last watts until you restarted.
+
+### Italiano
+
+* **Installare Panel de Control non abbassa più la potenza:** Sui Legion e sullo Steam Deck, la prima volta parte dai watt che la console stava già usando, quindi i giochi vanno come prima finché non sposti il cursore. Prima partiva da un valore più basso; su una Legion Go S erano 15 W mentre SteamOS arriva a 33 W, e si notava negli FPS.
+* **Su Legion Go e Legion Go S, disattivare il TDP restituisce la potenza di SteamOS:** Se disattivi il controllo del TDP di Panel de Control o lo disinstalli, la console torna alla potenza che le dà SteamOS. Prima restava con gli ultimi watt di Panel de Control fino al riavvio.
+
+### Deutsch
+
+* **Die Installation von Panel de Control senkt die Leistung nicht mehr:** Auf Legion-Geräten und dem Steam Deck startet es beim ersten Mal mit den Watt, die das Gerät schon nutzte. Spiele laufen also gleich, bis du den Regler bewegst. Vorher startete es niedriger; auf einer Legion Go S waren es 15 W, obwohl SteamOS bis zu 33 W erlaubt, und das sah man an den FPS.
+* **Auf Legion Go und Legion Go S gibt das Ausschalten des TDP die Leistung an SteamOS zurück:** Wenn du die TDP-Steuerung von Panel de Control ausschaltest oder es deinstallierst, kehrt das Gerät zu der Leistung zurück, die SteamOS ihm gibt. Vorher blieben bis zum Neustart die letzten Watt von Panel de Control aktiv.
+
+### Português (Brasil)
+
+* **Instalar o Panel de Control não reduz mais a potência:** Nos Legion e no Steam Deck, na primeira vez ele parte dos watts que o aparelho já usava, então os jogos rodam igual até você mexer no controle. Antes começava com um valor mais baixo; num Legion Go S eram 15 W enquanto o SteamOS libera até 33 W, e isso aparecia nos FPS.
+* **No Legion Go e no Legion Go S, desativar o TDP devolve a potência do SteamOS:** Se você desativar o controle de TDP do Panel de Control ou desinstalá-lo, o aparelho volta à potência que o SteamOS dá a ele. Antes ficava com os últimos watts do Panel de Control até reiniciar.
+
+### Français
+
+* **Installer Panel de Control ne baisse plus la puissance :** Sur les Legion et le Steam Deck, il part la première fois des watts que la console utilisait déjà, donc les jeux tournent pareil tant que tu ne touches pas au curseur. Avant, il démarrait plus bas ; sur une Legion Go S c’était 15 W alors que SteamOS va jusqu’à 33 W, et ça se voyait sur les FPS.
+* **Sur la Legion Go et la Legion Go S, désactiver le TDP rend la puissance à SteamOS :** Si tu désactives le contrôle du TDP de Panel de Control ou que tu le désinstalles, la console revient à la puissance que lui donne SteamOS. Avant, elle gardait les derniers watts de Panel de Control jusqu’au redémarrage.
+
+## [0.84.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.0...panel-de-control-v0.84.1) (2026-11-05)
+
+### Español
+
+* **Vuelve a usar la máquina sin acordarte del Modo Descarga:** Si empiezas a navegar y sigues usándola, se desactiva solo y recupera tus ajustes de rendimiento. Un toque para despertar la pantalla lo mantiene activo.
+* **Reportes más útiles:** Recogen mejor qué estaba consumiendo recursos y cómo estaban los ajustes de rendimiento, para ayudarnos a encontrar la causa de los problemas de lentitud.
+
+### English
+
+* **Pick up your device without worrying about Download Mode:** When you start navigating and keep using it, Download Mode turns off automatically and restores your performance settings. A single tap to wake the screen leaves it on.
+* **More useful reports:** Reports give us a clearer picture of what was using resources and which performance settings were active, helping us track down slowdowns.
+
+### Italiano
+
+* **Riprendi a usare il dispositivo senza pensare alla modalità Download:** Quando inizi a navigare e continui a usarlo, la modalità si disattiva da sola e ripristina le tue impostazioni di prestazioni. Un tocco per riattivare lo schermo la lascia attiva.
+* **Segnalazioni più utili:** Mostrano meglio cosa stava consumando risorse e quali impostazioni di prestazioni erano attive, aiutandoci a trovare la causa dei rallentamenti.
+
+### Deutsch
+
+* **Nutze dein Gerät wieder, ohne an den Download-Modus denken zu müssen:** Wenn du durch die Menüs navigierst und das Gerät weiter bedienst, schaltet sich der Modus automatisch aus und stellt deine Leistungseinstellungen wieder her. Ein kurzes Antippen zum Aufwecken des Bildschirms lässt ihn aktiv.
+* **Aussagekräftigere Fehlerberichte:** Sie zeigen genauer, was Ressourcen verbraucht hat und welche Leistungseinstellungen aktiv waren. So können wir die Ursache von Verlangsamungen besser finden.
+
+### Português (Brasil)
+
+* **Volte a usar o dispositivo sem se preocupar com o Modo Download:** Ao começar a navegar e continuar usando o aparelho, o modo é desativado sozinho e suas configurações de desempenho são restauradas. Um toque para acender a tela mantém o modo ativo.
+* **Relatos mais úteis:** Mostram melhor o que estava consumindo recursos e quais configurações de desempenho estavam ativas, ajudando a encontrar a causa da lentidão.
+
+### Français
+
+* **Reprenez votre appareil sans penser au mode Téléchargement :** Lorsque vous commencez à naviguer et continuez à l’utiliser, le mode se désactive tout seul et rétablit vos réglages de performances. Un simple appui pour réveiller l’écran le laisse actif.
+* **Des rapports plus utiles :** Ils montrent plus clairement ce qui consommait des ressources et les réglages de performances actifs, pour nous aider à trouver la cause des ralentissements.
+
 ## [0.84.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.83.0...panel-de-control-v0.84.0) (2026-11-04)
 
 

@@ -62,6 +62,9 @@ public sealed class ThemesController : IThemesController
                 case ThemesOperation.EnableSteamDebugging:
                     service.EnableSteamDebugging();
                     return await ReadbackAsync(cancellationToken).ConfigureAwait(false);
+                case ThemesOperation.SteamHome:
+                    CompanionLog.Write("themes.steam_home", await engine.PressSteamHomeAsync(cancellationToken).ConfigureAwait(false));
+                    return Response(engine.Status);
                 case ThemesOperation.RestartSteam:
                     using (var timeout = Timeout(cancellationToken, LongOperationTimeout))
                     {

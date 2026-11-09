@@ -25,7 +25,7 @@ _STOP_WAIT_S = 0.5
 _MAX_SCREENS = 4
 _LIFECYCLE_KEPT = 4
 _LIFECYCLE_EVENT_CHARS = 40
-_WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader")
+_WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader", "Panel de Contro")
 
 
 def _read(path: str) -> str | None:
@@ -126,6 +126,100 @@ def _processes(root: str) -> dict:
     return usage
 
 
+class ProcessSampler:
+    def __init__(self, root: str = "/", *, clock=time.monotonic, ticks_per_second=None):
+        self.root = root
+        self.clock = clock
+        self.hz = ticks_per_second or os.sysconf("SC_CLK_TCK")
+        self.previous: dict = {}
+        self.previous_at: float | None = None
+
+    def sample(self) -> dict:
+        now = self.clock()
+        elapsed = now - self.previous_at if self.previous_at is not None else None
+        current = {}
+        names = {}
+        rows = []
+        entries = sorted(glob.glob(os.path.join(self.root, "proc/[0-9]*")))
+        for entry in entries[:4096]:
+            text = _read(os.path.join(entry, "stat")) or ""
+            try:
+                end = text.rindex(")")
+                fields = text[end + 2:].split()
+                pid = int(os.path.basename(entry))
+                born, ticks = int(fields[19]), int(fields[11]) + int(fields[12])
+                raw_name = text[text.index("(") + 1:end]
+                name = raw_name if raw_name in (*_WATCHED_PROCESSES, "MainThread", "wineserver") else "other"
+            except (ValueError, IndexError):
+                continue
+            current[pid] = (born, ticks)
+            names[pid] = name
+            previous = self.previous.get(pid)
+            if elapsed is None or elapsed <= 0 or previous is None or previous[0] != born:
+                continue
+            delta = ticks - previous[1]
+            if delta < 0:
+                continue
+            rows.append({"pid": pid, "name": name, "cpu_pct": round(delta / self.hz / elapsed * 100, 1)})
+        self.previous, self.previous_at = current, now
+        top = sorted((row for row in rows if row["cpu_pct"] > 0), key=lambda row: row["cpu_pct"], reverse=True)[:5]
+        for row in top:
+            row["steam_appid"] = None
+            try:
+                with open(os.path.join(self.root, "proc", str(row["pid"]), "environ"), "rb") as handle:
+                    env = handle.read(65536)
+                stat = _read(os.path.join(self.root, "proc", str(row["pid"]), "stat")) or ""
+                try:
+                    born = int(stat[stat.rindex(")") + 2:].split()[19])
+                except (ValueError, IndexError):
+                    continue
+                if born != current[row["pid"]][0]:
+                    continue
+                for field in env.split(b"\0")[:-1]:
+                    key, _, value = field.partition(b"=")
+                    if key == b"SteamAppId" and value.isdigit() and 0 < len(value) <= 20 and int(value) > 0:
+                        row["steam_appid"] = value.decode("ascii")
+                        break
+            except OSError:
+                pass
+        return {
+            "interval_s": round(elapsed, 3) if elapsed is not None and elapsed > 0 else None,
+            "cpu_basis": "one_logical_cpu",
+            "observed": len(current),
+            "truncated": len(entries) > 4096,
+            "top_cpu": top,
+            "known_cpu_pct": {
+                name: round(sum(row["cpu_pct"] for row in rows if row["name"] == name), 1)
+                if len(entries) <= 4096 and any(row["name"] == name for row in rows)
+                and sum(row["name"] == name for row in rows) == sum(value == name for value in names.values()) else None
+                for name in _WATCHED_PROCESSES
+            },
+            "panel_cpu_pct": next((row["cpu_pct"] for row in rows if row["pid"] == os.getpid()), None),
+        }
+
+
+def performance_sample(root: str = "/") -> dict:
+    base = os.path.join(root, "sys/devices/system/cpu/cpufreq")
+    clocks = [_number(os.path.join(path, "scaling_cur_freq")) for path in sorted(glob.glob(os.path.join(base, "policy*")))[:256]]
+    clocks = [value for value in clocks if value is not None]
+    caps = []
+    for chip in sorted(glob.glob(os.path.join(root, "sys/class/hwmon/hwmon*")))[:32]:
+        name = (_read(os.path.join(chip, "name")) or "").strip()[:32]
+        for path in sorted(glob.glob(os.path.join(chip, "power*_cap")))[:4]:
+            value = _number(path)
+            if value is not None:
+                caps.append({"chip": name, "rail": os.path.basename(path), "uw": value})
+            if len(caps) >= 8:
+                break
+        if len(caps) >= 8:
+            break
+    return {
+        "boost": _number(os.path.join(base, "boost")),
+        "cpu_khz": {"min": min(clocks), "max": max(clocks)} if clocks else None,
+        "power_caps_uw": caps,
+    }
+
+
 def system_sample(root: str = "/") -> dict:
     loadavg = (_read(os.path.join(root, "proc/loadavg")) or "").split()
     uptime = (_read(os.path.join(root, "proc/uptime")) or "").split()
@@ -139,6 +233,7 @@ def system_sample(root: str = "/") -> dict:
         "gpu": _gpu(root),
         "screen": _screens(root),
         "proc": _processes(root),
+        "performance": performance_sample(root),
     }
 
 
@@ -184,6 +279,7 @@ class Pulse:
         self._lifecycle = lifecycle
         self._on_unclean = on_unclean
         self._sample = sample
+        self._process_sampler = ProcessSampler() if sample is system_sample else None
         self._interval_s = interval_s
         self._samples: collections.deque = collections.deque(maxlen=keep)
         self._clock = clock
@@ -249,6 +345,8 @@ class Pulse:
     def tick(self) -> None:
         try:
             sample = {"t": round(self._clock(), 1), **self._sample()}
+            if self._process_sampler is not None:
+                sample["process_cpu"] = self._process_sampler.sample()
         except Exception as error:  # noqa: BLE001
             sample = {"t": round(self._clock(), 1), "error": type(error).__name__}
         if self._context is not None:

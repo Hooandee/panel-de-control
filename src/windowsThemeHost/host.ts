@@ -8,6 +8,7 @@ import {
 } from "../themes/themeExtensionClient";
 import { installHostClassMaps } from "./classMaps";
 import { installHostGameAudio } from "./gameAudio";
+import { installHostGamePause } from "./gamePause";
 import { applyQamGeometry, measureQamGeometry, type QamGeometry } from "./qamGeometry";
 import { installOverlayToastPosition } from "./notificationPosition";
 import { installSteamButtonHome } from "./steamButton";
@@ -19,12 +20,14 @@ import {
   type WindowsStorageWrite,
 } from "./storage";
 
-export const WINDOWS_THEME_HOST_VERSION = 6;
+export const WINDOWS_THEME_HOST_VERSION = 9;
 
 export interface WindowsThemeHostState {
   revision: number;
   snapshot: CssLoaderSnapshot;
   extensions: readonly ThemeExtensionPayload[];
+  /** Resolved by the signed-in user companion; absent means unavailable. */
+  picturesDirectory?: string | null;
 }
 
 export interface WindowsThemeHostStatus {
@@ -35,7 +38,10 @@ export interface WindowsThemeHostStatus {
   mounted: readonly string[];
   errors: readonly string[];
   gameSilenced: boolean;
+  /** The game a theme holds frozen while its lease lasts (gamePause.ts), or null. */
+  gamePaused: string | null;
   storage: WindowsStorageStatus;
+  picturesDirectory: string | null;
 }
 
 export interface WindowsThemeHost {
@@ -45,6 +51,8 @@ export interface WindowsThemeHost {
   /** Writes theme runtimes made since the last settlement, oldest first; the companion persists them. */
   storageTake(): WindowsStorageWrite[];
   storageSettle(settlement: WindowsStorageSettlement): WindowsStorageStatus;
+  /** The Xbox button Game Bar kept from Steam (the companion calls it); see steamButton.ts. */
+  pressHome(): string;
   dispose(): void;
 }
 
@@ -151,6 +159,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
 
   const storage = createWindowsThemeStorage();
   const gameAudio = installHostGameAudio(scope);
+  const gamePause = installHostGamePause(scope);
   const releaseClassMaps = installHostClassMaps(scope);
 
   let qamGeometry: QamGeometry | null = null;
@@ -175,7 +184,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
   const geometryTimer = setInterval(syncQamGeometry, QAM_GEOMETRY_POLL_MS);
   syncQamGeometry();
 
-  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError);
+  const stopSteamButton = installSteamButtonHome(scope, () => mounted.size > 0, recordError, globalThis, gamePause.thawForRaise);
   const stopToastPosition = installOverlayToastPosition(scope, () => mounted.size > 0);
 
   const stopRuntime = startThemesRuntime({
@@ -205,6 +214,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
       };
     },
     storage: createThemeStorage(storage.backend),
+    games: gamePause.games,
     evaluate: trackMounts,
     log: recordError,
   });
@@ -217,7 +227,9 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     mounted: [...mounted].sort(),
     errors: [...errors],
     gameSilenced: gameAudio.silenced(),
+    gamePaused: gamePause.paused(),
     storage: storage.status(),
+    picturesDirectory: state.picturesDirectory ?? null,
   });
 
   return Object.freeze({
@@ -228,6 +240,7 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
         revision: next.revision,
         snapshot: next.snapshot,
         extensions: next.extensions.map(parseThemeExtensionPayload),
+        picturesDirectory: typeof next.picturesDirectory === "string" && next.picturesDirectory.trim() ? next.picturesDirectory : null,
       };
       for (const listener of [...listeners]) listener();
       return status();
@@ -235,10 +248,12 @@ export function createWindowsThemeHost(scope: typeof globalThis = globalThis): W
     status,
     storageTake: storage.take,
     storageSettle: storage.settle,
+    pressHome: () => stopSteamButton.pressHome(),
     dispose() {
       stopRuntime();
       storage.dispose();
       gameAudio.dispose();
+      gamePause.dispose();
       stopSteamButton();
       stopToastPosition();
       releaseClassMaps();

@@ -21,6 +21,8 @@ class TDPBackend(ABC):
     measured_not_honored: bool = False
     probe_trace: tuple[dict, ...] = ()
     primary_rail: str = "pl1"
+    # A fresh install adopts this route's readback as its starting profile.
+    seeds_from_readback: bool = False
     # Highest charger PL1 this backend will write; the manual extra range never exceeds it.
     manual_write_max_ac: int | None = None
 

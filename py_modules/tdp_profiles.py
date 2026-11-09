@@ -1,3 +1,7 @@
+import json
+import os
+
+from json_store import atomic_json_save
 from scoped_store import ScopedProfileStore
 
 # Boost derivation for the "auto" mode (single source of truth): moderate managed
@@ -73,7 +77,46 @@ class ProfileStore(ScopedProfileStore):
     def __init__(self, path, default_watts):
         self._default = int(default_watts)
         self._sanitize_pending = False
+        fresh_install = not os.path.exists(path)
         super().__init__(path)
+        self._seed_pending = fresh_install or self._stored_seed_pending()
+
+    def _stored_seed_pending(self):
+        try:
+            with open(self._path) as f:
+                raw = json.load(f)
+        except (OSError, ValueError):
+            return False
+        return isinstance(raw, dict) and raw.get("seed_pending") is True
+
+    @property
+    def seed_pending(self):
+        """A fresh install starts from what the machine already runs, read once; any
+        choice of the user's ends the wait so a later read never overwrites it."""
+        return self._seed_pending
+
+    def _save(self, *, keep_seed=False):
+        if not keep_seed:
+            self._seed_pending = False
+        data = {**self._data, "seed_pending": True} if self._seed_pending else self._data
+        atomic_json_save(self._path, data)
+
+    def seed_global(self, pl1, pl2, pl3):
+        if not self._seed_pending:
+            return False
+        pl1 = int(pl1)
+        pl2 = max(pl1, int(pl2))
+        pl3 = max(pl2, int(pl3))
+        off2, off3 = pl2 - pl1, pl3 - pl2
+        self._data["global"].update(
+            pl1=pl1,
+            mode="custom" if off2 or off3 else "estable",
+            off2=off2,
+            off3=off3,
+            auto_initial_tdp=pl1,
+        )
+        self._save()
+        return True
 
     def _profile_dict(self, pl1, mode=_DEFAULT_MODE, off2=0, off3=0):
         # off2/off3 coerced None-safe: _clean is the shape-validator and must never
@@ -186,7 +229,7 @@ class ProfileStore(ScopedProfileStore):
             dirty = fix(g) or dirty
         if dirty or self._sanitize_pending:
             try:
-                self._save()
+                self._save(keep_seed=True)
             except OSError:
                 self._sanitize_pending = True
                 raise
@@ -264,7 +307,7 @@ class ProfileStore(ScopedProfileStore):
         for profile in self._data["games"].values():
             changed = (profile.pop("gpu", None) is not None) or changed
         if changed:
-            self._save()
+            self._save(keep_seed=True)
 
     def _effective_from_profile(self, prof, pl1):
         pl1 = int(pl1)

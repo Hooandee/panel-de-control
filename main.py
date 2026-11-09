@@ -50,6 +50,7 @@ from version import read_version
 from json_store import atomic_json_save
 from settings_store import SettingsStore
 import theme_artwork
+import theme_groups
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
 from tdp.diagnostics import run_operation as trace_tdp_operation
@@ -251,6 +252,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
+        ("_support_theme_groups", None),
         ("_support_theme_storage", None),
         ("_support_steam_inventory", None),
     ),
@@ -1679,6 +1681,39 @@ class Plugin(AmbientRpc):
             decky.logger.exception("DUO artwork persistence failed")
             return {"ok": False, "error": "save_failed"}
         return {"ok": True}
+
+    def _support_theme_groups(self) -> dict:
+        return theme_groups.summary(self._settings.get("theme_groups"))
+
+    async def get_theme_groups(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.store(self._settings.get("theme_groups")).get(account, [])
+
+    async def set_theme_groups(self, account: str, groups: list) -> dict:
+        self._init()
+        if not theme_groups.valid_account(account) or not isinstance(groups, list):
+            return {"ok": False, "error": "invalid_request"}
+        previous = self._settings.get("theme_groups", {})
+        updated = theme_groups.store(previous)
+        if account not in updated and len(updated) >= theme_groups.MAX_ACCOUNTS:
+            return {"ok": False, "error": "limit_reached"}
+        updated[account] = theme_groups.records(groups)
+        self._settings["theme_groups"] = updated
+        try:
+            self._save()
+        except Exception:
+            self._settings["theme_groups"] = previous
+            decky.logger.exception("Theme groups persistence failed")
+            return {"ok": False, "error": "save_failed"}
+        return {"ok": True, "groups": updated[account]}
+
+    async def get_tab_master_tabs(self, account: str) -> list:
+        self._init()
+        if not theme_groups.valid_account(account):
+            return []
+        return theme_groups.read_tab_master(Path(decky.DECKY_PLUGIN_SETTINGS_DIR).parent, account)
 
     async def get_developer_options(self) -> bool:
         self._init()
@@ -7357,6 +7392,69 @@ class Plugin(AmbientRpc):
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _seed_tdp_from_hardware(self) -> None:
+        """A fresh install takes the power the machine already runs as its starting
+        profile: Panel shows the dial without changing performance until it is moved."""
+        try:
+            self._seed_tdp_profile()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning("TDP seed skipped: %s", type(error).__name__)
+
+    def _seed_tdp_profile(self) -> None:
+        store = self._tdp_profiles
+        backend = self._tdp_backend
+        if (
+            not store.seed_pending
+            or not getattr(backend, "seeds_from_readback", False)
+            or not self._tdp_supported()
+            or getattr(backend, "unit", "W") != "W"
+            or not getattr(backend, "readback", True)
+            or self._desktop_mode_on()
+            or self._settings.get("eco_enabled")
+            or self._low_battery_sidecar_active()
+            or read_on_ac()
+        ):
+            return
+        # The firmware caps power on low battery and may keep that cap until reboot;
+        # neither is the machine's own power.
+        percent = (self._battery.read() or {}).get("percent")
+        latched = self._settings.get("low_battery_hold_latched_boot")
+        if (
+            not isinstance(percent, (int, float))
+            or percent <= LOW_BATTERY_PERCENT
+            or (latched and latched == _current_boot_id())
+        ):
+            return
+        rails = self._observe_tdp_sync().surfaces.get(backend.name, {})
+
+        def applied(rail):
+            reading = rails.get(rail)
+            value = reading.applied_w if reading is not None else None
+            return value if isinstance(value, int) and value > 0 else None
+
+        sustained = applied("pl1") or applied(getattr(backend, "primary_rail", "pl1"))
+        if sustained is None:
+            return
+        limits = self._limits()
+        pl1 = max(limits.min_w, min(sustained, self._active_max(limits, False)))
+        rail_limits = backend.level_limits() or {}
+
+        def within_rail(rail, value):
+            ceiling = (rail_limits.get(rail) or {}).get("max")
+            return min(value, ceiling) if isinstance(ceiling, int) else value
+
+        pl2 = within_rail("pl2", applied("pl2") or pl1)
+        pl3 = within_rail("pl3", applied("pl3") or pl2)
+        if store.seed_global(pl1, pl2, pl3):
+            decky.logger.info(
+                "TDP profile seeded from hardware %s",
+                json.dumps({
+                    "backend": backend.name, "battery": percent,
+                    "read": {rail: applied(rail) for rail in ("pl1", "pl2", "pl3")},
+                    "seeded": store.effective(None),
+                }, sort_keys=True, separators=(",", ":")),
+            )
+
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
@@ -9993,6 +10091,7 @@ class Plugin(AmbientRpc):
         """Manual control taken → exit download mode and restore the normal TDP/boost
         state. Brightness is NOT touched here (FE-only; the persistent controller
         stops driving it and the user keeps whatever they set)."""
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -10084,6 +10183,12 @@ class Plugin(AmbientRpc):
         finally:
             await asyncio.to_thread(watch.close)
 
+    async def _eco_performance_readback(self) -> dict:
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(pulse.performance_sample), timeout=0.5)
+        except Exception as error:  # noqa: BLE001
+            return {"error": type(error).__name__}
+
     async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
         """Toggle download mode. On enable, snapshot the current brightness (to wake
         back to) and apply the override (TDP min + boost off) via _reapply_all; on
@@ -10094,6 +10199,13 @@ class Plugin(AmbientRpc):
         # to black on exit (unrecoverable from the card). Keep the previous value then.
         if enabled and int(current_brightness) > 0:
             self._settings["eco_brightness"] = int(current_brightness)
+        diary = journal.active
+        generation = getattr(self, "_eco_request_generation", 0) + 1
+        self._eco_request_generation = generation
+        before_enabled = bool(self._settings.get("eco_enabled", False))
+        before = await self._eco_performance_readback() if diary is not None else None
+        if generation != self._eco_request_generation:
+            return self._eco_state()
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
@@ -10102,6 +10214,14 @@ class Plugin(AmbientRpc):
         else:
             await self._apply_screen(False, "eco_disabled")
         await self._drain_offloaded()
+        if diary is not None:
+            after = await self._eco_performance_readback()
+            try:
+                diary.write("INFO", "eco", "transition_readback", before_enabled=before_enabled,
+                            enabled=bool(self._settings.get("eco_enabled", False)),
+                            before=before, after=after)
+            except Exception:  # noqa: BLE001
+                pass
         return self._eco_state()
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
@@ -10951,6 +11071,7 @@ class Plugin(AmbientRpc):
         return self._scope_context_is_current(scope, appid, context_appid)
 
     def _exit_eco_for_cpu(self) -> None:
+        self._eco_request_generation = getattr(self, "_eco_request_generation", 0) + 1
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
@@ -14608,6 +14729,7 @@ class Plugin(AmbientRpc):
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
+        await self._offload_call(self._seed_tdp_from_hardware)
         if self._tdp_control_on() and self._retired_experimental_tdp_unlock():
             retired = await self._retire_experimental_tdp_unlock_or_disable()
             if not retired.get("ok"):
@@ -14778,6 +14900,11 @@ class Plugin(AmbientRpc):
         return {
             "game": self._current_appid,
             "themes": getattr(self, "_support_active_themes", None),
+            "eco_enabled": bool(self._settings.get("eco_enabled", False)),
+            "support_sample_age_s": (
+                round(max(0.0, time.monotonic() - sample["sampled_at_monotonic"]), 1)
+                if sample.get("sampled_at_monotonic") is not None else None
+            ),
             # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
             "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
             **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
@@ -14900,7 +15027,7 @@ class Plugin(AmbientRpc):
                 await self._journal_theme_folders(diary, theme_folders, rescan_themes)
                 rescan_themes = False
                 sample = await self._support_sample()
-                self._support_last_sample = sample
+                self._support_last_sample = {**sample, "sampled_at_monotonic": time.monotonic()}
                 reason = watcher.observe(sample, time.time())
                 if reason is not None:
                     diary.write("INFO", "state", reason, **sample)
