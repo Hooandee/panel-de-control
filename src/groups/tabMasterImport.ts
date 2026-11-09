@@ -1,16 +1,13 @@
-import { normalizeGroup } from "./normalize";
+import { isRecord, normalizeGroup } from "./normalize";
 import type { GroupDefinition, Rule, RuleSet } from "./types";
 
-/**
- * Tab Master tabs as groups. Our rules are a superset of its filters, so the translation only goes one way:
- * once imported, a group belongs to Panel and is never written back.
- */
+// Tab Master tabs as groups. The translation only goes one way: once imported, a group belongs to Panel.
 
 type Tab = Record<string, unknown>;
 type Filter = { type?: unknown; inverted?: unknown; params?: unknown };
 
 const BITS = { software: 2, music: 8192 } as const;
-const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {});
+const record = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : {});
 const numbers = (value: unknown) => (Array.isArray(value) ? value.filter((n): n is number => typeof n === "number" && Number.isFinite(n)) : []);
 const atOp = (condition: unknown) => (condition === "below" ? "atMost" : "atLeast");
 const match = (mode: unknown) => (mode === "and" ? "all" : "any");
@@ -38,11 +35,11 @@ function dateRule(type: "released" | "purchased" | "lastPlayed", p: Record<strin
   return null;
 }
 
-/** One filter as one rule, or null with the filter's type noted when we cannot express it. */
+/** One filter as one rule, or null with the filter's type noted in `unknown`. */
 function translate(filter: Filter, depth: number, unknown: string[]): Rule | null {
   const type = typeof filter.type === "string" ? filter.type : "";
   const p = record(filter.params);
-  let inverted = filter.inverted === true;
+  const inverted = filter.inverted === true;
   const rule = (ruleType: Rule["type"], params: Rule["params"] = {}, flip = false): Rule =>
     ({ type: ruleType, inverted: inverted !== flip, params });
   switch (type) {
@@ -54,11 +51,9 @@ function translate(filter: Filter, depth: number, unknown: string[]): Rule | nul
     case "tags": return rule("tags", { ids: numbers(p.tags), match: match(p.mode) });
     case "whitelist": return rule("games", { ids: numbers(p.games) });
     case "blacklist": return rule("games", { ids: numbers(p.games) }, true);
-    case "merge": {
+    case "merge":
       if (depth >= 2) break;
-      const nested = translateSet(p.filters, p.mode, depth + 1, unknown);
-      return rule("all", { ...nested });
-    }
+      return rule("all", { ...translateSet(p.filters, p.mode, depth + 1, unknown) });
     case "platform": return rule("kind", { kinds: ["shortcut"] }, p.platform === "steam");
     case "deck compatibility": return rule("deckCompat", { levels: numbers([p.category]) });
     case "steamos compatibility": return rule("steamosCompat", { levels: numbers([p.category]) });
@@ -88,9 +83,7 @@ function translate(filter: Filter, depth: number, unknown: string[]): Rule | nul
       return rule("sdCard", card ? { card } : {});
     }
     case "install folder": return typeof p.driveName === "string" ? rule("installFolder", { folder: p.driveName }) : null;
-    default: break;
   }
-  inverted = false;
   unknown.push(type || "?");
   return null;
 }

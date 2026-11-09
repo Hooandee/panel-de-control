@@ -6,10 +6,11 @@ const GIB = 1024 ** 3;
 /** True or false when the rule can be decided, null when the app lacks the data (matches neither way). */
 type Verdict = boolean | null;
 
-const num = (value: unknown, fallback = 0): number => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
-const list = <T>(value: unknown, guard: (item: unknown) => item is T): T[] => (Array.isArray(value) ? value.filter(guard) : []);
 const isNumber = (item: unknown): item is number => typeof item === "number" && Number.isFinite(item);
 const isString = (item: unknown): item is string => typeof item === "string";
+const num = (value: unknown): number => (isNumber(value) ? value : 0);
+const list = <T>(value: unknown, guard: (item: unknown) => item is T): T[] => (Array.isArray(value) ? value.filter(guard) : []);
+const rulesOf = (set: RuleSet | undefined): Rule[] => (Array.isArray(set?.rules) ? set.rules : []);
 const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 function compare(value: number, op: unknown, target: number): Verdict {
@@ -34,7 +35,7 @@ function dated(value: number, params: Record<string, unknown>, now: number): Ver
   return null;
 }
 
-function matchSet(wanted: number[], have: number[], match: unknown): Verdict {
+function matchSet<T>(wanted: readonly T[], have: readonly T[], match: unknown): Verdict {
   if (!wanted.length) return null;
   return match === "all" ? wanted.every((id) => have.includes(id)) : wanted.some((id) => have.includes(id));
 }
@@ -90,8 +91,7 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
       const owners = ctx.friendOwners(app.appId);
       if (owners === null) return null;
       const ids = list(p.ids, isString);
-      if (!ids.length) return owners.length > 0;
-      return p.match === "all" ? ids.every((id) => owners.includes(id)) : ids.some((id) => owners.includes(id));
+      return ids.length ? matchSet(ids, owners, p.match) : owners.length > 0;
     }
     case "familyShared": return app.familyShared;
     case "demo": return app.demo;
@@ -102,10 +102,9 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
       return typeof p.card === "string" && p.card ? app.sdCard === p.card : app.sdCard !== null;
     case "games": return list(p.ids, isNumber).includes(app.appId);
     case "installFolder": return app.installFolder === null || typeof p.folder !== "string" ? null : app.installFolder === p.folder;
-    case "all": {
+    case "all":
       if (walk.depth >= GROUP_LIMITS.depth) return null;
       return matchesSet(p as unknown as RuleSet, app, { ...walk, depth: walk.depth + 1 });
-    }
     default: return null;
   }
 }
@@ -116,14 +115,14 @@ function matches(rule: Rule, app: AppFacts, walk: Walk): boolean {
 }
 
 function matchesSet(set: RuleSet | undefined, app: AppFacts, walk: Walk): boolean {
-  const rules = Array.isArray(set?.rules) ? set.rules : [];
+  const rules = rulesOf(set);
   if (!rules.length) return false;
   return set?.mode === "any" ? rules.some((rule) => matches(rule, app, walk)) : rules.every((rule) => matches(rule, app, walk));
 }
 
 /** Kinds a rule set asks for by name: only those reach apps outside the default universe. */
 function namedKinds(set: RuleSet | undefined, into = new Set<AppKind>()): Set<AppKind> {
-  for (const rule of Array.isArray(set?.rules) ? set.rules : []) {
+  for (const rule of rulesOf(set)) {
     if (rule.type === "kind" && !rule.inverted) list(rule.params.kinds, isString).forEach((kind) => into.add(kind as AppKind));
     if (rule.type === "all") namedKinds(rule.params as unknown as RuleSet, into);
   }

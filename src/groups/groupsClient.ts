@@ -2,7 +2,7 @@ import { buildCatalog, type RuleCatalog } from "./catalog";
 import { evaluateGroup } from "./engine";
 import { normalizeGroup, normalizeGroups } from "./normalize";
 import { createFriendOwnership, readSteam, steamAccount, type SteamGlobals, type SteamSnapshot } from "./steamFacts";
-import { translateTabMasterTab } from "./tabMasterImport";
+import { translateTabMasterTab, type ImportedTab } from "./tabMasterImport";
 import { GROUP_LIMITS, type EvaluationContext, type GroupDefinition, type Rule, type RuleSet } from "./types";
 
 export type ThemeGroup = GroupDefinition & { members: number[] };
@@ -80,7 +80,7 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
     definitions = []; groups = [];
     loading = (current ? host.read(current) : Promise.resolve([]))
       .then((value) => { if (account === current) definitions = normalizeGroups(value); })
-      .catch(() => { /* keep what we have; a later look tries again */ loading = null; })
+      .catch(() => { loading = null; })
       .finally(() => { if (account === current) { recompute(); notify(); } });
     return loading;
   };
@@ -101,6 +101,12 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
     definitions = normalizeGroups(reply.groups ?? next);
     recompute(); notify();
     return true;
+  };
+  const room = () => Math.max(0, GROUP_LIMITS.groups - definitions.length);
+  const isImported = (group: GroupDefinition) => definitions.some((item) => item.importedFrom === group.importedFrom);
+  const tabMasterTabs = async (target: string): Promise<ImportedTab[]> => {
+    const tabs = await host.tabMaster(target).catch(() => []);
+    return (Array.isArray(tabs) ? tabs : []).flatMap((tab) => translateTabMasterTab(tab as Record<string, unknown>) ?? []);
   };
   const newId = () => `grp:${now().toString(36)}${Math.floor(Math.random() * 36 ** 4).toString(36)}`;
 
@@ -146,32 +152,22 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
     async importSources() {
       await load();
       if (!account) return [];
-      const tabs = await host.tabMaster(account).catch(() => []);
-      return (Array.isArray(tabs) ? tabs : []).flatMap((tab) => {
-        const imported = translateTabMasterTab(tab as Record<string, unknown>);
-        if (!imported) return [];
-        const { group } = imported;
-        return [{
-          id: imported.tabId,
-          name: group.name,
-          count: group.rules ? preview(group.rules, group).length : 0,
-          imported: definitions.some((item) => item.importedFrom === group.importedFrom),
-          unknown: imported.unknown,
-        }];
-      });
+      return (await tabMasterTabs(account)).map(({ tabId, group, unknown }) => ({
+        id: tabId,
+        name: group.name,
+        count: group.rules ? preview(group.rules, group).length : 0,
+        imported: isImported(group),
+        unknown,
+      }));
     },
     async import(ids) {
       await load();
       if (!account) return [];
       const wanted = new Set(ids);
-      const tabs = await host.tabMaster(account).catch(() => []);
-      const fresh = (Array.isArray(tabs) ? tabs : [])
-        .map((tab) => translateTabMasterTab(tab as Record<string, unknown>))
-        .filter((item): item is NonNullable<typeof item> => !!item && wanted.has(item.tabId))
-        .map((item) => item.group)
-        .filter((group) => !definitions.some((item) => item.importedFrom === group.importedFrom))
-        .map((group) => ({ ...group, id: definitions.some((item) => item.id === group.id) ? newId() : group.id }))
-        .slice(0, Math.max(0, GROUP_LIMITS.groups - definitions.length));
+      const fresh = (await tabMasterTabs(account))
+        .filter((item) => wanted.has(item.tabId) && !isImported(item.group))
+        .map(({ group }) => ({ ...group, id: definitions.some((item) => item.id === group.id) ? newId() : group.id }))
+        .slice(0, room());
       if (!fresh.length || !(await persist([...definitions, ...fresh]))) return [];
       return groups.filter((group) => fresh.some((item) => item.id === group.id));
     },
@@ -183,7 +179,7 @@ export function createGroupsClient(host: GroupsHost, globals: SteamGlobals, opti
       const moved = missing.flatMap((old) => {
         const group = normalizeGroup({ id: newId() + old.id.replace(/[^A-Za-z0-9]/g, "").slice(-8), name: old.name, kind: "manual", appIds: [...old.appIds], added: [], hidden: [], legacyId: old.id });
         return group ? [group] : [];
-      }).slice(0, Math.max(0, GROUP_LIMITS.groups - definitions.length));
+      }).slice(0, room());
       if (moved.length) await persist([...definitions, ...moved]);
     },
     status: () => ({ friends: friends.loading() ? "loading" : friendsAsked ? "ready" : "idle" }),

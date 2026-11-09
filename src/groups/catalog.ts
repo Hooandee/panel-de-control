@@ -1,4 +1,4 @@
-import { createFriendOwnership, type SteamGlobals } from "./steamFacts";
+import { attempt, folderId, userCollections, type createFriendOwnership, type SteamGlobals } from "./steamFacts";
 import type { GroupDefinition } from "./types";
 
 /** Values a theme offers when the user builds a rule: names come from Steam where it has them. */
@@ -35,22 +35,17 @@ export function buildCatalog(
   libraryTags: Iterable<number>,
 ): RuleCatalog {
   const es = language.startsWith("es");
-  const store = globals.collectionStore;
-  let user: readonly { id?: string; displayName?: string }[] = [];
-  try { user = store?.userCollections ?? []; } catch { user = []; }
-  let favorite: { id?: string; displayName?: string } | undefined;
-  try { favorite = store?.GetCollection?.("favorite"); } catch { favorite = undefined; }
-  const collections = [favorite, ...user]
+  const favorite = attempt(() => globals.collectionStore?.GetCollection?.("favorite"), undefined);
+  const collections = [favorite, ...userCollections(globals)]
     .flatMap((c) => (c?.id ? [{ id: c.id, name: c.displayName || c.id }] : []));
   // Steam keeps tag names in a plain object on current clients, a Map on older ones.
   const tagNames = globals.appStore?.m_mapStoreTagLocalization;
-  const tagName = (id: number): string => {
-    try { return (tagNames instanceof Map ? tagNames.get(id) : (tagNames as Record<string, string> | undefined)?.[String(id)]) ?? ""; } catch { return ""; }
-  };
+  const tagName = (id: number): string =>
+    attempt(() => (tagNames instanceof Map ? tagNames.get(id) : tagNames?.[String(id)]) ?? "", "");
   const tags = [...new Set(libraryTags)].map((id) => ({ id, name: tagName(id) }))
     .filter((tag) => tag.name).sort((a, b) => a.name.localeCompare(b.name));
   const folders = (globals.installFolderStore?.AllInstallFolders ?? []).map((folder) => {
-    const id = folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");
+    const id = folderId(folder);
     return { id, name: folder.strUserLabel || id };
   }).filter((folder) => folder.id);
   const cards = (globals.MicroSDeck?.CardsAndGames ?? []).flatMap(([card]) => (card?.uid ? [{ id: card.uid, name: card.name || card.uid }] : []));

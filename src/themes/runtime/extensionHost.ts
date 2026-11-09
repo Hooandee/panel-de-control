@@ -154,22 +154,6 @@ export function ambientThemeId(themeName: string): string {
 const AMBIENT_SURFACES = new Set(["home", "library"]);
 
 /** Scopes the channel to one mount so every claim a runtime forgets is released when it unmounts. */
-/** The shared groups, with the theme's subscriptions dropped when it unmounts. */
-function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: { track(release: () => void): () => void }): Readonly<ThemeGroupsAccess> {
-  return Object.freeze({
-    list: () => groups.list(),
-    subscribe: (listener: () => void) => scope.track(groups.subscribe(listener)),
-    save: (group: Parameters<ThemeGroupsAccess["save"]>[0]) => groups.save(group),
-    remove: (id: string) => groups.remove(id),
-    preview: (rules: Parameters<ThemeGroupsAccess["preview"]>[0], extra?: Parameters<ThemeGroupsAccess["preview"]>[1]) => groups.preview(rules, extra),
-    catalog: (language?: string) => groups.catalog(language),
-    importSources: () => groups.importSources(),
-    import: (ids: readonly string[]) => groups.import(ids),
-    migrate: (legacy: Parameters<ThemeGroupsAccess["migrate"]>[0]) => groups.migrate(legacy),
-    status: () => groups.status(),
-  });
-}
-
 function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
   const releases = new Set<() => void>();
   const listeners = new Set<() => void>();
@@ -295,6 +279,23 @@ function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountSco
   });
 }
 
+/** The shared groups, with the theme's subscriptions dropped when it unmounts. */
+function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: MountScope): Readonly<ThemeGroupsAccess> {
+  const access: ThemeGroupsAccess = {
+    list: () => groups.list(),
+    subscribe: (listener) => scope.track(groups.subscribe(listener)),
+    save: (group) => groups.save(group),
+    remove: (id) => groups.remove(id),
+    preview: (rules, extra) => groups.preview(rules, extra),
+    catalog: (language) => groups.catalog(language),
+    importSources: () => groups.importSources(),
+    import: (ids) => groups.import(ids),
+    migrate: (legacy) => groups.migrate(legacy),
+    status: () => groups.status(),
+  };
+  return Object.freeze(access);
+}
+
 function freezeTheme(theme: CssLoaderTheme): Readonly<CssLoaderTheme> {
   return Object.freeze({ ...theme, patches: Object.freeze(theme.patches.map(freezePatch)) });
 }
@@ -385,10 +386,10 @@ export class ThemeExtensionRuntimeHost {
     games,
     groups,
   }: ThemeExtensionRuntimeHostOptions) {
-    this.groups = groups;
     this.ambient = ambient;
     this.storage = storage;
     this.games = games;
+    this.groups = groups;
     this.artwork = artwork;
     this.client = client;
     this.doc = doc;

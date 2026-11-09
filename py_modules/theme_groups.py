@@ -125,9 +125,10 @@ def store(value):
 
 
 def summary(value):
-    groups = [group for account in store(value).values() for group in account]
+    accounts = store(value)
+    groups = [group for account in accounts.values() for group in account]
     return {
-        "accounts": len(store(value)),
+        "accounts": len(accounts),
         "manual": sum(group["kind"] == "manual" for group in groups),
         "rules": sum(group["kind"] == "rules" for group in groups),
         "imported": sum("importedFrom" in group for group in groups),

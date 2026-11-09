@@ -12,14 +12,20 @@ interface SteamId { GetAccountID?(): number; ConvertTo64BitString?(): string }
 interface Player { m_steamid?: SteamId; m_strPlayerName?: string; m_strNickname?: string; avatar_url_medium?: string }
 /** Newer clients list players directly; older ones wrap them in `m_persona`. */
 type Friend = Player & { m_persona?: Player };
+type FriendIdentity = { id: number; name: string; avatar?: string };
 
-function friendIdentity(friend: Friend): { id: number; name: string; avatar?: string } | null {
+/** Steam's getters can throw while its stores are still loading. */
+export function attempt<T>(read: () => T, fallback: T): T {
+  try { return read(); } catch { return fallback; }
+}
+
+function friendIdentity(friend: Friend): FriendIdentity | null {
   const player = friend.m_persona ?? friend;
   try {
     const steamid = player.m_steamid;
     const id = steamid?.GetAccountID?.() ?? Number(BigInt.asUintN(32, BigInt(steamid?.ConvertTo64BitString?.() ?? "0")));
     if (!Number.isInteger(id) || id <= 0) return null;
-    const avatar = typeof player.avatar_url_medium === 'string' && /^https:\/\//.test(player.avatar_url_medium) ? player.avatar_url_medium : undefined;
+    const avatar = typeof player.avatar_url_medium === "string" && player.avatar_url_medium.startsWith("https://") ? player.avatar_url_medium : undefined;
     const name = [friend.m_strNickname, player.m_strNickname, player.m_strPlayerName].map((value) => value?.trim()).find(Boolean) || String(id);
     return { id, name, ...(avatar ? { avatar } : {}) };
   } catch {
@@ -27,6 +33,7 @@ function friendIdentity(friend: Friend): { id: number; name: string; avatar?: st
   }
 }
 
+interface InstallFolder { nFolderIndex?: number; strDriveName?: string; strUserLabel?: string; vecApps?: readonly { nAppID?: number }[] }
 interface Collection { id?: string; displayName?: string; allApps?: readonly Overview[]; visibleApps?: readonly Overview[] }
 export interface SteamGlobals {
   appStore?: { GetAppOverviewByAppID?(id: number): Overview | undefined; m_mapStoreTagLocalization?: Map<number, string> | Record<string, string> };
@@ -38,7 +45,7 @@ export interface SteamGlobals {
     GetAchievementProgress?(id: number): number;
     m_achievementProgress?: { mapCache?: Map<number, { unlocked?: number; total?: number }> };
   };
-  installFolderStore?: { AllInstallFolders?: readonly { nFolderIndex?: number; strDriveName?: string; strUserLabel?: string; vecApps?: readonly { nAppID?: number }[] }[] };
+  installFolderStore?: { AllInstallFolders?: readonly InstallFolder[] };
   friendStore?: {
     allFriends?: readonly Friend[];
     FetchOwnedGames?(accountId: number): Promise<{ setApps?: Iterable<number> } | undefined>;
@@ -55,17 +62,18 @@ const KINDS: Record<number, AppKind> = { 1: "game", 8: "game", [SHORTCUT]: "shor
 const DEFAULT_SOURCES = ["type-games"];
 const EXTENDED_SOURCES = ["type-software", "type-music", "type-tools", "type-videos"];
 
+export const folderId = (folder: InstallFolder) => folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");
+export const userCollections = (globals: SteamGlobals) => attempt(() => globals.collectionStore?.userCollections ?? [], []);
+
 const ids = (apps: readonly Overview[] | undefined) =>
   (apps ?? []).map((app) => app.appid).filter((id): id is number => Number.isInteger(id) && (id as number) > 0);
 
 /** The Steam account groups belong to: its 32-bit account id, as Tab Master keys its tabs. */
 export function steamAccount(globals: SteamGlobals): string | null {
-  try {
+  return attempt(() => {
     const id = globals.App?.m_CurrentUser?.strSteamID;
     return id && /^\d+$/.test(id) ? BigInt.asUintN(32, BigInt(id)).toString() : null;
-  } catch {
-    return null;
-  }
+  }, null);
 }
 
 /** A read of Steam's stores at one moment: facts per app, plus the lists rules run over. */
@@ -79,7 +87,7 @@ export interface SteamSnapshot {
 
 export function readSteam(globals: SteamGlobals): SteamSnapshot {
   const store = globals.collectionStore;
-  const collection = (id: string) => { try { return store?.GetCollection?.(id); } catch { return undefined; } };
+  const collection = (id: string) => attempt(() => store?.GetCollection?.(id), undefined);
   const visible = (sources: string[]) => [...new Set(sources.flatMap((id) => ids(collection(id)?.visibleApps ?? collection(id)?.allApps)))];
   const shortcuts = (store?.allAppsCollection?.allApps ?? []).filter((app) => app.app_type === SHORTCUT);
   const shared = new Set((store?.sharedLibrariesCollections ?? []).flatMap((c) => ids(c.allApps)));
@@ -87,14 +95,14 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
   const extended = visible(EXTENDED_SOURCES).filter((id) => !universe.includes(id));
 
   const memberOf = new Map<number, string[]>();
-  const user = (() => { try { return store?.userCollections ?? []; } catch { return []; } })();
+  const user = userCollections(globals);
   for (const c of [...user, collection("favorite"), collection("hidden")]) {
     if (!c?.id) continue;
     for (const id of ids(c.allApps)) memberOf.set(id, [...(memberOf.get(id) ?? []), c.id]);
   }
   const folderOf = new Map<number, string>();
   for (const folder of globals.installFolderStore?.AllInstallFolders ?? []) {
-    const name = folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");
+    const name = folderId(folder);
     for (const app of folder.vecApps ?? []) if (app.nAppID) folderOf.set(app.nAppID, name);
   }
   const cardOf = new Map<number, string>();
@@ -107,12 +115,10 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
 
   const facts = (appId: number): AppFacts | undefined => {
     if (cache.has(appId)) return cache.get(appId) ?? undefined;
-    let app: Overview | undefined;
-    try { app = globals.appStore?.GetAppOverviewByAppID?.(appId); } catch { app = undefined; }
+    const app = attempt(() => globals.appStore?.GetAppOverviewByAppID?.(appId), undefined);
     if (!app) { cache.set(appId, null); return undefined; }
     const progress = achievements?.m_achievementProgress?.mapCache?.get(appId);
-    let percent = 0;
-    try { percent = achievements?.GetAchievementProgress?.(appId) ?? 0; } catch { percent = 0; }
+    const percent = attempt(() => achievements?.GetAchievementProgress?.(appId) ?? 0, 0);
     const value: AppFacts = {
       appId,
       name: app.display_name ?? "",
@@ -163,9 +169,10 @@ export function createFriendOwnership(globals: SteamGlobals, onChange: () => voi
   let owners: Map<number, string[]> | null = null;
   let loadedAt = 0;
   let loading = false;
+  const identities = (): FriendIdentity[] => (globals.friendStore?.allFriends ?? []).flatMap((friend) => friendIdentity(friend) ?? []);
   const load = () => {
     if (loading || (owners && now() - loadedAt < 6 * 3600_000)) return;
-    const friends = (globals.friendStore?.allFriends ?? []).map(friendIdentity).filter((f): f is NonNullable<ReturnType<typeof friendIdentity>> => f !== null);
+    const friends = identities();
     const fetch = globals.friendStore?.FetchOwnedGames;
     if (!fetch || !friends.length) { owners = new Map(); loadedAt = now(); return; }
     loading = true;
@@ -194,10 +201,7 @@ export function createFriendOwnership(globals: SteamGlobals, onChange: () => voi
     },
     loading: () => loading,
     list(): { id: string; name: string; avatar?: string }[] {
-      return (globals.friendStore?.allFriends ?? []).flatMap((friend) => {
-        const identity = friendIdentity(friend);
-        return identity ? [{ id: String(identity.id), name: identity.name, ...(identity.avatar ? { avatar: identity.avatar } : {}) }] : [];
-      }).sort((a, b) => a.name.localeCompare(b.name));
+      return identities().map((identity) => ({ ...identity, id: String(identity.id) })).sort((a, b) => a.name.localeCompare(b.name));
     },
   };
 }

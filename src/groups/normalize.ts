@@ -5,8 +5,9 @@ export const GROUP_ID = /^[A-Za-z0-9:_-]{1,64}$/;
 const TAG = /^[\x20-\x7E]{1,80}$/;
 const RULE_TYPE_SET = new Set<string>(RULE_TYPES);
 const MAX_PARAMS_BYTES = 4096;
+const EXTRA_KINDS = new Set(["software", "music", "tool", "video", "other"]);
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 function appIds(value: unknown, limit: number): number[] | null {
@@ -56,8 +57,9 @@ export function normalizeGroup(value: unknown): GroupDefinition | null {
     if (!rules) return null;
     group.rules = rules;
   }
-  const include = Array.isArray(value.include) ? [...new Set(value.include.filter((kind): kind is NonNullable<GroupDefinition["include"]>[number] =>
-    kind === "software" || kind === "music" || kind === "tool" || kind === "video" || kind === "other"))] : [];
+  const include = Array.isArray(value.include)
+    ? [...new Set(value.include.filter((kind): kind is NonNullable<GroupDefinition["include"]>[number] => EXTRA_KINDS.has(kind)))]
+    : [];
   if (value.kind === "rules" && include.length) group.include = include;
   if (typeof value.importedFrom === "string" && TAG.test(value.importedFrom)) group.importedFrom = value.importedFrom;
   if (typeof value.legacyId === "string" && TAG.test(value.legacyId)) group.legacyId = value.legacyId;
