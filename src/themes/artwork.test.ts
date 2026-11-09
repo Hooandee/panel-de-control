@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { steamArtworkUrl } from "./artwork";
+import { logoPlacement } from "./artwork";
 describe("Steam artwork paths", () => {
   it("accepts Steam registered custom and asset paths", () => {
     expect(steamArtworkUrl("/customimages/12p.png?v=4")).toBe("https://steamloopback.host/customimages/12p.png?v=4");
@@ -54,4 +55,11 @@ it("gets the title from Steam even when the game is absent from installed games"
     expect(artworkGameTitle(10)).toBe("Uninstalled game");
     expect(artworkGameTitle(11, "Known game")).toBe("Known game");
   } finally { vi.unstubAllGlobals(); }
+});
+
+describe("logoPlacement", () => {
+  it("centres by default and reaches the cover's edges at 0 and 100", () => {
+    expect(logoPlacement({})).toEqual({ left: "11%", top: "27%", objectPosition: "50% 50%" });
+    expect(logoPlacement({ logoPositionX: 0, logoPositionY: 100 })).toEqual({ left: "0%", top: "54%", objectPosition: "0% 100%" });
+  });
 });

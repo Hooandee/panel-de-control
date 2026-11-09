@@ -39,6 +39,13 @@ def normalize(value, *, general=False):
         if isinstance(scale, bool) or not isinstance(scale, (float, int)) or not math.isfinite(scale) or not LOGO_SCALE_MIN <= scale <= LOGO_SCALE_MAX:
             raise ValueError("invalid_logo_scale")
         result["logoScale"] = scale
+    # Optional logo position in percent of the cover; absent means centred (50).
+    for key in ("logoPositionX", "logoPositionY"):
+        if key in value:
+            number = value[key]
+            if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number) or not 0 <= number <= 100:
+                raise ValueError("invalid_logo_position")
+            result[key] = number
     return result
 
 

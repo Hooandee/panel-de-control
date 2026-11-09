@@ -78,3 +78,11 @@ def test_logo_scale_is_optional_and_bounded():
         with pytest.raises(ValueError, match="invalid_logo_scale"):
             normalize({**VALUE, "logoScale": bad})
     assert records({"12": {**VALUE, "logoScale": 150}}) == {"12": {**VALUE, "logoScale": 150}}
+
+
+def test_logo_position_is_optional_and_bounded():
+    assert "logoPositionX" not in normalize(VALUE)
+    assert normalize({**VALUE, "logoPositionX": 0, "logoPositionY": 100})["logoPositionY"] == 100
+    for bad in (-1, 101, True, "50", float("nan")):
+        with pytest.raises(ValueError, match="invalid_logo_position"):
+            normalize({**VALUE, "logoPositionY": bad})
