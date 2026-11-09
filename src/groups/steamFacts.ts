@@ -27,7 +27,7 @@ function friendIdentity(friend: Friend): { id: number; name: string } | null {
 
 interface Collection { id?: string; displayName?: string; allApps?: readonly Overview[]; visibleApps?: readonly Overview[] }
 export interface SteamGlobals {
-  appStore?: { GetAppOverviewByAppID?(id: number): Overview | undefined; m_mapStoreTagLocalization?: Map<number, string> };
+  appStore?: { GetAppOverviewByAppID?(id: number): Overview | undefined; m_mapStoreTagLocalization?: Map<number, string> | Record<string, string> };
   collectionStore?: {
     GetCollection?(id: string): Collection | undefined; userCollections?: readonly Collection[];
     sharedLibrariesCollections?: readonly Collection[]; allAppsCollection?: Collection;

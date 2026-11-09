@@ -37,10 +37,16 @@ export function buildCatalog(
   const store = globals.collectionStore;
   let user: readonly { id?: string; displayName?: string }[] = [];
   try { user = store?.userCollections ?? []; } catch { user = []; }
-  const collections = [store?.GetCollection?.("favorite"), ...user]
+  let favorite: { id?: string; displayName?: string } | undefined;
+  try { favorite = store?.GetCollection?.("favorite"); } catch { favorite = undefined; }
+  const collections = [favorite, ...user]
     .flatMap((c) => (c?.id ? [{ id: c.id, name: c.displayName || c.id }] : []));
+  // Steam keeps tag names in a plain object on current clients, a Map on older ones.
   const tagNames = globals.appStore?.m_mapStoreTagLocalization;
-  const tags = [...new Set(libraryTags)].map((id) => ({ id, name: tagNames?.get(id) ?? "" }))
+  const tagName = (id: number): string => {
+    try { return (tagNames instanceof Map ? tagNames.get(id) : (tagNames as Record<string, string> | undefined)?.[String(id)]) ?? ""; } catch { return ""; }
+  };
+  const tags = [...new Set(libraryTags)].map((id) => ({ id, name: tagName(id) }))
     .filter((tag) => tag.name).sort((a, b) => a.name.localeCompare(b.name));
   const folders = (globals.installFolderStore?.AllInstallFolders ?? []).map((folder) => {
     const id = folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");

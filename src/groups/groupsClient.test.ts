@@ -12,7 +12,7 @@ function globals(user = STEAM64): SteamGlobals {
   const byId = new Map(APPS.map((a) => [a.appid, a]));
   return {
     App: { m_CurrentUser: { strSteamID: user } },
-    appStore: { GetAppOverviewByAppID: (id) => byId.get(id), m_mapStoreTagLocalization: new Map([[122, "RPG"]]) },
+    appStore: { GetAppOverviewByAppID: (id) => byId.get(id), m_mapStoreTagLocalization: { 122: "RPG" } },
     collectionStore: {
       GetCollection: (id) => (id === "type-games" ? { visibleApps: APPS } : id === "local-install" ? { allApps: APPS.filter((a) => a.installed) } : undefined),
       userCollections: [{ id: "uc-1", displayName: "Mine", allApps: [APPS[1]] }],
