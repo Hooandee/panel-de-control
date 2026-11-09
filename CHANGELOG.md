@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.85.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.4...panel-de-control-v0.85.0) (2026-11-09)
+
+
+### Features
+
+* **themes:** shared game groups, Home selection for Ambiente and cover logo placement ([#1166](https://github.com/Hooandee/panel-de-control/issues/1166)) ([feca0ec](https://github.com/Hooandee/panel-de-control/commit/feca0ecd670cd819d608a7d3569be44d336b59a5))
+* **upscalers:** Escaladores — pick an upscaler, Panel does the rest ([#1168](https://github.com/Hooandee/panel-de-control/issues/1168)) ([e10e41b](https://github.com/Hooandee/panel-de-control/commit/e10e41b17c681a63c01431fb67f1663edccd0624))
+
 ## [0.84.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.84.3...panel-de-control-v0.84.4) (2026-11-08)
 
 
