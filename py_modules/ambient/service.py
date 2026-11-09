@@ -35,7 +35,7 @@ _MAX_EVENTS = 20
 DISCOVER_TTL_SEC = 600
 PLAYLIST_TTL_SEC = 6 * 3600
 DISCOVER_CACHE_SIZE = 64
-_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share"}
+_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection"}
 
 
 _GAME_MEDIA_TTL_S = 7 * 24 * 3600
@@ -684,6 +684,8 @@ class AmbientService:
             "indexed": indexed,
             "backgroundEnabled": settings["background"]["enabled"],
             "selectedBackgroundCount": len(settings["background"]["selectedRefs"]),
+            "gameThemes": settings["background"]["gameThemes"],
+            "gameTrailers": settings["background"]["gameTrailers"],
             "musicEnabled": settings["music"]["enabled"],
             "musicSource": settings["music"]["source"],
             "queueLength": len(settings["music"]["queue"]),

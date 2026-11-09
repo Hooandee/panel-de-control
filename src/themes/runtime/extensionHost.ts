@@ -39,6 +39,11 @@ export interface ThemeExtensionAmbientAccess {
    * The element stays Panel's: draw from it, never move, restyle or keep it.
    */
   frame(): HTMLImageElement | HTMLVideoElement | null;
+  /**
+   * The game selected on a Home the theme draws itself, so Ambiente can play its soundtrack and trailer.
+   * `null` when nothing is selected. Dropped on unmount; absent on older Panels.
+   */
+  select?(appid: string | number | null): void;
 }
 
 /** What the orchestrator provides; claims are keyed by the theme that makes them. */
@@ -47,6 +52,7 @@ export interface AmbientChannelProvider {
   getState(): AmbientBackgroundState;
   subscribe(listener: (state: AmbientBackgroundState) => void): () => void;
   frame?(): HTMLImageElement | HTMLVideoElement | null;
+  select?(themeId: string, appid: string | null): () => void;
 }
 
 export interface ThemeExtensionQamAccess {
@@ -157,6 +163,7 @@ const AMBIENT_SURFACES = new Set(["home", "library"]);
 function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
   const releases = new Set<() => void>();
   const listeners = new Set<() => void>();
+  let releaseSelection: (() => void) | null = null;
   const access: ThemeExtensionAmbientAccess = {
     claim(options) {
       const surfaces = Array.isArray(options?.surfaces) ? options.surfaces.filter((s) => AMBIENT_SURFACES.has(s)) : [];
@@ -175,6 +182,13 @@ function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string):
     },
     getState: () => provider.getState(),
     frame: () => provider.frame?.() ?? null,
+    ...(provider.select ? {
+      select(appid: string | number | null) {
+        if (releaseSelection) releases.delete(releaseSelection);
+        releaseSelection = provider.select!(themeId, appid == null ? null : String(appid));
+        releases.add(releaseSelection);
+      },
+    } : {}),
     subscribe(listener) {
       const off = provider.subscribe(listener);
       let active = true;

@@ -30,6 +30,13 @@ def normalize(value, *, general=False):
         if not isinstance(value.get(key), bool):
             raise ValueError("invalid_visibility")
         result[key] = value[key]
+    # Optional; absent means 100 % size and a centred logo.
+    for key, low, high, error in (("logoScale", 50, 200, "invalid_logo_scale"), ("logoPositionX", 0, 100, "invalid_logo_position"), ("logoPositionY", 0, 100, "invalid_logo_position")):
+        if key in value:
+            number = value[key]
+            if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number) or not low <= number <= high:
+                raise ValueError(error)
+            result[key] = number
     return result
 
 

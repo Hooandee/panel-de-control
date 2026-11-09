@@ -5,7 +5,22 @@ export interface GameArtwork {
   positionY: number;
   showLogo: boolean;
   showTitle: boolean;
+  /** Percent, 50-200; absent means 100. */
+  logoScale?: number;
+  /** Logo position in percent, 0-100; absent means 50 (centred). */
+  logoPositionX?: number;
+  logoPositionY?: number;
 }
+/**
+ * The logo box (78 % x 36 %) slides to the cover's edges and the logo moves inside it the same way, so 0 and
+ * 100 put it against the edge. Themes must reproduce this placement.
+ */
+export function logoPlacement(art: Pick<GameArtwork, "logoPositionX" | "logoPositionY">): { left: string; top: string; objectPosition: string } {
+  const x = art.logoPositionX ?? 50, y = art.logoPositionY ?? 50;
+  return { left: `${x * 11 / 50}%`, top: `${y * 27 / 50}%`, objectPosition: `${x}% ${y}%` };
+}
+export const LOGO_SCALE_MIN = 50;
+export const LOGO_SCALE_MAX = 200;
 export interface ThemeArtworkEditorAccess {
   title?(appId: number): string;
   getGeneral(): GameArtwork;
