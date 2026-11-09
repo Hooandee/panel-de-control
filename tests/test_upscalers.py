@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, games, helixsr, ini, launchers, logread, lsfg, recipes
+from upscalers import catalog, games, helixsr, ini, launchers, logread, lsfg, recipe_catalog, recipes
 from upscalers.catalog import Asset, Build
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -458,7 +458,13 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert logread.verdict(facts) == "active"
 
 
+def without_bundled_recipes(monkeypatch):
+    """APPID is Witcher 3, which has a curated recipe on Linux hosts; these tests describe hand-made recipes only."""
+    monkeypatch.setattr(recipe_catalog, "bundled", lambda: recipe_catalog.Catalog(1, 0, {}, {}, {}))
+
+
 def test_recipe_adds_files_dlls_and_args_then_undoes_them(steam, fake_catalog, proc, monkeypatch):
+    without_bundled_recipes(monkeypatch)
     _, game = steam
     target = game / "bin/x64_dx12"
     content = b"ref"
@@ -1092,6 +1098,7 @@ def test_wiki_recipes_load_and_hand_written_ones_win():
 
 
 def test_recipe_proxy_and_args_apply_unless_the_user_picked(steam, fake_catalog, proc, monkeypatch):
+    without_bundled_recipes(monkeypatch)
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="winmm.dll", args=("-dx12",)))
     service = _service(steam, fake_catalog, proc)
     result = service.install(APPID, {"build": "fsr-test"})
@@ -1290,6 +1297,7 @@ def test_lsfg_from_another_tool_is_set_aside_then_restored(steam, tmp_path):
 
 
 def test_a_game_without_a_bundled_recipe_uses_the_live_wiki_by_name(steam, fake_catalog, proc, monkeypatch):
+    without_bundled_recipes(monkeypatch)
     monkeypatch.setattr(recipes, "RECIPES", {})
     monkeypatch.setattr(recipes, "WIKI", {})
     service = _service(steam, fake_catalog, proc)

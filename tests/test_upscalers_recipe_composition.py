@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers import APPID, FakeHelix, _service, _write, dll_catalog, fake_catalog, helix_catalog, proc, steam
+from test_upscalers import APPID, FakeHelix, without_bundled_recipes, _service, _write, dll_catalog, fake_catalog, helix_catalog, proc, steam
 from upscalers import catalog, diagnostics, games, recipes
 from upscalers.catalog import Asset
 
@@ -146,6 +146,7 @@ def test_real_asset_digest_survives_current_and_previous_report_redaction():
 
 @pytest.fixture
 def unknown_game_service(steam, fake_catalog, proc, monkeypatch):
+    without_bundled_recipes(monkeypatch)
     monkeypatch.setattr(recipes, "RECIPES", {})
     monkeypatch.setattr(recipes, "WIKI", {})
     service = _service(steam, fake_catalog, proc)
