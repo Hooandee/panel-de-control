@@ -94,3 +94,39 @@ describe("friends list", () => {
     expect(friends.list()).toEqual([{ id: "1", name: "Ana" }, { id: "3", name: "Bad" }, { id: "2", name: "Zoe", avatar: "https://avatars.example/z.jpg" }]);
   });
 });
+
+describe("friend ownership edge cases", () => {
+  const player = (id: number) => ({ m_steamid: { GetAccountID: () => id }, m_strPlayerName: `F${id}` });
+
+  it("does not decide that nobody owns anything while the friends list is still empty", async () => {
+    const store: { allFriends: ReturnType<typeof player>[]; FetchOwnedGames: (id: number) => Promise<{ setApps: number[] }> } = { allFriends: [], FetchOwnedGames: async () => ({ setApps: [10] }) };
+    let clock = 0;
+    const friends = createFriendOwnership({ friendStore: store }, () => {}, () => clock);
+    expect(friends.owners(10)).toBeNull();
+    store.allFriends = [player(1)];
+    clock += 31_000;
+    friends.owners(10);
+    await vi.waitFor(() => expect(friends.owners(10)).toEqual(["1"]));
+  });
+
+  it("retries later when every request fails, and stops for good on stop", async () => {
+    let calls = 0;
+    const friends = createFriendOwnership({ friendStore: { allFriends: [player(1)], FetchOwnedGames: async () => { calls++; throw new Error("offline"); } } }, () => {});
+    friends.owners(10);
+    await vi.waitFor(() => expect(friends.loading()).toBe(false));
+    expect(friends.owners(10)).toBeNull();
+    friends.stop();
+    friends.reset();
+    expect(calls).toBe(1);
+  });
+
+  it("drops answers from before a reset", async () => {
+    let release: (v: { setApps: number[] }) => void = () => {};
+    const friends = createFriendOwnership({ friendStore: { allFriends: [player(1)], FetchOwnedGames: () => new Promise((resolve) => { release = resolve; }) } }, () => {});
+    friends.owners(10);
+    friends.reset();
+    release({ setApps: [10] });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(friends.loading()).toBe(false);
+  });
+});

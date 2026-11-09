@@ -46,6 +46,7 @@ export interface SteamGlobals {
     m_achievementProgress?: { mapCache?: Map<number, { unlocked?: number; total?: number }> };
   };
   installFolderStore?: { AllInstallFolders?: readonly InstallFolder[] };
+  SteamUIStore?: { MainRunningAppID?: number };
   friendStore?: {
     allFriends?: readonly Friend[];
     FetchOwnedGames?(accountId: number): Promise<{ setApps?: Iterable<number> } | undefined>;
@@ -89,10 +90,11 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
   const store = globals.collectionStore;
   const collection = (id: string) => attempt(() => store?.GetCollection?.(id), undefined);
   const visible = (sources: string[]) => [...new Set(sources.flatMap((id) => ids(collection(id)?.visibleApps ?? collection(id)?.allApps)))];
-  const shortcuts = (store?.allAppsCollection?.allApps ?? []).filter((app) => app.app_type === SHORTCUT);
-  const shared = new Set((store?.sharedLibrariesCollections ?? []).flatMap((c) => ids(c.allApps)));
+  const shortcuts = attempt(() => (store?.allAppsCollection?.allApps ?? []).filter((app) => app.app_type === SHORTCUT), []);
+  const shared = new Set(attempt(() => (store?.sharedLibrariesCollections ?? []).flatMap((c) => ids(c.allApps)), []));
   const universe = [...new Set([...visible(DEFAULT_SOURCES), ...ids(shortcuts), ...shared])];
-  const extended = visible(EXTENDED_SOURCES).filter((id) => !universe.includes(id));
+  const inUniverse = new Set(universe);
+  const extended = visible(EXTENDED_SOURCES).filter((id) => !inUniverse.has(id));
 
   const memberOf = new Map<number, string[]>();
   const user = userCollections(globals);
@@ -101,15 +103,15 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
     for (const id of ids(c.allApps)) memberOf.set(id, [...(memberOf.get(id) ?? []), c.id]);
   }
   const folderOf = new Map<number, string>();
-  for (const folder of globals.installFolderStore?.AllInstallFolders ?? []) {
+  for (const folder of attempt(() => globals.installFolderStore?.AllInstallFolders ?? [], [])) {
     const name = folderId(folder);
     for (const app of folder.vecApps ?? []) if (app.nAppID) folderOf.set(app.nAppID, name);
   }
   const cardOf = new Map<number, string>();
-  for (const [card, games] of globals.MicroSDeck?.CardsAndGames ?? []) {
-    for (const game of games) if (card?.uid) cardOf.set(Number(game.uid), card.uid);
+  for (const [card, games] of attempt(() => globals.MicroSDeck?.CardsAndGames ?? [], [])) {
+    for (const game of games ?? []) if (card?.uid) cardOf.set(Number(game.uid), card.uid);
   }
-  const current = new Set((globals.MicroSDeck?.CurrentCardAndGames?.[1] ?? []).map((game) => Number(game.uid)));
+  const current = new Set(attempt(() => globals.MicroSDeck?.CurrentCardAndGames?.[1] ?? [], []).map((game) => Number(game.uid)));
   const achievements = globals.appAchievementProgressCache;
   const cache = new Map<number, AppFacts | null>();
 
@@ -117,7 +119,7 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
     if (cache.has(appId)) return cache.get(appId) ?? undefined;
     const app = attempt(() => globals.appStore?.GetAppOverviewByAppID?.(appId), undefined);
     if (!app) { cache.set(appId, null); return undefined; }
-    const progress = achievements?.m_achievementProgress?.mapCache?.get(appId);
+    const progress = attempt(() => achievements?.m_achievementProgress?.mapCache?.get(appId), undefined);
     const percent = attempt(() => achievements?.GetAchievementProgress?.(appId) ?? 0, 0);
     const value: AppFacts = {
       appId,
@@ -156,7 +158,9 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
     universe.length, extended.length, installed, shared.size,
     user.map((c) => `${c.id}:${c.allApps?.length ?? 0}`).join(","),
     ids(collection("favorite")?.allApps).length, ids(collection("hidden")?.allApps).length,
-    achievements?.m_achievementProgress?.mapCache?.size ?? 0, folderOf.size, cardOf.size,
+    attempt(() => achievements?.m_achievementProgress?.mapCache?.size ?? 0, 0), folderOf.size, cardOf.size,
+    // Playing changes play time and last played without changing any count: the running game marks it.
+    attempt(() => globals.SteamUIStore?.MainRunningAppID ?? 0, 0),
   ].join("|");
   return { facts, universe, extended, signature };
 }
@@ -168,30 +172,42 @@ export function readSteam(globals: SteamGlobals): SteamSnapshot {
 export function createFriendOwnership(globals: SteamGlobals, onChange: () => void, now = () => Date.now(), parallel = 3) {
   let owners: Map<number, string[]> | null = null;
   let loadedAt = 0;
+  let retryAt = 0;
   let loading = false;
-  const identities = (): FriendIdentity[] => (globals.friendStore?.allFriends ?? []).flatMap((friend) => friendIdentity(friend) ?? []);
+  // Bumped on reset and stop, so answers from an older load (another account, a dismounted Panel) are dropped.
+  let generation = 0;
+  let stopped = false;
+  const identities = (): FriendIdentity[] => attempt(() => globals.friendStore?.allFriends ?? [], []).flatMap((friend) => friendIdentity(friend) ?? []);
   const load = () => {
-    if (loading || (owners && now() - loadedAt < 6 * 3600_000)) return;
+    if (stopped || loading || now() < retryAt || (owners && now() - loadedAt < 6 * 3600_000)) return;
     const friends = identities();
     const fetch = globals.friendStore?.FetchOwnedGames;
-    if (!fetch || !friends.length) { owners = new Map(); loadedAt = now(); return; }
+    // Friends not loaded yet (or no friends): ask again later instead of deciding that nobody owns anything.
+    if (!fetch || !friends.length) { retryAt = now() + 30_000; return; }
+    const run = ++generation;
     loading = true;
     onChange();
     const next = new Map<number, string[]>();
-    let cursor = 0;
+    let cursor = 0, answered = 0;
     const worker = async () => {
-      while (cursor < friends.length) {
+      while (cursor < friends.length && run === generation) {
         const friend = friends[cursor++];
         try {
           const games = await fetch.call(globals.friendStore, friend.id);
+          answered++;
           for (const app of games?.setApps ?? []) next.set(app, [...(next.get(app) ?? []), String(friend.id)]);
         } catch { /* a private profile or a dropped request: that friend owns nothing we can see */ }
         // Give the page a frame between answers.
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     };
-    void Promise.all(Array.from({ length: Math.min(parallel, friends.length) }, worker))
-      .finally(() => { owners = next; loadedAt = now(); loading = false; onChange(); });
+    void Promise.all(Array.from({ length: Math.min(parallel, friends.length) }, worker)).finally(() => {
+      if (run !== generation) return;
+      loading = false;
+      // Offline, every request fails: try again in a few minutes rather than caching an empty answer.
+      if (answered) { owners = next; loadedAt = now(); } else retryAt = now() + 5 * 60_000;
+      onChange();
+    });
   };
   return {
     /** Starts the first load; until it finishes, every app reads as not known yet. */
@@ -200,6 +216,9 @@ export function createFriendOwnership(globals: SteamGlobals, onChange: () => voi
       return owners ? owners.get(appId) ?? [] : null;
     },
     loading: () => loading,
+    /** Forgets everything, for another Steam account. */
+    reset() { generation++; owners = null; loadedAt = 0; retryAt = 0; loading = false; },
+    stop() { stopped = true; generation++; loading = false; },
     list(): { id: string; name: string; avatar?: string }[] {
       return identities().map((identity) => ({ ...identity, id: String(identity.id) })).sort((a, b) => a.name.localeCompare(b.name));
     },

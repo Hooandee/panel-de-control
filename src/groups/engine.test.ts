@@ -145,3 +145,25 @@ describe("evaluateGroup", () => {
     expect(run([rule])).toEqual([]);
   });
 });
+
+describe("evaluateGroup, imported dates and shared work", () => {
+  it("last played accepts a fixed date, as Tab Master imports it", () => {
+    expect(run([r("lastPlayed", { op: "after", date: NOW - 10 * DAY })])).toEqual([1]);
+    expect(run([r("lastPlayed", { op: "before", date: NOW - 10 * DAY })])).toEqual([2]);
+  });
+
+  it("works out a referenced group once, not once per app", () => {
+    const base = rules([r("installed")], "all", { id: "base" });
+    let lookups = 0;
+    const c = ctx([base]);
+    const definition = c.definition;
+    c.definition = (id) => { lookups++; return definition(id); };
+    expect(evaluateGroup(rules([r("group", { id: "base" })]), c)).toEqual([1, 3]);
+    let evaluations = 0;
+    const facts = c.facts;
+    c.facts = (id) => { evaluations++; return facts(id); };
+    evaluateGroup(rules([r("group", { id: "base" })]), c);
+    expect(evaluations).toBeLessThan(APPS.length * 4);
+    expect(lookups).toBeGreaterThan(0);
+  });
+});

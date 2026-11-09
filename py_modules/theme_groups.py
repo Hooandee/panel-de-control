@@ -47,7 +47,7 @@ def _rule(value, depth):
     if not isinstance(params, dict):
         return None
     try:
-        text = json.dumps(params, ensure_ascii=False)
+        text = json.dumps(params, ensure_ascii=False, separators=(",", ":"))
     except (TypeError, ValueError):
         return None
     if len(text) > MAX_PARAMS_BYTES:
@@ -77,8 +77,8 @@ def normalize_group(value):
         "name": name.strip()[:MAX_NAME],
         "kind": kind,
         "appIds": picked if kind == "manual" else [],
-        "added": _app_ids(value.get("added", []), MAX_MANUAL_GAMES),
-        "hidden": _app_ids(value.get("hidden", []), MAX_MANUAL_GAMES),
+        "added": _app_ids(value.get("added") or [], MAX_MANUAL_GAMES),
+        "hidden": _app_ids(value.get("hidden") or [], MAX_MANUAL_GAMES),
     }
     if kind == "rules":
         rules = rule_set(value.get("rules"))
@@ -87,7 +87,7 @@ def normalize_group(value):
         group["rules"] = rules
     include = value.get("include")
     if kind == "rules" and isinstance(include, list):
-        kinds = [k for k in dict.fromkeys(include) if k in ("software", "music", "tool", "video", "other")]
+        kinds = list(dict.fromkeys(k for k in include if isinstance(k, str) and k in ("software", "music", "tool", "video", "other")))
         if kinds:
             group["include"] = kinds
     for key in ("importedFrom", "legacyId"):
@@ -102,7 +102,8 @@ def records(value):
     for item in value if isinstance(value, list) else []:
         try:
             group = normalize_group(item)
-        except ValueError:
+        except (ValueError, TypeError, AttributeError, KeyError, RecursionError):
+            # A hand-edited or damaged record costs only itself.
             continue
         if group["id"] in seen:
             continue

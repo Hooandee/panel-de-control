@@ -83,3 +83,22 @@ def test_rpc_store_per_account_and_failed_save_rolls_back():
     state._save = fail
     assert asyncio.run(scope["set_theme_groups"](state, "111", [RULES])) == {"ok": False, "error": "save_failed"}
     assert [g["id"] for g in asyncio.run(scope["get_theme_groups"](state, "111"))] == ["grp:m"]
+
+
+def test_params_are_measured_compactly_like_the_frontend():
+    ids = [str(76561197960287930 + i) for i in range(200)]
+    params = {"ids": ids, "match": "any"}
+    compact = json.dumps(params, separators=(",", ":"))
+    assert len(compact) <= theme_groups.MAX_PARAMS_BYTES < len(json.dumps(params))
+    group = {"id": "grp:f", "name": "Friends", "kind": "rules", "appIds": [], "added": [], "hidden": [],
+             "rules": {"mode": "all", "rules": [{"type": "friends", "inverted": False, "params": params}]}}
+    assert theme_groups.normalize_group(group)["rules"]["rules"][0]["params"]["ids"] == ids
+
+
+def test_null_lists_and_damaged_records_cost_only_themselves():
+    good = {"id": "grp:a", "name": "A", "kind": "manual", "appIds": [10], "added": None, "hidden": None}
+    damaged = {"id": "grp:b", "name": "B", "kind": "rules", "appIds": [], "added": [], "hidden": [],
+               "include": [["music"], "music"], "rules": {"mode": "all", "rules": [{"type": "installed", "inverted": False, "params": {}}]}}
+    out = theme_groups.records([good, damaged])
+    assert [g["id"] for g in out] == ["grp:a", "grp:b"]
+    assert out[1]["include"] == ["music"]

@@ -12,8 +12,9 @@ export interface GameArtwork {
   logoPositionY?: number;
 }
 /**
- * The logo box (78 % x 36 %) slides to the cover's edges and the logo moves inside it the same way, so 0 and
- * 100 put it against the edge. Themes must reproduce this placement.
+ * The logo box (78 % x 36 %) slides with the position and the logo moves inside it the same way. Across, 0 and 100
+ * reach the edges; down, the box goes from the top to 54 %, the band covers keep for the logo, and 50 is where it
+ * always sat. Themes must reproduce this placement.
  */
 export function logoPlacement(art: Pick<GameArtwork, "logoPositionX" | "logoPositionY">): { left: string; top: string; objectPosition: string } {
   const x = art.logoPositionX ?? 50, y = art.logoPositionY ?? 50;

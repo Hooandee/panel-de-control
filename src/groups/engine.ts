@@ -35,6 +35,18 @@ function dated(value: number, params: Record<string, unknown>, now: number): Ver
   return null;
 }
 
+// Name patterns are compiled once, not once per app; an invalid one matches nothing.
+const patterns = new Map<string, RegExp | null>();
+function compiled(source: string): RegExp | null {
+  if (!patterns.has(source)) {
+    if (patterns.size > 200) patterns.clear();
+    let pattern: RegExp | null = null;
+    try { pattern = new RegExp(source, "i"); } catch { /* stays null */ }
+    patterns.set(source, pattern);
+  }
+  return patterns.get(source) ?? null;
+}
+
 function matchSet<T>(wanted: readonly T[], have: readonly T[], match: unknown): Verdict {
   if (!wanted.length) return null;
   return match === "all" ? wanted.every((id) => have.includes(id)) : wanted.some((id) => have.includes(id));
@@ -45,6 +57,8 @@ interface Walk {
   depth: number;
   /** Groups being evaluated up the chain, so a group that refers back to itself matches nothing. */
   visiting: Set<string>;
+  /** Members of the groups other rules refer to, worked out once per evaluation instead of once per app. */
+  memo: Map<string, Set<number>>;
 }
 
 function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
@@ -57,11 +71,15 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
       const id = typeof p.id === "string" ? p.id : "";
       const definition = ctx.definition(id);
       if (!definition || walk.visiting.has(id)) return null;
-      return members(definition, ctx, walk).includes(app.appId);
+      const key = `${id}|${[...walk.visiting].sort().join(",")}`;
+      let found = walk.memo.get(key);
+      if (!found) { found = new Set(members(definition, ctx, walk)); walk.memo.set(key, found); }
+      return found.has(app.appId);
     }
     case "name": {
       if (typeof p.pattern === "string" && p.pattern) {
-        try { return new RegExp(p.pattern, "i").test(app.name); } catch { return null; }
+        const pattern = compiled(p.pattern);
+        return pattern ? pattern.test(app.name) : null;
       }
       const text = typeof p.text === "string" ? fold(p.text.trim()) : "";
       return text ? fold(app.name).includes(text) : null;
@@ -78,6 +96,7 @@ function decide(rule: Rule, app: AppFacts, walk: Walk): Verdict {
     case "playtime": return compare(app.playtimeMinutes, p.op, num(p.hours) * 60);
     case "lastPlayed":
       if (p.op === "never" || p.op === "unknown") return app.lastPlayed === 0;
+      if (p.op === "before" || p.op === "after") return dated(app.lastPlayed, p, ctx.now);
       return known(app.lastPlayed, (value) => compare(ctx.now - value, p.op, num(p.days) * DAY));
     case "released": return dated(app.released, p, ctx.now);
     case "purchased": return dated(app.purchased, p, ctx.now);
@@ -132,7 +151,7 @@ function namedKinds(set: RuleSet | undefined, into = new Set<AppKind>()): Set<Ap
 function members(group: GroupDefinition, ctx: EvaluationContext, walk: Walk): number[] {
   const hidden = new Set(group.hidden);
   if (group.kind === "manual") return group.appIds.filter((id) => !hidden.has(id) && ctx.facts(id) !== undefined);
-  const inner: Walk = { ctx, depth: 0, visiting: new Set([...walk.visiting, group.id]) };
+  const inner: Walk = { ctx, depth: 0, visiting: new Set([...walk.visiting, group.id]), memo: walk.memo };
   const kinds = namedKinds(group.rules);
   for (const kind of group.include ?? []) kinds.add(kind);
   const candidates = [...ctx.universe, ...(ctx.extended ?? []).filter((id) => {
@@ -153,5 +172,5 @@ function members(group: GroupDefinition, ctx: EvaluationContext, walk: Walk): nu
 
 /** The games in a group, in the universe's order; a manual group keeps the order its games were picked in. */
 export function evaluateGroup(group: GroupDefinition, ctx: EvaluationContext): number[] {
-  return members(group, ctx, { ctx, depth: 0, visiting: new Set() });
+  return members(group, ctx, { ctx, depth: 0, visiting: new Set(), memo: new Map() });
 }

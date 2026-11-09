@@ -139,3 +139,71 @@ describe("createGroupsClient", () => {
     client.stop();
   });
 });
+
+describe("createGroupsClient keeps stored groups safe", () => {
+  const stored = { id: "grp:a", name: "Mine", kind: "manual", appIds: [10], added: [], hidden: [] };
+
+  it("writes nothing after a failed read, and loads again before the next save", async () => {
+    const host = memoryHost({ "22202": [stored] });
+    vi.mocked(host.read).mockRejectedValueOnce(new Error("rpc"));
+    const client = createGroupsClient(host, globals());
+    await settle();
+    expect(client.list()).toEqual([]);
+    const saved = await client.save({ ...rulesGroup, name: "New" });
+    expect(saved?.name).toBe("New");
+    expect((host.stored["22202"] as GroupDefinition[]).map((g) => g.id)).toEqual(["grp:a", saved!.id]);
+    client.stop();
+  });
+
+  it("refuses to write when the read keeps failing", async () => {
+    const host = memoryHost({ "22202": [stored] });
+    vi.mocked(host.read).mockRejectedValue(new Error("rpc"));
+    const client = createGroupsClient(host, globals());
+    expect(await client.save({ ...rulesGroup, name: "New" })).toBeNull();
+    expect(host.write).not.toHaveBeenCalled();
+    client.stop();
+  });
+
+  it("does not write one account's groups into another when the account changes mid-import", async () => {
+    const host = memoryHost({ "22202": [stored] });
+    const steam = globals();
+    vi.mocked(host.tabMaster).mockImplementationOnce(async () => {
+      steam.App = { m_CurrentUser: { strSteamID: "76561197960287931" } };
+      return [{ id: "t1", title: "Installed RPG", position: 1, filtersMode: "and", filters: [{ type: "installed", inverted: false, params: { installed: true } }] }];
+    });
+    const client = createGroupsClient(host, steam);
+    expect(await client.import(["t1"])).toEqual([]);
+    expect(host.write).not.toHaveBeenCalled();
+    expect(host.stored["22203"]).toBeUndefined();
+    client.stop();
+  });
+
+  it("keeps both of two saves made at once", async () => {
+    const host = memoryHost();
+    const client = createGroupsClient(host, globals());
+    const [a, b] = await Promise.all([client.save({ ...rulesGroup, name: "A" }), client.save({ ...rulesGroup, name: "B" })]);
+    expect(a && b).toBeTruthy();
+    expect((host.stored["22202"] as GroupDefinition[]).map((g) => g.name).sort()).toEqual(["A", "B"]);
+    client.stop();
+  });
+
+  it("never brings back a moved group the user deleted", async () => {
+    const memory: Record<string, string[]> = {};
+    const migrated = { read: (account: string) => memory[account] ?? [], write: (account: string, ids: readonly string[]) => { memory[account] = [...ids]; } };
+    const client = createGroupsClient(memoryHost(), globals(), { migrated });
+    const legacy = [{ id: "own:1", name: "Faves", appIds: [20, 10] }];
+    await client.migrate(legacy);
+    await client.remove(client.list()[0].id);
+    await client.migrate(legacy);
+    expect(client.list()).toEqual([]);
+    client.stop();
+  });
+
+  it("hands themes frozen groups", async () => {
+    const client = createGroupsClient(memoryHost(), globals());
+    await client.save(rulesGroup);
+    expect(Object.isFrozen(client.list()[0])).toBe(true);
+    expect(Object.isFrozen(client.list()[0].members)).toBe(true);
+    client.stop();
+  });
+});
