@@ -1,3 +1,5 @@
+import { createGroupsClient } from "./groups/groupsClient";
+import type { SteamGlobals } from "./groups/steamFacts";
 import { cleanerForceSession } from "./cleaner/forceSession";
 import { artworkImages, artworkGameTitle } from "./themes/artworkImages";
 import { listInstalledGames } from "./launch/steamApi";
@@ -27,6 +29,9 @@ import {
   acknowledgeThemeCleanupUndo,
   loadThemeExtension,
   getThemeStorage,
+  getThemeGroups,
+  setThemeGroups,
+  getTabMasterTabs,
   setThemeStorage,
   forceCloseGame,
   pauseThemeGame,
@@ -216,6 +221,7 @@ export default definePlugin(() => {
   const releaseArtworkHost = configureArtworkHost({ read: getDuoArtwork, write: setDuoArtwork });
   const releaseArtworkEditor = registerArtworkEditor(openGameArtworkEditor);
   const stopArtworkHydration = startArtworkHydration();
+  const themeGroups = createGroupsClient({ read: getThemeGroups, write: setThemeGroups, tabMaster: getTabMasterTabs }, globalThis as SteamGlobals, { doc: document });
   const stopThemesRuntime = startThemesRuntime({
     artwork: {
       ...artworkAccess,
@@ -236,6 +242,7 @@ export default definePlugin(() => {
     storage: createThemeStorage({ get: getThemeStorage, set: setThemeStorage }),
     games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame }),
     subscribePackageChanges: onThemePackagesChanged,
+    groups: themeGroups,
   });
   const stopAmbient = startAmbient({
     gameSessions: createGameSessionPort(),
@@ -276,6 +283,7 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopKioskSteamBridge();
       stopThemesRuntime();
+      themeGroups.stop();
       stopAmbient();
       stopArtworkHydration();
       releaseArtworkEditor();

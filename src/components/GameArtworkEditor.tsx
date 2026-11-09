@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { showModal } from "../navigation/showModal";
 import { listInstalledGames } from "../launch/steamApi";
 import { useI18n } from "../i18n";
-import { DEFAULT_ARTWORK, type GameArtwork } from "../themes/artwork";
+import { DEFAULT_ARTWORK, LOGO_SCALE_MAX, LOGO_SCALE_MIN, logoPlacement, type GameArtwork } from "../themes/artwork";
 import { artworkAccess, loadArtwork, saveArtwork } from "../themes/artworkClient";
 import { artworkImages, previewArtworkImage, artworkSourceLabel, artworkGameTitle } from "../themes/artworkImages";
 import { recordUiEvent } from "../system/uiEvents";
@@ -44,7 +44,7 @@ function ArtworkEditor({ appId, closeModal }: { appId?: number; closeModal?: () 
       {!appId && <DropdownItem label={es ? "Juego" : "Game"} selectedOption={id} rgOptions={games.map((g) => ({ data: g.liveAppid, label: g.name }))} onChange={(o) => setId(o.data)} disabled={busy} />}
       <div style={{ width: 200, height: 200, position: "relative", overflow: "hidden", borderRadius: 16, background: "#182231", margin: "16px auto" }}>
         {image && <img src={image} onError={() => fail(image)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${draft.positionX}% ${draft.positionY}%` }} />}
-        {draft.showLogo && logo && <img src={logo} onError={() => fail(logo)} style={{ position: "absolute", top: "27%", left: "11%", width: "78%", height: "36%", objectFit: "contain" }} />}
+        {draft.showLogo && logo && <img src={logo} onError={() => fail(logo)} style={{ position: "absolute", ...logoPlacement(draft), width: "78%", height: "36%", objectFit: "contain", transform: `scale(${(draft.logoScale ?? 100) / 100})` }} />}
         {draft.showTitle && <div style={{ position: "absolute", bottom: 0, insetInline: 0, padding: 12, background: "#000a", color: "white" }}>{title}</div>}
       </div>
       <DropdownItem label={es ? "Imagen de Steam" : "Steam image"} selectedOption={draft.image ?? "auto"} disabled={!loaded || busy} rgOptions={[{ data: "auto", label: es ? "Automática" : "Automatic" }, ...candidates.map((x, i) => ({ data: x.url, label: `${artworkSourceLabel(x.source as Exclude<GameArtwork["source"], "auto">, es)} ${i + 1}` }))]} onChange={(o) => {
@@ -54,6 +54,11 @@ function ArtworkEditor({ appId, closeModal }: { appId?: number; closeModal?: () 
       <SliderField label={es ? "Posición horizontal" : "Horizontal position"} value={draft.positionX} min={0} max={100} step={1} disabled={!loaded || busy} onChange={(positionX) => setDraft({ ...draft, positionX })} />
       <SliderField label={es ? "Posición vertical" : "Vertical position"} value={draft.positionY} min={0} max={100} step={1} disabled={!loaded || busy} onChange={(positionY) => setDraft({ ...draft, positionY })} />
       <ToggleField label="Logo" checked={draft.showLogo} disabled={!loaded || busy} onChange={(showLogo) => setDraft({ ...draft, showLogo })} />
+      {draft.showLogo && <>
+        <SliderField label={es ? "Posición horizontal del logo" : "Logo horizontal position"} value={draft.logoPositionX ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionX) => setDraft({ ...draft, logoPositionX })} />
+        <SliderField label={es ? "Posición vertical del logo" : "Logo vertical position"} value={draft.logoPositionY ?? 50} min={0} max={100} step={5} disabled={!loaded || busy} onChange={(logoPositionY) => setDraft({ ...draft, logoPositionY })} />
+        <SliderField label={es ? "Tamaño del logo" : "Logo size"} value={draft.logoScale ?? 100} min={LOGO_SCALE_MIN} max={LOGO_SCALE_MAX} step={5} showValue valueSuffix="%" disabled={!loaded || busy} onChange={(logoScale) => setDraft({ ...draft, logoScale })} />
+      </>}
       <ToggleField label={es ? "Título" : "Title"} checked={draft.showTitle} disabled={!loaded || busy} onChange={(showTitle) => setDraft({ ...draft, showTitle })} />
       {error && <p role="alert">{error}</p>}
       <DialogButton disabled={!loaded || busy || !id} onClick={() => void save({ ...draft, image: draft.image ? image ?? null : null })}>{es ? "Guardar" : "Save"}</DialogButton>

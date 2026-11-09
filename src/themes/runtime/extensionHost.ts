@@ -1,3 +1,4 @@
+import type { ThemeGroupsAccess } from "../../groups/groupsClient";
 import type { ThemeArtworkAccess } from "../artwork";
 import type { CssLoaderPatch, CssLoaderSnapshot, CssLoaderTheme } from "../cssLoaderTypes";
 import type {
@@ -38,6 +39,11 @@ export interface ThemeExtensionAmbientAccess {
    * The element stays Panel's: draw from it, never move, restyle or keep it.
    */
   frame(): HTMLImageElement | HTMLVideoElement | null;
+  /**
+   * The game selected on a Home the theme draws itself, so Ambiente can play its soundtrack and trailer.
+   * `null` when nothing is selected. Dropped on unmount; absent on older Panels.
+   */
+  select?(appid: string | number | null): void;
 }
 
 /** What the orchestrator provides; claims are keyed by the theme that makes them. */
@@ -46,6 +52,7 @@ export interface AmbientChannelProvider {
   getState(): AmbientBackgroundState;
   subscribe(listener: (state: AmbientBackgroundState) => void): () => void;
   frame?(): HTMLImageElement | HTMLVideoElement | null;
+  select?(themeId: string, appid: string | null): () => void;
 }
 
 export interface ThemeExtensionQamAccess {
@@ -63,6 +70,8 @@ export interface ThemeExtensionMountContextV1 {
   navigation?: Readonly<Pick<ThemeExtensionNavigationAccess, "focus">>;
   /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
   storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Groups shared by every theme (hand-picked and rule based); absent on a Panel that does not offer them. */
+  groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
 }
@@ -78,6 +87,8 @@ export interface ThemeExtensionMountContextV2 {
   ambient?: Readonly<ThemeExtensionAmbientAccess>;
   /** Durable storage scoped to this theme's catalog id; absent on a Panel that does not offer it. */
   storage?: Readonly<ThemeExtensionStorageAccess>;
+  /** Groups shared by every theme (hand-picked and rule based); absent on a Panel that does not offer them. */
+  groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
 }
@@ -122,6 +133,7 @@ interface ThemeExtensionRuntimeHostOptions {
   ambient?: AmbientChannelProvider;
   storage?: ThemeStorageProvider;
   games?: Readonly<ThemeExtensionGamesAccess>;
+  groups?: Readonly<ThemeGroupsAccess>;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -151,6 +163,7 @@ const AMBIENT_SURFACES = new Set(["home", "library"]);
 function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
   const releases = new Set<() => void>();
   const listeners = new Set<() => void>();
+  let releaseSelection: (() => void) | null = null;
   const access: ThemeExtensionAmbientAccess = {
     claim(options) {
       const surfaces = Array.isArray(options?.surfaces) ? options.surfaces.filter((s) => AMBIENT_SURFACES.has(s)) : [];
@@ -169,6 +182,13 @@ function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string):
     },
     getState: () => provider.getState(),
     frame: () => provider.frame?.() ?? null,
+    ...(provider.select ? {
+      select(appid: string | number | null) {
+        if (releaseSelection) releases.delete(releaseSelection);
+        releaseSelection = provider.select!(themeId, appid == null ? null : String(appid));
+        releases.add(releaseSelection);
+      },
+    } : {}),
     subscribe(listener) {
       const off = provider.subscribe(listener);
       let active = true;
@@ -273,6 +293,23 @@ function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountSco
   });
 }
 
+/** The shared groups, with the theme's subscriptions dropped when it unmounts. */
+function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: MountScope): Readonly<ThemeGroupsAccess> {
+  const access: ThemeGroupsAccess = {
+    list: () => groups.list(),
+    subscribe: (listener) => scope.track(groups.subscribe(listener)),
+    save: (group) => groups.save(group),
+    remove: (id) => groups.remove(id),
+    preview: (rules, extra) => groups.preview(rules, extra),
+    catalog: (language) => groups.catalog(language),
+    importSources: () => groups.importSources(),
+    import: (ids) => groups.import(ids),
+    migrate: (legacy) => groups.migrate(legacy),
+    status: () => groups.status(),
+  };
+  return Object.freeze(access);
+}
+
 function freezeTheme(theme: CssLoaderTheme): Readonly<CssLoaderTheme> {
   return Object.freeze({ ...theme, patches: Object.freeze(theme.patches.map(freezePatch)) });
 }
@@ -339,6 +376,7 @@ export class ThemeExtensionRuntimeHost {
   private readonly ambient: AmbientChannelProvider | undefined;
   private readonly storage: ThemeStorageProvider | undefined;
   private readonly games: Readonly<ThemeExtensionGamesAccess> | undefined;
+  private readonly groups: Readonly<ThemeGroupsAccess> | undefined;
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
@@ -360,10 +398,12 @@ export class ThemeExtensionRuntimeHost {
     ambient,
     storage,
     games,
+    groups,
   }: ThemeExtensionRuntimeHostOptions) {
     this.ambient = ambient;
     this.storage = storage;
     this.games = games;
+    this.groups = groups;
     this.artwork = artwork;
     this.client = client;
     this.doc = doc;
@@ -561,6 +601,7 @@ export class ThemeExtensionRuntimeHost {
         ...(scoped ? { ambient: scoped.access } : {}),
         ...(this.storage ? { storage: this.storage.forTheme(selection.descriptor.catalogId) } : {}),
         ...(this.games ? { games: scopedGames(this.games, scope) } : {}),
+        ...(this.groups ? { groups: scopedGroups(this.groups, scope) } : {}),
         ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
           artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
             get: this.artwork.get,
