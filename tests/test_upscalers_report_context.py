@@ -171,3 +171,14 @@ def test_report_lists_the_games_own_upscalers_loaders_and_store_files(steam, fak
     owners = {item["path"]: item["owner"] for item in files["loaders"]}
     assert owners["bin/x64_dx12/dxgi.dll"] == "panel" and owners["bin/x64_dx12/dinput8.dll"] == "other"
     assert files["store_files"] == ["steam_settings"]
+
+
+def test_report_keeps_what_the_user_did_and_each_install_state_once():
+    snapshot = {"applied": {"build": "fsr-4.1.2-beta"}}
+    actions = ([{"action": "refresh_wiki", "state": "done", "snapshot": snapshot}] * 15
+               + [{"action": "install", "state": "started", "snapshot": snapshot},
+                  {"action": "install", "state": "done", "snapshot": snapshot},
+                  {"action": "configure", "state": "done", "snapshot": {"applied": {"build": "fsr-3.1"}}}])
+    events = diagnostics.report_actions(actions)
+    assert [e["action"] for e in events] == ["install", "install", "configure"]
+    assert ["snapshot" in e for e in events] == [True, False, True]

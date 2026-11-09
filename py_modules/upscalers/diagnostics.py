@@ -45,8 +45,23 @@ def with_job_reference(value: dict, key: str) -> dict:
     return result
 
 
+# Opening a page refreshes the wiki and checks the log; in a report those only bury what the user did.
+_ROUTINE_ACTIONS = frozenset({"refresh_wiki", "verify"})
+_CHANGING_ACTIONS = frozenset({"install", "configure", "uninstall", "image_settings", "image_restore", "set_ini"})
+
+
 def report_actions(actions) -> list[dict]:
-    return [with_job_reference(action, "job_id") for action in (actions or [])[-20:] if isinstance(action, dict)]
+    """The last actions that changed something; the full install snapshot only where it changed."""
+    kept = [action for action in (actions or []) if isinstance(action, dict) and action.get("action") not in _ROUTINE_ACTIONS][-20:]
+    result, last = [], None
+    for action in kept:
+        event = {key: value for key, value in action.items() if key != "snapshot"}
+        snapshot = action.get("snapshot")
+        if snapshot and snapshot != last and action.get("action") in _CHANGING_ACTIONS:
+            event["snapshot"] = snapshot
+            last = snapshot
+        result.append(with_job_reference(event, "job_id"))
+    return result
 
 
 def frontend_context(value) -> dict:
