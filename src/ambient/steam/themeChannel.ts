@@ -13,6 +13,14 @@ export interface ChannelClaim {
   mode: "yield" | "host";
 }
 
+/** Steam app ids (store games and non-Steam shortcuts) are unsigned 32-bit integers. */
+export function normalizeAppId(value: unknown): string | null {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,10}$/.test(text)) return null;
+  const id = Number(text);
+  return id > 0 && id < 2 ** 32 ? String(id) : null;
+}
+
 const INITIAL: ChannelState = { owner: "theme", media: null, motion: "pause" };
 
 function sameState(a: ChannelState, b: ChannelState): boolean {
@@ -29,6 +37,31 @@ export class AmbientThemeChannel {
   private stateListeners = new Set<(state: ChannelState) => void>();
   private claimListeners = new Set<() => void>();
   private frameSource: () => ChannelFrame | null = () => null;
+  private selections = new Map<string, { appid: string | null }>();
+  private selectionListeners = new Set<() => void>();
+
+  /** The game a theme selected on its own Home (`null`: none). Releasing hands it back to Steam's carousel. */
+  select(themeId: string, appid: string | null): () => void {
+    const entry = { appid: normalizeAppId(appid) };
+    const previous = this.selections.get(themeId);
+    this.selections.set(themeId, entry);
+    if (!previous || previous.appid !== entry.appid) this.notifySelection();
+    return () => {
+      if (this.selections.get(themeId) !== entry) return;
+      this.selections.delete(themeId);
+      this.notifySelection();
+    };
+  }
+
+  themeSelection(): { themeId: string; appid: string | null } | undefined {
+    const first = this.selections.entries().next().value;
+    return first ? { themeId: first[0], appid: first[1].appid } : undefined;
+  }
+
+  onSelectionChanged(listener: () => void): () => void {
+    this.selectionListeners.add(listener);
+    return () => this.selectionListeners.delete(listener);
+  }
 
   claim(themeId: string, options: { name: string; surfaces: readonly ("home" | "library")[]; mode: "yield" | "host" }): () => void {
     const claim: ChannelClaim = { themeId, name: options.name, surfaces: options.surfaces, mode: options.mode };
@@ -80,5 +113,9 @@ export class AmbientThemeChannel {
 
   private notifyClaims(): void {
     for (const listener of this.claimListeners) listener();
+  }
+
+  private notifySelection(): void {
+    for (const listener of this.selectionListeners) listener();
   }
 }

@@ -5,7 +5,11 @@ export interface GameArtwork {
   positionY: number;
   showLogo: boolean;
   showTitle: boolean;
+  /** Percent, 50-200; absent means 100. */
+  logoScale?: number;
 }
+export const LOGO_SCALE_MIN = 50;
+export const LOGO_SCALE_MAX = 200;
 export interface ThemeArtworkEditorAccess {
   title?(appId: number): string;
   getGeneral(): GameArtwork;

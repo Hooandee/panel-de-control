@@ -69,3 +69,12 @@ def test_rpc_general_settings_and_failed_save_rollback():
     state._save = lambda: None
     assert asyncio.run(scope["set_duo_artwork"](state, 0, None)) == {"ok": True}
     assert scope["_support_duo_artwork"](state) == {"configured_games": 1, "general_configured": False}
+
+
+def test_logo_scale_is_optional_and_bounded():
+    assert "logoScale" not in normalize(VALUE)
+    assert normalize({**VALUE, "logoScale": 135})["logoScale"] == 135
+    for bad in (49, 201, True, "120", float("inf")):
+        with pytest.raises(ValueError, match="invalid_logo_scale"):
+            normalize({**VALUE, "logoScale": bad})
+    assert records({"12": {**VALUE, "logoScale": 150}}) == {"12": {**VALUE, "logoScale": 150}}
