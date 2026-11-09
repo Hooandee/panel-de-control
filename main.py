@@ -2671,7 +2671,10 @@ class Plugin(AmbientRpc):
         if self._chip:
             d["chip"] = self._chip
         # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
-        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"], "/")
+        gpu = device_registry.gpu_facts(self._device.vendor, d["chip"], "/")
+        d["gpu_gen"] = gpu["generation"]
+        d["gpu_source"] = gpu["source"]
+        d["gpu_pci"] = gpu["pci"]
         return d
 
     def _desktop_mode_on(self) -> bool:

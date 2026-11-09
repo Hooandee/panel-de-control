@@ -160,6 +160,38 @@ def pci_gpu_generation(root: str = "/") -> str:
     return "rdna3" if amd else "unknown"
 
 
+def gpu_pci(root: str = "/") -> list[dict]:
+    """Each display GPU's PCI vendor and device id, for reports: enough to tell the real chip when its name doesn't."""
+    base = os.path.join(root, "sys/class/drm")
+    try:
+        cards = sorted(name for name in os.listdir(base) if re.fullmatch(r"card\d+", name))
+    except OSError:
+        return []
+    found = []
+    for card in cards[:4]:
+        values = {}
+        for field in ("vendor", "device"):
+            try:
+                with open(os.path.join(base, card, "device", field)) as f:
+                    value = f.read().strip().lower()
+            except OSError:
+                break
+            if not re.fullmatch(r"0x[0-9a-f]{4}", value):
+                break
+            values[field] = value
+        else:
+            found.append({"card": card, **values})
+    return found
+
+
+def gpu_facts(vendor: str, chip: str, root: str = "/") -> dict:
+    """The generation Panel uses and where it came from: the chip's name, its PCI id, or neither."""
+    by_name = gpu_generation(vendor, chip)
+    generation = by_name if by_name != "unknown" else gpu_generation(vendor, chip, root)
+    source = "name" if by_name != "unknown" else "pci" if generation != "unknown" else "unknown"
+    return {"generation": generation, "source": source, "pci": gpu_pci(root)}
+
+
 def detect(product_name: str | None = None, root: str = "/") -> DeviceProfile:
     """Return the DeviceProfile for this machine. Never raises. Falls back to a
     GENERIC profile carrying the host's real vendor/chip.
