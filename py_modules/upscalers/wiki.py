@@ -28,7 +28,7 @@ FORMAT = 2
 PAGE_FORMAT = 2
 
 _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)")
 _DX12 = re.compile(r"(?<![\w-])-dx12\b", re.I)
 _PROXY = re.compile(r"\b(?:as|rename(?:d)? (?:it )?to|use)\s+`?(winmm|version|dbghelp|wininet|winhttp|dxgi|d3d12)\.dll`?", re.I)
 _STORE_ONLY = re.compile(r"\b(?:xbox|game ?pass|ms store|microsoft store)\b", re.I)
@@ -96,6 +96,8 @@ def facts(status: str, patcher: str, notes: str, table: str = "main") -> dict:
     elif table == "mod" or (_MOD.search(notes) and "reframework" not in needs):
         if "reframework" not in needs:
             needs.append("mod")
+    if _PUREDARK.search(notes) and "mod" not in needs:
+        needs.append("mod")
     if needs:
         result["needs"] = needs
     if "✨" in patcher:

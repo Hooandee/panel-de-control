@@ -105,7 +105,8 @@ LateAsiPluginsDelay=auto
 def test_mod_tables_say_what_the_game_needs():
     rows = wiki.parse(MODS)
     assert rows["persona 5 royal"]["needs"] == ["luma"]
-    assert rows["resident evil 2 2019"]["needs"] == ["reframework"]
+    assert rows["resident evil 2 2019"]["needs"] == ["reframework", "mod"]
+    assert rows["resident evil 2 2019"]["page"] == "Resident-Evil-2-(2019)"
     assert rows["elden ring"]["needs"] == ["mod"]
 
 
@@ -137,6 +138,14 @@ def test_page_that_asks_for_puredarks_plugin_needs_a_separate_mod():
     recipe = recipes.from_facts("2050650", {"status": "works", "needs": ["reframework"]}, "test", facts)
     assert recipe.needs == ("reframework", "mod")
     assert "needs" not in wiki.parse_page(PAGE)
+
+
+def test_row_keeps_parenthesised_page_names_and_the_puredark_requirement():
+    row = ("| [Resident Evil 4 (2023)](Resident-Evil-4-(2023)) | ✅ | DLSS, XeSS | | Requires REFramework mod "
+           "(pd-upscaler branch) + PDUpscaler plugin + OptiScaler, check [Wiki](Resident-Evil-4-(2023)) | |")
+    found = wiki.parse(TABLE.splitlines()[0] + "\n|---|---|---|---|---|---|\n" + row)["resident evil 4 2023"]
+    assert found["page"] == "Resident-Evil-4-(2023)"
+    assert found["needs"] == ["reframework", "mod"]
 
 
 def test_page_cached_by_an_older_parser_is_fetched_whole_again(tmp_path):
