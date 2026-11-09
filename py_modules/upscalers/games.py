@@ -266,6 +266,15 @@ def shipped_upscalers(root: Path) -> list[str]:
     return [SHIPPED_NAMES[kind] for kind in SHIPPED_NAMES if kind in found]
 
 
+def _graphics_apis(exe: Path) -> list[str]:
+    """The exe's graphics imports. The D3D12 Agility SDK beside it means a D3D12 device: RE Engine games import only
+    d3d11/dxgi and load D3D12 at runtime."""
+    apis = set(pe.graphics_apis(str(exe)))
+    if (exe.parent / "D3D12" / "D3D12Core.dll").is_file():
+        apis = (apis - {"d3d11"}) | {"d3d12"}
+    return sorted(apis)
+
+
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 
@@ -303,7 +312,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     exes.sort(key=lambda item: (-item[0], -item[2], item[1].as_posix()))
     candidates = []
     for index, (score, path, size) in enumerate(exes[:MAX_PE_SCANS]):
-        apis = pe.graphics_apis(str(path))
+        apis = _graphics_apis(path)
         if any(api in apis for api in ("d3d12", "d3d11", "vulkan")):
             score += 30
         candidates.append({
@@ -318,14 +327,14 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     selected = candidates[0] if candidates else None
     if not chosen_exe and recipe_exe and (root / recipe_exe).is_file():
         selected = next((c for c in candidates if c["exe"] == recipe_exe), None) or {
-            "exe": recipe_exe, "apis": pe.graphics_apis(str(root / recipe_exe)),
+            "exe": recipe_exe, "apis": _graphics_apis(root / recipe_exe),
             "size": (root / recipe_exe).stat().st_size, "score": 0,
         }
     if chosen_exe and (root / chosen_exe).is_file():
         manual = True
         selected = next((c for c in candidates if c["exe"] == chosen_exe), None) or {
             "exe": chosen_exe,
-            "apis": pe.graphics_apis(str(root / chosen_exe)),
+            "apis": _graphics_apis(root / chosen_exe),
             "size": (root / chosen_exe).stat().st_size,
             "score": 0,
         }

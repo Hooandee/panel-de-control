@@ -276,6 +276,19 @@ def test_analyze_prefers_the_game_exe_over_its_launcher(steam, monkeypatch):
     assert result["anti_cheat"] is False and result["foreign"] is False
 
 
+def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
+    # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
+    from upscalers import solution_plan
+    _, game = steam
+    monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d11", "dxgi"] if path.endswith("witcher3.exe") else [])
+    assert games.analyze(game)["apis"] == ["d3d11", "dxgi"]
+    _write(game / "bin/x64_dx12/D3D12/D3D12Core.dll")
+    result = games.analyze(game)
+    assert result["apis"] == ["d3d12", "dxgi"]
+    plan = solution_plan.resolve("rdna3", result)
+    assert plan["effective_api"] == "d3d12" and plan["fg_plan"]["route"] == "optiscaler"
+
+
 def test_manual_exe_wins_and_detects_anti_cheat_and_foreign(steam):
     _, game = steam
     _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe")
