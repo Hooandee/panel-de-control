@@ -1186,6 +1186,7 @@ export const it: Record<string, string> = {
   "system.on": "attivato",
   "system.off": "disattivato",
   "system.eco.title": "Modalità download",
+  "system.eco.autoExit": "Modalità download disattivata alla ripresa dell’uso del dispositivo.",
   "system.eco.desc": "Riduce il consumo mentre scarichi i giochi.",
   "system.eco.countdown": "Lo schermo si spegne tra",
   "system.eco.row.tdp": "TDP",

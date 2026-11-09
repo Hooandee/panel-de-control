@@ -15,3 +15,19 @@ describe("arbiter contract", () => {
     expect(conflictKey(null)).toBeNull();
   });
 });
+
+
+describe("saved painter choices", () => {
+  const input = (claims: Record<string, "panel" | "other">): ArbiterInput => ({
+    themeClaims: [], thirdParty: {confidence:"low",id:"css:ScrollArea",candidates:["css:ScrollArea"]},
+    audioLoader:false, claims, previous:null,
+  });
+  it("keeps an explicit other choice when the matching theme background is ambiguous", () => {
+    expect(arbitrate(input({"css:ScrollArea":"other"}))).toMatchObject({background:"other",conflict:null});
+  });
+  it("does not infer ownership from an ambiguous background without a matching saved choice", () => {
+    expect(arbitrate(input({}))).toMatchObject({background:"panel",conflict:null});
+    expect(arbitrate(input({"css:BackgroundGlass":"other"}))).toMatchObject({background:"panel",conflict:null});
+    expect(arbitrate(input({"css:ScrollArea":"panel"}))).toMatchObject({background:"panel",conflict:null});
+  });
+});

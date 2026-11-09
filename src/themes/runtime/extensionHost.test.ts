@@ -897,6 +897,35 @@ describe("ambient channel", () => {
     expect(p.listeners.size).toBe(0);
     host.dispose();
   });
+
+  it("lets a theme report its selected game, and drops it when the theme unmounts", async () => {
+    const p = provider();
+    const selections: [string, string | null][] = [];
+    const released: string[] = [];
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      ambient: { ...p.value, select: (themeId: string, appid: string | null) => { selections.push([themeId, appid]); return () => released.push(`${themeId}:${appid}`); } },
+      evaluate: capturing((c) => { seen = c; }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    seen?.ambient?.select?.(1669420);
+    seen?.ambient?.select?.(null);
+    expect(selections).toEqual([["example-theme", "1669420"], ["example-theme", null]]);
+    host.reconcile({ status: "ready", themes: [] });
+    expect(released).toEqual(["example-theme:null"]);
+    host.dispose();
+    let older: ThemeExtensionMountContext | undefined;
+    const olderHost = new ThemeExtensionRuntimeHost({ client: client(), doc: document, ambient: p.value, evaluate: capturing((c) => { older = c; }) });
+    olderHost.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(older?.ambient && "select" in older.ambient).toBe(false);
+    olderHost.dispose();
+  });
 });
 
 describe("DUO artwork bridge", () => {
@@ -980,7 +1009,31 @@ describe("theme storage", () => {
     host.reconcile(snapshot());
     await settle();
     await settle();
-    expect(await seen?.games?.forceClose(730)).toBe("terminated");
+    expect(await seen?.games?.forceClose!(730)).toBe("terminated");
+    host.dispose();
+  });
+});
+
+describe("shared groups", () => {
+  it("are offered to every theme and drop its subscriptions when it unmounts", async () => {
+    const unsubscribe = vi.fn();
+    const groups = {
+      list: vi.fn(() => []), subscribe: vi.fn(() => unsubscribe), save: vi.fn(), remove: vi.fn(), preview: vi.fn(() => []),
+      catalog: vi.fn(), importSources: vi.fn(), import: vi.fn(), migrate: vi.fn(), status: vi.fn(),
+    };
+    let seen: ThemeExtensionMountContext | undefined;
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(), doc: document, groups: groups as never,
+      evaluate: () => Object.freeze({ abiVersion: 1 as const, mount(context: ThemeExtensionMountContext) { seen = context; context.groups?.subscribe(() => {}); return () => undefined; } }),
+    });
+    host.reconcile(snapshot());
+    await settle();
+    await settle();
+    expect(Object.isFrozen(seen?.groups)).toBe(true);
+    seen?.groups?.preview({ mode: "all", rules: [] });
+    expect(groups.preview).toHaveBeenCalled();
+    host.reconcile({ status: "ready", themes: [] });
+    expect(unsubscribe).toHaveBeenCalledOnce();
     host.dispose();
   });
 });

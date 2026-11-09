@@ -124,18 +124,39 @@ public sealed class SteamThemeEngineTests : IDisposable
         Assert.Equal(2, devTools.HostUpdates);
     }
 
-    [Fact]
-    public async Task ReplacesAnOlderHostLeftInSteamByAPreviousBuild()
+    [Theory]
+    [InlineData(6)] // Previous full host.
+    [InlineData(7)] // Minimal 0.81.2 Pictures backport, without storage.
+    public async Task ReplacesAnOlderHostLeftInSteamByAPreviousBuild(int previousVersion)
     {
         devTools.Targets = new[] { Shared(), Page("bp", "SP", BigPictureUrl) };
         var engine = Engine(Theme(), extension: true);
         await engine.CycleAsync(default);
 
-        devTools.HostVersionInSteam = SteamThemeEngine.HostVersion - 1;
+        devTools.HostVersionInSteam = previousVersion;
         await engine.CycleAsync(default);
 
         Assert.Equal(2, devTools.HostLoads);
         Assert.Equal(2, devTools.HostUpdates);
+    }
+
+    [Fact]
+    public async Task PublishesCompanionPicturesDirectoryAndRefreshesWhenItChanges()
+    {
+        devTools.Targets = new[] { Shared(), Page("bp", "SP", BigPictureUrl) };
+        string? pictures = @"C:\Users\Player\OneDrive\Imágenes";
+        var engine = new SteamThemeEngine(devTools, steam,
+            () => Inputs(Array.Empty<ThemeSelection>(), extension: true), () => "host",
+            new FixedTable(null), picturesDirectory: () => pictures);
+        await engine.CycleAsync(default);
+        Assert.Equal(pictures, devTools.LastHostState.GetProperty("picturesDirectory").GetString());
+        pictures = @"D:\Photos";
+        await engine.CycleAsync(default);
+        Assert.Equal(pictures, devTools.LastHostState.GetProperty("picturesDirectory").GetString());
+        pictures = null;
+        await engine.CycleAsync(default);
+        Assert.Equal(JsonValueKind.Null, devTools.LastHostState.GetProperty("picturesDirectory").ValueKind);
+        Assert.Equal(3, devTools.HostUpdates);
     }
 
     [Fact]
@@ -306,6 +327,8 @@ public sealed class SteamThemeEngineTests : IDisposable
 
         public int HostUpdates { get; private set; }
 
+        public JsonElement LastHostState { get; private set; }
+
         public string? StorageStatus { get; set; }
 
         public string StorageWrites { get; set; } = "[]";
@@ -364,6 +387,8 @@ public sealed class SteamThemeEngineTests : IDisposable
             if (expression.Contains("__pdcWindowsThemeHost.update(", StringComparison.Ordinal))
             {
                 HostUpdates++;
+                var stateStart = expression.IndexOf(".update(", StringComparison.Ordinal) + ".update(".Length;
+                LastHostState = Json(expression[stateStart..^1]);
                 var revision = Regex.Match(expression, @"""revision"":(\d+)");
                 hostRevision = long.Parse(revision.Groups[1].Value);
                 return HostStatus();

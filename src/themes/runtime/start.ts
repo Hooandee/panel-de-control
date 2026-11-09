@@ -1,3 +1,4 @@
+import type { ThemeGroupsAccess } from "../../groups/groupsClient";
 import type { ThemeArtworkAccess } from "../artwork";
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
@@ -159,6 +160,7 @@ interface ThemesRuntimeOptions {
   ambient?: AmbientChannelProvider;
   storage?: ThemeStorageProvider;
   games?: Readonly<ThemeExtensionGamesAccess>;
+  groups?: Readonly<ThemeGroupsAccess>;
   evaluate?(source: string): ThemeExtensionExport;
   log?(code: string): void;
   createManager?(
@@ -184,6 +186,7 @@ export function startThemesRuntime({
   ambient,
   storage,
   games,
+  groups,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -203,6 +206,7 @@ export function startThemesRuntime({
       ambient,
       storage,
       games,
+      groups,
       evaluate,
       log,
     }),

@@ -88,6 +88,7 @@ class FirmwareAttrBackend(TDPBackend):
         safety_lock_path=None,
         restore_on_release=False,
         ownership_lock_path=None,
+        relinquish_failed_restore=False,
         named_profile_owns_rails=False,
         optional_rails=None,
         probe_live_max_on_ac=False,
@@ -106,6 +107,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._trust_live_bounds = bool(trust_live_bounds)
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self._restore_on_release = bool(restore_on_release)
+        self._relinquish_failed_restore = bool(relinquish_failed_restore)
         self.reselection_safe_after_use = self._restore_on_release
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         self._named_profile_owns_rails = bool(named_profile_owns_rails)
@@ -535,8 +537,23 @@ class FirmwareAttrBackend(TDPBackend):
             if self._handoff is not None:
                 result = recovered
         if self._ownership_recovery_pending:
-            return self._restore_payload("ownership")
+            return self._restore_ownership()
         return result
+
+    def _restore_ownership(self):
+        restored = self._restore_payload("ownership")
+        if restored["ok"] or not self._relinquish_failed_restore:
+            return restored
+        # A hand-back the firmware refuses must not cost the user TDP control.
+        if self.relinquish_ownership()["ok"]:
+            self._write_circuit_open = None
+            diary = journal.active
+            if diary is not None:
+                diary.write(
+                    "WARNING", "tdp", "ownership_relinquished",
+                    backend=self.name, detail=restored["detail"],
+                )
+        return restored
 
     def relinquish_ownership(self):
         if self._runtime_lock_payload is not None:
@@ -1275,8 +1292,7 @@ class FirmwareAttrBackend(TDPBackend):
                 return False
         if self._owned_payload is None:
             return not self._ownership_recovery_pending
-        restored = self._restore_payload("ownership")
-        return bool(restored["ok"])
+        return bool(self._restore_ownership()["ok"])
 
     def _observation_mismatches(self, observation, targets):
         bad = []

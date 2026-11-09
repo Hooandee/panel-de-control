@@ -58,7 +58,7 @@ public sealed class SteamThemeEngine
     private const string HostGlobal = "__pdcWindowsThemeHost";
 
     /// <summary>Must match <c>WINDOWS_THEME_HOST_VERSION</c>: an older host left in Steam by a previous build is replaced.</summary>
-    public const int HostVersion = 6;
+    public const int HostVersion = 9;
 
     private static readonly TimeSpan CycleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleCycleInterval = TimeSpan.FromSeconds(30);
@@ -69,6 +69,7 @@ public sealed class SteamThemeEngine
     private readonly Func<string> hostBundle;
     private readonly IClassTableSource classTable;
     private readonly ThemeStorageStore? storage;
+    private readonly Func<string?> picturesDirectory;
     private readonly Dictionary<string, PageSession> pages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> cssCache = new(StringComparer.Ordinal);
     private readonly HashSet<string> inspectedPages = new(StringComparer.Ordinal);
@@ -93,9 +94,11 @@ public sealed class SteamThemeEngine
         Func<ThemeEngineInputs> loadInputs,
         Func<string> hostBundle,
         IClassTableSource classTable,
-        ThemeStorageStore? storage = null)
+        ThemeStorageStore? storage = null,
+        Func<string?>? picturesDirectory = null)
     {
         this.storage = storage;
+        this.picturesDirectory = picturesDirectory ?? ResolvePicturesDirectory;
         this.devTools = devTools;
         this.steam = steam;
         this.loadInputs = loadInputs;
@@ -145,6 +148,33 @@ public sealed class SteamThemeEngine
         var targets = await devTools.ListTargetsAsync(cancellationToken).ConfigureAwait(false);
         var shared = targets?.FirstOrDefault(target => target.Title == SharedContextTitle);
         return shared is null ? null : await devTools.ConnectAsync(shared, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The Xbox button that Windows gave to Game Bar instead of Steam: the theme host presses Steam's Home in its place
+    /// (steamButton.ts pressHome). Returns what the host did, for the log.
+    /// </summary>
+    public async Task<string> PressSteamHomeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var session = await ConnectSharedContextAsync(cancellationToken).ConfigureAwait(false);
+            if (session is null)
+            {
+                return "no_steam";
+            }
+
+            var result = await session.EvaluateAsync(
+                $"(() => {{ try {{ return String(window.{HostGlobal}?.pressHome?.() ?? 'no_host'); }} catch {{ return 'error'; }} }})()",
+                cancellationToken).ConfigureAwait(false);
+            return result.ValueKind == JsonValueKind.String ? result.GetString() ?? "unknown" : "unknown";
+        }
+        catch (Exception exception) when (exception is CdpException or System.Net.WebSockets.WebSocketException or HttpRequestException
+            or InvalidOperationException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return "unreachable";
+        }
     }
 
     public async Task<bool> BringBigPictureToFrontAsync(CancellationToken cancellationToken)
@@ -443,6 +473,21 @@ public sealed class SteamThemeEngine
         })()
         """;
 
+    private static string? ResolvePicturesDirectory()
+    {
+        try
+        {
+            // This engine runs in the signed-in user's companion, never in the SYSTEM service.
+            // GetFolderPath does not create the directory and respects Windows folder redirection.
+            var directory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            return string.IsNullOrWhiteSpace(directory) ? null : directory;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
+    }
+
     private async Task<ThemeHostStatus> SyncHostAsync(ICdpSession session, ThemeEngineInputs current, CancellationToken cancellationToken)
     {
         var version = await session.EvaluateAsync($"window.{HostGlobal}?.hostVersion ?? null", cancellationToken).ConfigureAwait(false);
@@ -452,13 +497,14 @@ public sealed class SteamThemeEngine
             hostInputsFingerprint = null;
         }
 
-        var inputsFingerprint = Fingerprint(current.SnapshotJson + "\0" + string.Join('\n', current.Extensions.Select(extension => extension.Sha256)));
+        var pictures = picturesDirectory();
+        var inputsFingerprint = Fingerprint(current.SnapshotJson + "\0" + pictures + "\0" + string.Join('\n', current.Extensions.Select(extension => extension.Sha256)));
         JsonElement result;
         var reported = await session.EvaluateAsync($"window.{HostGlobal}?.status() ?? null", cancellationToken).ConfigureAwait(false);
         if (hostInputsFingerprint != inputsFingerprint || HostRevision(reported) < hostRevision)
         {
             hostRevision = Math.Max(hostRevision, HostRevision(reported)) + 1;
-            var state = $$"""{"revision":{{hostRevision}},"snapshot":{{current.SnapshotJson}},"extensions":{{JsonSerializer.Serialize(current.Extensions.Select(extension => new
+            var state = $$"""{"revision":{{hostRevision}},"picturesDirectory":{{JsonSerializer.Serialize(pictures)}},"snapshot":{{current.SnapshotJson}},"extensions":{{JsonSerializer.Serialize(current.Extensions.Select(extension => new
             {
                 catalogId = extension.CatalogId,
                 cssLoaderName = extension.CssLoaderName,

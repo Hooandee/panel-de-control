@@ -337,3 +337,92 @@ def test_wake_arriving_while_a_sleep_is_in_flight_wins(tmp_path, monkeypatch):
 
     assert asyncio.run(run()) == {"ok": True, "asleep": False}
     assert screen.calls == [True, False]
+
+
+def test_eco_transition_records_before_and_after_readbacks(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    p._init()
+    main = sys.modules['main']
+    records = []
+    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: records.append((a, k))))
+    values = iter([{'boost': 1}, {'boost': 0}])
+    async def readback():
+        return next(values)
+    monkeypatch.setattr(p, '_eco_performance_readback', readback)
+    asyncio.run(p.set_eco(True, 50))
+    record = next(k for a, k in records if a[:3] == ('INFO', 'eco', 'transition_readback'))
+    assert record['before_enabled'] is False and record['enabled'] is True
+    assert record['before'] == {'boost': 1} and record['after'] == {'boost': 0}
+
+
+def test_eco_diagnostic_failure_does_not_prevent_toggle(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    main = sys.modules['main']
+    records = []
+    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: records.append((a, k))))
+    def unavailable():
+        raise OSError('unavailable')
+    monkeypatch.setattr(main.pulse, 'performance_sample', unavailable)
+    result = asyncio.run(p.set_eco(True, 50))
+    assert result['enabled'] is True
+    record = next(k for a, k in records if a[:3] == ('INFO', 'eco', 'transition_readback'))
+    assert record['before'] == {'error': 'OSError'} and record['after'] == {'error': 'OSError'}
+
+
+def test_slow_diagnostic_cannot_override_a_newer_eco_request(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    p._init()
+    main = sys.modules['main']
+    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: None))
+    async def scenario():
+        pending = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+        calls = 0
+        async def readback():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                entered.set()
+                return await pending
+            return {'boost': 1}
+        monkeypatch.setattr(p, '_eco_performance_readback', readback)
+        old_request = asyncio.create_task(p.set_eco(True, 50))
+        await entered.wait()
+        assert (await p.set_eco(False, 50))['enabled'] is False
+        pending.set_result({'boost': 1})
+        assert (await old_request)['enabled'] is False
+        assert p._settings['eco_enabled'] is False
+    asyncio.run(scenario())
+
+
+def test_manual_controls_cancel_pending_eco_activation(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    p._init()
+    main = sys.modules['main']
+    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: None))
+    async def scenario(clear):
+        pending = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+        async def readback():
+            entered.set()
+            return await pending
+        monkeypatch.setattr(p, '_eco_performance_readback', readback)
+        activation = asyncio.create_task(p.set_eco(True, 50))
+        await entered.wait()
+        clear()
+        pending.set_result({'boost': 1})
+        assert (await activation)['enabled'] is False
+    for clear in (p._clear_eco, p._exit_eco_for_cpu):
+        asyncio.run(scenario(clear))
+
+
+def test_eco_readback_timeout_is_reported_without_waiting_for_hardware(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    main = sys.modules['main']
+    async def stuck(*args, **kwargs):
+        await asyncio.Event().wait()
+    monkeypatch.setattr(main.asyncio, 'to_thread', stuck)
+    async def scenario():
+        result = await asyncio.wait_for(p._eco_performance_readback(), timeout=1.5)
+        assert result == {'error': 'TimeoutError'}
+    asyncio.run(scenario())

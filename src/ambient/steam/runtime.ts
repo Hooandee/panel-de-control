@@ -269,6 +269,16 @@ export class AmbientRuntime {
       this.checkSignals();
       void this.render();
     }));
+    let selectionSource = "carousel";
+    this.cleanups.push(this.channel.onSelectionChanged(() => {
+      const themed = this.channel.themeSelection();
+      const source = themed ? `theme:${themed.themeId}` : "carousel";
+      if (source !== selectionSource) {
+        selectionSource = source;
+        void rpc.recordAmbientEvent("selection", source).catch(() => undefined);
+      }
+      void this.render();
+    }));
     this.cleanups.push(this.ports.gameSessions.subscribe((game) => this.onGame(game !== null)));
     this.cleanups.push(this.ports.power.subscribe((power) => {
       this.power = power;
@@ -765,6 +775,9 @@ export class AmbientRuntime {
   }
 
   private selectedAppId(doc: Document | null): string | null {
+    // A theme that draws its own Home reports the selection; Steam's carousel is not there.
+    const themed = this.channel.themeSelection();
+    if (themed) return themed.appid;
     const container = steamClass("RecentGamesContainer");
     return doc && container ? selectedAppIdIn(doc.querySelector(`.${container}`)) : null;
   }

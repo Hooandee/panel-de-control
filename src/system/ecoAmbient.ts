@@ -1,11 +1,12 @@
-import { addEventListener, removeEventListener } from "@decky/api";
-import { EcoState, getEcoState, setEcoScreen } from "../api";
+import { addEventListener, removeEventListener, toaster } from "@decky/api";
+import { EcoState, getEcoState, setEco, setEcoScreen } from "../api";
 import { translate } from "../i18n";
 import { subscribeActive } from "./activity";
 import { displayBrightness } from "./display";
 import { hideBlackout, showBlackout } from "./ecoBlackout";
 import { startCountdown } from "./ecoCountdown";
 import { fromPercent, toPercent } from "./logic";
+import { recordUiEvent } from "./uiEvents";
 
 // Download mode's screen, at plugin scope so it works with the QAM closed. Panel mode:
 // gamescope switches the internal panel off. Otherwise a black layer at minimum brightness.
@@ -16,6 +17,10 @@ const COUNTDOWN_S = 3;
 const WAKE_DEBOUNCE_MS = 150;
 // Raw input Steam never saw gets no idle signal after it: go dark again after this long.
 const RELAPSE_MS = 8000;
+const AUTO_EXIT_MS = 10000;
+const INPUT_GAP_MS = 4000;
+const TIMER_LATENESS_MS = 1000;
+const EXIT_TIMEOUT_MS = 10000;
 const INPUT_EVENT = "pdc_eco_input";
 
 let enabled = false;
@@ -29,7 +34,73 @@ let cancelCountdown: (() => void) | null = null;
 let relapse: ReturnType<typeof setTimeout> | undefined;
 let debounce: ReturnType<typeof setTimeout> | undefined;
 let poll: ReturnType<typeof setInterval> | undefined;
+let activityTimer: ReturnType<typeof setTimeout> | undefined;
+let lastInputAt = Number.NEGATIVE_INFINITY;
+let exitPending = false;
+let inputCount = 0;
+let maxInputGap = 0;
 let unsubscribe: (() => void)[] = [];
+
+function resetActivity(): void {
+  clearTimeout(activityTimer);
+  activityTimer = undefined;
+  lastInputAt = Number.NEGATIVE_INFINITY;
+  inputCount = 0;
+  maxInputGap = 0;
+}
+
+async function exitForActivity(activity: { duration_ms: number; input_count: number; max_gap_ms: number }): Promise<void> {
+  const detail = { reason: "sustained_activity", source: "wake_input", ...activity };
+  const e = ++epoch;
+  exitPending = true;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const state = await Promise.race([
+      setEco(false, wakePct),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("eco_exit_timeout")), EXIT_TIMEOUT_MS);
+      }),
+    ]);
+    recordUiEvent("system", "eco_auto_exit", detail, !state.enabled);
+    if (!alive || e !== epoch || state.enabled) return;
+    disable();
+    toaster.toast({
+      title: translate("system.eco.title"),
+      body: translate("system.eco.autoExit"),
+      duration: 3000,
+      playSound: false,
+      showNewIndicator: false,
+    });
+  } catch {
+    recordUiEvent("system", "eco_auto_exit", detail, false);
+  } finally {
+    clearTimeout(timeout);
+    if (e === epoch) exitPending = false;
+  }
+}
+
+function recordActivity(): void {
+  if (exitPending) return;
+  const now = Date.now();
+  if (now - lastInputAt >= INPUT_GAP_MS) resetActivity();
+  if (Number.isFinite(lastInputAt)) maxInputGap = Math.max(maxInputGap, now - lastInputAt);
+  inputCount += 1;
+  lastInputAt = now;
+  if (activityTimer !== undefined) return;
+  const deadline = now + AUTO_EXIT_MS;
+  activityTimer = setTimeout(() => {
+    activityTimer = undefined;
+    const now = Date.now();
+    if (!alive || !enabled || now - lastInputAt >= INPUT_GAP_MS
+      || now < deadline || now - deadline > TIMER_LATENESS_MS) {
+      resetActivity();
+      return;
+    }
+    const activity = { duration_ms: now - (deadline - AUTO_EXIT_MS), input_count: inputCount, max_gap_ms: maxInputGap };
+    resetActivity();
+    void exitForActivity(activity);
+  }, AUTO_EXIT_MS);
+}
 
 function setBrightness(pct: number): void {
   drivenAt = Date.now();
@@ -92,6 +163,7 @@ function armRelapse(): void {
 
 function onRawInput(): void {
   if (!enabled) return;
+  recordActivity();
   if (panel) hideBlackout();
   if (active) {
     // Input Steam does not count keeps the screen on while it continues.
@@ -103,6 +175,7 @@ function onRawInput(): void {
 }
 
 function onSteamActivity(next: boolean): void {
+  if (!next) resetActivity();
   clearTimeout(relapse);
   relapse = undefined;
   clearTimeout(debounce);
@@ -115,6 +188,8 @@ function onBrightness(fraction: number): void {
 }
 
 function enable(wake: number, screenOff: boolean): void {
+  resetActivity();
+  exitPending = false;
   enabled = true;
   active = true;
   panel = screenOff;
@@ -127,14 +202,17 @@ function enable(wake: number, screenOff: boolean): void {
     () => removeEventListener(INPUT_EVENT, onRawInput),
   ].filter((u): u is () => void => u !== null);
   poll = setInterval(() => {
+    if (exitPending) return;
     const e = epoch;
     getEcoState()
-      .then((s) => alive && e === epoch && sync(s))
+      .then((s) => alive && e === epoch && !exitPending && sync(s))
       .catch(() => {});
   }, POLL_MS);
 }
 
 function disable(): void {
+  resetActivity();
+  exitPending = false;
   enabled = false;
   unsubscribe.forEach((u) => u());
   unsubscribe = [];
@@ -169,6 +247,8 @@ function sync(s: EcoState): void {
 
 export function setEcoActiveHint(on: boolean, wake: number, screenOff: boolean): void {
   epoch += 1;
+  resetActivity();
+  exitPending = false;
   if (on && !enabled) enable(wake, screenOff);
   else if (!on && enabled) disable();
 }
@@ -177,9 +257,10 @@ export function startEcoAmbient(): () => void {
   alive = true;
   const e = epoch;
   getEcoState()
-    .then((s) => alive && e === epoch && sync(s))
+    .then((s) => alive && e === epoch && !exitPending && sync(s))
     .catch(() => {});
   return () => {
+    epoch += 1;
     alive = false;
     if (enabled) disable();
   };

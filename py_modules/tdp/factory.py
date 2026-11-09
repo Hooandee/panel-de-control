@@ -107,6 +107,9 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         go_s_83l3 = legion_go_s_83l3_firmware_attr_quirks(device, root)
         boost_floors = legion_go_s_83n6_rail_floors(device, root)
         floors_menu_only = legion_go_s_83n6_boost_floors_menu_only(device, root)
+        go_2_83n0 = legion_go_2_83n0_firmware_attr_quirks(device, root)
+        # 83N0 already hands a stuck firmware back to a named profile on its own.
+        hands_back = "firmware_handoff_profile" not in go_2_83n0
         backend = FirmwareAttrBackend(
             "lenovo-wmi-other",
             fallback,
@@ -119,14 +122,21 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            restore_on_release=hands_back,
+            relinquish_failed_restore=hands_back,
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-lenovo-wmi-other.lock",
+            ),
             write_max_ac=charger_write_max(device),
             **lenovo_legion_firmware_attr_quirks(device, root),
-            **legion_go_2_83n0_firmware_attr_quirks(device, root),
+            **go_2_83n0,
             **go_s_83l3,
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
         if go_s_83l3:
             backend.low_battery_hold_strategy = None
+        backend.seeds_from_readback = True
         return backend
 
     def msi():
