@@ -738,7 +738,8 @@ class UpscalerService:
             overrides.update(image_overrides)
         else:
             entry.pop("image_settings", None)
-        if automatic:
+        # Only recipes with Proton prerequisites (Luma's runtimes) touch the prefix; game files alone don't.
+        if automatic and auto_recipes.verbs(automatic):
             self._update_job(phase="dependencies")
             try:
                 checkpoint = self.scaler_transitions.pending(appid)

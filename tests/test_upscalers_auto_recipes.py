@@ -217,3 +217,14 @@ def test_remake_marks_reshade_tutorial_done_and_takes_it_back(tmp_path):
     auto_recipes.restore_configuration(game / 'ReShade.ini', game / 'backup.ini', changes)
     restored = (game / 'ReShade.ini').read_text()
     assert 'TutorialProgress' not in restored and 'SRUserType=0' in restored
+
+
+def test_recipe_without_proton_prerequisites_never_touches_the_prefix(automatic, steam, monkeypatch):
+    service, calls, _ = automatic
+    monkeypatch.setattr(auto_recipes, 'verbs', lambda selected: ())
+    monkeypatch.setattr(prefix_dependencies, 'prepare', lambda *args: (_ for _ in ()).throw(AssertionError('no prefix')))
+    checkpoint = service.begin_scaler_transition(APPID)
+    service.install(APPID, {'build': 'fsr-test'})
+    assert list(steam[1].rglob('Luma-test.addon'))
+    service.finish_scaler_transition(APPID, checkpoint['token'])
+    assert calls == []
