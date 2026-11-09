@@ -2,7 +2,6 @@ import { GiSharkFin } from "react-icons/gi";
 import { Focusable } from "@decky/ui";
 import { useEffect, useRef, useState } from "react";
 import { LuCheck, LuChevronDown, LuChevronUp, LuFileCode, LuLayers } from "react-icons/lu";
-import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
@@ -77,8 +76,12 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
     const name = buildLabel({ ...build, channel: undefined });
     return model ? `${name} ${model === "lite" ? "Lite" : t(`up.model.${model}`)}` : name;
   };
-  const fallbackBadge = (build: BuildInfo) => build.may_fallback
-    ? <ExperimentalBadge>{t("up.build.mayUse", { version: build.may_fallback })}</ExperimentalBadge> : null;
+  // What actually runs on this GPU, under the name: a pill beside it pushed the name onto two lines.
+  const named = (build: BuildInfo, label: string) => build.may_fallback
+    ? <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <span>{label}</span>
+      <span style={{ fontSize: theme.font.caption - 1, fontWeight: 400, color: theme.color.textMuted }}>{t("up.build.mayUse", { version: build.may_fallback })}</span>
+    </span> : label;
   const options = builds.filter((build) => mode !== "mako" && build.available && build.supported && (mode === "dll" ? build.engine === "dll" && supportsDllTargets(build, dllTargets) : build.engine !== "dll") && !buildBlocker(build, inputs, protonEnv))
     .flatMap((build) => (build.models?.length ? build.models : [null]).map((model) => ({ build, model })));
   const selectedIndex = Math.max(0, options.findIndex(({ build, model }) => choice.build === build.id && (choice.model ?? build.models?.[0] ?? null) === model));
@@ -93,8 +96,7 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
     {mode !== "mako" && <Focusable ref={trigger} role="button" aria-label={t("up.section.model")} aria-expanded={open} aria-disabled={disabled}
       onClick={toggle} onActivate={toggle} onCancel={open ? (event) => { event.stopPropagation(); close(); } : undefined}
       style={{ padding: theme.space.sm, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: theme.space.sm }}>
-      <span style={{ flex: 1, minWidth: 0 }}>{mode === choiceMode && current ? optionLabel(current, choice.model ?? current.models?.[0] ?? null) : t("up.section.model")}</span>
-      {mode === choiceMode && current && fallbackBadge(current)}
+      <span style={{ flex: 1, minWidth: 0 }}>{mode === choiceMode && current ? named(current, optionLabel(current, choice.model ?? current.models?.[0] ?? null)) : t("up.section.model")}</span>
       {open ? <LuChevronUp size={16} /> : <LuChevronDown size={16} />}
     </Focusable>}
     {open && mode !== "mako" && <Focusable flow-children="column" onCancel={(event) => { event.stopPropagation(); close(); }} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
@@ -118,8 +120,7 @@ export function ModelPicker({ builds, choice, inputs, protonEnv, disabled, onCha
             style={{ display: "flex", alignItems: "center", padding: `${theme.space.sm}px 0`, minHeight: 44,
               boxSizing: "border-box", borderTop: `1px solid ${theme.color.hairline}`, cursor: "pointer", fontSize: theme.font.caption, minWidth: 0 }}>
             <span style={{ width: 20, flexShrink: 0, display: "flex" }}>{checked && <LuCheck size={14} />}</span>
-            <span style={{ flex: 1, minWidth: 0, overflowWrap: "normal", wordBreak: "normal" }}>{optionLabel(build, model)}</span>
-            {fallbackBadge(build)}
+            <span style={{ flex: 1, minWidth: 0, overflowWrap: "normal", wordBreak: "normal" }}>{named(build, optionLabel(build, model))}</span>
             <span style={{ display: "inline-flex", flexShrink: 0, width: 80 }} aria-hidden="true"><Bars value={build.image} /><Bars value={4 - build.cost} /></span>
           </Focusable>;
         })}

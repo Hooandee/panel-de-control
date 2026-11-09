@@ -519,7 +519,7 @@ export const ptBR: Record<string, string> = {
   "up.phase.download": "Baixando {done} de {total} MB",
   "up.phase.downloading": "Baixando",
   "up.phase.resolve": "Buscando a versão mais recente",
-  "up.build.mayUse": "Pode usar {version}",
+  "up.build.mayUse": "Nesta GPU: FSR {version}",
   "up.phase.copy": "Instalando no jogo",
   "up.phase.restore": "Deixando o jogo como estava",
   "up.phase.done": "Pronto",

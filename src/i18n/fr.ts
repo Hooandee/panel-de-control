@@ -519,7 +519,7 @@ export const fr: Record<string, string> = {
   "up.phase.download": "Téléchargement {done} sur {total} Mo",
   "up.phase.downloading": "Téléchargement",
   "up.phase.resolve": "Recherche de la dernière version",
-  "up.build.mayUse": "Peut utiliser {version}",
+  "up.build.mayUse": "Sur ce GPU : FSR {version}",
   "up.phase.copy": "Installation dans le jeu",
   "up.phase.restore": "Remise du jeu dans son état d'origine",
   "up.phase.done": "Terminé",
