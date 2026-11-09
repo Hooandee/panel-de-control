@@ -88,6 +88,11 @@ function useCoverLabels(): Record<string, Badge> {
   return useMemo(() => ({ ...engines, ...installed }), [engines, installed]);
 }
 
+/** Games with a Panel upscaler or engine profile, for a report to describe. */
+export function reportedAppids(): string[] {
+  return [...new Set([...Object.keys(installs), ...Object.keys(engineCovers)])];
+}
+
 export function useInstalls(): Record<string, Badge> {
   const [value, setValue] = useState(installs);
   useEffect(() => {

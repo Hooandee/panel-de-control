@@ -1,6 +1,6 @@
 import json
 
-from test_upscalers import APPID, _service, steam, fake_catalog, proc
+from test_upscalers import APPID, _service, _write, steam, fake_catalog, proc
 from upscalers import diagnostics
 from upscalers.service import UpscalerError, UpscalerService
 
@@ -69,7 +69,7 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
 def test_frontend_rejects_wrong_types_and_non_live_ids():
     result = diagnostics.frontend_context({'collected_at': 1, 'status': [],
         'running': {'live_appid': '../not-id', 'name': False, 'stable_appid': 42}})
-    assert result == {'status': 'unavailable', 'running': {'is_non_steam': None}}
+    assert result == {'status': 'unavailable', 'running': {'is_non_steam': None}, 'games': {}}
 
 
 def test_diagnostic_failure_does_not_stop_operation(steam, fake_catalog, proc, monkeypatch):
@@ -145,3 +145,29 @@ def test_job_references_survive_real_redaction_without_mutating_runtime(steam, f
     assert service._job == before_job
     service._job['id'] = 'unexpected-private-token'
     assert 'id' not in redact_obj(service.report())['job']
+
+
+def test_live_steam_facts_keep_licence_and_launch_parts_but_nothing_personal():
+    from upscalers import diagnostics
+    context = diagnostics.frontend_context({"status": "available", "games": {"3764200": {
+        "ownership_flags": 2049 | 32, "owned_by_user": False, "free": False, "beta": "public", "build_id": 23634047,
+        "compat_tool": "proton_experimental",
+        "launch_options": 'API_KEY=secret-token WINEDLLOVERRIDES="dxgi=n,b" gamemoderun %command% -dx12 /home/alice/save'}}})
+    facts = context["games"]["3764200"]
+    assert facts["ownership"] == ["subscribed", "shared_license", "license_permanent"]
+    assert facts["owned_by_user"] is False and facts["compat_tool"] == "proton_experimental"
+    assert facts["launch_live"]["dll_overrides"] == [{"name": "dxgi", "mode": "n,b"}]
+    assert "secret-token" not in str(context) and "alice" not in str(context)
+
+
+def test_report_lists_the_games_own_upscalers_loaders_and_store_files(steam, fake_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    _write(target / "dinput8.dll", b"someone else's loader")
+    _write(target / "steam_settings" / "configs.user.ini", b"x")
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    files = service.diagnose(APPID)["game_files"]
+    owners = {item["path"]: item["owner"] for item in files["loaders"]}
+    assert owners["bin/x64_dx12/dxgi.dll"] == "panel" and owners["bin/x64_dx12/dinput8.dll"] == "other"
+    assert files["store_files"] == ["steam_settings"]

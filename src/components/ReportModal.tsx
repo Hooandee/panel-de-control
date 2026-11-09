@@ -175,7 +175,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
       selected.includes("hud") ? steamOverlay.diagnostics() : undefined,
       themeDisplay,
     );
-    if (selected.includes("upscalers")) context.upscalers = upscalersReportContext();
+    if (selected.includes("upscalers")) context.upscalers = await upscalersReportContext();
     submitReport(selected, text, context)
       .then((r) => {
         setResult(r);

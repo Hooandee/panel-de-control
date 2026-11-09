@@ -10,7 +10,7 @@ from pathlib import Path
 
 from steam_cleaner import vdf
 
-from . import games, helixsr, ini, logread
+from . import games, helixsr, ini, logread, pe
 from .assets import sha256
 
 INI_KEYS = (
@@ -62,6 +62,36 @@ def frontend_context(value) -> dict:
             if re.fullmatch(r"[0-9]{1,20}", str(live)) and int(live) > 0:
                 result["running"]["live_appid"] = str(live)
         result["running"]["is_non_steam"] = running.get("is_non_steam") if isinstance(running.get("is_non_steam"), bool) else None
+    result["games"] = {}
+    games_value = value.get("games")
+    if isinstance(games_value, dict):
+        for appid, facts in list(games_value.items())[:12]:
+            if isinstance(facts, dict) and re.fullmatch(r"[0-9]{1,20}", str(appid)):
+                result["games"][str(appid)] = steam_facts(facts)
+    return result
+
+
+# Steam's EAppOwnershipFlags, named so a report reads as a licence, not a number.
+_OWNERSHIP = ((1, "subscribed"), (2, "free_license"), (4, "region_restricted"), (32, "shared_license"),
+              (64, "free_weekend"), (128, "retail_license"), (256, "license_locked"), (512, "license_pending"),
+              (1024, "license_expired"), (2048, "license_permanent"), (4096, "license_recurring"),
+              (8192, "license_canceled"), (16384, "auto_grant"), (131072, "rental"), (262144, "site_license"),
+              (2097152, "timed_trial"))
+
+
+def steam_facts(facts: dict) -> dict:
+    """What Steam said live about one game; launch options keep only their technical parts."""
+    flags = facts.get("ownership_flags")
+    result = {
+        "ownership": [name for bit, name in _OWNERSHIP if isinstance(flags, int) and not isinstance(flags, bool) and flags & bit],
+        "owned_by_user": facts.get("owned_by_user") if isinstance(facts.get("owned_by_user"), bool) else None,
+        "free": facts.get("free") if isinstance(facts.get("free"), bool) else None,
+        "beta": facts["beta"][:64] if isinstance(facts.get("beta"), str) and re.fullmatch(r"[\w.\- ]{0,64}", facts["beta"]) else None,
+        "build_id": facts.get("build_id") if isinstance(facts.get("build_id"), int) and not isinstance(facts.get("build_id"), bool) else None,
+        "compat_tool": facts["compat_tool"][:80] if isinstance(facts.get("compat_tool"), str) and re.fullmatch(r"[\w.\- ]{0,80}", facts["compat_tool"]) else None,
+    }
+    if isinstance(facts.get("launch_options"), str):
+        result["launch_live"] = launch_diagnostics(facts["launch_options"][:16384])
     return result
 
 
@@ -426,3 +456,83 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
             "log_excerpt": _log_excerpt(target),
         })
     return report
+
+
+# Files that load code into a game besides the game itself: whose they are is the first support question.
+_LOADER_FILES = ("dxgi.dll", "d3d11.dll", "d3d12.dll", "dinput8.dll", "version.dll", "winmm.dll", "winhttp.dll",
+                 "dbghelp.dll", "nvngx.dll", "OptiScaler.dll", "OptiScaler.ini", "ReShade.ini", "ReShade64.dll",
+                 "re2_fw_config.txt", "helixsr-install.json", "amd_fidelityfx_dx12.dll")
+_LOADER_DIRS = ("reframework", "OptiScaler", "Luma", "D3D12_Optiscaler", "plugins")
+# Files that replace Steam's own API layer. Reported as found, never interpreted: support reads them with the
+# Steam ownership facts the frontend adds.
+_STORE_FILES = ("steam_emu.ini", "steam_settings", "ColdClientLoader.ini", "OnlineFix.ini", "OnlineFix64.dll",
+                "cream_api.ini", "SmartSteamEmu.ini", "CODEX.ini", "steam_interfaces.txt")
+
+
+def game_files(installed, analysis: dict, owned: list[str]) -> dict:
+    """What the game folder holds around its executable: the game's own upscalers and anything injected."""
+    root = Path(installed.root)
+    target = Path(analysis["target"]) if analysis.get("target") else None
+    folders = list(dict.fromkeys(f for f in (target, root) if f is not None))
+    result: dict = {"exe": analysis.get("exe"), "apis": list(analysis.get("apis") or [])[:6],
+                    "anti_cheat": bool(analysis.get("anti_cheat")),
+                    "foreign_identity": fields(analysis.get("foreign_identity"), ("engine", "variant", "manifest_error")),
+                    "inputs": {}, "loaders": [], "store_files": []}
+    mine = {str(name).lower() for name in owned}
+    target_prefix = f"{target.relative_to(root).as_posix()}/" if target and target != root and target.is_relative_to(root) else ""
+
+    def owner(relative_to_root: str) -> str:
+        path = relative_to_root.lower()
+        candidates = {path, path.removeprefix(target_prefix.lower())} if target_prefix else {path}
+        if candidates & mine:
+            return "panel"
+        if any(name.startswith(candidate.rstrip("/") + "/") for candidate in candidates for name in mine):
+            return "panel"
+        return "other"
+
+    for kind, paths in (analysis.get("inputs") or {}).items():
+        found = []
+        for relative in list(paths)[:4]:
+            item = {"path": str(relative)[:160], "owner": owner(str(relative))}
+            if str(relative).lower().endswith(".dll"):
+                strings = pe.version_strings(str(root / relative))
+                version = strings.get("FileVersion") or strings.get("ProductVersion")
+                if version:
+                    item["version"] = version[:40]
+            found.append(item)
+        result["inputs"][str(kind)[:20]] = found
+    for folder in folders:
+        try:
+            names = {entry.name: entry for entry in folder.iterdir()}
+        except OSError:
+            continue
+        for name in _LOADER_FILES + _LOADER_DIRS:
+            entry = names.get(name) or next((e for n, e in names.items() if n.lower() == name.lower()), None)
+            if entry is None:
+                continue
+            relative = entry.relative_to(root).as_posix()
+            result["loaders"].append({"path": relative[:160], "dir": entry.is_dir(), "owner": owner(relative)})
+        for name in _STORE_FILES:
+            if any(n.lower() == name.lower() for n in names):
+                result["store_files"].append(name)
+    # REFramework writes its own folder beside the dinput8.dll Panel placed: it comes with Panel's install.
+    if any(item["path"].lower().endswith("dinput8.dll") and item["owner"] == "panel" for item in result["loaders"]):
+        for item in result["loaders"]:
+            if item["dir"] and item["path"].lower().rsplit("/", 1)[-1] == "reframework":
+                item["owner"] = "panel_runtime"
+    result["loaders"] = result["loaders"][:24]
+    result["store_files"] = sorted(set(result["store_files"]))
+    return result
+
+
+def proton_prefix(home: str, appid: str) -> dict:
+    """The Proton that last ran this game's prefix, as the prefix itself records it."""
+    for library in games.library_paths(home):
+        compat = library / "steamapps/compatdata" / str(appid)
+        try:
+            version = (compat / "version").read_text(encoding="utf-8", errors="replace").strip().splitlines()[0][:60]
+        except (OSError, IndexError):
+            continue
+        return {"present": (compat / "pfx").is_dir(), "last_proton": version}
+    return {"present": False}
+

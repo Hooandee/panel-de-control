@@ -1859,6 +1859,16 @@ class UpscalerService:
             current = (_build_solution(self.gpu, analysis, recipe, build, automatic, blocked) if build else
                        solution_plan.resolve(self.gpu, analysis, recipe))
             report["current_solution"] = diagnostics.solution(current)
+            owned = []
+            # OptiScaler keeps its manifest beside the executable, the DLL route in the game root.
+            for folder in dict.fromkeys(f for f in (analysis.get("target"), str(installed.root)) if f):
+                try:
+                    owned += list(json.loads((Path(folder) / games.MANIFEST_DIR / "manifest.json").read_text()).get("files", {}))
+                except (OSError, ValueError, TypeError, AttributeError):
+                    continue
+            if not installed.native:
+                report["game_files"] = diagnostics.game_files(installed, analysis, owned)
+                report["proton_prefix"] = diagnostics.proton_prefix(self.home, appid)
         info = _recipe_info(recipe)
         report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy"))
         if info:
