@@ -44,6 +44,11 @@ export interface UpscalersOverview {
   builds: BuildInfo[];
   cached: string[];
   installs: Record<string, { build: string; proxy: string; status: UpscalerStatus; options?: Partial<UpscalerChoice> }>;
+  /** Mako and Lossless Scaling per game: they never show up as an install. */
+  engines?: Record<string, {
+    mako?: { spatial: boolean; fg: boolean; multiplier: number | null };
+    lossless?: { multiplier: number | null };
+  }>;
   job: UpscalerJob | null;
   helixsr?: { downloaded: boolean };
 }

@@ -44,3 +44,14 @@ it("gives each requested game a fresh page instead of the previous game's state"
   await act(async () => { openUpscalersFor(2); });
   expect(screen.getByTestId("page").textContent).toBe("2:2");
 });
+
+it("names Mako and Lossless in the list instead of the game's own techniques", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersOverview).mockResolvedValueOnce({ builds: [], installs: {}, job: null, preferred: "fsr",
+    engines: { "1": { mako: { spatial: true, fg: true, multiplier: 2 } }, "2": { lossless: { multiplier: 4 } } } } as never);
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({ "1": { inputs: ["DLSS", "XeSS"], native: false } } as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.getByText("Mako ×2")).toBeTruthy();
+  expect(screen.getByText("Lossless ×4")).toBeTruthy();
+  expect(screen.queryByText("DLSS, XeSS")).toBeNull();
+});

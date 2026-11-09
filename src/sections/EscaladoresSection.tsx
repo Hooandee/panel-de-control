@@ -13,7 +13,7 @@ import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
 import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
-import { buildLabel } from "../upscalers/model";
+import { badgeLabel } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
 import { showGame, takeHeldPage, type PageDraft } from "../upscalers/pageMemory";
 import type { UpscalerChoice, UpscalersOverview } from "../upscalers/types";
@@ -122,6 +122,11 @@ export const EscaladoresSection: FC = () => {
             const build = install && overview.builds.find((b) => b.id === install.build);
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
             const info = compat[String(game.liveAppid)];
+            const engines = overview.engines?.[String(game.liveAppid)];
+            const frameGen = engines?.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
+              : engines?.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
+            const scaler = install ? badgeLabel(build, install.options?.model, install.build).full : engines?.mako?.spatial ? "Mako" : null;
+            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" · ");
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
@@ -136,8 +141,10 @@ export const EscaladoresSection: FC = () => {
                           style={{ display: "flex", flexShrink: 0, color: statusColor(install.status) }}>
                           {install.status === "active" ? <LuCircleCheck size={14} /> : install.status === "broken" ? <LuTriangleAlert size={14} /> : <LuClock size={14} />}
                         </span>
-                        <span style={{ color: theme.color.textPrimary }}>{build ? buildLabel(build) : install.build}</span>
+                        <span style={{ color: theme.color.textPrimary }}>{active}</span>
                       </>
+                    ) : active ? (
+                      <span style={{ color: theme.color.textPrimary }}>{active}</span>
                     ) : info ? (
                       <span style={{ color: info.inputs.length ? theme.color.ok : theme.color.textMuted }}>
                         {info.native ? t("up.list.linux") : info.inputs.length ? info.inputs.join(", ") : t("up.list.none")}

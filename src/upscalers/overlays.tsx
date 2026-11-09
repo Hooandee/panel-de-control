@@ -1,5 +1,5 @@
 import { findSP } from "@decky/ui";
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { createPortal } from "react-dom";
 
 import { getUpscalersOverview } from "../api";
@@ -45,6 +45,8 @@ interface Badge {
 }
 
 let installs: Record<string, Badge> = {};
+// Covers also name what runs without an upscaler install: Mako's spatial scaling or a frame generator on its own.
+let engineCovers: Record<string, Badge> = {};
 let sectionOpen = false;
 let ghost: { image: string; opacity: number } | null = null;
 const listeners = new Set<() => void>();
@@ -62,7 +64,28 @@ export function publishOverview(overview: UpscalersOverview): void {
     next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
   }
   installs = next;
+  const covers: Record<string, Badge> = {};
+  for (const [appid, engines] of Object.entries(overview.engines ?? {})) {
+    if (next[appid]) continue;
+    const label = engines.mako?.spatial ? "Mako"
+      : engines.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
+      : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
+    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null };
+  }
+  engineCovers = covers;
   emit();
+}
+
+function useCoverLabels(): Record<string, Badge> {
+  const installed = useInstalls();
+  const [engines, setEngines] = useState(engineCovers);
+  useEffect(() => {
+    const update = () => setEngines(engineCovers);
+    update();
+    listeners.add(update);
+    return () => { listeners.delete(update); };
+  }, []);
+  return useMemo(() => ({ ...engines, ...installed }), [engines, installed]);
 }
 
 export function useInstalls(): Record<string, Badge> {
@@ -166,6 +189,9 @@ export function isCollection(tile: HTMLElement): boolean {
   const own = tile.getBoundingClientRect();
   const outer = item.getBoundingClientRect();
   if (outer.width > own.width * 2.5 || outer.height > own.height * 2.5) return false;
+  // Gallery makes its whole carousel, neighbours included, one selectable item; a collection is never screen-wide.
+  const view = tile.ownerDocument.defaultView;
+  if (view && outer.width >= view.innerWidth * 0.9) return false;
   const appids = new Set<string>();
   for (const img of Array.from(item.querySelectorAll("img"))) {
     const appid = appidOf(img.src);
@@ -190,6 +216,20 @@ export function tileOf(img: HTMLImageElement): HTMLElement | null {
     tile = parent;
   }
   return tile;
+}
+
+/** Art a theme keeps in the tree but out of sight (Gallery hides Steam's own image under the copy it draws). */
+export function isHidden(img: HTMLElement, view: Window): boolean {
+  let opacity = 1;
+  let node: HTMLElement | null = img;
+  for (let depth = 0; node && depth < 8 && node !== img.ownerDocument.body; depth++, node = node.parentElement) {
+    const style = view.getComputedStyle(node);
+    if (style.visibility === "hidden" || style.display === "none") return true;
+    const own = parseFloat(style.opacity);
+    opacity *= Number.isNaN(own) ? 1 : own;
+    if (opacity < 0.05) return true;
+  }
+  return false;
 }
 
 function isRound(tile: HTMLElement, view: Window): boolean {
@@ -232,7 +272,7 @@ function clearBadge(tile: Element): void {
 
 /** Puts a pill on every tile showing a game's art, in Steam's library and in any theme that draws its own tiles. */
 export const CoverBadges: FC = () => {
-  const map = useInstalls();
+  const map = useCoverLabels();
   useEffect(() => {
     const view = mainWindow();
     const doc = view?.document;
@@ -264,6 +304,7 @@ export const CoverBadges: FC = () => {
         if (tileBox.width < box.width * 0.5 || tileBox.height < box.height * 0.5) continue;
         if (ICON.test(img.src) && !isRound(tile, view)) continue;
         if (isCollection(tile)) continue;
+        if (isHidden(img, view)) continue;
         const area = box.width * box.height;
         const seen = faces.get(tile);
         if (!seen || area > seen.area) faces.set(tile, { img, badge, area });

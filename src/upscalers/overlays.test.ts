@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@decky/ui", () => ({ findSP: () => null }));
 vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn() }));
 
-import { hostOf, isCollection, tileOf } from "./overlays";
+import { hostOf, isCollection, isHidden, tileOf } from "./overlays";
 
 function box(el: Element, width: number, height: number): void {
   el.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, width, height, right: width, bottom: height, toJSON: () => ({}) });
@@ -91,6 +91,41 @@ describe("cover badge placement", () => {
   });
 });
 
+describe("screen-wide carousels", () => {
+  it("are not taken for a collection collage", () => {
+    const carousel = document.createElement("div");
+    carousel.className = "Focusable";
+    const face = document.createElement("div");
+    const faceImg = document.createElement("img");
+    faceImg.src = "https://steamloopback.host/assets/1462040/library_header.jpg";
+    const neighbour = document.createElement("img");
+    neighbour.src = "https://steamloopback.host/assets/292030/library_600x900.jpg";
+    face.appendChild(faceImg);
+    carousel.append(face, neighbour);
+    document.body.appendChild(carousel);
+    box(carousel, window.innerWidth, 508);
+    box(face, window.innerWidth / 1.8, 231);
+    expect(isCollection(face)).toBe(false);
+    carousel.remove();
+  });
+});
+
+describe("hidden art", () => {
+  it("never carries the pill when a theme hides Steam's image under its own copy", () => {
+    const card = document.createElement("div");
+    const hiddenLayer = document.createElement("div");
+    hiddenLayer.style.opacity = "0";
+    const original = document.createElement("img");
+    const copy = document.createElement("img");
+    hiddenLayer.appendChild(original);
+    card.append(hiddenLayer, copy);
+    document.body.appendChild(card);
+    expect(isHidden(original, window)).toBe(true);
+    expect(isHidden(copy, window)).toBe(false);
+    card.remove();
+  });
+});
+
 describe("installs published before the overlays subscribe", () => {
   it("still reach a component whose subscription effect runs after the publish", async () => {
     const { render, cleanup } = await import("@testing-library/react");
@@ -113,5 +148,12 @@ describe("installs published before the overlays subscribe", () => {
     render(createElement("div", null, createElement(Reader), createElement(EarlyPublish)));
     expect(seen[seen.length - 1]).toEqual(["292030"]);
     cleanup();
+  });
+});
+
+describe("covers without an upscaler install", () => {
+  it("name Mako or Lossless Scaling instead of staying blank", async () => {
+    const { publishOverview } = await import("./overlays");
+    expect(() => publishOverview({ builds: [], installs: {}, engines: { "292030": { mako: { spatial: true, fg: false, multiplier: null } } } } as never)).not.toThrow();
   });
 });

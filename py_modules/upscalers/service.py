@@ -220,9 +220,32 @@ class UpscalerService:
             "builds": catalog.describe(self.gpu, self.device),
             "cached": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
             "installs": installs,
+            "engines": self._engine_summaries(),
             "job": self.job(),
             "helixsr": {"downloaded": self.helix.ready()},
         }
+
+    def _engine_summaries(self) -> dict:
+        """What Mako and Lossless Scaling do per game, for the list: neither shows up as an install."""
+        summaries: dict[str, dict] = {}
+        try:
+            for key, profile in (self.mako.status().get("profiles") or {}).items():
+                if isinstance(profile, dict):
+                    summaries.setdefault(str(key), {})["mako"] = {
+                        "spatial": bool(profile.get("scaling_enabled")), "fg": bool(profile.get("enabled")),
+                        "multiplier": profile.get("multiplier") if type(profile.get("multiplier")) is int else None}
+        except Exception as error:  # noqa: BLE001 — the list still shows every scaler install without it
+            if self.logger:
+                self.logger.info(f"Mako summary unavailable: {type(error).__name__}")
+        try:
+            for key, profile in (self.lsfg.status().get("profiles") or {}).items():
+                if isinstance(profile, dict):
+                    summaries.setdefault(str(key), {})["lossless"] = {
+                        "multiplier": profile.get("multiplier") if type(profile.get("multiplier")) is int else None}
+        except Exception as error:  # noqa: BLE001
+            if self.logger:
+                self.logger.info(f"Lossless summary unavailable: {type(error).__name__}")
+        return summaries
 
     def _status(self, install: dict, entry: dict) -> str:
         target = Path(install.get("target", ""))
