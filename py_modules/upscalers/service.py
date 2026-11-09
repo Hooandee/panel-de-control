@@ -111,6 +111,7 @@ class UpscalerService:
         self.state_path = Path(state_dir) / "state.json"
         self.cache = AssetCache(Path(state_dir) / "cache")
         self.latest = latest.Resolver(Path(state_dir), logger=logger)
+        self._fallbacks: dict[str, str] = {}
         self.lsfg = lsfg.Lsfg(home, Path(state_dir))
         self.mako = mako.Mako(home, Path(state_dir))
         self._engine_lock = threading.RLock()
@@ -196,6 +197,10 @@ class UpscalerService:
             event["job_id"] = job.get("id")
         if error:
             event["error"] = str(error)[:80]
+            if job and str(job.get("appid")) == str(appid) and job.get("detail"):
+                detail = diagnostics.error_detail(job["detail"])
+                if detail:
+                    event["detail"] = detail
         entry["actions"] = [*(entry.get("actions") or []), event][-20:]
         if global_action:
             self.state["global_actions"] = entry["actions"]
@@ -442,6 +447,7 @@ class UpscalerService:
     def run(self, operation, *args) -> None:
         appid = str(args[0]) if args else ""
         requested = args[1] if len(args) > 1 and isinstance(args[1], dict) else None
+        self._fallbacks = {}
         self.record_action(appid, operation.__name__, "started", requested)
         try:
             result = operation(*args)
@@ -738,7 +744,7 @@ class UpscalerService:
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
             "recipe_dependencies": list(automatic.dependencies) if automatic else [],
-            "components": diagnostics.components([{"id": asset.id, "sha256": chosen[asset.id].sha256} for asset in assets]),
+            "components": diagnostics.components([self._component(chosen[asset.id]) for asset in assets]),
             "fg_plan": fg_plan,
             "managed": managed,
             "edited": dict(edited),
@@ -747,6 +753,7 @@ class UpscalerService:
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
+        _wrote_ini(entry["install"])
         entry["history"].append({
             "build": build.id, "proxy": proxy, "at": now, "result": "pending", "exe": analysis["exe"],
             "game_build": installed.build_id, "recipe_revision": automatic.revision if automatic else None,
@@ -770,6 +777,8 @@ class UpscalerService:
     def _fetch_assets(self, assets: list[catalog.Asset], pinned_only=frozenset()) -> tuple[dict[str, Path], dict[str, catalog.Asset]]:
         """Each asset at its newest verified release, falling back to the catalog's own when that one fails."""
         unique = list({asset.id: asset for asset in assets}.values())
+        self._fallbacks.update({asset.id: "layout" for asset in unique
+                                if asset.id in pinned_only and self.latest.tracked(asset)})
         if any(self.latest.tracked(asset) and asset.id not in pinned_only for asset in unique):
             self._update_job(phase="resolve", total=0, done=0)
         chosen = {asset.id: asset if asset.id in pinned_only else self.latest.resolve(asset) for asset in unique}
@@ -790,12 +799,22 @@ class UpscalerService:
                     raise
                 if self.logger:
                     self.logger.warning(f"Newest {pinned.id} failed ({error.code}); using the catalog's release")
+                self._fallbacks[pinned.id] = error.code
                 chosen[pinned.id] = pinned
                 paths[pinned.id] = self.cache.ensure(pinned, progress, self._cancel.is_set)
             if asset in missing:
                 offset += asset.size
                 self._update_job(done=offset)
         return paths, chosen
+
+    def _component(self, asset: catalog.Asset) -> dict:
+        """Which release went in for a tracked tool: the newest (with its tag) or the catalog's, and why."""
+        item = {"id": asset.id, "sha256": asset.sha256}
+        if self.latest.tracked(asset):
+            version = self.latest.version(asset)
+            item.update({"source": "latest", "version": version} if version else
+                        {"source": "pinned", "fallback": self._fallbacks.get(asset.id, "unresolved")})
+        return item
 
     def _install_dll(self, appid: str, build: catalog.Build, choice: dict) -> dict:
         installed, analysis, _target = self._guard(appid, bool(choice.get("confirm_anti_cheat")))
@@ -1131,6 +1150,7 @@ class UpscalerService:
                 path.write_text(ini.apply(text, catalog.fg_overrides(None, False)), encoding="utf-8")
             except OSError:
                 raise UpscalerError("broken") from None
+            _wrote_ini(install)
             install["options"] = {**current, "fg": "off"}
             self._save()
             return {"options": install["options"]}
@@ -1172,6 +1192,7 @@ class UpscalerService:
         model = catalog.model_overrides(build, choice.get("model"))
         model_changed = model != catalog.model_overrides(build, install.get("options", {}).get("model"))
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **model, **fg, **_image_overrides(install, text)}), encoding="utf-8")
+        _wrote_ini(install)
         if _clean_options(choice).get("quality") != (install.get("options") or {}).get("quality"):
             install["quality_at"] = time.time()
         install["options"] = _clean_options(choice)
@@ -1198,6 +1219,7 @@ class UpscalerService:
         except OSError:
             raise UpscalerError("broken") from None
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **_image_overrides(install, text)}), encoding="utf-8")
+        _wrote_ini(install)
         if wanted.get("quality") != current.get("quality"):
             install["quality_at"] = time.time()
         install["options"] = wanted
@@ -1346,6 +1368,8 @@ class UpscalerService:
                 try:
                     self._save()
                     image_settings.write(path, root, text, ini.apply(text, changes))
+                    if owned:
+                        _wrote_ini(entry["install"])
                 except Exception:
                     if image_settings.read(path, root) == text:
                         if previous is None:
@@ -1372,6 +1396,8 @@ class UpscalerService:
                 if not isinstance(receipt, dict) or receipt.get("target") != str(path):
                     raise UpscalerError("image_settings_changed")
                 image_settings.write(path, root, text, image_settings.restored(text, receipt))
+                if owned:
+                    _wrote_ini(entry["install"])
                 previous_overrides = entry["install"].get("image_overrides") if owned else None
                 entry.pop("image_settings", None)
                 if owned:
@@ -1426,6 +1452,7 @@ class UpscalerService:
             raise UpscalerError("ini_value")
         path.write_text(ini.apply(text, {dotted: value}), encoding="utf-8")
         install.setdefault("edited", {})[dotted] = value
+        _wrote_ini(install)
         self._save()
         return {"key": dotted, "value": value}
 
@@ -2069,6 +2096,13 @@ def _archive_sources(archive: Path, generation: int) -> dict[str, Path]:
             if item.is_file() and item.suffix.lower() != ".bat":
                 sources[item.relative_to(archive).as_posix()] = item
     return sources
+
+
+def _wrote_ini(install: dict) -> None:
+    """What Panel just left in OptiScaler.ini, so a report can tell a later rewrite (the game, OptiScaler's own
+    menu, the user) from a setting Panel never saved."""
+    written = diagnostics.ini_values(Path(install["target"]) / "OptiScaler.ini", install.get("edited"))
+    install["ini_written"] = None if written.get("missing") else {"at": time.time(), "values": written}
 
 
 def _clean_options(choice: dict) -> dict:

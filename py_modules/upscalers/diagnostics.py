@@ -139,8 +139,29 @@ def components(value) -> list[dict]:
         identifier, digest = item.get("id"), item.get("sha256")
         if (isinstance(identifier, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", identifier)
                 and isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)):
-            result.append({"id": identifier, "sha256": digest})
+            entry = {"id": identifier, "sha256": digest}
+            for key in ("source", "version", "fallback"):
+                value = item.get(key)
+                if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}", value):
+                    entry[key] = value
+            result.append(entry)
     return result
+
+
+_DETAIL = re.compile(r"\b[A-Z][A-Za-z]*(?:Error|Exception|Timeout)\b|\bHTTP Error \d{3}\b|\bE[A-Z]{3,15}\b"
+                     r"|timed out|Name or service not known|Temporary failure in name resolution"
+                     r"|certificate verify failed|Connection (?:refused|reset by peer)|No space left on device"
+                     r"|bridge missing")
+
+
+def error_detail(text) -> str | None:
+    """Only the recognisable parts of a failure (exception type, HTTP status, errno, network cause): enough to tell
+    a server or network problem from ours, never free text that could carry a URL token or a path."""
+    text = str(text or "")
+    if re.fullmatch(r"\d{1,15}", text):
+        return text
+    found = list(dict.fromkeys(_DETAIL.findall(text)))
+    return "; ".join(found)[:160] or None
 
 
 def verification_since(install: dict) -> float | None:
@@ -208,7 +229,8 @@ def _snapshot(install) -> dict:
                              for item in components(install.get("components"))]
     if install.get("target") and install.get("engine", "optiscaler") == "optiscaler":
         path = Path(install["target"]) / "OptiScaler.ini"
-        applied["ini"] = _ini_values(path)
+        applied["ini"] = ini_values(path)
+        applied["ini_drift"] = ini_drift(install, path)
         applied["advanced"] = [ini_request(path, key, value) for key, value in list(install.get("edited", {}).items())[:40]]
     applied["recipe_dependencies"] = [value for value in install.get("recipe_dependencies", [])[:16]
                                       if isinstance(value, str) and re.fullmatch(r"[a-z0-9-]{1,80}", value)]
@@ -236,7 +258,9 @@ def _snapshot(install) -> dict:
     return result
 
 
-def _ini_values(path: Path) -> dict:
+def ini_values(path: Path, extra=None) -> dict:
+    """Panel's reported OptiScaler.ini keys (plus the user's own edited ones) as they stand in the file."""
+    keys = {*INI_KEYS, *(k for k in (extra or {}) if isinstance(k, str))}
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -249,9 +273,28 @@ def _ini_values(path: Path) -> dict:
         elif "=" in stripped and not stripped.startswith(";"):
             key, value = stripped.split("=", 1)
             dotted = f"{section}.{key.strip()}"
-            if dotted in INI_KEYS:
+            if dotted in keys:
                 values[dotted] = value.strip()[:160]
     return values
+
+
+def ini_drift(install: dict, path: Path) -> dict:
+    """Keys changed in OptiScaler.ini since Panel last wrote it: who changed them is not ours to know, only that
+    Panel's write did land and something else rewrote it afterwards."""
+    written = install.get("ini_written")
+    if not isinstance(written, dict) or not isinstance(written.get("values"), dict):
+        return {"status": "unrecorded"}
+    now = ini_values(path, install.get("edited"))
+    if now.get("missing"):
+        return {"status": "missing", "written_at": written.get("at")}
+    try:
+        modified = path.stat().st_mtime
+    except OSError:
+        modified = None
+    changed = {key: {"panel": value, "now": now.get(key)} for key, value in written["values"].items()
+               if now.get(key) != value}
+    return {"status": "changed" if changed else "as_written", "written_at": written.get("at"),
+            "modified_at": modified, "keys": dict(list(changed.items())[:24])}
 
 
 def _manifest_check(target: Path) -> dict:
@@ -465,7 +508,7 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
         facts = logread.read(target, since=verification_since(install))
         report.update({
             "manifest": _manifest_check(target),
-            "ini": _ini_values(target / "OptiScaler.ini"),
+            "ini": ini_values(target / "OptiScaler.ini"),
             "log_verdict": logread.verdict(facts),
             "log_facts": facts,
             "log_excerpt": _log_excerpt(target),

@@ -238,6 +238,8 @@ def test_a_broken_newest_release_falls_back_to_the_catalog_one(steam, fake_catal
     service.install(APPID, {"build": "fsr-test"})
     assert service.cache.ready(pinned) and not service.cache.ready(newest)
     assert service.state["games"][APPID]["install"]["build"] == "fsr-test"
+    component = next(item for item in service.state["games"][APPID]["install"]["components"] if item["id"] == pinned.id)
+    assert component["source"] == "pinned" and component["fallback"] == "hash_mismatch"
 
 
 def test_a_cancelled_install_reports_cancelled_and_keeps_the_game(steam, fake_catalog, proc, monkeypatch):
@@ -327,3 +329,51 @@ def test_a_failed_release_lookup_waits_before_asking_again(tmp_path):
 def test_wine_paths_in_reports_hide_the_user_name():
     from report import collector
     assert "alice" not in collector.redact_text(r"Z:\home\alice\.local\share\Steam\game.log")
+
+
+# ---- reports tell our failures from someone else's -------------------------------------------------------
+def test_report_shows_the_ini_as_panel_wrote_it_and_what_changed_after(steam, fake_catalog, proc):
+    from upscalers import diagnostics
+    _, game = steam
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test"})
+    install = service.state["games"][APPID]["install"]
+    path = Path(install["target"]) / "OptiScaler.ini"
+    assert diagnostics.ini_drift(install, path)["status"] == "as_written"
+    service.configure(APPID, {**install["options"], "quality": "performance"})
+    assert diagnostics.ini_drift(install, path)["status"] == "as_written"
+    text = path.read_text()
+    written = install["ini_written"]["values"]
+    assert written
+    key = next(iter(written))
+    name = key.split(".", 1)[1]
+    path.write_text(text.replace(f"{name}={written[key]}", f"{name}=changed", 1))
+    drift = diagnostics.ini_drift(install, path)
+    assert drift["status"] == "changed" and drift["keys"][key] == {"panel": written[key], "now": "changed"}
+    path.unlink()
+    assert diagnostics.ini_drift(install, path)["status"] == "missing"
+    assert diagnostics.ini_drift({}, path) == {"status": "unrecorded"}
+
+
+def test_a_failed_job_keeps_its_detail_in_the_game_history(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+
+    def failing(appid, choice):
+        raise assets_mod.AssetError("download_failed", "HTTPError: HTTP Error 503: Service Unavailable")
+
+    failing.__name__ = "install"
+    service.begin("install", APPID)
+    service.run(failing, APPID, {"build": "fsr-test"})
+    last = service.state["games"][APPID]["actions"][-1]
+    assert last["error"] == "download_failed" and last["detail"] == "HTTPError; HTTP Error 503"
+
+
+@pytest.mark.parametrize(("raw", "kept"), [
+    ("URLError: <urlopen error [Errno -2] Name or service not known>", "URLError; Name or service not known"),
+    ("token=secret https://x.invalid/?sig=abc", None),
+    ("1048576", "1048576"),
+    ("OSError: [Errno 28] No space left on device: '/home/deck/x'", "OSError; No space left on device"),
+])
+def test_error_detail_keeps_only_recognisable_causes(raw, kept):
+    from upscalers import diagnostics
+    assert diagnostics.error_detail(raw) == kept

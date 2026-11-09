@@ -56,11 +56,13 @@ def test_applied_components_survive_catalog_changes_and_optiscaler_to_dll_restor
     assert original.read_bytes() == b"official framework"
     expected = [{"id": asset.id, "sha256": asset.sha256} for asset in catalog.build_assets(catalog.BUILDS["fsr-test"])]
     expected.append({"id": "reframework-nightly", "sha256": catalog.ASSETS["reframework-nightly"].sha256})
-    assert service.game(APPID)["install"]["components"] == expected
+    assert [{key: item[key] for key in ("id", "sha256")} for item in service.game(APPID)["install"]["components"]] == expected
     monkeypatch.setitem(catalog.ASSETS, "reframework-nightly", replace(catalog.ASSETS["reframework-nightly"], sha256="0" * 64))
     reloaded = _service(steam, re_catalog, proc)
+    stored = service.game(APPID)["install"]["components"]
+    assert stored[0]["source"] == "pinned" and stored[0]["fallback"] == "unresolved" and stored[-1].get("source") == "pinned", stored
     reported = [{**item, "sha256": "-".join(item["sha256"][index:index + 4] for index in range(0, 64, 4))}
-                for item in expected]
+                for item in stored]
     assert reloaded.diagnose(APPID)["current"]["applied"]["components"] == reported
     reloaded.install(APPID, {"build": "dll-test"})
     assert original.read_bytes() == b"original loader"
