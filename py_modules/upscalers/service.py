@@ -368,7 +368,7 @@ class UpscalerService:
         if recipe_info:
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                recipe_info["automatic"] = ["Luma"] if automatic else []
+                recipe_info["automatic"] = ["Luma"] if automatic and any(d.startswith("luma") for d in automatic.dependencies) else []
                 recipe_info["automatic_builds"] = [b.id for b in catalog.BUILDS.values() if b.engine == "optiscaler"] if automatic else []
                 recipe_info["user_files"] = auto_recipes.user_files(automatic, self.user_files)
                 recipe_info["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)

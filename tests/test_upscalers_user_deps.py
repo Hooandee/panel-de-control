@@ -102,3 +102,23 @@ def test_service_adopts_only_files_under_home_and_names_the_problem(tmp_path, mo
         service.add_user_file("2050650", "refw-pdup-re4", str(good))
     service.remove_user_file("2050650", "puredark-upscaler-base")
     assert service.user_files.status(dependency)["state"] == "missing"
+
+
+def test_game_detail_lists_user_files_and_does_not_claim_luma(tmp_path, monkeypatch):
+    from upscalers import auto_recipes, recipe_catalog, recipes
+    from upscalers.service import UpscalerService
+    import test_upscalers
+    home = tmp_path / "home"
+    game_root = home / ".local/share/Steam/steamapps/common/Witcher"
+    test_upscalers._write(home / ".local/share/Steam/steamapps/libraryfolders.vdf",
+                          '"libraryfolders"\n{\n "0"\n {\n  "path" "%s"\n }\n}\n' % (home / ".local/share/Steam"))
+    test_upscalers._write(home / f".local/share/Steam/steamapps/appmanifest_{test_upscalers.APPID}.acf",
+                          '"AppState"\n{\n "appid" "%s"\n "name" "Witcher"\n "installdir" "Witcher"\n "StateFlags" "4"\n}\n' % test_upscalers.APPID)
+    test_upscalers._write(game_root / "re4.exe", b"MZ" + b"\0" * 64)
+    service = UpscalerService(str(home), str(tmp_path / "state"), "rdna3", proc=str(tmp_path))
+    curated = recipe_catalog.bundled().match("2050650", "optiscaler", "linux", "x86_64")
+    monkeypatch.setattr(service, "_recipe", lambda *a: recipes.recipe_for("2050650", platform="linux", arch="x86_64"))
+    monkeypatch.setattr(auto_recipes, "plan", lambda recipe, installed: curated)
+    info = service.game(test_upscalers.APPID)["recipe_info"]
+    assert info["automatic"] == []
+    assert [(f["id"], f["state"]) for f in info["user_files"]] == [("puredark-upscaler-base", "missing")]
