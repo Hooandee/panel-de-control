@@ -624,6 +624,9 @@ export const GameView: FC<{
           {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.game_settings?.map((entry) => (
             <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>
           ))}
+          {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.quality_on_exit && overview.display && (
+            <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.fullResolution", { size: `${overview.display[0]}x${overview.display[1]}` })}</Notice>
+          )}
           {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
           {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}
           {detail.recipe_info && (

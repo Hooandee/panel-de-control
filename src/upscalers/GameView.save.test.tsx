@@ -183,3 +183,10 @@ it("saves a quality chosen while playing a REFramework game for when the game cl
   await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
   state.running = null;
 });
+
+it("asks REFramework games to run full screen at the display's resolution", async () => {
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText(/up.recipe.fullResolution/)).toBeTruthy();
+});

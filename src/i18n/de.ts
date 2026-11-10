@@ -452,6 +452,7 @@ export const de: Record<string, string> = {
   "up.error.prefix_tool_unavailable": "Das Werkzeug zum Vorbereiten der Spielumgebung fehlt",
   "up.error.prefix_unavailable": "Starte das Spiel einmal, damit Steam seine Umgebung vorbereitet, und wende die Änderungen erneut an",
   "up.error.prefix_failed": "Die Spielumgebung konnte nicht vorbereitet werden",
+  "up.recipe.fullResolution": "Stelle in den Grafikeinstellungen des Spiels Vollbild mit {size} ein: Der Upscaler reicht nur bis zur Ausgabeauflösung des Spiels",
   "up.recipe.gameSetting": "Stelle in den Grafikeinstellungen des Spiels „{setting}“ auf „{value}“",
   "up.recipe.need.mod": "OptiScaler skaliert dieses Spiel nicht ohne separaten Mod",
   "up.wiki.status.works": "Von der OptiScaler-Community getestet: funktioniert",

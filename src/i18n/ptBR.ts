@@ -452,6 +452,7 @@ export const ptBR: Record<string, string> = {
   "up.error.prefix_tool_unavailable": "Falta a ferramenta necessária para preparar o ambiente do jogo",
   "up.error.prefix_unavailable": "Abra o jogo uma vez para que o Steam prepare o ambiente e aplique novamente",
   "up.error.prefix_failed": "Não foi possível preparar o ambiente do jogo",
+  "up.recipe.fullResolution": "Nas configurações gráficas do jogo, use tela cheia em {size}: o upscaler só chega à resolução de saída do jogo",
   "up.recipe.gameSetting": "Nos gráficos do jogo, coloque “{setting}” em “{value}”",
   "up.recipe.need.mod": "O OptiScaler não escala este jogo sem um mod à parte",
   "up.wiki.status.works": "Testado pela comunidade do OptiScaler: funciona",
