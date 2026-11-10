@@ -610,7 +610,7 @@ export const ptBR: Record<string, string> = {
   "up.userFile.waiting": "Aguardando o download",
   "up.userFile.waitingCaption": "Instala sozinho assim que chegar em Downloads",
   "up.userFile.missing": "Falta",
-  "up.userFile.where": "Baixe no modo desktop em {page}, versão {version}",
+  "up.userFile.where": "Versão {version} em {page}",
   "up.userFile.use": "Usar {name}",
   "up.userFile.choose": "Escolher arquivo",
   "up.userFile.change": "Trocar arquivo",

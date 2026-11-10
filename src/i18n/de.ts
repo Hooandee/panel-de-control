@@ -610,7 +610,7 @@ export const de: Record<string, string> = {
   "up.userFile.waiting": "Warte auf den Download",
   "up.userFile.waitingCaption": "Wird installiert, sobald sie in Downloads liegt",
   "up.userFile.missing": "Fehlt",
-  "up.userFile.where": "Im Desktop-Modus von {page} herunterladen, Version {version}",
+  "up.userFile.where": "Version {version} auf {page}",
   "up.userFile.use": "{name} verwenden",
   "up.userFile.choose": "Datei wählen",
   "up.userFile.change": "Datei ändern",
