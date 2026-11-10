@@ -6518,7 +6518,13 @@ class Plugin(AmbientRpc):
         if (
             decision.reason == "probe_stable"
             and self._learning_active()
-            and not self._measured_route_active()
+            and (
+                not self._measured_route_active()
+                or (
+                    self._measured_verdict is None
+                    or self._measured_verdict.state != "exceeded"
+                )
+            )
         ):
             try:
                 recorded = self._auto_learning.record(
