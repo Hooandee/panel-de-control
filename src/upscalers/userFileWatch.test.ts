@@ -67,3 +67,17 @@ it("keeps a single watch when pressed twice and releases the first card", async 
   await vi.advanceTimersByTimeAsync(9000);
   expect(api.getUpscalerUserFileCandidates).toHaveBeenCalledTimes(1);
 });
+
+it("keeps watching while an install is running and adopts once it ends", async () => {
+  api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/d", candidates: [] });
+  await downloadUserFile("2050650", file);
+  api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/d", candidates: [fresh] });
+  api.addUpscalerUserFile.mockRejectedValueOnce(new Error("busy")).mockResolvedValue({ appid: "2050650", install: {} });
+  const events: string[] = [];
+  onUserFileWatch((event) => events.push(event.type));
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(watchingFor("2050650", file.id)).toBe(true);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(events).toEqual(["adopted"]);
+  expect(watchingFor("2050650", file.id)).toBe(false);
+});

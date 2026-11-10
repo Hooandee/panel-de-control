@@ -45,7 +45,7 @@ import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
 import { UserFiles } from "./UserFiles";
-import { takePendingReinstall } from "./userFileWatch";
+import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
 import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
@@ -298,7 +298,7 @@ export const GameView: FC<{
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
-  // A file picked up from Downloads while this page was closed still has to go into the installed game.
+  // A user file changed (here or while this page was closed): it goes into the installed game once nothing blocks it.
   useEffect(() => {
     if (detail?.install && !gameRunning && job?.state !== "running" && takePendingReinstall(appid)) reinstall();
   }, [detail?.install, gameRunning, job?.state]);
@@ -578,7 +578,7 @@ export const GameView: FC<{
             disabled={running || foreignBusy} onChange={changeChoice} />}
           {!detail.native && !spatial && selectedEngine === "optiscaler" && !!detail.recipe_info?.user_files?.length && (
             <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
-              onDetail={(next) => { setDetail(next); if (install && !gameRunning && !running) reinstall(); }} />
+              onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
           )}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (

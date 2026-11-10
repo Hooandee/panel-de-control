@@ -47,7 +47,12 @@ export function watchingFor(appid: string, dependency: string): boolean {
   return watch?.appid === appid && watch.dependency === dependency;
 }
 
-/** Whether a file adopted while the page was closed still has to go into the installed game. Consumed once. */
+/** A changed file still has to go into the installed game: GameView reinstalls once the game and any job allow it. */
+export function markPendingReinstall(appid: string): void {
+  reinstall.add(appid);
+}
+
+/** Consumed once. */
 export function takePendingReinstall(appid: string): boolean {
   return reinstall.delete(appid);
 }
@@ -71,14 +76,20 @@ async function tick(): Promise<void> {
     // A half-written download doesn't open as an archive yet, so it never shows up here.
     const fresh = candidates.find((candidate) => !current.known.has(candidate.path));
     if (!fresh) return;
-    stop();
+    let detail: GameDetail;
     try {
-      const detail = await addUpscalerUserFile(current.appid, current.dependency, fresh.path);
-      if (detail.install) reinstall.add(current.appid);
-      emit({ type: "adopted", appid: current.appid, dependency: current.dependency, detail });
+      detail = await addUpscalerUserFile(current.appid, current.dependency, fresh.path);
     } catch (error) {
-      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code: upscalerErrorCode(error) });
+      const code = upscalerErrorCode(error);
+      // An install is running: the next tick tries again.
+      if (code === "busy") return;
+      if (watch === current) stop();
+      emit({ type: "failed", appid: current.appid, dependency: current.dependency, code });
+      return;
     }
+    if (watch === current) stop();
+    if (detail.install) reinstall.add(current.appid);
+    emit({ type: "adopted", appid: current.appid, dependency: current.dependency, detail });
   } catch {
     /* the next tick tries again */
   } finally {

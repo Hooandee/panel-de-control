@@ -39,6 +39,18 @@ def test_archives_with_escaping_or_option_like_paths_are_refused(tmp_path, membe
     assert user_deps.inspect(PLUGIN, archive)["reason"] == "unsafe_archive"
 
 
+def test_archive_paths_with_brackets_are_taken_literally(tmp_path):
+    import tarfile
+    source = tmp_path / "PDPerfPlugin.dll"
+    source.write_bytes(b"MZplugin")
+    archive = tmp_path / "UpscalerBasePlugin-502-1-1-2-1.7z"  # bsdtar reads the format from the content
+    with tarfile.open(archive, "w") as tar:
+        tar.add(source, arcname="Plugin [1.1.2]/PDPerfPlugin.dll")
+    store = user_deps.Store(tmp_path / "store")
+    assert store.adopt(PLUGIN, archive)["state"] == "ready"
+    assert store.sources(PLUGIN)["PDPerfPlugin.dll"].read_bytes() == b"MZplugin"
+
+
 def test_a_loose_dll_saved_in_other_case_is_stored_under_the_wanted_name(tmp_path):
     dll = tmp_path / "pdperfplugin.dll"
     dll.write_bytes(b"MZplugin")

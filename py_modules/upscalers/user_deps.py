@@ -99,7 +99,9 @@ def _extract(path: Path, members: dict[str, str], destination: Path) -> None:
         return
     staging = Path(tempfile.mkdtemp(dir=destination, prefix=".unpack-"))
     try:
-        result = subprocess.run(["bsdtar", "-xf", str(path), "-C", str(staging), "--", *members.values()],
+        # bsdtar reads member names as patterns: escape so "Plugin [1.1.2]/x.dll" means itself.
+        patterns = [re.sub(r"([][*?\\])", r"\\\1", member) for member in members.values()]
+        result = subprocess.run(["bsdtar", "-xf", str(path.resolve()), "-C", str(staging), "--", *patterns],
                                 capture_output=True, timeout=300, check=False)
         if result.returncode != 0:
             raise UserFileError("unreadable")
@@ -221,7 +223,7 @@ class Store:
         ready = bool(meta) and all((self._folder(dependency) / "files" / m).is_file() for m in dependency.files.values())
         return {
             "id": dependency.id, "name": dependency.name, "page_url": dependency.page_url,
-            "download_url": getattr(dependency, "download_url", None) or dependency.page_url,
+            "download_url": dependency.download_url or dependency.page_url,
             "version": dependency.version, "installed_version": meta.get("version") if ready else None,
             "filename": meta.get("filename") if ready else None,
             "state": _state(dependency, meta.get("version")) if ready else "missing",

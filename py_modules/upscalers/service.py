@@ -436,6 +436,7 @@ class UpscalerService:
             raise UpscalerError("user_file_unreadable") from None
         if not any(resolved.is_relative_to(root) for root in allowed):
             raise UpscalerError("user_file_unreadable")
+        self._idle()
         try:
             self.user_files.adopt(dependency, resolved)
         except user_deps.UserFileError as error:
@@ -444,6 +445,7 @@ class UpscalerService:
         return self.game(appid)
 
     def remove_user_file(self, appid: str, dependency_id: str) -> dict:
+        self._idle()
         self.user_files.remove(self._user_dependency(dependency_id))
         return self.game(appid)
 
@@ -476,6 +478,12 @@ class UpscalerService:
     def begin(self, kind: str, appid: str) -> str:
         with self._image_lock:
             return self._begin(kind, appid)
+
+    def _idle(self) -> None:
+        """A running install reads the stored user files: they can't change under it."""
+        with self._lock:
+            if self._job and self._job.get("state") == "running":
+                raise UpscalerError("busy")
 
     def _begin(self, kind: str, appid: str) -> str:
         with self._lock:
@@ -2082,7 +2090,7 @@ def _recipe_info(recipe) -> dict | None:
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,
             "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
-            # OptiScaler's old menu (OverlayMenu=false, RE Engine via REFramework) never draws its FPS counter.
+            # OptiScaler's old menu (OverlayMenu=false) never draws its FPS counter.
             "fps_counter": not (str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
                                 or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}
 

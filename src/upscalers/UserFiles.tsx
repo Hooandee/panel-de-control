@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { upscalerErrorCode } from "./errorCode";
 import { ListCard, ListRow, Note } from "./parts";
 import type { GameDetail, UserFile, UserFileCandidate } from "./types";
-import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, takePendingReinstall, watchingFor } from "./userFileWatch";
+import { cancelUserFileWatch, downloadUserFile, onUserFileWatch, watchingFor } from "./userFileWatch";
 
 const EXTENSIONS = ["zip", "7z", "rar", "dll"];
 
@@ -37,11 +37,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
   useEffect(() => onUserFileWatch((event) => {
     if (event.appid !== appid || event.dependency !== file.id) return;
     setWaiting(event.type === "watching");
-    if (event.type === "adopted") {
-      // Still on screen: the page reinstalls through onDetail, so the pending flag is not needed.
-      takePendingReinstall(appid);
-      onDetail(event.detail);
-    }
+    if (event.type === "adopted") onDetail(event.detail);
     if (event.type === "failed") setError(t(event.code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
   }), [appid, file.id, onDetail, t]);
 
