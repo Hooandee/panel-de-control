@@ -77,6 +77,9 @@ class DeviceProfile:
     # x86-only paths (watt-based TDP backends, ryzenadj, amdgpu/i915 clocks).
     arch: str = "x86"
     dt_compatible: tuple[str, ...] = field(default_factory=tuple)
+    # Floor (watts) below which the measured-power watchdog will not flag an overshoot.
+    # APUs with a high baseline draw under 3D load use this to prevent false trips.
+    measured_floor_w: float = 0.0
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -257,7 +260,8 @@ DEVICE_TABLE = (
                   tdp_presets=(12, 18, 30, 30)),
     DeviceProfile("gpd_win5", "GPD Win 5", "AMD Ryzen AI Max 385", "amd",
                   5, 25, 55, 55, match_names=("G1618-05",), experimental=True,
-                  tdp_presets=(15, 30, 50, 50), cooler_max=75),
+                  tdp_presets=(15, 30, 50, 50), cooler_max=75,
+                  measured_floor_w=25.0),
     DeviceProfile("gpd_win_max_2", "GPD Win Max 2", "AMD Ryzen 7 8840U", "amd",
                   5, 20, 35, 35, match_names=("G1619-05",), experimental=True,
                   tdp_presets=(12, 22, 32, 32)),

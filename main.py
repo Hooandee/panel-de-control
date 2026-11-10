@@ -982,7 +982,9 @@ class Plugin(AmbientRpc):
         self._hud_apply_status = None
         self._tdp_generation = 0
         self._tdp_targets = None
-        self._measured_watch = MeasuredLimitWatch()
+        self._measured_watch = MeasuredLimitWatch(
+            floor_w=self._measured_floor_w(),
+        )
         self._measured_verdict = None
         self._measured_exceeded = 0
         self._measured_history = deque(maxlen=12)
@@ -13545,6 +13547,9 @@ class Plugin(AmbientRpc):
                 self._measured_power_source = False
             self._measured_power_source_at = now
         return self._measured_power_source
+
+    def _measured_floor_w(self) -> float:
+        return float(getattr(self._device, "measured_floor_w", 0.0) or 0.0)
 
     def _measured_route_active(self) -> bool:
         return bool(

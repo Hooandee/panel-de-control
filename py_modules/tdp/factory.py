@@ -45,7 +45,7 @@ _STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 # Zotac keeps its own unconfirmed-write fallback.
 _UNREADABLE_RYZENADJ_YIELDS = (
     _STRICT_RYZENADJ_KEYS - {"zotac_gaming_zone"}
-) | {"onexplayer_apex"}
+) | {"onexplayer_apex", "gpd_win5"}
 
 
 def _runtime_lock_path(root, name):
@@ -276,7 +276,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
     if os_id != "anatase":
         if key == "msi_claw_a8":
             return [ryzenadj]
-        if key == "onexplayer_apex":
+        if key in ("onexplayer_apex", "gpd_win5"):
             # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
             return [ryzenadj, *unreadable_tail]
         if key in _RYZENADJ_ONLY_KEYS:
@@ -289,7 +289,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
 
     if key == "msi_claw_a8":
         return [msi_a8, ryzenadj]
-    if key == "onexplayer_apex":
+    if key in ("onexplayer_apex", "gpd_win5"):
         return [dptc, ryzenadj, *unreadable_tail]
     if key in _RYZENADJ_ONLY_KEYS:
         return [dptc, asus, lenovo, msi, ryzenadj, *unreadable_tail]

@@ -265,6 +265,7 @@ def test_gpd_win5_is_recognised_experimental():
     assert prof.tdp_max == 55
     assert prof.tdp_presets == (15, 30, 50, 50)
     assert prof.cooler_max == 75  # cooler-attached ceiling (opt-in)
+    assert prof.measured_floor_w == 25.0
 
 
 def test_only_win5_has_cooler_max():
