@@ -451,6 +451,35 @@ def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_pat
     assert "hunter2" not in str(diagnostics)
 
 
+def test_steam_ui_exception_names_type_property_and_script_once(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    line = (
+        '[1110/112413.343200:INFO:CONSOLE(16)] "Uncaught TypeError: Cannot read properties of undefined '
+        "(reading 'values')\", source: https://steamloopback.host/libraries/libraries~00299a408.js (16)\n"
+    )
+    _write(
+        current,
+        line * 30
+        + '[1110/112413.496642:INFO:CONSOLE(1)] "TypeError: Cannot read properties of undefined '
+        "(reading 'values')\", source: https://steamloopback.host/library.js (1)\n"
+        + '[1110/112414.000000:INFO:CONSOLE(1)] "Uncaught TypeError: user@example.com is not a function", '
+        "source: https://steamloopback.host/routes/library/app/123?token=secret (1)\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "libraries", "reading": "values", "count": 30},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "library", "reading": "values", "count": 1},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "other", "count": 1},
+    ]
+    assert "user@example.com" not in str(diagnostics)
+    assert "secret" not in str(diagnostics)
+
+
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     tmp_path,
     monkeypatch,

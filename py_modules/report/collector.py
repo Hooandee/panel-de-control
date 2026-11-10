@@ -172,6 +172,11 @@ _DECKY_ORIGIN = re.compile(r"(?:localhost|127\.0\.0\.1):1337(?P<path>/[^\s?#)\"'
 _FRONTEND_EXCEPTION_TYPE = re.compile(
     r"Uncaught(?: \(in promise\))? (?P<error>TypeError|ReferenceError|SyntaxError|RangeError|Error)\b"
 )
+# Steam's own UI scripts: an error there takes down the library or a menu, whoever triggered it.
+_STEAM_UI_ORIGIN = re.compile(r"steamloopback\.host/(?P<path>[^\s?#)\"']*)")
+_STEAM_UI_EXCEPTION = re.compile(r'"(?:Uncaught(?: \(in promise\))? )?(?P<error>TypeError|ReferenceError|RangeError)\b')
+_STEAM_UI_READING = re.compile(r"\(reading '(?P<name>[A-Za-z_$][\w$]{0,40})'\)")
+_STEAM_UI_SCRIPTS = (("libraries/", "libraries"), ("library.js", "library"), ("sp.js", "sp"), ("chunk", "chunk"))
 # Plugin folder names are user text: only these fixed slugs leave the device.
 _KNOWN_FRONTEND_ORIGINS = {
     "paneldecontrol": "panel",
@@ -355,7 +360,19 @@ def _frontend_signal(line: str) -> tuple[str | None, bool]:
         and re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", line)
     ):
         return "decky_frontend_exception", False
+    if _STEAM_UI_ORIGIN.search(line) and _STEAM_UI_EXCEPTION.search(line):
+        return "steam_ui_exception", False
     return None, False
+
+
+def _steam_ui_exception_detail(line: str) -> dict:
+    path = _STEAM_UI_ORIGIN.search(line).group("path")
+    script = next((slug for prefix, slug in _STEAM_UI_SCRIPTS if prefix in path), "other")
+    detail = {"error_type": _STEAM_UI_EXCEPTION.search(line).group("error"), "script": script}
+    reading = _STEAM_UI_READING.search(line)
+    if reading:
+        detail["reading"] = reading.group("name")
+    return detail
 
 
 def _frontend_exception_detail(line: str) -> dict:
@@ -390,6 +407,7 @@ def frontend_crash_diagnostics(
     signals = []
     plugin_load_errors = []
     seen_plugins = set()
+    steam_ui_seen: dict[tuple, dict] = {}
     crash_detected = False
     plugin_load_error = False
 
@@ -443,6 +461,16 @@ def frontend_crash_diagnostics(
                 ):
                     seen_plugins.add(key)
                     plugin_load_errors.append(plugin)
+            if kind == "steam_ui_exception":
+                signal = {"source": source, "kind": kind, **_steam_ui_exception_detail(raw_line)}
+                key = tuple(sorted(signal.items()))
+                if key in steam_ui_seen:
+                    steam_ui_seen[key]["count"] += 1
+                elif len(signals) < _MAX_FRONTEND_SIGNALS:
+                    signal["count"] = 1
+                    steam_ui_seen[key] = signal
+                    signals.append(signal)
+                continue
             if len(signals) < _MAX_FRONTEND_SIGNALS:
                 signal = {"source": source, "kind": kind}
                 if kind == "decky_frontend_exception":
