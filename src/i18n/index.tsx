@@ -489,7 +489,7 @@ const es: Record<string, string> = {
   "up.error.prefix_tool_unavailable": "Falta la herramienta necesaria para preparar el entorno del juego",
   "up.error.prefix_unavailable": "Abre el juego una vez para que Steam prepare su entorno y vuelve a aplicar",
   "up.error.prefix_failed": "No se pudo preparar el entorno del juego",
-  "up.recipe.gameSetting": "En los gráficos del juego, pon «{setting}» en «{value}»",
+  "up.recipe.gameSetting": "En los gráficos del juego, pon \"{setting}\" en \"{value}\"",
   "up.recipe.need.mod": "OptiScaler no escala este juego sin un mod aparte",
   "up.wiki.status.works": "La comunidad de OptiScaler lo ha probado y funciona",
   "up.wiki.status.partial": "Según la wiki de OptiScaler funciona a medias",
