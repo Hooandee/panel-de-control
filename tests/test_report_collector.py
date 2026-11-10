@@ -480,6 +480,49 @@ def test_steam_ui_exception_names_type_property_and_script_once(tmp_path):
     assert "secret" not in str(diagnostics)
 
 
+def test_steam_ui_exception_keeps_names_fixed_and_trusts_only_the_source(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[1] "Uncaught TypeError: Cannot read properties of undefined (reading \'JoséMaría\')", '
+        "source: https://steamloopback.host/sp.js?contenthash=1 (1)\n"
+        '[2] "Uncaught TypeError: x https://steamloopback.host/chunk~1.js", '
+        "source: https://store.steampowered.com/app/1?u=https://steamloopback.host/chunk~1.js (1)\n"
+        '[3] "Uncaught TypeError: y", source: https://steamloopback.host/routes/wsp.js (1)\n',
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["signals"] == [
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "sp", "reading": "other", "count": 1},
+        {"source": "cef_log.txt", "kind": "steam_ui_exception", "error_type": "TypeError",
+         "script": "other", "count": 1},
+    ]
+    assert "José" not in str(diagnostics)
+
+
+def test_steam_ui_exceptions_leave_room_for_plugin_signals(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    names = ["values", "keys", "entries", "get", "has", "set", "size", "length", "map", "filter", "find", "some"]
+    noisy = "".join(
+        f'[{i}] "Uncaught TypeError: Cannot read properties of undefined (reading \'{name}\')", '
+        "source: https://steamloopback.host/library.js (1)\n"
+        for i, name in enumerate(names * 3)
+    )
+    _write(
+        current,
+        noisy + '[9] "Uncaught TypeError: w", '
+        "source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js (9)\n",
+    )
+
+    signals = frontend_crash_diagnostics([str(current)])["signals"]
+
+    assert sum(s["kind"] == "steam_ui_exception" for s in signals) == 8
+    assert {"source": "cef_log.txt", "kind": "decky_frontend_exception",
+            "error_type": "TypeError", "origin": "panel"} in signals
+
+
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
     tmp_path,
     monkeypatch,
