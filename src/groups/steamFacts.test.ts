@@ -21,6 +21,7 @@ function globals(): SteamGlobals {
     appStore: { GetAppOverviewByAppID: (id) => byId.get(id) },
     collectionStore: {
       GetCollection: (id) => ({ "type-games": { visibleApps: [apps[0], apps[1]] }, "type-music": { visibleApps: [apps[3]] }, favorite: { id: "favorite", allApps: [apps[0]] } } as unknown as Record<string, never>)[id],
+      m_mapCollectionsFromStorage: new Map(),
       userCollections: [{ id: "uc-1", allApps: [apps[1]] }],
       sharedLibrariesCollections: [{ allApps: [apps[4]] }],
       allAppsCollection: { allApps: apps },
@@ -128,5 +129,19 @@ describe("friend ownership edge cases", () => {
     release({ setApps: [10] });
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(friends.loading()).toBe(false);
+  });
+});
+
+describe("Steam's collections before they load", () => {
+  it("never touches Steam's userCollections until the store holds its collections", async () => {
+    const { userCollections } = await import("./steamFacts");
+    const getter = vi.fn(() => { throw new TypeError("Cannot read properties of undefined (reading 'values')"); });
+    const store: Record<string, unknown> = {};
+    Object.defineProperty(store, "userCollections", { get: getter });
+    expect(userCollections({ collectionStore: store } as unknown as SteamGlobals)).toEqual([]);
+    expect(getter).not.toHaveBeenCalled();
+    const loaded = [{ id: "uc-1", displayName: "Favs" }];
+    const ready = { m_mapCollectionsFromStorage: new Map([["uc-1", loaded[0]]]), userCollections: loaded };
+    expect(userCollections({ collectionStore: ready } as unknown as SteamGlobals)).toEqual(loaded);
   });
 });

@@ -39,6 +39,7 @@ export interface SteamGlobals {
   appStore?: { GetAppOverviewByAppID?(id: number): Overview | undefined; m_mapStoreTagLocalization?: Map<number, string> | Record<string, string> };
   collectionStore?: {
     GetCollection?(id: string): Collection | undefined; userCollections?: readonly Collection[];
+    m_mapCollectionsFromStorage?: { values?: unknown };
     sharedLibrariesCollections?: readonly Collection[]; allAppsCollection?: Collection;
   };
   appAchievementProgressCache?: {
@@ -64,7 +65,13 @@ const DEFAULT_SOURCES = ["type-games"];
 const EXTENDED_SOURCES = ["type-software", "type-music", "type-tools", "type-videos"];
 
 export const folderId = (folder: InstallFolder) => folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");
-export const userCollections = (globals: SteamGlobals) => attempt(() => globals.collectionStore?.userCollections ?? [], []);
+// Steam's userCollections is a MobX computed over the collections it loads from cloud storage. Read before that
+// load, it fails and MobX keeps the failure: Steam's library, game menu and properties then crash on it.
+export const userCollections = (globals: SteamGlobals) => attempt(() => {
+  const store = globals.collectionStore;
+  if (typeof store?.m_mapCollectionsFromStorage?.values !== "function") return [];
+  return store.userCollections ?? [];
+}, []);
 
 const ids = (apps: readonly Overview[] | undefined) =>
   (apps ?? []).map((app) => app.appid).filter((id): id is number => Number.isInteger(id) && (id as number) > 0);
