@@ -185,5 +185,33 @@
       "PDPerfPlugin.dll": "PDPerfPlugin.dll"
     },
     "download_url": "https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293"
+  },
+  "refw-pdup-re2": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re2",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-re3": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re3",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-re7": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re7",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-dmc5": {
+    "kind": "game_files",
+    "asset": "refw-pdup-dmc5",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
   }
 }
