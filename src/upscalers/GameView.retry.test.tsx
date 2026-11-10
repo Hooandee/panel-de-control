@@ -373,3 +373,11 @@ it("ignores another game's job progress and cancel control", async () => {
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 793 }} overview={{ ...overview, job: other }} />); });
   expect(screen.queryByText("up.cancel")).toBeNull();
 });
+
+it("tells which option to change in the game's own menu", async () => {
+  state.job = null;
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [], install: null,
+    recipe_info: { needs: [], game_settings: [{ setting: "FidelityFX Super Resolution 2", value: "No" }] } };
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.recipe.gameSetting")).toBeTruthy();
+});

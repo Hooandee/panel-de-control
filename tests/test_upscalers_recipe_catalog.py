@@ -51,7 +51,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 6
+    assert recipe.catalog_version == 7
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -319,3 +319,21 @@ def test_root_files_must_be_plain_dll_names(catalog_dir, value):
     edit(catalog_dir, 'games/2050650.json', lambda d: d.update(optiscaler_root_files=value))
     with pytest.raises(rc.CatalogError):
         rc.load(catalog_dir)
+
+
+def test_re4_recipe_drives_reframeworks_upscaler_and_names_the_game_setting():
+    game = rc.load().match('2050650', 'optiscaler', 'linux', 'x86_64')
+    assert game.reframework_upscaler is True and game.optiscaler_fg is False
+    assert game.game_settings == (('FidelityFX Super Resolution 2', 'No'),)
+    recipe = recipes.recipe_for('2050650', platform='linux', arch='x86_64')
+    assert recipe.reframework_upscaler and not recipe.optiscaler_fg
+    assert recipe.game_settings == (('FidelityFX Super Resolution 2', 'No'),)
+
+
+def test_recipe_without_optiscaler_fg_recommends_none_but_still_offers_it():
+    from py_modules.upscalers import solution_plan
+    recipe = recipes.Recipe('1', optiscaler_fg=False)
+    plan = solution_plan.resolve('rdna2', {'apis': ['d3d12']}, recipe)
+    assert plan['fg_plan'] is None
+    assert 'optiscaler' in plan['offered_fg_plan']['routes']
+    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'optiscaler'})['route'] == 'optiscaler'

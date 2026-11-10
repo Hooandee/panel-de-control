@@ -25,6 +25,18 @@ _GENERATED = ("OptiScaler.log",)
 REFRAMEWORK_CONFIG = "re2_fw_config.txt"
 REFRAMEWORK_CLOSED = {"REFrameworkConfig_RememberMenuState": "true", "REFrameworkConfig_MenuOpen": "false"}
 _SEEDED = (REFRAMEWORK_CONFIG,)
+# REFramework's TemporalUpscaler quality combo: Performance, Balanced, Quality, UltraPerformance.
+REFRAMEWORK_QUALITY = {"performance": "0", "balanced": "1", "quality": "2", "ultra": "3"}
+REFRAMEWORK_UPSCALER_KEYS = ("TemporalUpscaler_Enabled", "TemporalUpscaler_UseNativeResolution", "TemporalUpscaler_UpscaleQuality")
+
+
+def _reframework_upscaler_keys(choice: dict) -> dict[str, str | None]:
+    """Panel's quality as REFramework's TemporalUpscaler settings: native renders at full size (its DLAA mode)."""
+    quality = choice.get("quality")
+    if quality == "native":
+        return {"TemporalUpscaler_Enabled": "true", "TemporalUpscaler_UseNativeResolution": "true"}
+    return {"TemporalUpscaler_Enabled": "true", "TemporalUpscaler_UseNativeResolution": "false",
+            "TemporalUpscaler_UpscaleQuality": REFRAMEWORK_QUALITY.get(quality, "1")}
 
 
 def _with_keys(text: str, values: dict[str, str | None]) -> str:
@@ -768,7 +780,8 @@ class UpscalerService:
                 except OSError:
                     current = ""
                 seed = Path(prepared) / REFRAMEWORK_CONFIG
-                seed.write_text(_with_keys(current, REFRAMEWORK_CLOSED), encoding="utf-8")
+                seed.write_text(_with_keys(current, {**REFRAMEWORK_CLOSED, **(
+                    _reframework_upscaler_keys(choice) if recipe.reframework_upscaler else {})}), encoding="utf-8")
                 sources[REFRAMEWORK_CONFIG] = seed
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
                                    getattr(automatic, "configuration", {}) if automatic else {})
@@ -788,6 +801,7 @@ class UpscalerService:
             "edited": dict(edited),
             "image_overrides": dict(image_overrides),
             "menu_key": recipe.menu_key if recipe else None,
+            "reframework_upscaler": bool(recipe and recipe.reframework_upscaler),
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
@@ -1231,6 +1245,11 @@ class UpscalerService:
         model_changed = model != catalog.model_overrides(build, install.get("options", {}).get("model"))
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **model, **fg, **_image_overrides(install, text)}), encoding="utf-8")
         _wrote_ini(install)
+        if install.get("reframework_upscaler"):
+            config = Path(install["target"]) / REFRAMEWORK_CONFIG
+            if config.is_file() and not config.is_symlink():
+                current = config.read_text(encoding="utf-8", errors="replace")
+                config.write_text(_with_keys(current, _reframework_upscaler_keys(choice)), encoding="utf-8")
         if _clean_options(choice).get("quality") != (install.get("options") or {}).get("quality"):
             install["quality_at"] = time.time()
         install["options"] = _clean_options(choice)
@@ -1598,7 +1617,7 @@ class UpscalerService:
                 saved = meta / "backup" / relative
                 original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
                 current = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(_with_keys(current, _keys(original, REFRAMEWORK_CLOSED)), encoding="utf-8")
+                path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
                 saved.unlink(missing_ok=True)
             else:
                 kept.append(relative)
@@ -2059,7 +2078,8 @@ def _recipe_info(recipe) -> dict | None:
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
-            "recommended_input": recipe.recommended_input}
+            "recommended_input": recipe.recommended_input,
+            "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())]}
 
 
 def _is_helix(install: dict | None) -> bool:

@@ -77,6 +77,12 @@ class GameRecipe:
     # Files of the selected OptiScaler build that must also sit beside the exe (PureDark's plugin looks for
     # libxess.dll there while OptiScaler 10 keeps it in its own folder).
     optiscaler_root_files: tuple[str, ...] = ()
+    # REFramework's TemporalUpscaler does the upscaling (PureDark's route): Panel's quality drives its render size.
+    reframework_upscaler: bool = False
+    # False when OptiScaler's own frame generation breaks the game on this route (offered, not recommended).
+    optiscaler_fg: bool = True
+    # Options the user must change in the game's own menu, as (setting, value) in the game's words.
+    game_settings: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -287,7 +293,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files'))
+        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -339,6 +345,18 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         root_files = _strings(item.get('optiscaler_root_files', []), _path, 8)
         if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
             raise CatalogError('invalid_root_files')
+        flags = {}
+        for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True)):
+            flags[key] = item.get(key, default)
+            if type(flags[key]) is not bool:
+                raise CatalogError('invalid_' + key)
+        raw_settings = item.get('game_settings', [])
+        if not isinstance(raw_settings, list) or len(raw_settings) > 8:
+            raise CatalogError('invalid_game_settings')
+        game_settings = []
+        for entry in raw_settings:
+            entry = _object(entry, ('setting', 'value'))
+            game_settings.append((_text(entry['setting'], 80), _text(entry['value'], 40)))
         tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
         tested_at = item.get('tested_at')
         if tested_at is not None:
@@ -348,7 +366,8 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             except ValueError:
                 raise CatalogError('invalid_test_date') from None
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files)
+                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog

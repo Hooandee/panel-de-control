@@ -1610,3 +1610,17 @@ def test_root_files_are_copied_from_optiscalers_subfolder():
     assert _with_root_files(sources, "OptiScaler/", ("libxess.dll",))["libxess.dll"] == "x"
     assert "libxess.dll" not in _with_root_files({"dxgi.dll": "y"}, "OptiScaler/", ("libxess.dll",))
     assert _with_root_files({"libxess.dll": "z"}, "", ("libxess.dll",)) == {"libxess.dll": "z"}
+
+
+@pytest.mark.parametrize("quality,expected", [
+    ("native", {"TemporalUpscaler_UseNativeResolution": "true"}),
+    ("quality", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "2"}),
+    ("balanced", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "1"}),
+    ("performance", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "0"}),
+    (None, {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "1"}),
+])
+def test_panel_quality_maps_to_reframeworks_upscaler(quality, expected):
+    from upscalers.service import _reframework_upscaler_keys
+    keys = _reframework_upscaler_keys({"quality": quality})
+    assert keys["TemporalUpscaler_Enabled"] == "true"
+    assert {k: v for k, v in keys.items() if k != "TemporalUpscaler_Enabled" and v is not None} == expected
