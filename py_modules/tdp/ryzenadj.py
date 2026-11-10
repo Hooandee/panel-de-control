@@ -270,7 +270,7 @@ class RyzenadjBackend(TDPBackend):
 
     def _probe_normal_readback(self) -> bool:
         _exit_ok, out = self._read_info_result()
-        if out is not None and _parse_stapm(out) is not None:
+        if out is not None and not _unreadable(_parse_stapm(out)):
             self._readback_state = "not_required"
             return True
         if self._has_written:
@@ -1012,7 +1012,7 @@ class RyzenadjBackend(TDPBackend):
             return False, None
         returncode = getattr(res, "returncode", 0)
         stdout = getattr(res, "stdout", "") or ""
-        if returncode or _parse_stapm(stdout) is None:
+        if returncode or _unreadable(_parse_stapm(stdout)):
             stderr = getattr(res, "stderr", "") or ""
             self._last_read_error = {
                 "rc": returncode,

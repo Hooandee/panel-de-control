@@ -2233,6 +2233,28 @@ def test_onexplayer_apex_unreadable_ryzenadj_yields_to_unconfirmed_writes(tmp_pa
     ]
 
 
+def test_gpd_win5_zero_stapm_ryzenadj_yields_to_unconfirmed_writes(tmp_path):
+    root = str(tmp_path)
+    binary = _mk_static_ryzenadj(root, watts=0)
+    _mk_acpi_call(root)
+    first = select_backend(
+        _p("gpd_win5"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert first.name == "ryzenadj"
+
+    assert first.probe() is False
+    assert first.safety_locked is False
+    assert first.reselection_safe_after_use is True
+
+    backend = select_backend(
+        _p("gpd_win5"), root=root, ryzenadj_resolve=lambda: binary,
+    )
+    assert backend.name == "ryzenadj-unverified"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "ryzenadj", "ryzenadj_unverified",
+    ]
+
+
 def test_onexplayer_apex_without_alib_keeps_unconfirmed_ryzenadj(tmp_path):
     root = str(tmp_path)
     binary, _writes = _mk_unreadable_ryzenadj(root)
