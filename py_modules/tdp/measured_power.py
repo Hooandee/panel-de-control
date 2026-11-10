@@ -18,8 +18,11 @@ class MeasuredVerdict:
         return asdict(self)
 
 
-def exceed_threshold_w(target_w: int) -> float:
-    return target_w + max(MIN_TOLERANCE_W, target_w * RELATIVE_TOLERANCE)
+def exceed_threshold_w(target_w: int, floor_w: float = 0.0) -> float:
+    return max(
+        target_w + max(MIN_TOLERANCE_W, target_w * RELATIVE_TOLERANCE),
+        floor_w,
+    )
 
 
 class MeasuredLimitWatch:
@@ -29,9 +32,15 @@ class MeasuredLimitWatch:
     simply be light), so the verdicts are `within_limit` and `exceeded`, never
     `applied`."""
 
-    def __init__(self, window_s: float = WINDOW_S, settle_s: float = SETTLE_S):
+    def __init__(
+        self,
+        window_s: float = WINDOW_S,
+        settle_s: float = SETTLE_S,
+        floor_w: float = 0.0,
+    ):
         self._window_s = window_s
         self._settle_s = settle_s
+        self._floor_w = float(floor_w)
         self._target_w = None
         self._since = None
         self._samples = deque()
@@ -58,5 +67,9 @@ class MeasuredLimitWatch:
         average = round(sum(w for _, w in self._samples) / len(self._samples), 1)
         if span < self._window_s * 0.8:
             return MeasuredVerdict("warming", target, average, len(self._samples))
-        state = "exceeded" if average > exceed_threshold_w(target) else "within_limit"
+        state = (
+            "exceeded"
+            if average > exceed_threshold_w(target, self._floor_w)
+            else "within_limit"
+        )
         return MeasuredVerdict(state, target, average, len(self._samples))
