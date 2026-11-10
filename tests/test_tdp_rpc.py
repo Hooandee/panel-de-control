@@ -1648,6 +1648,75 @@ def test_auto_learning_respects_telemetry_opt_out_for_seed_and_record(
     asyncio.run(p._auto_tick())
 
 
+@pytest.mark.parametrize(
+    ("verdict_state", "average_w", "expected_records"),
+    [
+        ("within_limit", 16.0, 1),
+        ("exceeded", 30.0, 0),
+    ],
+)
+def test_measured_route_learning_gated_by_watchdog_verdict(
+    Plugin, monkeypatch, verdict_state, average_w, expected_records,
+):
+    from tdp.measured_power import MeasuredVerdict
+
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    control, _created = p._ensure_auto_session(on_ac=True)
+
+    class StableDecision:
+        setpoint = 16
+        target_fps = 40
+        reason = "probe_stable"
+        changed = False
+
+        @staticmethod
+        def as_dict():
+            return {
+                "setpoint": 16,
+                "state": "holding",
+                "reason": "probe_stable",
+                "changed": False,
+                "fps": 40.0,
+                "target_fps": 40,
+            }
+
+    control.step = lambda **_kwargs: StableDecision()
+    p._auto_applied = True
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40.0,
+        "focus": "42",
+        "age_s": 0,
+        "sample_at": 100,
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 80.0}
+    monkeypatch.setattr(p, "_measured_route_active", lambda: True)
+    p._measured_verdict = MeasuredVerdict(
+        state=verdict_state,
+        target_w=16,
+        average_w=average_w,
+        samples=5,
+    )
+    learned = []
+    monkeypatch.setattr(
+        p._auto_learning,
+        "record",
+        lambda *args, **kwargs: learned.append((args, kwargs)),
+    )
+
+    asyncio.run(p._auto_tick())
+
+    assert len(learned) == expected_records
+    if expected_records:
+        assert learned[0][0][:4] == ("42", 40, True, 16)
+
+
 def test_unconfirmed_auto_apply_pauses_without_learning(Plugin, monkeypatch):
     p = Plugin()
     p._init()
