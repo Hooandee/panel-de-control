@@ -166,4 +166,5 @@ def test_fps_counter_is_unavailable_with_optiscalers_old_menu():
     assert _recipe_info(recipes.Recipe("1"))["fps_counter"] is True
     assert _recipe_info(recipes.Recipe("1", ini={"Menu.OverlayMenu": "false"}))["fps_counter"] is False
     assert _recipe_info(recipes.Recipe("1", wiki_settings={"OverlayMenu": "false"}))["fps_counter"] is False
+    assert _recipe_info(recipes.Recipe("1", ini={"Menu.OverlayMenu": "true"}, reframework_upscaler=True))["fps_counter"] is False
     assert _recipe_info(recipes.recipe_for("2050650", platform="linux", arch="x86_64"))["fps_counter"] is False

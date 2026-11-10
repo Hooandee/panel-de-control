@@ -16,7 +16,7 @@
   "args": [],
   "ini": {
     "Spoofing.Dxgi": "false",
-    "Menu.OverlayMenu": "false"
+    "Menu.OverlayMenu": "true"
   },
   "dependencies": [
     "refw-pdup-dmc5",
