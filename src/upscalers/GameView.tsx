@@ -328,8 +328,9 @@ export const GameView: FC<{
 
   const apply = async () => {
     trace("apply");
-    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged)) {
-      // The running game holds OptiScaler's files: the new version goes in as soon as it closes.
+    const qualityChanged = (install?.options.quality ?? null) !== (choice.quality ?? null);
+    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
+      // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
         ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
         ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),

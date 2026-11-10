@@ -170,3 +170,16 @@ it("saves a new version chosen while playing for when the game closes, and keeps
   await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
   state.running = null;
 });
+
+it("saves a quality chosen while playing a REFramework game for when the game closes", async () => {
+  state.running = { liveAppid: 777 };
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.quality.balanced")); });
+  await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+  expect(configureUpscaler).not.toHaveBeenCalled();
+  expect(screen.getByText("up.live.appliedOnExit")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
+  state.running = null;
+});
