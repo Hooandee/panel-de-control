@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.0...panel-de-control-v0.86.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* Steam's library, game menu and properties no longer break after 0.86.0 ([#1223](https://github.com/Hooandee/panel-de-control/issues/1223)) ([806283b](https://github.com/Hooandee/panel-de-control/commit/806283bd3a49b6ef360e65a06f7bca60d7ae5f38))
+
 ## [0.86.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.85.0...panel-de-control-v0.86.0) (2026-11-09)
 
 
