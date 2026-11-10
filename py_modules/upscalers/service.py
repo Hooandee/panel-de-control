@@ -2079,7 +2079,10 @@ def _recipe_info(recipe) -> dict | None:
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
             "recommended_input": recipe.recommended_input,
-            "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())]}
+            "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
+            # OptiScaler's old menu (OverlayMenu=false, RE Engine via REFramework) never draws its FPS counter.
+            "fps_counter": not (str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
+                                or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}
 
 
 def _is_helix(install: dict | None) -> bool:

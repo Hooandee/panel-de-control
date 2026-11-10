@@ -709,6 +709,7 @@ export const GameView: FC<{
         <DuringPlay
           appid={appid}
           optiscaler={installedOptiscaler}
+          fpsCounter={detail.recipe_info?.fps_counter !== false}
           fg={installedOptiscaler && install?.options.fg === "on"}
           live={live}
           onGenerating={setGenerating}
@@ -750,7 +751,7 @@ export const GameView: FC<{
                     {detail.foreign_backup && !install && !detail.analysis.foreign && (
                       <ListRow label={t("up.foreign.restore")} disabled={foreignBusy || running || gameRunning} onPress={() => void foreignAction(restoreForeignUpscaler)} />
                     )}
-                    {playing && installedOptiscaler && (
+                    {playing && installedOptiscaler && detail.recipe_info?.fps_counter !== false && (
                       <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
                     )}
                     {installedOptiscaler && !running && <AdvancedIni appid={appid} />}

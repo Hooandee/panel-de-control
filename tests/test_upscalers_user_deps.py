@@ -123,3 +123,12 @@ def test_game_detail_lists_user_files_and_does_not_claim_luma(tmp_path, monkeypa
     info = service.game(test_upscalers.APPID)["recipe_info"]
     assert info["automatic"] == []
     assert [(f["id"], f["state"]) for f in info["user_files"]] == [("puredark-upscaler-base", "missing")]
+
+
+def test_fps_counter_is_unavailable_with_optiscalers_old_menu():
+    from upscalers import recipes
+    from upscalers.service import _recipe_info
+    assert _recipe_info(recipes.Recipe("1"))["fps_counter"] is True
+    assert _recipe_info(recipes.Recipe("1", ini={"Menu.OverlayMenu": "false"}))["fps_counter"] is False
+    assert _recipe_info(recipes.Recipe("1", wiki_settings={"OverlayMenu": "false"}))["fps_counter"] is False
+    assert _recipe_info(recipes.recipe_for("2050650", platform="linux", arch="x86_64"))["fps_counter"] is False
