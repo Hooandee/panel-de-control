@@ -330,10 +330,10 @@ def test_re4_recipe_drives_reframeworks_upscaler_and_names_the_game_setting():
     assert recipe.game_settings == (('FidelityFX Super Resolution 2', 'No'),)
 
 
-def test_recipe_without_optiscaler_fg_recommends_none_but_still_offers_it():
+def test_recipe_without_optiscaler_fg_neither_offers_nor_applies_it():
     from py_modules.upscalers import solution_plan
     recipe = recipes.Recipe('1', optiscaler_fg=False)
-    plan = solution_plan.resolve('rdna2', {'apis': ['d3d12']}, recipe)
-    assert plan['fg_plan'] is None
-    assert 'optiscaler' in plan['offered_fg_plan']['routes']
-    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'optiscaler'})['route'] == 'optiscaler'
+    plan = solution_plan.resolve('rdna2', {'apis': ['d3d12'], 'inputs': {'fsrfg': True}}, recipe)
+    assert plan['fg_plan'] is None and plan['offered_fg_plan'] is None
+    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'optiscaler'}) is None
+    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'game'}) is None
