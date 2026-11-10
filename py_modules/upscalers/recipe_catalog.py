@@ -79,7 +79,7 @@ class GameRecipe:
     optiscaler_root_files: tuple[str, ...] = ()
     # REFramework's TemporalUpscaler does the upscaling (PureDark's route): Panel's quality drives its render size.
     reframework_upscaler: bool = False
-    # False when OptiScaler's own frame generation breaks the game on this route (offered, not recommended).
+    # False when OptiScaler's own frame generation breaks the game: Panel then offers only Mako or Lossless.
     optiscaler_fg: bool = True
     # Options the user must change in the game's own menu, as (setting, value) in the game's words.
     game_settings: tuple[tuple[str, str], ...] = ()

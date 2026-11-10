@@ -283,6 +283,8 @@ def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
     monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d11", "dxgi"] if path.endswith("witcher3.exe") else [])
     assert games.analyze(game)["apis"] == ["d3d11", "dxgi"]
     _write(game / "bin/x64_dx12/D3D12/D3D12Core.dll")
+    assert games.analyze(game)["apis"] == ["d3d11", "dxgi"], "the Agility SDK alone proves nothing"
+    _write(game / "bin/x64_dx12/re_chunk_000.pak")
     result = games.analyze(game)
     assert result["apis"] == ["d3d12", "dxgi"]
     plan = solution_plan.resolve("rdna3", result)
@@ -1526,6 +1528,18 @@ def test_quality_changes_while_running_are_saved_for_the_next_launch(steam, fake
     assert ini.read((target / "OptiScaler.ini").read_text(), "QualityOverrides.QualityRatioOverrideEnabled") == "true"
     with pytest.raises(UpscalerError, match="running"):
         service.configure(APPID, {"build": "fsr-test", "quality": "quality", "sharpness": "soft", "fg": "on"})
+
+
+def test_reframework_quality_waits_for_the_game_to_close(steam, fake_catalog, proc):
+    # REFramework rewrites its config on exit, so a quality written while it runs would be lost.
+    _, game = steam
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test", "quality": "quality"})
+    service._game_state(APPID)["install"]["reframework_upscaler"] = True
+    _running(proc, game)
+    with pytest.raises(UpscalerError, match="running"):
+        service.configure(APPID, {"build": "fsr-test", "quality": "performance"})
+    assert service.configure(APPID, {"build": "fsr-test", "quality": "quality", "sharpness": "high"})["live"] is False
 
 
 def test_quality_change_while_running_keeps_the_other_options(steam, fake_catalog, proc):

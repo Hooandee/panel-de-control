@@ -39,6 +39,29 @@ def test_archives_with_escaping_or_option_like_paths_are_refused(tmp_path, membe
     assert user_deps.inspect(PLUGIN, archive)["reason"] == "unsafe_archive"
 
 
+def test_a_loose_dll_saved_in_other_case_is_stored_under_the_wanted_name(tmp_path):
+    dll = tmp_path / "pdperfplugin.dll"
+    dll.write_bytes(b"MZplugin")
+    store = user_deps.Store(tmp_path / "store")
+    assert store.adopt(PLUGIN, dll)["state"] == "ready"
+    assert store.sources(PLUGIN)["PDPerfPlugin.dll"].name == "PDPerfPlugin.dll"
+
+
+def test_candidates_inspect_each_download_once_until_it_changes(tmp_path, monkeypatch):
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    archive = _zip(downloads / "UpscalerBasePlugin-502-1-1-2-1.zip", {"PDPerfPlugin.dll": b"MZ"})
+    calls = []
+    real = user_deps.inspect
+    monkeypatch.setattr(user_deps, "inspect", lambda dep, path: calls.append(path) or real(dep, path))
+    user_deps.candidates(PLUGIN, [downloads])
+    user_deps.candidates(PLUGIN, [downloads])
+    assert len(calls) == 1
+    os.utime(archive, ns=(1, 1))
+    user_deps.candidates(PLUGIN, [downloads])
+    assert len(calls) == 2
+
+
 def test_store_keeps_the_choice_and_hands_out_the_files(tmp_path):
     store = user_deps.Store(tmp_path / "store")
     assert store.status(PLUGIN)["state"] == "missing"

@@ -13,7 +13,7 @@ const EXTENSIONS = ["zip", "7z", "rar", "dll"];
 const shortPage = (url: string) => url.replace(/^https:\/\/(www\.)?/, "");
 
 /** Files only the user can download, right under the upscaler: what is missing, which version is in, and where the
- *  file the user already saved in desktop mode can be picked up with one press. */
+ *  file already in Downloads can be picked up with one press. */
 export const UserFiles: FC<{
   appid: string;
   files: UserFile[];

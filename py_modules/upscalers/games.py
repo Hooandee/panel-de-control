@@ -267,10 +267,10 @@ def shipped_upscalers(root: Path) -> list[str]:
 
 
 def _graphics_apis(exe: Path) -> list[str]:
-    """The exe's graphics imports. The D3D12 Agility SDK beside it means a D3D12 device: RE Engine games import only
-    d3d11/dxgi and load D3D12 at runtime."""
+    """The exe's graphics imports. RE Engine games import only d3d11/dxgi and load D3D12 at runtime; the Agility SDK
+    beside their exe is what gives the D3D12 device away. Other games keep what they import."""
     apis = set(pe.graphics_apis(str(exe)))
-    if (exe.parent / "D3D12" / "D3D12Core.dll").is_file():
+    if (exe.parent / "D3D12" / "D3D12Core.dll").is_file() and any(exe.parent.glob("re_chunk_000.pak*")):
         apis = (apis - {"d3d11"}) | {"d3d12"}
     return sorted(apis)
 

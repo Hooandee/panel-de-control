@@ -23,6 +23,7 @@ interface Watch {
 }
 
 let watch: Watch | null = null;
+let pressed = 0;
 const reinstall = new Set<string>();
 const listeners = new Set<(event: UserFileWatchEvent) => void>();
 
@@ -73,7 +74,7 @@ async function tick(): Promise<void> {
     stop();
     try {
       const detail = await addUpscalerUserFile(current.appid, current.dependency, fresh.path);
-      reinstall.add(current.appid);
+      if (detail.install) reinstall.add(current.appid);
       emit({ type: "adopted", appid: current.appid, dependency: current.dependency, detail });
     } catch (error) {
       emit({ type: "failed", appid: current.appid, dependency: current.dependency, code: upscalerErrorCode(error) });
@@ -87,13 +88,16 @@ async function tick(): Promise<void> {
 
 /** Opens the file's download page in Steam's browser and picks the archive up as soon as it lands in Downloads. */
 export async function downloadUserFile(appid: string, file: Pick<UserFile, "id" | "page_url" | "download_url">): Promise<void> {
-  stop();
+  cancelUserFileWatch();
+  const press = ++pressed;
   let known = new Set<string>();
   try {
     known = new Set((await getUpscalerUserFileCandidates(file.id)).candidates.map((candidate) => candidate.path));
   } catch {
     /* every download then counts as new */
   }
+  // A later press owns the watch.
+  if (press !== pressed) return;
   watch = { appid, dependency: file.id, known, until: Date.now() + LIMIT_MS, timer: setInterval(() => void tick(), POLL_MS), busy: false };
   emit({ type: "watching", appid, dependency: file.id });
   Navigation.NavigateToExternalWeb(file.download_url ?? file.page_url);

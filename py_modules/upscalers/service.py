@@ -21,7 +21,7 @@ _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
 # REFramework opens its menu over the game on first launch unless its config says otherwise; handhelds have no
-# Insert key to close it, so Panel seeds that config when the game has none. REFramework rewrites it later.
+# Insert key to close it, so Panel writes these keys into its config (uninstall puts the old values back).
 REFRAMEWORK_CONFIG = "re2_fw_config.txt"
 REFRAMEWORK_CLOSED = {"REFrameworkConfig_RememberMenuState": "true", "REFrameworkConfig_MenuOpen": "false"}
 _SEEDED = (REFRAMEWORK_CONFIG,)
@@ -1267,8 +1267,10 @@ class UpscalerService:
         for the next launch (the panel offers to restart the game); anything else waits for the game to close."""
         current = _clean_options(install.get("options") or {})
         wanted = _clean_options({**current, **choice})
+        # REFramework rewrites its own config on exit, so its upscaler quality can only change with the game closed.
         if _is_helix(install) or install.get("engine") == "proton" or any(
-                wanted.get(k) != current.get(k) for k in ("fg", "fg_route", "model")):
+                wanted.get(k) != current.get(k) for k in ("fg", "fg_route", "model")) or (
+                install.get("reframework_upscaler") and wanted.get("quality") != current.get("quality")):
             raise UpscalerError("running")
         path = Path(install["target"]) / "OptiScaler.ini"
         try:

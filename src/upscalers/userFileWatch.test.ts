@@ -16,7 +16,7 @@ afterEach(() => { cancelUserFileWatch(); vi.useRealTimers(); vi.clearAllMocks();
 
 it("opens the exact file page and adopts only the archive that arrives afterwards", async () => {
   api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/d", candidates: [old] });
-  api.addUpscalerUserFile.mockResolvedValue({ appid: "2050650" });
+  api.addUpscalerUserFile.mockResolvedValue({ appid: "2050650", install: {} });
   const events: string[] = [];
   onUserFileWatch((event) => events.push(event.type));
   await downloadUserFile("2050650", file);
@@ -41,4 +41,29 @@ it("gives up after a while and can be cancelled", async () => {
   await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
   expect(events).toEqual(["watching", "stopped"]);
   expect(watchingFor("2050650", file.id)).toBe(false);
+});
+
+it("leaves nothing to reinstall when the game had no install yet", async () => {
+  api.getUpscalerUserFileCandidates.mockResolvedValueOnce({ folder: "/d", candidates: [] })
+    .mockResolvedValue({ folder: "/d", candidates: [fresh] });
+  api.addUpscalerUserFile.mockResolvedValue({ appid: "2050650", install: null });
+  await downloadUserFile("2050650", file);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(api.addUpscalerUserFile).toHaveBeenCalled();
+  expect(takePendingReinstall("2050650")).toBe(false);
+});
+
+it("keeps a single watch when pressed twice and releases the first card", async () => {
+  api.getUpscalerUserFileCandidates.mockResolvedValue({ folder: "/d", candidates: [] });
+  const events: string[] = [];
+  onUserFileWatch((event) => events.push(`${event.type}:${event.dependency}`));
+  await downloadUserFile("2050650", file);
+  await Promise.all([downloadUserFile("2050650", { ...file, id: "other" }), downloadUserFile("2050650", file)]);
+  expect(events).toEqual([`watching:${file.id}`, `stopped:${file.id}`, `watching:${file.id}`]);
+  api.getUpscalerUserFileCandidates.mockClear();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(api.getUpscalerUserFileCandidates).toHaveBeenCalledTimes(1);
+  cancelUserFileWatch();
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(api.getUpscalerUserFileCandidates).toHaveBeenCalledTimes(1);
 });

@@ -1,7 +1,6 @@
 """Files a recipe needs that only the user can download (PureDark's plugins on Nexus): Panel finds the archive the
 user saved, checks it carries what the recipe names, keeps a copy and installs it like any other dependency."""
 
-import hashlib
 import json
 import os
 import re
@@ -69,7 +68,7 @@ def _locate(dependency, path: Path) -> dict[str, str]:
     if path.suffix.lower() == ".dll":
         if set(wanted) != {path.name.casefold()}:
             raise UserFileError("missing_files")
-        return {path.name: path.name}
+        return {wanted[path.name.casefold()]: path.name}
     members = _members(path)
     if any(_unsafe(member) for member in members):
         raise UserFileError("unsafe_archive")
@@ -88,7 +87,7 @@ def _locate(dependency, path: Path) -> dict[str, str]:
 def _extract(path: Path, members: dict[str, str], destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".dll":
-        shutil.copyfile(path, destination / path.name)
+        shutil.copyfile(path, destination / next(iter(members)))
         return
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
@@ -125,16 +124,20 @@ def _version(dependency, path: Path, extracted: Path | None) -> str | None:
     return _filename_version(path.name)
 
 
+def _readable(dependency, path: Path) -> dict[str, str]:
+    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in (*ARCHIVES, ".dll"):
+        raise UserFileError("unreadable")
+    if path.stat().st_size > MAX_ARCHIVE:
+        raise UserFileError("too_large")
+    return _locate(dependency, path)
+
+
 def inspect(dependency, path: Path) -> dict:
     """Whether this file is what the dependency asks for, with the version it carries."""
     path = Path(path)
     result = {"ok": False, "reason": None, "version": None, "filename": path.name}
     try:
-        if path.is_symlink() or not path.is_file() or path.suffix.lower() not in (*ARCHIVES, ".dll"):
-            raise UserFileError("unreadable")
-        if path.stat().st_size > MAX_ARCHIVE:
-            raise UserFileError("too_large")
-        members = _locate(dependency, path)
+        members = _readable(dependency, path)
         with tempfile.TemporaryDirectory(prefix="pdc-user-file-") as scratch:
             dll_members = {k: v for k, v in members.items() if k.lower().endswith(".dll")}
             extracted = None
@@ -152,6 +155,23 @@ def inspect(dependency, path: Path) -> dict:
     return result
 
 
+_INSPECTED: dict[tuple, dict] = {}
+
+
+def _inspect_cached(dependency, path: Path) -> dict:
+    """inspect() once per file version: the download watcher asks again every few seconds."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return inspect(dependency, path)
+    key = (dependency.id, tuple(sorted(dependency.files.values())), str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _INSPECTED:
+        if len(_INSPECTED) > 512:
+            _INSPECTED.clear()
+        _INSPECTED[key] = inspect(dependency, path)
+    return _INSPECTED[key]
+
+
 def candidates(dependency, folders) -> list[dict]:
     """Downloads that carry what the dependency asks for, newest first."""
     files: list[tuple[float, Path]] = []
@@ -164,7 +184,7 @@ def candidates(dependency, folders) -> list[dict]:
             continue
     found = []
     for _, path in sorted(files, key=lambda item: -item[0])[:MAX_SCANNED]:
-        checked = inspect(dependency, path)
+        checked = _inspect_cached(dependency, path)
         if checked["ok"]:
             found.append({"path": str(path), "filename": path.name, "version": checked["version"]})
             if len(found) >= MAX_CANDIDATES:
@@ -215,17 +235,12 @@ class Store:
 
     def adopt(self, dependency, path: Path) -> dict:
         path = Path(path)
-        checked = inspect(dependency, path)
-        if not checked["ok"]:
-            raise UserFileError(checked["reason"] or "unreadable")
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(dir=self.root, prefix=f".{dependency.id}-"))
         try:
-            _extract(path, _locate(dependency, path), staging / "files")
-            digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.stat().st_size <= MAX_ARCHIVE else None
-            (staging / "meta.json").write_text(json.dumps({
-                "filename": path.name, "version": checked["version"], "sha256": digest, "at": time.time(),
-            }))
+            _extract(path, _readable(dependency, path), staging / "files")
+            version = _version(dependency, path, staging / "files")
+            (staging / "meta.json").write_text(json.dumps({"filename": path.name, "version": version, "at": time.time()}))
             old = self._folder(dependency)
             trash = None
             if old.exists():
@@ -234,7 +249,7 @@ class Store:
             os.replace(staging, old)
             if trash:
                 shutil.rmtree(trash, ignore_errors=True)
-        except (OSError, zipfile.BadZipFile, KeyError, subprocess.SubprocessError):
+        except (OSError, zipfile.BadZipFile, KeyError, subprocess.SubprocessError, ValueError):
             raise UserFileError("unreadable") from None
         finally:
             shutil.rmtree(staging, ignore_errors=True)
