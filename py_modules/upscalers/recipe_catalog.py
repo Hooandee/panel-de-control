@@ -74,6 +74,9 @@ class GameRecipe:
     effective_api: str | None = None
     quality_owner: str = "panel"
     recommended_build: str | None = None
+    # Files of the selected OptiScaler build that must also sit beside the exe (PureDark's plugin looks for
+    # libxess.dll there while OptiScaler 10 keeps it in its own folder).
+    optiscaler_root_files: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -284,7 +287,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build'))
+        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -333,6 +336,9 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         recommended_build = item.get('recommended_build')
         if 'recommended_build' in item and (not isinstance(recommended_build, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,79}', recommended_build)):
             raise CatalogError('invalid_recommended_build')
+        root_files = _strings(item.get('optiscaler_root_files', []), _path, 8)
+        if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
+            raise CatalogError('invalid_root_files')
         tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
         tested_at = item.get('tested_at')
         if tested_at is not None:
@@ -342,7 +348,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             except ValueError:
                 raise CatalogError('invalid_test_date') from None
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build)
+                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files)
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog

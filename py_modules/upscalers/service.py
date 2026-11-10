@@ -710,6 +710,7 @@ class UpscalerService:
                 sources[name] = paths[asset_id]
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
+            sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
 
         try:
             sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
@@ -2106,6 +2107,15 @@ def _requested_fg(solution, choice):
     if choice.get("fg") == "on" and plan is None:
         raise UpscalerError("fg_route_unavailable")
     return plan
+
+
+def _with_root_files(sources: dict, prefix: str, names) -> dict:
+    """OptiScaler files a recipe also needs beside the exe, copied from the build's own folder."""
+    result = dict(sources)
+    for name in names:
+        if prefix and prefix + name in result and name not in result:
+            result[name] = result[prefix + name]
+    return result
 
 
 def _build_solution(gpu, analysis, recipe, build, automatic, blocked):

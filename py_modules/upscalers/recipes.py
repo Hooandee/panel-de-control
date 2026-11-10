@@ -51,6 +51,7 @@ class Recipe:
     effective_api: str | None = None
     quality_owner: str = "panel"
     recommended_build: str | None = None
+    optiscaler_root_files: tuple[str, ...] = ()
 
 
 RECIPES: dict[str, Recipe] = {
@@ -161,7 +162,7 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
         hand = replace(hand or Recipe(entry.appid), exe=entry.exe, args=entry.args, ini=dict(entry.ini),
                       dependencies=entry.dependencies, catalog_revision=entry.revision,
                       catalog_version=catalog.catalog_version, source="game-recipes",
-                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build)
+                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files)
     return combine(hand, with_wiki(WIKI.get(str(appid)), live))
 
 

@@ -1,6 +1,6 @@
 {
   "name": "Resident Evil 4",
-  "revision": 1,
+  "revision": 2,
   "conditions": {
     "engine": [
       "optiscaler"
@@ -26,5 +26,8 @@
     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-4-(2023)"
   ],
-  "effective_api": "d3d12"
+  "effective_api": "d3d12",
+  "optiscaler_root_files": [
+    "libxess.dll"
+  ]
 }

@@ -1602,3 +1602,11 @@ def test_fp8_sdk_providers_say_they_may_fall_back_off_rdna4():
     assert described["fsr-4.1.2-dll"]["may_fallback"] == "3.1.6"
     assert described["fsr-4.1.2-lite-igpu-dll"]["may_fallback"] is None
     assert {item["id"]: item for item in catalog.describe("rdna4")}["fsr-4.1.2-dll"]["may_fallback"] is None
+
+
+def test_root_files_are_copied_from_optiscalers_subfolder():
+    from upscalers.service import _with_root_files
+    sources = {"OptiScaler/libxess.dll": "x", "dxgi.dll": "y"}
+    assert _with_root_files(sources, "OptiScaler/", ("libxess.dll",))["libxess.dll"] == "x"
+    assert "libxess.dll" not in _with_root_files({"dxgi.dll": "y"}, "OptiScaler/", ("libxess.dll",))
+    assert _with_root_files({"libxess.dll": "z"}, "", ("libxess.dll",)) == {"libxess.dll": "z"}
