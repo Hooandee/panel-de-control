@@ -2092,8 +2092,8 @@ def _recipe_info(recipe) -> dict | None:
             "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
             # REFramework rewrites its own config when the game closes: its quality only changes with the game closed.
             "quality_on_exit": bool(getattr(recipe, "reframework_upscaler", False)),
-            # OptiScaler's old menu (OverlayMenu=false) never draws its FPS counter; with REFramework's upscaler its
-            # overlay fights REFramework for the game window and hangs the game.
+            # OptiScaler's old menu (OverlayMenu=false) never draws its FPS counter. REFramework games run its overlay menu
+            # instead, but without Dxgi spoofing that overlay never hooks the swapchain, so it has no counter either.
             "fps_counter": not (getattr(recipe, "reframework_upscaler", False)
                                 or str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
                                 or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}

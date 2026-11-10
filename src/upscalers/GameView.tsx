@@ -279,7 +279,8 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
-  const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null);
+  const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
+    && (!detail?.recipe_info?.quality_on_exit || (queued.quality ?? null) === (choice.quality ?? null));
   const dirty = !awaitingExit && (spatialInstalled || !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || modelChanged);
   const selectedFgPlan = solution ? solution.offered_fg_plan ?? solution.fg_plan : detail?.fg_plan;
   const routes = selectedFgPlan?.routes ?? {};
@@ -300,7 +301,8 @@ export const GameView: FC<{
   const reinstall = () => start(installSelected);
   // A user file changed (here or while this page was closed): it goes into the installed game once nothing blocks it.
   useEffect(() => {
-    if (detail?.install && !gameRunning && job?.state !== "running" && takePendingReinstall(appid)) reinstall();
+    // A queued install for this game already carries the new file.
+    if (detail?.install && !gameRunning && job?.state !== "running" && !pendingInstall(appid) && takePendingReinstall(appid)) reinstall();
   }, [detail?.install, gameRunning, job?.state]);
   const retry = () => {
     const request = job ? readInstallRequest(appid, job.id) : null;
@@ -328,7 +330,6 @@ export const GameView: FC<{
 
   const apply = async () => {
     trace("apply");
-    const qualityChanged = (install?.options.quality ?? null) !== (choice.quality ?? null);
     if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
       // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
@@ -625,7 +626,7 @@ export const GameView: FC<{
             <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>
           ))}
           {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.quality_on_exit && overview.display && (
-            <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.fullResolution", { size: `${overview.display[0]}x${overview.display[1]}` })}</Notice>
+            <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.fullResolution", { size: `${Math.max(...overview.display)}x${Math.min(...overview.display)}` })}</Notice>
           )}
           {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
           {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}

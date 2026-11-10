@@ -56,7 +56,7 @@ const UserFileCard: FC<{ appid: string; file: UserFile; disabled: boolean; onDet
       onDetail(await action());
     } catch (failure) {
       const code = upscalerErrorCode(failure);
-      setError(t(code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
+      setError(t(code === "busy" ? "up.error.busy" : code === "user_file_wrong" ? "up.error.user_file_wrong" : "up.error.user_file_unreadable"));
     } finally {
       setBusy(false);
     }
