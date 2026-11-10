@@ -70,15 +70,13 @@ def test_existing_verified_prefix_needs_no_transaction(automatic, monkeypatch):
     assert calls == []
 
 
-def test_unresolved_mod_does_not_remove_previous_install(steam, fake_catalog, proc, monkeypatch):
+def test_a_missing_mod_warns_but_never_blocks_the_install(steam, fake_catalog, proc, monkeypatch):
     service = _service(steam, fake_catalog, proc)
-    service.install(APPID, {'build': 'fsr-test'})
-    old = service._game_state(APPID)['install'].copy()
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, needs=('mod',)))
-    with pytest.raises(UpscalerError, match='recipe_unresolved'):
-        service.install(APPID, {'build': 'fsr-test'})
-    assert service._game_state(APPID)['install'] == old
-    assert (Path(old['target']) / 'dxgi.dll').read_bytes() == b'injector'
+    service.install(APPID, {'build': 'fsr-test'})
+    assert service._game_state(APPID)['install']['build'] == 'fsr-test'
+    info = service.game(APPID)['recipe_info']
+    assert 'mod' in info['needs'] and info['blocked'] is False
 
 
 def test_report_distinguishes_applied_and_current_game_build(steam, fake_catalog, proc, monkeypatch):

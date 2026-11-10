@@ -383,7 +383,8 @@ class UpscalerService:
                 recipe_info["automatic"] = ["Luma"] if automatic and any(d.startswith("luma") for d in getattr(automatic, "dependencies", ("luma",))) else []
                 recipe_info["automatic_builds"] = [b.id for b in catalog.BUILDS.values() if b.engine == "optiscaler"] if automatic else []
                 recipe_info["user_files"] = auto_recipes.user_files(automatic, self.user_files)
-                recipe_info["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
+                # A missing mod is a warning (recipe_info["needs"]), never a reason to refuse: the user may bring it.
+                recipe_info["blocked"] = False
             except auto_recipes.RecipeError:
                 recipe_info["automatic"] = []
                 recipe_info["blocked"] = True
@@ -660,8 +661,6 @@ class UpscalerService:
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
         try:
             automatic = auto_recipes.plan(recipe, installed)
-            if auto_recipes.unresolved(recipe, analysis, automatic):
-                raise UpscalerError("recipe_unresolved")
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
         if automatic and diagnostics._steam_config(self.home, appid).get("launch_diagnostics", {}).get("reshade_redirected"):
@@ -1220,8 +1219,6 @@ class UpscalerService:
             analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                if auto_recipes.unresolved(recipe, analysis, automatic):
-                    raise UpscalerError("recipe_unresolved")
             except auto_recipes.RecipeError as error:
                 raise UpscalerError(error.code) from None
             solution = solution_plan.resolve(self.gpu, analysis, recipe, _generation(install), route=choice.get("fg_route"),
@@ -1946,7 +1943,7 @@ class UpscalerService:
             automatic = None
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                blocked = auto_recipes.unresolved(recipe, analysis, automatic)
+                blocked = False
             except auto_recipes.RecipeError:
                 blocked = True
             build = catalog.BUILDS.get((entry.get("install") or {}).get("build"))
