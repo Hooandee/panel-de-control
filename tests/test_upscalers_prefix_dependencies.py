@@ -252,3 +252,32 @@ def test_system_tool_install_without_root_fails_without_installing(monkeypatch):
     with pytest.raises(pd.DependencyError, match='prefix_tool_unavailable'):
         pd._tool({'PATH': '/usr/bin'}, 1000, 1000)
     assert not any(c[1] == 'install' for c in calls)
+
+
+def test_a_process_that_exits_mid_scan_does_not_fail_the_guard(tmp_path, monkeypatch):
+    transaction = tmp_path / '.pdc-dependencies-1462040'
+    transaction.mkdir()
+    proc = tmp_path / 'proc'
+    (proc / '4242').mkdir(parents=True)
+    real = Path.read_bytes
+
+    def gone(self):
+        if self.parent.name == '4242':
+            raise ProcessLookupError(3, 'No such process')
+        return real(self)
+
+    monkeypatch.setattr(Path, 'read_bytes', gone)
+    pd._guard_transaction(transaction, str(proc))
+
+
+def test_a_failed_tool_run_reports_its_last_output(context, monkeypatch, caplog):
+    import logging
+    home, game, compat = context
+    monkeypatch.setattr(pd.os, 'geteuid', lambda: 1000)
+    real = pd._execute
+    monkeypatch.setattr(pd, '_execute', lambda command, env, uid, gid, timeout: real(
+        ['sh', '-c', f'echo "{home}/secret: winetricks could not download" >&2; exit 3'], {'HOME': str(home), 'PATH': pd.os.environ['PATH']}, 1000, gid, timeout))
+    with pytest.raises(pd.DependencyError, match='prefix_install_failed'):
+        pd.prepare(str(home), game, ('vcrun2022',), logging.getLogger('test'))
+    assert 'winetricks could not download' in caplog.text
+    assert str(home) not in caplog.text

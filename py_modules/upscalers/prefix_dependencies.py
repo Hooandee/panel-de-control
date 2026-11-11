@@ -8,6 +8,7 @@ import re
 import shutil
 import signal
 import subprocess
+import tempfile
 from pathlib import Path
 
 from . import games, pe
@@ -18,32 +19,48 @@ _FLATPAK = 'com.github.Matoking.protontricks'
 
 
 class DependencyError(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, detail: str = ''):
         self.code = code
+        self.detail = detail
         super().__init__(code)
 
 
-def _execute(command, env, uid, gid, timeout, capture=False):
-    kwargs = {'env': env, 'stdin': subprocess.DEVNULL, 'stdout': subprocess.PIPE if capture else subprocess.DEVNULL,
-              'stderr': subprocess.DEVNULL, 'start_new_session': True}
-    if os.geteuid() == 0:
-        kwargs.update(user=uid, group=gid, extra_groups=[])
-    elif os.geteuid() != uid:
-        raise DependencyError('prefix_user_unavailable')
+def _last_output(stream, home):
+    """The tool's closing lines, for the log: the only clue to why winetricks gave up."""
     try:
-        process = subprocess.Popen(command, **kwargs)
+        stream.seek(max(0, stream.seek(0, os.SEEK_END) - 4096))
+        lines = [line.strip() for line in stream.read().decode('utf-8', 'replace').splitlines() if line.strip()]
+    except (OSError, ValueError):
+        return ''
+    text = ' | '.join(lines[-3:])
+    return (text.replace(str(home), '~') if home else text)[:300]
+
+
+def _execute(command, env, uid, gid, timeout, capture=False):
+    if os.geteuid() != 0 and os.geteuid() != uid:
+        raise DependencyError('prefix_user_unavailable')
+    with tempfile.TemporaryFile() as errors:
+        kwargs = {'env': env, 'stdin': subprocess.DEVNULL, 'stdout': subprocess.PIPE if capture else subprocess.DEVNULL,
+                  'stderr': errors, 'start_new_session': True}
+        if os.geteuid() == 0:
+            kwargs.update(user=uid, group=gid, extra_groups=[])
         try:
-            code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=10)
-            raise DependencyError('prefix_timeout') from None
-    except OSError:
-        raise DependencyError('prefix_tool_unavailable') from None
-    if code:
-        raise DependencyError('prefix_install_failed')
-    if capture:
-        return process.stdout.read(16384).decode('utf-8')
+            process = subprocess.Popen(command, **kwargs)
+            try:
+                code = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=10)
+                raise DependencyError('prefix_timeout', _last_output(errors, env.get('HOME'))) from None
+        except OSError:
+            raise DependencyError('prefix_tool_unavailable') from None
+        if code:
+            raise DependencyError('prefix_install_failed', _last_output(errors, env.get('HOME')))
+        if capture:
+            return process.stdout.read(16384).decode('utf-8')
 
 
 def _session(home, proc):
@@ -181,7 +198,8 @@ def _guard_transaction(transaction, proc='/proc'):
                 raise DependencyError('prefix_process_running')
         except PermissionError:
             raise DependencyError('prefix_process_state_unavailable') from None
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
+            # Gone, or a zombie with nothing left to read: it cannot be holding the staged prefix.
             continue
 
 
@@ -304,7 +322,8 @@ def prepare(home: str, installed: games.Installed, dependencies, logger=None, pr
         receipt['state'] = 'failed'
         _save(receipt)
         if logger:
-            logger.warning('Upscaler Windows prerequisites failed: %s', getattr(error, 'code', type(error).__name__))
+            logger.warning('Upscaler Windows prerequisites failed: %s%s', getattr(error, 'code', type(error).__name__),
+                           f" ({error.detail})" if getattr(error, 'detail', '') else '')
         # Retain failed staging: Flatpak services may outlive their command after a timeout.
         raise
 
