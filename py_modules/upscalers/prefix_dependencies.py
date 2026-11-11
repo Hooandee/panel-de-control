@@ -111,7 +111,7 @@ def _tool(env, uid, gid, logger=None):
         scope = candidate
         break
     if scope is None:
-        # No Flathub at all (a fresh Bazzite or a trimmed image): add it for this user and try once more.
+        # No Flathub remote in either scope: add it for this user and try once more.
         try:
             _execute([executable, 'remote-add', '--user', '--if-not-exists', 'flathub', _FLATHUB], env, uid, gid, 60)
             _execute([executable, 'remote-info', '--user', 'flathub', _FLATPAK], env, uid, gid, 30)
