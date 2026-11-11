@@ -1,5 +1,74 @@
 # Changelog
 
+## [0.87.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.1...panel-de-control-v0.87.0) (2026-11-11)
+
+
+### Español
+
+* **FSR 4 en Resident Evil 2, 3, 4 y 7:** Escaladores los prepara por completo. Solo hay que descargar un archivo que Panel de Control no puede repartir; la ficha del juego abre su página y lo recoge sola cuando llega a Descargas.
+* **Baldur's Gate 3 sin pasos a mano:** Con Proton, el juego arranca directo donde funciona FSR 4 y la ficha indica que hay que elegir DLSS en el juego. La versión de Linux ya no pide un ejecutable que no existe: se reconoce como juego de Linux, con Mako y Lossless Scaling.
+* **Juegos añadidos con PortProton, Unifideck o un script:** Salían como juegos de Linux y solo ofrecían Mako. Ahora se reconocen como juegos de Windows y los ajustes se guardan donde cada lanzador los lee.
+* **Final Fantasy VII Remake ya no se queda atascado:** La instalación fallaba y después siempre salía «No se pudo completar la restauración». Además, los componentes de Windows que necesita se instalan aunque Proton esté en otra biblioteca o en la tarjeta SD; si aun así faltan, el juego se instala igual y la ficha ofrece reintentarlo.
+* **Lossless Scaling se instala en Bazzite:** La instalación se quedaba a medias y fallaba una y otra vez.
+* **Mako de otra herramienta:** Un resto del plugin MAKO antiguo ya no bloquea Mako en todos los juegos. Si un juego conserva esa configuración, la ficha ofrece limpiarla, y Mako se puede volver a activar aunque sus opciones de lanzamiento se hubieran borrado a mano.
+* **El estado dice la verdad en juegos DirectX 11:** Se quedaban en «instalado» y el aviso en el juego solo mostraba la generación de frames, aunque FSR 4 estuviera funcionando.
+* **Nada se bloquea por un mod que falta:** Los juegos que necesitan un mod aparte se pueden activar igual, con un aviso de una línea.
+
+### English
+
+* **FSR 4 in Resident Evil 2, 3, 4 and 7:** Upscalers sets them up completely. Only one file has to be downloaded by hand, because Panel de Control cannot redistribute it; the game page opens its page and picks the file up once it lands in Downloads.
+* **Baldur's Gate 3 with no manual steps:** With Proton, the game starts straight where FSR 4 works and the page says to pick DLSS in the game. The Linux version no longer asks for an executable that does not exist: it is recognised as a Linux game, with Mako and Lossless Scaling.
+* **Games added through PortProton, Unifideck or a script:** They showed up as Linux games and only offered Mako. They are now recognised as Windows games, and the settings are saved where each launcher reads them.
+* **Final Fantasy VII Remake no longer gets stuck:** The install failed and afterwards "Restoration could not be completed" came up every time. The Windows components it needs also install when Proton lives in another library or on the SD card; if they are still missing, the game installs anyway and the page offers to retry.
+* **Lossless Scaling installs on Bazzite:** The install stopped halfway and failed over and over.
+* **Mako from another tool:** A leftover from the old MAKO plugin no longer blocks Mako in every game. If a game still carries that setup, the page offers to clear it, and Mako can be turned on again even after its launch options were deleted by hand.
+* **The status tells the truth in DirectX 11 games:** They stayed at "installed" and the in-game notice only showed frame generation, even with FSR 4 running.
+* **A missing mod never blocks anything:** Games that need a separate mod can still be activated, with a one-line notice.
+
+### Italiano
+
+* **FSR 4 in Resident Evil 2, 3, 4 e 7:** Upscaler li prepara per intero. Va scaricato a mano un solo file, che Panel de Control non può distribuire; la scheda del gioco apre la sua pagina e lo raccoglie da sola quando arriva in Download.
+* **Baldur's Gate 3 senza passaggi manuali:** Con Proton il gioco parte direttamente dove funziona FSR 4 e la scheda indica di scegliere DLSS nel gioco. La versione Linux non chiede più un eseguibile che non esiste: viene riconosciuta come gioco Linux, con Mako e Lossless Scaling.
+* **Giochi aggiunti con PortProton, Unifideck o uno script:** Comparivano come giochi Linux e offrivano solo Mako. Ora vengono riconosciuti come giochi Windows e le impostazioni si salvano dove ogni launcher le legge.
+* **Final Fantasy VII Remake non si blocca più:** L'installazione falliva e poi compariva sempre «Ripristino incompleto». Inoltre i componenti di Windows necessari si installano anche se Proton si trova in un'altra libreria o sulla scheda SD; se mancano comunque, il gioco si installa lo stesso e la scheda propone di riprovare.
+* **Lossless Scaling si installa su Bazzite:** L'installazione si fermava a metà e falliva ogni volta.
+* **Mako di un altro strumento:** Un residuo del vecchio plugin MAKO non blocca più Mako in tutti i giochi. Se un gioco conserva quella configurazione, la scheda propone di rimuoverla, e Mako si può riattivare anche dopo che le sue opzioni di avvio sono state cancellate a mano.
+* **Lo stato dice il vero nei giochi DirectX 11:** Restavano su «installato» e l'avviso nel gioco mostrava solo la generazione di frame, anche con FSR 4 in funzione.
+* **Una mod mancante non blocca nulla:** I giochi che richiedono una mod a parte si possono attivare comunque, con un avviso di una riga.
+
+### Deutsch
+
+* **FSR 4 in Resident Evil 2, 3, 4 und 7:** Upscaler richtet sie vollständig ein. Nur eine Datei muss von Hand heruntergeladen werden, weil Panel de Control sie nicht weitergeben darf; die Spielseite öffnet ihre Seite und übernimmt die Datei, sobald sie in Downloads liegt.
+* **Baldur's Gate 3 ohne Handarbeit:** Mit Proton startet das Spiel direkt dort, wo FSR 4 funktioniert, und die Seite weist darauf hin, im Spiel DLSS zu wählen. Die Linux-Version fragt nicht mehr nach einer Programmdatei, die es nicht gibt: Sie wird als Linux-Spiel erkannt, mit Mako und Lossless Scaling.
+* **Über PortProton, Unifideck oder ein Skript hinzugefügte Spiele:** Sie erschienen als Linux-Spiele und boten nur Mako an. Jetzt werden sie als Windows-Spiele erkannt, und die Einstellungen landen dort, wo der jeweilige Launcher sie liest.
+* **Final Fantasy VII Remake bleibt nicht mehr hängen:** Die Installation schlug fehl und danach erschien jedes Mal „Wiederherstellung nicht abgeschlossen“. Außerdem werden die benötigten Windows-Komponenten auch dann installiert, wenn Proton in einer anderen Bibliothek oder auf der SD-Karte liegt; fehlen sie trotzdem, wird das Spiel dennoch eingerichtet und die Seite bietet einen neuen Versuch an.
+* **Lossless Scaling lässt sich auf Bazzite installieren:** Die Installation blieb auf halbem Weg stehen und schlug immer wieder fehl.
+* **Mako aus einem anderen Tool:** Ein Überbleibsel des alten MAKO-Plugins sperrt Mako nicht mehr in allen Spielen. Trägt ein Spiel diese Einrichtung noch, bietet die Seite an, sie zu entfernen, und Mako lässt sich wieder einschalten, auch wenn seine Startoptionen von Hand gelöscht wurden.
+* **Der Status stimmt bei DirectX-11-Spielen:** Sie blieben bei „installiert“ und der Hinweis im Spiel zeigte nur die Frame-Generierung, obwohl FSR 4 lief.
+* **Ein fehlender Mod sperrt nichts:** Spiele, die einen separaten Mod brauchen, lassen sich trotzdem aktivieren, mit einem einzeiligen Hinweis.
+
+### Português (Brasil)
+
+* **FSR 4 em Resident Evil 2, 3, 4 e 7:** O Upscalers prepara tudo. Só um arquivo precisa ser baixado à mão, porque o Panel de Control não pode distribuí-lo; a página do jogo abre o site dele e recolhe o arquivo sozinha quando ele chega em Downloads.
+* **Baldur's Gate 3 sem passos manuais:** Com o Proton, o jogo abre direto onde o FSR 4 funciona e a página avisa para escolher DLSS no jogo. A versão de Linux não pede mais um executável que não existe: é reconhecida como jogo de Linux, com Mako e Lossless Scaling.
+* **Jogos adicionados pelo PortProton, Unifideck ou um script:** Apareciam como jogos de Linux e só ofereciam o Mako. Agora são reconhecidos como jogos de Windows, e os ajustes são salvos onde cada launcher os lê.
+* **Final Fantasy VII Remake não trava mais:** A instalação falhava e depois sempre aparecia «Não foi possível concluir a restauração». Além disso, os componentes do Windows necessários são instalados mesmo com o Proton em outra biblioteca ou no cartão SD; se ainda faltarem, o jogo é instalado assim mesmo e a página oferece tentar de novo.
+* **Lossless Scaling instala no Bazzite:** A instalação parava no meio e falhava repetidamente.
+* **Mako de outra ferramenta:** Um resto do plugin MAKO antigo não bloqueia mais o Mako em todos os jogos. Se um jogo ainda traz essa configuração, a página oferece limpá-la, e o Mako pode ser ativado de novo mesmo depois de suas opções de inicialização terem sido apagadas à mão.
+* **O status diz a verdade em jogos DirectX 11:** Ficavam em «instalado» e o aviso no jogo só mostrava a geração de frames, mesmo com o FSR 4 funcionando.
+* **Um mod que falta não bloqueia nada:** Jogos que precisam de um mod à parte podem ser ativados do mesmo jeito, com um aviso de uma linha.
+
+### Français
+
+* **FSR 4 dans Resident Evil 2, 3, 4 et 7 :** Upscalers les prépare entièrement. Un seul fichier est à télécharger à la main, car Panel de Control ne peut pas le redistribuer ; la page du jeu ouvre sa page et récupère le fichier dès qu'il arrive dans Téléchargements.
+* **Baldur's Gate 3 sans étape manuelle :** Avec Proton, le jeu démarre directement là où FSR 4 fonctionne et la page indique de choisir DLSS dans le jeu. La version Linux ne demande plus un exécutable qui n'existe pas : elle est reconnue comme un jeu Linux, avec Mako et Lossless Scaling.
+* **Jeux ajoutés via PortProton, Unifideck ou un script :** Ils apparaissaient comme des jeux Linux et ne proposaient que Mako. Ils sont désormais reconnus comme des jeux Windows, et les réglages sont enregistrés là où chaque lanceur les lit.
+* **Final Fantasy VII Remake ne reste plus bloqué :** L'installation échouait, puis « La restauration a échoué » s'affichait à chaque fois. De plus, les composants Windows nécessaires s'installent même si Proton se trouve dans une autre bibliothèque ou sur la carte SD ; s'ils manquent malgré tout, le jeu est installé quand même et la page propose de réessayer.
+* **Lossless Scaling s'installe sur Bazzite :** L'installation s'arrêtait en cours de route et échouait sans cesse.
+* **Mako d'un autre outil :** Un reste de l'ancien plugin MAKO ne bloque plus Mako dans tous les jeux. Si un jeu garde cette configuration, la page propose de l'effacer, et Mako peut être réactivé même après la suppression manuelle de ses options de lancement.
+* **L'état dit vrai dans les jeux DirectX 11 :** Ils restaient sur « installé » et l'avis en jeu n'affichait que la génération d'images, alors que FSR 4 fonctionnait.
+* **Un mod manquant ne bloque rien :** Les jeux qui demandent un mod à part peuvent être activés quand même, avec un avis d'une ligne.
+
 ## [0.86.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.0...panel-de-control-v0.86.1) (2026-11-10)
 
 
