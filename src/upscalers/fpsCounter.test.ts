@@ -28,7 +28,39 @@ it("resets when the game ends while the QAM is closed, and stops on plugin unloa
   await vi.advanceTimersByTimeAsync(2000);
   expect(fpsCounterSnapshot("42").on).toBe(true);
   vi.mocked(readRunningGame).mockReturnValue(null);
-  await vi.advanceTimersByTimeAsync(2000);
+  await vi.advanceTimersByTimeAsync(12000);
   expect(fpsCounterSnapshot("42").on).toBe(false);
   stop(); expect(vi.getTimerCount()).toBe(0);
+});
+
+it("keeps the counter through a brief moment without a running game (resume, focus change)", async () => {
+  vi.mocked(readRunningGame).mockReturnValue({ appid: "7", liveAppid: 7, name: "Game" });
+  const stop = startFpsCounterSession();
+  await toggleFpsCounter("7", async () => {});
+  vi.mocked(readRunningGame).mockReturnValue(null);
+  await vi.advanceTimersByTimeAsync(4000);
+  vi.mocked(readRunningGame).mockReturnValue({ appid: "7", liveAppid: 7, name: "Game" });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(fpsCounterSnapshot("7").on).toBe(true);
+  stop();
+});
+
+it("remembers the counter when Panel reloads while the same game keeps running", async () => {
+  vi.mocked(readRunningGame).mockReturnValue({ appid: "9", liveAppid: 9, name: "Game" });
+  const stop = startFpsCounterSession();
+  await toggleFpsCounter("9", async () => {});
+  stop();
+  vi.resetModules();
+  const fresh = await import("./fpsCounter");
+  const again = fresh.startFpsCounterSession();
+  expect(fresh.fpsCounterSnapshot("9").on).toBe(true);
+  vi.mocked(readRunningGame).mockReturnValue(null);
+  await vi.advanceTimersByTimeAsync(12000);
+  again();
+  vi.resetModules();
+  const later = await import("./fpsCounter");
+  vi.mocked(readRunningGame).mockReturnValue({ appid: "9", liveAppid: 9, name: "Game" });
+  const third = later.startFpsCounterSession();
+  expect(later.fpsCounterSnapshot("9").on).toBe(false);
+  third();
 });

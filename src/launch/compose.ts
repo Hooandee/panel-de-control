@@ -30,10 +30,15 @@ export interface Parsed {
   malformed: boolean;
   /** The original source string, verbatim — returned as-is when malformed. */
   raw: string;
+  /** Unifideck's `store:game_id` token: its launcher only honours variables written after it. */
+  envAfter?: string;
 }
 
 const COMMAND = "%command%";
 const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+// From Unifideck's launch options guide: `<id> VAR=value` works, `VAR=value %command% <id>` can lose the variable,
+// and a bare `%command% <id>` does not launch.
+const UNIFIDECK_ID_RE = /^(?:epic|gog|amazon|ubisoft|battlenet|microsoft|gamevault|itch):[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Split on whitespace but keep quoted substrings and backslash-escaped characters
  *  (including escaped whitespace, e.g. `hello\ world`) intact, so a value never
@@ -104,21 +109,21 @@ export function parse(str: string): Parsed {
     return { ...empty, malformed: true };
   }
 
-  if (cmdCount === 0) {
-    // No token: the whole string is game args.
-    return { ...empty, suffix: tokens };
-  }
-
   const idx = tokens.indexOf(COMMAND);
-  const prefix = tokens.slice(0, idx);
-  const suffix = tokens.slice(idx + 1);
+  const prefix = idx < 0 ? [] : tokens.slice(0, idx);
+  let suffix = tokens.slice(idx + 1);
   const envs: EnvVar[] = [];
   const wrappers: string[] = [];
   for (const tok of prefix) {
     if (ENV_RE.test(tok)) envs.push(toEnv(tok));
     else wrappers.push(tok);
   }
-  return { envs, wrappers, suffix, hasCommand: true, malformed: false, raw };
+  const id = suffix.findIndex((tok) => UNIFIDECK_ID_RE.test(tok));
+  if (id < 0) return { envs, wrappers, suffix, hasCommand: idx >= 0, malformed: false, raw };
+  const after = suffix.slice(id + 1);
+  for (const tok of after) if (ENV_RE.test(tok)) envs.push(toEnv(tok));
+  suffix = [...suffix.slice(0, id + 1), ...after.filter((tok) => !ENV_RE.test(tok))];
+  return { envs, wrappers, suffix, hasCommand: idx >= 0, malformed: false, raw, envAfter: suffix[id] };
 }
 
 export function serialize(p: Parsed): string {
@@ -127,6 +132,12 @@ export function serialize(p: Parsed): string {
   // Fully empty → clean empty string (never leave a bare "%command%").
   if (p.envs.length === 0 && p.wrappers.length === 0 && p.suffix.length === 0) return "";
   const parts: string[] = [];
+  if (p.envAfter && p.suffix.includes(p.envAfter)) {
+    const at = p.suffix.indexOf(p.envAfter);
+    if (p.wrappers.length > 0) parts.push(...p.wrappers, COMMAND);
+    parts.push(...p.suffix.slice(0, at + 1), ...p.envs.map((e) => envToken(e.name, e.value)), ...p.suffix.slice(at + 1));
+    return parts.join(" ");
+  }
   for (const e of p.envs) parts.push(envToken(e.name, e.value));
   parts.push(...p.wrappers);
   // Emit the token when anything must run before the game, or the source had it.

@@ -28,7 +28,8 @@ def unresolved(recipe, analysis: dict, selected) -> bool:
         return False
     needs = set(recipe.needs)
     if selected:
-        needs.discard("luma")
+        # A curated recipe names everything the game needs, the separate mod included.
+        needs -= {"luma", "mod"}
     if analysis.get("inputs", {}).get("DLSS"):
         needs.discard("nvngx_dlss")
     return bool(needs & {"luma", "mod", "nvngx_dlss"})
@@ -48,9 +49,27 @@ def assets(selected) -> list[Asset]:
     return list(result.values())
 
 
-def sources(selected, paths: dict[str, Path]) -> dict[str, Path]:
+def user_files(selected, store) -> list[dict]:
+    """What the user still has to bring for this recipe, and what they brought."""
+    if not getattr(selected, "dependencies", None):
+        return []
+    try:
+        ordered = dependencies(selected)
+    except recipe_catalog.CatalogError:
+        return []
+    return [store.status(dependency) for dependency in ordered if dependency.kind == "user_files"]
+
+
+def sources(selected, paths: dict[str, Path], store=None) -> dict[str, Path]:
     result = {}
     for dependency in dependencies(selected):
+        if dependency.kind == "user_files":
+            # Missing until the user picks the file: the rest installs and the row says what is left.
+            for destination, source in (store.sources(dependency) if store else {}).items():
+                if destination in result:
+                    raise RecipeError("recipe_files_invalid")
+                result[destination] = source
+            continue
         if dependency.kind != "game_files":
             continue
         root = paths[dependency.asset].resolve(strict=True)

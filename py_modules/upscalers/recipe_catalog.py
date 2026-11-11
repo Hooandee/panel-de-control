@@ -17,6 +17,9 @@ _ENGINES = {'optiscaler', 'dll', 'helixsr', 'proton', 'mako'}
 _PLATFORMS = {'linux', 'windows', 'darwin', 'android'}
 _ARCHES = {'x86_64', 'aarch64'}
 _VERBS = {'vcrun2022', 'msvcrt40'}
+# Pages a user_files dependency may point the user to; Panel never downloads from them.
+_PAGE_HOSTS = {'www.nexusmods.com', 'nexusmods.com', 'github.com', 'www.patreon.com'}
+_VERSION = re.compile(r'[0-9]+(?:\.[0-9]+){0,3}\Z')
 # TutorialProgress=4 marks ReShade's tutorial done: otherwise its splash stays over the game until Home is pressed.
 _CONFIGURATION = {'ReShade.ini': {'Luma.SRUserType': {'2'}, 'OVERLAY.TutorialProgress': {'4'}}}
 
@@ -45,6 +48,12 @@ class DependencySpec:
     provider: str | None
     verb: str | None
     requires: tuple[str, ...]
+    # user_files: what the user downloads themselves where Panel can't fetch it (Nexus, Patreon).
+    name: str | None = None
+    page_url: str | None = None
+    version: str | None = None
+    avoid_versions: tuple[str, ...] = ()
+    download_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,15 @@ class GameRecipe:
     effective_api: str | None = None
     quality_owner: str = "panel"
     recommended_build: str | None = None
+    # Files of the selected OptiScaler build that must also sit beside the exe (PureDark's plugin looks for
+    # libxess.dll there while OptiScaler 10 keeps it in its own folder).
+    optiscaler_root_files: tuple[str, ...] = ()
+    # REFramework's TemporalUpscaler does the upscaling (PureDark's route): Panel's quality drives its render size.
+    reframework_upscaler: bool = False
+    # False when OptiScaler's own frame generation breaks the game: Panel then offers only Mako or Lossless.
+    optiscaler_fg: bool = True
+    # Options the user must change in the game's own menu, as (setting, value) in the game's words.
+    game_settings: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,6 +179,24 @@ def _url(value, asset=False):
     return value
 
 
+def _page_url(value):
+    value = _text(value, 2048)
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise CatalogError('untrusted_origin') from None
+    if parsed.scheme != 'https' or parsed.hostname not in _PAGE_HOSTS or parsed.username or parsed.password or port is not None:
+        raise CatalogError('untrusted_origin')
+    return value
+
+
+def _version(value):
+    if not isinstance(value, str) or not _VERSION.fullmatch(value):
+        raise CatalogError('invalid_version')
+    return value
+
+
 def _strings(value, validate, maximum=128):
     if not isinstance(value, list) or len(value) > maximum:
         raise CatalogError('invalid_list')
@@ -237,6 +273,19 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
                 raise CatalogError('unsupported_dependency')
             dependency = DependencySpec(identifier, kind, None, {}, 'winetricks', item['verb'],
                                         _strings(item.get('requires', []), _identifier))
+        elif kind == 'user_files':
+            item = _object(item, ('kind', 'name', 'page_url', 'version', 'files'), ('avoid_versions', 'requires', 'download_url'))
+            if not isinstance(item['files'], dict) or not 0 < len(item['files']) <= 32:
+                raise CatalogError('invalid_file_dependency')
+            # The archive's layout is the author's: each file is found by its name anywhere inside it.
+            files = {_path(destination): _path(member) for destination, member in item['files'].items()}
+            if any('/' in member for member in files.values()) or len({n.casefold() for n in files}) != len(files):
+                raise CatalogError('invalid_file_dependency')
+            dependency = DependencySpec(identifier, kind, None, files, None, None,
+                                        _strings(item.get('requires', []), _identifier),
+                                        _text(item['name'], 80), _page_url(item['page_url']), _version(item['version']),
+                                        _strings(item.get('avoid_versions', []), _version, 16),
+                                        _page_url(item['download_url']) if 'download_url' in item else None)
         else:
             raise CatalogError('unsupported_dependency')
         dependencies[identifier] = dependency
@@ -244,7 +293,7 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
     for appid, item in raw['games'].items():
         if not isinstance(appid, str) or not re.fullmatch(r'[1-9][0-9]{0,9}', appid):
             raise CatalogError('invalid_appid')
-        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build'))
+        item = _object(item, ('name', 'revision', 'conditions', 'exe', 'args', 'ini', 'dependencies', 'source_urls'), ('tested_game_builds', 'tested_at', 'configuration', 'recommended_input', 'effective_api', 'quality_owner', 'recommended_build', 'optiscaler_root_files', 'reframework_upscaler', 'optiscaler_fg', 'game_settings'))
         conditions = _object(item['conditions'], ('engine', 'platform', 'arch'), ('game_builds',))
         allowed = {'engine': _ENGINES, 'platform': _PLATFORMS, 'arch': _ARCHES}
         parsed_conditions = {}
@@ -293,6 +342,21 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
         recommended_build = item.get('recommended_build')
         if 'recommended_build' in item and (not isinstance(recommended_build, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,79}', recommended_build)):
             raise CatalogError('invalid_recommended_build')
+        root_files = _strings(item.get('optiscaler_root_files', []), _path, 8)
+        if any('/' in name or not name.lower().endswith('.dll') for name in root_files):
+            raise CatalogError('invalid_root_files')
+        flags = {}
+        for key, default in (('reframework_upscaler', False), ('optiscaler_fg', True)):
+            flags[key] = item.get(key, default)
+            if type(flags[key]) is not bool:
+                raise CatalogError('invalid_' + key)
+        raw_settings = item.get('game_settings', [])
+        if not isinstance(raw_settings, list) or len(raw_settings) > 8:
+            raise CatalogError('invalid_game_settings')
+        game_settings = []
+        for entry in raw_settings:
+            entry = _object(entry, ('setting', 'value'))
+            game_settings.append((_text(entry['setting'], 80), _text(entry['value'], 40)))
         tested_builds = _strings(item.get('tested_game_builds', []), _game_build)
         tested_at = item.get('tested_at')
         if tested_at is not None:
@@ -302,7 +366,8 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
             except ValueError:
                 raise CatalogError('invalid_test_date') from None
         entries[appid] = GameRecipe(appid, _text(item['name'], 160), _integer(item['revision'], 2**31 - 1),
-                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build)
+                                   parsed_conditions, _path(item['exe']), args, dict(settings), ids, sources, tested_builds, tested_at, configuration, recommended_input, item.get("effective_api"), item.get("quality_owner", "panel"), recommended_build, root_files,
+                                   flags['reframework_upscaler'], flags['optiscaler_fg'], tuple(game_settings))
     catalog = Catalog(1, version, assets, dependencies, entries)
     catalog.dependency_order(dependencies)
     return catalog

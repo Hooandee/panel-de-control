@@ -83,22 +83,12 @@ def test_running_quality_choice_is_saved_even_when_game_owns_quality(steam, fake
     assert ini.read((Path(installed['target']) / 'OptiScaler.ini').read_text(), 'QualityOverrides.QualityRatioOverrideEnabled') == 'true'
 
 
-def test_only_disable_recovers_missing_dependency_without_other_changes(steam, fake_catalog, proc, monkeypatch):
+def test_a_missing_mod_never_locks_the_settings_of_an_install(steam, fake_catalog, proc, monkeypatch):
     service = _service(steam, fake_catalog, proc)
-    service.install(APPID, {'build': 'fsr-test', 'fg': 'on', 'quality': 'balanced'})
-    installed = service._game_state(APPID)['install']
-    path = Path(installed['target']) / 'OptiScaler.ini'
-    before = path.read_text()
-    options = dict(installed['options'])
+    service.install(APPID, {'build': 'fsr-test', 'fg': 'off', 'quality': 'balanced'})
     monkeypatch.setattr(service, '_recipe', lambda *args: recipes.Recipe(APPID, needs=('mod',)))
-    for changes in ({'quality': 'performance'}, {'model': 'other'}, {'proxy': 'other.dll'}, {'force': True}):
-        with pytest.raises(UpscalerError, match='recipe_unresolved'):
-            service.configure(APPID, {'fg': 'off', **changes})
-        assert path.read_text() == before
-        assert installed['options'] == options
-    service.configure(APPID, {'fg': 'off'})
-    assert installed['options'] == {**options, 'fg': 'off'}
-    assert path.read_text() == ini.apply(before, catalog.fg_overrides(None, False))
+    service.configure(APPID, {'quality': 'performance'})
+    assert service._game_state(APPID)['install']['options']['quality'] == 'performance'
 
 
 @pytest.mark.parametrize('route', ['invented', 'game'])

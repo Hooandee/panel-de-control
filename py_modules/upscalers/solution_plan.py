@@ -31,6 +31,10 @@ def resolve(gpu, analysis, recipe=None, generation=9, engine="optiscaler", route
                 fg = {**routes[selected], "route": selected, "routes": routes}
             else:
                 fg = None
+    if getattr(recipe, "optiscaler_fg", True) is False:
+        # The recipe says OptiScaler's frame generation breaks the game: neither offered nor recommended, which leaves
+        # frame generation outside OptiScaler (Mako, Lossless).
+        fg = offered = None
     return {"input_reconciled": reconciled, "recommended_input": recommended, "effective_api": api, "api_source": source,
             "quality": {"owner": owner, "reason": "recipe_quality_game" if owner == "game" else None},
             "fg_plan": fg, "offered_fg_plan": offered, "blocked_reason": None,

@@ -65,11 +65,13 @@ export function useUpscalerLive(appid: string, enabled: boolean, onActive?: () =
 export const DuringPlay: FC<{
   appid: string;
   optiscaler: boolean;
+  /** False where OptiScaler runs its old menu, which never draws the FPS counter (RE Engine games). */
+  fpsCounter?: boolean;
   fg: boolean;
   live: UpscalerLive;
   onGenerating: (generating: boolean | null) => void;
   onCompare: () => void;
-}> = ({ appid, optiscaler, fg, live, onGenerating, onCompare }) => {
+}> = ({ appid, optiscaler, fpsCounter = true, fg, live, onGenerating, onCompare }) => {
   const { t } = useI18n();
   const counter = useSyncExternalStore(subscribeFpsCounter, () => fpsCounterSnapshot(appid));
   const [pressing, setPressing] = useState<UpscalerKey | null>(null);
@@ -96,11 +98,11 @@ export const DuringPlay: FC<{
     <>
       <Label>{t("up.play.title")}</Label>
       <ListCard>
-        {optiscaler && (
+        {optiscaler && fpsCounter && (
           <ListRow first label={t("up.play.fps")} on={counter.on} busy={counter.busy} disabled={pressing !== null}
             onPress={() => void press("fps")} />
         )}
-        <ListRow first={!optiscaler} label={t("up.play.compare")} chevron onPress={onCompare} />
+        <ListRow first={!(optiscaler && fpsCounter)} label={t("up.play.compare")} chevron onPress={onCompare} />
         {optiscaler && (
           <ListRow label={t("up.play.menu")} detail={t("up.play.menu.detail")} busy={pressing === "menu"}
             disabled={counter.busy || (pressing !== null && pressing !== "menu")} onPress={() => void press("menu")} />

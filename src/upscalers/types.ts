@@ -32,7 +32,7 @@ export interface UpscalerJob {
   error: string | null;
   leftover?: { removed_overrides: string[]; removed_args: string[]; env: Record<string, string | null> };
   result?: {
-    overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris";
+    overrides?: string[]; args?: string[]; kept?: string[]; launcher?: "heroic" | "lutris" | "portproton";
     removed_overrides?: string[]; removed_args?: string[]; env?: Record<string, string | null>;
   };
 }
@@ -134,7 +134,7 @@ export interface GameDetail {
   foreign_backup?: { at: number } | null;
   recipe_info?: RecipeInfo | null;
   fg_note?: "reflexOff" | null;
-  launcher?: "heroic" | "lutris" | null;
+  launcher?: "heroic" | "lutris" | "portproton" | null;
   shortcut: boolean;
   native: boolean;
   fg_plan: FgPlan | null;
@@ -160,9 +160,32 @@ export interface IniSection {
   keys: IniKey[];
 }
 
+/** A file the recipe needs that only the user can download (e.g. from Nexus). */
+export interface UserFile {
+  id: string;
+  name: string;
+  page_url: string;
+  download_url?: string;
+  version: string;
+  installed_version: string | null;
+  filename: string | null;
+  state: "missing" | "ready" | "avoid" | "other_version";
+}
+
+export interface UserFileCandidate {
+  path: string;
+  filename: string;
+  version: string | null;
+}
+
 export interface RecipeInfo {
+  user_files?: UserFile[];
+  game_settings?: { setting: string; value: string }[];
+  fps_counter?: boolean;
+  quality_on_exit?: boolean;
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;
   luma_detected?: boolean;
+  windows_components?: "ready" | "missing" | "pending" | "unknown";
   automatic?: string[];
   automatic_builds?: string[];
   blocked?: boolean;

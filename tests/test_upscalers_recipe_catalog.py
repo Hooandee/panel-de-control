@@ -51,7 +51,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 4
+    assert recipe.catalog_version == 11
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -238,3 +238,113 @@ def test_luma_411_uses_new_engine_and_preserves_driver_provider():
 def test_hidden_files_beside_the_recipes_are_ignored(catalog_dir):
     (catalog_dir / 'games' / '.DS_Store').write_bytes(b'\x00')
     assert rc.load(catalog_dir).match('1462040', 'optiscaler', 'linux', 'amd64') is not None
+
+
+def _user_dependency(data):
+    data['puredark-test'] = {
+        'kind': 'user_files', 'name': 'UpscalerBasePlugin', 'page_url': 'https://www.nexusmods.com/site/mods/502',
+        'version': '1.1.2', 'avoid_versions': ['1.2.0'], 'files': {'PDPerfPlugin.dll': 'PDPerfPlugin.dll'},
+    }
+
+
+def test_user_files_dependency_names_what_the_user_brings(catalog_dir):
+    edit(catalog_dir, 'dependencies.json', _user_dependency)
+    dependency = rc.load(catalog_dir).dependencies['puredark-test']
+    assert dependency.kind == 'user_files' and dependency.asset is None
+    assert dependency.name == 'UpscalerBasePlugin' and dependency.version == '1.1.2'
+    assert dependency.avoid_versions == ('1.2.0',)
+    assert dependency.page_url == 'https://www.nexusmods.com/site/mods/502'
+    assert dependency.files == {'PDPerfPlugin.dll': 'PDPerfPlugin.dll'}
+    assert dependency.download_url is None
+    assert rc.load().dependencies['puredark-upscaler-base'].download_url.endswith('?tab=files&file_id=2293')
+
+
+@pytest.mark.parametrize('change', [
+    lambda d: d['puredark-test'].update(page_url='https://evil.example/mod'),
+    lambda d: d['puredark-test'].update(files={'PDPerfPlugin.dll': 'sub/PDPerfPlugin.dll'}),
+    lambda d: d['puredark-test'].update(files={}),
+    lambda d: d['puredark-test'].pop('name'),
+])
+def test_user_files_dependency_rejects_unsafe_data(catalog_dir, change):
+    edit(catalog_dir, 'dependencies.json', lambda d: (_user_dependency(d), change(d)))
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_re4_brings_its_own_reframework_and_asks_the_user_only_for_puredark(tmp_path):
+    from pathlib import Path
+    from py_modules.upscalers import auto_recipes, user_deps
+    catalog = rc.load()
+    game = catalog.match('2050650', 'optiscaler', 'linux', 'x86_64')
+    order = catalog.dependency_order(game.dependencies)
+    assert [(d.id, d.kind) for d in order] == [('refw-pdup-re4', 'game_files'), ('puredark-upscaler-base', 'user_files')]
+    recipe = recipes.recipe_for('2050650', platform='linux', arch='x86_64')
+    root = tmp_path / 'RE4'
+    root.mkdir()
+    (root / 're_chunk_000.pak').write_bytes(b'')
+    composed = recipes.with_engine(recipe, '2050650', root)
+    assert 'reframework-nightly' not in composed.files.values()
+    assert composed.menu_key == 'home' and 'dinput8' in composed.native_dlls
+    assert not auto_recipes.unresolved(composed, {'inputs': {}}, game)
+    assert [a.id for a in auto_recipes.assets(game)] == ['refw-pdup-re4']
+    store = user_deps.Store(tmp_path / 'store')
+    framework = tmp_path / 'refw'
+    framework.mkdir()
+    (framework / 'dinput8.dll').write_bytes(b'MZ')
+    assert set(auto_recipes.sources(game, {'refw-pdup-re4': framework}, store)) == {'dinput8.dll'}
+    assert [s['state'] for s in auto_recipes.user_files(game, store)] == ['missing']
+    plugin = tmp_path / 'PDPerfPlugin.dll'
+    plugin.write_bytes(b'MZ')
+    store.adopt(catalog.dependencies['puredark-upscaler-base'], plugin)
+    assert set(auto_recipes.sources(game, {'refw-pdup-re4': framework}, store)) == {'dinput8.dll', 'PDPerfPlugin.dll'}
+
+
+def test_standard_reframework_still_composes_for_other_re_engine_games(tmp_path):
+    root = tmp_path / 'game'
+    root.mkdir()
+    (root / 're_chunk_000.pak').write_bytes(b'')
+    composed = recipes.with_engine(recipes.Recipe('3764200'), '3764200', root)
+    assert composed.files == {'dinput8.dll': 'reframework-nightly'}
+
+
+
+def test_re4_keeps_optiscalers_libxess_beside_the_exe():
+    game = rc.load().match('2050650', 'optiscaler', 'linux', 'x86_64')
+    assert game.optiscaler_root_files == ('libxess.dll',)
+    assert recipes.recipe_for('2050650', platform='linux', arch='x86_64').optiscaler_root_files == ('libxess.dll',)
+
+
+@pytest.mark.parametrize('value', [['sub/libxess.dll'], ['libxess.exe'], 'libxess.dll'])
+def test_root_files_must_be_plain_dll_names(catalog_dir, value):
+    edit(catalog_dir, 'games/2050650.json', lambda d: d.update(optiscaler_root_files=value))
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_re4_recipe_drives_reframeworks_upscaler_and_names_the_game_setting():
+    game = rc.load().match('2050650', 'optiscaler', 'linux', 'x86_64')
+    assert game.reframework_upscaler is True and game.optiscaler_fg is False
+    assert game.game_settings == (('FidelityFX Super Resolution 2', 'No'),)
+    recipe = recipes.recipe_for('2050650', platform='linux', arch='x86_64')
+    assert recipe.reframework_upscaler and not recipe.optiscaler_fg
+    assert recipe.game_settings == (('FidelityFX Super Resolution 2', 'No'),)
+
+
+def test_recipe_without_optiscaler_fg_neither_offers_nor_applies_it():
+    from py_modules.upscalers import solution_plan
+    recipe = recipes.Recipe('1', optiscaler_fg=False)
+    plan = solution_plan.resolve('rdna2', {'apis': ['d3d12'], 'inputs': {'fsrfg': True}}, recipe)
+    assert plan['fg_plan'] is None and plan['offered_fg_plan'] is None
+    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'optiscaler'}) is None
+    assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'game'}) is None
+
+
+def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
+    recipe = recipes.recipe_for('1086940', platform='linux', arch='x86_64')
+    assert (recipe.exe, recipe.args, recipe.recommended_input) == ('bin/bg3_dx11.exe', ('--skip-launcher',), 'dlss')
+    assert recipe.dependencies == () and not recipe.needs
+
+
+def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
+    for appid in ('2050650', '883710', '952060', '418370', '601150'):
+        assert recipes.recipe_for(appid, platform='linux', arch='x86_64').ini['Menu.OverlayMenu'] == 'true', appid

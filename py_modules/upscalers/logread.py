@@ -17,6 +17,9 @@ _FACTS = (
     ("gpu", re.compile(r"Adapter Desc:\s*(.+)")),
     ("upscaler", re.compile(r"Creating new (.+?) upscaler")),
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
+    # D3D11 games reach OptiScaler through DLSS only, and it names the backend it bridges to D3D12 differently:
+    # "NVSDK_NGX_D3D11_CreateFeature Creating new FSR 3.X w/Dx12 feature".
+    ("d3d11_upscaler", re.compile(r"NVSDK_NGX_D3D11_CreateFeature Creating new (.+?)(?: w/Dx1[12])? feature")),
     ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
     ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
     ("fg_state", re.compile(r"D3D12_Configure Enabled: (true|false), result|SetEnabled: (true|false), result")),
@@ -74,6 +77,9 @@ def read(target: Path, since: float | None = None) -> dict:
                 else:
                     ffx_input = False
                 facts["input"] = value
+            elif key == "d3d11_upscaler":
+                facts["upscaler"] = match.group(1).strip()[:120]
+                facts["input"] = "DLSS"
             elif key == "initial_resolution":
                 facts[key] = {
                     "render": [int(match.group(1)), int(match.group(2))],

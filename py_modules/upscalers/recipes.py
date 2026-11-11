@@ -51,6 +51,10 @@ class Recipe:
     effective_api: str | None = None
     quality_owner: str = "panel"
     recommended_build: str | None = None
+    optiscaler_root_files: tuple[str, ...] = ()
+    reframework_upscaler: bool = False
+    optiscaler_fg: bool = True
+    game_settings: tuple[tuple[str, str], ...] = ()
 
 
 RECIPES: dict[str, Recipe] = {
@@ -101,7 +105,7 @@ def from_facts(appid: str, entry: dict, source: str, page: dict | None = None) -
         appid,
         args=tuple(a for a in entry.get("args", ()) if a == "-dx12"),
         proxy=proxy if isinstance(proxy, str) else None,
-        needs=tuple(n for n in entry.get("needs", ()) if n in NEEDS),
+        needs=tuple(dict.fromkeys(n for n in (*entry.get("needs", ()), *page.get("needs", ())) if n in NEEDS)),
         broken=status == "broken",
         optipatcher=bool(entry.get("optipatcher")),
         status=status,
@@ -161,13 +165,24 @@ def recipe_for(appid: str, live: Recipe | None = None, *, engine: str = "optisca
         hand = replace(hand or Recipe(entry.appid), exe=entry.exe, args=entry.args, ini=dict(entry.ini),
                       dependencies=entry.dependencies, catalog_revision=entry.revision,
                       catalog_version=catalog.catalog_version, source="game-recipes",
-                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build)
+                      recommended_input=entry.recommended_input, effective_api=entry.effective_api, quality_owner=entry.quality_owner, recommended_build=entry.recommended_build, optiscaler_root_files=entry.optiscaler_root_files,
+                      reframework_upscaler=entry.reframework_upscaler, optiscaler_fg=entry.optiscaler_fg,
+                      game_settings=entry.game_settings)
     return combine(hand, with_wiki(WIKI.get(str(appid)), live))
 
 
 # Every RE Engine game ships its packs as re_chunk_000.pak in the game root.
 RE_ENGINE_MARKER = "re_chunk_000.pak"
 REFRAMEWORK = {"dinput8.dll": "reframework-nightly"}
+
+
+def _dependency_files(recipe: Recipe) -> tuple[str, ...]:
+    """Files a curated recipe's dependencies place, e.g. the pd-upscaler REFramework build some games need."""
+    try:
+        ordered = recipe_catalog.bundled().dependency_order(recipe.dependencies)
+    except recipe_catalog.CatalogError:
+        return ()
+    return tuple(name for dependency in ordered for name in dependency.files)
 
 
 def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
@@ -178,7 +193,7 @@ def with_engine(recipe: Recipe | None, appid: str, root: Path) -> Recipe | None:
     # REFramework opens its own menu with Insert too: OptiScaler's moves to Home (VK 0x24).
     keys = {"ini": {**base.ini, "Menu.ShortcutKey": "0x24"}, "menu_key": "home"}
     files = dict(base.files)
-    if not any(name.lower() == "dinput8.dll" for name in files):
+    if not any(name.lower() == "dinput8.dll" for name in (*files, *_dependency_files(base))):
         files.update(REFRAMEWORK)
     native_dlls = {}
     for name in (*base.native_dlls, "dinput8"):

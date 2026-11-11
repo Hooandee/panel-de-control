@@ -139,3 +139,29 @@ def test_upgrade_keeps_legacy_history_dimensions_only_as_initial(tmp_path):
 def test_latest_explicit_input_wins_over_earlier_ffx_context(tmp_path, events, expected):
     service, _ = make_service(tmp_path, events)
     assert service.verify('292030')['facts']['input'] == expected
+
+
+D3D11_LOG = (
+    '[13:20:25.453743] [I] NVSDK_NGX_D3D11_CreateFeature Creating new FSR 3.X w/Dx12 feature\n'
+    '[13:20:25.453838] [I] IFeature::SetInitParameters Render Resolution: 752x423, Display Resolution 1280x720, Quality: 3\n'
+    '[13:20:26.217677] [I] WithDx12::GetD3D12DeviceFromD3D11 D3D12 interop device created on D3D11 adapter: AMD Custom GPU\n'
+)
+
+
+def test_a_d3d11_game_bridged_to_d3d12_counts_as_running(tmp_path):
+    from upscalers import logread
+    (tmp_path / logread.LOG_NAME).write_text(D3D11_LOG)
+    facts = logread.read(tmp_path)
+    assert logread.verdict(facts) == 'active'
+    assert facts['input'] == 'DLSS'
+    assert facts['initial_resolution'] == {'render': [752, 423], 'output': [1280, 720]}
+    assert logread.provider_observation(facts)['provider_family'] == 'fsr'
+
+
+def test_d3d12_logs_read_exactly_as_before(tmp_path):
+    from upscalers import logread
+    (tmp_path / logread.LOG_NAME).write_text('[I] NVSDK_NGX_D3D12_CreateFeature Creating new fsr31 upscaler\nCreateDLSSContext\n')
+    facts = logread.read(tmp_path)
+    assert (facts['upscaler'], facts['input'], logread.verdict(facts)) == ('fsr31', 'DLSS', 'active')
+    (tmp_path / logread.LOG_NAME).write_text('[I] NVSDK_NGX_D3D11_Init_Ext AppId: 100980011\n')
+    assert logread.verdict(logread.read(tmp_path)) == 'loaded'
