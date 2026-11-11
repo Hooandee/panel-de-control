@@ -377,3 +377,34 @@ def test_a_failed_job_keeps_its_detail_in_the_game_history(steam, fake_catalog, 
 def test_error_detail_keeps_only_recognisable_causes(raw, kept):
     from upscalers import diagnostics
     assert diagnostics.error_detail(raw) == kept
+
+
+def _steam_game(home, appid, folder, build="1"):
+    root = home / ".local/share/Steam"
+    _write(root / f"steamapps/appmanifest_{appid}.acf",
+           '"AppState"\n{\n "appid" "%s"\n "name" "%s"\n "installdir" "%s"\n "StateFlags" "4"\n "buildid" "%s"\n}\n' % (appid, folder, folder, build))
+    return root / "steamapps/common" / folder
+
+
+def test_a_steam_game_shipping_only_its_linux_build_is_a_linux_game(steam, fake_catalog, proc):
+    home, _ = steam
+    game = _steam_game(home, "1086940", "Baldurs Gate 3")
+    binary = _write(game / "bin/bg3", b"\x7fELF" + b"\0" * 64)
+    binary.chmod(0o755)
+    _write(game / "bin/amd_fidelityfx_dx12.dll", b"MZ")
+    service = _service(steam, fake_catalog, proc)
+    detail = service.game("1086940")
+    assert detail["native"] is True
+    with pytest.raises(UpscalerError, match="native_game"):
+        service.install("1086940", {"build": "fsr-test"})
+
+
+def test_a_windows_game_with_linux_helpers_stays_a_windows_game(steam, fake_catalog, proc):
+    home, game = steam
+    helper = _write(game / "tools/crashpad_handler", b"\x7fELF" + b"\0" * 64)
+    helper.chmod(0o755)
+    assert games.find_installed(str(home), APPID).native is False
+    deep = _steam_game(home, "555", "Deep")
+    _write(deep / "a/b/c/d/e/f/g/Game.exe", b"MZ")
+    _write(deep / "launcher", b"\x7fELF").chmod(0o755)
+    assert games.find_installed(str(home), "555").native is False

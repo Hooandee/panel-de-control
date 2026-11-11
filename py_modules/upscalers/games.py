@@ -170,6 +170,44 @@ def from_hint(appid: str, hint: dict | None, home: str = "") -> Installed | None
     return Installed(appid, name, start, STATE_FULLY_INSTALLED, relative, True)
 
 
+_linux_builds: dict[str, tuple[tuple, bool]] = {}
+
+
+def _is_elf(path: Path) -> bool:
+    try:
+        if ".so" in path.suffixes or not os.access(path, os.X_OK):
+            return False
+        with path.open("rb") as stream:
+            return stream.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def linux_build(root: Path, build_id: str | None = None) -> bool:
+    """Steam installed the game's own Linux build: a Linux binary near the top and not one .exe anywhere.
+
+    The shallow look for the binary comes first, so Windows games never pay for the walk that rules out every .exe;
+    the answer is remembered per folder until Steam changes it."""
+    try:
+        stamp = (build_id, root.stat().st_mtime_ns)
+    except OSError:
+        return False
+    cached = _linux_builds.get(str(root))
+    if cached and cached[0] == stamp:
+        return cached[1]
+    depth = len(root.parts)
+    binary = False
+    for current, dirs, files in os.walk(root):
+        if len(Path(current).parts) - depth >= 2:
+            dirs[:] = []
+        if any(_is_elf(Path(current) / name) for name in files):
+            binary = True
+            break
+    result = binary and not any(name.lower().endswith(".exe") for _current, _dirs, files in os.walk(root) for name in files)
+    _linux_builds[str(root)] = (stamp, result)
+    return result
+
+
 def find_installed(home: str, appid: str) -> Installed | None:
     if not appid.isdecimal():
         return None
@@ -188,8 +226,9 @@ def find_installed(home: str, appid: str) -> Installed | None:
                 flags = int(state.get("stateflags", 0))
             except (TypeError, ValueError):
                 flags = 0
+            build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
             return Installed(appid, str(state.get("name") or appid), root, flags,
-                             build_id=str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None)
+                             native=linux_build(root, build_id), build_id=build_id)
     return find_shortcut(home, appid)
 
 
