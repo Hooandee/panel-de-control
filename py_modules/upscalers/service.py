@@ -1768,7 +1768,12 @@ class UpscalerService:
         asset = catalog.ASSETS[catalog.LSFG_ARCHIVE]
         try:
             unpacked = self.cache.ensure(asset, lambda _done: None, lambda: False)
-            return self.lsfg.install(unpacked, asset.id)
+            try:
+                return self.lsfg.install(unpacked, asset.id)
+            except lsfg.LsfgError as error:
+                if error.code != "lsfg_archive":
+                    raise
+                return self.lsfg.install(self.cache.unpack_again(asset), asset.id)
         except AssetError as error:
             raise UpscalerError(error.code) from None
         except lsfg.LsfgError as error:
