@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.1...panel-de-control-v0.87.0) (2026-11-11)
+
+
+### Features
+
+* **upscalers:** FSR 4 recipes for RE Engine and Baldur's Gate 3, script shortcuts, and fixes from user reports ([#1218](https://github.com/Hooandee/panel-de-control/issues/1218)) ([8113bff](https://github.com/Hooandee/panel-de-control/commit/8113bfff81dc193dd7d0a02a6a5f7ac04fb81722))
+
 ## [0.86.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.0...panel-de-control-v0.86.1) (2026-11-10)
 
 
