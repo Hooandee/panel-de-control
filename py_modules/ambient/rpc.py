@@ -94,6 +94,19 @@ class AmbientRpc:
             return None
         return await self._ambient_call(lambda s: s.media_url(media_id))
 
+    async def register_ambient_theme_image(self, media_id: str, owner: str, max_side: Any = None) -> dict[str, Any]:
+        if not isinstance(media_id, str) or len(media_id) > 512 or not isinstance(owner, str):
+            return {"error": "unknown_media"}
+        return await self._ambient_call(lambda s: s.register_theme_image(media_id, owner, max_side))
+
+    async def keep_ambient_theme_images(self, owner: str, refs: Any) -> list[str]:
+        if not isinstance(owner, str):
+            return []
+        return await self._ambient_call(lambda s: s.keep_theme_images(owner, refs))
+
+    async def get_ambient_theme_images(self) -> dict[str, dict[str, Any]]:
+        return await self._ambient_call(lambda s: s.theme_images())
+
     async def get_ambient_game_media(self, appid: str, name: str, store: bool = True) -> dict[str, Any]:
         if not isinstance(appid, str) or not appid.isdigit() or len(appid) > 10 or not isinstance(name, str):
             return {"trailer": None, "theme": None}

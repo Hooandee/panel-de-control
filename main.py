@@ -252,6 +252,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         )),
         ("_support_custom_artwork", None),
         ("_support_duo_artwork", None),
+        ("_support_vida_artwork", None),
         ("_support_theme_groups", None),
         ("_support_theme_storage", None),
         ("_support_steam_inventory", None),
@@ -443,6 +444,7 @@ DEFAULTS = {
     "kiosk_enabled": False,
     "kiosk_brightness": None,
     "duo_artwork": {},
+    "vida_artwork": {},
     "developer_options": False,
     "remote_access_enabled": False,
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -1662,23 +1664,40 @@ class Plugin(AmbientRpc):
     def _developer_options_on(self) -> bool:
         return bool(self._settings.get("developer_options"))
 
-    def _support_duo_artwork(self) -> dict:
-        records = theme_artwork.records(self._settings.get("duo_artwork"))
+    def _artwork_support(self, store: str) -> dict:
+        records = theme_artwork.records(self._settings.get(theme_artwork.STORES[store]))
         return {"configured_games": sum(key != "0" for key in records), "general_configured": "0" in records}
 
+    def _support_duo_artwork(self) -> dict:
+        return self._artwork_support("duo")
+
+    def _support_vida_artwork(self) -> dict:
+        return self._artwork_support("vida")
+
     async def get_duo_artwork(self) -> dict:
-        self._init()
-        return theme_artwork.records(self._settings.get("duo_artwork"))
+        return await self.get_theme_artwork("duo")
 
     async def set_duo_artwork(self, app_id: int, artwork: dict | None) -> dict:
+        return await self.set_theme_artwork("duo", app_id, artwork)
+
+    async def get_theme_artwork(self, store: str) -> dict:
         self._init()
+        if store not in theme_artwork.STORES:
+            return {}
+        return theme_artwork.records(self._settings.get(theme_artwork.STORES[store]))
+
+    async def set_theme_artwork(self, store: str, app_id: int, artwork: dict | None) -> dict:
+        self._init()
+        if store not in theme_artwork.STORES:
+            return {"ok": False, "error": "invalid_store"}
         if isinstance(app_id, bool) or not isinstance(app_id, int) or not 0 <= app_id < 2**32:
             return {"ok": False, "error": "invalid_app"}
         try:
             value = theme_artwork.normalize(artwork, general=app_id == 0) if artwork is not None else None
         except ValueError as error:
             return {"ok": False, "error": str(error)}
-        previous = self._settings.get("duo_artwork", {})
+        key = theme_artwork.STORES[store]
+        previous = self._settings.get(key, {})
         updated = theme_artwork.records(previous)
         if value is None:
             updated.pop(str(app_id), None)
@@ -1686,12 +1705,12 @@ class Plugin(AmbientRpc):
             if str(app_id) not in updated and len(updated) >= 4096:
                 return {"ok": False, "error": "limit_reached"}
             updated[str(app_id)] = value
-        self._settings["duo_artwork"] = updated
+        self._settings[key] = updated
         try:
             self._save()
         except Exception:
-            self._settings["duo_artwork"] = previous
-            decky.logger.exception("DUO artwork persistence failed")
+            self._settings[key] = previous
+            decky.logger.exception("Theme artwork persistence failed (%s)", store)
             return {"ok": False, "error": "save_failed"}
         return {"ok": True}
 
@@ -2561,6 +2580,23 @@ class Plugin(AmbientRpc):
                 type(error).__name__,
             )
             return {}
+
+    async def get_theme_actions(self, catalog_id: str, css_loader_name: str) -> list:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.theme_actions(
+                    self._themes_root(),
+                    catalog_id,
+                    css_loader_name,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Theme actions unavailable (%s)",
+                type(error).__name__,
+            )
+            return []
 
     async def load_theme_extension(self, catalog_id: str, version: str) -> dict:
         self._init()

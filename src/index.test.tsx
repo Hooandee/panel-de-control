@@ -48,6 +48,8 @@ vi.mock("./themes/qamCoverWatch", () => ({ watchQamCover: vi.fn(() => () => {}) 
 vi.mock("./components/ThemeHealth", () => ({ openThemeHealthModal: vi.fn() }));
 vi.mock("./api", () => ({
   getDuoArtwork: vi.fn(async () => ({})),
+  getThemeArtwork: vi.fn(async () => ({})),
+  setThemeArtwork: vi.fn(async () => ({ ok: true })),
   pauseThemeGame: vi.fn(async () => false),
   resumeThemeGame: vi.fn(async () => {}),
   setDuoArtwork: vi.fn(async () => ({ ok: true })),

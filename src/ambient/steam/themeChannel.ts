@@ -1,7 +1,18 @@
+import type { ThemeImagePick } from "./themeImages";
+
+/** What the channel needs from the theme picture registry (`ThemeImages`). */
+export interface ChannelImages {
+  pick(owner: string, options: { title?: string; maxSide?: number }, signal?: AbortSignal): Promise<ThemeImagePick | null>;
+  url(owner: string, ref: string, maxSide?: number): string | null;
+  keep(owner: string, refs: unknown): void;
+  subscribe(listener: () => void): () => void;
+}
+
 export interface ChannelState {
   owner: "panel" | "theme";
   media: { url: string; kind: "image" | "video" } | null;
   motion: "play" | "pause" | "freeze";
+  music?: { playing: boolean };
 }
 
 export type ChannelFrame = HTMLImageElement | HTMLVideoElement;
@@ -21,10 +32,11 @@ export function normalizeAppId(value: unknown): string | null {
   return id > 0 && id < 2 ** 32 ? String(id) : null;
 }
 
-const INITIAL: ChannelState = { owner: "theme", media: null, motion: "pause" };
+const INITIAL: ChannelState = { owner: "theme", media: null, motion: "pause", music: { playing: false } };
 
 function sameState(a: ChannelState, b: ChannelState): boolean {
-  return a.owner === b.owner && a.motion === b.motion && a.media?.url === b.media?.url && a.media?.kind === b.media?.kind;
+  return a.owner === b.owner && a.motion === b.motion && a.media?.url === b.media?.url && a.media?.kind === b.media?.kind
+    && a.music?.playing === b.music?.playing;
 }
 
 /**
@@ -39,6 +51,40 @@ export class AmbientThemeChannel {
   private frameSource: () => ChannelFrame | null = () => null;
   private selections = new Map<string, { appid: string | null }>();
   private selectionListeners = new Set<() => void>();
+  private images: ChannelImages | null = null;
+  private releaseImages: (() => void) | null = null;
+  private imageListeners = new Set<() => void>();
+
+  setImages(images: ChannelImages | null): void {
+    this.releaseImages?.();
+    this.images = images;
+    this.releaseImages = images ? images.subscribe(() => this.notifyImages()) : null;
+    this.notifyImages();
+  }
+
+  /** Opens Ambiente's photo explorer for a theme; null when Panel cannot offer it or the user backs out. */
+  pickImage(owner: string, options: { title?: string; maxSide?: number }, signal?: AbortSignal): Promise<ThemeImagePick | null> {
+    return this.images ? this.images.pick(owner, options, signal) : Promise.resolve(null);
+  }
+
+  keepImages(owner: string, refs: readonly string[]): void {
+    this.images?.keep(owner, refs);
+  }
+
+  imageUrl(owner: string, ref: string, maxSide?: number): string | null {
+    return this.images?.url(owner, ref, maxSide) ?? null;
+  }
+
+  subscribeImages(listener: () => void): () => void {
+    this.imageListeners.add(listener);
+    return () => { this.imageListeners.delete(listener); };
+  }
+
+  private notifyImages(): void {
+    for (const listener of [...this.imageListeners]) {
+      try { listener(); } catch { /* a theme's listener must not break the others */ }
+    }
+  }
 
   /** The game a theme selected on its own Home (`null`: none). Releasing hands it back to Steam's carousel. */
   select(themeId: string, appid: string | null): () => void {
@@ -101,10 +147,17 @@ export class AmbientThemeChannel {
     return () => this.claimListeners.delete(listener);
   }
 
+  /** A background change keeps the music as it was unless it says otherwise. */
   publish(next: ChannelState): void {
+    if (!next.music && this.state.music) next = { ...next, music: this.state.music };
     if (sameState(this.state, next)) return;
     this.state = next;
     for (const listener of this.stateListeners) listener(next);
+  }
+
+  /** Whether Ambiente's music is audibly playing, so a theme can fade its own music around it. */
+  setMusicPlaying(playing: boolean): void {
+    this.publish({ ...this.state, music: { playing } });
   }
 
   reset(): void {

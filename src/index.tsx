@@ -2,10 +2,10 @@ import { createGroupsClient } from "./groups/groupsClient";
 import type { SteamGlobals } from "./groups/steamFacts";
 import { cleanerForceSession } from "./cleaner/forceSession";
 import { artworkImages, artworkGameTitle } from "./themes/artworkImages";
-import { listInstalledGames } from "./launch/steamApi";
-import { artworkAccess, configureArtworkHost, startArtworkHydration, registerArtworkEditor, getGeneralArtwork, getCustomArtwork, saveArtwork } from "./themes/artworkClient";
+import { listInstalledGames, listLibraryGames } from "./launch/steamApi";
+import { artworkAccess, configureArtworkHost, startArtworkHydration, registerArtworkEditor, getGeneralArtwork, getCustomArtwork, saveArtwork, vidaArtwork } from "./themes/artworkClient";
 import { openGameArtworkEditor } from "./components/GameArtworkEditor";
-import { getDuoArtwork, setDuoArtwork } from "./api";
+import { getDuoArtwork, getThemeArtwork, setDuoArtwork, setThemeArtwork } from "./api";
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin, openFilePicker, toaster } from "@decky/api";
 import { FC } from "react";
@@ -72,6 +72,7 @@ import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost, onThemePackagesChanged } from "./themes/panelThemeInstallHost";
 import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { themesClientOptionsWriter } from "./themes/runtime/themeOptions";
 import { ambientThemeChannel, startAmbient } from "./ambient";
 import { startUpscalerOverlays } from "./upscalers/overlays";
 import { adoptStaleActivePlugin } from "./deckyInternal";
@@ -90,6 +91,7 @@ import { getThemesClient } from "./themes/useThemes";
 import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 import { createThemeStorage } from "./themes/runtime/themeStorage";
 import { createThemeGamesAccess } from "./themes/runtime/gamesAccess";
+import { themeActionsChannel } from "./themes/runtime/themeActions";
 import { startPluginQamRuntime } from "./qam/pluginRuntime";
 import { getQamDocument, onQamDocument } from "./qamDocument";
 
@@ -235,21 +237,40 @@ export default definePlugin(() => {
   }));
   const standardLifecycle = new AbortController();
   const releaseArtworkHost = configureArtworkHost({ read: getDuoArtwork, write: setDuoArtwork });
+  const releaseVidaArtworkHost = vidaArtwork.configureHost({
+    read: () => getThemeArtwork("vida"),
+    write: (appId, value) => setThemeArtwork("vida", appId, value),
+  });
   const releaseArtworkEditor = registerArtworkEditor(openGameArtworkEditor);
   const stopArtworkHydration = startArtworkHydration();
   const themeGroups = createGroupsClient({ read: getThemeGroups, write: setThemeGroups, tabMaster: getTabMasterTabs }, globalThis as SteamGlobals, { doc: document });
   const stopThemesRuntime = startThemesRuntime({
     artwork: {
-      ...artworkAccess,
-      editor: {
-        getGeneral: getGeneralArtwork,
-        getCustom: getCustomArtwork,
-        save: saveArtwork,
-        images: artworkImages,
-        title: artworkGameTitle,
-        games: () => listInstalledGames().map(game => ({ appId: game.liveAppid, name: game.name })),
+      duo: {
+        ...artworkAccess,
+        editor: {
+          getGeneral: getGeneralArtwork,
+          getCustom: getCustomArtwork,
+          save: saveArtwork,
+          images: artworkImages,
+          title: artworkGameTitle,
+          games: () => listInstalledGames().map(game => ({ appId: game.liveAppid, name: game.name })),
+        },
+      },
+      // Vida draws its own editor: its `edit` stays a no-op returning false (no Panel editor is registered for it).
+      vida: {
+        ...vidaArtwork.access,
+        editor: {
+          getGeneral: vidaArtwork.getGeneral,
+          getCustom: vidaArtwork.getCustom,
+          save: vidaArtwork.save,
+          images: artworkImages,
+          title: artworkGameTitle,
+          games: listLibraryGames,
+        },
       },
     },
+    options: themesClientOptionsWriter(themesClient),
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
@@ -259,6 +280,7 @@ export default definePlugin(() => {
     games: createThemeGamesAccess({ forceClose: forceCloseGame, pause: pauseThemeGame, resume: resumeThemeGame }),
     subscribePackageChanges: onThemePackagesChanged,
     groups: themeGroups,
+    actions: themeActionsChannel,
   });
   const stopUpscalerOverlays = startUpscalerOverlays();
   const stopAmbient = startAmbient({
@@ -307,6 +329,7 @@ export default definePlugin(() => {
       stopArtworkHydration();
       releaseArtworkEditor();
       releaseArtworkHost();
+      releaseVidaArtworkHost();
       stopQamCoverWatch();
       releaseThemeInstallHost();
       releaseThemeActivationJournalHost();

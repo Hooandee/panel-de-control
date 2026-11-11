@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AmbientRuntime, AmbientSnapshot } from "../steam/runtime";
 import { FilesTab } from "./FilesTab";
 
@@ -308,4 +308,39 @@ it("names pictures without the folder name they repeat", async () => {
   expect(tileName("GTA VI - Vice City Postcard.jpg", "GTA VI")).toBe("Vice City Postcard");
   expect(tileName("Sunset.jpg", "GTA VI")).toBe("Sunset");
   expect(tileName("GTA VI.jpg", "GTA VI")).toBe("GTA VI");
+});
+
+describe("single-photo picker for themes", () => {
+  function pickerFixture() {
+    const props = fixture();
+    Object.assign(props.runtime, { refreshLibraryScan: vi.fn() });
+    props.snapshot.state!.collections.push({ id: "suggested.bing", kind: "suggested" });
+    props.snapshot.player = { track: { id: "local:playing", title: "Current song" }, status: "playing", video: true } as AmbientSnapshot["player"];
+    return props;
+  }
+
+  it("offers only local photos, one at a time, and hands the choice to the theme", async () => {
+    const props = pickerFixture();
+    const onPickPhoto = vi.fn().mockResolvedValue(true);
+    render(<FilesTab {...props} purpose="background" header={null} onPickPhoto={onPickPhoto} />);
+    fireEvent.click(await screen.findByText("Photo"));
+    expect(screen.queryByText("Film")).toBeNull();
+    expect(screen.queryByText("ambient.tile.bing")).toBeNull();
+    expect(screen.queryByText("ambient.lib.chooseSeveral")).toBeNull();
+    expect(document.querySelector('[data-library-column="2"]')).toBeNull();
+    fireEvent.click(screen.getByText("ambient.pick.use"));
+    await waitFor(() => expect(onPickPhoto).toHaveBeenCalledWith({ ref: "local:photo", kind: "image", name: "Photo.jpg", collection: "folder.shared" }));
+    expect(props.runtime.saveLibrarySelection).not.toHaveBeenCalled();
+    expect(props.runtime.beginLibrarySession).not.toHaveBeenCalled();
+    expect(props.runtime.refreshLibraryScan).toHaveBeenCalledOnce();
+  });
+
+  it("stays open with an error when the photo cannot be served", async () => {
+    const props = pickerFixture();
+    render(<FilesTab {...props} purpose="background" header={null} onPickPhoto={vi.fn().mockResolvedValue(false)} />);
+    fireEvent.click(await screen.findByText("Photo"));
+    fireEvent.click(screen.getByText("ambient.pick.use"));
+    expect(await screen.findByText("ambient.lib.actionFailed")).toBeTruthy();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_ARTWORK } from "./artwork";
-import { artworkAccess, artworkThemeActive, configureArtworkHost, loadArtwork, saveArtwork, startArtworkHydration, getGeneralArtwork, getCustomArtwork, saveGeneralArtwork } from "./artworkClient";
+import { artworkAccess, artworkThemeActive, configureArtworkHost, createArtworkStore, vidaArtwork, loadArtwork, saveArtwork, startArtworkHydration, getGeneralArtwork, getCustomArtwork, saveGeneralArtwork } from "./artworkClient";
 
 describe("artwork cache", () => {
   it("publishes loaded, saved and reset values, while failed saves keep prior state", async () => {
@@ -144,5 +144,42 @@ describe("cover-owning theme", () => {
     expect(artworkThemeActive()).toBe(true);
     release(); release();
     expect(artworkThemeActive()).toBe(false);
+  });
+});
+
+describe("separate cover stores", () => {
+  it("keeps Vida's covers apart from Duo's", async () => {
+    const duoWrite = vi.fn(async () => ({ ok: true }));
+    const vidaWrite = vi.fn(async () => ({ ok: true }));
+    const releaseDuo = configureArtworkHost({ read: async () => ({ "12": { ...DEFAULT_ARTWORK, positionX: 10 } }), write: duoWrite });
+    const releaseVida = vidaArtwork.configureHost({ read: async () => ({}), write: vidaWrite });
+    try {
+      await loadArtwork();
+      await vidaArtwork.load();
+      await vidaArtwork.save(12, { ...DEFAULT_ARTWORK, positionX: 90, scale: 200 });
+      expect(vidaWrite).toHaveBeenCalledWith(12, { ...DEFAULT_ARTWORK, positionX: 90, scale: 200 });
+      expect(duoWrite).not.toHaveBeenCalled();
+      expect(vidaArtwork.access.get(12)?.scale).toBe(200);
+      expect(artworkAccess.get(12)?.positionX).toBe(10);
+      expect(vidaArtwork.access.edit(12)).toBe(false);
+    } finally { releaseVida(); releaseDuo(); }
+  });
+
+  it("reads a store that hydrates on attach only while a theme holds it, and does not offer Duo's game menu", async () => {
+    vi.useFakeTimers();
+    const store = createArtworkStore("vida", { hydrateOnAttach: true });
+    const read = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ "5": DEFAULT_ARTWORK });
+    const release = store.configureHost({ read, write: async () => ({ ok: true }) });
+    try {
+      expect(read).not.toHaveBeenCalled();
+      const detach = store.access.attach!();
+      expect(store.themeActive()).toBe(true);
+      expect(artworkThemeActive()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(store.access.get(5)).toEqual(DEFAULT_ARTWORK);
+      detach();
+      expect(store.themeActive()).toBe(false);
+    } finally { release(); vi.useRealTimers(); }
   });
 });

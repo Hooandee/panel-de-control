@@ -1,5 +1,5 @@
 import type { ThemeGroupsAccess } from "../../groups/groupsClient";
-import type { ThemeArtworkAccess } from "../artwork";
+import type { ThemeArtworkAccess, ThemeArtworkStore } from "../artwork";
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createThemeExtensionClient } from "../themeExtensionClient";
 import {
@@ -18,6 +18,8 @@ import {
 } from "./navigationAccess";
 import type { ThemeStorageProvider } from "./themeStorage";
 import type { ThemeExtensionGamesAccess } from "./gamesAccess";
+import type { ThemeActionsProvider } from "./themeActions";
+import type { ThemeOptionsWriter } from "./themeOptions";
 
 interface RuntimeManagerLike {
   reconcile(snapshot: CssLoaderSnapshot): void;
@@ -147,7 +149,9 @@ interface ThemesRuntimeClient {
 }
 
 interface ThemesRuntimeOptions {
-  artwork?: ThemeArtworkAccess;
+  artwork?: Readonly<Partial<Record<ThemeArtworkStore, ThemeArtworkAccess>>>;
+  /** Writes for `context.options`; omitted where Panel cannot write CSS Loader options (Windows). */
+  options?: ThemeOptionsWriter;
   client: ThemesRuntimeClient;
   getSteamDocument(): Document | null;
   getQamDocument?(): Document | null;
@@ -161,6 +165,7 @@ interface ThemesRuntimeOptions {
   storage?: ThemeStorageProvider;
   games?: Readonly<ThemeExtensionGamesAccess>;
   groups?: Readonly<ThemeGroupsAccess>;
+  actions?: ThemeActionsProvider;
   evaluate?(source: string): ThemeExtensionExport;
   log?(code: string): void;
   createManager?(
@@ -173,6 +178,7 @@ interface ThemesRuntimeOptions {
 
 export function startThemesRuntime({
   artwork,
+  options,
   client,
   getSteamDocument,
   getQamDocument,
@@ -187,6 +193,7 @@ export function startThemesRuntime({
   storage,
   games,
   groups,
+  actions,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -202,11 +209,13 @@ export function startThemesRuntime({
       qam,
       library,
       artwork,
+      options,
       navigation,
       ambient,
       storage,
       games,
       groups,
+      actions,
       evaluate,
       log,
     }),

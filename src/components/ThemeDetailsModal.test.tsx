@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   showModal: vi.fn(),
   patchLabels: {} as Record<string, unknown>,
+  actions: [] as unknown[],
 }));
 vi.mock("@decky/ui", () => ({
   ModalRoot: ({ children, onCancel, onEscKeypress, bAllowFullSize }: { children?: ReactNode; onCancel?: () => void; onEscKeypress?: () => void; bAllowFullSize?: boolean }) => (
@@ -43,9 +44,12 @@ vi.mock("../themes/useThemePatchLabels", async () => {
   const { useState } = await import("react");
   return { useThemePatchLabels: () => useState(() => mocks.patchLabels)[0] };
 });
+vi.mock("../themes/useThemeActions", () => ({ useThemeActions: () => mocks.actions }));
 vi.mock("./FocusRoot", () => ({ FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div> }));
 
 import { ThemeDetailsModal } from "./ThemeDetailsModal";
+import { themeActionsChannel } from "../themes/runtime/themeActions";
+import { parseThemeActions } from "../themes/themeActions";
 
 function controller(overrides: Partial<ThemesController> = {}): ThemesController {
   const release = {
@@ -656,5 +660,110 @@ describe("ThemeDetailsModal", () => {
     const css = screen.getByTestId("theme-settings-content").querySelector("style")?.textContent ?? "";
     expect(css).not.toContain("--hdg-");
     expect(css).toContain("[data-pdc-theme-settings]");
+  });
+
+  describe("theme actions", () => {
+    const RESET_HOME = parseThemeActions([{
+      id: "reset-home",
+      label: { es: "Restablecer menú principal", en: "Reset home screen" },
+      description: { en: "Back to the original layout." },
+      confirm: { en: "Reset the home screen?" },
+      destructive: true,
+    }, { id: "reload-art", label: { en: "Reload covers" } }]);
+    let unsubscribe: (() => void) | null = null;
+
+    afterEach(() => { unsubscribe?.(); unsubscribe = null; mocks.actions = []; });
+
+    function activeController(): ThemesController {
+      const base = installedController();
+      return { ...base, cards: [{ ...base.cards[0], active: true }] };
+    }
+
+    it("asks before a confirmable action and delivers its id to the theme's runtime only once confirmed", () => {
+      const received: string[] = [];
+      const other = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", (id) => received.push(id));
+      const offOther = themeActionsChannel.subscribe("another-theme", other);
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      expect(screen.getByText("themes.actions.title")).toBeTruthy();
+      expect(screen.getByText("Back to the original layout.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Reset home screen" }));
+      const confirmation = screen.getByRole("group", { name: "Reset the home screen?" });
+      expect(received).toEqual([]);
+      fireEvent.click(within(confirmation).getByRole("button", { name: "themes.install.confirm.cancel" }));
+      expect(received).toEqual([]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset home screen" }));
+      fireEvent.click(within(screen.getByRole("group", { name: "Reset the home screen?" })).getByRole("button", { name: "Reset home screen" }));
+      expect(received).toEqual(["reset-home"]);
+      expect(other).not.toHaveBeenCalled();
+      expect(screen.getByText("themes.actions.sent")).toBeTruthy();
+      offOther();
+    });
+
+    it("fires an action without a confirmation straight away", () => {
+      const listener = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", listener);
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reload covers" }));
+      expect(listener).toHaveBeenCalledWith("reload-art");
+      expect(screen.queryByRole("group", { name: /Reset/ })).toBeNull();
+    });
+
+    it("always asks before a destructive action, with Panel's wording when the theme gives none", () => {
+      const listener = vi.fn();
+      unsubscribe = themeActionsChannel.subscribe("example-theme", listener);
+      mocks.actions = [...parseThemeActions([{ id: "wipe", label: { en: "Wipe layout" }, destructive: true }])];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Wipe layout" }));
+      expect(listener).not.toHaveBeenCalled();
+      const confirmation = screen.getByRole("group", { name: "themes.actions.confirm.title" });
+      expect(within(confirmation).getByText("themes.actions.confirm.desc")).toBeTruthy();
+      fireEvent.click(within(confirmation).getByRole("button", { name: "Wipe layout" }));
+      expect(listener).toHaveBeenCalledWith("wipe");
+    });
+
+    it("disables actions and says why while the theme is off or its runtime is not listening", () => {
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = installedController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("themes.actions.inactive")).toBeTruthy();
+      cleanup();
+
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("themes.actions.notListening")).toBeTruthy();
+
+      act(() => { unsubscribe = themeActionsChannel.subscribe("example-theme", () => {}); });
+      expect((screen.getByRole("button", { name: "Reset home screen" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText("themes.actions.notListening")).toBeNull();
+    });
+
+    it("says so when the theme's listener throws", () => {
+      unsubscribe = themeActionsChannel.subscribe("example-theme", () => { throw new Error("boom"); });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mocks.actions = [...RESET_HOME];
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      fireEvent.click(screen.getByRole("button", { name: "Reload covers" }));
+      expect(screen.getByText("themes.actions.failed")).toBeTruthy();
+      warn.mockRestore();
+    });
+
+    it("shows no actions section for a theme that declares none", () => {
+      mocks.controller = activeController();
+      render(<ThemeDetailsModal themeId="example-theme" />);
+      expect(screen.queryByText("themes.actions.title")).toBeNull();
+    });
   });
 });

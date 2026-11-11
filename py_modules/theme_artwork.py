@@ -1,6 +1,11 @@
 import math
 from urllib.parse import unquote, urlparse
 
+# Settings key of each theme's covers. Keys never change: Duo's records stay where they always were.
+STORES = {"duo": "duo_artwork", "vida": "vida_artwork"}
+SCALE_MIN = 100
+SCALE_MAX = 300
+
 
 def normalize(value, *, general=False):
     if not isinstance(value, dict):
@@ -37,6 +42,13 @@ def normalize(value, *, general=False):
             if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number) or not low <= number <= high:
                 raise ValueError(error)
             result[key] = number
+    # Zoom of a round bubble's framing, percent; absent means 100. Out of range clamps instead of
+    # failing, because one bad field would drop the whole cover in records().
+    if "scale" in value:
+        number = value["scale"]
+        if isinstance(number, bool) or not isinstance(number, (float, int)) or not math.isfinite(number):
+            raise ValueError("invalid_scale")
+        result["scale"] = min(SCALE_MAX, max(SCALE_MIN, number))
     return result
 
 

@@ -1,5 +1,5 @@
 import type { ThemeGroupsAccess } from "../../groups/groupsClient";
-import type { ThemeArtworkAccess } from "../artwork";
+import { artworkStoreOf, type ThemeArtworkAccess, type ThemeArtworkStore } from "../artwork";
 import type { CssLoaderPatch, CssLoaderSnapshot, CssLoaderTheme } from "../cssLoaderTypes";
 import type {
   ThemeExtensionClient,
@@ -10,7 +10,12 @@ import type { ThemeExtensionLibraryAccess } from "./libraryAccess";
 import type { ThemeExtensionNavigationAccess } from "./navigationAccess";
 import type { ThemeExtensionStorageAccess, ThemeStorageProvider } from "./themeStorage";
 import type { ThemeExtensionGamesAccess } from "./gamesAccess";
+import type { ThemeActionsAccess, ThemeActionsProvider } from "./themeActions";
 import { SECTION_ON, sectionKeyOf } from "../sectionOwnership";
+import { ThemeOptionsChannel, type ThemeOptionsAccess, type ThemeOptionsWriter } from "./themeOptions";
+import { keptThemeImageRefs, validThemeImageRef } from "../../ambient/steam/themeImages";
+
+export type { ThemeOptionsAccess, ThemeOptionsWriter } from "./themeOptions";
 
 export interface ThemeExtensionHostDescriptor {
   abiVersion: 1;
@@ -20,6 +25,11 @@ export interface AmbientBackgroundState {
   owner: "panel" | "theme";
   media: { url: string; kind: "image" | "video" } | null;
   motion: "play" | "pause" | "freeze";
+  /**
+   * Whether Ambiente's music (own files, queue or radio) is audibly playing now. A gap between tracks is
+   * reported only once it lasts; absent on older Panels, which a theme reads as not playing.
+   */
+  music?: { playing: boolean };
 }
 
 export interface AmbientClaimOptions {
@@ -44,6 +54,36 @@ export interface ThemeExtensionAmbientAccess {
    * `null` when nothing is selected. Dropped on unmount; absent on older Panels.
    */
   select?(appid: string | number | null): void;
+  /**
+   * Opens Ambiente's photo explorer over Big Picture to choose one picture. Settles with a stable `ref` (opaque,
+   * at most 512 characters, the same across reboots) and a loopback `url` Big Picture can load; images loaded
+   * with `crossOrigin="anonymous"` can be read by canvas and WebGL. Null when the user backs out, when another
+   * picker is open, or when the theme unmounts first. Absent on older Panels and on Windows. On the Deck it is
+   * present even while Ambiente cannot serve pictures (for example while its runtime is stopped): it then
+   * settles null, as when the user backs out.
+   * `maxSide`: as in `imageUrl`.
+   */
+  pickImage?(options?: { title?: string; maxSide?: number }): Promise<{ ref: string; url: string } | null>;
+  /**
+   * The current URL for a ref `pickImage` returned, also after a reboot. Null for an unknown ref, a ref this theme
+   * does not keep (another theme's picture), a file that is gone, an absurd or unreadable picture, or until Panel
+   * has loaded its references shortly after it starts.
+   * Synchronous and cheap.
+   * `maxSide`: the long side, in device pixels, of the screen Big Picture draws on. Panel snaps it up to 1280,
+   * 1920 or 2560 (absent or invalid: 2560) and serves a copy no larger, EXIF orientation applied, or the
+   * original when it already fits. Each size has its own URL; a copy is made on the first request for it.
+   */
+  imageUrl?(ref: string, maxSide?: number): string | null;
+  /** Called when `imageUrl` answers may have changed (references loaded, a file went missing or came back). */
+  subscribeImages?(listener: () => void): () => void;
+  /**
+   * The complete list of refs this theme still shows somewhere. Every picture of this theme not listed is
+   * forgotten: its ref stops resolving and, unless another theme still keeps it, its cached copies are deleted
+   * (never the user's files). So list every ref in use, including one `pickImage` returned since the last call.
+   * Calls and picks reach Panel in the order made. Cheap to call on every layout save: an unchanged list does
+   * nothing. Ignored unless it is an array of at most 512 refs.
+   */
+  keepImages?(refs: readonly string[]): void;
 }
 
 /** What the orchestrator provides; claims are keyed by the theme that makes them. */
@@ -53,6 +93,17 @@ export interface AmbientChannelProvider {
   subscribe(listener: (state: AmbientBackgroundState) => void): () => void;
   frame?(): HTMLImageElement | HTMLVideoElement | null;
   select?(themeId: string, appid: string | null): () => void;
+  /** `owner` is the mounted theme's catalog id: pictures are registered and forgotten per theme. */
+  pickImage?(owner: string, options: { title?: string; maxSide?: number }, signal: AbortSignal): Promise<{ ref: string; url: string } | null>;
+  imageUrl?(owner: string, ref: string, maxSide?: number): string | null;
+  subscribeImages?(listener: () => void): () => void;
+  keepImages?(owner: string, refs: readonly string[]): void;
+}
+
+const MAX_IMAGE_TITLE = 80;
+
+function screenSide(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 export interface ThemeExtensionQamAccess {
@@ -74,6 +125,10 @@ export interface ThemeExtensionMountContextV1 {
   groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
+  /** The theme's own `actions` (panel-theme.json), pressed in its Panel settings; absent where Panel does not offer them. */
+  actions?: Readonly<ThemeActionsAccess>;
+  /** This theme's own CSS Loader options, live and writable; absent where Panel cannot write them (Windows). */
+  options?: Readonly<ThemeOptionsAccess>;
 }
 
 export interface ThemeExtensionMountContextV2 {
@@ -91,6 +146,10 @@ export interface ThemeExtensionMountContextV2 {
   groups?: Readonly<ThemeGroupsAccess>;
   /** Game controls Steam lacks (force close); absent where Panel cannot offer them, e.g. Windows. */
   games?: Readonly<ThemeExtensionGamesAccess>;
+  /** The theme's own `actions` (panel-theme.json), pressed in its Panel settings; absent where Panel does not offer them. */
+  actions?: Readonly<ThemeActionsAccess>;
+  /** This theme's own CSS Loader options, live and writable; absent where Panel cannot write them (Windows). */
+  options?: Readonly<ThemeOptionsAccess>;
 }
 
 export type ThemeExtensionMountContext =
@@ -121,10 +180,14 @@ type ExtensionLogCode =
   | "extension_evaluation_failed"
   | "extension_mount_failed"
   | "extension_dispose_failed"
-  | "extension_release_failed";
+  | "extension_release_failed"
+  | "options_write_failed"
+  | "options_listener_failed";
 
 interface ThemeExtensionRuntimeHostOptions {
-  artwork?: ThemeArtworkAccess;
+  /** Cover stores by name; a theme only sees the store its catalog id is allowed (`artworkStoreOf`). */
+  artwork?: Readonly<Partial<Record<ThemeArtworkStore, ThemeArtworkAccess>>>;
+  options?: ThemeOptionsWriter;
   client: ThemeExtensionClient;
   doc: Document;
   qam?: ThemeExtensionQamAccess;
@@ -134,6 +197,7 @@ interface ThemeExtensionRuntimeHostOptions {
   storage?: ThemeStorageProvider;
   games?: Readonly<ThemeExtensionGamesAccess>;
   groups?: Readonly<ThemeGroupsAccess>;
+  actions?: ThemeActionsProvider;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -147,6 +211,10 @@ interface RuntimeSelection {
 
 interface ActiveRuntime {
   stop: () => void;
+  key: string;
+  structure: string;
+  /** True while the runtime holds an options subscription: it follows value changes itself instead of being remounted. */
+  followsOptions: () => boolean;
 }
 
 class ThemeExtensionPayloadMismatchError extends Error {}
@@ -160,7 +228,7 @@ export function ambientThemeId(themeName: string): string {
 const AMBIENT_SURFACES = new Set(["home", "library"]);
 
 /** Scopes the channel to one mount so every claim a runtime forgets is released when it unmounts. */
-function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
+function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string, owner: string): { access: Readonly<ThemeExtensionAmbientAccess>; release(): void } {
   const releases = new Set<() => void>();
   const listeners = new Set<() => void>();
   let releaseSelection: (() => void) | null = null;
@@ -189,19 +257,52 @@ function scopedAmbientAccess(provider: AmbientChannelProvider, themeId: string):
         releases.add(releaseSelection);
       },
     } : {}),
-    subscribe(listener) {
-      const off = provider.subscribe(listener);
-      let active = true;
-      const unsubscribe = () => {
-        if (!active) return;
-        active = false;
-        listeners.delete(unsubscribe);
-        off();
-      };
-      listeners.add(unsubscribe);
-      return unsubscribe;
-    },
+    subscribe: (listener) => track(provider.subscribe(listener)),
+    ...(provider.pickImage ? {
+      async pickImage(options?: { title?: string; maxSide?: number }) {
+        const title = typeof options?.title === "string" ? options.title.trim().slice(0, MAX_IMAGE_TITLE) : "";
+        const maxSide = screenSide(options?.maxSide);
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        releases.add(abort);
+        try {
+          const pick = await provider.pickImage!(owner, { ...(title ? { title } : {}), ...(maxSide ? { maxSide } : {}) }, controller.signal);
+          return pick && typeof pick.ref === "string" && typeof pick.url === "string" && !controller.signal.aborted ? { ref: pick.ref, url: pick.url } : null;
+        } catch {
+          return null;
+        } finally {
+          releases.delete(abort);
+        }
+      },
+    } : {}),
+    ...(provider.imageUrl ? {
+      imageUrl(ref: string, maxSide?: number) {
+        if (!validThemeImageRef(ref)) return null;
+        try { return provider.imageUrl!(owner, ref, screenSide(maxSide)); } catch { return null; }
+      },
+    } : {}),
+    ...(provider.subscribeImages ? {
+      subscribeImages: (listener: () => void) => track(provider.subscribeImages!(listener)),
+    } : {}),
+    ...(provider.keepImages ? {
+      keepImages(refs: readonly string[]) {
+        const kept = keptThemeImageRefs(refs);
+        if (!kept) return;
+        try { provider.keepImages!(owner, kept); } catch { /* the theme's layout save must not fail on Panel */ }
+      },
+    } : {}),
   };
+  function track(off: () => void): () => void {
+    let active = true;
+    const unsubscribe = () => {
+      if (!active) return;
+      active = false;
+      listeners.delete(unsubscribe);
+      off();
+    };
+    listeners.add(unsubscribe);
+    return unsubscribe;
+  }
   return {
     access: Object.freeze(access),
     release() {
@@ -310,8 +411,34 @@ function scopedGroups(groups: Readonly<ThemeGroupsAccess>, scope: MountScope): R
   return Object.freeze(access);
 }
 
+/** Only this theme's actions, with its listeners dropped when it unmounts. */
+function scopedActions(actions: ThemeActionsProvider, catalogId: string, scope: MountScope): Readonly<ThemeActionsAccess> {
+  return Object.freeze({
+    subscribe: (listener: (id: string) => void) => scope.track(actions.subscribe(catalogId, listener)),
+  });
+}
+
 function freezeTheme(theme: CssLoaderTheme): Readonly<CssLoaderTheme> {
   return Object.freeze({ ...theme, patches: Object.freeze(theme.patches.map(freezePatch)) });
+}
+
+// What still forces a remount of a runtime that follows its own options: a new version or a section changing hands.
+function runtimeStructure(theme: CssLoaderTheme): string {
+  const sections = theme.patches
+    .filter((patch) => sectionKeyOf(patch.name) !== null)
+    .map((patch) => [patch.name, patch.value] as const)
+    .sort(([left], [right]) => left.localeCompare(right, "en"));
+  return JSON.stringify({ version: theme.version, sections });
+}
+
+function scopedArtwork(artwork: ThemeArtworkAccess, scope: MountScope): Readonly<ThemeArtworkAccess> {
+  scope.track(artwork.attach?.() ?? (() => {}));
+  return Object.freeze({
+    get: artwork.get,
+    edit: artwork.edit,
+    ...(artwork.editor ? { editor: Object.freeze({ ...artwork.editor }) } : {}),
+    subscribe: (listener: () => void) => scope.track(artwork.subscribe(listener)),
+  });
 }
 
 function themeFingerprint(theme: CssLoaderTheme): string {
@@ -361,7 +488,8 @@ function payloadMatches(
 }
 
 export class ThemeExtensionRuntimeHost {
-  private readonly artwork: ThemeArtworkAccess | undefined;
+  private readonly artwork: Readonly<Partial<Record<ThemeArtworkStore, ThemeArtworkAccess>>> | undefined;
+  private readonly options: ThemeOptionsChannel | undefined;
   private readonly client: ThemeExtensionClient;
   private readonly doc: Document;
   private readonly qam: Readonly<ThemeExtensionQamAccess> | undefined;
@@ -377,6 +505,7 @@ export class ThemeExtensionRuntimeHost {
   private readonly storage: ThemeStorageProvider | undefined;
   private readonly games: Readonly<ThemeExtensionGamesAccess> | undefined;
   private readonly groups: Readonly<ThemeGroupsAccess> | undefined;
+  private readonly actions: ThemeActionsProvider | undefined;
   private readonly payloadRequests = new Map<string, Promise<ThemeExtensionPayload>>();
   private readonly active = new Map<string, ActiveRuntime>();
   private readonly pending = new Map<string, number>();
@@ -388,6 +517,7 @@ export class ThemeExtensionRuntimeHost {
 
   constructor({
     artwork,
+    options,
     client,
     doc,
     qam,
@@ -399,12 +529,15 @@ export class ThemeExtensionRuntimeHost {
     storage,
     games,
     groups,
+    actions,
   }: ThemeExtensionRuntimeHostOptions) {
     this.ambient = ambient;
+    this.actions = actions;
     this.storage = storage;
     this.games = games;
     this.groups = groups;
     this.artwork = artwork;
+    this.options = options ? new ThemeOptionsChannel(options, (code) => this.log(code)) : undefined;
     this.client = client;
     this.doc = doc;
     this.qam = qam ? Object.freeze({
@@ -427,6 +560,11 @@ export class ThemeExtensionRuntimeHost {
 
   reconcile(snapshot: CssLoaderSnapshot): void {
     if (this.disposed) return;
+    this.applySnapshot(snapshot);
+    this.options?.update(snapshot);
+  }
+
+  private applySnapshot(snapshot: CssLoaderSnapshot): void {
     this.snapshot = snapshot;
     this.unclassifiable.clear();
     if (snapshot.status !== "ready" || !snapshot.themes.some((theme) => theme.enabled)) {
@@ -485,8 +623,22 @@ export class ThemeExtensionRuntimeHost {
       }
     }
     const desired = this.desired(candidates);
-    for (const fingerprint of [...this.active.keys()]) {
-      if (!desired.has(fingerprint)) this.stop(fingerprint);
+    for (const [fingerprint, runtime] of [...this.active]) {
+      if (desired.has(fingerprint)) continue;
+      const successor = runtime.followsOptions()
+        ? [...desired.values()].find((selection) => (
+          selection.key === runtime.key
+          && !this.active.has(selection.fingerprint)
+          && runtimeStructure(selection.theme) === runtime.structure
+        ))
+        : undefined;
+      if (successor) {
+        this.active.delete(fingerprint);
+        this.active.set(successor.fingerprint, runtime);
+        this.pending.delete(successor.fingerprint);
+      } else {
+        this.stop(fingerprint);
+      }
     }
     for (const fingerprint of [...this.pending.keys()]) {
       if (!desired.has(fingerprint)) this.pending.delete(fingerprint);
@@ -593,7 +745,11 @@ export class ThemeExtensionRuntimeHost {
     if (!this.isCurrent(selection.fingerprint, generation)) return this.abandon(selection.fingerprint, generation);
     const scope = new MountScope(this.log);
     try {
-      const scoped = this.ambient ? scopedAmbientAccess(this.ambient, ambientThemeId(selection.theme.name)) : null;
+      const scoped = this.ambient ? scopedAmbientAccess(this.ambient, ambientThemeId(selection.theme.name), selection.descriptor.catalogId) : null;
+      const artworkStore = artworkStoreOf(selection.descriptor.catalogId);
+      const artwork = artworkStore ? this.artwork?.[artworkStore] : undefined;
+      const options = this.options?.forMount(selection.descriptor.catalogId, selection.descriptor.cssLoaderName);
+      if (options) scope.track(options.release);
       const sharedContext = {
         theme: freezeTheme(selection.theme),
         document: this.doc,
@@ -602,14 +758,9 @@ export class ThemeExtensionRuntimeHost {
         ...(this.storage ? { storage: this.storage.forTheme(selection.descriptor.catalogId) } : {}),
         ...(this.games ? { games: scopedGames(this.games, scope) } : {}),
         ...(this.groups ? { groups: scopedGroups(this.groups, scope) } : {}),
-        ...(selection.descriptor.catalogId === "hooandee-duo" && this.artwork ? {
-          artwork: (scope.track(this.artwork.attach?.() ?? (() => {})), Object.freeze({
-            get: this.artwork.get,
-            edit: this.artwork.edit,
-            ...(this.artwork.editor ? { editor: Object.freeze({ ...this.artwork.editor }) } : {}),
-            subscribe: (listener: () => void) => scope.track(this.artwork!.subscribe(listener)),
-          })),
-        } : {}),
+        ...(this.actions ? { actions: scopedActions(this.actions, selection.descriptor.catalogId, scope) } : {}),
+        ...(artwork ? { artwork: scopedArtwork(artwork, scope) } : {}),
+        ...(options ? { options: options.access } : {}),
       };
       if (scoped) scope.track(() => scoped.release());
       let stop: () => void;
@@ -660,7 +811,12 @@ export class ThemeExtensionRuntimeHost {
       }
       const release = stop;
       stop = () => { try { release(); } finally { scope.releaseAll(); } };
-      this.active.set(selection.fingerprint, { stop });
+      this.active.set(selection.fingerprint, {
+        stop,
+        key: selection.key,
+        structure: runtimeStructure(selection.theme),
+        followsOptions: options ? options.follows : () => false,
+      });
       this.pending.delete(selection.fingerprint);
     } catch {
       scope.releaseAll();
