@@ -16,6 +16,7 @@ from . import games, pe
 _ALLOWED = {'vcrun2022', 'msvcrt40'}
 _DLLS = {'vcrun2022': ('system32/msvcp140.dll', 'system32/vcruntime140.dll'), 'msvcrt40': ('syswow64/msvcrt40.dll',)}
 _FLATPAK = 'com.github.Matoking.protontricks'
+_FLATHUB = 'https://dl.flathub.org/repo/flathub.flatpakrepo'
 
 
 class DependencyError(RuntimeError):
@@ -110,7 +111,17 @@ def _tool(env, uid, gid, logger=None):
         scope = candidate
         break
     if scope is None:
-        raise DependencyError('prefix_tool_unavailable')
+        # No Flathub at all (a fresh Bazzite or a trimmed image): add it for this user and try once more.
+        try:
+            _execute([executable, 'remote-add', '--user', '--if-not-exists', 'flathub', _FLATHUB], env, uid, gid, 60)
+            _execute([executable, 'remote-info', '--user', 'flathub', _FLATPAK], env, uid, gid, 30)
+        except DependencyError as error:
+            if logger:
+                logger.warning('Upscaler prerequisite tool remote: code=%s', error.code)
+            raise DependencyError('prefix_tool_unavailable', error.detail) from None
+        if logger:
+            logger.info('Upscaler prerequisite tool remote: added flathub for the user')
+        scope = '--user'
     install_env, install_uid, install_gid = env, uid, gid
     if scope == '--system':
         if os.geteuid() != 0:
@@ -239,7 +250,16 @@ def _verify(pfx, dependencies):
         return False
 
 
-def prepare(home: str, installed: games.Installed, dependencies, logger=None, proc='/proc'):
+def _note(trace, logger, via, code, detail=''):
+    """Every way tried leaves a line in the log and in the report: the only evidence a reporter can send."""
+    if trace is not None:
+        trace.append({'via': via, 'result': code, **({'detail': detail[:300]} if detail else {})})
+    if logger:
+        (logger.info if code == 'ok' else logger.warning)('Upscaler Windows prerequisites attempt: via=%s result=%s%s',
+                                                           via, code, f' ({detail[:300]})' if detail else '')
+
+
+def prepare(home: str, installed: games.Installed, dependencies, logger=None, proc='/proc', trace=None):
     dependencies = tuple(dependencies)
     if not dependencies or any(verb not in _ALLOWED for verb in dependencies):
         raise DependencyError('prefix_unsupported')
@@ -273,8 +293,16 @@ def prepare(home: str, installed: games.Installed, dependencies, logger=None, pr
     if _verify(compat / 'pfx', dependencies):
         return None
     uid, gid, env = _session(home, proc)
-    executable = _tool(env, uid, gid, logger)
-    runtimes = _runtime_paths(home, installed.appid, executable, env, uid, gid)
+    native = shutil.which('protontricks', path=env.get('PATH', os.defpath))
+    executable, runtimes = None, []
+    try:
+        executable = _tool(env, uid, gid, logger)
+        runtimes = _runtime_paths(home, installed.appid, executable, env, uid, gid)
+    except DependencyError as error:
+        _note(trace, logger, 'flatpak-setup', error.code, error.detail)
+        executable = None
+        if not native:
+            raise
     try:
         transaction.mkdir(mode=0o700)
     except FileExistsError:
@@ -303,21 +331,37 @@ def prepare(home: str, installed: games.Installed, dependencies, logger=None, pr
         if os.geteuid() == 0:
             os.chown(transaction, uid, gid)
         env['STEAM_COMPAT_DATA_PATH'] = str(staged)
-        command = [executable, 'run', f'--filesystem={compat.parent.parent.parent}',
-                   *[f'--filesystem={runtime}:rw' for runtime in runtimes],
-                   f'--env=STEAM_COMPAT_DATA_PATH={staged}', f'--env=DISPLAY={env["DISPLAY"]}',
-                   _FLATPAK, installed.appid, '-q', *dependencies]
-        _guard(installed.root, proc)
-        try:
-            _execute(command, env, uid, gid, 600)
-        except DependencyError as error:
-            if error.code != 'prefix_install_failed':
-                raise
-            # winetricks keeps what it downloaded: a second run gets past a dropped connection.
-            if logger:
-                logger.warning('Upscaler Windows prerequisites retry: %s', error.detail or error.code)
+        plans = []
+        if executable:
+            # Protontricks finds the game's Proton through every library's manifests: one on another drive (an SD card)
+            # that the sandbox cannot see ends in "Could not find configured Proton installation".
+            sandbox = [executable, 'run', *[f'--filesystem={library}:ro' for library in games.library_paths(home)],
+                       f'--filesystem={compat.parent.parent.parent}',
+                       *[f'--filesystem={runtime}:rw' for runtime in runtimes],
+                       f'--env=STEAM_COMPAT_DATA_PATH={staged}', f'--env=DISPLAY={env["DISPLAY"]}']
+            verbs = [_FLATPAK, installed.appid, '-q', *dependencies]
+            # winetricks keeps what it downloaded: the same run again gets past a dropped connection.
+            plans += [('flatpak', sandbox + verbs), ('flatpak-again', sandbox + verbs)]
+            if runtimes:
+                plans.append(('flatpak-named-proton', sandbox + [f'--env=PROTON_VERSION={runtimes[0].name}'] + verbs))
+        if native:
+            plans.append(('native', [native, installed.appid, '-q', *dependencies]))
+        failure = DependencyError('prefix_tool_unavailable')
+        for via, command in plans:
+            if failure.code == 'prefix_timeout' and via.startswith('flatpak'):
+                continue
             _guard(installed.root, proc)
-            _execute(command, env, uid, gid, 600)
+            try:
+                _execute(command, env, uid, gid, 600)
+                if _verify(staged / 'pfx', dependencies):
+                    _note(trace, logger, via, 'ok')
+                    break
+                failure = DependencyError('prefix_readback_failed')
+            except DependencyError as error:
+                failure = error
+            _note(trace, logger, via, failure.code, failure.detail)
+        else:
+            raise failure
         if not _verify(staged / 'pfx', dependencies):
             raise DependencyError('prefix_readback_failed')
         _guard(installed.root, proc)

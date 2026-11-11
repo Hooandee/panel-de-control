@@ -594,3 +594,13 @@ def proton_prefix(home: str, appid: str) -> dict:
         return {"present": (compat / "pfx").is_dir(), "last_proton": version}
     return {"present": False}
 
+
+def windows_components(record) -> dict | None:
+    """The last attempt to install a recipe's Windows components: each way tried, how it ended and the tool's own words."""
+    if not isinstance(record, dict):
+        return None
+    attempts = [{"via": str(item.get("via"))[:40], "result": str(item.get("result"))[:40],
+                 **({"detail": str(item["detail"])[:300]} if item.get("detail") else {})}
+                for item in record.get("attempts", [])[:8] if isinstance(item, dict)]
+    return {"at": record.get("at"), "error": str(record["error"])[:40] if record.get("error") else None, "attempts": attempts}
+

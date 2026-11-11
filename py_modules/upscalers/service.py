@@ -768,10 +768,15 @@ class UpscalerService:
                 checkpoint = self.scaler_transitions.pending(appid)
                 checkpoint["recipe_dependencies"] = True
                 self.scaler_transitions._save(checkpoint)
+                attempts: list[dict] = []
                 try:
-                    receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc)
+                    try:
+                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts)
+                    finally:
+                        entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
                 except (prefix_dependencies.DependencyError, OSError) as error:
                     components_error = getattr(error, "code", type(error).__name__)
+                    entry["windows_components"]["error"] = components_error
                     if components_error == "running":
                         raise
                     # The game files still go in: the game page says what is missing and offers to try again.
@@ -826,6 +831,13 @@ class UpscalerService:
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
+        # What an earlier install put in the launch options is still there, and still Panel's to take out.
+        fresh = entry["install"]
+        fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
+        if "added_overrides" in previous:
+            fresh["added_overrides"] = [o for o in previous["added_overrides"] if o in _overrides(fresh)]
+        if "added_env" in previous:
+            fresh["added_env"] = [k for k in previous["added_env"] if k == fresh.get("env")]
         _wrote_ini(entry["install"])
         entry["history"].append({
             "build": build.id, "proxy": proxy, "at": now, "result": "pending", "exe": analysis["exe"],
@@ -1580,11 +1592,11 @@ class UpscalerService:
         install = self._game_state(appid).get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        install["added_args"] = [a for a in args if a in install.get("args", [])]
+        install["added_args"] = [a for a in install.get("args", []) if a in args or a in install.get("added_args", [])]
         if overrides is not None:
-            install["added_overrides"] = [o for o in overrides if o in _overrides(install)]
+            install["added_overrides"] = [o for o in _overrides(install) if o in overrides or o in install.get("added_overrides", [])]
         if env is not None:
-            install["added_env"] = [k for k in env if k == install.get("env")]
+            install["added_env"] = [k for k in {*env, *install.get("added_env", [])} if k == install.get("env")]
         self._save()
         return {"added_args": install["added_args"]}
 
@@ -1996,6 +2008,7 @@ class UpscalerService:
                     report["recipe"]["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
                     if automatic:
                         report["recipe"]["prefix"] = prefix_dependencies.status(self.home, installed, auto_recipes.verbs(automatic))
+                        report["recipe"]["prefix"]["last_install"] = diagnostics.windows_components(entry.get("windows_components"))
                     if "luma" in recipe.needs:
                         report["recipe"]["luma_detected"] = luma.detected(installed.root, Path(analysis["target"]) if analysis["target"] else None, recipe.appid)
                 except (auto_recipes.RecipeError, prefix_dependencies.DependencyError) as error:

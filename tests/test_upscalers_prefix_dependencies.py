@@ -281,3 +281,91 @@ def test_a_failed_tool_run_reports_its_last_output(context, monkeypatch, caplog)
         pd.prepare(str(home), game, ('vcrun2022',), logging.getLogger('test'))
     assert 'winetricks could not download' in caplog.text
     assert str(home) not in caplog.text
+
+
+def test_every_steam_library_is_visible_to_the_tool(context, monkeypatch):
+    home, game, compat = context
+    library = compat.parent.parent.parent
+    card = home / 'card'
+    monkeypatch.setattr(pd.games, 'library_paths', lambda home: [library, card])
+    commands = []
+
+    def execute(command, *args):
+        commands.append(command)
+        installed(command, *args)
+
+    monkeypatch.setattr(pd, '_execute', execute)
+    pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'))
+    assert f'--filesystem={card}:ro' in commands[0]
+    assert commands[0].index(f'--filesystem={library}:ro') < commands[0].index(f'--filesystem={library}')
+
+
+def test_each_way_is_tried_in_turn_and_leaves_its_trace(context, monkeypatch):
+    home, game, compat = context
+    runtime = home / 'card/steamapps/common/Proton 11.0'
+    monkeypatch.setattr(pd, '_runtime_paths', lambda *args: [runtime])
+    monkeypatch.setattr(pd.shutil, 'which', lambda tool, path=None: '/usr/bin/protontricks' if tool == 'protontricks' else None)
+    seen = []
+
+    def execute(command, env, uid, gid, timeout):
+        seen.append(command)
+        if command[0] == '/usr/bin/flatpak' and 'PROTON_VERSION=Proton 11.0' not in ' '.join(command):
+            raise pd.DependencyError('prefix_install_failed', 'protontricks (ERROR): Could not find configured Proton installation!')
+        installed(command, env, uid, gid, timeout)
+
+    monkeypatch.setattr(pd, '_execute', execute)
+    trace = []
+    receipt = pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'), trace=trace)
+    assert receipt['verified'] is True
+    assert [(item['via'], item['result']) for item in trace] == [
+        ('flatpak', 'prefix_install_failed'), ('flatpak-again', 'prefix_install_failed'), ('flatpak-named-proton', 'ok')]
+    assert 'Could not find configured Proton' in trace[0]['detail']
+    assert len(seen) == 3
+
+
+def test_the_systems_own_protontricks_is_used_when_flatpak_cannot_provide_one(context, monkeypatch):
+    home, game, compat = context
+
+    def missing(*args):
+        raise pd.DependencyError('prefix_tool_unavailable')
+
+    monkeypatch.setattr(pd, '_tool', missing)
+    monkeypatch.setattr(pd.shutil, 'which', lambda tool, path=None: '/usr/bin/protontricks' if tool == 'protontricks' else None)
+    monkeypatch.setattr(pd, '_execute', lambda command, env, *args: installed(['-q', 'vcrun2022', 'msvcrt40'], env, *args)
+                        if command[0] == '/usr/bin/protontricks' else pytest.fail('flatpak must not run'))
+    trace = []
+    assert pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'), trace=trace)['verified'] is True
+    assert [(item['via'], item['result']) for item in trace] == [('flatpak-setup', 'prefix_tool_unavailable'), ('native', 'ok')]
+
+
+def test_a_timeout_does_not_repeat_the_same_tool(context, monkeypatch):
+    home, game, compat = context
+    monkeypatch.setattr(pd.shutil, 'which', lambda tool, path=None: None)
+    runs = []
+
+    def execute(command, *args):
+        runs.append(command)
+        raise pd.DependencyError('prefix_timeout')
+
+    monkeypatch.setattr(pd, '_execute', execute)
+    trace = []
+    with pytest.raises(pd.DependencyError, match='prefix_timeout'):
+        pd.prepare(str(home), game, ('vcrun2022', 'msvcrt40'), trace=trace)
+    assert len(runs) == 1 and trace[-1] == {'via': 'flatpak', 'result': 'prefix_timeout'}
+
+
+def test_a_system_without_flathub_gets_it_added_for_the_user(monkeypatch):
+    calls = []
+
+    def execute(command, env, uid, gid, timeout, capture=False):
+        calls.append(command[1:])
+        if command[1] == 'info' and not any(call[0] == 'install' for call in calls):
+            raise pd.DependencyError('prefix_install_failed')
+        if command[1] == 'remote-info' and not any(call[0] == 'remote-add' for call in calls):
+            raise pd.DependencyError('prefix_install_failed')
+
+    monkeypatch.setattr(pd.shutil, 'which', lambda tool, path=None: '/usr/bin/flatpak')
+    monkeypatch.setattr(pd, '_execute', execute)
+    assert pd._tool({'PATH': '/usr/bin'}, 1000, 1000) == '/usr/bin/flatpak'
+    assert ['remote-add', '--user', '--if-not-exists', 'flathub', pd._FLATHUB] in calls
+    assert ['install', '--user', '--noninteractive', '--assumeyes', 'flathub', pd._FLATPAK] in calls

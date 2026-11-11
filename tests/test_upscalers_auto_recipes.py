@@ -233,6 +233,7 @@ def test_windows_components_that_fail_do_not_stop_the_install(automatic, steam, 
     service, calls, _ = automatic
 
     def failing(*args):
+        args[-1].append({'via': 'flatpak', 'result': 'prefix_install_failed', 'detail': 'protontricks (ERROR): no Proton'})
         raise prefix_dependencies.DependencyError('prefix_install_failed')
 
     monkeypatch.setattr(prefix_dependencies, 'prepare', failing)
@@ -243,6 +244,10 @@ def test_windows_components_that_fail_do_not_stop_the_install(automatic, steam, 
     assert list(steam[1].rglob('Luma-test.addon'))
     assert service._game_state(APPID)['install']['windows_components_error'] == 'prefix_install_failed'
     assert service.game(APPID)['recipe_info']['windows_components'] == 'missing'
+    record = service._game_state(APPID)['windows_components']
+    assert record['error'] == 'prefix_install_failed' and record['attempts'][0]['detail'] == 'protontricks (ERROR): no Proton'
+    from upscalers import diagnostics
+    assert diagnostics.windows_components(record)['attempts'] == [{'via': 'flatpak', 'result': 'prefix_install_failed', 'detail': 'protontricks (ERROR): no Proton'}]
     service.finish_scaler_transition(APPID, checkpoint['token'])
     assert calls == ['abandon']
 

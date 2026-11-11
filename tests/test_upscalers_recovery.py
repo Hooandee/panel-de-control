@@ -408,3 +408,13 @@ def test_a_windows_game_with_linux_helpers_stays_a_windows_game(steam, fake_cata
     _write(deep / "a/b/c/d/e/f/g/Game.exe", b"MZ")
     _write(deep / "launcher", b"\x7fELF").chmod(0o755)
     assert games.find_installed(str(home), "555").native is False
+
+
+def test_reinstalling_keeps_what_panel_added_to_the_launch_options(steam, fake_catalog, proc):
+    service = _service(steam, fake_catalog, proc)
+    first = service.install(APPID, {"build": "fsr-test"})
+    service.record_added_args(APPID, [], first["overrides"], [])
+    service.install(APPID, {"build": "fsr-test"})
+    # The options are already in place, so the second pass adds nothing new.
+    service.record_added_args(APPID, [], [], [])
+    assert service.uninstall(APPID)["overrides"] == first["overrides"] != []
