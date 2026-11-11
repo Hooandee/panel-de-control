@@ -5,51 +5,51 @@
 
 ### Español
 
-* **Lo nuevo de Vida 0.2.0 necesita esta versión:** Vida 0.2.0 se instala a partir de Panel de Control 0.88.0. Actualiza primero Panel de Control y después te llegará Vida como siempre.
-* **Botones propios en los ajustes de cada tema:** Un tema puede añadir acciones junto al botón de actualizar. Vida trae «Restablecer menú principal» para volver a colocar tus apps y juegos instalados. Las acciones que deshacen algo siempre piden confirmación.
-* **Tus fotos como fondo en los temas:** Vida usa el explorador de Ambiente para que elijas una foto tuya como fondo de cada página del Inicio. La foto se reduce al tamaño de tu pantalla y se borra de la caché cuando ya no la usa ninguna página.
-* **La app Personalización de Vida cambia los ajustes al momento:** Las opciones del tema se guardan desde el propio Vida sin el aviso de guardado ni errores en Temas, y las secciones «Estilizar …» de otros temas no se tocan. Además puede leer las portadas de todos tus juegos vinculados a Steam.
-* **La música de Ambiente tiene prioridad:** Si suena tu música en Ambiente, Vida baja la suya y la retoma cuando la tuya para.
+* **Preparado para Vida 0.2.0:** La nueva versión de Vida necesita este Panel de Control, así que actualiza primero aquí y Vida te llegará justo después.
+* **Botones de los temas en sus ajustes:** Los temas ya pueden poner sus propios botones al lado del de actualizar. Vida estrena uno para restablecer el menú principal si te has liado colocando burbujas, y te pregunta antes de hacerlo.
+* **Tus fotos de fondo:** Desde el modo organizar de Vida puedes elegir cualquier foto tuya con el explorador de Ambiente y ponerla de fondo en una página. Se ajusta sola a tu pantalla y, si la quitas, deja de ocupar espacio.
+* **Personalización va al momento:** Lo que cambias en la app de Vida se aplica en el acto, sin avisos de guardado ni errores en Temas y sin tocar los estilos de otros temas. También ve las portadas de todos tus juegos de Steam.
+* **Tu música manda:** Si tienes música puesta en Ambiente, Vida baja la suya y vuelve cuando termina la tuya.
 
 ### English
 
-* **What's new in Vida 0.2.0 needs this version:** Vida 0.2.0 installs from Panel de Control 0.88.0 on. Update Panel de Control first and Vida will arrive as usual.
-* **Each theme can add its own buttons to its settings:** A theme can add actions next to the update button. Vida brings "Reset home screen" to lay your apps and installed games out again. Actions that undo something always ask first.
-* **Your photos as theme backgrounds:** Vida uses Ambiente's explorer so you can pick one of your photos as the background of each Home page. The photo is scaled down to your screen and removed from the cache once no page uses it.
-* **Vida's Customisation app changes settings instantly:** The theme's options are saved from Vida itself without the saving notice or errors in Themes, and other themes' style sections are left alone. It can also read the artwork of every game linked to Steam.
-* **Ambiente's music comes first:** When your music plays in Ambiente, Vida fades its own out and brings it back when yours stops.
+* **Ready for Vida 0.2.0:** The new Vida needs this version of Panel de Control, so update here first and Vida will follow right after.
+* **Theme buttons in their settings:** Themes can now add their own buttons next to the update one. Vida uses it to reset the home screen when your bubbles end up all over the place, and asks before doing it.
+* **Your photos as backgrounds:** In Vida's organise mode you can pick any of your photos with Ambiente's explorer and set it as a page background. It fits your screen on its own and stops taking up space once you remove it.
+* **Customisation applies right away:** Whatever you change in Vida's app takes effect straight away, with no saving notice or errors in Themes, and other themes' styles stay as they were. It also sees the artwork of every game on your Steam account.
+* **Your music comes first:** If you have music playing in Ambiente, Vida turns its own down and comes back when yours ends.
 
 ### Italiano
 
-* **Le novità di Vida 0.2.0 richiedono questa versione:** Vida 0.2.0 si installa da Panel de Control 0.88.0 in poi. Aggiorna prima Panel de Control e Vida arriverà come sempre.
-* **Pulsanti propri nelle impostazioni di ogni tema:** Un tema può aggiungere azioni accanto al pulsante di aggiornamento. Vida porta «Ripristina il menu principale» per risistemare le tue app e i giochi installati. Le azioni che annullano qualcosa chiedono sempre conferma.
-* **Le tue foto come sfondo nei temi:** Vida usa l'esploratore di Ambiente per farti scegliere una tua foto come sfondo di ogni pagina della Home. La foto viene ridotta alle dimensioni del tuo schermo e cancellata dalla cache quando nessuna pagina la usa più.
-* **L'app Personalizzazione di Vida cambia le impostazioni all'istante:** Le opzioni del tema si salvano da Vida stesso senza l'avviso di salvataggio né errori in Temi, e le sezioni di stile degli altri temi restano intatte. Può anche leggere le copertine di tutti i giochi collegati a Steam.
-* **La musica di Ambiente ha la precedenza:** Quando suona la tua musica in Ambiente, Vida abbassa la sua e la riprende quando la tua si ferma.
+* **Pronto per Vida 0.2.0:** La nuova Vida ha bisogno di questo Panel de Control, quindi aggiorna prima qui e Vida arriverà subito dopo.
+* **Pulsanti dei temi nelle loro impostazioni:** I temi ora possono mettere i propri pulsanti accanto a quello di aggiornamento. Vida ne usa uno per ripristinare il menu principale quando le bolle sono finite un po' ovunque, e chiede prima di farlo.
+* **Le tue foto come sfondo:** Dalla modalità organizza di Vida puoi scegliere una tua foto con l'esploratore di Ambiente e metterla come sfondo di una pagina. Si adatta da sola allo schermo e, se la togli, non occupa più spazio.
+* **Personalizzazione si applica subito:** Quello che cambi nell'app di Vida vale all'istante, senza avvisi di salvataggio né errori in Temi, e gli stili degli altri temi restano come sono. Vede anche le copertine di tutti i tuoi giochi di Steam.
+* **La tua musica ha la precedenza:** Se hai musica in riproduzione in Ambiente, Vida abbassa la sua e riprende quando la tua finisce.
 
 ### Deutsch
 
-* **Das Neue in Vida 0.2.0 braucht diese Version:** Vida 0.2.0 lässt sich ab Panel de Control 0.88.0 installieren. Aktualisiere zuerst Panel de Control, dann kommt Vida wie gewohnt.
-* **Eigene Schaltflächen in den Einstellungen jedes Themes:** Ein Theme kann neben der Aktualisieren-Schaltfläche eigene Aktionen anbieten. Vida bringt „Startbildschirm zurücksetzen“ mit, um deine Apps und installierten Spiele neu anzuordnen. Aktionen, die etwas rückgängig machen, fragen immer vorher nach.
-* **Deine Fotos als Hintergrund in Themes:** Vida nutzt den Explorer von Ambiente, damit du für jede Seite des Startbildschirms ein eigenes Foto wählen kannst. Das Foto wird auf deine Bildschirmgröße verkleinert und aus dem Cache gelöscht, sobald keine Seite es mehr nutzt.
-* **Vidas App Personalisierung ändert Einstellungen sofort:** Die Optionen des Themes werden direkt aus Vida gespeichert, ohne Speicherhinweis oder Fehler in Themes, und die Stilbereiche anderer Themes bleiben unberührt. Außerdem kann sie die Bilder aller mit Steam verknüpften Spiele lesen.
-* **Die Musik von Ambiente hat Vorrang:** Läuft deine Musik in Ambiente, blendet Vida die eigene aus und setzt sie fort, wenn deine endet.
+* **Bereit für Vida 0.2.0:** Das neue Vida braucht diese Version von Panel de Control. Aktualisiere also zuerst hier, Vida folgt gleich danach.
+* **Theme-Schaltflächen in den Einstellungen:** Themes können jetzt eigene Schaltflächen neben die zum Aktualisieren setzen. Vida nutzt das, um den Startbildschirm zurückzusetzen, wenn deine Blasen kreuz und quer liegen, und fragt vorher nach.
+* **Deine Fotos als Hintergrund:** Im Ordnen-Modus von Vida kannst du mit dem Explorer von Ambiente ein eigenes Foto als Hintergrund einer Seite wählen. Es passt sich von selbst an deinen Bildschirm an und belegt keinen Platz mehr, sobald du es entfernst.
+* **Personalisierung wirkt sofort:** Was du in Vidas App änderst, gilt sofort, ohne Speicherhinweis oder Fehler unter Themes, und die Stile anderer Themes bleiben, wie sie sind. Sie sieht außerdem die Bilder aller Spiele in deinem Steam-Konto.
+* **Deine Musik hat Vorrang:** Läuft in Ambiente deine Musik, wird Vida leiser und kommt zurück, wenn deine endet.
 
 ### Português (Brasil)
 
-* **As novidades do Vida 0.2.0 precisam desta versão:** O Vida 0.2.0 instala a partir do Panel de Control 0.88.0. Atualize primeiro o Panel de Control e o Vida chegará como sempre.
-* **Botões próprios nos ajustes de cada tema:** Um tema pode adicionar ações ao lado do botão de atualizar. O Vida traz «Redefinir menu principal» para reorganizar seus apps e jogos instalados. As ações que desfazem algo sempre pedem confirmação.
-* **Suas fotos como fundo nos temas:** O Vida usa o explorador do Ambiente para você escolher uma foto sua como fundo de cada página do Início. A foto é reduzida ao tamanho da sua tela e apagada do cache quando nenhuma página a usa mais.
-* **O app Personalização do Vida muda os ajustes na hora:** As opções do tema são salvas pelo próprio Vida, sem o aviso de salvamento nem erros em Temas, e as seções de estilo de outros temas não são tocadas. Ele também pode ler as capas de todos os jogos vinculados ao Steam.
-* **A música do Ambiente tem prioridade:** Quando sua música toca no Ambiente, o Vida abaixa a dele e a retoma quando a sua para.
+* **Pronto para o Vida 0.2.0:** O novo Vida precisa desta versão do Panel de Control, então atualize aqui primeiro e o Vida chega logo em seguida.
+* **Botões dos temas nos ajustes:** Os temas agora podem colocar botões próprios ao lado do de atualizar. O Vida usa isso para redefinir o menu principal quando suas bolhas ficam espalhadas, e pergunta antes de fazer.
+* **Suas fotos como fundo:** No modo organizar do Vida, você escolhe qualquer foto sua pelo explorador do Ambiente e coloca como fundo de uma página. Ela se ajusta sozinha à tela e para de ocupar espaço quando você tira.
+* **Personalização vale na hora:** O que você muda no app do Vida vale na hora, sem aviso de salvamento nem erros em Temas, e os estilos de outros temas continuam como estavam. Ele também vê as capas de todos os jogos da sua conta Steam.
+* **Sua música vem primeiro:** Se tem música tocando no Ambiente, o Vida abaixa a dele e volta quando a sua termina.
 
 ### Français
 
-* **Les nouveautés de Vida 0.2.0 demandent cette version :** Vida 0.2.0 s'installe à partir de Panel de Control 0.88.0. Mettez d'abord à jour Panel de Control, puis Vida arrivera comme d'habitude.
-* **Des boutons propres dans les réglages de chaque thème :** Un thème peut ajouter des actions à côté du bouton de mise à jour. Vida apporte « Réinitialiser l'écran d'accueil » pour replacer vos applications et vos jeux installés. Les actions qui annulent quelque chose demandent toujours confirmation.
-* **Vos photos en fond dans les thèmes :** Vida utilise l'explorateur d'Ambiente pour que vous choisissiez une de vos photos comme fond de chaque page de l'accueil. La photo est réduite à la taille de votre écran et supprimée du cache dès qu'aucune page ne l'utilise.
-* **L'app Personnalisation de Vida change les réglages tout de suite :** Les options du thème sont enregistrées depuis Vida, sans l'avis d'enregistrement ni erreurs dans Thèmes, et les sections de style des autres thèmes restent intactes. Elle peut aussi lire les illustrations de tous les jeux liés à Steam.
-* **La musique d'Ambiente passe en premier :** Quand votre musique joue dans Ambiente, Vida baisse la sienne et la reprend quand la vôtre s'arrête.
+* **Prêt pour Vida 0.2.0 :** Le nouveau Vida a besoin de cette version de Panel de Control. Mettez d'abord à jour ici, Vida suivra juste après.
+* **Les boutons des thèmes dans leurs réglages :** Les thèmes peuvent maintenant placer leurs propres boutons à côté de celui de mise à jour. Vida s'en sert pour réinitialiser l'écran d'accueil quand vos bulles sont un peu partout, et demande avant de le faire.
+* **Vos photos en fond :** Depuis le mode organisation de Vida, choisissez n'importe quelle photo avec l'explorateur d'Ambiente et mettez-la en fond d'une page. Elle s'adapte seule à votre écran et ne prend plus de place une fois retirée.
+* **La personnalisation s'applique tout de suite :** Ce que vous changez dans l'app de Vida s'applique aussitôt, sans avis d'enregistrement ni erreurs dans Thèmes, et les styles des autres thèmes restent tels quels. Elle voit aussi les illustrations de tous les jeux de votre compte Steam.
+* **Votre musique passe avant :** Si de la musique joue dans Ambiente, Vida baisse la sienne et revient quand la vôtre se termine.
 
 ## [0.87.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.1...panel-de-control-v0.87.0) (2026-11-11)
 
