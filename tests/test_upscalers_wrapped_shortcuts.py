@@ -24,12 +24,52 @@ def _script(path: Path, body: str) -> Path:
     return path
 
 
-def test_a_portproton_script_leads_to_its_game(home):
+def _portproton(home, flatpak=False):
     game = _exe(home / "Games/Ghost of Tsushima/GhostOfTsushima.exe")
+    runner = "flatpak run ru.linux_gaming.PortProton" if flatpak else f'"{home}/PortProton/data/scripts/start.sh"'
     script = _script(home / "PortProton/steam_scripts/Ghost Of Tsushima.sh",
-                     f'export START_FROM_STEAM=1\n"{home}/PortProton/data/scripts/start.sh" "{game}" "$@"\n')
+                     f'export LD_PRELOAD=\nexport START_FROM_STEAM=1\nexport START_FROM_FLATPAK=0\n{runner} "{game}" "$@"\n')
     found = games.from_hint("3520677033", {"exe": f'"{script}"', "dir": str(script.parent), "name": "Ghost Of Tsushima", "opts": ""}, str(home))
+    return game, script, found
+
+
+@pytest.mark.parametrize("flatpak", [False, True])
+def test_a_portproton_script_leads_to_its_game(home, flatpak):
+    game, script, found = _portproton(home, flatpak)
     assert (found.native, found.shortcut, found.root, found.exe) == (False, True, game.parent, "GhostOfTsushima.exe")
+    assert found.launcher == ("portproton", str(script), None)
+
+
+def test_portproton_overrides_go_in_the_games_ppdb_and_come_back_out(home):
+    game, _, found = _portproton(home)
+    profile = game.with_name(game.name + ".ppdb")
+    profile.write_text('#!/usr/bin/env bash\n#GhostOfTsushima.exe\nexport PW_VULKAN_USE="2"\nexport WINEDLLOVERRIDES="mfc120=b,n"\n')
+    launched = launchers.find(str(home), *found.launcher)
+    launchers.set_overrides(launched, ["dxgi", "winmm"])
+    assert 'export WINEDLLOVERRIDES="mfc120=b,n;dxgi,winmm=n,b"' in profile.read_text()
+    assert 'export PW_VULKAN_USE="2"' in profile.read_text()
+    launchers.set_overrides(launched, ["dxgi", "winmm"], remove=True)
+    assert 'export WINEDLLOVERRIDES="mfc120=b,n"' in profile.read_text()
+
+
+def test_a_portproton_game_without_profile_starts_from_portprotons_own(home):
+    game, _, found = _portproton(home)
+    database = home / "PortProton/data/scripts/portwine_db"
+    database.mkdir(parents=True)
+    (database / "GoT").write_text('#!/usr/bin/env bash\n#GhostOfTsushima.exe\nexport PW_WINE_USE="PROTON_LG"\n')
+    launched = launchers.find(str(home), *found.launcher)
+    launchers.set_overrides(launched, ["dxgi"], remove=True)
+    assert not launched.config.exists()
+    launchers.set_overrides(launched, ["dxgi"])
+    text = launched.config.read_text()
+    assert 'export PW_WINE_USE="PROTON_LG"' in text and text.rstrip().endswith('export WINEDLLOVERRIDES="dxgi=n,b"')
+
+
+def test_unifidecks_older_map_format_is_read_too(home):
+    game = _exe(home / "GOG Games/Old/old.exe")
+    (home / ".local/share/unifideck").mkdir(parents=True)
+    (home / launchers.UNIFIDECK_MAP).write_text(f"gog:1207658924|{game}|{game.parent}\n")
+    assert launchers.wrapped_exe(str(home), "/x/unifideck-launcher", "gog:1207658924 MANGOHUD=1") == game
 
 
 def test_a_wrapper_passed_after_the_command_is_followed(home):

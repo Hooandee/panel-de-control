@@ -320,6 +320,7 @@ export const fr: Record<string, string> = {
   "up.model.help": "Le léger sollicite moins le GPU ; le complet garde un peu plus de détails fins",
   "up.launcher.heroic": "Jeu Heroic : Panel enregistre les réglages dans Heroic",
   "up.launcher.lutris": "Jeu Lutris : Panel enregistre les réglages dans Lutris",
+  "up.launcher.portproton": "Jeu PortProton : les réglages sont enregistrés dans PortProton",
   "up.lsfg.needBranch": "Dans Lossless Scaling, Propriétés, Bêtas, choisissez la branche lsfg-vk",
   "up.lsfg.foreign": "Un autre outil configure déjà Lossless Scaling",
   "up.lsfg.restart": "Relancez le jeu pour l'activer",
