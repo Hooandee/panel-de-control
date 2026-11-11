@@ -51,7 +51,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 10
+    assert recipe.catalog_version == 11
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -343,3 +343,8 @@ def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
     recipe = recipes.recipe_for('1086940', platform='linux', arch='x86_64')
     assert (recipe.exe, recipe.args, recipe.recommended_input) == ('bin/bg3_dx11.exe', ('--skip-launcher',), 'dlss')
     assert recipe.dependencies == () and not recipe.needs
+
+
+def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
+    for appid in ('2050650', '883710', '952060', '418370', '601150'):
+        assert recipes.recipe_for(appid, platform='linux', arch='x86_64').ini['Menu.OverlayMenu'] == 'true', appid

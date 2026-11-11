@@ -1,6 +1,6 @@
 {
   "name": "Resident Evil 4",
-  "revision": 3,
+  "revision": 4,
   "conditions": {
     "engine": [
       "optiscaler"
@@ -16,7 +16,7 @@
   "args": [],
   "ini": {
     "Spoofing.Dxgi": "false",
-    "Menu.OverlayMenu": "false"
+    "Menu.OverlayMenu": "true"
   },
   "dependencies": [
     "refw-pdup-re4",

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, it, vi } from "vitest";
-const api = vi.hoisted(() => ({ getMakoStatus: vi.fn(), getUpscalerLaunchReceipt: vi.fn(), setMakoGame: vi.fn(), readAppDetails: vi.fn(), applyManagedLaunch: vi.fn() }));
+const api = vi.hoisted(() => ({ getMakoStatus: vi.fn(), getUpscalerLaunchReceipt: vi.fn(), setMakoGame: vi.fn(), readAppDetails: vi.fn(), applyManagedLaunch: vi.fn(), setUpscalerLaunchReceipt: vi.fn() }));
 vi.mock("../api", () => api);
 vi.mock("../launch/steamApi", () => api);
 vi.mock("./managedLaunch", () => api);
@@ -41,3 +41,24 @@ it("creates spatial-only profiles without accidentally enabling frame generation
   await saveMakoProfile("1", 1, { scaling_enabled: true, scaling_sharpness: 0.4 });
   expect(api.setMakoGame).toHaveBeenCalledWith("1", { enabled: false, scaling_enabled: true, scaling_sharpness: 0.4 });
 });
+const receipt = { version: 1, env: [{ name: "MAKO_PROFILE", before: null, applied: "pdc-1" }], wrappers: { before: [], applied: ["/x/mako-launch"], added: ["/x/mako-launch"] } };
+it("forgets what it had added once someone removed it by hand, so Mako can be turned on again", async () => {
+  api.getMakoStatus.mockResolvedValue({ profiles: {} });
+  api.getUpscalerLaunchReceipt.mockResolvedValue(receipt);
+  api.readAppDetails.mockResolvedValue({ launch: 'WINEDLLOVERRIDES="dxgi=n,b" %command%' });
+  api.setUpscalerLaunchReceipt.mockResolvedValue(true);
+  await saveMakoProfile("1", 1, { enabled: true });
+  expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("1", "mako", { version: 1, env: [], wrappers: { before: [], applied: [], added: [] } });
+  expect(api.applyManagedLaunch).toHaveBeenCalled();
+});
+it("keeps a receipt whose options are still in place or still being written", async () => {
+  api.getMakoStatus.mockResolvedValue({ profiles: {} });
+  api.readAppDetails.mockResolvedValue({ launch: "MAKO_PROFILE=pdc-1 /x/mako-launch %command%" });
+  api.getUpscalerLaunchReceipt.mockResolvedValue(receipt);
+  await saveMakoProfile("1", 1, { enabled: true });
+  api.readAppDetails.mockResolvedValue({ launch: "%command%" });
+  api.getUpscalerLaunchReceipt.mockResolvedValue({ ...receipt, pending: true });
+  await saveMakoProfile("1", 1, { enabled: true });
+  expect(api.setUpscalerLaunchReceipt).not.toHaveBeenCalled();
+});
+
