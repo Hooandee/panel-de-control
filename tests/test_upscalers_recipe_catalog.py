@@ -51,7 +51,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 9
+    assert recipe.catalog_version == 10
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -337,3 +337,9 @@ def test_recipe_without_optiscaler_fg_neither_offers_nor_applies_it():
     assert plan['fg_plan'] is None and plan['offered_fg_plan'] is None
     assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'optiscaler'}) is None
     assert solution_plan.requested_fg(plan, {'fg': 'on', 'fg_route': 'game'}) is None
+
+
+def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
+    recipe = recipes.recipe_for('1086940', platform='linux', arch='x86_64')
+    assert (recipe.exe, recipe.args, recipe.recommended_input) == ('bin/bg3_dx11.exe', ('--skip-launcher',), 'dlss')
+    assert recipe.dependencies == () and not recipe.needs
