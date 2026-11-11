@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.87.0...panel-de-control-v0.88.0) (2026-11-11)
+
+
+### Features
+
+* **themes:** theme actions, Ambiente music state, theme photos and theme options for runtime extensions ([#1249](https://github.com/Hooandee/panel-de-control/issues/1249)) ([975665b](https://github.com/Hooandee/panel-de-control/commit/975665b1838627518271fd40304d9c6460afcf0a))
+
 ## [0.87.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.1...panel-de-control-v0.87.0) (2026-11-11)
 
 
