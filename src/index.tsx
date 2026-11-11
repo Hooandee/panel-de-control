@@ -52,6 +52,7 @@ import { startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { startCollectionsHeal } from "./steam/healCollections";
 import { resumePendingInstalls } from "./upscalers/pendingInstall";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
@@ -116,6 +117,14 @@ const StandardPluginContent: FC<{
     </StandardDeckyContent>
   </I18nProvider>
 );
+
+// The heal runs as the plugin starts, before the backend has opened its journal.
+function recordUntilJournalOpen(area: string, action: string, detail: string, attempt = 0): void {
+  const retry = () => {
+    if (attempt < 20) setTimeout(() => recordUntilJournalOpen(area, action, detail, attempt + 1), 3_000);
+  };
+  recordUiEvent(area, action, detail, true).then((recorded) => (recorded ? undefined : retry()), retry);
+}
 
 export default definePlugin(() => {
   cleanerForceSession.acknowledged = false;
@@ -206,6 +215,10 @@ export default definePlugin(() => {
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
   const stopGameWatcher = startGameWatcher();
+  const stopCollectionsHeal = startCollectionsHeal(
+    () => (globalThis as { collectionStore?: object }).collectionStore,
+    (healed) => recordUntilJournalOpen("steam", "collections_heal", JSON.stringify({ healed })),
+  );
   resumePendingInstalls();
   const stopSteamPerformanceOwnership = startSteamPerformanceOwnership();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
@@ -288,6 +301,7 @@ export default definePlugin(() => {
       stopKioskSteamBridge();
       stopThemesRuntime();
       themeGroups.stop();
+      stopCollectionsHeal();
       stopAmbient();
       stopUpscalerOverlays();
       stopArtworkHydration();

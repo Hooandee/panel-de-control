@@ -66,7 +66,7 @@ const EXTENDED_SOURCES = ["type-software", "type-music", "type-tools", "type-vid
 
 export const folderId = (folder: InstallFolder) => folder.strDriveName || folder.strUserLabel || String(folder.nFolderIndex ?? "");
 // Steam's userCollections is a MobX computed over the collections it loads from cloud storage. Read before that
-// load, it fails and MobX keeps the failure: Steam's own library then crashes on it (desktop library, game launch).
+// load, it fails and MobX keeps the failure: Steam's library, game menu and properties then crash on it.
 export const userCollections = (globals: SteamGlobals) => attempt(() => {
   const store = globals.collectionStore;
   if (typeof store?.m_mapCollectionsFromStorage?.values !== "function") return [];

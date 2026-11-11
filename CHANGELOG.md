@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.86.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.0...panel-de-control-v0.86.1) (2026-11-10)
+
+
+### Español
+
+* **La biblioteca de Steam vuelve a funcionar:** Desde 0.86.0, al abrir la biblioteca, el engranaje de un juego o sus propiedades podía salir una pantalla de error que culpaba a Panel de Control, y solo se iba reiniciando Steam. Pasaba cuando Steam tardaba en cargar tus colecciones. Ya no ocurre, y si te había pasado, se arregla solo al actualizar, sin reiniciar Steam.
+* **Reportes más completos:** Los reportes incluyen ahora los errores de la propia interfaz de Steam, para dar antes con fallos como este.
+
+### English
+
+* **Steam's library works again:** Since 0.86.0, opening the library, a game's gear menu or its properties could end on an error screen blaming Panel de Control, and only restarting Steam made it go away. It happened when Steam was slow to load your collections. That no longer happens, and if it already hit you, updating fixes it on its own, without restarting Steam.
+* **More complete reports:** Reports now include errors from Steam's own interface, so problems like this one are found much sooner.
+
+### Italiano
+
+* **La libreria di Steam torna a funzionare:** Dalla 0.86.0, aprendo la libreria, l'ingranaggio di un gioco o le sue proprietà poteva comparire una schermata di errore che dava la colpa a Panel de Control, e spariva solo riavviando Steam. Succedeva quando Steam era lento a caricare le tue raccolte. Ora non succede più e, se ti era già capitato, aggiornando si risolve da solo, senza riavviare Steam.
+* **Segnalazioni più complete:** Le segnalazioni ora includono gli errori dell'interfaccia di Steam stessa, così problemi come questo si trovano molto prima.
+
+### Deutsch
+
+* **Die Steam-Bibliothek funktioniert wieder:** Seit 0.86.0 konnte beim Öffnen der Bibliothek, des Zahnrads eines Spiels oder seiner Eigenschaften ein Fehlerbildschirm erscheinen, der Panel de Control die Schuld gab, und nur ein Neustart von Steam half. Das passierte, wenn Steam deine Sammlungen nur langsam lud. Das kommt nicht mehr vor, und falls es dich schon erwischt hat, behebt das Update es von selbst, ohne Steam neu zu starten.
+* **Vollständigere Berichte:** Berichte enthalten jetzt auch Fehler aus der Oberfläche von Steam selbst, damit Probleme wie dieses viel früher auffallen.
+
+### Português (Brasil)
+
+* **A biblioteca da Steam voltou a funcionar:** Desde a 0.86.0, ao abrir a biblioteca, a engrenagem de um jogo ou as propriedades dele, podia aparecer uma tela de erro culpando o Panel de Control, que só sumia reiniciando a Steam. Acontecia quando a Steam demorava para carregar suas coleções. Isso não acontece mais e, se já tinha acontecido com você, a atualização resolve sozinha, sem reiniciar a Steam.
+* **Relatórios mais completos:** Os relatórios agora incluem os erros da própria interface da Steam, para encontrar problemas como este bem antes.
+
+### Français
+
+* **La bibliothèque Steam fonctionne à nouveau :** Depuis la 0.86.0, ouvrir la bibliothèque, la roue crantée d'un jeu ou ses propriétés pouvait afficher un écran d'erreur qui accusait Panel de Control, et seul un redémarrage de Steam le faisait disparaître. Cela arrivait quand Steam tardait à charger tes collections. Ça n'arrive plus et, si c'était déjà le cas, la mise à jour le corrige toute seule, sans redémarrer Steam.
+* **Rapports plus complets :** Les rapports incluent désormais les erreurs de l'interface de Steam elle-même, pour repérer bien plus tôt des problèmes comme celui-ci.
+
 ## [0.86.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.85.0...panel-de-control-v0.86.0) (2026-11-09)
 
 

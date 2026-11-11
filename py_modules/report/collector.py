@@ -172,6 +172,17 @@ _DECKY_ORIGIN = re.compile(r"(?:localhost|127\.0\.0\.1):1337(?P<path>/[^\s?#)\"'
 _FRONTEND_EXCEPTION_TYPE = re.compile(
     r"Uncaught(?: \(in promise\))? (?P<error>TypeError|ReferenceError|SyntaxError|RangeError|Error)\b"
 )
+# Steam's own UI scripts: an error there takes down the library or a menu, whoever triggered it.
+_STEAM_UI_ORIGIN = re.compile(r"source: https://steamloopback\.host/(?P<path>[^\s?#)\"']*)")
+_STEAM_UI_EXCEPTION = re.compile(r'"(?:Uncaught(?: \(in promise\))? )?(?P<error>TypeError|ReferenceError|RangeError)\b')
+_STEAM_UI_READING = re.compile(r"\(reading '(?P<name>[^']{1,64})'\)")
+# A property name can be a user-derived key (obj[name]): only these fixed names leave the device.
+_STEAM_UI_READING_NAMES = frozenset({
+    "values", "keys", "entries", "get", "has", "set", "size", "length", "map", "filter", "find",
+    "forEach", "some", "includes", "push", "then", "appid", "id", "displayName", "allApps",
+    "visibleApps", "window", "document", "props", "children", "type", "current",
+})
+_MAX_STEAM_UI_SIGNALS = 8
 # Plugin folder names are user text: only these fixed slugs leave the device.
 _KNOWN_FRONTEND_ORIGINS = {
     "paneldecontrol": "panel",
@@ -355,7 +366,32 @@ def _frontend_signal(line: str) -> tuple[str | None, bool]:
         and re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", line)
     ):
         return "decky_frontend_exception", False
+    if _STEAM_UI_ORIGIN.search(line) and _STEAM_UI_EXCEPTION.search(line):
+        return "steam_ui_exception", False
     return None, False
+
+
+def _steam_ui_script(path: str) -> str:
+    name = path.rsplit("/", 1)[-1]
+    if path.startswith("libraries/"):
+        return "libraries"
+    if name in ("library.js", "sp.js"):
+        return name[:-3]
+    if name.startswith("chunk"):
+        return "chunk"
+    return "other"
+
+
+def _steam_ui_exception_detail(line: str) -> dict:
+    detail = {
+        "error_type": _STEAM_UI_EXCEPTION.search(line).group("error"),
+        "script": _steam_ui_script(_STEAM_UI_ORIGIN.search(line).group("path")),
+    }
+    reading = _STEAM_UI_READING.search(line)
+    if reading:
+        name = reading.group("name")
+        detail["reading"] = name if name in _STEAM_UI_READING_NAMES else "other"
+    return detail
 
 
 def _frontend_exception_detail(line: str) -> dict:
@@ -390,6 +426,7 @@ def frontend_crash_diagnostics(
     signals = []
     plugin_load_errors = []
     seen_plugins = set()
+    steam_ui_seen: dict[tuple, dict] = {}
     crash_detected = False
     plugin_load_error = False
 
@@ -443,6 +480,16 @@ def frontend_crash_diagnostics(
                 ):
                     seen_plugins.add(key)
                     plugin_load_errors.append(plugin)
+            if kind == "steam_ui_exception":
+                signal = {"source": source, "kind": kind, **_steam_ui_exception_detail(raw_line)}
+                key = tuple(sorted(signal.items()))
+                if key in steam_ui_seen:
+                    steam_ui_seen[key]["count"] += 1
+                elif len(steam_ui_seen) < _MAX_STEAM_UI_SIGNALS and len(signals) < _MAX_FRONTEND_SIGNALS:
+                    signal["count"] = 1
+                    steam_ui_seen[key] = signal
+                    signals.append(signal)
+                continue
             if len(signals) < _MAX_FRONTEND_SIGNALS:
                 signal = {"source": source, "kind": kind}
                 if kind == "decky_frontend_exception":
