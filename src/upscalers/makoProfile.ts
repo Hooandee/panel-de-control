@@ -1,6 +1,6 @@
 import { getMakoStatus, getUpscalerLaunchReceipt, setMakoGame, type MakoProfile } from "../api";
 import { readAppDetails } from "../launch/steamApi";
-import { configuredLaunchTools } from "./launchTools";
+import { hasMakoLeftover } from "./makoLeftover";
 import { applyManagedLaunch } from "./managedLaunch";
 
 const writing = new Set<string>();
@@ -15,7 +15,7 @@ export async function saveMakoProfile(appid: string, liveAppid: number, config: 
     if (config && !previous) {
       const [details, receipt] = await Promise.all([readAppDetails(liveAppid), getUpscalerLaunchReceipt(appid, "mako")]);
       if (!details) throw new Error("launch_failed");
-      if (!receipt?.wrappers.added.length && configuredLaunchTools(details.launch).includes("Mako")) throw new Error("mako_foreign");
+      if (hasMakoLeftover(details.launch, receipt)) throw new Error("mako_foreign");
     }
     const patch = config?.scaling_enabled && !previous ? { enabled: false, ...config } : config;
     const result = await setMakoGame(appid, patch);

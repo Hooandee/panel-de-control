@@ -139,17 +139,21 @@ it("stages Mako then configures it and its owned launcher on explicit activation
   fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
   await waitFor(() => expect(api.managedLaunch).toHaveBeenCalledWith("1", 1, "mako", { env: { MAKO_CONFIG: "/config/mako/1.toml" }, wrappers: ["/private/mako-launch"] }, { isNonSteam: false, requireComplete: true }));
 });
-it("keeps a manually configured Mako launcher and profile untouched", async () => {
+it("offers to clear another tool's Mako setup before using Panel's", async () => {
   api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
   api.getMakoStatus.mockResolvedValue(makoReady);
   api.readAppDetails.mockResolvedValue({ launch: "MAKO_PROFILE=custom ~/.local/bin/mako-run %command% -dx11" });
+  api.writeLaunchOptions.mockImplementation((_appid: number, value: string) => { api.readAppDetails.mockResolvedValue({ launch: value }); return true; });
   render(<FrameGenRow {...baseProps} onOptiscaler={vi.fn()} />);
   await screen.findByRole("option", { name: "Mako" });
   fireEvent.change(screen.getByRole("combobox", { name: "up.fg.title" }), { target: { value: "mako" } });
-  fireEvent.click((await screen.findByRole("button", { name: "up.activate" })));
-  expect(await screen.findByText("up.mako.foreignProfile")).toBeTruthy();
+  expect(await screen.findByText("up.mako.leftover")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "up.activate" })).toBeNull();
   expect(api.setMakoGame).not.toHaveBeenCalled();
-  expect(api.managedLaunch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "up.mako.leftover.clear" }));
+  await waitFor(() => expect(api.writeLaunchOptions).toHaveBeenCalledWith(1, "%command% -dx11", false, true));
+  expect(await screen.findByRole("button", { name: "up.activate" })).toBeTruthy();
+  expect(screen.queryByText("up.mako.leftover")).toBeNull();
 });
 it("rolls back Mako configuration when launch composition fails", async () => {
   api.getLsfgStatus.mockResolvedValue({ ...foreign, foreign: false });
