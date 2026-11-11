@@ -1,4 +1,6 @@
 import os
+import subprocess
+from pathlib import Path
 import zipfile
 
 import pytest
@@ -168,3 +170,26 @@ def test_fps_counter_is_unavailable_with_optiscalers_old_menu():
     assert _recipe_info(recipes.Recipe("1", wiki_settings={"OverlayMenu": "false"}))["fps_counter"] is False
     assert _recipe_info(recipes.Recipe("1", ini={"Menu.OverlayMenu": "true"}, reframework_upscaler=True))["fps_counter"] is False
     assert _recipe_info(recipes.recipe_for("2050650", platform="linux", arch="x86_64"))["fps_counter"] is False
+
+
+def test_without_bsdtar_the_archive_is_read_with_7z(tmp_path, monkeypatch):
+    archive = tmp_path / "UpscalerBasePlugin-502-1-1-2-1.7z"
+    archive.write_bytes(b"7z")
+    monkeypatch.setattr(user_deps.shutil, "which", lambda tool: "/usr/bin/7z" if tool == "7z" else None)
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command[:2])
+        if command[1] == "l":
+            listing = "Path = Plugin\nFolder = +\n\nPath = Plugin/PDPerfPlugin.dll\nFolder = -\nSize = 8\n\n"
+            return subprocess.CompletedProcess(command, 0, listing.encode(), b"")
+        staging = Path(next(arg for arg in command if arg.startswith("-o"))[2:])
+        (staging / "Plugin").mkdir()
+        (staging / "Plugin/PDPerfPlugin.dll").write_bytes(b"MZplugin")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(user_deps.subprocess, "run", run)
+    store = user_deps.Store(tmp_path / "store")
+    assert store.adopt(PLUGIN, archive)["state"] == "ready"
+    assert store.sources(PLUGIN)["PDPerfPlugin.dll"].read_bytes() == b"MZplugin"
+    assert ["7z", "l"] in commands and ["7z", "x"] in commands

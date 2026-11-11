@@ -46,10 +46,28 @@ def _dll_version(path: Path) -> str | None:
     return None
 
 
+def _archiver() -> str:
+    """bsdtar reads every format Nexus serves, but not every distribution ships it; 7z is the fallback."""
+    for tool in ("bsdtar", "7z"):
+        if shutil.which(tool):
+            return tool
+    raise OSError("no archive tool")
+
+
 def _members(path: Path) -> list[str]:
     if path.suffix.lower() == ".zip":
         with zipfile.ZipFile(path) as archive:
             return [info.filename for info in archive.infolist() if not info.is_dir()]
+    if _archiver() == "7z":
+        result = subprocess.run(["7z", "l", "-slt", "-ba", str(path.resolve())], capture_output=True, timeout=60, check=False)
+        if result.returncode != 0:
+            raise OSError("unreadable archive")
+        members = []
+        for block in result.stdout.decode("utf-8", "replace").replace("\r", "").split("\n\n"):
+            fields = dict(line.split(" = ", 1) for line in block.splitlines() if " = " in line)
+            if fields.get("Path") and fields.get("Folder") != "+" and not fields.get("Attributes", "").startswith("D"):
+                members.append(fields["Path"])
+        return members
     result = subprocess.run(["bsdtar", "-tf", str(path.resolve())], capture_output=True, timeout=60, check=False)
     if result.returncode != 0:
         raise OSError("unreadable archive")
@@ -99,10 +117,13 @@ def _extract(path: Path, members: dict[str, str], destination: Path) -> None:
         return
     staging = Path(tempfile.mkdtemp(dir=destination, prefix=".unpack-"))
     try:
-        # bsdtar reads member names as patterns: escape so "Plugin [1.1.2]/x.dll" means itself.
-        patterns = [re.sub(r"([][*?\\])", r"\\\1", member) for member in members.values()]
-        result = subprocess.run(["bsdtar", "-xf", str(path.resolve()), "-C", str(staging), "--", *patterns],
-                                capture_output=True, timeout=300, check=False)
+        if _archiver() == "7z":
+            command = ["7z", "x", "-y", f"-o{staging}", str(path.resolve())]
+        else:
+            # bsdtar reads member names as patterns: escape so "Plugin [1.1.2]/x.dll" means itself.
+            patterns = [re.sub(r"([][*?\\])", r"\\\1", member) for member in members.values()]
+            command = ["bsdtar", "-xf", str(path.resolve()), "-C", str(staging), "--", *patterns]
+        result = subprocess.run(command, capture_output=True, timeout=300, check=False)
         if result.returncode != 0:
             raise UserFileError("unreadable")
         for wanted, member in members.items():
