@@ -652,6 +652,36 @@ describe("AmbientRuntime", () => {
     expect(channel.getState().owner).toBe("theme");
   });
 
+  it("tells theme runtimes when Ambiente's music really plays, and when the in-game pause silences it", async () => {
+    const configured = settings();
+    configured.music.enabled = true;
+    configured.music.source = "music";
+    configured.music.inGameMediaLevel = 0;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.scanAmbientSources.mockResolvedValue({ collections: {}, music: [{ id: "local:song", name: "Song.mp3", kind: "audio" }], truncated: false });
+    audioStub();
+    const channel = new AmbientThemeChannel();
+    const heard: (boolean | undefined)[] = [false];
+    channel.subscribe((state) => { if (heard[heard.length - 1] !== state.music?.playing) heard.push(state.music?.playing); });
+    const p = ports();
+    const runtime = new AmbientRuntime(p as unknown as AmbientPorts, channel);
+    try {
+      expect(channel.getState().music).toEqual({ playing: false });
+      await runtime.start();
+      await runtime.playMyMusic();
+      expect(runtime.getSnapshot().player.status).toBe("playing");
+      expect(channel.getState().music).toEqual({ playing: true });
+      p.fireGame({ appid: "1", liveAppid: 1, name: "g" });
+      expect(runtime.getSnapshot().player.status).toBe("paused");
+      expect(channel.getState().music).toEqual({ playing: true });
+      await vi.waitFor(() => expect(channel.getState().music).toEqual({ playing: false }), { timeout: 3000 });
+      p.fireGame(null);
+      expect(channel.getState().music).toEqual({ playing: true });
+      expect(heard).toEqual([false, true, false, true]);
+    } finally { runtime.stop(); }
+    expect(channel.getState().music).toEqual({ playing: false });
+  });
+
   it("keeping mine over a third-party painter clears only that painter's background", async () => {
     rpcMock.getAmbientState.mockResolvedValue({ settings: settings({ claims: { "css:ScrollArea::before": "panel" } }), knownFolders: {}, collections: [], mediaServer: "stopped" });
     const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);

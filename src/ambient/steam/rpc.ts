@@ -38,6 +38,13 @@ export const getAmbientState = callable<[], AmbientState>("get_ambient_state");
 export const saveAmbientSettings = callable<[settings: AmbientSettings], AmbientSettings>("save_ambient_settings");
 export const scanAmbientSources = callable<[], ScanResult>("scan_ambient_sources");
 export const getAmbientMediaUrl = callable<[mediaId: string], string | null>("get_ambient_media_url");
+/** URLs of one theme picture per screen size bucket ("1280", "1920", "2560"). */
+export type ThemeImageUrls = Record<string, string>;
+export interface ThemeImageEntry { urls: ThemeImageUrls; owners: string[] }
+export const registerAmbientThemeImage = callable<[mediaId: string, owner: string, maxSide: number | null], { ref: string; urls: ThemeImageUrls } | { error: string }>("register_ambient_theme_image");
+/** The refs `owner` (a theme's catalog id) still shows; answers the refs the backend forgot. */
+export const keepAmbientThemeImages = callable<[owner: string, refs: string[]], string[]>("keep_ambient_theme_images");
+export const getAmbientThemeImages = callable<[], Record<string, ThemeImageEntry>>("get_ambient_theme_images");
 export const getAmbientVideoPage = callable<[], string | null>("get_ambient_video_page");
 export const addAmbientPlaylist = callable<[url: string, name: string], AmbientSettings | null>("add_ambient_playlist");
 export const removeAmbientPlaylist = callable<[playlistId: string], AmbientSettings | null>("remove_ambient_playlist");

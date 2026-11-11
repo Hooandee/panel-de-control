@@ -123,7 +123,7 @@ export type ThemesOperation =
   | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
-  | { kind: "saving"; themeId: string; patchName: string }
+  | { kind: "saving"; themeId: string; patchNames: readonly string[] }
   | { kind: "cleaning" }
   | { kind: "restoring" };
 
@@ -261,6 +261,7 @@ export class ThemesClient {
   private installReconcileFailures = 0;
   private pendingSectionHandoff: SectionHandoffNotice | null = null;
   private lastReportedFailure: string | null = null;
+  private quietWrite: Promise<void> | null = null;
 
   constructor(readonly dependencies: ThemesDependencies) {}
 
@@ -567,19 +568,77 @@ export class ThemesClient {
     return running;
   }
 
-  setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
+  setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => (
+    this.setPatches(themeId, { [patchName]: value })
+  );
+
+  /** Several patches of one theme in a single Panel operation; CSS Loader still applies them one by one. */
+  setPatches = (themeId: string, values: Readonly<Record<string, string>>): Promise<boolean> => {
     const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
     if (!entry) return this.rejectUnknownTheme("saving", themeId);
+    const patchNames = Object.keys(values);
+    if (patchNames.length === 0) return Promise.resolve(true);
     return this.mutate(
-      { kind: "saving", themeId, patchName },
-      async () => {
-        const after = await this.dependencies.adapter.setPatchValue(entry.cssLoaderName, patchName, value);
-        if (sectionKeyOf(patchName) === null) return after;
-        this.forgetHandoffs([{ themeName: entry.cssLoaderName, patchName }]);
-        return this.handOffSections(after, entry.cssLoaderName, patchName);
-      },
+      { kind: "saving", themeId, patchNames },
+      () => this.writePatches(entry.cssLoaderName, values),
     );
   };
+
+  /**
+   * A theme runtime writing its own options. It waits its turn like any write, but it is not the user's
+   * operation: the Temas screen stays usable, nothing is shown while it runs and a failure is only the
+   * runtime's answer (false), never an error banner or a failure report. «Estilizar …» patches are refused,
+   * since turning a section on hands it off from other themes, which only the user may decide.
+   */
+  setRuntimePatches = async (themeId: string, values: Readonly<Record<string, string>>): Promise<boolean> => {
+    const entry = this.managedThemes().find((theme) => theme.catalogId === themeId);
+    const patchNames = Object.keys(values);
+    if (!entry || patchNames.some((name) => sectionKeyOf(name) !== null)) return false;
+    if (patchNames.length === 0) return true;
+    await this.quietWritesSettled();
+    if (this.operationLocked || this.current.recoveryBlocked) return false;
+    this.operationLocked = true;
+    const request = ++this.requestSequence;
+    const running = (async () => {
+      await this.reconcilePendingRecovery();
+      return this.writePatches(entry.cssLoaderName, values);
+    })();
+    const settled = running.then(() => undefined, () => undefined);
+    this.quietWrite = settled;
+    try {
+      const after = await running;
+      if (request === this.requestSequence) this.update({ snapshot: after });
+      return true;
+    } catch {
+      try {
+        const reconciled = await this.dependencies.adapter.inspect();
+        if (request === this.requestSequence) this.update({ snapshot: reconciled });
+      } catch {
+        // The next refresh reports CSS Loader being unreachable; this write only answers false.
+      }
+      return false;
+    } finally {
+      this.operationLocked = false;
+      if (this.quietWrite === settled) this.quietWrite = null;
+    }
+  };
+
+  private async writePatches(themeName: string, values: Readonly<Record<string, string>>): Promise<CssLoaderSnapshot> {
+    let after: CssLoaderSnapshot | undefined;
+    for (const [patchName, value] of Object.entries(values)) {
+      after = await this.dependencies.adapter.setPatchValue(themeName, patchName, value);
+      if (sectionKeyOf(patchName) === null) continue;
+      this.forgetHandoffs([{ themeName, patchName }]);
+      after = await this.handOffSections(after, themeName, patchName);
+    }
+    return after!;
+  }
+
+  // A runtime's write holds the lock only briefly and invisibly; the user's own operation waits for it
+  // instead of being refused for a reason the screen never showed.
+  private async quietWritesSettled(): Promise<void> {
+    while (this.quietWrite) await this.quietWrite;
+  }
 
   // Without CSS Loader running nothing can be turned off or reloaded, but its folders can still be
   // set aside and the styles it left behind removed from the Steam windows the caller can reach.
@@ -788,6 +847,7 @@ export class ThemesClient {
     operation: ThemesOperation,
     run: () => Promise<CssLoaderSnapshot>,
   ): Promise<boolean> {
+    if (this.quietWrite) await this.quietWritesSettled();
     if (this.operationLocked || this.current.recoveryBlocked) return false;
     this.operationLocked = true;
     const request = ++this.requestSequence;

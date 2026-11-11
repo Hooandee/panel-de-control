@@ -93,6 +93,21 @@ export function listInstalledGames(): GameEntry[] {
   }
 }
 
+/** Every game in the library, installed or not, plus non-Steam shortcuts; tools excluded. Ids and names only. Never throws. */
+export function listLibraryGames(): { appId: number; name: string }[] {
+  try {
+    const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
+    const out: { appId: number; name: string }[] = [];
+    for (const ov of all) {
+      if (!ov || typeof ov.appid !== "number" || ov.app_type === APP_TYPE_TOOL) continue;
+      out.push({ appId: ov.appid, name: ov.display_name || String(ov.appid) });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 /** Resolve a stable key back to the current numeric appid (shortcut appids churn). */
 export function resolveLiveAppid(stableKey: string): number | null {
   const g = listInstalledGames().find((e) => e.stableKey === stableKey);

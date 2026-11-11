@@ -63,11 +63,21 @@ export const MediaSelection: FC<{ item: LibraryItem; purpose: LibraryPurpose; ru
   </div>;
 };
 
-export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; purpose: LibraryPurpose; header: ReactNode; onClose?: () => void }> = ({ runtime, snapshot, purpose, header, onClose }) => {
+/**
+ * Ambiente's library explorer. With `onPickPhoto` it is the single-photo picker theme runtimes open: local
+ * pictures only, one at a time, handed to the callback instead of becoming Ambiente's background.
+ */
+export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; purpose: LibraryPurpose; header: ReactNode; onClose?: () => void; onPickPhoto?: (photo: LibraryPhoto) => Promise<boolean> }> = ({ runtime, snapshot, purpose, header, onClose, onPickPhoto }) => {
   const { t } = useI18n();
   const saving = useRef(false);
   const navigation = useLibraryNavigation(() => { if (!saving.current) onClose?.(); });
-  useEffect(() => runtime.beginLibrarySession(), [runtime]);
+  const picking = !!onPickPhoto;
+  const accepts = (kind: LibraryItem["kind"]) => picking ? kind === "image" : acceptsMedia(kind, purpose);
+  useEffect(() => {
+    if (!picking) return runtime.beginLibrarySession();
+    runtime.refreshLibraryScan();
+    return undefined;
+  }, [runtime, picking]);
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [selected, setSelected] = useState<LibraryItem | null>(null);
@@ -85,12 +95,12 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
   const available = state.collections.some((s) => s.id === "known.music") || !snapshot.scan?.music.length
     ? state.collections : [...state.collections, { id: "known.music", kind: "known" as const }];
   const sources = available.filter((s) => {
-    if (s.kind === "favorite" || (purpose === "playback" && s.kind === "suggested")) return false;
+    if (s.kind === "favorite" || ((purpose === "playback" || picking) && s.kind === "suggested")) return false;
     if (!snapshot.scan || (s.kind !== "known" && s.kind !== "folder" && s.kind !== "screenshots")) return true;
     const media = snapshot.scan.library?.[s.id] ?? snapshot.scan.collections[s.id] ?? (s.id === "known.music" ? snapshot.scan.music : []) ?? [];
-    return s.kind === "folder" && media.length === 0 ? true : media.some((m) => acceptsMedia(m.kind, purpose));
+    return s.kind === "folder" && media.length === 0 ? true : media.some((m) => accepts(m.kind));
   });
-  const wantedRef = purpose === "background" ? state.settings.background.pinned || snapshot.current?.ref : snapshot.player?.track?.id;
+  const wantedRef = picking ? undefined : purpose === "background" ? state.settings.background.pinned || snapshot.current?.ref : snapshot.player?.track?.id;
   const wantedCollection = purpose === "background" && snapshot.current?.ref === wantedRef ? snapshot.current?.collection : undefined;
   const preferred = preferredSource(sources, snapshot.scan, purpose, wantedRef, wantedCollection);
   const current = sources.find((s) => s.id === sourceId) ?? sources.find((s) => s.id === preferred);
@@ -109,11 +119,11 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
     const pending: Promise<LibraryItem[]> = current.kind === "suggested"
       ? runtime.libraryItems(current.id)
       : Promise.resolve(media.map((m) => ({ ref: m.id, name: m.name, kind: m.kind, collection: current.id })));
-    void pending.then((items) => { if (active) setItems(items.filter((m) => acceptsMedia(m.kind, purpose))); }).catch(() => {
+    void pending.then((items) => { if (active) setItems(items.filter((m) => accepts(m.kind))); }).catch(() => {
       if (active) { setItems([]); setError(t("ambient.lib.loadFailed")); }
     });
     return () => { active = false; };
-  }, [runtime, current?.id, snapshot.scan, purpose]);
+  }, [runtime, current?.id, snapshot.scan, purpose, picking]);
   const startMultiple = () => {
     const inventory: LibraryItem[] = [...snapshot.items ?? [], ...Object.entries(snapshot.scan?.library ?? snapshot.scan?.collections ?? {}).flatMap(([collection, media]) => media.map((item) => ({ ref: item.id, kind: item.kind, name: item.name, collection })))];
     setPhotos(photoSelection(state.settings.background.selectedRefs ?? [], inventory));
@@ -182,7 +192,18 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
     catch { setError(t("ambient.lib.actionFailed")); }
     finally { quickPlaying.current = false; }
   };
+  const pickPhoto = async () => {
+    if (saving.current || !onPickPhoto || selected?.kind !== "image") return;
+    saving.current = true;
+    setApplying(true);
+    setError("");
+    try {
+      if (!await onPickPhoto({ ...selected, kind: "image" })) setError(t("ambient.lib.actionFailed"));
+    } catch { setError(t("ambient.lib.actionFailed")); }
+    finally { saving.current = false; setApplying(false); }
+  };
   const save = async () => {
+    if (picking) return pickPhoto();
     const selection = multiple ? [...chosen.values()] : selected ? [selected] : [];
     if (saving.current || !selection.length || (multiple && !playback && selection.length < 2)) return;
     saving.current = true;
@@ -211,15 +232,16 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
     } catch { setError(t("ambient.lib.actionFailed")); }
     finally { setAdding(false); }
   };
-  const countOf = (id: string) => (snapshot.scan?.library?.[id] ?? snapshot.scan?.collections[id] ?? (id === "known.music" ? snapshot.scan?.music : []) ?? []).filter((m) => acceptsMedia(m.kind, purpose)).length;
+  const countOf = (id: string) => (snapshot.scan?.library?.[id] ?? snapshot.scan?.collections[id] ?? (id === "known.music" ? snapshot.scan?.music : []) ?? []).filter((m) => accepts(m.kind)).length;
   const selection = multiple ? [...chosen.values()] : selected ? [selected] : [];
   const actionLabel = applying ? t("ambient.lib.working")
+    : picking ? t("ambient.pick.use")
     : !selection.length ? t(playback ? "ambient.player.play" : "ambient.lib.useBackground")
       : playback ? (selection.length > 1 ? t("ambient.lib.playSelected", { n: String(selection.length) }) : t("ambient.player.play"))
         : selection.length > 1 ? t("ambient.lib.rotatePhotos", { n: String(selection.length) }) : t("ambient.lib.useBackground");
   const canApply = !applying && (multiple ? chosen.size >= (playback ? 1 : 2) : !!selected);
   const title = current ? SOURCE_LABELS[current.id] ? t(SOURCE_LABELS[current.id]) : current.name ?? current.id : "";
-  const docked = !!snapshot.player?.video;
+  const docked = !picking && !!snapshot.player?.video;
   const gridRows = !playback && visible ? chunk(visible, docked ? GRID_COLUMNS - 1 : GRID_COLUMNS) : [];
   return <Focusable {...navigation}
     onCancelButton={(event) => {
@@ -245,7 +267,7 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
               trailing={s.kind !== "suggested" && countOf(s.id) > 0 ? <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, fontVariantNumeric: "tabular-nums" }}>{countOf(s.id)}</span> : undefined} />
           </Focusable>;
         })}
-        {purpose === "background" && state.settings.collections?.removedSuggested.filter((id) => SOURCE_LABELS[id]).map((id) => <Row key={id} title={t(SOURCE_LABELS[id])} subtitle={t("ambient.lib.restore")} onActivate={() => void runtime.restoreSuggested("background", id)} />)}
+        {purpose === "background" && !picking && state.settings.collections?.removedSuggested.filter((id) => SOURCE_LABELS[id]).map((id) => <Row key={id} title={t(SOURCE_LABELS[id])} subtitle={t("ambient.lib.restore")} onActivate={() => void runtime.restoreSuggested("background", id)} />)}
       </Focusable>
       <Focusable data-library-column="1" flow-children="column" style={{ display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, gap: 6 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
@@ -256,7 +278,7 @@ export const FilesTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
           {playback && !multiple && !!visible?.length && <Button label={<><LuPlay size={14} /> {t("ambient.lib.playAll")}</>} onActivate={() => void playFolder("now")} />}
           {playback && !multiple && !!visible?.length && <Button label={<><LuListPlus size={14} /> {t("ambient.queue.addEnd")}</>} onActivate={() => void playFolder("end")} />}
           {playback && multiple && picks.size > 0 && <Button label={<><LuListPlus size={14} /> {t("ambient.queue.addEnd")}</>} onActivate={() => { void queueItems([...picks.values()], "end"); cancelMultiple(); }} />}
-          {!!visible?.length && <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />}
+          {!!visible?.length && !picking && <Button disabled={applying} label={t(multiple ? "ambient.lib.cancelSelection" : "ambient.lib.chooseSeveral")} onActivate={multiple ? cancelMultiple : playback ? () => { setPicks(new Map()); setMultiple(true); } : startMultiple} />}
         </Focusable>
         <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>
           {visible == null ? <Empty text={t("ambient.lib.loading")} /> : visible.length === 0 ? <Empty text={error || t("ambient.lib.filesEmpty")} /> : listHeight > 0 && (playback

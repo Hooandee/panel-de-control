@@ -5,9 +5,11 @@ import { refocusWhenRemoved } from "../navigation/refocusWhenRemoved";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { showModal } from "../navigation/showModal";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { LuDownload, LuFileArchive, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
+import type { IconType } from "react-icons";
+import { LuCheck, LuDownload, LuFileArchive, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2, LuTriangleAlert, LuZap } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
+import type { Lang } from "../i18n/languages";
 import { theme, themed } from "../theme";
 import { groupThemePatches } from "../themes/patchGroups";
 import { localizePublishedText } from "../themes/remotePublication";
@@ -15,6 +17,10 @@ import { themeCoverFor, themeDescriptionFor } from "../themes/themePresentation"
 import { labelsForPatch } from "../themes/themePatchLabels";
 import { useThemePatchLabels } from "../themes/useThemePatchLabels";
 import { useThemes } from "../themes/useThemes";
+import { themeActionText, useThemeActionsListening, type ThemeAction } from "../themes/themeActions";
+import { useThemeActions } from "../themes/useThemeActions";
+import { themeActionsChannel } from "../themes/runtime/themeActions";
+import { recordUiEvent } from "../system/uiEvents";
 import { FocusRoot } from "./FocusRoot";
 import { EarlyBadge } from "./ThemeCard";
 import { ThemePatchControl } from "./ThemePatchControl";
@@ -29,7 +35,14 @@ interface ThemeOffer {
   version: string;
 }
 
-type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" };
+type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" } | { kind: "action"; action: ThemeAction };
+
+interface ThemeActionFeedback {
+  id: string;
+  delivered: boolean;
+}
+
+const ACTION_FEEDBACK_MS = 2500;
 
 const gamepadNavigation = createThemeNavigationAccess();
 
@@ -173,6 +186,61 @@ interface ThemeConfirmationProps {
   onConfirm: () => void;
 }
 
+interface ConfirmationCopy {
+  destructive: boolean;
+  icon: IconType;
+  title: string;
+  description: string | null;
+  confirm: string;
+  version: string | null;
+}
+
+// A destructive action always asks first; when its theme gives no wording, Panel's own names the action.
+function confirmationCopy(
+  confirmation: PendingThemeConfirmation,
+  displayName: string,
+  lang: Lang,
+  t: (key: string, params?: Record<string, string>) => string,
+): ConfirmationCopy {
+  switch (confirmation.kind) {
+    case "uninstall":
+      return {
+        destructive: true,
+        icon: LuTrash2,
+        title: t("themes.delete.confirm.title", { name: displayName }),
+        description: t("themes.delete.confirm.desc"),
+        confirm: t("themes.delete.confirm.ok"),
+        version: null,
+      };
+    case "action": {
+      const { action } = confirmation;
+      const label = themeActionText(action.label, lang);
+      return {
+        destructive: action.destructive,
+        icon: LuZap,
+        title: action.confirm ? themeActionText(action.confirm, lang) : t("themes.actions.confirm.title", { action: label }),
+        description: action.description
+          ? themeActionText(action.description, lang)
+          : action.destructive ? t("themes.actions.confirm.desc") : null,
+        confirm: label,
+        version: null,
+      };
+    }
+    case "update":
+    case "install": {
+      const prefix = confirmation.kind === "update" ? "themes.update.confirm" : "themes.install.confirm";
+      return {
+        destructive: false,
+        icon: confirmation.kind === "update" ? LuRefreshCw : LuDownload,
+        title: t(`${prefix}.title`, { name: displayName }),
+        description: t(`${prefix}.desc`),
+        confirm: t(`${prefix}.ok`),
+        version: confirmation.version,
+      };
+    }
+  }
+}
+
 function ThemeConfirmation({
   confirmation,
   displayName,
@@ -180,49 +248,37 @@ function ThemeConfirmation({
   onCancel,
   onConfirm,
 }: ThemeConfirmationProps) {
-  const { t } = useI18n();
-  const destructive = confirmation.kind === "uninstall";
-  const updating = confirmation.kind === "update";
-  const titleKey = destructive
-    ? "themes.delete.confirm.title"
-    : updating
-      ? "themes.update.confirm.title"
-      : "themes.install.confirm.title";
-  const descriptionKey = destructive
-    ? "themes.delete.confirm.desc"
-    : updating
-      ? "themes.update.confirm.desc"
-      : "themes.install.confirm.desc";
-  const confirmKey = destructive
-    ? "themes.delete.confirm.ok"
-    : updating
-      ? "themes.update.confirm.ok"
-      : "themes.install.confirm.ok";
+  const { lang, t } = useI18n();
+  const copy = confirmationCopy(confirmation, displayName, lang, t);
+  const { destructive, icon: Icon } = copy;
+  const columns = destructive ? "minmax(0, 1fr)" : copy.version ? "42px minmax(0, 1fr) auto" : "42px minmax(0, 1fr)";
 
   return (
     <div
       role="group"
       aria-labelledby="theme-confirmation-title"
-      aria-describedby="theme-confirmation-description"
+      aria-describedby={copy.description ? "theme-confirmation-description" : undefined}
       style={destructive ? DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE : CONFIRMATION_SURFACE_STYLE}
     >
-      <div style={{ display: "grid", gridTemplateColumns: destructive ? "minmax(0, 1fr)" : "42px minmax(0, 1fr) auto", alignItems: "center", gap: theme.space.md }}>
+      <div style={{ display: "grid", gridTemplateColumns: columns, alignItems: "center", gap: theme.space.md }}>
         {!destructive ? (
           <span aria-hidden style={CONFIRMATION_ICON_STYLE}>
-            {updating ? <LuRefreshCw size={19} /> : <LuDownload size={19} />}
+            <Icon size={19} />
           </span>
         ) : null}
         <div style={{ minWidth: 0 }}>
           <div id="theme-confirmation-title" style={{ fontSize: 18, lineHeight: 1.15, fontWeight: 780 }}>
-            {t(titleKey, { name: displayName })}
+            {copy.title}
           </div>
-          <div id="theme-confirmation-description" data-pdc-theme-muted style={{ marginTop: 5, lineHeight: 1.4 }}>
-            {t(descriptionKey)}
-          </div>
+          {copy.description ? (
+            <div id="theme-confirmation-description" data-pdc-theme-muted style={{ marginTop: 5, lineHeight: 1.4 }}>
+              {copy.description}
+            </div>
+          ) : null}
         </div>
-        {confirmation.kind !== "uninstall" ? (
+        {copy.version ? (
           <span style={VERSION_PILL_STYLE}>
-            {t("themes.remote.card.version", { version: confirmation.version })}
+            {t("themes.remote.card.version", { version: copy.version })}
           </span>
         ) : null}
       </div>
@@ -232,8 +288,8 @@ function ThemeConfirmation({
         </DialogButton>
         <DialogButton style={destructive ? DESTRUCTIVE_CONFIRM_STYLE : PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>
           <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-            {destructive ? <LuTrash2 size={15} aria-hidden /> : updating ? <LuRefreshCw size={15} aria-hidden /> : <LuDownload size={15} aria-hidden />}
-            <span>{t(confirmKey)}</span>
+            <Icon size={15} aria-hidden />
+            <span>{copy.confirm}</span>
           </span>
         </DialogButton>
       </Focusable>
@@ -248,6 +304,9 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const [failedCover, setFailedCover] = useState<string>();
   const card = controller.cards.find((candidate) => candidate.id === themeId);
   const patchLabels = useThemePatchLabels(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
+  const themeActions = useThemeActions(themeId, card?.cssLoaderTheme?.name, card?.installedVersion);
+  const actionsListening = useThemeActionsListening(themeId);
+  const [actionFeedback, setActionFeedback] = useState<ThemeActionFeedback | null>(null);
   const installOfferRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -266,6 +325,12 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     }
     previousInstalledRef.current = installed;
   }, [card?.installed]);
+
+  useEffect(() => {
+    if (!actionFeedback) return undefined;
+    const timer = setTimeout(() => setActionFeedback(null), ACTION_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [actionFeedback]);
 
   if (controller.loading && !card) {
     return (
@@ -314,7 +379,20 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     && cssReady
     ? pendingConfirmation
     : null;
-  const activeConfirmation = activeOfferConfirmation ?? activeUninstallConfirmation;
+  const actionsAvailable = card.installed && cssReady && themeActions.length > 0;
+  const actionUnavailable = !card.active ? "inactive" : !actionsListening ? "notListening" : null;
+  const activeActionConfirmation = pendingConfirmation?.kind === "action"
+    && actionsAvailable
+    && !actionUnavailable
+    && themeActions.some((action) => action.id === pendingConfirmation.action.id)
+    ? pendingConfirmation
+    : null;
+  const activeConfirmation = activeOfferConfirmation ?? activeUninstallConfirmation ?? activeActionConfirmation;
+  const fireAction = (action: ThemeAction) => {
+    const delivered = themeActionsChannel.dispatch(card.id, action.id);
+    recordUiEvent("themes", "theme_action", { catalogId: card.id, id: action.id, delivered }, delivered > 0);
+    setActionFeedback({ id: action.id, delivered: delivered > 0 });
+  };
   const cancelOrClose = activeConfirmation ? () => switchConfirmation(null) : closeModal;
 
   return (
@@ -531,6 +609,53 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   <GameArtworkEditorButton disabled={actionsBlocked || !card.active} onOpen={closeModal} />
                 </div>
               </Focusable>
+            ) : null}
+            {actionsAvailable ? (
+              <section data-pdc-part="theme-actions" aria-labelledby="theme-actions-heading" style={{ minWidth: 0, marginBottom: theme.space.section }}>
+                <h3 id="theme-actions-heading" data-pdc-theme-muted style={{ ...theme.sectionLabel, margin: `0 0 ${theme.space.sm}px` }}>{t("themes.actions.title")}</h3>
+                {actionUnavailable ? (
+                  <p role="status" data-pdc-theme-muted style={{ margin: `0 0 ${theme.space.sm}px`, lineHeight: 1.4 }}>
+                    {t(`themes.actions.${actionUnavailable}`)}
+                  </p>
+                ) : null}
+                {activeActionConfirmation ? (
+                  <ThemeConfirmation
+                    confirmation={activeActionConfirmation}
+                    displayName={displayName}
+                    actionsBlocked={actionsBlocked}
+                    onCancel={() => switchConfirmation(null)}
+                    onConfirm={() => {
+                      switchConfirmation(null);
+                      fireAction(activeActionConfirmation.action);
+                    }}
+                  />
+                ) : (
+                  <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+                    {themeActions.map((action) => (
+                      <div key={action.id} role="listitem" data-pdc-theme-status-surface="true" style={{ ...STATUS_SURFACE, marginBottom: 0 }}>
+                        {action.description ? (
+                          <div data-pdc-theme-muted style={{ lineHeight: 1.4 }}>{themeActionText(action.description, lang)}</div>
+                        ) : null}
+                        <div style={{ marginTop: action.description ? theme.space.md : 0 }}>
+                          <ButtonItem
+                            layout="below"
+                            disabled={actionsBlocked || actionUnavailable !== null}
+                            onClick={() => (action.confirm || action.destructive ? switchConfirmation({ kind: "action", action }) : fireAction(action))}
+                          >
+                            {themeActionText(action.label, lang)}
+                          </ButtonItem>
+                        </div>
+                        {actionFeedback?.id === action.id ? (
+                          <div role="status" style={{ display: "flex", alignItems: "center", gap: theme.space.xs, marginTop: theme.space.xs, fontSize: theme.font.caption, lineHeight: 1.4, color: actionFeedback.delivered ? theme.color.ok : theme.color.warn }}>
+                            {actionFeedback.delivered ? <LuCheck size={14} aria-hidden /> : <LuTriangleAlert size={14} aria-hidden />}
+                            {t(actionFeedback.delivered ? "themes.actions.sent" : "themes.actions.failed")}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             ) : null}
             {card.installed && groups.length === 0 ? (
               <div data-pdc-theme-status-surface="true" style={STATUS_SURFACE}><span data-pdc-theme-muted>{t("themes.patches.empty")}</span></div>

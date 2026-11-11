@@ -68,4 +68,60 @@ describe("AmbientThemeChannel", () => {
     expect(normalizeAppId(570)).toBe("570");
     for (const bad of ["0", "-1", "abc", "4294967296", "1.5", "", null, undefined, {}]) expect(normalizeAppId(bad)).toBeNull();
   });
+
+  it("reports Ambiente's music beside the background and notifies only when it changes", () => {
+    const channel = new AmbientThemeChannel();
+    const listener = vi.fn();
+    channel.subscribe(listener);
+    expect(channel.getState().music).toEqual({ playing: false });
+
+    channel.setMusicPlaying(true);
+    channel.setMusicPlaying(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ music: { playing: true } }));
+
+    channel.publish({ owner: "panel", media: { url: "u", kind: "image" }, motion: "play" });
+    expect(channel.getState()).toEqual({ owner: "panel", media: { url: "u", kind: "image" }, motion: "play", music: { playing: true } });
+    channel.publish({ owner: "panel", media: { url: "u", kind: "image" }, motion: "play" });
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    channel.setMusicPlaying(false);
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(channel.getState().owner).toBe("panel");
+
+    channel.setMusicPlaying(true);
+    channel.reset();
+    expect(channel.getState().music).toEqual({ playing: false });
+  });
+
+  it("offers theme pictures only while a registry is attached, and forwards its changes", async () => {
+    const channel = new AmbientThemeChannel();
+    await expect(channel.pickImage("hooandee-vida", {})).resolves.toBeNull();
+    expect(() => channel.keepImages("hooandee-vida", [])).not.toThrow();
+    expect(channel.imageUrl("hooandee-vida", "local:abc")).toBeNull();
+    const changed = vi.fn();
+    channel.subscribeImages(changed);
+    let notify!: () => void;
+    const images = {
+      pick: vi.fn(async () => ({ ref: "local:abc", url: "u" })),
+      url: vi.fn((_owner: string, ref: string) => ref === "local:abc" ? "u" : null),
+      subscribe: vi.fn((listener: () => void) => { notify = listener; return vi.fn(); }),
+      keep: vi.fn(),
+    };
+    channel.setImages(images);
+    expect(changed).toHaveBeenCalledOnce();
+    const signal = new AbortController().signal;
+    await expect(channel.pickImage("hooandee-vida", { title: "T" }, signal)).resolves.toEqual({ ref: "local:abc", url: "u" });
+    expect(images.pick).toHaveBeenCalledWith("hooandee-vida", { title: "T" }, signal);
+    channel.keepImages("hooandee-vida", ["local:abc"]);
+    expect(images.keep).toHaveBeenCalledWith("hooandee-vida", ["local:abc"]);
+    expect(channel.imageUrl("hooandee-vida", "local:abc", 1280)).toBe("u");
+    expect(images.url).toHaveBeenLastCalledWith("hooandee-vida", "local:abc", 1280);
+    notify();
+    expect(changed).toHaveBeenCalledTimes(2);
+    const unsubscribe = images.subscribe.mock.results[0].value;
+    channel.setImages(null);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(channel.imageUrl("hooandee-vida", "local:abc")).toBeNull();
+  });
 });

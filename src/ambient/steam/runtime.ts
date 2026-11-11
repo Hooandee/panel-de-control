@@ -23,6 +23,7 @@ import { currentSurface, subscribeSurface, type Surface } from "./route";
 import * as rpc from "./rpc";
 import { steamClass } from "./steamClasses";
 import { AmbientThemeChannel } from "./themeChannel";
+import { MusicActivity, musicAudible } from "../core/musicActivity";
 import { applyNeutralizer, detectThirdParty, readThemeClaim } from "./themeSignals";
 
 export interface AmbientPorts {
@@ -187,6 +188,7 @@ export class AmbientRuntime {
   private readonly layer: BackgroundLayer;
   private readonly player: AmbientPlayer;
   private readonly audioLoader = new AudioLoaderBridge();
+  private readonly musicActivity: MusicActivity;
   private stopped = false;
   private renderGeneration = 0;
   private mountRetries = 0;
@@ -216,6 +218,7 @@ export class AmbientRuntime {
       (detail) => void rpc.recordAmbientEvent("playback_error", detail).catch(() => undefined),
     );
     this.channel.setFrameSource(() => this.layer.activeMedia());
+    this.musicActivity = new MusicActivity((playing) => this.channel.setMusicPlaying(playing));
     this.player = new AmbientPlayer(
       undefined,
       (detail) => void rpc.recordAmbientEvent(detail.startsWith("radio") ? "radio_error" : "playback_error", detail).catch(() => undefined),
@@ -263,6 +266,7 @@ export class AmbientRuntime {
       if (!player.video && this.snapshot.videoFullscreen) this.setVideoFullscreen(false);
       this.patch({ player });
       this.scheduleQueueSave(player);
+      this.musicActivity.update(musicAudible(player));
     }));
     this.cleanups.push(this.channel.onClaimsChanged(() => {
       this.claimChangedAt = Date.now();
@@ -340,6 +344,7 @@ export class AmbientRuntime {
     if (this.queueSaveTimer !== null) clearTimeout(this.queueSaveTimer);
     if (this.signalTimer !== null) clearTimeout(this.signalTimer);
     this.layer.dispose();
+    this.musicActivity.dispose();
     this.channel.reset();
     const doc = spDocument();
     if (doc) applyNeutralizer(doc, []);
@@ -507,6 +512,11 @@ export class AmbientRuntime {
     void this.render();
     void this.refreshScan();
     return () => this.finishLibrarySession(session, true);
+  }
+
+  /** The theme photo picker browses the same library without taking over playback like a library session. */
+  refreshLibraryScan(): void {
+    void this.refreshScan();
   }
 
   /** Files copied since the last scan (from desktop mode, a USB stick) show up when the library opens. */

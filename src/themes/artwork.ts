@@ -10,6 +10,8 @@ export interface GameArtwork {
   /** Logo position in percent, 0-100; absent means 50 (centred). */
   logoPositionX?: number;
   logoPositionY?: number;
+  /** Zoom into the image for a round bubble's framing, percent 100-300; absent means 100. positionX/Y stay the pan. */
+  scale?: number;
 }
 /**
  * The logo box (78 % x 36 %) slides with the position and the logo moves inside it the same way. Across, 0 and 100
@@ -22,6 +24,17 @@ export function logoPlacement(art: Pick<GameArtwork, "logoPositionX" | "logoPosi
 }
 export const LOGO_SCALE_MIN = 50;
 export const LOGO_SCALE_MAX = 200;
+export const ARTWORK_SCALE_MIN = 100;
+export const ARTWORK_SCALE_MAX = 300;
+export type ThemeArtworkStore = "duo" | "vida";
+/** Themes that own per-game covers, each with its own backend store, so one theme's covers never mix with another's. */
+const THEME_ARTWORK_STORES: ReadonlyMap<string, ThemeArtworkStore> = new Map([
+  ["hooandee-duo", "duo"],
+  ["hooandee-vida", "vida"],
+]);
+export function artworkStoreOf(catalogId: string): ThemeArtworkStore | null {
+  return THEME_ARTWORK_STORES.get(catalogId) ?? null;
+}
 export interface ThemeArtworkEditorAccess {
   title?(appId: number): string;
   getGeneral(): GameArtwork;
@@ -34,6 +47,7 @@ export interface ThemeArtworkAccess {
   editor?: Readonly<ThemeArtworkEditorAccess>;
   get(appId: number): Readonly<GameArtwork> | null;
   subscribe(listener: () => void): () => void;
+  /** Opens Panel's own cover editor (Duo). Themes that draw their own editor (Vida) get a no-op that returns false. */
   edit(appId: number): boolean;
   /** Held by the theme host while a theme that owns covers (Duo) is mounted with this bridge. */
   attach?(): () => void;

@@ -3,10 +3,13 @@ import { registerGlobal } from "../platform/globalComponent";
 import { registerCatalog } from "../i18n";
 import type { GameSessionPort } from "../platform/gameSessions";
 import type { PowerPort } from "../platform/power";
+import { getAmbientThemeImages, keepAmbientThemeImages, registerAmbientThemeImage } from "./steam/rpc";
 import { AmbientRuntime } from "./steam/runtime";
 import { AmbientThemeChannel } from "./steam/themeChannel";
+import { ThemeImages } from "./steam/themeImages";
 import { FloatingPlayer } from "./ui/FloatingPlayer";
 import { QamSidePlayer } from "./ui/QamSidePlayer";
+import { openThemeImagePicker } from "./ui/ThemeImagePicker";
 import { AMBIENT_STRINGS } from "./ui/strings";
 import { setAmbientRuntime } from "./ui/useAmbient";
 
@@ -26,12 +29,13 @@ export interface AmbientHost {
 
 /** Starts the Ambient domain at plugin load; the returned function tears it down completely. */
 export function startAmbient(host: AmbientHost): () => void {
+  const stopThemeImages = startThemeImages();
   let runtime: AmbientRuntime;
   try {
     runtime = new AmbientRuntime(host, ambientThemeChannel);
   } catch (error) {
     console.warn("[ambient:start_failed]", error);
-    return () => undefined;
+    return stopThemeImages;
   }
   setAmbientRuntime(runtime);
   runtime.start().catch((error) => console.warn("[ambient:start_failed]", error));
@@ -42,5 +46,21 @@ export function startAmbient(host: AmbientHost): () => void {
     sidePlayer();
     setAmbientRuntime(null);
     runtime.stop();
+    stopThemeImages();
+  };
+}
+
+/** Theme pictures load on their own RPC, so they resolve with Ambiente's background off or its runtime down. */
+function startThemeImages(): () => void {
+  const images = new ThemeImages({
+    list: () => getAmbientThemeImages(),
+    register: (ref, owner, maxSide) => registerAmbientThemeImage(ref, owner, maxSide),
+    keep: (owner, refs) => keepAmbientThemeImages(owner, refs),
+  }, openThemeImagePicker);
+  ambientThemeChannel.setImages(images);
+  void images.refresh();
+  return () => {
+    ambientThemeChannel.setImages(null);
+    images.stop();
   };
 }

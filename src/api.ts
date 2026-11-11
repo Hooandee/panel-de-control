@@ -55,6 +55,10 @@ export const getThemePatchLabels = callable<[
   catalogId: string,
   cssLoaderName: string,
 ], unknown>("get_theme_patch_labels");
+export const getThemeActions = callable<[
+  catalogId: string,
+  cssLoaderName: string,
+], unknown>("get_theme_actions");
 export const loadThemeExtension = callable<[
   catalogId: string,
   version: string,
@@ -1355,6 +1359,8 @@ export const getThemeGroups = callable<[account: string], unknown[]>("get_theme_
 export const setThemeGroups = callable<[account: string, groups: unknown[]], { ok: boolean; error?: string; groups?: unknown[] }>("set_theme_groups");
 export const getTabMasterTabs = callable<[account: string], unknown[]>("get_tab_master_tabs");
 export const setDuoArtwork = callable<[number, import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_duo_artwork");
+export const getThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore], Record<string, import("./themes/artwork").GameArtwork>>("get_theme_artwork");
+export const setThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore, appId: number, artwork: import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_theme_artwork");
 
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
 export interface GameCompat { native: boolean; inputs: string[]; preferred?: string }

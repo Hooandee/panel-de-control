@@ -65,7 +65,7 @@ def _background_priority() -> None:
     os.nice(15)
 
 
-def _run(command: list[str], cancel: Optional[threading.Event]) -> int:
+def _run(command: list[str], cancel: Optional[threading.Event], timeout: float = TIMEOUT_SEC) -> int:
     """Runs one encode; killed when cancelled or past the timeout so it never outlives Ambiente."""
     try:
         process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env={**clean_env(), "LC_ALL": "C"}, preexec_fn=_background_priority)
@@ -87,7 +87,7 @@ def _run(command: list[str], cancel: Optional[threading.Event]) -> int:
 
     reader = threading.Thread(target=read_errors, name="ambient-encode-errors", daemon=True)
     reader.start()
-    deadline = time.monotonic() + TIMEOUT_SEC
+    deadline = time.monotonic() + timeout
     while True:
         try:
             code = process.wait(timeout=0.5)
