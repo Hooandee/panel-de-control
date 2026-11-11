@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.88.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.87.0...panel-de-control-v0.88.0) (2026-11-11)
+
+
+### Español
+
+* **Preparado para Vida 0.2.0:** La nueva versión de Vida necesita este Panel de Control, así que actualiza primero aquí y Vida te llegará justo después.
+* **Botones de los temas en sus ajustes:** Los temas ya pueden poner sus propios botones al lado del de actualizar. Vida estrena uno para restablecer el menú principal si te has liado colocando burbujas, y te pregunta antes de hacerlo.
+* **Tus fotos de fondo:** Desde el modo organizar de Vida puedes elegir cualquier foto tuya con el explorador de Ambiente y ponerla de fondo en una página. Se ajusta sola a tu pantalla y, si la quitas, deja de ocupar espacio.
+* **Personalización va al momento:** Lo que cambias en la app de Vida se aplica en el acto, sin avisos de guardado ni errores en Temas y sin tocar los estilos de otros temas. También ve las portadas de todos tus juegos de Steam.
+* **Tu música manda:** Si tienes música puesta en Ambiente, Vida baja la suya y vuelve cuando termina la tuya.
+
+### English
+
+* **Ready for Vida 0.2.0:** The new Vida needs this version of Panel de Control, so update here first and Vida will follow right after.
+* **Theme buttons in their settings:** Themes can now add their own buttons next to the update one. Vida uses it to reset the home screen when your bubbles end up all over the place, and asks before doing it.
+* **Your photos as backgrounds:** In Vida's organise mode you can pick any of your photos with Ambiente's explorer and set it as a page background. It fits your screen on its own and stops taking up space once you remove it.
+* **Customisation applies right away:** Whatever you change in Vida's app takes effect straight away, with no saving notice or errors in Themes, and other themes' styles stay as they were. It also sees the artwork of every game on your Steam account.
+* **Your music comes first:** If you have music playing in Ambiente, Vida turns its own down and comes back when yours ends.
+
+### Italiano
+
+* **Pronto per Vida 0.2.0:** La nuova Vida ha bisogno di questo Panel de Control, quindi aggiorna prima qui e Vida arriverà subito dopo.
+* **Pulsanti dei temi nelle loro impostazioni:** I temi ora possono mettere i propri pulsanti accanto a quello di aggiornamento. Vida ne usa uno per ripristinare il menu principale quando le bolle sono finite un po' ovunque, e chiede prima di farlo.
+* **Le tue foto come sfondo:** Dalla modalità organizza di Vida puoi scegliere una tua foto con l'esploratore di Ambiente e metterla come sfondo di una pagina. Si adatta da sola allo schermo e, se la togli, non occupa più spazio.
+* **Personalizzazione si applica subito:** Quello che cambi nell'app di Vida vale all'istante, senza avvisi di salvataggio né errori in Temi, e gli stili degli altri temi restano come sono. Vede anche le copertine di tutti i tuoi giochi di Steam.
+* **La tua musica ha la precedenza:** Se hai musica in riproduzione in Ambiente, Vida abbassa la sua e riprende quando la tua finisce.
+
+### Deutsch
+
+* **Bereit für Vida 0.2.0:** Das neue Vida braucht diese Version von Panel de Control. Aktualisiere also zuerst hier, Vida folgt gleich danach.
+* **Theme-Schaltflächen in den Einstellungen:** Themes können jetzt eigene Schaltflächen neben die zum Aktualisieren setzen. Vida nutzt das, um den Startbildschirm zurückzusetzen, wenn deine Blasen kreuz und quer liegen, und fragt vorher nach.
+* **Deine Fotos als Hintergrund:** Im Ordnen-Modus von Vida kannst du mit dem Explorer von Ambiente ein eigenes Foto als Hintergrund einer Seite wählen. Es passt sich von selbst an deinen Bildschirm an und belegt keinen Platz mehr, sobald du es entfernst.
+* **Personalisierung wirkt sofort:** Was du in Vidas App änderst, gilt sofort, ohne Speicherhinweis oder Fehler unter Themes, und die Stile anderer Themes bleiben, wie sie sind. Sie sieht außerdem die Bilder aller Spiele in deinem Steam-Konto.
+* **Deine Musik hat Vorrang:** Läuft in Ambiente deine Musik, wird Vida leiser und kommt zurück, wenn deine endet.
+
+### Português (Brasil)
+
+* **Pronto para o Vida 0.2.0:** O novo Vida precisa desta versão do Panel de Control, então atualize aqui primeiro e o Vida chega logo em seguida.
+* **Botões dos temas nos ajustes:** Os temas agora podem colocar botões próprios ao lado do de atualizar. O Vida usa isso para redefinir o menu principal quando suas bolhas ficam espalhadas, e pergunta antes de fazer.
+* **Suas fotos como fundo:** No modo organizar do Vida, você escolhe qualquer foto sua pelo explorador do Ambiente e coloca como fundo de uma página. Ela se ajusta sozinha à tela e para de ocupar espaço quando você tira.
+* **Personalização vale na hora:** O que você muda no app do Vida vale na hora, sem aviso de salvamento nem erros em Temas, e os estilos de outros temas continuam como estavam. Ele também vê as capas de todos os jogos da sua conta Steam.
+* **Sua música vem primeiro:** Se tem música tocando no Ambiente, o Vida abaixa a dele e volta quando a sua termina.
+
+### Français
+
+* **Prêt pour Vida 0.2.0 :** Le nouveau Vida a besoin de cette version de Panel de Control. Mettez d'abord à jour ici, Vida suivra juste après.
+* **Les boutons des thèmes dans leurs réglages :** Les thèmes peuvent maintenant placer leurs propres boutons à côté de celui de mise à jour. Vida s'en sert pour réinitialiser l'écran d'accueil quand vos bulles sont un peu partout, et demande avant de le faire.
+* **Vos photos en fond :** Depuis le mode organisation de Vida, choisissez n'importe quelle photo avec l'explorateur d'Ambiente et mettez-la en fond d'une page. Elle s'adapte seule à votre écran et ne prend plus de place une fois retirée.
+* **La personnalisation s'applique tout de suite :** Ce que vous changez dans l'app de Vida s'applique aussitôt, sans avis d'enregistrement ni erreurs dans Thèmes, et les styles des autres thèmes restent tels quels. Elle voit aussi les illustrations de tous les jeux de votre compte Steam.
+* **Votre musique passe avant :** Si de la musique joue dans Ambiente, Vida baisse la sienne et revient quand la vôtre se termine.
+
 ## [0.87.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.86.1...panel-de-control-v0.87.0) (2026-11-11)
 
 
