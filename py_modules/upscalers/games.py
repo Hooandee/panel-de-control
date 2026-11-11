@@ -112,6 +112,15 @@ def from_launcher(home: str, appid: str, exe: str, launch_options: str) -> Insta
     return Installed(appid, game.name, game.root, STATE_FULLY_INSTALLED, game.exe, True, game.native, found)
 
 
+def _wrapped(home: str, appid: str, name: str, exe: str, launch_options: str) -> Installed | None:
+    """A shortcut to a script (PortProton, Unifideck, a hand-written wrapper) that runs a Windows game."""
+    target = launchers.wrapped_exe(home, exe, launch_options)
+    if target is None:
+        return None
+    root = launchers.game_root(target)
+    return Installed(appid, name, root, STATE_FULLY_INSTALLED, target.relative_to(root).as_posix(), True)
+
+
 def find_shortcut(home: str, appid: str) -> Installed | None:
     """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
     for root in steam_roots(home):
@@ -136,8 +145,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
                     return None
                 name = str(entry.get("appname") or appid)
                 if exe.suffix.lower() != ".exe":
-                    # An AppImage, script or Linux binary: its start folder is not a Windows game to patch.
-                    return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+                    wrapped = _wrapped(home, appid, name, str(exe), str(entry.get("launchoptions") or ""))
+                    # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
+                    return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
                 relative = None
                 if exe.is_file():
                     try:
@@ -162,7 +172,8 @@ def from_hint(appid: str, hint: dict | None, home: str = "") -> Installed | None
         return None
     name = str(hint.get("name") or appid)
     if exe.suffix.lower() != ".exe":
-        return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+        wrapped = _wrapped(home, appid, name, str(exe), str(hint.get("opts") or "")) if home else None
+        return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
     try:
         relative = exe.resolve().relative_to(start.resolve()).as_posix()
     except (ValueError, OSError):

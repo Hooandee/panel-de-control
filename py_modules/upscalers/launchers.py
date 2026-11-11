@@ -1,4 +1,5 @@
 """Heroic and Lutris games added to Steam: the shortcut points at the launcher, not at the game.
+PortProton, Unifideck and hand-written wrapper scripts do the same with a script; `wrapped_exe` follows it to the game.
 
 The real install folder, executable and the place where the launcher keeps per-game environment
 come from each launcher's own files (paths as in Heroic's and Lutris' sources). Overrides go there,
@@ -218,3 +219,72 @@ def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
 
 def set_overrides(game: LauncherGame, dlls: list[str], remove: bool = False) -> None:
     (_heroic_write if game.launcher == "heroic" else _lutris_write)(game, dlls, remove)
+
+
+UNIFIDECK_MAP = ".local/share/unifideck/games.map"
+_UNIFIDECK_ID = re.compile(r"\b(?:epic|gog|amazon|ubisoft|battlenet|microsoft|gamevault|itch):[a-zA-Z0-9][a-zA-Z0-9._-]*")
+_EXE_PATH = re.compile(r'"([^"\n]+?\.exe)"|\'([^\'\n]+?\.exe)\'|((?:~|\$HOME|\$\{HOME\}|/)(?:\\ |[^\s"\'])*?\.exe)(?=[\s"\']|$)', re.I)
+_SCRIPT_PATH = re.compile(r'"([^"\n]+?\.sh)"|\'([^\'\n]+?\.sh)\'|((?:~|\$HOME|\$\{HOME\}|/)(?:\\ |[^\s"\'])*?\.sh)(?=[\s"\']|$)')
+_SCRIPT_LIMIT = 64 * 1024
+
+
+def _paths(pattern: re.Pattern, text: str, home: str, base: Path) -> list[Path]:
+    found = []
+    for match in pattern.finditer(text):
+        raw = next(group for group in match.groups() if group).replace("\\ ", " ")
+        for prefix in ("${HOME}", "$HOME", "~"):
+            if raw.startswith(prefix + "/"):
+                raw = home + raw[len(prefix):]
+                break
+        if "$" in raw:
+            continue
+        found.append(Path(raw) if Path(raw).is_absolute() else base / raw)
+    return found
+
+
+def _first_exe(text: str, home: str, base: Path) -> Path | None:
+    return next((path for path in _paths(_EXE_PATH, text, home, base) if path.is_file()), None)
+
+
+def _script_text(path: Path) -> str:
+    try:
+        if not path.is_file() or path.stat().st_size > _SCRIPT_LIMIT:
+            return ""
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    return data.decode("utf-8", "replace") if data.startswith(b"#!") or path.suffix.lower() in (".sh", ".desktop") else ""
+
+
+def wrapped_exe(home: str, exe: str, launch_options: str) -> Path | None:
+    """The Windows executable a script shortcut ends up running, when the shortcut or its script names one that exists."""
+    shortcut = Path(exe.strip().strip('"'))
+    base = shortcut.parent
+    store = _UNIFIDECK_ID.search(launch_options)
+    if store:
+        try:
+            lines = (Path(home) / UNIFIDECK_MAP).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            key, _, value = line.partition("=")
+            target = Path(value.split("\t")[0].strip())
+            if key.strip() == store.group(0) and target.suffix.lower() == ".exe" and target.is_file():
+                return target
+    direct = _first_exe(launch_options, home, base)
+    if direct:
+        return direct
+    for script in (shortcut, *_paths(_SCRIPT_PATH, launch_options, home, base)):
+        found = _first_exe(_script_text(script), home, script.parent)
+        if found:
+            return found
+    return None
+
+
+def game_root(exe: Path) -> Path:
+    """Unreal keeps the executable three folders under the game; anything else is taken to live beside it."""
+    parents = exe.parents
+    if len(parents) > 3 and [parents[0].name.lower(), parents[1].name.lower()] == ["win64", "binaries"] and (parents[3] / "Engine").is_dir():
+        return parents[3]
+    return exe.parent
+
