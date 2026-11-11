@@ -383,6 +383,8 @@ class UpscalerService:
                 recipe_info["automatic"] = ["Luma"] if automatic and any(d.startswith("luma") for d in getattr(automatic, "dependencies", ("luma",))) else []
                 recipe_info["automatic_builds"] = [b.id for b in catalog.BUILDS.values() if b.engine == "optiscaler"] if automatic else []
                 recipe_info["user_files"] = auto_recipes.user_files(automatic, self.user_files)
+                if automatic and auto_recipes.verbs(automatic):
+                    recipe_info["windows_components"] = prefix_dependencies.status(self.home, installed, auto_recipes.verbs(automatic))["state"]
                 # A missing mod is a warning (recipe_info["needs"]), never a reason to refuse: the user may bring it.
                 recipe_info["blocked"] = False
             except auto_recipes.RecipeError:
@@ -759,13 +761,24 @@ class UpscalerService:
         else:
             entry.pop("image_settings", None)
         # Only recipes with Proton prerequisites (Luma's runtimes) touch the prefix; game files alone don't.
+        components_error = None
         if automatic and auto_recipes.verbs(automatic):
             self._update_job(phase="dependencies")
             try:
                 checkpoint = self.scaler_transitions.pending(appid)
                 checkpoint["recipe_dependencies"] = True
                 self.scaler_transitions._save(checkpoint)
-                receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc)
+                try:
+                    receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc)
+                except (prefix_dependencies.DependencyError, OSError) as error:
+                    components_error = getattr(error, "code", type(error).__name__)
+                    if components_error == "running":
+                        raise
+                    # The game files still go in: the game page says what is missing and offers to try again.
+                    receipt = None
+                    prefix_dependencies.abandon(self.home, installed, self.proc)
+                    checkpoint["recipe_dependencies"] = False
+                    self.scaler_transitions._save(checkpoint)
                 if receipt:
                     checkpoint["recipe_prefix"] = receipt
                     self.scaler_transitions._save(checkpoint)
@@ -802,6 +815,7 @@ class UpscalerService:
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
             "recipe_dependencies": list(automatic.dependencies) if automatic else [],
+            "windows_components_error": components_error,
             "components": diagnostics.components([self._component(chosen[asset.id]) for asset in assets]),
             "fg_plan": fg_plan,
             "managed": managed,

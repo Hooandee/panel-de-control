@@ -308,7 +308,16 @@ def prepare(home: str, installed: games.Installed, dependencies, logger=None, pr
                    f'--env=STEAM_COMPAT_DATA_PATH={staged}', f'--env=DISPLAY={env["DISPLAY"]}',
                    _FLATPAK, installed.appid, '-q', *dependencies]
         _guard(installed.root, proc)
-        _execute(command, env, uid, gid, 600)
+        try:
+            _execute(command, env, uid, gid, 600)
+        except DependencyError as error:
+            if error.code != 'prefix_install_failed':
+                raise
+            # winetricks keeps what it downloaded: a second run gets past a dropped connection.
+            if logger:
+                logger.warning('Upscaler Windows prerequisites retry: %s', error.detail or error.code)
+            _guard(installed.root, proc)
+            _execute(command, env, uid, gid, 600)
         if not _verify(staged / 'pfx', dependencies):
             raise DependencyError('prefix_readback_failed')
         _guard(installed.root, proc)
@@ -370,6 +379,16 @@ def finish(receipt, proc='/proc'):
     if transaction.exists():
         _guard_transaction(transaction, proc)
         shutil.rmtree(transaction)
+
+
+def abandon(home: str, installed: games.Installed, proc='/proc') -> None:
+    """Drop a staging that never reached the live prefix. One a process still holds stays for the next attempt to clear."""
+    try:
+        receipt = recover_pending(home, installed)
+        if receipt and receipt.get('state') != 'published':
+            finish(rollback(receipt, installed.root, proc), proc)
+    except (DependencyError, OSError):
+        pass
 
 
 def recover_pending(home: str, installed: games.Installed):

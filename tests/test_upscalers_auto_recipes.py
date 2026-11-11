@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -226,3 +227,61 @@ def test_recipe_without_proton_prerequisites_never_touches_the_prefix(automatic,
     assert list(steam[1].rglob('Luma-test.addon'))
     service.finish_scaler_transition(APPID, checkpoint['token'])
     assert calls == []
+
+
+def test_windows_components_that_fail_do_not_stop_the_install(automatic, steam, monkeypatch):
+    service, calls, _ = automatic
+
+    def failing(*args):
+        raise prefix_dependencies.DependencyError('prefix_install_failed')
+
+    monkeypatch.setattr(prefix_dependencies, 'prepare', failing)
+    monkeypatch.setattr(prefix_dependencies, 'abandon', lambda *args: calls.append('abandon'))
+    monkeypatch.setattr(prefix_dependencies, 'status', lambda *args: {'state': 'missing', 'dependencies': []})
+    checkpoint = service.begin_scaler_transition(APPID)
+    service.install(APPID, {'build': 'fsr-test'})
+    assert list(steam[1].rglob('Luma-test.addon'))
+    assert service._game_state(APPID)['install']['windows_components_error'] == 'prefix_install_failed'
+    assert service.game(APPID)['recipe_info']['windows_components'] == 'missing'
+    service.finish_scaler_transition(APPID, checkpoint['token'])
+    assert calls == ['abandon']
+
+
+def test_a_game_that_starts_mid_install_still_stops_it(automatic, monkeypatch):
+    service, _, _ = automatic
+
+    def running(*args):
+        raise prefix_dependencies.DependencyError('running')
+
+    monkeypatch.setattr(prefix_dependencies, 'prepare', running)
+    service.begin_scaler_transition(APPID)
+    with pytest.raises(UpscalerError, match='running'):
+        service.install(APPID, {'build': 'fsr-test'})
+
+
+def test_an_abandoned_staging_is_removed_and_one_in_use_is_left(tmp_path, monkeypatch):
+    from upscalers.games import Installed
+    library = tmp_path / 'Steam'
+    root = library / 'steamapps/common/Game'
+    root.mkdir(parents=True)
+    compat = library / 'steamapps/compatdata/1462040'
+    (compat / 'pfx').mkdir(parents=True)
+    transaction = compat.parent / '.pdc-dependencies-1462040'
+    (transaction / 'compat/pfx').mkdir(parents=True)
+    (transaction / 'receipt.json').write_text(json.dumps({'appid': '1462040', 'compatdata': str(compat), 'transaction': str(transaction),
+                                                          'dependencies': ['vcrun2022'], 'state': 'failed', 'verified': False}))
+    game = Installed('1462040', 'Game', root, 4)
+    monkeypatch.setattr(prefix_dependencies.games, 'library_paths', lambda home: [library])
+    monkeypatch.setattr(prefix_dependencies.games, 'running_under', lambda *args: False)
+    proc = tmp_path / 'proc'
+    proc.mkdir()
+
+    def busy(*args):
+        raise prefix_dependencies.DependencyError('prefix_process_running')
+
+    with monkeypatch.context() as patched:
+        patched.setattr(prefix_dependencies, '_guard_transaction', busy)
+        prefix_dependencies.abandon(str(tmp_path), game, str(proc))
+        assert transaction.exists()
+    prefix_dependencies.abandon(str(tmp_path), game, str(proc))
+    assert not transaction.exists() and (compat / 'pfx').is_dir()

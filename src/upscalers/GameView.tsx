@@ -629,6 +629,12 @@ export const GameView: FC<{
             <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.fullResolution", { size: `${Math.max(...overview.display)}x${Math.min(...overview.display)}` })}</Notice>
           )}
           {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
+          {install && optiscalerRecipe && !running && ["missing", "pending"].includes(detail.recipe_info?.windows_components ?? "") && (
+            <>
+              <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.windowsComponents")}</Notice>
+              <Row><ActionButton label={t("load.retry")} disabled={blocked || gameRunning} onPress={reinstall} /></Row>
+            </>
+          )}
           {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />

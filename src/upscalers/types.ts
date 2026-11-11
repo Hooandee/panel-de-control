@@ -185,6 +185,7 @@ export interface RecipeInfo {
   quality_on_exit?: boolean;
   recommended_input?: "dlss" | "fsr31" | "fsr2" | "xess" | null;
   luma_detected?: boolean;
+  windows_components?: "ready" | "missing" | "pending" | "unknown";
   automatic?: string[];
   automatic_builds?: string[];
   blocked?: boolean;
