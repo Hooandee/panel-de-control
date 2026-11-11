@@ -1,4 +1,7 @@
 """Heroic and Lutris games added to Steam: the shortcut points at the launcher, not at the game.
+PortProton does the same with a script and clears WINEDLLOVERRIDES on start (start.sh), reading it back from the
+`<exe>.ppdb` beside the game: its overrides go in that file. Unifideck and hand-written wrapper scripts keep the
+environment Steam gives them; `wrapped_exe` follows those to the game.
 
 The real install folder, executable and the place where the launcher keeps per-game environment
 come from each launcher's own files (paths as in Heroic's and Lutris' sources). Overrides go there,
@@ -26,8 +29,8 @@ ENV_KEY = "WINEDLLOVERRIDES"
 
 @dataclass(frozen=True)
 class LauncherGame:
-    launcher: str  # "heroic" | "lutris"
-    key: str  # Heroic appName or Lutris game id
+    launcher: str  # "heroic" | "lutris" | "portproton"
+    key: str  # Heroic appName, Lutris game id or PortProton's script for the game
     name: str
     root: Path
     exe: str | None  # relative to root
@@ -52,6 +55,8 @@ def identify(exe: str, launch_options: str) -> tuple[str, str, str | None] | Non
     script = _LUTRIS_SCRIPT.search(exe.strip().strip('"'))
     if script:
         return "lutris", "slug:" + script.group(1), None
+    if _portproton_target(Path(exe.strip().strip('"'))):
+        return "portproton", exe.strip().strip('"'), None
     return None
 
 
@@ -134,7 +139,32 @@ def _yaml_scalar(text: str, section: str, key: str) -> str | None:
     return None
 
 
+# The line PortProton writes in steam_scripts/<name>.sh (add_in_steam.sh), natively or through its Flatpak.
+_PORTPROTON_LINE = re.compile(r'^[^#\n]*?(?:"([^"\n]*/start\.sh)"|flatpak\s+run\s+\S*PortProton\S*)\s+"([^"\n]+\.exe)"', re.I | re.M)
+
+
+def _portproton_target(script: Path) -> tuple[Path, Path | None] | None:
+    """(game executable, PortProton's scripts folder) named by one of its Steam scripts."""
+    try:
+        if script.suffix.lower() != ".sh" or not script.is_file() or script.stat().st_size > 64 * 1024:
+            return None
+        match = _PORTPROTON_LINE.search(script.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
+    if not match or not Path(match.group(2)).is_file():
+        return None
+    return Path(match.group(2)), Path(match.group(1)).parent if match.group(1) else None
+
+
 def find(home: str, launcher: str, key: str, runner: str | None = None) -> LauncherGame | None:
+    if launcher == "portproton":
+        target = _portproton_target(Path(key))
+        if not target:
+            return None
+        exe, _ = target
+        root = game_root(exe)
+        return LauncherGame("portproton", key, Path(key).stem, root, exe.relative_to(root).as_posix(), False,
+                            exe.with_name(exe.name + ".ppdb"))
     if launcher == "heroic":
         for directory in HEROIC_DIRS:
             base = Path(home) / directory
@@ -169,8 +199,12 @@ def find(home: str, launcher: str, key: str, runner: str | None = None) -> Launc
 # ---- overrides --------------------------------------------------------------------------------
 
 def _merge(existing: str, dlls: list[str], remove: bool) -> str:
-    parts = [p for p in existing.split(";") if p.strip()] if existing else []
-    kept = [p for p in parts if p.split("=", 1)[0].strip() not in dlls]
+    kept = []
+    for part in (p for p in existing.split(";") if p.strip()) if existing else ():
+        names, separator, mode = part.partition("=")
+        others = [name.strip() for name in names.split(",") if name.strip() not in dlls]
+        if others:
+            kept.append(",".join(others) + separator + mode)
     if not remove:
         kept.append(f"{','.join(dlls)}=n,b")
     return ";".join(kept)
@@ -216,5 +250,106 @@ def _lutris_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
     ownership.own_like_ancestor(game.config)
 
 
+_PPDB_OVERRIDES = re.compile(r'^export WINEDLLOVERRIDES="(.*)"[ \t]*$', re.M)
+
+
+def _portproton_write(game: LauncherGame, dlls: list[str], remove: bool) -> None:
+    """Sets `export WINEDLLOVERRIDES="…"` in the game's .ppdb, the way PortProton's own settings window does."""
+    try:
+        text = game.config.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        if remove:
+            return
+        target = _portproton_target(Path(game.key))
+        exe = (game.root / game.exe) if game.exe else None
+        database = target[1] / "portwine_db" if target and target[1] else None
+        marker = f"#{exe.stem}.exe".lower() if exe else ""
+        known = next((path for path in sorted(database.glob("*")) if marker and marker in path.read_text(encoding="utf-8", errors="replace").lower()), None) \
+            if database and database.is_dir() else None
+        # PortProton takes an existing .ppdb as it is, so its own profile for the game has to be the starting point.
+        text = known.read_text(encoding="utf-8", errors="replace") if known else f"#!/usr/bin/env bash\n#{exe.stem if exe else game.name}.exe\n#Rating=1-5\n"
+    current = _PPDB_OVERRIDES.search(text)
+    value = _merge(current.group(1) if current else "", dlls, remove)
+    line = f'export WINEDLLOVERRIDES="{value}"'
+    if current:
+        text = text[:current.start()] + (line if value else "") + text[current.end():]
+        if not value:
+            text = text.replace("\n\n", "\n")
+    elif value:
+        text = text.rstrip("\n") + "\n" + line + "\n"
+    game.config.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    ownership.own_like_ancestor(game.config)
+
+
 def set_overrides(game: LauncherGame, dlls: list[str], remove: bool = False) -> None:
-    (_heroic_write if game.launcher == "heroic" else _lutris_write)(game, dlls, remove)
+    {"heroic": _heroic_write, "lutris": _lutris_write, "portproton": _portproton_write}[game.launcher](game, dlls, remove)
+
+
+UNIFIDECK_MAP = ".local/share/unifideck/games.map"
+_UNIFIDECK_ID = re.compile(r"\b(?:epic|gog|amazon|ubisoft|battlenet|microsoft|gamevault|itch):[a-zA-Z0-9][a-zA-Z0-9._-]*")
+_EXE_PATH = re.compile(r'"([^"\n]+?\.exe)"|\'([^\'\n]+?\.exe)\'|((?:~|\$HOME|\$\{HOME\}|/)(?:\\ |[^\s"\'])*?\.exe)(?=[\s"\']|$)', re.I)
+_SCRIPT_PATH = re.compile(r'"([^"\n]+?\.sh)"|\'([^\'\n]+?\.sh)\'|((?:~|\$HOME|\$\{HOME\}|/)(?:\\ |[^\s"\'])*?\.sh)(?=[\s"\']|$)')
+_SCRIPT_LIMIT = 64 * 1024
+
+
+def _paths(pattern: re.Pattern, text: str, home: str, base: Path) -> list[Path]:
+    found = []
+    for match in pattern.finditer(text):
+        raw = next(group for group in match.groups() if group).replace("\\ ", " ")
+        for prefix in ("${HOME}", "$HOME", "~"):
+            if raw.startswith(prefix + "/"):
+                raw = home + raw[len(prefix):]
+                break
+        if "$" in raw:
+            continue
+        found.append(Path(raw) if Path(raw).is_absolute() else base / raw)
+    return found
+
+
+def _first_exe(text: str, home: str, base: Path) -> Path | None:
+    return next((path for path in _paths(_EXE_PATH, text, home, base) if path.is_file()), None)
+
+
+def _script_text(path: Path) -> str:
+    try:
+        if not path.is_file() or path.stat().st_size > _SCRIPT_LIMIT:
+            return ""
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    return data.decode("utf-8", "replace") if data.startswith(b"#!") or path.suffix.lower() in (".sh", ".desktop") else ""
+
+
+def wrapped_exe(home: str, exe: str, launch_options: str) -> Path | None:
+    """The Windows executable a script shortcut ends up running, when the shortcut or its script names one that exists."""
+    shortcut = Path(exe.strip().strip('"'))
+    base = shortcut.parent
+    store = _UNIFIDECK_ID.search(launch_options)
+    if store:
+        try:
+            lines = (Path(home) / UNIFIDECK_MAP).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            # `store:id=exe<TAB>workdir<TAB>appid` today, `store:id|exe|workdir` in older releases.
+            key, separator, value = line.partition("=") if "=" in line.split("|")[0] else line.partition("|")
+            target = Path(re.split(r"[\t|]" if separator == "|" else r"\t", value)[0].strip())
+            if key.strip() == store.group(0) and target.suffix.lower() == ".exe" and target.is_file():
+                return target
+    direct = _first_exe(launch_options, home, base)
+    if direct:
+        return direct
+    for script in (shortcut, *_paths(_SCRIPT_PATH, launch_options, home, base)):
+        found = _first_exe(_script_text(script), home, script.parent)
+        if found:
+            return found
+    return None
+
+
+def game_root(exe: Path) -> Path:
+    """Unreal keeps the executable three folders under the game; anything else is taken to live beside it."""
+    parents = exe.parents
+    if len(parents) > 3 and [parents[0].name.lower(), parents[1].name.lower()] == ["win64", "binaries"] and (parents[3] / "Engine").is_dir():
+        return parents[3]
+    return exe.parent
+

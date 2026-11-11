@@ -165,5 +165,53 @@
       "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_8.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_8.png",
       "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_9.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_9.png"
     }
+  },
+  "refw-pdup-re4": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re4",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "puredark-upscaler-base": {
+    "kind": "user_files",
+    "name": "UpscalerBasePlugin",
+    "page_url": "https://www.nexusmods.com/site/mods/502",
+    "version": "1.1.2",
+    "avoid_versions": [
+      "1.2.0"
+    ],
+    "files": {
+      "PDPerfPlugin.dll": "PDPerfPlugin.dll"
+    },
+    "download_url": "https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293"
+  },
+  "refw-pdup-re2": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re2",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-re3": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re3",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-re7": {
+    "kind": "game_files",
+    "asset": "refw-pdup-re7",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
+  },
+  "refw-pdup-dmc5": {
+    "kind": "game_files",
+    "asset": "refw-pdup-dmc5",
+    "files": {
+      "dinput8.dll": "dinput8.dll"
+    }
   }
 }

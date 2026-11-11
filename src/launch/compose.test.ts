@@ -156,3 +156,28 @@ describe("quoted Wine override groups", () => {
     }
   });
 });
+
+describe("Unifideck shortcuts", () => {
+  it("reads variables written after the game id and keeps them there", () => {
+    const parsed = parse("gog:1207658924 LSFG=1");
+    expect(getEnv(parsed, "LSFG")).toBe("1");
+    expect(serialize(setEnv(parsed, "WINEDLLOVERRIDES", '"dxgi=n,b"'))).toBe('gog:1207658924 LSFG=1 WINEDLLOVERRIDES="dxgi=n,b"');
+    expect(serialize(setEnv(parsed, "LSFG", null))).toBe("gog:1207658924");
+  });
+
+  it("never starts with a bare %command% and moves leading variables behind the id", () => {
+    expect(serialize(setEnv(parse("epic:abc123"), "MANGOHUD", "1"))).toBe("epic:abc123 MANGOHUD=1");
+    expect(serialize(parse("DXVK_HUD=fps %command% epic:abc123"))).toBe("epic:abc123 DXVK_HUD=fps");
+  });
+
+  it("keeps wrappers before %command% with the id after it", () => {
+    expect(serialize(addWrapper(parse("amazon:amzn1.adg.product.x-1 LSFG=1"), "mangohud"))).toBe("mangohud %command% amazon:amzn1.adg.product.x-1 LSFG=1");
+    expect(serialize(removeWrapper(parse("mangohud %command% gog:1 A=1"), "mangohud"))).toBe("gog:1 A=1");
+  });
+
+  it("leaves every other game's options as they were", () => {
+    expect(serialize(parse("-dx11 gog-galaxy"))).toBe("-dx11 gog-galaxy");
+    expect(serialize(setEnv(parse("%command% -novid"), "A", "1"))).toBe("A=1 %command% -novid");
+  });
+});
+

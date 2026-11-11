@@ -15,6 +15,7 @@ import { ActionButton, Label, ListCard, ListRow, Notice, PickerButton, Row } fro
 import type { FgRoute } from "./types";
 
 import { applyManagedLaunch } from "./managedLaunch";
+import { useMakoLeftover } from "./makoLeftover";
 import { saveMakoProfile } from "./makoProfile";
 import { transitionFrameGen, type FrameGenStep } from "./frameGenTransition";
 import { upscalerErrorCode } from "./errorCode";
@@ -70,6 +71,7 @@ export const FrameGenRow: FC<{
     return () => { alive = false; window.removeEventListener("pdc-mako-changed", reload); };
   }, [appid]);
 
+  const makoLeftover = useMakoLeftover(appid, liveAppid, !!isNonSteam);
   const profile = status?.profiles[appid] ?? null;
   const storedMako = mako?.profiles[appid] ?? null;
   const makoProfile = storedMako?.enabled === false ? null : storedMako;
@@ -316,13 +318,19 @@ export const FrameGenRow: FC<{
         {(current === "game" || current === "optiscaler") && recommendedRoutes && !recommendedRoutes[current] && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.fg.notRecommended")}</Notice>}
         {current === "game" && dlssBridge && <Notice icon={<LuLayers size={16} />}>{t("up.fg.hint.dlss")}</Notice>}
         {current === "optiscaler" && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.fg.hint.opti")}</Notice>}
+        {current === "mako" && !makoProfile && makoLeftover.leftover && (
+          <>
+            <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.mako.leftover")}</Notice>
+            <Row><ActionButton label={t("up.mako.leftover.clear")} busy={busy} disabled={disabled || gameRunning} onPress={() => void run(makoLeftover.clear)} /></Row>
+          </>
+        )}
         {current === "lsfg" && status?.foreign && (
           <>
             <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.lsfg.foreign")}</Notice>
             <Row><ActionButton label={t("up.lsfg.adopt")} busy={busy} disabled={disabled || !status.dll} onPress={() => void run(async () => { const adopted = await adoptForeignLsfg(); setStatus(adopted); })} /></Row>
           </>
         )}
-        {(current !== "off" || !!profile || !!makoProfile || !!installedRoute) && !(current === "lsfg" && status?.foreign) && (
+        {(current !== "off" || !!profile || !!makoProfile || !!installedRoute) && !(current === "lsfg" && status?.foreign) && !(current === "mako" && !makoProfile && makoLeftover.leftover) && (
           <ActionButton
             label={enginePhase ? t(`up.engine.${enginePhase}`) : activating ? t("up.activating") : t(selectedActive || current === "off" ? "up.deactivate" : installedRoute || profile || makoProfile ? "up.save" : "up.activate", { name: current === "mako" || (current === "off" && makoProfile) ? "Mako" : current === "lsfg" || (current === "off" && profile) ? "Lossless Scaling" : t(`up.fg.pick.${current === "off" ? installedRoute ?? "optiscaler" : current}`) })}
             busy={busy || enginePhase !== null}

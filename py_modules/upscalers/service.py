@@ -13,7 +13,7 @@ from pathlib import Path
 
 from json_store import atomic_json_save
 
-from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipes, scaler_transition, wiki
+from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, capture, catalog, diagnostics, games, helixsr, identify, image_settings, ini, keys, latest, launchers, launch_state, logread, lsfg, luma, mako, ownership, recipe_catalog, recipes, scaler_transition, user_deps, wiki
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
@@ -21,10 +21,22 @@ _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
 # REFramework opens its menu over the game on first launch unless its config says otherwise; handhelds have no
-# Insert key to close it, so Panel seeds that config when the game has none. REFramework rewrites it later.
+# Insert key to close it, so Panel writes these keys into its config (uninstall puts the old values back).
 REFRAMEWORK_CONFIG = "re2_fw_config.txt"
 REFRAMEWORK_CLOSED = {"REFrameworkConfig_RememberMenuState": "true", "REFrameworkConfig_MenuOpen": "false"}
 _SEEDED = (REFRAMEWORK_CONFIG,)
+# REFramework's TemporalUpscaler quality combo: Performance, Balanced, Quality, UltraPerformance.
+REFRAMEWORK_QUALITY = {"performance": "0", "balanced": "1", "quality": "2", "ultra": "3"}
+REFRAMEWORK_UPSCALER_KEYS = ("TemporalUpscaler_Enabled", "TemporalUpscaler_UseNativeResolution", "TemporalUpscaler_UpscaleQuality")
+
+
+def _reframework_upscaler_keys(choice: dict) -> dict[str, str | None]:
+    """Panel's quality as REFramework's TemporalUpscaler settings: native renders at full size (its DLAA mode)."""
+    quality = choice.get("quality")
+    if quality == "native":
+        return {"TemporalUpscaler_Enabled": "true", "TemporalUpscaler_UseNativeResolution": "true"}
+    return {"TemporalUpscaler_Enabled": "true", "TemporalUpscaler_UseNativeResolution": "false",
+            "TemporalUpscaler_UpscaleQuality": REFRAMEWORK_QUALITY.get(quality, "1")}
 
 
 def _with_keys(text: str, values: dict[str, str | None]) -> str:
@@ -122,6 +134,7 @@ class UpscalerService:
         self.scaler_transitions = scaler_transition.Checkpoints(Path(state_dir))
         self.helix = helixsr.HelixSR(home)
         self.wiki = wiki.WikiCache(Path(state_dir))
+        self.user_files = user_deps.Store(Path(state_dir) / "user-files")
         self._lock = threading.Lock()
         self._compat: dict[str, tuple[float, bool]] = {}
         self._job: dict | None = None
@@ -367,9 +380,13 @@ class UpscalerService:
         if recipe_info:
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                recipe_info["automatic"] = ["Luma"] if automatic else []
+                recipe_info["automatic"] = ["Luma"] if automatic and any(d.startswith("luma") for d in getattr(automatic, "dependencies", ("luma",))) else []
                 recipe_info["automatic_builds"] = [b.id for b in catalog.BUILDS.values() if b.engine == "optiscaler"] if automatic else []
-                recipe_info["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
+                recipe_info["user_files"] = auto_recipes.user_files(automatic, self.user_files)
+                if automatic and auto_recipes.verbs(automatic):
+                    recipe_info["windows_components"] = prefix_dependencies.status(self.home, installed, auto_recipes.verbs(automatic))["state"]
+                # A missing mod is a warning (recipe_info["needs"]), never a reason to refuse: the user may bring it.
+                recipe_info["blocked"] = False
             except auto_recipes.RecipeError:
                 recipe_info["automatic"] = []
                 recipe_info["blocked"] = True
@@ -398,6 +415,42 @@ class UpscalerService:
             "fg_note": recipe.fg_note if recipe else None,
             "fg_plan": None if installed.native else selected["fg_plan"],
         }
+
+    # ---- files only the user can download ---------------------------------
+    def _user_dependency(self, dependency_id: str):
+        dependency = recipe_catalog.bundled().dependencies.get(str(dependency_id))
+        if dependency is None or dependency.kind != "user_files":
+            raise UpscalerError("unknown_dependency")
+        return dependency
+
+    def user_file_candidates(self, dependency_id: str) -> dict:
+        home = Path(self.home)
+        folders = [home / "Downloads", home / "Descargas"]
+        folder = next((f for f in folders if f.is_dir()), home)
+        return {"folder": str(folder), "candidates": user_deps.candidates(self._user_dependency(dependency_id), folders)}
+
+    def add_user_file(self, appid: str, dependency_id: str, path: str) -> dict:
+        dependency = self._user_dependency(dependency_id)
+        chosen = Path(str(path))
+        allowed = (Path(self.home).resolve(), Path("/run/media"))
+        try:
+            resolved = chosen.resolve(strict=True)
+        except OSError:
+            raise UpscalerError("user_file_unreadable") from None
+        if not any(resolved.is_relative_to(root) for root in allowed):
+            raise UpscalerError("user_file_unreadable")
+        self._idle()
+        try:
+            self.user_files.adopt(dependency, resolved)
+        except user_deps.UserFileError as error:
+            raise UpscalerError("user_file_wrong" if error.code in ("missing_files", "ambiguous_files")
+                                else "user_file_unreadable") from None
+        return self.game(appid)
+
+    def remove_user_file(self, appid: str, dependency_id: str) -> dict:
+        self._idle()
+        self.user_files.remove(self._user_dependency(dependency_id))
+        return self.game(appid)
 
     def set_exe(self, appid: str, exe: str | None) -> dict:
         installed = self._find(appid)
@@ -428,6 +481,12 @@ class UpscalerService:
     def begin(self, kind: str, appid: str) -> str:
         with self._image_lock:
             return self._begin(kind, appid)
+
+    def _idle(self) -> None:
+        """A running install reads the stored user files: they can't change under it."""
+        with self._lock:
+            if self._job and self._job.get("state") == "running":
+                raise UpscalerError("busy")
 
     def _begin(self, kind: str, appid: str) -> str:
         with self._lock:
@@ -604,8 +663,6 @@ class UpscalerService:
         recipe = self._recipe(appid, self._identity(installed, entry), installed)
         try:
             automatic = auto_recipes.plan(recipe, installed)
-            if auto_recipes.unresolved(recipe, analysis, automatic):
-                raise UpscalerError("recipe_unresolved")
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
         if automatic and diagnostics._steam_config(self.home, appid).get("launch_diagnostics", {}).get("reshade_redirected"):
@@ -636,7 +693,7 @@ class UpscalerService:
         pinned_only: set[str] = set()
         paths, chosen = self._fetch_assets(needed(effective_build, recipe))
         try:
-            auto_recipes.sources(automatic, paths)
+            auto_recipes.sources(automatic, paths, self.user_files)
         except auto_recipes.RecipeError:
             pinned_only = {asset.id for asset in auto_recipes.assets(automatic)}
             paths, chosen = self._fetch_assets(needed(effective_build, recipe), pinned_only)
@@ -674,9 +731,10 @@ class UpscalerService:
                 sources[name] = paths[asset_id]
             if recipe.optipatcher:
                 sources[f"{prefix}plugins/OptiPatcher.asi"] = paths[catalog.OPTIPATCHER]
+            sources = _with_root_files(sources, prefix, recipe.optiscaler_root_files)
 
         try:
-            sources = {**auto_recipes.sources(automatic, paths), **sources}
+            sources = {**auto_recipes.sources(automatic, paths, self.user_files), **sources}
         except auto_recipes.RecipeError as error:
             raise UpscalerError(error.code) from None
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
@@ -702,13 +760,30 @@ class UpscalerService:
             overrides.update(image_overrides)
         else:
             entry.pop("image_settings", None)
-        if automatic:
+        # Only recipes with Proton prerequisites (Luma's runtimes) touch the prefix; game files alone don't.
+        components_error = None
+        if automatic and auto_recipes.verbs(automatic):
             self._update_job(phase="dependencies")
             try:
                 checkpoint = self.scaler_transitions.pending(appid)
                 checkpoint["recipe_dependencies"] = True
                 self.scaler_transitions._save(checkpoint)
-                receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc)
+                attempts: list[dict] = []
+                try:
+                    try:
+                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts)
+                    finally:
+                        entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
+                except (prefix_dependencies.DependencyError, OSError) as error:
+                    components_error = getattr(error, "code", type(error).__name__)
+                    entry["windows_components"]["error"] = components_error
+                    if components_error == "running":
+                        raise
+                    # The game files still go in: the game page says what is missing and offers to try again.
+                    receipt = None
+                    prefix_dependencies.abandon(self.home, installed, self.proc)
+                    checkpoint["recipe_dependencies"] = False
+                    self.scaler_transitions._save(checkpoint)
                 if receipt:
                     checkpoint["recipe_prefix"] = receipt
                     self.scaler_transitions._save(checkpoint)
@@ -722,13 +797,16 @@ class UpscalerService:
             except auto_recipes.RecipeError as error:
                 raise UpscalerError(error.code) from None
             existing = target / REFRAMEWORK_CONFIG
-            if recipe and "reframework-nightly" in recipe.files.values() and not existing.is_symlink():
+            reframework = recipe and ("reframework-nightly" in recipe.files.values()
+                                      or any(n.lower() == "dinput8.dll" for n in recipes._dependency_files(recipe)))
+            if reframework and not existing.is_symlink():
                 try:
                     current = existing.read_text(encoding="utf-8", errors="replace") if existing.is_file() and existing.stat().st_size < 1024 * 1024 else ""
                 except OSError:
                     current = ""
                 seed = Path(prepared) / REFRAMEWORK_CONFIG
-                seed.write_text(_with_keys(current, REFRAMEWORK_CLOSED), encoding="utf-8")
+                seed.write_text(_with_keys(current, {**REFRAMEWORK_CLOSED, **(
+                    _reframework_upscaler_keys(choice) if recipe.reframework_upscaler else {})}), encoding="utf-8")
                 sources[REFRAMEWORK_CONFIG] = seed
             manifest = self._apply(target, sources, ini.apply(base_ini, overrides),
                                    getattr(automatic, "configuration", {}) if automatic else {})
@@ -742,15 +820,24 @@ class UpscalerService:
             "recipe_revision": automatic.revision if automatic else None,
             "recipe_configuration": dict(getattr(automatic, "configuration", {})) if automatic else {},
             "recipe_dependencies": list(automatic.dependencies) if automatic else [],
+            "windows_components_error": components_error,
             "components": diagnostics.components([self._component(chosen[asset.id]) for asset in assets]),
             "fg_plan": fg_plan,
             "managed": managed,
             "edited": dict(edited),
             "image_overrides": dict(image_overrides),
             "menu_key": recipe.menu_key if recipe else None,
+            "reframework_upscaler": bool(recipe and recipe.reframework_upscaler),
             "args": list(recipe.args) if recipe else [],
             "added_args": [],
         }
+        # What an earlier install put in the launch options is still there, and still Panel's to take out.
+        fresh = entry["install"]
+        fresh["added_args"] = [arg for arg in previous.get("added_args", []) if arg in fresh["args"]]
+        if "added_overrides" in previous:
+            fresh["added_overrides"] = [o for o in previous["added_overrides"] if o in _overrides(fresh)]
+        if "added_env" in previous:
+            fresh["added_env"] = [k for k in previous["added_env"] if k == fresh.get("env")]
         _wrote_ini(entry["install"])
         entry["history"].append({
             "build": build.id, "proxy": proxy, "at": now, "result": "pending", "exe": analysis["exe"],
@@ -1158,8 +1245,6 @@ class UpscalerService:
             analysis = games.analyze(installed.root, entry.get("exe"), recipe.exe if recipe else installed.exe)
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                if auto_recipes.unresolved(recipe, analysis, automatic):
-                    raise UpscalerError("recipe_unresolved")
             except auto_recipes.RecipeError as error:
                 raise UpscalerError(error.code) from None
             solution = solution_plan.resolve(self.gpu, analysis, recipe, _generation(install), route=choice.get("fg_route"),
@@ -1191,6 +1276,11 @@ class UpscalerService:
         model_changed = model != catalog.model_overrides(build, install.get("options", {}).get("model"))
         path.write_text(ini.apply(text, {**_option_overrides(choice, reset=True), **model, **fg, **_image_overrides(install, text)}), encoding="utf-8")
         _wrote_ini(install)
+        if install.get("reframework_upscaler"):
+            config = Path(install["target"]) / REFRAMEWORK_CONFIG
+            if config.is_file() and not config.is_symlink():
+                current = config.read_text(encoding="utf-8", errors="replace")
+                config.write_text(_with_keys(current, _reframework_upscaler_keys(choice)), encoding="utf-8")
         if _clean_options(choice).get("quality") != (install.get("options") or {}).get("quality"):
             install["quality_at"] = time.time()
         install["options"] = _clean_options(choice)
@@ -1208,8 +1298,10 @@ class UpscalerService:
         for the next launch (the panel offers to restart the game); anything else waits for the game to close."""
         current = _clean_options(install.get("options") or {})
         wanted = _clean_options({**current, **choice})
+        # REFramework rewrites its own config on exit, so its upscaler quality can only change with the game closed.
         if _is_helix(install) or install.get("engine") == "proton" or any(
-                wanted.get(k) != current.get(k) for k in ("fg", "fg_route", "model")):
+                wanted.get(k) != current.get(k) for k in ("fg", "fg_route", "model")) or (
+                install.get("reframework_upscaler") and wanted.get("quality") != current.get("quality")):
             raise UpscalerError("running")
         path = Path(install["target"]) / "OptiScaler.ini"
         try:
@@ -1500,11 +1592,11 @@ class UpscalerService:
         install = self._game_state(appid).get("install")
         if not isinstance(install, dict):
             raise UpscalerError("not_patched")
-        install["added_args"] = [a for a in args if a in install.get("args", [])]
+        install["added_args"] = [a for a in install.get("args", []) if a in args or a in install.get("added_args", [])]
         if overrides is not None:
-            install["added_overrides"] = [o for o in overrides if o in _overrides(install)]
+            install["added_overrides"] = [o for o in _overrides(install) if o in overrides or o in install.get("added_overrides", [])]
         if env is not None:
-            install["added_env"] = [k for k in env if k == install.get("env")]
+            install["added_env"] = [k for k in {*env, *install.get("added_env", [])} if k == install.get("env")]
         self._save()
         return {"added_args": install["added_args"]}
 
@@ -1558,7 +1650,7 @@ class UpscalerService:
                 saved = meta / "backup" / relative
                 original = saved.read_text(encoding="utf-8", errors="replace") if saved.is_file() else ""
                 current = path.read_text(encoding="utf-8", errors="replace")
-                path.write_text(_with_keys(current, _keys(original, REFRAMEWORK_CLOSED)), encoding="utf-8")
+                path.write_text(_with_keys(current, _keys(original, (*REFRAMEWORK_CLOSED, *REFRAMEWORK_UPSCALER_KEYS))), encoding="utf-8")
                 saved.unlink(missing_ok=True)
             else:
                 kept.append(relative)
@@ -1702,7 +1794,12 @@ class UpscalerService:
         asset = catalog.ASSETS[catalog.LSFG_ARCHIVE]
         try:
             unpacked = self.cache.ensure(asset, lambda _done: None, lambda: False)
-            return self.lsfg.install(unpacked, asset.id)
+            try:
+                return self.lsfg.install(unpacked, asset.id)
+            except lsfg.LsfgError as error:
+                if error.code != "lsfg_archive":
+                    raise
+                return self.lsfg.install(self.cache.unpack_again(asset), asset.id)
         except AssetError as error:
             raise UpscalerError(error.code) from None
         except lsfg.LsfgError as error:
@@ -1877,7 +1974,7 @@ class UpscalerService:
             automatic = None
             try:
                 automatic = auto_recipes.plan(recipe, installed)
-                blocked = auto_recipes.unresolved(recipe, analysis, automatic)
+                blocked = False
             except auto_recipes.RecipeError:
                 blocked = True
             build = catalog.BUILDS.get((entry.get("install") or {}).get("build"))
@@ -1911,6 +2008,7 @@ class UpscalerService:
                     report["recipe"]["blocked"] = auto_recipes.unresolved(recipe, analysis, automatic)
                     if automatic:
                         report["recipe"]["prefix"] = prefix_dependencies.status(self.home, installed, auto_recipes.verbs(automatic))
+                        report["recipe"]["prefix"]["last_install"] = diagnostics.windows_components(entry.get("windows_components"))
                     if "luma" in recipe.needs:
                         report["recipe"]["luma_detected"] = luma.detected(installed.root, Path(analysis["target"]) if analysis["target"] else None, recipe.appid)
                 except (auto_recipes.RecipeError, prefix_dependencies.DependencyError) as error:
@@ -2019,7 +2117,15 @@ def _recipe_info(recipe) -> dict | None:
     return {"needs": list(recipe.needs), "broken": recipe.broken, "proxy": _recipe_proxy(recipe), "args": list(recipe.args),
             "status": recipe.status, "inputs": list(recipe.inputs), "linux": recipe.linux, "optipatcher": recipe.optipatcher,
             "page": recipe.page, "settings": dict(recipe.wiki_settings), "suggestions": dict(recipe.wiki_suggestions),
-            "recommended_input": recipe.recommended_input}
+            "recommended_input": recipe.recommended_input,
+            "game_settings": [{"setting": setting, "value": value} for setting, value in getattr(recipe, "game_settings", ())],
+            # REFramework rewrites its own config when the game closes: its quality only changes with the game closed.
+            "quality_on_exit": bool(getattr(recipe, "reframework_upscaler", False)),
+            # OptiScaler's old menu (OverlayMenu=false) never draws its FPS counter. REFramework games run its overlay menu
+            # instead, but without Dxgi spoofing that overlay never hooks the swapchain, so it has no counter either.
+            "fps_counter": not (getattr(recipe, "reframework_upscaler", False)
+                                or str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
+                                or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}
 
 
 def _is_helix(install: dict | None) -> bool:
@@ -2067,6 +2173,15 @@ def _requested_fg(solution, choice):
     if choice.get("fg") == "on" and plan is None:
         raise UpscalerError("fg_route_unavailable")
     return plan
+
+
+def _with_root_files(sources: dict, prefix: str, names) -> dict:
+    """OptiScaler files a recipe also needs beside the exe, copied from the build's own folder."""
+    result = dict(sources)
+    for name in names:
+        if prefix and prefix + name in result and name not in result:
+            result[name] = result[prefix + name]
+    return result
 
 
 def _build_solution(gpu, analysis, recipe, build, automatic, blocked):

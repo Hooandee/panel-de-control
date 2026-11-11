@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { LuTriangleAlert } from "react-icons/lu";
+import { LuArrowLeftRight, LuTriangleAlert } from "react-icons/lu";
 import { getMakoStatus, installMako, refreshFrameGenEngine, type EngineUpdate, type MakoStatus } from "../api";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { useI18n } from "../i18n";
 import { saveExclusiveMakoProfile } from "./jobRunner";
+import { useMakoLeftover } from "./makoLeftover";
 import { ActionButton, ListCard, Note, Notice, Row, Spinner } from "./parts";
 import { upscalerErrorCode } from "./errorCode";
 
@@ -54,7 +55,9 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
   }, [appid]);
   const profile = status?.profiles[appid];
   const active = !!profile?.scaling_enabled;
-  const blocked = disabled || gameRunning || busy || !status || !status.supported || status.foreign || mixed || status.reason === "mako_identity_ambiguous";
+  const makoLeftover = useMakoLeftover(appid, liveAppid, !!isNonSteam);
+  const leftover = !profile && makoLeftover.leftover;
+  const blocked = disabled || gameRunning || busy || !status || !status.supported || leftover || mixed || status.reason === "mako_identity_ambiguous";
   const save = async (enabled: boolean) => {
     if (blocked) return;
     setBusy(true); setError(null); setSaved(false); setEngineNotice(null);
@@ -88,7 +91,10 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
     <Note>{t("up.mako.scaling.hint")}</Note>
     {mixed && <Notice icon={<LuTriangleAlert size={16} />}>{t("up.mako.scaling.mixed")}</Notice>}
     {status && !status.supported && <Note>{t("up.mako.unsupported")}</Note>}
-    {status?.foreign && <Note>{t("up.mako.foreignProfile")}</Note>}
+    {leftover && <>
+      <Notice icon={<LuArrowLeftRight size={16} />}>{t("up.mako.leftover")}</Notice>
+      <Row><ActionButton label={t("up.mako.leftover.clear")} disabled={disabled || gameRunning} onPress={() => { setError(null); void makoLeftover.clear().catch(() => { if (alive.current) setError(t("up.lsfg.launchFailed")); }); }} /></Row>
+    </>}
     {status?.reason === "mako_identity_ambiguous" && <Note>{t("up.mako.identity")}</Note>}
     {gameRunning && <Note>{t("up.error.running")}</Note>}
     {busy && <Note><Spinner size={12} /> {t("up.activating")}</Note>}

@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -49,6 +50,25 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _untar(archive: Path, destination: Path) -> None:
+    try:
+        with tarfile.open(archive) as source:
+            for member in source:
+                relative = Path(member.name)
+                if relative.is_absolute() or ".." in relative.parts or not (member.isdir() or member.isfile()):
+                    raise AssetError("unsafe_archive")
+                target = destination / relative
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with source.extractfile(member) as data, open(target, "wb") as out:
+                    shutil.copyfileobj(data, out)
+                target.chmod(0o755 if member.mode & 0o100 else 0o644)
+    except (tarfile.TarError, EOFError, OSError) as error:
+        raise AssetError("unpack_failed", type(error).__name__) from None
+
+
 class AssetCache:
     def __init__(self, root: Path):
         self.root = root
@@ -85,6 +105,11 @@ class AssetCache:
         if asset.archive:
             return self.unpacked(asset)
         return self.member(asset) if asset.member else self.file(asset)
+
+    def unpack_again(self, asset: Asset) -> Path:
+        """Rebuild the unpacked folder from the verified download: an older unpack can be marked complete and be wrong."""
+        shutil.rmtree(self.unpacked(asset), ignore_errors=True)
+        return self.ensure(asset, lambda _done: None, lambda: False)
 
     def _extract_member(self, asset: Asset) -> None:
         """Resolve one catalog member from a verified ZIP or the existing safe 7z unpacker."""
@@ -187,17 +212,21 @@ class AssetCache:
         shutil.rmtree(destination, ignore_errors=True)
         staging = Path(tempfile.mkdtemp(dir=destination.parent, prefix=".unpack-"))
         try:
-            for tool in (["bsdtar", "-xf"], ["7z", "x", "-y", f"-o{staging}"]):
-                if shutil.which(tool[0]) is None:
-                    continue
-                command = [*tool, str(self.file(asset))]
-                if tool[0] == "bsdtar":
-                    command += ["-C", str(staging)]
-                result = subprocess.run(command, capture_output=True, timeout=300, check=False)
-                if result.returncode == 0:
-                    break
+            if tarfile.is_tarfile(self.file(asset)):
+                # 7z only peels the compression off a tarball and bsdtar is not on every distribution.
+                _untar(self.file(asset), staging)
             else:
-                raise AssetError("unpack_failed")
+                for tool in (["bsdtar", "-xf"], ["7z", "x", "-y", f"-o{staging}"]):
+                    if shutil.which(tool[0]) is None:
+                        continue
+                    command = [*tool, str(self.file(asset))]
+                    if tool[0] == "bsdtar":
+                        command += ["-C", str(staging)]
+                    result = subprocess.run(command, capture_output=True, timeout=300, check=False)
+                    if result.returncode == 0:
+                        break
+                else:
+                    raise AssetError("unpack_failed")
             for path in staging.rglob("*"):
                 if path.is_symlink() or not path.resolve().is_relative_to(staging.resolve()):
                     raise AssetError("unsafe_archive")

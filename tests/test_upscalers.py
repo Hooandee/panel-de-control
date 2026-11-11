@@ -276,6 +276,21 @@ def test_analyze_prefers_the_game_exe_over_its_launcher(steam, monkeypatch):
     assert result["anti_cheat"] is False and result["foreign"] is False
 
 
+def test_agility_sdk_beside_the_exe_means_d3d12(steam, monkeypatch):
+    # RE Engine games (RE4, Requiem, Onimusha) import only d3d11/dxgi and load D3D12 at runtime.
+    from upscalers import solution_plan
+    _, game = steam
+    monkeypatch.setattr(games.pe, "graphics_apis", lambda path: ["d3d11", "dxgi"] if path.endswith("witcher3.exe") else [])
+    assert games.analyze(game)["apis"] == ["d3d11", "dxgi"]
+    _write(game / "bin/x64_dx12/D3D12/D3D12Core.dll")
+    assert games.analyze(game)["apis"] == ["d3d11", "dxgi"], "the Agility SDK alone proves nothing"
+    _write(game / "bin/x64_dx12/re_chunk_000.pak")
+    result = games.analyze(game)
+    assert result["apis"] == ["d3d12", "dxgi"]
+    plan = solution_plan.resolve("rdna3", result)
+    assert plan["effective_api"] == "d3d12" and plan["fg_plan"]["route"] == "optiscaler"
+
+
 def test_manual_exe_wins_and_detects_anti_cheat_and_foreign(steam):
     _, game = steam
     _write(game / "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe")
@@ -1515,6 +1530,18 @@ def test_quality_changes_while_running_are_saved_for_the_next_launch(steam, fake
         service.configure(APPID, {"build": "fsr-test", "quality": "quality", "sharpness": "soft", "fg": "on"})
 
 
+def test_reframework_quality_waits_for_the_game_to_close(steam, fake_catalog, proc):
+    # REFramework rewrites its config on exit, so a quality written while it runs would be lost.
+    _, game = steam
+    service = _service(steam, fake_catalog, proc)
+    service.install(APPID, {"build": "fsr-test", "quality": "quality"})
+    service._game_state(APPID)["install"]["reframework_upscaler"] = True
+    _running(proc, game)
+    with pytest.raises(UpscalerError, match="running"):
+        service.configure(APPID, {"build": "fsr-test", "quality": "performance"})
+    assert service.configure(APPID, {"build": "fsr-test", "quality": "quality", "sharpness": "high"})["live"] is False
+
+
 def test_quality_change_while_running_keeps_the_other_options(steam, fake_catalog, proc):
     home, game = steam
     service = _service(steam, fake_catalog, proc)
@@ -1589,3 +1616,25 @@ def test_fp8_sdk_providers_say_they_may_fall_back_off_rdna4():
     assert described["fsr-4.1.2-dll"]["may_fallback"] == "3.1.6"
     assert described["fsr-4.1.2-lite-igpu-dll"]["may_fallback"] is None
     assert {item["id"]: item for item in catalog.describe("rdna4")}["fsr-4.1.2-dll"]["may_fallback"] is None
+
+
+def test_root_files_are_copied_from_optiscalers_subfolder():
+    from upscalers.service import _with_root_files
+    sources = {"OptiScaler/libxess.dll": "x", "dxgi.dll": "y"}
+    assert _with_root_files(sources, "OptiScaler/", ("libxess.dll",))["libxess.dll"] == "x"
+    assert "libxess.dll" not in _with_root_files({"dxgi.dll": "y"}, "OptiScaler/", ("libxess.dll",))
+    assert _with_root_files({"libxess.dll": "z"}, "", ("libxess.dll",)) == {"libxess.dll": "z"}
+
+
+@pytest.mark.parametrize("quality,expected", [
+    ("native", {"TemporalUpscaler_UseNativeResolution": "true"}),
+    ("quality", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "2"}),
+    ("balanced", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "1"}),
+    ("performance", {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "0"}),
+    (None, {"TemporalUpscaler_UseNativeResolution": "false", "TemporalUpscaler_UpscaleQuality": "1"}),
+])
+def test_panel_quality_maps_to_reframeworks_upscaler(quality, expected):
+    from upscalers.service import _reframework_upscaler_keys
+    keys = _reframework_upscaler_keys({"quality": quality})
+    assert keys["TemporalUpscaler_Enabled"] == "true"
+    assert {k: v for k, v in keys.items() if k != "TemporalUpscaler_Enabled" and v is not None} == expected

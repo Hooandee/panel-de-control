@@ -24,9 +24,11 @@ MAX_BYTES = 4 * 1024 * 1024
 PAGE_MAX_BYTES = 256 * 1024
 # Bumped whenever parse() keeps new facts, so a copy saved by an older Panel is fetched again.
 FORMAT = 2
+# Bumped when parse_page learns something new, so pages cached by an older parser are fetched whole again.
+PAGE_FORMAT = 2
 
 _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
-_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)")
 _DX12 = re.compile(r"(?<![\w-])-dx12\b", re.I)
 _PROXY = re.compile(r"\b(?:as|rename(?:d)? (?:it )?to|use)\s+`?(winmm|version|dbghelp|wininet|winhttp|dxgi|d3d12)\.dll`?", re.I)
 _STORE_ONLY = re.compile(r"\b(?:xbox|game ?pass|ms store|microsoft store)\b", re.I)
@@ -35,6 +37,8 @@ _HEDGED = re.compile(r"\b(?:might|may)\b", re.I)
 _REFRAMEWORK = re.compile(r"\bREFramework\b", re.I)
 _NVNGX = re.compile(r"(?:copy|requires a copy of|place|add)[^.]{0,40}nvngx_dlss\.dll", re.I)
 _ANTI_CHEAT = re.compile(r"\b(?:EAC|EasyAntiCheat|anti-?cheat)\b[^.]{0,30}\bdisabled\b|\bdisable\b[^.]{0,30}\b(?:EAC|anti-?cheat)\b", re.I)
+# PureDark's plugins (and the REFramework branch built for them) are manual downloads OptiScaler can't run without.
+_PUREDARK = re.compile(r"\bUpscalerBasePlugin\b|\bPDPerfPlugin\b|\bPDUpscaler\b|\bpd-upscaler\b", re.I)
 _MOD = re.compile(r"\brequires?\b[^.|]{0,60}\bmod\b|\bLuma\b", re.I)
 _INPUTS = ("DLSS", "FSR2", "FSR3", "FSR3.1", "FSR4", "XeSS", "DLSSG", "FSR FG", "XeFG")
 _PAGE_FIELD = re.compile(r"^\|\*\*(?P<name>[^*]+)\*\*\s*$", re.M)
@@ -92,6 +96,8 @@ def facts(status: str, patcher: str, notes: str, table: str = "main") -> dict:
     elif table == "mod" or (_MOD.search(notes) and "reframework" not in needs):
         if "reframework" not in needs:
             needs.append("mod")
+    if _PUREDARK.search(notes) and "mod" not in needs:
+        needs.append("mod")
     if needs:
         result["needs"] = needs
     if "✨" in patcher:
@@ -170,6 +176,8 @@ def parse_page(text: str) -> dict:
         result["settings"] = settings
     if suggestions:
         result["suggestions"] = suggestions
+    if _PUREDARK.search(fields.get("notes", "")):
+        result["needs"] = ["mod"]
     return result
 
 
@@ -277,13 +285,15 @@ class WikiCache:
             return {"updated": False, "fresh": True}
         pages = dict(self.pages())
         cached = pages.get(slug) or {}
+        if cached.get("format") != PAGE_FORMAT:
+            cached = {}
         if cached.get("fetched_at", 0) > now() - PAGE_MAX_AGE_S:
             return {"updated": False, "fresh": True}
         outcome, body, etag = self._fetch(PAGE_URL.format(urllib.parse.quote(slug)), cached.get("etag"), PAGE_MAX_BYTES, fetch)
         if outcome == "failed":
             return {"updated": False, "fresh": False}
         page = cached.get("facts") if outcome == "same" or body is None else parse_page(body.decode("utf-8", "replace"))
-        pages[slug] = {"facts": page or {}, "etag": etag or cached.get("etag"), "fetched_at": now()}
+        pages[slug] = {"facts": page or {}, "etag": etag or cached.get("etag"), "fetched_at": now(), "format": PAGE_FORMAT}
         self._write(self.pages_path, pages)
         self._pages = pages
         return {"updated": (page or {}) != (cached.get("facts") or {}), "fresh": True}

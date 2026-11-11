@@ -6,5 +6,45 @@
     "size": 136693836,
     "filename": "Luma-Final_Fantasy_VII_Remake.zip",
     "format": "zip"
+  },
+  "refw-pdup-re4": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE4.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "395b9a183a1835ef93205467d9bd45b430b5f1a2bc3b7d481bab6da5efd47b5e",
+    "size": 13340466,
+    "filename": "RE4.zip",
+    "format": "zip"
+  },
+  "refw-pdup-re2": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE2.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "51b8ce585392c00ac8367bae4e8cf80e346ef2ded7d53c89a71fd8e10027f178",
+    "size": 13377627,
+    "filename": "RE2.zip",
+    "format": "zip"
+  },
+  "refw-pdup-re3": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE3.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "de88d403eaf3865388bbeeb9490d5465d77bc914334818ca350a1523c3acd9b4",
+    "size": 13376906,
+    "filename": "RE3.zip",
+    "format": "zip"
+  },
+  "refw-pdup-re7": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE7.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "ff1e62a2aa13b7fe67b6a51813e35d399ee1dc2e21fa69043caccbe7566f4cac",
+    "size": 13379798,
+    "filename": "RE7.zip",
+    "format": "zip"
+  },
+  "refw-pdup-dmc5": {
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/DMC5.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "ceea6cd1eeee32d61fe508db8887e96f4dd7ff534b0f0faa33b4d401602dac3d",
+    "size": 13293690,
+    "filename": "DMC5.zip",
+    "format": "zip"
   }
 }

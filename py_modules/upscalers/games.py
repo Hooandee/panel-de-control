@@ -112,6 +112,15 @@ def from_launcher(home: str, appid: str, exe: str, launch_options: str) -> Insta
     return Installed(appid, game.name, game.root, STATE_FULLY_INSTALLED, game.exe, True, game.native, found)
 
 
+def _wrapped(home: str, appid: str, name: str, exe: str, launch_options: str) -> Installed | None:
+    """A shortcut to a script (PortProton, Unifideck, a hand-written wrapper) that runs a Windows game."""
+    target = launchers.wrapped_exe(home, exe, launch_options)
+    if target is None:
+        return None
+    root = launchers.game_root(target)
+    return Installed(appid, name, root, STATE_FULLY_INSTALLED, target.relative_to(root).as_posix(), True)
+
+
 def find_shortcut(home: str, appid: str) -> Installed | None:
     """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
     for root in steam_roots(home):
@@ -136,8 +145,9 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
                     return None
                 name = str(entry.get("appname") or appid)
                 if exe.suffix.lower() != ".exe":
-                    # An AppImage, script or Linux binary: its start folder is not a Windows game to patch.
-                    return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+                    wrapped = _wrapped(home, appid, name, str(exe), str(entry.get("launchoptions") or ""))
+                    # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
+                    return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
                 relative = None
                 if exe.is_file():
                     try:
@@ -162,12 +172,51 @@ def from_hint(appid: str, hint: dict | None, home: str = "") -> Installed | None
         return None
     name = str(hint.get("name") or appid)
     if exe.suffix.lower() != ".exe":
-        return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+        wrapped = _wrapped(home, appid, name, str(exe), str(hint.get("opts") or "")) if home else None
+        return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
     try:
         relative = exe.resolve().relative_to(start.resolve()).as_posix()
     except (ValueError, OSError):
         start, relative = exe.parent, exe.name
     return Installed(appid, name, start, STATE_FULLY_INSTALLED, relative, True)
+
+
+_linux_builds: dict[str, tuple[tuple, bool]] = {}
+
+
+def _is_elf(path: Path) -> bool:
+    try:
+        if ".so" in path.suffixes or not os.access(path, os.X_OK):
+            return False
+        with path.open("rb") as stream:
+            return stream.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def linux_build(root: Path, build_id: str | None = None) -> bool:
+    """Steam installed the game's own Linux build: a Linux binary near the top and not one .exe anywhere.
+
+    The shallow look for the binary comes first, so Windows games never pay for the walk that rules out every .exe;
+    the answer is remembered per folder until Steam changes it."""
+    try:
+        stamp = (build_id, root.stat().st_mtime_ns)
+    except OSError:
+        return False
+    cached = _linux_builds.get(str(root))
+    if cached and cached[0] == stamp:
+        return cached[1]
+    depth = len(root.parts)
+    binary = False
+    for current, dirs, files in os.walk(root):
+        if len(Path(current).parts) - depth >= 2:
+            dirs[:] = []
+        if any(_is_elf(Path(current) / name) for name in files):
+            binary = True
+            break
+    result = binary and not any(name.lower().endswith(".exe") for _current, _dirs, files in os.walk(root) for name in files)
+    _linux_builds[str(root)] = (stamp, result)
+    return result
 
 
 def find_installed(home: str, appid: str) -> Installed | None:
@@ -188,8 +237,9 @@ def find_installed(home: str, appid: str) -> Installed | None:
                 flags = int(state.get("stateflags", 0))
             except (TypeError, ValueError):
                 flags = 0
+            build_id = str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None
             return Installed(appid, str(state.get("name") or appid), root, flags,
-                             build_id=str(state["buildid"]) if str(state.get("buildid", "")).isdecimal() else None)
+                             native=linux_build(root, build_id), build_id=build_id)
     return find_shortcut(home, appid)
 
 
@@ -266,6 +316,15 @@ def shipped_upscalers(root: Path) -> list[str]:
     return [SHIPPED_NAMES[kind] for kind in SHIPPED_NAMES if kind in found]
 
 
+def _graphics_apis(exe: Path) -> list[str]:
+    """The exe's graphics imports. RE Engine games import only d3d11/dxgi and load D3D12 at runtime; the Agility SDK
+    beside their exe is what gives the D3D12 device away. Other games keep what they import."""
+    apis = set(pe.graphics_apis(str(exe)))
+    if (exe.parent / "D3D12" / "D3D12Core.dll").is_file() and any(exe.parent.glob("re_chunk_000.pak*")):
+        apis = (apis - {"d3d11"}) | {"d3d12"}
+    return sorted(apis)
+
+
 def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = None) -> dict:
     """Candidates for the device-creating executable plus what the game ships.
 
@@ -303,7 +362,7 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     exes.sort(key=lambda item: (-item[0], -item[2], item[1].as_posix()))
     candidates = []
     for index, (score, path, size) in enumerate(exes[:MAX_PE_SCANS]):
-        apis = pe.graphics_apis(str(path))
+        apis = _graphics_apis(path)
         if any(api in apis for api in ("d3d12", "d3d11", "vulkan")):
             score += 30
         candidates.append({
@@ -318,14 +377,14 @@ def analyze(root: Path, chosen_exe: str | None = None, recipe_exe: str | None = 
     selected = candidates[0] if candidates else None
     if not chosen_exe and recipe_exe and (root / recipe_exe).is_file():
         selected = next((c for c in candidates if c["exe"] == recipe_exe), None) or {
-            "exe": recipe_exe, "apis": pe.graphics_apis(str(root / recipe_exe)),
+            "exe": recipe_exe, "apis": _graphics_apis(root / recipe_exe),
             "size": (root / recipe_exe).stat().st_size, "score": 0,
         }
     if chosen_exe and (root / chosen_exe).is_file():
         manual = True
         selected = next((c for c in candidates if c["exe"] == chosen_exe), None) or {
             "exe": chosen_exe,
-            "apis": pe.graphics_apis(str(root / chosen_exe)),
+            "apis": _graphics_apis(root / chosen_exe),
             "size": (root / chosen_exe).stat().st_size,
             "score": 0,
         }

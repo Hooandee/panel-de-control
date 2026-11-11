@@ -170,3 +170,28 @@ it("saves a new version chosen while playing for when the game closes, and keeps
   await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
   state.running = null;
 });
+
+it("saves a quality chosen while playing a REFramework game for when the game closes", async () => {
+  state.running = { liveAppid: 777 };
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  await act(async () => { render(<GameView {...props} />); });
+  await act(async () => { fireEvent.click(screen.getByText("up.quality.balanced")); });
+  await act(async () => { fireEvent.click(screen.getByText("up.save")); });
+  expect(configureUpscaler).not.toHaveBeenCalled();
+  expect(screen.getByText("up.live.appliedOnExit")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByText("up.quality.performance")); });
+  expect(screen.getByText("up.save")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getAllByText("up.discard")[0]); });
+  state.running = null;
+});
+
+it("asks REFramework games to run full screen at the display's resolution", async () => {
+  const detail = installed();
+  state.detail = { ...detail, recipe_info: { ...detail.recipe_info, quality_on_exit: true } } as unknown as GameDetail;
+  const plain = state.t;
+  state.t = (key: string, params?: Record<string, unknown>) => params?.size ? `${key} ${params.size}` : key;
+  await act(async () => { render(<GameView {...props} overview={{ ...overview, display: [800, 1280] } as unknown as UpscalersOverview} />); });
+  expect(screen.getByText("up.recipe.fullResolution 1280x800")).toBeTruthy();
+  state.t = plain;
+});

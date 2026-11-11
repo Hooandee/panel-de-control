@@ -35,3 +35,9 @@ it("keeps an acknowledged FPS toggle when closing the QAM unmounts the caller", 
   await act(async () => fireEvent.click(screen.getByRole("switch")));
   expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false");
 });
+
+it("hides the FPS switch where OptiScaler can't draw its counter", () => {
+  render(<DuringPlay {...props} fpsCounter={false} />);
+  expect(screen.queryByText("up.play.fps")).toBeNull();
+  expect(screen.getByText("up.play.menu")).toBeTruthy();
+});

@@ -44,6 +44,8 @@ import { JobProgress } from "./JobProgress";
 import { FrameGenRow } from "./FrameGenRow";
 import { useThemes } from "../themes/useThemes";
 import { ModelPicker } from "./ModelPicker";
+import { UserFiles } from "./UserFiles";
+import { markPendingReinstall, takePendingReinstall } from "./userFileWatch";
 import { replaceForeignInstallation } from "./foreignReplacement";
 import {
   ActionButton, Fold, Label, ListCard, ListRow, Note, Notice, Row, SegmentRow, Skeleton, Spinner, statusColor,
@@ -277,7 +279,8 @@ export const GameView: FC<{
   const qualityChanged = qualityMode.mode === "panel" && install?.options.quality !== choice.quality;
   const modelChanged = (install?.options.model ?? builds.find((build) => build.id === install?.build)?.models?.[0] ?? null)
     !== (choice.model ?? builds.find((build) => build.id === choice.build)?.models?.[0] ?? null);
-  const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null);
+  const awaitingExit = !!queued && queued.build === choice.build && (queued.model ?? null) === (choice.model ?? null)
+    && (!detail?.recipe_info?.quality_on_exit || (queued.quality ?? null) === (choice.quality ?? null));
   const dirty = !awaitingExit && (spatialInstalled || !install || !sameBuild || qualityChanged || install.options.sharpness !== choice.sharpness || modelChanged);
   const selectedFgPlan = solution ? solution.offered_fg_plan ?? solution.fg_plan : detail?.fg_plan;
   const routes = selectedFgPlan?.routes ?? {};
@@ -296,6 +299,11 @@ export const GameView: FC<{
     ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
   });
   const reinstall = () => start(installSelected);
+  // A user file changed (here or while this page was closed): it goes into the installed game once nothing blocks it.
+  useEffect(() => {
+    // A queued install for this game already carries the new file.
+    if (detail?.install && !gameRunning && job?.state !== "running" && !pendingInstall(appid) && takePendingReinstall(appid)) reinstall();
+  }, [detail?.install, gameRunning, job?.state]);
   const retry = () => {
     const request = job ? readInstallRequest(appid, job.id) : null;
     trace("retry", request ?? choice);
@@ -322,8 +330,8 @@ export const GameView: FC<{
 
   const apply = async () => {
     trace("apply");
-    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged)) {
-      // The running game holds OptiScaler's files: the new version goes in as soon as it closes.
+    if (gameRunning && install && !spatialInstalled && (!sameBuild || modelChanged || (qualityChanged && !!detail?.recipe_info?.quality_on_exit))) {
+      // The running game holds OptiScaler's files (and REFramework rewrites its quality on exit): it goes in as soon as it closes.
       queueForGameExit({ appid, liveAppid: game.liveAppid, isNonSteam: game.isNonSteam }, {
         ...scalerChoice, ...(replacesFsr ? { fg: "off" as const } : {}), confirm_anti_cheat: confirmAntiCheat,
         ...(selected?.engine === "proton" && protonEnv ? { env: protonEnv } : {}),
@@ -570,6 +578,10 @@ export const GameView: FC<{
           <LaunchMixNotice liveAppid={game.liveAppid} scaler={install ? runs : detail.analysis.foreign_identity?.engine === "helixsr" ? "HelixSR" : null} />
           {!detail.native && !externalHelix && <ModelPicker onPendingChoice={setPendingModel} gpu={overview.gpu} duo={duo} appid={appid} spatial={spatial} onSpatial={selectSpatial} builds={builds} choice={choice} inputs={inputs} protonEnv={protonEnv} dllTargets={detail.analysis.dll_targets}
             disabled={running || foreignBusy} onChange={changeChoice} />}
+          {!detail.native && !spatial && selectedEngine === "optiscaler" && !!detail.recipe_info?.user_files?.length && (
+            <UserFiles appid={appid} files={detail.recipe_info.user_files} disabled={running || foreignBusy}
+              onDetail={(next) => { if (next.install) markPendingReinstall(appid); setDetail(next); }} />
+          )}
           {(detail.native || externalHelix) && <ListRow label="Mako" chevron disabled={running || foreignBusy} onPress={() => selectSpatial(!spatial)} />}
           {wikiUpdating && (
             <span style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -607,10 +619,22 @@ export const GameView: FC<{
           )}
           {!detail.analysis.target && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.error.no_exe")}</Notice>}
           {detail.updating && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(detail.updating === "running" ? "up.error.updating" : "up.error.update_pending")}</Notice>}
-          {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
+          {detail.analysis.target && uses.length === 0 && !solution?.input_reconciled && !detail.recipe_info?.needs.includes("mod") && !detail.recipe_info?.user_files?.length && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.detect.noinputs")}</Notice>}
           {detail.recipe_info?.broken && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.broken")}</Notice>}
-          {detail.recipe_info?.needs.filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {detail.recipe_info?.needs.filter((need) => !(need === "mod" && detail.recipe_info?.user_files?.length)).filter((need) => need !== "luma" || (optiscalerRecipe && !detail.recipe_info?.luma_detected && !automaticLuma)).map((need) => <Notice key={need} icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.recipe.need.${need}`)}</Notice>)}
+          {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.game_settings?.map((entry) => (
+            <Notice key={entry.setting} icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.gameSetting", entry)}</Notice>
+          ))}
+          {!spatial && selectedEngine === "optiscaler" && detail.recipe_info?.quality_on_exit && overview.display && (
+            <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.fullResolution", { size: `${Math.max(...overview.display)}x${Math.min(...overview.display)}` })}</Notice>
+          )}
           {automaticLuma && <Note>{t("up.recipe.automatic.luma")}</Note>}
+          {install && optiscalerRecipe && !running && ["missing", "pending"].includes(detail.recipe_info?.windows_components ?? "") && (
+            <>
+              <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.windowsComponents")}</Notice>
+              <Row><ActionButton label={t("load.retry")} disabled={blocked || gameRunning} onPress={reinstall} /></Row>
+            </>
+          )}
           {recipeBlocked && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.recipe.blocked")}</Notice>}
           {detail.recipe_info && (
             <WikiFacts appid={appid} info={detail.recipe_info} installed={!!install} onApplied={() => void load()} />
@@ -696,6 +720,7 @@ export const GameView: FC<{
         <DuringPlay
           appid={appid}
           optiscaler={installedOptiscaler}
+          fpsCounter={detail.recipe_info?.fps_counter !== false}
           fg={installedOptiscaler && install?.options.fg === "on"}
           live={live}
           onGenerating={setGenerating}
@@ -737,7 +762,7 @@ export const GameView: FC<{
                     {detail.foreign_backup && !install && !detail.analysis.foreign && (
                       <ListRow label={t("up.foreign.restore")} disabled={foreignBusy || running || gameRunning} onPress={() => void foreignAction(restoreForeignUpscaler)} />
                     )}
-                    {playing && installedOptiscaler && (
+                    {playing && installedOptiscaler && detail.recipe_info?.fps_counter !== false && (
                       <ListRow label={t("up.play.fpsStyle")} chevron onPress={() => void nextCounterStyle()} />
                     )}
                     {installedOptiscaler && !running && <AdvancedIni appid={appid} />}

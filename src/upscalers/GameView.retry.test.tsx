@@ -230,6 +230,7 @@ it.each([undefined, false, true])("shows the Luma prerequisite only when not det
   await act(async () => { render(<GameView {...props} />); });
   expect(!!screen.queryByText("up.recipe.need.luma")).toBe(!detected);
   expect(screen.queryByText("up.recipe.need.mod")).toBeTruthy();
+  expect(screen.queryByText("up.detect.noinputs")).toBeNull();
 });
 
 it("removes the Luma requirement when choosing Mako", async () => {
@@ -371,4 +372,12 @@ it("ignores another game's job progress and cancel control", async () => {
   const other = { id: "other-game", appid: "1", kind: "install", state: "running", phase: "download", done: 1, total: 10 } as UpscalerJob;
   await act(async () => { render(<GameView {...props} game={{ ...game, liveAppid: 793 }} overview={{ ...overview, job: other }} />); });
   expect(screen.queryByText("up.cancel")).toBeNull();
+});
+
+it("tells which option to change in the game's own menu", async () => {
+  state.job = null;
+  state.detail = { analysis: { target: "/game", inputs: {}, candidates: [] }, history: [], install: null,
+    recipe_info: { needs: [], game_settings: [{ setting: "FidelityFX Super Resolution 2", value: "No" }] } };
+  await act(async () => { render(<GameView {...props} />); });
+  expect(screen.getByText("up.recipe.gameSetting")).toBeTruthy();
 });

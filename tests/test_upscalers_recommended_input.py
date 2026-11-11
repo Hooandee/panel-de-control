@@ -33,7 +33,7 @@ def test_game_and_bulk_share_recipe_build_recommendation(steam, fake_catalog, pr
     def plan(*args):
         if not eligible:
             raise auto_recipes.RecipeError('recipe_unsupported')
-        return SimpleNamespace(recommended_build='fsr-test')
+        return SimpleNamespace(recommended_build='fsr-test', dependencies=())
     monkeypatch.setattr(auto_recipes, 'plan', plan)
     expected = 'fsr-test' if eligible else catalog.preferred_build('rdna2')
     assert service.game('292030')['preferred'] == expected

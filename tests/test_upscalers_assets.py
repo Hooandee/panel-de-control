@@ -135,3 +135,59 @@ def test_cancel_stops_the_download(tmp_path, monkeypatch):
     with pytest.raises(AssetError) as error:
         AssetCache(tmp_path).ensure(asset, lambda n: None, lambda: True)
     assert error.value.code == "cancelled"
+
+
+def _tarball(tmp_path, members):
+    import tarfile
+    path = tmp_path / "layer.tar.xz"
+    with tarfile.open(path, "w:xz") as archive:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name)
+            if data is None:
+                info.type, info.linkname = tarfile.SYMTYPE, "/etc/passwd"
+                archive.addfile(info)
+            else:
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+    payload = path.read_bytes()
+    return Asset("layer", "layer.tar.xz", hashlib.sha256(payload).hexdigest(), len(payload), ("http://invalid",), archive=True), payload
+
+
+def test_a_tarball_unpacks_without_any_system_tool(tmp_path, monkeypatch):
+    asset, payload = _tarball(tmp_path, {"lib/layer.so": b"layer", "share/layer.json": b"{}"})
+    cache = AssetCache(tmp_path / "cache")
+    cache.file(asset).parent.mkdir(parents=True)
+    cache.file(asset).write_bytes(payload)
+    monkeypatch.setattr(assets.shutil, "which", lambda tool: None)
+    unpacked = cache.ensure(asset, lambda _: None, lambda: False)
+    assert (unpacked / "lib/layer.so").read_bytes() == b"layer"
+    assert (unpacked / "share/layer.json").read_bytes() == b"{}"
+
+
+@pytest.mark.parametrize("name", ["../escape.so", "/abs.so", "link"])
+def test_a_tarball_that_leaves_its_folder_is_rejected(tmp_path, name):
+    asset, payload = _tarball(tmp_path, {name: None if name == "link" else b"x"})
+    cache = AssetCache(tmp_path / "cache")
+    cache.file(asset).parent.mkdir(parents=True)
+    cache.file(asset).write_bytes(payload)
+    with pytest.raises(AssetError, match="unsafe_archive"):
+        cache.ensure(asset, lambda _: None, lambda: False)
+    assert not cache.unpacked(asset).exists()
+
+
+def test_lossless_installs_over_an_unpack_that_only_peeled_the_compression(tmp_path, monkeypatch):
+    from upscalers import catalog, lsfg
+    from upscalers.service import UpscalerService
+    asset, payload = _tarball(tmp_path, {name: name.encode() for name in lsfg.LAYER_FILES})
+    asset = Asset(catalog.LSFG_ARCHIVE, asset.filename, asset.sha256, asset.size, asset.urls, archive=True)
+    monkeypatch.setitem(catalog.ASSETS, catalog.LSFG_ARCHIVE, asset)
+    (tmp_path / "home").mkdir()
+    (tmp_path / "proc").mkdir()
+    service = UpscalerService(str(tmp_path / "home"), str(tmp_path / "state"), "rdna2", proc=str(tmp_path / "proc"))
+    service.cache.file(asset).parent.mkdir(parents=True)
+    service.cache.file(asset).write_bytes(payload)
+    stale = service.cache.unpacked(asset)
+    stale.mkdir()
+    (stale / "layer.tar").write_bytes(b"what 7z leaves behind")
+    (stale / ".complete").write_text(asset.sha256)
+    assert service.lsfg_install()["installed"]
