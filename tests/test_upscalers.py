@@ -1476,6 +1476,24 @@ def test_a_helixsr_dll_the_bridge_no_longer_recognises_is_restored_by_hand(steam
     assert service.game(APPID)["install"] is None
 
 
+def test_helixsr_in_a_game_moved_to_another_library_is_still_removed(steam, helix_catalog, proc, tmp_path):
+    _, game = steam
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    install = service.game(APPID)["install"]
+    old_root = tmp_path / "old-library" / game.name
+    for key in ("target", "helix_file", "log", "exe_folder"):
+        install[key] = str(old_root / Path(install[key]).relative_to(game))
+    service.state["games"][APPID]["install"] = install
+    service.helix.calls.clear()
+
+    service.uninstall(APPID)
+
+    assert service.helix.calls == [("remove",)]
+    assert not (game / "bin/x64_dx12/helixsr-install.json").exists()
+
+
 def test_helixsr_record_gone_is_uninstalled_without_the_bridge(steam, helix_catalog, proc):
     _, game = steam
     target = game / "bin/x64_dx12"

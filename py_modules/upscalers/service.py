@@ -1148,7 +1148,7 @@ class UpscalerService:
             return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
-        record = Path(install.get("helix_file", ""))
+        record = _relocated(Path(install.get("helix_file", "")), Path(install.get("target", "")), root)
         if not record.is_file():
             # HelixSR already took itself out (HelixSR Desktop, or a game update over its DLL): nothing to restore.
             self._log_helix_gone("record_missing")
@@ -2199,6 +2199,16 @@ def _recipe_info(recipe) -> dict | None:
             "fps_counter": not (getattr(recipe, "reframework_upscaler", False)
                                 or str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
                                 or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}
+
+
+def _relocated(path: Path, old_target: Path, root: Path) -> Path:
+    """`path` saved under the game's old folder, seen under its current one (the game moved to another library)."""
+    if path.is_file():
+        return path
+    for ancestor in old_target.parents:
+        if ancestor.name == root.name and path.is_relative_to(ancestor):
+            return root / path.relative_to(ancestor)
+    return path
 
 
 def _is_helix(install: dict | None) -> bool:
