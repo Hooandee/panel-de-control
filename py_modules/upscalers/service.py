@@ -1162,7 +1162,14 @@ class UpscalerService:
         old_target = Path(install.get("target", ""))
         record = _relocated(Path(install.get("helix_file", "")), old_target, root)
         if not record.is_file():
-            # HelixSR already took itself out (HelixSR Desktop, or a game update over its DLL): nothing to restore.
+            # No record where Panel expects it: HelixSR Desktop took it out, or the game moved somewhere Panel can't
+            # map. The bridge still gets a say on the folder Steam runs; "not installed" means there is nothing left.
+            if self.helix.ready():
+                try:
+                    self._helix("remove", root)
+                except UpscalerError as error:
+                    if not helixsr.not_installed(error.detail):
+                        raise
             self._log_helix_gone("record_missing")
         elif self.helix.ready():
             try:

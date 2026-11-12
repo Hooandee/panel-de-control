@@ -1539,7 +1539,8 @@ def test_helixsr_record_gone_is_uninstalled_without_the_bridge(steam, helix_cata
 
     service.uninstall(APPID)
 
-    assert service.helix.calls == []
+    # The bridge still gets a say on the folder Steam runs; with nothing of HelixSR there, nothing changes.
+    assert service.helix.calls == [("remove",)]
     assert service.game(APPID)["install"] is None
     assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"updated game fsr"
     assert not (target / games.MANIFEST_DIR).exists()
@@ -1824,3 +1825,15 @@ def test_relocation_prefers_the_game_steam_runs_over_a_copy_left_behind(tmp_path
     assert _relocated(old_target / "helixsr-install.json", old_target, root) == root / "bin/helixsr-install.json"
     (root / "bin/helixsr-install.json").unlink()
     assert _relocated(old_target / "helixsr-install.json", old_target, root) == old_target / "helixsr-install.json"
+
+
+def test_a_missing_record_still_asks_the_bridge_and_accepts_not_installed(steam, helix_catalog, proc):
+    _, game = steam
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (game / "bin/x64_dx12/helixsr-install.json").unlink()
+    service.helix = GoneHelix()
+    service.uninstall(APPID)
+    assert service.helix.calls == [("remove",)]
+    assert service.game(APPID)["install"] is None

@@ -29,7 +29,7 @@ async function adoptOwnMako(appid: string, liveAppid: number, desired: LaunchOve
   const plan = planLaunchOverlay(details.launch, desired, receipt);
   if (!plan || (!plan.preserved.env.length && !plan.preserved.wrappers.length)) return;
   if (!plan.preserved.env.every((name) => name.startsWith("MAKO_")) || !plan.preserved.wrappers.every(isMakoWrapper)) return;
-  const adopted = adoptedMakoReceipt(details.launch, appid);
+  const adopted = adoptedMakoReceipt(details.launch);
   if (!adopted) return;
   const ok = await setUpscalerLaunchReceipt(appid, "mako", adopted).catch(() => false);
   recordUiEvent("upscalers", "mako_adopt", { appid: liveAppid, env: adopted.env.length, hadReceipt: !!receipt }, ok);
