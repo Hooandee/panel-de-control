@@ -426,6 +426,7 @@
   <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
   <data name="ThemesPickerUnavailable" xml:space="preserve"><value>die Dateiauswahl konnte nicht geöffnet werden; sie öffnet sich auch in Panel de Control über Start</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>mit einem weiteren aktiven Design gibt es keine Animationen; eines muss aus</value></data>
+  <data name="ThemesKeyboardsHeading" xml:space="preserve"><value>Tastaturen</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>diese ZIP-Datei ist keine veröffentlichte Early dieses Designs</value></data>
   <data name="ThemesGroup_appearance" xml:space="preserve"><value>Darstellung</value></data>
   <data name="ThemesGroup_grid" xml:space="preserve"><value>Raster</value></data>

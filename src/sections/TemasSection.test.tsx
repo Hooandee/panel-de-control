@@ -134,4 +134,23 @@ describe("TemasSection", () => {
     expect(screen.getByText("comingSoon.badge")).toBeTruthy();
     expect(screen.getByRole("img", { name: "themes.keyboards.imageAlt" }).getAttribute("src")).toBe("keyboards-preview.jpg");
   });
+
+  it("lists keyboard themes under Keyboards only, and opens their details from there", () => {
+    const base = controller();
+    const keyboardRelease = { ...base.cards[0].release, catalogId: "hooandee-terciopelo", cssLoaderName: "Hooandee Terciopelo", exclusiveGroup: "keyboard" };
+    mocks.controller = controller({
+      cards: [...base.cards, { ...base.cards[0], id: "hooandee-terciopelo", release: keyboardRelease }],
+    });
+    render(<TemasSection />);
+
+    expect(screen.getByRole("button", { name: "example-theme" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "hooandee-terciopelo" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "themes.tab.keyboards" }));
+
+    expect(screen.queryByRole("button", { name: "example-theme" })).toBeNull();
+    expect(screen.queryByText("comingSoon.badge")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "hooandee-terciopelo" }));
+    expect(mocks.open).toHaveBeenCalledWith("hooandee-terciopelo", expect.any(Function));
+  });
 });

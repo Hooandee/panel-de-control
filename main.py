@@ -30,6 +30,8 @@ import decky_socket_guard
 import device_registry
 import device_tree
 import game_freeze
+import theme_hltb
+import theme_protondb
 from gamescope_perf import GamescopePerf
 from user_session import spawn_args
 from gamescope_stats import GamescopeStats
@@ -1844,6 +1846,42 @@ class Plugin(AmbientRpc):
         freezer = getattr(self, "_freezer", None)
         if freezer is not None:
             freezer.resume()
+
+    async def get_theme_protondb(self, appid) -> dict:
+        """ProtonDB's rating for a theme's details: its API answers only its own site (CORS)."""
+        self._init()
+        lookup = getattr(self, "_protondb", None)
+        if lookup is None:
+            lookup = theme_protondb.ProtonDbLookup(theme_protondb.cache_path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+            self._protondb = lookup
+        try:
+            result = await asyncio.to_thread(lookup.lookup, appid)
+        except Exception as error:  # noqa: BLE001
+            result = {"result": "unavailable", "code": type(error).__name__}
+        if result.get("result") == "unavailable":
+            decky.logger.warning("ProtonDB lookup failed (%s)", result.get("code"))
+            diary = journal.active
+            if diary is not None:
+                diary.write("WARNING", "themes", "protondb_unavailable", code=result.get("code"))
+        return result
+
+    async def get_theme_hltb(self, appid, name) -> dict:
+        """How Long to Beat for a theme's details: Steam's client cannot reach howlongtobeat.com (CORS)."""
+        self._init()
+        lookup = getattr(self, "_hltb", None)
+        if lookup is None:
+            lookup = theme_hltb.HltbLookup(theme_hltb.cache_path(decky.DECKY_PLUGIN_SETTINGS_DIR))
+            self._hltb = lookup
+        try:
+            result = await asyncio.to_thread(lookup.lookup, appid, name)
+        except Exception as error:  # noqa: BLE001
+            result = {"result": "unavailable", "code": type(error).__name__}
+        if result.get("result") == "unavailable":
+            decky.logger.warning("HLTB lookup failed (%s)", result.get("code"))
+            diary = journal.active
+            if diary is not None:
+                diary.write("WARNING", "themes", "hltb_unavailable", code=result.get("code"))
+        return result
 
     async def get_proton_caps(self, compat_name: str = "") -> dict:
         """Which launch-option vars the installed Proton build supports."""
