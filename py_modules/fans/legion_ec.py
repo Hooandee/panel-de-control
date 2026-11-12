@@ -85,6 +85,11 @@ class _PortEC:
                 return False
 
 
+def _dmi_text(root: str, *fields: str) -> str:
+    dmi = os.path.join(root, "sys/class/dmi/id")
+    return " ".join(_read(os.path.join(dmi, field)) or "" for field in fields).upper()
+
+
 def _read_le16(ec, addr: int) -> Optional[int]:
     """16-bit little-endian EC value across addr,addr+1. None if either read fails."""
     lo = ec.read(addr)
@@ -115,9 +120,7 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
         return self._dmi_ok
 
     def _dmi_matches(self) -> bool:
-        dmi = os.path.join(self._root, "sys/class/dmi/id")
-        text = ((_read(os.path.join(dmi, "product_version")) or "") + " "
-                + (_read(os.path.join(dmi, "product_name")) or "")).upper()
+        text = _dmi_text(self._root, "product_version", "product_name")
         return any(tok in text for tok in _DMI_MATCH)
 
     def _write_target(self, rpm: int) -> bool:
@@ -167,7 +170,7 @@ _GOS_MAX_RPM = 4500
 _GOS_MIN_SPIN = 1536
 # Above this temperature we ignore the user's curve and force full (capped) cooling —
 # a bad curve must never leave the fan slow while hot.
-_GOS_TEMP_GUARD_C = 90
+_TEMP_GUARD_C = 90
 
 
 class LegionGoSFanBackend(LegionGo2FanBackend):
@@ -184,10 +187,7 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         return self.supported
 
     def _dmi_matches(self) -> bool:
-        dmi = os.path.join(self._root, "sys/class/dmi/id")
-        text = ((_read(os.path.join(dmi, "product_version")) or "") + " "
-                + (_read(os.path.join(dmi, "product_name")) or "") + " "
-                + (_read(os.path.join(dmi, "product_family")) or "")).upper()
+        text = _dmi_text(self._root, "product_version", "product_name", "product_family")
         return any(tok in text for tok in _DMI_MATCH_GOS)
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
@@ -197,7 +197,7 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         None (writes nothing) when not driving."""
         if self._points is None or temp is None:
             return None
-        if temp >= _GOS_TEMP_GUARD_C:
+        if temp >= _TEMP_GUARD_C:
             return self.max_rpm  # guardian
         duty = _interp(self._points, temp)
         if duty <= 0:
@@ -206,29 +206,20 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         return int(round(_GOS_MIN_SPIN + frac * (self.max_rpm - _GOS_MIN_SPIN)))
 
 
-# Legion Go original (83E1): the firmware runs a 10-point fan table (fan % per step of
-# its own board sensor) from its EC window. Lenovo's GZFD.WMAB method 6 (SFAN) writes
-# the table bytes plus SFNT = 1 so the EC follows them; SFNT = 0 hands the fan back to
-# the active platform profile, which ignores the table, and every profile switch resets
-# it to 0. Offsets are from the DSDT (ECMM at 0xFE0B0300, EFAN at 0xFE0B0900).
+# Legion Go original: EC window from the DSDT (GZFD SFAN). SFNT = 1 makes the EC follow
+# the 10-step fan table; a platform profile switch resets it to 0.
 GO1_EC_BASE = 0xFE0B0000
 GO1_SFNT = 0x30E
 GO1_RPM = 0x38B
 GO1_TABLE = 0x930
 GO1_STEPS = 10
-# The board sensor indexing the table reads ~40 °C while the APU is at 60-80 °C, so the
-# user's curve (APU temperature) cannot be copied into the table: the loop writes the
-# duty it wants into the cool steps instead. The hot steps keep the firmware's own
-# minimums, so a stalled loop still cools hard once the board itself heats up.
+# The table is indexed by a board sensor far cooler than the APU, so the loop writes its
+# duty to the cool steps and the hot steps keep the firmware minimums.
 GO1_HOT_FLOOR = (None, None, None, None, None, 79, 87, 87, 100, 100)
-# Past this APU temperature the curve is ignored and the fan runs at full speed.
-_GO1_TEMP_GUARD_C = 90
 
 
 class _MemEC:
-    """Byte access to the Go original's EC window through /dev/mem. Maps lazily and
-    never raises; `available` is False when the kernel refuses the mapping (lockdown,
-    a driver owning the range)."""
+    """Byte access to the EC window through /dev/mem. Never raises."""
 
     def __init__(self, base: int = GO1_EC_BASE, size: int = 0x1000) -> None:
         self._base = base
@@ -275,10 +266,8 @@ class _MemEC:
 
 
 class LegionGoFanTableBackend(SoftwareLoopBackend):
-    """Legion Go original: drive the fan through the firmware table. Each tick turns the
-    curve at the live APU temperature into a duty, writes it to the table's cool steps
-    and keeps SFNT = 1, which also undoes a profile switch or suspend resetting it.
-    Release = SFNT 0 (firmware profile curve)."""
+    """Legion Go original: the loop writes the duty into the firmware table and keeps
+    SFNT = 1; release = SFNT 0."""
 
     name = "legion-go-ec-table"
     resettable = False
@@ -286,8 +275,7 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
     def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None,
                  root: str = "/", ec=None) -> None:
         super().__init__(temp_fn=temp_fn, root=root)
-        dmi = os.path.join(root, "sys/class/dmi/id/product_name")
-        self._dmi_ok = (_read(dmi) or "").strip().upper() == "83E1"
+        self._dmi_ok = _dmi_text(root, "product_name").strip() == "83E1"
         self._ec = (ec or _MemEC()) if self._dmi_ok else None
         self._mapped = bool(self._ec is not None and self._ec.available())
         self._reasserts = 0
@@ -307,7 +295,7 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
         if self._points is None or temp is None:
             return None
-        if temp >= _GO1_TEMP_GUARD_C:
+        if temp >= _TEMP_GUARD_C:
             return 100
         return max(0, min(100, round(_interp(self._points, temp) * 100 / 255)))
 
@@ -329,7 +317,7 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
             diary = journal.active
             if diary is not None and self._reasserts & (self._reasserts - 1) == 0:
                 diary.write("INFO", "fans", "table_reset", count=self._reasserts, sfnt=sfnt)
-        # Table before SFNT: taking over from the firmware never runs a half-written table.
+        # Table before SFNT so taking over never runs a half-written table.
         for i, pct in enumerate(table):
             self._ec.write(GO1_TABLE + i, pct)
         self._ec.write(GO1_SFNT, 1)

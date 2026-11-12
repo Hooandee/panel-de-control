@@ -15,7 +15,7 @@ from fans.legion_ec import (
     LegionGoSFanBackend,
     REG_OVERRIDE,
     _GOS_MAX_RPM,
-    _GOS_TEMP_GUARD_C,
+    _TEMP_GUARD_C,
 )
 
 
@@ -120,7 +120,7 @@ def test_guardian_forces_max_through_the_loop(tmp_path, fast_loop):
         b.apply_curve_all(CURVE)
         await _wait_for(lambda: _override(ec) == b.target_for_temp(55.0))
         assert _override(ec) < _GOS_MAX_RPM  # not yet at the cap
-        temp["v"] = _GOS_TEMP_GUARD_C + 5  # cross the guardian
+        temp["v"] = _TEMP_GUARD_C + 5  # cross the guardian
         ok = await _wait_for(lambda: _override(ec) == _GOS_MAX_RPM)
         assert ok, "guardian never forced the capped max through the loop"
         b.set_auto(None)

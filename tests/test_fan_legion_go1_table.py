@@ -1,6 +1,4 @@
-"""Legion Go original (83E1) fan table. The real backend maps the firmware's EC
-window from /dev/mem; tests inject a FakeMem and a synthetic DMI so no hardware is
-touched. Offsets and behaviour were measured on a real 83E1 (BIOS N3CN40WW)."""
+"""Legion Go original (83E1) fan table backend with an injected EC window."""
 import os
 
 from fans.control import select_fan_backend
@@ -151,7 +149,7 @@ def test_reasserts_after_firmware_resets_custom_mode(tmp_path):
     mem = FakeMem()
     backend = _backend(tmp_path, mem)
     backend.apply_curve_all(CURVE)
-    mem.mem[GO1_SFNT] = 0  # a platform profile switch drops the custom table
+    mem.mem[GO1_SFNT] = 0
     assert backend._apply_once() is True
     assert mem.mem[GO1_SFNT] == 1
     assert backend.diagnostics()["reasserts"] == 1

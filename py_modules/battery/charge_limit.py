@@ -216,11 +216,7 @@ class LenovoConservationMode(ChargeLimitBackend):
 
 
 class LenovoChargeTypes(ChargeLimitBackend):
-    """Lenovo `power_supply/*/charge_types` with a `Long_Life` mode (Legion Go
-    original on kernels where lenovo-wmi-other extends the battery). Long_Life is
-    the firmware's fixed 80 % cap, so this is an on/off control like
-    conservation_mode. The firmware answers reads, so the bracketed readback is the
-    applied truth."""
+    """Lenovo `charge_types`: Long_Life is the firmware's fixed 80 % cap (on/off)."""
 
     adjustable = False
     name = "lenovo-charge-types"
@@ -231,26 +227,19 @@ class LenovoChargeTypes(ChargeLimitBackend):
         self._path = self._find(root)
         self.supported = self._path is not None
 
-    @staticmethod
-    def _modes(text):
-        return [token.strip("[]") for token in (text or "").split()]
-
     @classmethod
     def _find(cls, root):
         for d in sorted(glob.glob(os.path.join(root, _SUPPLY, "*"))):
             path = os.path.join(d, "charge_types")
-            modes = cls._modes(read_str(path))
-            if cls._ON in modes and cls._OFF in modes:
+            modes = {token.strip("[]") for token in (read_str(path) or "").split()}
+            if {cls._ON, cls._OFF} <= modes:
                 return path
         return None
 
     def active(self):
-        text = read_str(self._path) if self.supported else None
-        tokens = (text or "").split()
+        tokens = (read_str(self._path) or "").split() if self.supported else []
         selected = [t.strip("[]") for t in tokens if t.startswith("[")]
-        if selected:
-            return selected[0]
-        return tokens[0] if len(tokens) == 1 else None
+        return selected[0] if selected else (tokens[0] if len(tokens) == 1 else None)
 
     def get(self):
         return None  # firmware-fixed threshold; percent unknown

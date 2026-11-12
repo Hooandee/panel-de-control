@@ -38,8 +38,6 @@ GO1_GRIPS = [
 
 
 def test_buttons_legion_go_1_old_inputplumber_m2_is_left_stick_touch():
-    # InputPlumber <= 0.77.6 advertises both stick touches; M2 emits LeftStickTouch and
-    # M1 (RightStickTouch) also sends mouse events, so it is not offered.
     caps = GO1_GRIPS + ["Gamepad:Button:LeftStickTouch", "Gamepad:Button:RightStickTouch"]
     assert ip.buttons_for("legion_go", caps) == [
         ("LeftPaddle1", "Y1"),
@@ -51,8 +49,6 @@ def test_buttons_legion_go_1_old_inputplumber_m2_is_left_stick_touch():
 
 
 def test_buttons_legion_go_1_current_inputplumber_m2_is_right_stick_touch():
-    # From InputPlumber 0.77.7 the Go 1 driver sends M2 as RightStickTouch and no longer
-    # advertises LeftStickTouch (bundle PDC-5XM2, InputPlumber 0.78.0).
     caps = GO1_GRIPS + ["Gamepad:Button:RightStickTouch"]
     assert ip.buttons_for("legion_go", caps) == [
         ("LeftPaddle1", "Y1"),

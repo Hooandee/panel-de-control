@@ -75,10 +75,8 @@ DEVICES_WITHOUT_BUILTIN_CONTROLS = frozenset({"playstation_5"})
 # current names. This keeps one physical M1/M2 pair in the UI instead of exposing
 # duplicate aliases when a transitional daemon advertises both generations.
 DEVICE_BUTTON_VARIANTS = {
-    # Legion Go 1 (M1 sends mouse/keyboard events, so it is not remappable). Up to
-    # InputPlumber 0.77.6, M2 emitted LeftStickTouch and both stick touches were
-    # advertised; from 0.77.7 M2 emits RightStickTouch and LeftStickTouch is no longer
-    # advertised. A tie (old daemon) keeps the first variant.
+    # Go 1 M1 sends mouse events. InputPlumber <= 0.77.6 sends M2 as LeftStickTouch and
+    # advertises both touches (tie keeps the first); later versions use RightStickTouch.
     "legion_go": [
         [("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
          ("LeftStickTouch", "M2"), ("RightPaddle2", "M3")],
