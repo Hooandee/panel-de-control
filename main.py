@@ -125,6 +125,7 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
+from power.rapl import RaplPackagePower
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
@@ -294,6 +295,17 @@ _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
+# Every value refresh is a mangohudctl reload, and mangoapp re-parses its whole config
+# on a control thread while the render thread draws it. Continuous sensor readings
+# (power draw, fan speed, battery) are therefore republished far less often than
+# applied state (TDP, profile, toggles) or a reading that just became available.
+_MIN_HUD_SENSOR_REFRESH_S = 10.0
+_HUD_SENSOR_METRICS = frozenset((
+    "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
+))
+_HUD_REDETECT_S = 15.0
+_HUD_UNOBSERVED_BACKOFF_S = 60.0
+_HUD_BATTERY_METRICS = frozenset(("pdc_bat_health", "pdc_bat_power", "pdc_bat_time"))
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
@@ -917,6 +929,7 @@ class Plugin(AmbientRpc):
             self._settings.get("hud_managed_path")
         )
         self._power_reader = PowerReader()
+        self._rapl_power = RaplPackagePower()
         self._gamescope_stats = GamescopeStats()
         self._gamescope_perf = GamescopePerf(
             app_id=self._gamescope_focus_app,
@@ -1020,6 +1033,15 @@ class Plugin(AmbientRpc):
         self._hud_reload_retry_at = 0.0
         self._hud_conflict = None
         self._hud_last_publish_at = float("-inf")
+        self._hud_redetect_at = float("-inf")
+        self._hud_value_publish_count = 0
+        self._hud_redetect_count = 0
+        self._hud_redetect_recovered = 0
+        self._hud_last_delivery = "unknown"
+        self._hud_unobserved_reloads = 0
+        self._hud_reload_via_proc_cwd = False
+        self._hud_observe_after = float("-inf")
+        self._hud_power_source = None
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -3281,6 +3303,19 @@ class Plugin(AmbientRpc):
             "readback_mismatch",
         }:
             outcome = "unavailable"
+        deactivation = overlay.get("last_deactivation")
+        deactivation = deactivation if isinstance(deactivation, dict) else {}
+        hide_outcome = deactivation.get("outcome")
+        if hide_outcome not in {
+            "not_attempted",
+            "already_hidden",
+            "confirmed",
+            "unavailable",
+            "exception",
+            "readback_timeout",
+            "readback_mismatch",
+        }:
+            hide_outcome = "not_attempted"
         return {
             "snapshot_status": "available" if raw_level is not None else "unavailable",
             "resolver": resolver,
@@ -3297,6 +3332,11 @@ class Plugin(AmbientRpc):
                 "before_level": level(activation.get("before_level")),
                 "requested_level": level(activation.get("requested_level")),
                 "observed_level": level(activation.get("observed_level")),
+            },
+            "last_deactivation": {
+                "outcome": hide_outcome,
+                "before_level": level(deactivation.get("before_level")),
+                "observed_level": level(deactivation.get("observed_level")),
             },
         }
 
@@ -3348,6 +3388,12 @@ class Plugin(AmbientRpc):
             "managed_session_count": len(getattr(self, "_hud_sessions", ())),
             "reload_pending_count": len(getattr(self, "_hud_reload_pending", ())),
             "reload_attempt": int(getattr(self, "_hud_reload_attempt", 0)),
+            "value_publish_count": int(getattr(self, "_hud_value_publish_count", 0)),
+            "redetect_count": int(getattr(self, "_hud_redetect_count", 0)),
+            "redetect_recovered": int(getattr(self, "_hud_redetect_recovered", 0)),
+            "reload_delivery": getattr(self, "_hud_last_delivery", "unknown"),
+            "unobserved_reloads": int(getattr(self, "_hud_unobserved_reloads", 0)),
+            "power_source": getattr(self, "_hud_power_source", None),
             "conflict": bool(state.get("conflict") or conflict),
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
@@ -10627,7 +10673,7 @@ class Plugin(AmbientRpc):
         }
         self._hud_apply_status = "conflict"
 
-    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+    def _request_hud_reload(self, snapshot, *, reset_backoff, confirm=True) -> bool:
         snapshot = tuple(snapshot)
         if reset_backoff:
             self._hud_reload_attempt = 0
@@ -10635,7 +10681,16 @@ class Plugin(AmbientRpc):
             self._hud_reload_pending = ()
             self._hud_reload_retry_at = 0.0
             return False
-        result = reload_sessions(snapshot)
+        result = reload_sessions(
+            snapshot,
+            observe=(
+                confirm
+                and not self._hud_shutdown
+                and _monotonic() >= self._hud_observe_after
+            ),
+            via_proc_cwd=self._hud_reload_via_proc_cwd,
+        )
+        self._note_hud_delivery(getattr(result, "delivery", "unknown"))
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
             session
@@ -10663,9 +10718,35 @@ class Plugin(AmbientRpc):
                 self._hud_reload_retry_at = _monotonic() + delay
         return False
 
-    def _reload_mangoapp(self, sessions=None) -> bool:
+    def _note_hud_delivery(self, delivery) -> None:
+        if delivery == "unknown":
+            return
+        previous = self._hud_last_delivery
+        self._hud_last_delivery = delivery
+        if delivery == "observed_proc_cwd":
+            self._hud_reload_via_proc_cwd = True
+        elif delivery == "observed":
+            self._hud_reload_via_proc_cwd = False
+        if delivery != "unobserved":
+            if previous == "unobserved":
+                decky.logger.info("HUD reload delivery recovered: %s", delivery)
+            return
+        self._hud_unobserved_reloads += 1
+        # Stop paying the confirmation wait on every publish; check again later.
+        self._hud_observe_after = _monotonic() + _HUD_UNOBSERVED_BACKOFF_S
+        if previous != "unobserved":
+            decky.logger.warning(
+                "HUD reload delivery: %s",
+                json.dumps({
+                    "delivery": delivery,
+                    "unobserved": self._hud_unobserved_reloads,
+                    "sessions": len(self._hud_sessions),
+                }),
+            )
+
+    def _reload_mangoapp(self, sessions=None, *, confirm=True) -> bool:
         snapshot = tuple(self._hud_sessions if sessions is None else sessions)
-        return self._request_hud_reload(snapshot, reset_backoff=True)
+        return self._request_hud_reload(snapshot, reset_backoff=True, confirm=confirm)
 
     def _retry_pending_hud_reload(self) -> bool:
         if not self._hud_reload_pending:
@@ -10675,6 +10756,7 @@ class Plugin(AmbientRpc):
         return self._request_hud_reload(
             self._hud_reload_pending,
             reset_backoff=False,
+            confirm=False,
         )
 
     def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
@@ -10688,6 +10770,7 @@ class Plugin(AmbientRpc):
         model = self._hud.load() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._hud_power_source = None
             self._pdc_presets_path = None
             self._pdc_active_ids = []
             self._pdc_written = {}
@@ -10714,7 +10797,7 @@ class Plugin(AmbientRpc):
             if (
                 cap["supported"]
                 and cap["running"]
-                and not self._reload_mangoapp(cap["sessions"])
+                and not self._reload_mangoapp(cap["sessions"], confirm=False)
             ):
                 self._hud_apply_status = "pending"
             else:
@@ -10765,6 +10848,8 @@ class Plugin(AmbientRpc):
         self._hud_sessions = tuple(cap["sessions"])
         self._pdc_locale = model.get("locale", "es")
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
+        if "pdc_power" not in self._pdc_active_ids:
+            self._hud_power_source = None
         values = self._pdc_values()
         self._pdc_preview_values = values
         try:
@@ -10820,7 +10905,7 @@ class Plugin(AmbientRpc):
 
         if "pdc_power" in active:
             src["power"] = observed(
-                self._power_reader.read,
+                self._hud_package_power,
                 lambda value: isinstance(value.get("watts"), (int, float)),
             )
         if "pdc_fan_rpm" in active:
@@ -10831,10 +10916,10 @@ class Plugin(AmbientRpc):
                     for fan in value.get("fans", [])
                 ),
             )
-        if "pdc_bat_health" in active:
+        if active & _HUD_BATTERY_METRICS:
             src["battery"] = observed(
                 self._battery.read,
-                lambda value: isinstance(value.get("health_percent"), (int, float)),
+                lambda value: bool(value.get("present")),
             )
         if "pdc_charge" in active:
             src["charge"] = observed(
@@ -10882,6 +10967,15 @@ class Plugin(AmbientRpc):
             _HUD_OBSERVATION_MAX_AGE_S,
         )
         return {} if value is None else value
+
+    def _hud_package_power(self) -> dict:
+        reading = self._power_reader.read()
+        if isinstance(reading.get("watts"), (int, float)):
+            self._hud_power_source = "amdgpu"
+            return reading
+        watts = self._rapl_power.read()
+        self._hud_power_source = "rapl" if watts is not None else None
+        return {**reading, "watts": watts}
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
         """Gather the live plugin state the active pdc metrics need. Only computes what
@@ -10941,7 +11035,7 @@ class Plugin(AmbientRpc):
             power = self._fresh_pdc_source(
                 extras,
                 "power",
-                self._power_reader.read,
+                self._hud_package_power,
             )
             snap["watts"] = power.get("watts")
         if "pdc_charge" in active_ids:
@@ -10957,13 +11051,16 @@ class Plugin(AmbientRpc):
                 (int, float),
             )
             snap["charge_percent"] = cl.get("applied_percent")
-        if "pdc_bat_health" in active_ids:
+        if _HUD_BATTERY_METRICS.intersection(active_ids):
             bat = self._fresh_pdc_source(
                 extras,
                 "battery",
                 self._battery.read,
             )
             snap["bat_health"] = bat.get("health_percent")
+            snap["bat_status"] = bat.get("status")
+            snap["bat_watts"] = bat.get("power_now_w")
+            snap["bat_eta_s"] = bat.get("eta_seconds")
         if "pdc_smt" in active_ids:
             snap["smt_supported"] = self._smt.supported
             snap["smt_on"] = self._smt.enabled() if self._smt.supported else None
@@ -11008,7 +11105,59 @@ class Plugin(AmbientRpc):
             for mid in active
         }
 
+    def _hud_redetect_due(self) -> bool:
+        return (
+            self._hud_apply_status == "pending"
+            and _monotonic() >= self._hud_redetect_at
+        )
+
+    def _hud_sessions_gone(self) -> bool:
+        return bool(self._hud_sessions) and not any(
+            mangohud_detect.session_alive(session) for session in self._hud_sessions
+        )
+
+    def _redetect_hud_sessions(self) -> bool:
+        """Find a mangoapp that started after the last apply (late session start or a
+        restarted mangoapp) and re-apply to it. Returns True when a re-apply ran."""
+        self._hud_redetect_at = _monotonic() + _HUD_REDETECT_S
+        model = self._hud.load()
+        if not model["enabled"]:
+            return False
+        self._hud_redetect_count += 1
+        cap = self._detect_hud()
+        if not cap["supported"]:
+            return False
+        self._apply_hud(cap=cap, model=model)
+        if self._hud_apply_status == "reload_requested":
+            self._hud_redetect_recovered += 1
+            decky.logger.info(
+                "HUD reattached to mangoapp: %s",
+                json.dumps({
+                    "status": self._hud_apply_status,
+                    "sessions": len(self._hud_sessions),
+                    "attempts": self._hud_redetect_count,
+                }),
+            )
+        return True
+
+    def _hud_values_due(self, values, now) -> bool:
+        elapsed = now - self._hud_last_publish_at
+        changed = {
+            metric_id
+            for metric_id in set(values) | set(self._pdc_written)
+            if values.get(metric_id) != self._pdc_written.get(metric_id)
+        }
+        appeared = any(
+            self._pdc_written.get(metric_id) in (None, mangohud_pdc.DASH)
+            for metric_id in changed
+        )
+        if changed - _HUD_SENSOR_METRICS or appeared:
+            return elapsed >= _MIN_HUD_REFRESH_S
+        return elapsed >= _MIN_HUD_SENSOR_REFRESH_S
+
     def _refresh_pdc_metrics_sync(self) -> None:
+        if self._hud_redetect_due() and self._redetect_hud_sessions():
+            return
         if self._hud_reload_pending:
             self._hud_apply_status = (
                 "reload_requested"
@@ -11017,12 +11166,18 @@ class Plugin(AmbientRpc):
             )
         if not self._pdc_active_ids or not self._pdc_presets_path:
             return
+        if (
+            _monotonic() >= self._hud_redetect_at
+            and self._hud_sessions_gone()
+            and self._redetect_hud_sessions()
+        ):
+            return
         extras = self._read_pdc_sources()
         values = self._pdc_values(extras)
         if values == self._pdc_written:
             return
         now = _monotonic()
-        if now - self._hud_last_publish_at < _MIN_HUD_REFRESH_S:
+        if not self._hud_values_due(values, now):
             return
         model = self._hud.load()
         if model["enabled"]:
@@ -11041,6 +11196,7 @@ class Plugin(AmbientRpc):
             except OSError:
                 self._hud_apply_status = "failed"
                 raise
+            self._hud_value_publish_count += 1
             if self._reload_mangoapp():
                 self._pdc_written = values
                 self._hud_last_publish_at = now
@@ -11091,6 +11247,7 @@ class Plugin(AmbientRpc):
             self._hud_shutdown
             or (
                 not self._hud_reload_pending
+                and not self._hud_redetect_due()
                 and (not self._pdc_active_ids or not self._pdc_presets_path)
             )
         ):

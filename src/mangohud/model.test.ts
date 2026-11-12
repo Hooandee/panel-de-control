@@ -284,8 +284,8 @@ describe("pdc (Panel de Control) metrics", () => {
     const pdc = GROUPS.find((g) => g.key === "pdc");
     expect(pdc?.ids).toEqual([
       "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
-      "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
-      "pdc_cores", "pdc_gpu_clock", "pdc_model",
+      "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_bat_power",
+      "pdc_bat_time", "pdc_smt", "pdc_boost", "pdc_cores", "pdc_gpu_clock", "pdc_model",
     ]);
   });
   it("renders a pdc metric with the latest honest backend value", () => {

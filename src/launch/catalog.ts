@@ -105,7 +105,7 @@ export type Usage = Record<string, number>;
 // wrapper lands in the right place while any pre-existing (unknown) wrapper stays outermost.
 export const CATALOG: Pill[] = [
   // ── Común ────────────────────────────────────────────────────────────────
-  { id: "mangohud", section: "common", recommended: true, subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
+  { id: "mangohud", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
   { id: "gamemode", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "gamemoderun", raw: "gamemoderun", requires: "gamemode", labelKey: "params.pill.gamemode", descKey: "params.pill.gamemode.desc" },
   { id: "lsfg", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/lsfg", raw: "~/lsfg", requires: "lsfg", labelKey: "params.pill.lsfg", descKey: "params.pill.lsfg.desc" },
   { id: "makoRun", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/.local/bin/mako-run", raw: "~/.local/bin/mako-run", requires: "makoRun", labelKey: "params.pill.makoRun", descKey: "params.pill.makoRun.desc" },
