@@ -1579,6 +1579,7 @@ export const fr: Record<string, string> = {
   "tdp.ownership.constrained": "L'appareil limite la puissance à {applied} W pour le moment.",
   "tdp.ownership.powerLimited": "L'appareil limite la puissance à {applied} W avec cette alimentation.",
   "tdp.ownership.minimum": "L'appareil ne descend pas sous {applied} W.",
+  "tdp.ownership.boostFloor": "Reste à {applied} W en moyenne. L'appareil autorise de brefs pics jusqu'à {boost} W.",
   "tdp.ownership.rejectedUnknown": "L'appareil n'accepte pas cette valeur pour le moment.",
   "tdp.ownership.conflict": "Quelque chose modifie la limite de puissance de l'appareil.",
   "tdp.ownership.rejected": "L'appareil n'accepte pas {target} W pour le moment. Il reste à {applied} W.",

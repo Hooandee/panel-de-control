@@ -1609,6 +1609,7 @@ export const ptBR: Record<string, string> = {
   "tdp.ownership.constrained": "O aparelho está limitando a potência a {applied} W por enquanto.",
   "tdp.ownership.powerLimited": "O aparelho limita a potência a {applied} W com esta fonte de energia.",
   "tdp.ownership.minimum": "O aparelho não fica abaixo de {applied} W.",
+  "tdp.ownership.boostFloor": "Fica em {applied} W na média. O aparelho permite picos curtos de até {boost} W.",
   "tdp.ownership.rejectedUnknown": "O aparelho não permite esse valor agora.",
   "tdp.ownership.conflict": "Algo no aparelho está mudando o limite de potência.",
   "tdp.ownership.rejected": "O aparelho não permite {target} W agora. Continua em {applied} W.",

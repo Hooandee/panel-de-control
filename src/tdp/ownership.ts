@@ -35,7 +35,7 @@ export function ownershipView(ownership: TdpOwnership, physicalMin?: number): Ow
   const onlyRaisedSecondary = secondaryChanges.some((change) => change > 0)
     && secondaryChanges.every((change) => change >= 0);
   const secondaryOnlyConstraint = ownership.status === "constrained"
-    && ownership.reason === "safe_min"
+    && ["safe_min", "live_min"].includes(ownership.reason)
     && requested !== null
     && requested === target
     && target === applied
@@ -112,6 +112,20 @@ export function ownershipMessage(
     return { key: "tdp.ownership.overshootUnresolved", vars: { target: ownership.overshoot.target_w }, warn: true };
   }
   if (ownership.conflict_persistent) return { key: "tdp.ownership.conflict", vars: {}, warn: true };
+  // Firmware that publishes a higher minimum for the boost rails than for sustained power keeps
+  // a low limit on average while short peaks still reach that boost minimum.
+  if (
+    ownership.reason === "live_min"
+    && view.boostFloor !== null
+    && view.applied !== null
+    && view.requested === view.applied
+  ) {
+    return {
+      key: "tdp.ownership.boostFloor",
+      vars: { applied: view.applied, boost: Math.max(view.boostFloor.pl2, view.boostFloor.pl3) },
+      warn: false,
+    };
+  }
   if (view.show && ownership.status === "constrained" && view.applied !== null) {
     const key = ["safe_min", "live_min"].includes(ownership.reason)
       ? "tdp.ownership.minimum"

@@ -1,9 +1,15 @@
 import os
+import time
 
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 import journal
+from lifecycle import read_on_ac
+
+# A revert this soon after our own write is the firmware; later ones (resume, other tools) are drift.
+_FIRMWARE_REVERT_WINDOW_S = 60.0
+_BATTERY_CEILING_TTL_S = 600.0
 
 _POWERCAP = "sys/devices/virtual/powercap"
 # Prefer the MMIO interface (current on recent kernels), fall back to the legacy one.
@@ -73,7 +79,9 @@ class IntelRaplBackend(TDPBackend):
         write_max_ac: int | None = None,
         sync_surfaces: bool = False,
         baseline_path: str | None = None,
+        battery_ceiling: bool = False,
     ) -> None:
+        self._battery_ceiling_enabled = bool(battery_ceiling)
         self._fallback = fallback
         self._write_limits = fallback.with_ac_max(write_max_ac)
         self._root = root
@@ -99,6 +107,11 @@ class IntelRaplBackend(TDPBackend):
         self._owned_payload = self._ownership_lock.load_payload()
         self._owns_state = False
         self._ownership_recovery_pending = self._owned_payload is not None
+        self._on_ac = None
+        self._written_w = None
+        self._written_at = None
+        self._battery_ceiling_w = None
+        self._ceiling_since = None
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
             if self._runtime_lock_payload
@@ -322,6 +335,8 @@ class IntelRaplBackend(TDPBackend):
         return max(self._fallback.min_w, min(int(watts), maximum))
 
     def apply_auto_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
+        self._written_at = None
+        self._battery_ceiling_w = None
         requested = int(targets["pl1"])
         if not self.auto_tdp_safe:
             return TdpResult(requested, None, False, "complete PL1/PL2 RAPL control unavailable")
@@ -444,6 +459,11 @@ class IntelRaplBackend(TDPBackend):
                 "firmware PL1 could not be recorded for hand-back",
             )
         target = self._write_limits.clamp(watts, ac)
+        self._on_ac = bool(ac)
+        if ac:
+            self._battery_ceiling_w = None
+        self._written_w = target
+        self._written_at = time.monotonic()
         # A BIOS-locked surface refuses the write but still counts: the package
         # obeys the lowest PL1, so with several surfaces success is judged on that
         # effective value. A single surface keeps requiring the write itself.
@@ -512,7 +532,8 @@ class IntelRaplBackend(TDPBackend):
         for rail, index in (("pl1", 0), ("pl2", 1)):
             value = self.read_applied() if index == 0 else self._read_constraint_w(index)
             if value is not None:
-                rails[rail] = RailReading(value)
+                ceiling = self._observe_battery_ceiling() if index == 0 else None
+                rails[rail] = RailReading(value, max_w=ceiling)
         return TdpObservation(
             readable=True,
             surfaces={self.name: rails} if rails else {},
@@ -542,6 +563,37 @@ class IntelRaplBackend(TDPBackend):
             return self._restore_payload("ownership")
         return {"ok": True, "detail": "no RAPL recovery pending"}
 
+    def _observe_battery_ceiling(self) -> int | None:
+        # MSI Claw firmware puts its own battery PL1 back on the MMIO surface a few
+        # seconds after any higher write. Rewriting it is a fight the package never
+        # sees, so the reverted value is published as the live ceiling until AC.
+        if (self._on_ac is not False or not self._sync_surfaces
+                or not self._battery_ceiling_enabled):
+            return None
+        if read_on_ac(self._root):
+            self._battery_ceiling_w = None
+            return None
+        now = time.monotonic()
+        if (self._battery_ceiling_w is not None
+                and now - self._ceiling_since >= _BATTERY_CEILING_TTL_S):
+            # Retry the higher target now and then: the cap may have been a one-off reset.
+            self._battery_ceiling_w = None
+        recent_write = (self._written_at is not None
+                        and now - self._written_at <= _FIRMWARE_REVERT_WINDOW_S)
+        if self._battery_ceiling_w is None and self._written_w is not None and recent_write:
+            firmware = (self._baseline_lock.load_payload() or {}).get("pl1_uw") or {}
+            reverted = []
+            for directory in self._pl1_dirs:
+                own = firmware.get(os.path.basename(directory))
+                current = self._read_int(self._pl1_path(directory))
+                if own is None or current is None or current != int(own):
+                    continue
+                if round(current / 1_000_000) < self._written_w:
+                    reverted.append(round(current / 1_000_000))
+            self._battery_ceiling_w = min(reverted) if reverted else None
+            self._ceiling_since = now
+        return self._battery_ceiling_w
+
     def _capture_baseline(self) -> bool:
         if self._baseline_path is None or self._baseline_lock.load_payload() is not None:
             return True
@@ -566,13 +618,16 @@ class IntelRaplBackend(TDPBackend):
             }
 
         baseline = self._baseline_lock.load_payload()
-        return {
+        diagnostics = {
             "pl1_surfaces": watts({
                 os.path.basename(d): self._read_int(self._pl1_path(d))
                 for d in self._pl1_dirs
             }),
             "firmware_pl1_w": watts(baseline.get("pl1_uw") or {}) if baseline else None,
         }
+        if self._battery_ceiling_w is not None:
+            diagnostics["battery_ceiling_w"] = self._battery_ceiling_w
+        return diagnostics
 
     def _release_auto_state(self):
         if self._runtime_lock_payload is not None:
@@ -584,4 +639,7 @@ class IntelRaplBackend(TDPBackend):
         return bool(self._restore_payload("ownership")["ok"])
 
     def release(self):
+        self._written_w = None
+        self._written_at = None
+        self._battery_ceiling_w = None
         return self._release_auto_state() and self._restore_baseline()

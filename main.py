@@ -241,6 +241,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
+            "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
+            "board_fans.loaded_by_panel",
         )),
     ),
     "audio": (
@@ -584,6 +586,8 @@ DEFAULTS = {
     "fan_experimental": False,
     "board_fan_driver": False,
     "board_fan_module": None,
+    "board_fan_control_off": False,
+    "fan_release_pending": False,
     # PlayStation 5 fan target (°C) for the firmware autoservo; None = untouched.
     "ps5_fan_target_c": None,
     # PlayStation 5 light preset (None = untouched) and thermal guard / overheat beep.
@@ -817,9 +821,7 @@ class Plugin(AmbientRpc):
             desktop=self._desktop_mode_on(), device_key=self._device.key)
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp,
-            experimental=bool(self._settings.get("fan_experimental", False)))
+        self._fan_ctrl = self._select_fan_backend()
         board_module = self._settings.get("board_fan_module")
         self._board_fans = (
             BoardFanDriver(owned=(board_module,) if isinstance(board_module, str) else ())
@@ -2027,6 +2029,7 @@ class Plugin(AmbientRpc):
         """Persist a module state and reconcile affected runtime ownership."""
         self._init()
         disabled = bool(disabled)
+        fans_were_on = self._module_enabled("fanControl")
         charge_generation = None
         if module_id in self._MODULE_SETTING:
             charge_generation = self._cancel_charge_limit_reconcile(
@@ -2050,6 +2053,8 @@ class Plugin(AmbientRpc):
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
         if disabled and module_id in ("system", "chargeLimit"):
             self._clear_charge_limit_full_once()
+        if fans_were_on and not self._module_enabled("fanControl"):
+            self._settings["fan_release_pending"] = True
         release_requested = (
             dict(targets.requested)
             if module_id == "power"
@@ -4788,13 +4793,7 @@ class Plugin(AmbientRpc):
         outcome = gpd_recovery.ensure_gpd_fan(self._device)
         if outcome["eligible"] and outcome["abi_after"]:
             try:
-                self._fan_ctrl = fan_control.select_fan_backend(
-                    self._device,
-                    temp_fn=self._driving_temp,
-                    experimental=bool(
-                        self._settings.get("fan_experimental", False)
-                    ),
-                )
+                self._fan_ctrl = self._select_fan_backend()
             except Exception as exc:  # noqa: BLE001 — retain firmware-auto/null
                 outcome["error"] = type(exc).__name__
 
@@ -4821,23 +4820,52 @@ class Plugin(AmbientRpc):
         log = decky.logger.info if outcome["supported"] else decky.logger.warning
         log("GPD fan recovery %s", encoded)
 
+    def _fans_owned_by_panel(self) -> bool:
+        # With fan control off, another tool may own the fans; only a release still
+        # pending from the switch-off may write them.
+        settings = getattr(self, "_settings", None)
+        return (
+            settings is None
+            or self._module_enabled("fanControl")
+            or settings.get("fan_release_pending") is True
+        )
+
+    def _select_fan_backend(self, experimental=None):
+        if experimental is None:
+            experimental = bool(self._settings.get("fan_experimental", False))
+        return fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp, experimental=experimental,
+            board_control=self._settings.get("board_fan_control_off") is not True)
+
     def _board_fan_state(self) -> dict:
         driver = getattr(self, "_board_fans", None)
         if driver is None:
             return {"supported": False}
-        return {**driver.state(), "supported": True,
-                "enabled": self._settings.get("board_fan_driver") is True}
+        # A driver the system loads itself is driven by the curve until the user turns the
+        # toggle off, so the toggle follows the fan backend actually in use.
+        opted_out = self._settings.get("board_fan_control_off") is True
+        controlled = not opted_out and (
+            self._settings.get("board_fan_driver") is True
+            or getattr(getattr(self, "_fan_ctrl", None), "name", None) == "generic-pwm"
+        )
+        return {**driver.state(), "supported": True, "enabled": controlled,
+                "control_off": opted_out}
 
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
-        try:
-            released = self._fan_ctrl.restore_auto()
-            released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
-        except Exception:  # noqa: BLE001
-            released_ok = False
+        if self._fans_owned_by_panel():
+            try:
+                released = self._fan_ctrl.restore_auto()
+                released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+            except Exception:  # noqa: BLE001
+                released_ok = False
+        else:
+            released_ok = True
         if enabled:
+            self._settings["board_fan_control_off"] = False
             state = driver.load(only)
         elif released_ok:
+            self._settings["board_fan_control_off"] = True
             state = driver.unload()
         else:
             # Unloading under a fan still in manual mode would strand it at its
@@ -4846,9 +4874,7 @@ class Plugin(AmbientRpc):
         reader = getattr(self, "_fan_reader", None)
         if reader is not None:
             reader.invalidate()
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp,
-            experimental=bool(self._settings.get("fan_experimental", False)))
+        self._fan_ctrl = self._select_fan_backend()
         self._reapply_fans_sync()
         decky.logger.info("Board fan driver %s", json.dumps(
             {**state, "backend": getattr(self._fan_ctrl, "name", "null")},
@@ -5277,7 +5303,8 @@ class Plugin(AmbientRpc):
 
     def _restore_board_fans(self) -> None:
         if (getattr(self, "_board_fans", None) is None
-                or self._settings.get("board_fan_driver") is not True):
+                or self._settings.get("board_fan_driver") is not True
+                or self._settings.get("board_fan_control_off") is True):
             return
         module = self._settings.get("board_fan_module")
         self._offload(
@@ -5330,8 +5357,14 @@ class Plugin(AmbientRpc):
         except Exception as error:  # noqa: BLE001
             decky.logger.warning("PS5 fan target reapply error=%s", type(error).__name__)
         if not self._module_enabled("fanControl"):
-            # Fan control disabled: hand the fans back to firmware auto, never drive.
+            # Fan control disabled: hand the fans back once and stop writing, so another
+            # tool (CoolerControl, fancontrol) keeps what it sets afterwards.
+            if self._settings.get("fan_release_pending") is not True:
+                return True
             released = self._restore_fans_safe()
+            if released:
+                self._settings["fan_release_pending"] = False
+                self._save()
             self._fan_apply_confirmed = False
             self._log_fan_transition("module_disabled", ok=bool(released))
             return released
@@ -5594,8 +5627,7 @@ class Plugin(AmbientRpc):
                 not isinstance(released, dict) or not bool(released.get("ok"))
             ):
                 return False
-        self._fan_ctrl = fan_control.select_fan_backend(
-            self._device, temp_fn=self._driving_temp, experimental=enabled)
+        self._fan_ctrl = self._select_fan_backend(experimental=enabled)
         self._reapply_fans_sync()
         return True
 
@@ -14753,7 +14785,8 @@ class Plugin(AmbientRpc):
         except Exception:  # noqa: BLE001
             released = False
         try:
-            if getattr(self, "_fan_ctrl", None) is not None:
+            # NullFanBackend never held a fan, so there is nothing for it to hand back.
+            if getattr(getattr(self, "_fan_ctrl", None), "supported", False):
                 result = self._fan_ctrl.restore_auto()
                 released = released and bool(
                     isinstance(result, dict) and result.get("ok")
@@ -15768,7 +15801,9 @@ class Plugin(AmbientRpc):
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
-        fans_released = self._restore_fans_safe()
+        fans_released = (
+            self._restore_fans_safe() if self._fans_owned_by_panel() else True
+        )
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
         self._restore_audio_safe()

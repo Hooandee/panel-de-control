@@ -658,3 +658,153 @@ def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
     asyncio.run(p.set_fan_preset("performance", "global", None))
     st = asyncio.run(p.reset_fan_control())
     assert st["reset_ok"] is False
+
+
+def _settle(plugin):
+    """Wait for the fan reapply that set_ui_module queued on the serial apply executor."""
+    executor = getattr(plugin, "_apply_executor", None)
+    if executor is not None:
+        executor.submit(lambda: None).result(timeout=10)
+
+
+class _CountingFan:
+    supported = True
+    name = "counting"
+    _owns_fan = False
+
+    def __init__(self):
+        self.restores = 0
+        self.curves = 0
+
+    def restore_auto(self):
+        self.restores += 1
+        return {"ok": True}
+
+    def apply_curve(self, points):
+        self.curves += 1
+        return {"ok": True}
+
+    def read_state(self):
+        return {"fans": []}
+
+
+def test_disabled_fan_control_releases_once_and_then_stops_writing(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+    first = fan.restores
+    for _ in range(3):
+        plugin._reapply_fans_sync()
+
+    assert first == 1
+    assert fan.restores == 1
+
+
+def test_fan_control_disabled_before_start_is_never_written(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+    plugin._settings["disabled_modules"] = ["fanControl"]
+
+    plugin._reapply_fans_sync()
+
+    assert fan.restores == 0
+
+
+def test_reenabling_fan_control_releases_again_on_the_next_disable(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+    first = fan.restores
+    asyncio.run(plugin.set_ui_module("fanControl", False))
+    _settle(plugin)
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+    _settle(plugin)
+    plugin._reapply_fans_sync()
+
+    assert first == 1
+    assert fan.restores == 2
+    assert plugin._settings["fan_release_pending"] is False
+
+
+def test_shutdown_leaves_fans_alone_while_fan_control_is_off(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+    _settle(plugin)
+    released = fan.restores
+
+    plugin._perform_shutdown_handoff("unload")
+
+    assert fan.restores == released
+
+
+def test_release_interrupted_before_a_restart_is_retried_at_start(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+    plugin._settings["disabled_modules"] = ["fanControl"]
+    plugin._settings["fan_release_pending"] = True
+
+    plugin._reapply_fans_sync()
+    plugin._reapply_fans_sync()
+
+    assert fan.restores == 1
+    assert plugin._settings["fan_release_pending"] is False
+
+
+def test_a_backend_that_cannot_release_does_not_keep_retrying(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+    plugin = Plugin()
+    plugin._init()
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+
+    assert plugin._settings["fan_release_pending"] is False
+
+
+def test_a_failed_ps5_release_stays_pending(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+    plugin = Plugin()
+    plugin._init()
+    plugin._ps5_fan = types.SimpleNamespace(release=lambda: {"ok": False})
+    plugin._restore_fans_safe = lambda: False
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+
+    assert plugin._settings["fan_release_pending"] is True
+
+
+def test_a_successful_ps5_release_clears_the_pending_hand_back(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+    plugin = Plugin()
+    plugin._init()
+    released = []
+    plugin._ps5_fan = types.SimpleNamespace(release=lambda: released.append(1) or {"ok": True})
+    plugin._settings["ps5_fan_target_c"] = 70
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+    plugin._reapply_fans_sync()
+
+    assert plugin._settings["fan_release_pending"] is False
+    assert len(released) == 1
