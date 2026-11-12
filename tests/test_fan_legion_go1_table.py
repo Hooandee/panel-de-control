@@ -206,3 +206,36 @@ def test_factory_skips_it_on_other_legions(tmp_path, monkeypatch):
     monkeypatch.setattr(legion_ec, "_MemEC", lambda *a, **k: FakeMem())
     backend = select_fan_backend(type("D", (), {"key": "legion_go_s"})(), root=str(tmp_path))
     assert not isinstance(backend, LegionGoFanTableBackend)
+
+
+def test_unreadable_temperature_runs_full_speed(tmp_path):
+    _dmi(str(tmp_path))
+    mem = FakeMem()
+    _backend(tmp_path, mem, temp=None).apply_curve_all(CURVE)
+    assert mem.table() == [100] * GO1_STEPS
+
+
+def test_auto_leaves_another_tools_table_alone(tmp_path):
+    _dmi(str(tmp_path))
+    mem = FakeMem()
+    mem.mem[GO1_SFNT] = 1
+    backend = _backend(tmp_path, mem)
+    assert backend.set_auto(None)["ok"] is True
+    assert mem.mem[GO1_SFNT] == 1
+    assert mem.writes == []
+
+
+def test_auto_releases_a_table_left_by_a_previous_run(tmp_path):
+    _dmi(str(tmp_path))
+    mem = FakeMem()
+    for i, v in enumerate(LegionGoFanTableBackend.table_for(30)):
+        mem.mem[GO1_TABLE + i] = v
+    mem.mem[GO1_SFNT] = 1
+    assert _backend(tmp_path, mem).set_auto(None)["ok"] is True
+    assert mem.mem[GO1_SFNT] == 0
+
+
+def test_real_ec_is_never_opened_under_a_test_root(tmp_path):
+    _dmi(str(tmp_path))
+    backend = LegionGoFanTableBackend(root=str(tmp_path))
+    assert backend.supported is False

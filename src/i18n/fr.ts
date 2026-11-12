@@ -1498,7 +1498,7 @@ export const fr: Record<string, string> = {
   "tdp.fwmode.low-power": "Silencieux",
   "tdp.fwmode.balanced": "Équilibré",
   "tdp.fwmode.performance": "Performances",
-  "tdp.fwmode.active": "Dans ce mode, le firmware gère la puissance et le ventilateur. Déplacez le curseur pour personnaliser.",
+  "tdp.fwmode.active": "Dans ce mode, le firmware gère la puissance, et le ventilateur tant que Ventilateurs est sur Auto. Déplacez le curseur pour personnaliser.",
   "tdp.fwmode.custom": "Mode personnalisé : réglez la puissance avec le curseur.",
   "tdp.boost.title": "Boost",
   "tdp.boost.mode.estable": "Stable",

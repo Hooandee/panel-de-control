@@ -1498,7 +1498,7 @@ export const de: Record<string, string> = {
   "tdp.fwmode.low-power": "Leise",
   "tdp.fwmode.balanced": "Ausgewogen",
   "tdp.fwmode.performance": "Leistung",
-  "tdp.fwmode.active": "Die Firmware steuert in diesem Modus Leistung und Lüfter. Bewege den Regler, um den Wert anzupassen.",
+  "tdp.fwmode.active": "Die Firmware steuert in diesem Modus die Leistung, und den Lüfter, solange Lüfter auf Auto steht. Bewege den Regler, um den Wert anzupassen.",
   "tdp.fwmode.custom": "Benutzerdefinierter Modus: Passe die Leistung mit dem Regler an.",
   "tdp.boost.title": "Boost",
   "tdp.boost.mode.estable": "Konstant",

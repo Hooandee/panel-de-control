@@ -1498,7 +1498,7 @@ export const ptBR: Record<string, string> = {
   "tdp.fwmode.low-power": "Silencioso",
   "tdp.fwmode.balanced": "Equilibrado",
   "tdp.fwmode.performance": "Desempenho",
-  "tdp.fwmode.active": "O firmware controla a energia e a ventoinha neste modo. Mova o controle deslizante para personalizar.",
+  "tdp.fwmode.active": "O firmware controla a energia neste modo, e a ventoinha enquanto Ventoinhas estiver em Auto. Mova o controle deslizante para personalizar.",
   "tdp.fwmode.custom": "Modo personalizado: ajuste a energia com o controle deslizante.",
   "tdp.boost.title": "Boost",
   "tdp.boost.mode.estable": "Estável",

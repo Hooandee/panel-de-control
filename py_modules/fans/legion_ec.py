@@ -218,10 +218,22 @@ GO1_STEPS = 10
 GO1_HOT_FLOOR = (None, None, None, None, None, 79, 87, 87, 100, 100)
 
 
+_unmapped_logged = False
+
+
+def _log_unmapped(error) -> None:
+    global _unmapped_logged
+    diary = journal.active
+    if diary is not None and not _unmapped_logged:
+        _unmapped_logged = True
+        diary.write("WARNING", "fans", "ec_window_unavailable", error=error)
+
+
 class _MemEC:
     """Byte access to the EC window through /dev/mem. Never raises."""
 
-    def __init__(self, base: int = GO1_EC_BASE, size: int = 0x1000) -> None:
+    def __init__(self, path: str = "/dev/mem", base: int = GO1_EC_BASE, size: int = 0x1000) -> None:
+        self._path = path
         self._base = base
         self._size = size
         self._map = None
@@ -231,7 +243,7 @@ class _MemEC:
     def _ensure(self):
         if self._map is None:
             import mmap
-            fd = os.open("/dev/mem", os.O_RDWR | os.O_SYNC)
+            fd = os.open(self._path, os.O_RDWR | os.O_SYNC)
             try:
                 self._map = mmap.mmap(fd, self._size, mmap.MAP_SHARED,
                                       mmap.PROT_READ | mmap.PROT_WRITE, offset=self._base)
@@ -276,10 +288,13 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
                  root: str = "/", ec=None) -> None:
         super().__init__(temp_fn=temp_fn, root=root)
         self._dmi_ok = _dmi_text(root, "product_name").strip() == "83E1"
-        self._ec = (ec or _MemEC()) if self._dmi_ok else None
-        self._mapped = bool(self._ec is not None and self._ec.available())
+        self._ec = ec or (_MemEC(os.path.join(root, "dev/mem")) if self._dmi_ok else None)
+        self._mapped = bool(self._dmi_ok and self._ec is not None and self._ec.available())
         self._reasserts = 0
         self._last_duty: Optional[int] = None
+        self._drove = False
+        if self._dmi_ok and not self._mapped:
+            _log_unmapped(getattr(self._ec, "error", None))
 
     def _find_chip(self) -> Optional[str]:
         return None
@@ -293,11 +308,15 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
         return [duty if floor is None else max(duty, floor) for floor in GO1_HOT_FLOOR]
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
-        if self._points is None or temp is None:
+        if self._points is None:
             return None
-        if temp >= _TEMP_GUARD_C:
+        if temp is None or temp >= _TEMP_GUARD_C:
             return 100
         return max(0, min(100, round(_interp(self._points, temp) * 100 / 255)))
+
+    @classmethod
+    def _is_ours(cls, table: list) -> bool:
+        return None not in table and table == cls.table_for(table[0])
 
     def _read_table(self) -> list:
         return [self._ec.read(GO1_TABLE + i) for i in range(GO1_STEPS)]
@@ -321,6 +340,7 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
         for i, pct in enumerate(table):
             self._ec.write(GO1_TABLE + i, pct)
         self._ec.write(GO1_SFNT, 1)
+        self._drove = True
         self._drive_ok = self._ec.read(GO1_SFNT) == 1 and self._read_table() == table
         self._last_duty = duty if self._drive_ok else None
         return self._drive_ok
@@ -330,6 +350,9 @@ class LegionGoFanTableBackend(SoftwareLoopBackend):
 
     def _release(self) -> bool:
         self._last_duty = None
+        sfnt = self._ec.read(GO1_SFNT)
+        if sfnt == 0 or (sfnt == 1 and not self._drove and not self._is_ours(self._read_table())):
+            return True  # firmware already in charge, or another tool's table
         for _ in range(_RELEASE_CONFIRM_RETRIES):
             if self._ec.write(GO1_SFNT, 0) and self._ec.read(GO1_SFNT) == 0:
                 return True
