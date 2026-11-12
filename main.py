@@ -213,6 +213,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
             "kernel_support.visible",
             "gpu_level", "global_gpu_level", "game_power_owner",
+            "ownership.status", "ownership.reason",
         )),
         ("get_tdp_conflict", ("hhd_present", "hhd_managing", "powerstation_active", "steamos_manager_active")),
     ),
@@ -233,6 +234,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
+            "board_fans.enabled", "board_fans.loaded", "board_fans.loaded_by_panel",
         )),
     ),
     "audio": (
