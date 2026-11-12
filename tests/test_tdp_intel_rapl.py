@@ -552,3 +552,62 @@ def test_diagnostics_show_driven_surfaces_and_recorded_firmware_pl1(tmp_path):
         "pl1_surfaces": {"intel-rapl-mmio:0": 12, "intel-rapl:0": 12},
         "firmware_pl1_w": {"intel-rapl-mmio:0": 40, "intel-rapl:0": 25},
     }
+
+
+def _claw_battery_firmware(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=25_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=30_000_000)
+    return mmio, _baseline_backend(tmp_path)
+
+
+def _firmware_puts_back(mmio, uw):
+    with open(os.path.join(mmio, "constraint_0_power_limit_uw"), "w") as f:
+        f.write(str(uw))
+
+
+def test_battery_pl1_put_back_by_firmware_is_published_as_the_live_ceiling(tmp_path):
+    from tdp.reconcile import build_targets
+
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    assert backend.set_tdp(30, False).ok is True
+    _firmware_puts_back(mmio, 25_000_000)
+
+    pl1 = backend.observe().surfaces["intel-rapl"]["pl1"]
+    targets = build_targets({"pl1": 30}, {"pl1": {"min": 8, "max": 30}}, backend.observe())
+
+    assert (pl1.applied_w, pl1.max_w) == (25, 25)
+    assert targets.target == {"pl1": 25}
+    assert backend.diagnostics()["battery_ceiling_w"] == 25
+
+
+def test_battery_ceiling_holds_after_writing_it_and_clears_on_the_charger(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    backend.observe()
+
+    backend.set_tdp(25, False)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    backend.set_tdp(30, True)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_no_battery_ceiling_on_the_charger_or_below_the_firmware_value(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, True)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+    backend.set_tdp(20, False)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_release_forgets_the_battery_ceiling(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    backend.observe()
+
+    assert backend.release() is True
+    assert "battery_ceiling_w" not in backend.diagnostics()
