@@ -266,15 +266,19 @@ export const HudSection: FC = () => {
       setSteamMasterEnabled(result.master_enabled);
     });
   };
+  const hideSteamOverlay = () => {
+    void steamOverlay.ensureHudHidden().then((result) => {
+      setSteamMasterEnabled(result.master_enabled);
+    });
+  };
   const setHudEnabled = (enabled: boolean) => {
     setEnabled(enabled);
-    if (enabled) {
-      activateSteamOverlay();
-    } else {
-      void steamOverlay.ensureHudHidden().then((result) => {
-        setSteamMasterEnabled(result.master_enabled);
-      });
-    }
+    if (enabled) activateSteamOverlay();
+    else hideSteamOverlay();
+  };
+  const resetHud = () => {
+    reset();
+    if (m.enabled) hideSteamOverlay();
   };
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = PRESETS;
@@ -458,7 +462,7 @@ export const HudSection: FC = () => {
         desc={t("hud.reset.confirm.desc")}
         confirmLabel={t("hud.reset")}
         cancelLabel={t("hud.reset.cancel")}
-        onConfirm={reset}
+        onConfirm={resetHud}
         icon={<LuRotateCcw size={18} />}
       />,
     );

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   ensureFullHudVisible: vi.fn(async () => ({})),
   cancelActivation: vi.fn(),
   ensureHudHidden: vi.fn(async () => ({ master_enabled: false })),
+  reset: vi.fn(),
+  showModal: vi.fn(),
   hudEnabled: false,
   steamMasterEnabled: true as boolean | null,
   uniformTextSize: false,
@@ -98,7 +100,7 @@ vi.mock("../mangohud/useHud", async () => {
       reload: vi.fn(),
       reloadStatus: "idle",
       saveStatus: "idle",
-      reset: vi.fn(),
+      reset: mocks.reset,
       resolveConflict: mocks.resolveConflict,
     }),
     useHudValues: () => ({}),
@@ -126,6 +128,8 @@ vi.mock("../components/HudPreview", () => ({
 vi.mock("../components/ColorPicker", () => ({
   ColorPicker: ({ label }: { label: string }) => <span>{label}</span>,
 }));
+
+vi.mock("../navigation/showModal", () => ({ showModal: mocks.showModal }));
 
 vi.mock("../components/ConfirmDialog", () => ({
   ConfirmDialog: () => <div>confirm</div>,
@@ -208,6 +212,18 @@ describe("HudSection QAM composition", () => {
     expect(mocks.setEnabled).toHaveBeenCalledWith(false);
     expect(mocks.ensureHudHidden).toHaveBeenCalledOnce();
     expect(mocks.ensureFullHudVisible).not.toHaveBeenCalled();
+  });
+
+  it("hides Steam's HUD when a reset switches the HUD off", () => {
+    mocks.hudEnabled = true;
+    render(<HudSection />);
+
+    fireEvent.click(screen.getAllByText("copy:hud.reset").at(-1)!);
+    const dialog = mocks.showModal.mock.calls.at(-1)?.[0] as { props: { onConfirm: () => void } };
+    dialog.props.onConfirm();
+
+    expect(mocks.reset).toHaveBeenCalledOnce();
+    expect(mocks.ensureHudHidden).toHaveBeenCalledOnce();
   });
 
   it("offers recovery when PdC is enabled but Steam is hidden", () => {
