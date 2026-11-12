@@ -4716,6 +4716,16 @@ class Plugin(AmbientRpc):
         log = decky.logger.info if outcome["supported"] else decky.logger.warning
         log("GPD fan recovery %s", encoded)
 
+    def _fans_owned_by_panel(self) -> bool:
+        # With fan control off, another tool may own the fans; only a release still
+        # pending from the switch-off may write them.
+        settings = getattr(self, "_settings", None)
+        return (
+            settings is None
+            or self._module_enabled("fanControl")
+            or settings.get("fan_release_pending") is True
+        )
+
     def _select_fan_backend(self, experimental=None):
         if experimental is None:
             experimental = bool(self._settings.get("fan_experimental", False))
@@ -4739,11 +4749,14 @@ class Plugin(AmbientRpc):
 
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
-        try:
-            released = self._fan_ctrl.restore_auto()
-            released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
-        except Exception:  # noqa: BLE001
-            released_ok = False
+        if self._fans_owned_by_panel():
+            try:
+                released = self._fan_ctrl.restore_auto()
+                released_ok = not isinstance(released, dict) or bool(released.get("ok", True))
+            except Exception:  # noqa: BLE001
+                released_ok = False
+        else:
+            released_ok = True
         if enabled:
             self._settings["board_fan_control_off"] = False
             state = driver.load(only)
@@ -5245,7 +5258,11 @@ class Plugin(AmbientRpc):
             if self._settings.get("fan_release_pending") is not True:
                 return True
             released = self._restore_fans_safe()
-            if released or not getattr(self._fan_ctrl, "supported", False):
+            nothing_to_release = (
+                not getattr(self._fan_ctrl, "supported", False)
+                and getattr(self, "_ps5_fan", None) is None
+            )
+            if released or nothing_to_release:
                 self._settings["fan_release_pending"] = False
                 self._save()
             self._fan_apply_confirmed = False
@@ -15492,12 +15509,8 @@ class Plugin(AmbientRpc):
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
-        settings = getattr(self, "_settings", None)
-        fans_off = settings is not None and not self._module_enabled("fanControl")
         fans_released = (
-            True
-            if fans_off and settings.get("fan_release_pending") is not True
-            else self._restore_fans_safe()
+            self._restore_fans_safe() if self._fans_owned_by_panel() else True
         )
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()

@@ -377,3 +377,15 @@ def test_opted_out_state_is_reported_so_the_toggle_stays_reachable(monkeypatch):
 
     assert state["enabled"] is False
     assert state["control_off"] is True
+
+
+def test_startup_restore_leaves_fans_alone_while_fan_control_is_off(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["disabled_modules"] = ["fanControl"]
+    plugin._module_enabled = lambda mid: mid != "fanControl"
+    before = type(plugin._fan_ctrl).released
+
+    asyncio.run(plugin.set_board_fan_enabled(True))
+
+    assert type(plugin._fan_ctrl).released == before

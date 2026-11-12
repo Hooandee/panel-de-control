@@ -761,3 +761,15 @@ def test_a_backend_that_cannot_release_does_not_keep_retrying(tmp_path, monkeypa
     asyncio.run(plugin.set_ui_module("fanControl", True))
 
     assert plugin._settings["fan_release_pending"] is False
+
+
+def test_a_failed_ps5_release_stays_pending(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+    plugin = Plugin()
+    plugin._init()
+    plugin._ps5_fan = types.SimpleNamespace(release=lambda: {"ok": False})
+    plugin._restore_fans_safe = lambda: False
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    assert plugin._settings["fan_release_pending"] is True
