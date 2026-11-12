@@ -9,6 +9,7 @@ runs as the user who owns the games, never as root.
 """
 
 import json
+import mmap
 import os
 import re
 import shutil
@@ -175,6 +176,23 @@ def remove_by_hand(folder: Path) -> None:
 def not_installed(detail: str) -> bool:
     """The bridge's answer when the game no longer has HelixSR's files (its own update put its FSR back)."""
     return bool(re.match(r"HelixSR( Scaler)? is not installed in ", detail or ""))
+
+
+# Strings HelixSR's drop-in carries (its own log lines); AMD's FidelityFX DLLs never do.
+_HELIX_SIGNATURES = (b"HLX-FSR-4", b"HelixSR")
+
+
+def _is_helix_file(path: Path) -> bool:
+    try:
+        with open(path, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            return any(data.find(signature) >= 0 for signature in _HELIX_SIGNATURES)
+    except (OSError, ValueError):
+        return False
+
+
+def still_swapped(folder: Path) -> bool:
+    """Whether a file HelixSR's record lists is still HelixSR's own DLL, whatever its bridge answered."""
+    return any(_is_helix_file(current) for current, _ in _recorded_swaps(folder))
 
 
 def forget(folder: Path) -> None:

@@ -292,6 +292,8 @@ function clearBadge(tile: Element): void {
 export const CoverBadges: FC = () => {
   const map = useCoverLabels();
   useEffect(() => {
+    // Nothing to mark (switched off, or no game set up): the previous run's cleanup already took its pills down.
+    if (!Object.keys(map).length) return;
     const view = mainWindow();
     const doc = view?.document;
     if (!view || !doc?.body) return;

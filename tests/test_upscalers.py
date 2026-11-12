@@ -1459,6 +1459,23 @@ def test_helixsr_already_gone_from_the_game_never_blocks_a_switch(steam, helix_c
     assert not (target / "helixsr-install.json").exists()
 
 
+def test_a_helixsr_dll_the_bridge_no_longer_recognises_is_restored_by_hand(steam, helix_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"MZ ... HLX-FSR-4 own runtime ...")
+    (target / "helixsr-install.json").write_text(json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    service.helix = GoneHelix()
+
+    service.uninstall(APPID)
+
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"game fsr"
+    assert not (target / "amd_fidelityfx_upscaler_dx12.original.dll").exists()
+    assert service.game(APPID)["install"] is None
+
+
 def test_helixsr_record_gone_is_uninstalled_without_the_bridge(steam, helix_catalog, proc):
     _, game = steam
     target = game / "bin/x64_dx12"

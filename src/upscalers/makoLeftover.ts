@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getUpscalerLaunchReceipt } from "../api";
-import { getEnv, parse, serialize, setEnv } from "../launch/compose";
+import { parse, serialize, setEnv } from "../launch/compose";
 import { readAppDetails, writeLaunchOptions } from "../launch/steamApi";
 import { recordUiEvent } from "../system/uiEvents";
 import { configuredLaunchTools } from "./launchTools";
@@ -8,7 +8,6 @@ import type { LaunchReceipt } from "./launchOwnership";
 
 const WRAPPERS = ["mako-run", "mako-launch", "mako-framegen"];
 const ENVS = ["MAKO_CONFIG", "MAKO_PROFILE"];
-const PANEL_ENVS = [...ENVS, "MAKO_LAUNCH_CONFIG"];
 
 export function isMakoWrapper(token: string): boolean {
   return WRAPPERS.includes(token.replace(/^(["'])(.*)\1$/, "$2").split("/").pop() ?? "");
@@ -19,20 +18,31 @@ export function hasMakoLeftover(launch: string, receipt: LaunchReceipt | null | 
   return !receipt?.wrappers.added.length && configuredLaunchTools(launch).includes("Mako");
 }
 
+const unquote = (value: string) => value.replace(/^(["'])(.*)\1$/, "$2");
+
+/** The values Panel itself writes for this game's Mako profile, so nobody else's setup is ever mistaken for it. */
+function isPanelMakoValue(name: string, value: string, appid: string): boolean {
+  const plain = unquote(value);
+  const folder = `/panel-de-control/mako/${appid}/`;
+  if (name === "MAKO_PROFILE") return plain === `pdc-${appid}`;
+  if (name === "MAKO_CONFIG") return plain.endsWith(`${folder}conf.toml`);
+  if (name === "MAKO_LAUNCH_CONFIG") return plain.endsWith(`${folder}launcher.conf`);
+  return false;
+}
+
 /**
- * A receipt for Panel's own Mako options in place, as if Panel had just written them; null when they can't be told
- * apart from the user's (another Mako variable or profile, a Mako wrapper given its own flags).
+ * A receipt for Panel's own Mako options in place, as if Panel had just written them; null when anything Mako there
+ * is not exactly what Panel writes for this game (another profile or path, a Mako wrapper with its own flags).
  */
-export function adoptedMakoReceipt(launch: string): LaunchReceipt | null {
+export function adoptedMakoReceipt(launch: string, appid: string): LaunchReceipt | null {
   const parsed = parse(launch);
   if (parsed.malformed) return null;
   const added = parsed.wrappers.filter(isMakoWrapper);
-  if (added.length !== 1) return null;
+  if (added.length !== 1 || !/\/panel-de-control\/mako\/[^/]+\/bin\/mako-launch$/.test(unquote(added[0]))) return null;
   const at = parsed.wrappers.indexOf(added[0]);
   if (parsed.wrappers[at + 1]?.startsWith("-")) return null;
   const env = parsed.envs.filter((entry) => entry.name.startsWith("MAKO_"));
-  // Panel names every profile it writes `pdc-<game>`; any other Mako variable is someone else's setup.
-  if (!env.every((entry) => PANEL_ENVS.includes(entry.name)) || !/^'?pdc-/.test(getEnv(parsed, "MAKO_PROFILE") ?? "")) return null;
+  if (!env.some((entry) => entry.name === "MAKO_PROFILE") || !env.every((entry) => isPanelMakoValue(entry.name, entry.value, appid))) return null;
   return {
     version: 1,
     env: env.map((entry) => ({ name: entry.name, before: null, applied: entry.value })),

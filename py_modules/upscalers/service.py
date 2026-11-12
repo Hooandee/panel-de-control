@@ -1158,9 +1158,14 @@ class UpscalerService:
             except UpscalerError as error:
                 if not helixsr.not_installed(error.detail):
                     raise
-                # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
-                helixsr.forget(record.parent)
-                self._log_helix_gone("bridge_not_installed")
+                if helixsr.still_swapped(record.parent):
+                    # The bridge no longer recognises a DLL an older HelixSR release put in: restore it by hand.
+                    helixsr.remove_by_hand(record.parent)
+                    self._log_helix_gone("bridge_not_installed_restored")
+                else:
+                    # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
+                    helixsr.forget(record.parent)
+                    self._log_helix_gone("bridge_not_installed")
         else:
             helixsr.remove_by_hand(record.parent)
         log = Path(install.get("log", ""))
