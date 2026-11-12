@@ -75,6 +75,7 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
       await load();
       if (alive.current) setSaved(true);
     } catch (caught) {
+      if (["transition_failed_clean", "transition_restore_failed"].includes(upscalerErrorCode(caught))) onChanged?.();
       if (alive.current) {
         const key = `up.error.${upscalerErrorCode(caught)}`;
         setError(t(key) === key ? t("up.error.generic") : t(key));

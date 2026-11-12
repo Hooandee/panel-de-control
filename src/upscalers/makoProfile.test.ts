@@ -62,3 +62,43 @@ it("keeps a receipt whose options are still in place or still being written", as
   expect(api.setUpscalerLaunchReceipt).not.toHaveBeenCalled();
 });
 
+it("takes back Panel's own Mako options when its receipt no longer matches them, so Mako can be turned off", async () => {
+  const launch = "MAKO_CONFIG=/h/.config/panel-de-control/mako/1/conf.toml MAKO_PROFILE=pdc-1 MAKO_LAUNCH_CONFIG=/h/.config/panel-de-control/mako/1/launcher.conf /h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch %command%";
+  api.readAppDetails.mockResolvedValue({ launch });
+  api.getUpscalerLaunchReceipt.mockResolvedValue({ version: 1, env: [{ name: "MAKO_PROFILE", before: null, applied: "pdc-old" }], wrappers: { before: [], applied: ["/old/mako-launch"], added: ["/old/mako-launch"] } });
+  api.setUpscalerLaunchReceipt.mockResolvedValue(true);
+  api.setMakoGame.mockResolvedValue({ profile: { ...previous, enabled: false }, env: { MAKO_CONFIG: "/h/.config/panel-de-control/mako/1/conf.toml", MAKO_PROFILE: "pdc-1", MAKO_LAUNCH_CONFIG: "/h/.config/panel-de-control/mako/1/launcher.conf" }, wrappers: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"] });
+  await saveMakoProfile("1", 1, { enabled: false });
+  expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("1", "mako", {
+    version: 1,
+    env: [{ name: "MAKO_CONFIG", before: null, applied: "/h/.config/panel-de-control/mako/1/conf.toml" }, { name: "MAKO_PROFILE", before: null, applied: "pdc-1" }, { name: "MAKO_LAUNCH_CONFIG", before: null, applied: "/h/.config/panel-de-control/mako/1/launcher.conf" }],
+    wrappers: { before: [], applied: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"], added: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"] },
+  });
+  expect(api.applyManagedLaunch).toHaveBeenCalled();
+});
+it("never takes over options that are not Mako's, nor a Mako wrapper the user gave flags", async () => {
+  api.getUpscalerLaunchReceipt.mockResolvedValue(null);
+  const own = "/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch";
+  for (const launch of [
+    `MAKO_PROFILE=mine ${own} %command%`,
+    `MAKO_PROFILE=pdc-1 ${own} --verbose %command%`,
+    `MAKO_CONFIG=/home/deck/my.toml MAKO_PROFILE=pdc-1 ${own} %command%`,
+    "MAKO_PROFILE=pdc-1 /opt/mymako/bin/mako-launch %command%",
+    `MAKO_PROFILE=pdc-2 MAKO_CONFIG=/h/.config/panel-de-control/mako/1/conf.toml ${own} %command%`,
+  ]) {
+    api.readAppDetails.mockResolvedValue({ launch });
+    await saveMakoProfile("1", 1, { enabled: false });
+  }
+  expect(api.setUpscalerLaunchReceipt).not.toHaveBeenCalled();
+});
+
+it("takes back a shortcut's Mako options, whose profile is its launch identity", async () => {
+  const id = "1234567890123";
+  api.readAppDetails.mockResolvedValue({ launch: `MAKO_CONFIG=/h/.config/panel-de-control/mako/${id}/conf.toml MAKO_PROFILE=pdc-${id} /h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch %command%` });
+  api.getMakoStatus.mockResolvedValue({ profiles: { "ns:game": previous } });
+  api.getUpscalerLaunchReceipt.mockResolvedValue({ version: 1, env: [], wrappers: { before: [], applied: ["/old/mako-launch"], added: ["/old/mako-launch"] } });
+  api.setUpscalerLaunchReceipt.mockResolvedValue(true);
+  api.setMakoGame.mockResolvedValue({ profile: { ...previous, enabled: false }, env: { MAKO_PROFILE: "pdc-1234567890123" }, wrappers: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"] });
+  await saveMakoProfile("ns:game", 3456789012, { enabled: false }, true);
+  expect(api.setUpscalerLaunchReceipt).toHaveBeenCalledWith("ns:game", "mako", expect.objectContaining({ wrappers: expect.objectContaining({ added: ["/h/.local/share/panel-de-control/mako/4.6.0/bin/mako-launch"] }) }));
+});

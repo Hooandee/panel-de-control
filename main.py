@@ -260,7 +260,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
-            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
+            "activation_quarantined",
             "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
@@ -356,9 +357,15 @@ _THEME_FAILURE_OPERATIONS = frozenset({
     "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+# CSS Loader's own target categories; anything else a theme author typed is counted as "other".
+_THEME_TARGETS = frozenset({
+    "system-wide", "home", "library", "store", "keyboard", "preset", "snippet", "background",
+    "font", "fonts", "desktop", "hero", "friends", "settings", "quick access", "downloads",
+    "lock screen", "notifications", "game page", "other",
+})
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
-_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend|themes)$")
 _UI_DIAGNOSTIC_HISTORY = 20
 _UI_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _THEME_FOLDER_SCAN_LIMIT = 200
@@ -2166,9 +2173,10 @@ class Plugin(AmbientRpc):
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
-        so they are only counted."""
+        so they are only counted, grouped by the CSS Loader target they declare."""
         installed = []
         other_active = 0
+        other_targets: dict[str, int] = {}
         early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
@@ -2192,6 +2200,11 @@ class Plugin(AmbientRpc):
             active = config.get("active") is True
             if not (folder / "panel-theme.json").is_file():
                 other_active += active
+                if active:
+                    target = manifest.get("target")
+                    key = target.strip().lower() if isinstance(target, str) else ""
+                    key = key if key in _THEME_TARGETS else "other"
+                    other_targets[key] = other_targets.get(key, 0) + 1
                 continue
             installed.append({
                 "name": str(manifest.get("name", ""))[:80],
@@ -2205,7 +2218,11 @@ class Plugin(AmbientRpc):
                     if isinstance(key, str) and key.startswith("Estilizar ") and isinstance(value, str)
                 },
             })
-        return {"installed": installed, "other_active_themes": other_active}
+        return {
+            "installed": installed,
+            "other_active_themes": other_active,
+            "other_active_targets": other_targets,
+        }
 
     def _theme_early_installs(self) -> dict[str, str]:
         """Installed theme name to the early version it was installed as."""
@@ -3371,20 +3388,25 @@ class Plugin(AmbientRpc):
 
     @staticmethod
     def _with_theme_display(themes, context):
-        display = context.get("theme_display") if isinstance(context, dict) else None
-        if not isinstance(themes, dict) or not isinstance(display, dict):
+        if not isinstance(themes, dict) or not isinstance(context, dict):
             return themes
-        sanitized = {}
-        for key, value in display.items():
-            if not isinstance(key, str) or len(key) > 32:
+        result = dict(themes)
+        for source, target, limit in (("theme_display", "display", 16), ("theme_surface", "surface", 24)):
+            values = context.get(source)
+            if not isinstance(values, dict):
                 continue
-            if isinstance(value, bool) or value is None:
-                sanitized[key] = value
-            elif isinstance(value, (int, float)) and math.isfinite(value):
-                sanitized[key] = round(float(value), 3)
-            if len(sanitized) >= 16:
-                break
-        return {**themes, "display": sanitized}
+            sanitized = {}
+            for key, value in values.items():
+                if not isinstance(key, str) or len(key) > 32:
+                    continue
+                if isinstance(value, bool) or value is None:
+                    sanitized[key] = value
+                elif isinstance(value, (int, float)) and math.isfinite(value):
+                    sanitized[key] = round(float(value), 3)
+                if len(sanitized) >= limit:
+                    break
+            result[target] = sanitized
+        return result
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -3400,6 +3422,7 @@ class Plugin(AmbientRpc):
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
         frontend.pop("theme_display", None)
+        frontend.pop("theme_surface", None)
         frontend.pop("upscalers", None)
         return {
             "tools": tools,

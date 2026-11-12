@@ -1,6 +1,6 @@
 import { recordUiDiagnostic as recordUiDiagnosticRpc } from "../api";
 
-export type UiDiagnosticArea = "cleaner" | "proton" | "media" | "frontend";
+export type UiDiagnosticArea = "cleaner" | "proton" | "media" | "frontend" | "themes";
 
 const PANEL_BUNDLE = /Panel(?:%20| )de(?:%20| )Control/;
 
