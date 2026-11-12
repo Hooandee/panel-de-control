@@ -52,9 +52,11 @@ public sealed class ThemeManifest
         string displayName,
         string version,
         string author,
+        string? target,
         IReadOnlyList<ThemeInject> injects,
         IReadOnlyList<ThemePatch> patches)
     {
+        Target = target;
         Name = name;
         DisplayName = displayName;
         Version = version;
@@ -70,6 +72,11 @@ public sealed class ThemeManifest
     public string Version { get; }
 
     public string Author { get; }
+
+    /// <summary>CSS Loader's <c>target</c>: what the theme dresses. «Keyboard» marks an on-screen keyboard theme.</summary>
+    public string? Target { get; }
+
+    public bool IsKeyboard => string.Equals(Target, "Keyboard", StringComparison.OrdinalIgnoreCase);
 
     public IReadOnlyList<ThemeInject> Injects { get; }
 
@@ -129,13 +136,14 @@ public sealed class ThemeManifest
             var version = RequiredString(root, "version");
             var displayName = OptionalString(root, "display_name") ?? name;
             var author = OptionalString(root, "author") ?? string.Empty;
+            var target = OptionalString(root, "target");
             var injects = root.TryGetProperty("inject", out var inject)
                 ? ParseInjects(inject)
                 : Array.Empty<ThemeInject>();
             var patches = root.TryGetProperty("patches", out var patchesElement)
                 ? ParsePatches(patchesElement)
                 : Array.Empty<ThemePatch>();
-            return new ThemeManifest(name, displayName, version, author, injects, patches);
+            return new ThemeManifest(name, displayName, version, author, target, injects, patches);
         }
     }
 
