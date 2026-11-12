@@ -13,7 +13,7 @@ from armada_os import POCKNIX_FAN_UNIT, POWERD_UNIT, powerd_present, unit_presen
 from fans.generic_pwm import GenericPwmFanBackend
 from fans.software_loop import _systemctl_path
 
-__all__ = ["ArmadaFanBackend", "PocknixFanBackend", "SystemdPowerdControl", "pocknix_fan_present", "powerd_min_duty", "powerd_present"]
+__all__ = ["ArmadaFanBackend", "PocknixFanBackend", "SystemdPowerdControl", "pocknix_fan_in_use", "pocknix_fan_present", "powerd_min_duty", "powerd_present"]
 
 GUARD_PREFIX = "pdc-armada-fan-guard"
 HEARTBEAT = "/run/pdc-armada-fan.alive"
@@ -47,6 +47,15 @@ def _run(argv: list[str]) -> tuple[bool, str]:
 
 def pocknix_fan_present(root: str = "/") -> bool:
     return unit_present(POCKNIX_FAN_UNIT, root)
+
+
+def pocknix_fan_in_use() -> bool:
+    """Whether pocknix-fancontrol runs or starts at boot. A daemon the user turned off
+    is not handed the fan back; the generic backend keeps its own automatic curve."""
+    systemctl = _systemctl_path()
+    return any(_run([systemctl, verb, POCKNIX_FAN_UNIT])[1] in wanted
+               for verb, wanted in (("is-active", ("active", "activating")),
+                                    ("is-enabled", ("enabled", "enabled-runtime"))))
 
 
 class SystemdPowerdControl:

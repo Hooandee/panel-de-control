@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from fans.armada import ArmadaFanBackend, powerd_min_duty, powerd_present
 
 
@@ -241,13 +243,16 @@ def _pocknix_odin3(tmp_path):
     return root, fan
 
 
-def test_pocknix_hands_the_fan_to_and_from_its_own_daemon(tmp_path):
+def test_pocknix_hands_the_fan_to_and_from_its_own_daemon(tmp_path, monkeypatch):
     from types import SimpleNamespace
+
+    import fans.armada as armada
 
     from fans.armada import PocknixFanBackend
     from fans.control import select_fan_backend
 
     root, fan = _pocknix_odin3(tmp_path)
+    monkeypatch.setattr(armada, "pocknix_fan_in_use", lambda: True)
     assert select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root).name == "pocknix-pwm"
     control = FakeControl()
     backend = PocknixFanBackend(temp_fn=lambda: 60.0, root=root, control=control)
@@ -297,3 +302,31 @@ def test_pocknix_control_stops_and_restarts_its_own_unit(monkeypatch):
     assert ["start", "pocknix-fancontrol.service"] in calls
     assert "exec" in " ".join(calls[-1]) and "start pocknix-fancontrol.service" in " ".join(calls[-1])
     assert not any("armada-powerd" in " ".join(call) for call in calls)
+
+
+def test_a_disabled_pocknix_daemon_leaves_the_generic_automatic_curve(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import fans.armada as armada
+    from fans.control import select_fan_backend
+
+    root, _ = _pocknix_odin3(tmp_path)
+    monkeypatch.setattr(armada, "pocknix_fan_in_use", lambda: False)
+    backend = select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root)
+    assert backend.name == "generic-pwm"
+    # No firmware automatic mode on a pwm-fan: Auto runs Panel's own curve instead of a daemon.
+    assert backend.firmware_auto is False
+
+
+@pytest.mark.parametrize("active, enabled, expected", [
+    ("active", "disabled", True),
+    ("inactive", "enabled", True),
+    ("inactive", "disabled", False),
+    ("inactive", "masked", False),
+])
+def test_pocknix_daemon_counts_when_running_or_enabled(monkeypatch, active, enabled, expected):
+    import fans.armada as armada
+
+    replies = {"is-active": active, "is-enabled": enabled}
+    monkeypatch.setattr(armada, "_run", lambda argv: (True, replies[argv[1]]))
+    assert armada.pocknix_fan_in_use() is expected

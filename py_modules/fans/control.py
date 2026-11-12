@@ -474,9 +474,14 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
             if backend.eligible:
                 return backend
     if getattr(device, "arch", "x86") == "arm":
-        from fans.armada import ArmadaFanBackend, PocknixFanBackend, pocknix_fan_present, powerd_present
-        daemon_backend = (ArmadaFanBackend if powerd_present(root)
-                          else PocknixFanBackend if pocknix_fan_present(root) else None)
+        from fans.armada import (ArmadaFanBackend, PocknixFanBackend, pocknix_fan_in_use,
+                                 pocknix_fan_present, powerd_present)
+        if powerd_present(root):
+            daemon_backend = ArmadaFanBackend
+        elif pocknix_fan_present(root) and pocknix_fan_in_use():
+            daemon_backend = PocknixFanBackend
+        else:
+            daemon_backend = None
         if daemon_backend is not None:
             backend = daemon_backend(temp_fn=temp_fn, root=root)
             if backend.supported:
