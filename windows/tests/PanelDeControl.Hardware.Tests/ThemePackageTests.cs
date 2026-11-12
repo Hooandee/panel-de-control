@@ -211,6 +211,41 @@ public sealed class ThemePackageTests : IDisposable
         Assert.Equal(new[] { "Hooandee Duo" }, service.Settings().Where(setting => setting.Enabled).Select(setting => setting.Name));
     }
 
+    [Fact]
+    public void KeyboardThemesStayOnWithAHomeRuntimeAndOnlyOneKeyboardIsOn()
+    {
+        var installer = new ThemePackageInstaller(root);
+        var archive = Package("0.2.5");
+        installer.Install(Release("0.2.5", archive), archive);
+        void InstallKeyboard(string name, string catalogId)
+        {
+            var folder = Path.Combine(root, name);
+            CopyDirectory(Path.Combine(root, Name), folder);
+            File.WriteAllText(Path.Combine(folder, "theme.json"), $$$"""{"name":"{{{name}}}","version":"0.2.0","target":"Keyboard","inject":{"tokens.css":["bigpicture"]}}""");
+            File.WriteAllText(
+                Path.Combine(folder, "panel-theme.json"),
+                File.ReadAllText(Path.Combine(folder, "panel-theme.json")).Replace("hooandee-eclipse", catalogId));
+        }
+
+        InstallKeyboard("Hooandee Terciopelo", "hooandee-terciopelo");
+        InstallKeyboard("Hooandee Lobo Blanco", "hooandee-lobo-blanco");
+        var service = new ThemeService(root, new NoChannel(), new NoSteam(), Path.Combine(root, "imports"));
+        Assert.True(service.Library().Themes.Single(theme => theme.Name == "Hooandee Terciopelo").Manifest.IsKeyboard);
+
+        service.SetEnabled(Name, true);
+        service.SetEnabled("Hooandee Terciopelo", true);
+        Assert.Equal(new[] { Name, "Hooandee Terciopelo" }, service.Settings().Where(setting => setting.Enabled).Select(setting => setting.Name).OrderBy(name => name == Name ? 0 : 1));
+
+        service.SetEnabled("Hooandee Lobo Blanco", true);
+        Assert.Equal(
+            new[] { "Hooandee Eclipse", "Hooandee Lobo Blanco" },
+            service.Settings().Where(setting => setting.Enabled).Select(setting => setting.Name).OrderBy(name => name, StringComparer.Ordinal));
+
+        service.SetEnabled(Name, false);
+        service.SetEnabled(Name, true);
+        Assert.Contains(service.Settings(), setting => setting.Name == "Hooandee Lobo Blanco" && setting.Enabled);
+    }
+
     private static void CopyDirectory(string source, string target)
     {
         Directory.CreateDirectory(target);

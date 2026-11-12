@@ -7,7 +7,7 @@ import pulse
 from journal import Journal
 from journal_context import active_themes
 from pulse import Pulse, report, system_sample
-from report import collector as report_collector
+from pdc_report import collector as report_collector
 
 
 def _pulse(directory, *, boot="boot-a", now=None, **kwargs):

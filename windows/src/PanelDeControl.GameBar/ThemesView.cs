@@ -94,7 +94,11 @@ public sealed class ThemesView : UserControl
         {
             last = response;
             ApplyConnection(response, operationError);
-            var installed = response.Themes.Where(theme => theme.Installed || theme.PublishedVersion is not null || theme.EarlyVersion is not null).ToArray();
+            // Home and system themes first, then the on-screen keyboard themes under their own heading.
+            var installed = response.Themes
+                .Where(theme => theme.Installed || theme.PublishedVersion is not null || theme.EarlyVersion is not null)
+                .OrderBy(theme => theme.Keyboard)
+                .ToArray();
             var signature = string.Join("|", installed.Select(theme =>
                 $"{theme.Name}:{theme.InstalledVersion}:{theme.PublishedVersion}:{theme.Broken}:{string.Join(",", (theme.Options ?? new ThemeOption[0]).Select(option => option.Name + "=" + option.Values.Length))}"));
             if (signature != structure)
@@ -102,8 +106,15 @@ public sealed class ThemesView : UserControl
                 structure = signature;
                 themeList.Children.Clear();
                 cards.Clear();
+                var keyboardsHeaded = false;
                 foreach (var theme in installed)
                 {
+                    if (theme.Keyboard && !keyboardsHeaded)
+                    {
+                        keyboardsHeaded = true;
+                        themeList.Children.Add(KeyboardsHeading());
+                    }
+
                     var card = BuildCard(theme);
                     cards[theme.Name] = card;
                     themeList.Children.Add(card.Root);
@@ -184,7 +195,10 @@ public sealed class ThemesView : UserControl
         ["Hooandee Duo"] = ("duo-cover.jpg", 340.0 / 960),
         ["Hooandee Eclipse"] = ("eclipse-cover.jpg", 240.0 / 960),
         ["Hooandee Gallery"] = ("hooandee-cover.jpg", 240.0 / 960),
+        ["Hooandee Loop"] = ("loop-cover.jpg", 240.0 / 960),
         ["Hooandee Luminous Atlas"] = ("luminous-atlas-cover.jpg", 240.0 / 960),
+        ["Hooandee Terciopelo"] = ("terciopelo-cover.jpg", 240.0 / 960),
+        ["Hooandee Lobo Blanco"] = ("lobo-blanco-cover.jpg", 240.0 / 960),
     };
 
     private static FrameworkElement? BuildCover(string themeName)
@@ -392,6 +406,14 @@ public sealed class ThemesView : UserControl
         return card;
     }
 
+    private static FrameworkElement KeyboardsHeading() => new TextBlock
+    {
+        Text = Localized("ThemesKeyboardsHeading").ToUpperInvariant(),
+        Style = Resource<Style>("PdcCaptionStyle"),
+        CharacterSpacing = 60,
+        Margin = new Thickness(0, 12, 0, 0),
+    };
+
     private static FrameworkElement GroupHeading(string group)
     {
         var key = "ThemesGroup_" + group;
@@ -496,7 +518,8 @@ public sealed class ThemesView : UserControl
         card.Toggle.IsEnabled = !operationPending;
         AutomationProperties.SetName(card.Toggle, card.Title.Text);
 
-        var runtimeConflict = last?.Themes.Count(candidate => candidate.Enabled && candidate.RuntimeExpected) > 1;
+        // A keyboard theme's runtime lives next to a Home theme's; only two of the same kind fight.
+        var runtimeConflict = last?.Themes.Count(candidate => candidate.Enabled && candidate.RuntimeExpected && candidate.Keyboard == theme.Keyboard) > 1;
         var (state, brush) = StateText(theme, runtimeConflict);
         card.State.Text = state;
         card.State.Foreground = Resource<Brush>(brush);

@@ -48,6 +48,7 @@ export interface ThemesAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot>;
   setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot>;
+  setThemeState?(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot>;
   disableAllExcept?(before: CssLoaderReadySnapshot, keep: ReadonlySet<string>): Promise<CssLoaderReadySnapshot>;
   enableAgain?(
     before: CssLoaderReadySnapshot,
@@ -609,6 +610,46 @@ export class ThemesClient {
       const after = await running;
       if (request === this.requestSequence) this.update({ snapshot: after });
       return true;
+    } catch {
+      try {
+        const reconciled = await this.dependencies.adapter.inspect();
+        if (request === this.requestSequence) this.update({ snapshot: reconciled });
+      } catch {
+        // The next refresh reports CSS Loader being unreachable; this write only answers false.
+      }
+      return false;
+    } finally {
+      this.operationLocked = false;
+      if (this.quietWrite === settled) this.quietWrite = null;
+    }
+  };
+
+  /** Turns off a theme a runtime replaced (a second keyboard theme), through the same quiet lock as runtime patches.
+   * `keep` is the theme that replaced it: if a recovery turned that one off meanwhile, nothing is turned off and the
+   * next reconcile decides again. */
+  retireRuntimeTheme = async (cssLoaderName: string, keep: string): Promise<boolean> => {
+    const setThemeState = this.dependencies.adapter.setThemeState?.bind(this.dependencies.adapter);
+    const snapshot = this.current.snapshot;
+    if (!setThemeState || snapshot.status !== "ready") return false;
+    if (!snapshot.themes.some((theme) => theme.name === cssLoaderName && theme.enabled)) return true;
+    await this.quietWritesSettled();
+    if (this.operationLocked || this.current.recoveryBlocked) return false;
+    this.operationLocked = true;
+    const request = ++this.requestSequence;
+    const running = (async () => {
+      await this.reconcilePendingRecovery();
+      const current = await this.dependencies.adapter.inspect();
+      const enabled = (name: string) => current.status === "ready" && current.themes.some((theme) => theme.name === name && theme.enabled);
+      if (!enabled(keep)) return { after: current, retired: true };
+      if (!enabled(cssLoaderName)) return { after: current, retired: true };
+      return { after: await setThemeState(cssLoaderName, false), retired: true };
+    })();
+    const settled = running.then(() => undefined, () => undefined);
+    this.quietWrite = settled;
+    try {
+      const { after, retired } = await running;
+      if (request === this.requestSequence) this.update({ snapshot: after });
+      return retired;
     } catch {
       try {
         const reconciled = await this.dependencies.adapter.inspect();

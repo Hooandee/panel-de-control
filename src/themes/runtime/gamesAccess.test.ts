@@ -60,3 +60,37 @@ describe("theme games access", () => {
     });
   });
 });
+
+describe("theme games howLongToBeat", () => {
+  it("asks Panel by decimal id and hands back hours", async () => {
+    const howLongToBeat = vi.fn(async () => ({ result: "found", main: 27, plus: 41.6, complete: 65.6, title: "Hollow Knight" }));
+    const games = createThemeGamesAccess({ forceClose: vi.fn(), howLongToBeat });
+    expect(await games.howLongToBeat(367520, " Hollow Knight ")).toEqual({ main: 27, plus: 41.6, complete: 65.6 });
+    expect(howLongToBeat).toHaveBeenCalledWith("367520", "Hollow Knight");
+  });
+
+  it("gives null for misses, failures, junk and an older Panel", async () => {
+    const reply = (value: unknown) => createThemeGamesAccess({ forceClose: vi.fn(), howLongToBeat: async () => value });
+    expect(await reply({ result: "not_found" }).howLongToBeat(1, "x")).toBeNull();
+    expect(await reply({ result: "found", main: "27", plus: -1, complete: null }).howLongToBeat(1, "x")).toBeNull();
+    expect(await createThemeGamesAccess({ forceClose: vi.fn(), howLongToBeat: async () => { throw new Error("gone"); } }).howLongToBeat(1, "x")).toBeNull();
+    expect(await createThemeGamesAccess({ forceClose: vi.fn() }).howLongToBeat(1, "x")).toBeNull();
+    const asked = vi.fn();
+    const games = createThemeGamesAccess({ forceClose: vi.fn(), howLongToBeat: asked });
+    expect(await games.howLongToBeat("01", "x")).toBeNull();
+    expect(await games.howLongToBeat(1, "  ")).toBeNull();
+    expect(asked).not.toHaveBeenCalled();
+  });
+});
+
+describe("theme games protonDb", () => {
+  it("passes a known tier through and refuses the rest", async () => {
+    const protonDb = vi.fn(async () => ({ result: "found", tier: "gold", confidence: "good", total: 120 }));
+    expect(await createThemeGamesAccess({ forceClose: vi.fn(), protonDb }).protonDb(292030)).toEqual({ tier: "gold", total: 120 });
+    expect(protonDb).toHaveBeenCalledWith("292030");
+    const reply = (value: unknown) => createThemeGamesAccess({ forceClose: vi.fn(), protonDb: async () => value });
+    expect(await reply({ result: "found", tier: "pending" }).protonDb(1)).toBeNull();
+    expect(await reply({ result: "not_found" }).protonDb(1)).toBeNull();
+    expect(await createThemeGamesAccess({ forceClose: vi.fn() }).protonDb(1)).toBeNull();
+  });
+});

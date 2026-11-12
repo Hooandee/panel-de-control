@@ -112,8 +112,17 @@
     <Content Include="..\..\..\src\assets\hooandee-cover.jpg">
       <Link>Assets\ThemeCovers\hooandee-cover.jpg</Link>
     </Content>
+    <Content Include="..\..\..\src\assets\loop-cover.jpg">
+      <Link>Assets\ThemeCovers\loop-cover.jpg</Link>
+    </Content>
     <Content Include="..\..\..\src\assets\luminous-atlas-cover.jpg">
       <Link>Assets\ThemeCovers\luminous-atlas-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\terciopelo-cover.jpg">
+      <Link>Assets\ThemeCovers\terciopelo-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\lobo-blanco-cover.jpg">
+      <Link>Assets\ThemeCovers\lobo-blanco-cover.jpg</Link>
     </Content>
     <Content Include="Assets\WidgetIcon.png">
       <Link>GameBar\PanelDeControl\WidgetIcon.png</Link>

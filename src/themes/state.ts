@@ -97,6 +97,13 @@ function earlyOnlyThemes(publication: ThemePublicationState): PublishedEarlyThem
 }
 
 /** Every Hooandee theme Panel manages: the stable catalog plus themes published only as early access. */
+/** Catalog group of the on-screen keyboard themes: listed under Keyboards, and only one of them is on at a time. */
+export const KEYBOARD_THEME_GROUP = "keyboard";
+
+export function isKeyboardTheme(release: Pick<PublishedThemeRelease, "exclusiveGroup">): boolean {
+  return release.exclusiveGroup === KEYBOARD_THEME_GROUP;
+}
+
 export function managedThemeReleases(publication: ThemePublicationState): readonly PublishedThemeRelease[] {
   return [...usableThemes(publication), ...earlyOnlyThemes(publication).map((theme) => theme.release)];
 }

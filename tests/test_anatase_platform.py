@@ -6,9 +6,7 @@ import pytest
 from controllers import hhd as default_hhd
 from pdc_platform import anatase_hhd
 from pdc_platform import (
-    activate_import_paths,
     describe,
-    plugin_root_from_platform_file,
     select_hhd_tdp_client,
 )
 
@@ -34,39 +32,6 @@ def test_existing_first_class_platforms_keep_the_default_hhd_client():
 def test_only_anatase_selects_its_isolated_hhd_client():
     assert select_hhd_tdp_client("anatase", default_hhd) is anatase_hhd
     assert anatase_hhd is not default_hhd
-
-
-def test_anatase_prioritises_plugin_modules_over_fedora_site_packages(tmp_path):
-    plugin_root = str(tmp_path / "plugin")
-    local_modules = os.path.join(plugin_root, "py_modules")
-    os.makedirs(local_modules)
-    paths = ["/usr/lib64/python3.14/site-packages", local_modules]
-
-    activate_import_paths("anatase", plugin_root, paths)
-
-    assert paths[0] == local_modules
-
-
-def test_platform_package_resolves_the_real_plugin_root(tmp_path):
-    plugin_root = str(tmp_path / "Panel de Control")
-    package_file = os.path.join(
-        plugin_root,
-        "py_modules/pdc_platform/__init__.py",
-    )
-
-    assert plugin_root_from_platform_file(package_file) == plugin_root
-
-
-def test_other_platforms_keep_their_existing_import_order(tmp_path):
-    plugin_root = str(tmp_path / "plugin")
-    local_modules = os.path.join(plugin_root, "py_modules")
-    os.makedirs(local_modules)
-    original = ["/usr/lib/python3/site-packages", local_modules]
-    paths = list(original)
-
-    for os_id in ("steamos", "bazzite", "cachyos", None):
-        activate_import_paths(os_id, plugin_root, paths)
-        assert paths == original
 
 
 def test_anatase_hhd_client_reads_and_confirms_tdp_state(tmp_path, monkeypatch):

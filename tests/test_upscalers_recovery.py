@@ -327,7 +327,7 @@ def test_a_failed_release_lookup_waits_before_asking_again(tmp_path):
 
 
 def test_wine_paths_in_reports_hide_the_user_name():
-    from report import collector
+    from pdc_report import collector
     assert "alice" not in collector.redact_text(r"Z:\home\alice\.local\share\Steam\game.log")
 
 
