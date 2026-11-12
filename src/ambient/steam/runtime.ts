@@ -1038,7 +1038,7 @@ export class AmbientRuntime {
    */
   private decodeFallback(url: string): void {
     const current = this.snapshot.current;
-    if (!current || current.kind !== "video" || !current.ref.startsWith("local:")) return;
+    if (this.inGame || !current || current.kind !== "video" || !current.ref.startsWith("local:")) return;
     const key = `${current.ref}|${this.settings()?.background.videoQuality ?? "fluid"}`;
     if (this.undecodable.has(key) || this.noSpace.has(`${key}|vp9`) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
     this.undecodable.add(key);

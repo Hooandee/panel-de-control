@@ -198,6 +198,6 @@ def fetch_head(url: str, opener: Opener = default_opener, limit: int = 64 * 1024
         raise ValueError("unsupported_url")
     with opener(build_request(url), TIMEOUT_SEC) as response:
         media_type = str(getattr(response, "headers", {}).get("Content-Type", "") or "").lower()
-        if media_type.startswith(("audio/", "video/")):
+        if media_type.startswith(("audio/", "video/")) and "mpegurl" not in media_type:
             return ""
         return response.read(limit).decode("utf-8", errors="replace")

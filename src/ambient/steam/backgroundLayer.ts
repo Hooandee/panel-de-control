@@ -184,6 +184,8 @@ export class BackgroundLayer {
   private generation = 0;
   private load: AbortController | null = null;
   private lastFailure = "";
+  /** The last medium that did not load, tried again when the layer shows after being hidden. */
+  private failed: { media: LayerMedia; attempt: number } | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
@@ -235,6 +237,7 @@ export class BackgroundLayer {
   }
 
   apply(media: LayerMedia | null, options: LayerOptions): boolean {
+    const shown = options.visible && !this.options.visible;
     this.options = options;
     if (media === null) {
       this.dispose();
@@ -247,6 +250,7 @@ export class BackgroundLayer {
     this.syncNativeArt();
     root.style.display = options.visible ? "" : "none";
     if (!this.current || this.current.url !== media.url || this.current.kind !== media.kind) void this.swap(media);
+    else if (shown && this.failed && this.retryTimer === null && !this.load) void this.swap(this.failed.media, this.failed.attempt);
     this.syncVideos();
     return true;
   }
@@ -329,13 +333,16 @@ export class BackgroundLayer {
         this.lastFailure = "";
         const slow = attempt - delays.length;
         if (slow < 0 || slow % SLOW_RETRY_REPORT_EVERY === 0) this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
+        this.failed = { media, attempt: attempt + 1 };
+        // Hidden (a game is running) the retry waits for the layer to show again instead of decoding in game.
         if (retrying) this.retryTimer = setTimeout(() => {
           this.retryTimer = null;
-          if (generation === this.generation) void this.swap(media, attempt + 1);
+          if (generation === this.generation && this.options.visible) void this.swap(media, attempt + 1);
         }, delays[attempt] ?? SLOW_RETRY_MS);
       }
       return;
     }
+    this.failed = null;
     if (this.stallExhausted === media.url) {
       this.stallExhausted = "";
       this.stall.url = "";
@@ -417,6 +424,7 @@ export class BackgroundLayer {
   }
 
   private unmount(): void {
+    this.failed = null;
     this.cancelPending();
     this.watchStall(false);
     this.generation += 1;

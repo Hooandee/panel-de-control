@@ -60,3 +60,33 @@ def test_a_live_stream_link_is_not_read():
             raise AssertionError("the stream must not be read")
 
     assert remote_sources.fetch_head("https://radio.test/live.m3u", opener=lambda request, timeout: Response()) == ""
+
+
+def test_a_playlist_served_as_audio_mpegurl_is_still_read():
+    from ambient.adapters import remote_sources
+
+    class Response:
+        headers = {"Content-Type": "audio/x-mpegurl"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, size):
+            return b"#EXTM3U\n"
+
+    assert remote_sources.fetch_head("https://lists.test/tv.m3u", opener=lambda request, timeout: Response()) == "#EXTM3U\n"
+
+
+def test_a_rule_opened_after_the_share_ended_is_closed_at_once(tmp_path, monkeypatch):
+    from ambient.service import AmbientService
+
+    service = AmbientService(state_dir=str(tmp_path / "state"), cache_dir=str(tmp_path / "cache"), home=str(tmp_path))
+    closed = []
+    monkeypatch.setattr(lan_firewall, "open_port", lambda port, host, seconds: "opened:home")
+    monkeypatch.setattr(lan_firewall, "close_port", lambda port, zone: closed.append((port, zone)))
+    service._open_share_firewall("http://192.168.1.5:41000/s/token/", 600)
+    assert closed == [(41000, "home")] and service._share_rule is None
+    service.close()

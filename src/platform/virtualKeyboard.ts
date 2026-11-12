@@ -55,7 +55,8 @@ export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): 
     value = current;
     report(!!current?.Value);
     try {
-      handle = current?.Subscribe?.(() => report(!!current.Value));
+      // A Steam build that registers without returning a handle must not be subscribed again every check.
+      handle = current?.Subscribe?.(() => report(!!current.Value)) ?? (current ? {} : undefined);
     } catch {
       handle = undefined;
     }

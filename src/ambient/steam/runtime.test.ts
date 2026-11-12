@@ -639,6 +639,29 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it("never starts a VP9 encode while a game is running", async () => {
+    const configured = settings();
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.scanAmbientSources.mockResolvedValue({ collections: { "known.images": [{ id: "local:a", name: "a.mp4", kind: "video", size: 1, mtime: 1 }] }, music: [], truncated: false });
+    rpcMock.optimizeAmbientMedia.mockReset().mockResolvedValue({ id: "opt:vp9", url: "http://127.0.0.1:1/m/t/opt:vp9" });
+    const p = ports();
+    const runtime = new AmbientRuntime(p as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      const video = await vi.waitFor(() => {
+        const found = document.querySelector<HTMLVideoElement>("#pdc-ambient-layer video");
+        if (!found) throw new Error("no video yet");
+        return found;
+      });
+      p.fireGame({ appid: "1", liveAppid: 1, name: "g" });
+      Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+      Object.defineProperty(video, "readyState", { configurable: true, get: () => 1 });
+      video.dispatchEvent(new Event("error"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(rpcMock.optimizeAmbientMedia).not.toHaveBeenCalledWith("local:a", expect.any(Number), 30, "vp9");
+    } finally { runtime.stop(); }
+  });
+
   it("swaps a local video the browser cannot decode for a VP9 copy, once", async () => {
     const configured = settings();
     configured.background.optimizeVideos = false;

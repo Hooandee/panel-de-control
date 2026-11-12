@@ -375,6 +375,9 @@ def test_inspect_link_reads_only_the_head_and_says_list_stream_or_unknown(tmp_pa
     }
 
     def fake_head(url):
+        if url == "https://shoutcast.test/x.m3u":
+            import http.client
+            raise http.client.BadStatusLine("ICY 200 OK")
         if url not in bodies:
             raise OSError("offline")
         return bodies[url]
@@ -385,4 +388,5 @@ def test_inspect_link_reads_only_the_head_and_says_list_stream_or_unknown(tmp_pa
     assert service.inspect_link("https://live.test/channel.m3u8") == {"kind": "stream"}
     assert service.inspect_link("https://down.test/x.m3u8") == {"kind": "unknown"}
     assert service.diagnostics()["events"][-1]["detail"] == "inspect:OSError"
+    assert service.inspect_link("https://shoutcast.test/x.m3u") == {"kind": "unknown"}
     service.close()

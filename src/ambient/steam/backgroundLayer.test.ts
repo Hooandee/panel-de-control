@@ -333,6 +333,38 @@ describe("BackgroundLayer failed loads", () => {
     expect(undecodable).toHaveBeenLastCalledWith("http://127.0.0.1/no-picture.mp4");
   });
 
+  it("does not retry while hidden in a game, and tries again once the layer shows", async () => {
+    const media = { kind: "video" as const, url: "http://127.0.0.1/later.mp4" };
+    layer.apply(media, hiddenArt);
+    document.querySelector("video")!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    layer.apply(media, { ...hiddenArt, visible: false });
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(document.querySelector("video")).toBeNull();
+    layer.apply(media, hiddenArt);
+    const again = document.querySelector("video")!;
+    again.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(again);
+  });
+
+  it("gives a video without a picture another go when the layer shows again, not before", async () => {
+    picture.height = 0;
+    const media = { kind: "video" as const, url: "http://127.0.0.1/no-picture-yet.mp4" };
+    layer.apply(media, hiddenArt);
+    document.querySelector("video")!.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 3; i++) layer.apply(media, hiddenArt);
+    expect(document.querySelector("video")).toBeNull();
+    layer.apply(media, { ...hiddenArt, visible: false });
+    picture.height = 720;
+    layer.apply(media, hiddenArt);
+    const copy = document.querySelector("video")!;
+    copy.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(copy);
+  });
+
   it("does not watch a video that is meant to be paused", async () => {
     picture.time = () => 3;
     layer.apply({ kind: "video", url: "http://127.0.0.1/paused.mp4" }, { ...hiddenArt, motion: "pause" });

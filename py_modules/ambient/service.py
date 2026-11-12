@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import http.client
 import logging
 import json
 import os
@@ -118,9 +119,18 @@ class AmbientService:
             return
         result = lan_firewall.open_port(parsed.port, parsed.hostname, seconds)
         self.record_event("share_firewall", result)
-        if result.startswith("opened:"):
-            with self._lock:
-                self._share_rule = (parsed.port, result.split(":", 1)[1])
+        if not result.startswith("opened:"):
+            return
+        rule = (parsed.port, result.split(":", 1)[1])
+        share = self._share
+        if share is None or not share.active or share.port != parsed.port:
+            # The share already ended (or a newer one replaced it) while firewalld was answering.
+            lan_firewall.close_port(*rule)
+            return
+        with self._lock:
+            stale, self._share_rule = self._share_rule, rule
+        if stale is not None and stale != rule:
+            lan_firewall.close_port(*stale)
 
     def take_shared(self) -> dict[str, Any]:
         share = self._share
@@ -811,7 +821,7 @@ class AmbientService:
         """Whether a pasted .m3u/.m3u8 link is a list of channels (saved as a list) or one stream."""
         try:
             text = remote_sources.fetch_head(url)
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, http.client.HTTPException) as error:
             self.record_event("radio_error", f"inspect:{type(error).__name__}")
             return {"kind": "unknown"}
         return {"kind": "list"} if is_channel_list(text) else {"kind": "stream"}
@@ -902,7 +912,7 @@ class AmbientService:
     def record_event(self, kind: str, detail: str) -> bool:
         if kind not in _EVENT_KINDS:
             return False
-        detail = str(detail)[:160]
+        detail = str(detail)[:240]
         self._events.append({"kind": kind, "detail": detail, "at": int(time.time())})
         _log.log(logging.WARNING if kind.endswith("_error") else logging.INFO, "Ambient %s: %s", kind, detail)
         return True
