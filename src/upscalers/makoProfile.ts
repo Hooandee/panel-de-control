@@ -2,8 +2,10 @@ import { getMakoStatus, getUpscalerLaunchReceipt, setMakoGame, setUpscalerLaunch
 import { getEnv, parse } from "../launch/compose";
 import type { LaunchReceipt } from "./launchOwnership";
 import { readAppDetails } from "../launch/steamApi";
-import { hasMakoLeftover } from "./makoLeftover";
+import { adoptedMakoReceipt, hasMakoLeftover, isMakoWrapper } from "./makoLeftover";
 import { applyManagedLaunch } from "./managedLaunch";
+import { planLaunchOverlay, type LaunchOverlay } from "./launchOwnership";
+import { recordUiEvent } from "../system/uiEvents";
 
 const writing = new Set<string>();
 const EMPTY_RECEIPT: LaunchReceipt = { version: 1, env: [], wrappers: { before: [], applied: [], added: [] } };
@@ -16,6 +18,22 @@ function staleReceipt(launch: string, receipt: LaunchReceipt): boolean {
   return receipt.env.every((entry) => getEnv(parsed, entry.name) === null) && receipt.wrappers.added.every((token) => !parsed.wrappers.includes(token));
 }
 const token = (value: string) => /^[A-Za-z0-9_./:-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+
+/**
+ * Panel runs Mako for this game, yet its receipt no longer matches the Mako options in the launch options (rewritten
+ * by hand or by another tool with Panel's own values): every change was refused as someone else's and rolled back.
+ */
+async function adoptOwnMako(appid: string, liveAppid: number, desired: LaunchOverlay): Promise<void> {
+  const [details, receipt] = await Promise.all([readAppDetails(liveAppid), getUpscalerLaunchReceipt(appid, "mako")]);
+  if (!details) return;
+  const plan = planLaunchOverlay(details.launch, desired, receipt);
+  if (!plan || (!plan.preserved.env.length && !plan.preserved.wrappers.length)) return;
+  if (!plan.preserved.env.every((name) => name.startsWith("MAKO_")) || !plan.preserved.wrappers.every(isMakoWrapper)) return;
+  const adopted = adoptedMakoReceipt(details.launch);
+  if (!adopted) return;
+  const ok = await setUpscalerLaunchReceipt(appid, "mako", adopted).catch(() => false);
+  recordUiEvent("upscalers", "mako_adopt", { appid: liveAppid, env: adopted.env.length, hadReceipt: !!receipt }, ok);
+}
 
 export async function saveMakoProfile(appid: string, liveAppid: number, config: Partial<MakoProfile> | null, isNonSteam = false) {
   if (writing.has(appid)) throw new Error("mako_busy");
@@ -35,10 +53,12 @@ export async function saveMakoProfile(appid: string, liveAppid: number, config: 
     const result = await setMakoGame(appid, patch);
     let pending = false;
     try {
-      const applied = await applyManagedLaunch(appid, liveAppid, "mako", {
+      const desired: LaunchOverlay = {
         env: Object.fromEntries(Object.entries(result.env).map(([name, value]) => [name, token(value)])),
         wrappers: result.wrappers.map(token),
-      }, { isNonSteam, requireComplete: result.profile !== null });
+      };
+      if (previous) await adoptOwnMako(appid, liveAppid, desired);
+      const applied = await applyManagedLaunch(appid, liveAppid, "mako", desired, { isNonSteam, requireComplete: result.profile !== null });
       pending = !!applied.pending;
       if (!applied.ok) throw new Error("launch_failed");
     } catch (error) {

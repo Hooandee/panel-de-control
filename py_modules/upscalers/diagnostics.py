@@ -69,6 +69,11 @@ def frontend_context(value) -> dict:
     running = value.get("running")
     result = {key: value[key][:40] for key in ("collected_at", "status") if isinstance(value.get(key), str)}
     result["status"] = result.get("status") if result.get("status") in ("available", "unavailable") else "unavailable"
+    badges = value.get("badges") if isinstance(value.get("badges"), dict) else {}
+    result["badges"] = {
+        "covers": badges.get("covers") if isinstance(badges.get("covers"), bool) else None,
+        "in_game": badges.get("in_game") if badges.get("in_game") in ("off", "start", "always") else None,
+    }
     result["running"] = None
     if isinstance(running, dict):
         result["running"] = {key: running[key][:256] for key in ("stable_appid", "name") if isinstance(running.get(key), str)}

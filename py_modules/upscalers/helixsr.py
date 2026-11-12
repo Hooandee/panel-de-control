@@ -161,6 +161,17 @@ def remove_by_hand(folder: Path) -> None:
         (folder / name).unlink(missing_ok=True)
 
 
+def not_installed(detail: str) -> bool:
+    """The bridge's answer when the game no longer has HelixSR's files (its own update put its FSR back)."""
+    return bool(re.match(r"HelixSR( Scaler)? is not installed in ", detail or ""))
+
+
+def forget(folder: Path) -> None:
+    """Drop HelixSR's own record when its files are already gone; the game's files and backups stay as they are."""
+    for name in ("helixsr-install.json", "helixsr.ini"):
+        (folder / name).unlink(missing_ok=True)
+
+
 def read_install_log(install: dict) -> dict:
     if install.get("engine") != "helixsr":
         return {"present": False}

@@ -558,6 +558,14 @@ class UpscalerService:
                 raise UpscalerError("updating")
             entry = self._game_state(appid)
             install = entry.get("install")
+            if _is_helix(install):
+                # HelixSR's files are its bridge's to restore, not a checkpoint's: it comes out before the switch, so
+                # a switch that fails leaves the game with its own FSR instead of with HelixSR.
+                entry["previous"] = diagnostics.snapshot(install)
+                self._drop(install, installed.root)
+                entry["install"] = None
+                self._save()
+                install = None
             if install and install.get("engine", "optiscaler") not in ("optiscaler", "dll"):
                 raise UpscalerError("transition_unsupported")
             if not install and not installed.native and self.game(appid)["analysis"]["foreign"]:
@@ -1140,16 +1148,31 @@ class UpscalerService:
             return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
-        if self.helix.ready():
-            self._helix("remove", root)
+        record = Path(install.get("helix_file", ""))
+        if not record.is_file():
+            # HelixSR already took itself out (HelixSR Desktop, or a game update over its DLL): nothing to restore.
+            self._log_helix_gone(install, "record_missing")
+        elif self.helix.ready():
+            try:
+                self._helix("remove", root)
+            except UpscalerError as error:
+                if not helixsr.not_installed(error.detail):
+                    raise
+                # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
+                helixsr.forget(record.parent)
+                self._log_helix_gone(install, "bridge_not_installed")
         else:
-            helixsr.remove_by_hand(Path(install.get("helix_file", "")).parent)
+            helixsr.remove_by_hand(record.parent)
         log = Path(install.get("log", ""))
         for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
             if generated.name and generated.is_file():
                 generated.unlink()
         shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
         return []
+
+    def _log_helix_gone(self, install: dict, reason: str) -> None:
+        if self.logger:
+            self.logger.info(f"HelixSR was already out of the game ({reason}); clearing Panel's record of it")
 
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]
