@@ -131,6 +131,11 @@ def test_leaves_when_steam_says_the_mode_ended_without_a_restore():
     assert hold.step(_deck(6, 6), TARGET, None, 15.0, _off) is None
     assert hold.step(_deck(6, 6), TARGET, None, 21.0, _off) == "left"
     assert hold.diagnostics()["last"]["why"] == "steam_left"
+    for tick in range(10):
+        assert hold.step(_deck(6, 6), TARGET, None, 22.0 + tick, _off) is None
+        assert not hold.holding
+    hold.step(_deck(15, 15), TARGET, None, 40.0, _off)
+    assert hold.step(_deck(6, 6), TARGET, None, 50.0, _on) == "entered"
 
 
 def test_stops_asking_steam_after_an_unconfirmed_limit():
@@ -154,6 +159,8 @@ def test_fan_service_only_hold_has_a_time_cap():
     assert hold.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S - 1, lambda: (True, "fan_service")) is None
     assert hold.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S, lambda: (True, "fan_service")) == "left"
     assert hold.diagnostics()["last"]["why"] == "timeout"
+    assert hold.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S + 1, lambda: (True, "fan_service")) is None
+    assert not hold.holding and hold.diagnostics()["count"] == 1
 
     confirmed = SteamDownloadModeHold(6)
     confirmed.step(_deck(6, 6), TARGET, None, 0.0, _on)
@@ -209,9 +216,17 @@ def test_reads_the_steamos_fan_service_state(monkeypatch):
 
     from fans import software_loop
 
-    for stdout, expected in (("active\n", True), ("inactive\n", False), ("failed\n", False), ("", None)):
+    cases = (
+        ("LoadState=loaded\nActiveState=active\n", 0, True),
+        ("LoadState=loaded\nActiveState=inactive\n", 0, False),
+        ("LoadState=loaded\nActiveState=failed\n", 0, False),
+        ("LoadState=not-found\nActiveState=inactive\n", 0, None),
+        ("", 1, None),
+    )
+    for stdout, rc, expected in cases:
         monkeypatch.setattr(
-            subprocess, "run", lambda *a, _out=stdout, **k: types.SimpleNamespace(stdout=_out),
+            subprocess, "run",
+            lambda *a, _out=stdout, _rc=rc, **k: types.SimpleNamespace(stdout=_out, returncode=_rc),
         )
         assert software_loop.jupiter_fan_control_active() is expected
 

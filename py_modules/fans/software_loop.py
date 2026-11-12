@@ -304,17 +304,21 @@ def _systemctl(verb: str) -> bool:
 
 
 def jupiter_fan_control_active() -> bool | None:
-    """systemd state of SteamOS's fan service; None when it cannot be read."""
+    """systemd state of SteamOS's fan service; None when it cannot be read or the
+    unit does not exist."""
     try:
         import subprocess
         from controllers.detect import clean_env
         r = subprocess.run(
-            [_systemctl_path(), "is-active", _JUPITER_SERVICE],
+            [_systemctl_path(), "show", "-p", "LoadState", "-p", "ActiveState", _JUPITER_SERVICE],
             check=False, capture_output=True, text=True, timeout=5, env=clean_env(),
         )
     except Exception:  # noqa: BLE001
         return None
-    state = r.stdout.strip()
+    fields = dict(line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
+    if r.returncode != 0 or fields.get("LoadState") != "loaded":
+        return None
+    state = fields.get("ActiveState")
     if state in ("active", "activating", "reloading"):
         return True
     if state in ("inactive", "deactivating", "failed"):

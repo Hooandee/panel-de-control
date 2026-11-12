@@ -159,6 +159,8 @@ class SteamDownloadModeHold:
         }
         self.active = self.holding = False
         self._entered_at = None
+        # Settled for these rails: no new wait or hold until they leave the limit.
+        self._unconfirmed_reported = True
         return "left"
 
     def diagnostics(self) -> dict:
