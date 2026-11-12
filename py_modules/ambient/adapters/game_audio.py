@@ -16,6 +16,11 @@ _MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
 Runner = Callable[[list[str]], Optional[str]]
 
 
+def _volume_percents(stream: dict[str, Any]) -> list[int]:
+    channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
+    return [int(p) for p in (str(c.get("value_percent", "")).rstrip("%") for c in channels) if p.isdigit()]
+
+
 def game_streams(sink_inputs: list[dict[str, Any]]) -> list[tuple[int, int]]:
     """Pulse sink inputs that belong to a game, as (index, current volume percent)."""
     streams: list[tuple[int, int]] = []
@@ -28,9 +33,7 @@ def game_streams(sink_inputs: list[dict[str, Any]]) -> list[tuple[int, int]]:
         index = stream.get("index")
         if not isinstance(index, int):
             continue
-        channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
-        percents = [int(str(c.get("value_percent", "100")).rstrip("%") or 100) for c in channels]
-        streams.append((index, max(percents) if percents else 100))
+        streams.append((index, max(_volume_percents(stream), default=100)))
     return streams
 
 
@@ -41,9 +44,7 @@ def steam_streams(sink_inputs: list[dict[str, Any]]) -> list[str]:
         props = stream.get("properties") or {}
         if props.get("application.process.binary") not in _STEAM_BINARIES:
             continue
-        channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
-        percents = [int(p) for p in (str(c.get("value_percent", "")).rstrip("%") for c in channels) if p.isdigit()]
-        found.append(f"vol={max(percents, default='?')} mute={stream.get('mute')} corked={stream.get('corked')} sink={stream.get('sink')}")
+        found.append(f"vol={max(_volume_percents(stream), default='?')} mute={stream.get('mute')} corked={stream.get('corked')} sink={stream.get('sink')}")
     return found
 
 

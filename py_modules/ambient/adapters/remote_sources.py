@@ -174,12 +174,16 @@ def download(url: str, cache_dir: str, opener: Opener = default_opener, max_byte
                 os.unlink(tmp)
 
 
-def fetch_text(url: str, opener: Opener = default_opener, limit: int = MAX_PLAYLIST_BYTES) -> str:
-    """Small text resources such as M3U playlists; refuses anything past `limit` bytes."""
+def _read(url: str, opener: Opener, size: int) -> bytes:
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError("unsupported_url")
     with opener(build_request(url), TIMEOUT_SEC) as response:
-        data = response.read(limit + 1)
+        return response.read(size)
+
+
+def fetch_text(url: str, opener: Opener = default_opener, limit: int = MAX_PLAYLIST_BYTES) -> str:
+    """Small text resources such as M3U playlists; refuses anything past `limit` bytes."""
+    data = _read(url, opener, limit + 1)
     if len(data) > limit:
         raise ValueError("playlist_too_large")
     return data.decode("utf-8", errors="replace")
@@ -187,8 +191,4 @@ def fetch_text(url: str, opener: Opener = default_opener, limit: int = MAX_PLAYL
 
 def fetch_head(url: str, opener: Opener = default_opener, limit: int = 256 * 1024) -> str:
     """The first `limit` bytes of a text resource, enough to tell what kind of file it is."""
-    if not url.lower().startswith(("https://", "http://")):
-        raise ValueError("unsupported_url")
-    with opener(build_request(url), TIMEOUT_SEC) as response:
-        data = response.read(limit)
-    return data.decode("utf-8", errors="replace")
+    return _read(url, opener, limit).decode("utf-8", errors="replace")

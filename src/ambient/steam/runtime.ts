@@ -1016,34 +1016,21 @@ export class AmbientRuntime {
   private maybeOptimize(url: string, height: number): void {
     const settings = this.settings();
     const current = this.snapshot.current;
-    const view = spDocument()?.defaultView;
-    const screenHeight = Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1));
     if (!settings?.background.optimizeVideos || !current || current.kind !== "video") return;
     const quality = settings.background.videoQuality;
-    const target = videoTarget(quality, screenHeight);
+    const target = videoTarget(quality, screenPixelHeight());
     const key = `${current.ref}|${quality}`;
     if (!current.ref.startsWith("local:") || this.optimized.has(key) || this.noSpace.has(key) || !needsCopy(quality, height, target)) return;
     if (this.snapshot.optimizing || this.urls.get(current.ref) !== url) return;
     this.patch({ optimizing: true });
     this.optimizingRef = current.ref;
-    const generation = this.cacheGeneration;
     void this.render();
-    void rpc.optimizeAmbientMedia(current.ref, target.height, target.fps)
-      .then((result) => {
-        if (this.stopped || generation !== this.cacheGeneration) return;
-        if ("id" in result) {
-          this.optimized.set(key, result.id);
-          if (this.snapshot.current?.ref === current.ref) void this.render();
-        } else if (result.error === "no_space") this.reportNoSpace(key);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        this.optimizingRef = null;
-        this.patch({ optimizing: false });
-        void this.render();
-      });
+    void this.encodeCopy(current.ref, key, target.height, target.fps, "h264").finally(() => {
+      this.optimizingRef = null;
+      this.patch({ optimizing: false });
+      void this.render();
+    });
   }
-
 
   /**
    * Steam's CEF can lose H.264 decoding entirely after a Steam restart (kUnsupportedConfig on every
@@ -1055,22 +1042,22 @@ export class AmbientRuntime {
     const key = `${current.ref}|${this.settings()?.background.videoQuality ?? "fluid"}`;
     if (this.undecodable.has(key) || this.noSpace.has(key) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
     this.undecodable.add(key);
-    const view = spDocument()?.defaultView;
-    const height = Math.min(720, Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1)));
-    const generation = this.cacheGeneration;
     void rpc.recordAmbientEvent("playback_error", "background video undecodable; encoding vp9").catch(() => undefined);
-    void rpc.optimizeAmbientMedia(current.ref, height, 30, "vp9")
-      .then((result) => {
-        if (this.stopped || generation !== this.cacheGeneration) return;
-        if ("id" in result) {
-          this.optimized.set(key, result.id);
-          if (this.snapshot.current?.ref === current.ref) void this.render();
-        } else {
-          if (result.error === "no_space") this.reportNoSpace(key);
-          void rpc.recordAmbientEvent("playback_error", `background vp9 copy failed: ${result.error}`).catch(() => undefined);
-        }
-      })
-      .catch(() => undefined);
+    void this.encodeCopy(current.ref, key, Math.min(720, screenPixelHeight()), 30, "vp9");
+  }
+
+  /** Asks the backend for a re-encoded copy and, once ready, shows it in place of the original. */
+  private async encodeCopy(ref: string, key: string, height: number, fps: number, codec: "h264" | "vp9"): Promise<void> {
+    const generation = this.cacheGeneration;
+    const result = await rpc.optimizeAmbientMedia(ref, height, fps, codec).catch(() => null);
+    if (!result || this.stopped || generation !== this.cacheGeneration) return;
+    if ("id" in result) {
+      this.optimized.set(key, result.id);
+      if (this.snapshot.current?.ref === ref) void this.render();
+      return;
+    }
+    if (result.error === "no_space") this.reportNoSpace(key);
+    if (codec === "vp9") void rpc.recordAmbientEvent("playback_error", `background vp9 copy failed: ${result.error}`).catch(() => undefined);
   }
 
   private syncMusicOwnership(decision: ArbiterDecision, settings: AmbientSettings): void {
@@ -1704,6 +1691,11 @@ function toQueued(track: Track): QueuedTrack {
 
 function queueSignature(queue: readonly QueuedTrack[], repeat: RepeatMode, shuffle: boolean): string {
   return JSON.stringify([repeat, shuffle, queue.map((q) => q.id)]);
+}
+
+function screenPixelHeight(): number {
+  const view = spDocument()?.defaultView;
+  return Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1));
 }
 
 const STEAM_SESSION_KEY = "__pdcAmbientSteamSession";
