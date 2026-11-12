@@ -182,6 +182,7 @@ def test_hud_report_diagnostics_are_useful_without_custom_content(
         "redetect_recovered": 0,
         "reload_delivery": "unknown",
         "unobserved_reloads": 0,
+        "power_source": None,
         "conflict": True,
         "conflict_reason": "external_config",
         "shutdown": False,
@@ -1604,3 +1605,26 @@ def test_switching_the_hud_off_does_not_wait_for_reload_confirmation(tmp_path, m
 
     assert observed == [False]
     assert state["applyStatus"] == "disabled"
+
+
+def test_pending_reload_retries_do_not_wait_for_confirmation(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    observed = []
+
+    def reload_snapshot(snapshot, **kwargs):
+        observed.append(kwargs["observe"])
+        identities = tuple((session.pid, session.starttime) for session in snapshot)
+        return types.SimpleNamespace(requested=(), pending=identities, delivery="unknown")
+
+    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
+    monkeypatch.setattr(main.mangohud_detect, "session_alive", lambda *_a, **_k: True)
+    clock = {"now": 10.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    session = _session(main, str(tmp_path / "presets.conf"), 8)
+
+    p._reload_mangoapp((session,), confirm=False)
+    clock["now"] += 5
+    p._retry_pending_hud_reload()
+
+    assert observed == [False, False]

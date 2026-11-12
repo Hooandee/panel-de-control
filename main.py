@@ -1017,6 +1017,7 @@ class Plugin(AmbientRpc):
         self._hud_unobserved_reloads = 0
         self._hud_reload_via_proc_cwd = False
         self._hud_observe_after = float("-inf")
+        self._hud_power_source = None
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -3352,6 +3353,7 @@ class Plugin(AmbientRpc):
             "redetect_recovered": int(getattr(self, "_hud_redetect_recovered", 0)),
             "reload_delivery": getattr(self, "_hud_last_delivery", "unknown"),
             "unobserved_reloads": int(getattr(self, "_hud_unobserved_reloads", 0)),
+            "power_source": getattr(self, "_hud_power_source", None),
             "conflict": bool(state.get("conflict") or conflict),
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
@@ -10618,6 +10620,7 @@ class Plugin(AmbientRpc):
         return self._request_hud_reload(
             self._hud_reload_pending,
             reset_backoff=False,
+            confirm=False,
         )
 
     def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
@@ -10828,8 +10831,10 @@ class Plugin(AmbientRpc):
 
     def _hud_package_power(self) -> dict:
         reading = self._power_reader.read()
+        self._hud_power_source = "amdgpu"
         if not isinstance(reading.get("watts"), (int, float)):
             reading = {**reading, "watts": self._rapl_power.read()}
+            self._hud_power_source = "rapl"
         return reading
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
@@ -10983,7 +10988,7 @@ class Plugin(AmbientRpc):
         if not cap["supported"]:
             return False
         self._apply_hud(cap=cap, model=model)
-        if self._hud_apply_status in ("reload_requested", "written"):
+        if self._hud_apply_status == "reload_requested":
             self._hud_redetect_recovered += 1
             decky.logger.info(
                 "HUD reattached to mangoapp: %s",

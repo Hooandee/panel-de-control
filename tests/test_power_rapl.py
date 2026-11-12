@@ -88,3 +88,17 @@ def test_a_machine_without_rapl_is_not_rescanned_every_read(tmp_path, monkeypatc
     reader.read()
 
     assert len(scans) == 2
+
+
+def test_a_stale_sample_is_not_averaged_over_a_long_pause(tmp_path):
+    path = _domain(str(tmp_path), energy=0)
+    clock = {"now": 0.0}
+    reader = RaplPackagePower(root=str(tmp_path), clock=lambda: clock["now"])
+    reader.read()
+    _energy(path, 3_600_000_000)
+    clock["now"] = 3600.0
+
+    assert reader.read() is None
+    _energy(path, 3_610_000_000)
+    clock["now"] = 3602.0
+    assert reader.read() == 5.0

@@ -9,11 +9,13 @@ class RaplPackagePower:
     Intel handhelds have no amdgpu hwmon, so this is their package power source.
     `energy_uj` is root-only on current kernels (MangoHud, running as the user,
     reads 0 W there). Power is the counter delta over wall time between two reads;
-    a read sooner than `_MIN_GAP_S` repeats the last result. The first read and an
-    unreadable or reset counter return None, never a guess."""
+    a read sooner than `_MIN_GAP_S` repeats the last result. The first read, a read
+    after a gap longer than `_MAX_GAP_S` and an unreadable or reset counter return
+    None, never a guess."""
 
     _MIN_GAP_S = 0.5
     _REPROBE_S = 60.0
+    _MAX_GAP_S = 10.0
 
     def __init__(self, root="/", clock=time.monotonic):
         self._root = root
@@ -63,7 +65,8 @@ class RaplPackagePower:
         if previous is not None and now - previous[1] < self._MIN_GAP_S:
             return self._watts
         self._last = (energy, now)
-        if previous is None:
+        if previous is None or now - previous[1] > self._MAX_GAP_S:
+            self._watts = None
             return None
         delta_uj = energy - previous[0]
         if delta_uj < 0:
