@@ -18,7 +18,7 @@ from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
 # The support report waits four seconds for this section; games stop being read past this point.
-REPORT_BUDGET_S = 2.5
+REPORT_BUDGET_S = 2.0
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
