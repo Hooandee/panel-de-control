@@ -194,6 +194,7 @@ describe("AutoTdpCard", () => {
     ["warming", "warming", 16, null, null, "tdp.auto.status.warming 16 W"],
     ["paused", "fps_stale", 16, null, null, "tdp.auto.status.paused_signal 16 W"],
     ["paused", "focus_mismatch", 15, null, null, "tdp.auto.status.paused 15 W"],
+    ["paused", "steam_download_mode", 6, null, null, "tdp.auto.status.paused_control 6 W"],
   ] as const)(
     "maps %s/%s to its user-facing status",
     (state, reason, setpoint, heldWatts, fps, expected) => {
