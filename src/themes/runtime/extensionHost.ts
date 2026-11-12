@@ -182,7 +182,8 @@ type ExtensionLogCode =
   | "extension_dispose_failed"
   | "extension_release_failed"
   | "options_write_failed"
-  | "options_listener_failed";
+  | "options_listener_failed"
+  | "keyboard_theme_retire_failed";
 
 interface ThemeExtensionRuntimeHostOptions {
   /** Cover stores by name; a theme only sees the store its catalog id is allowed (`artworkStoreOf`). */
@@ -198,6 +199,8 @@ interface ThemeExtensionRuntimeHostOptions {
   games?: Readonly<ThemeExtensionGamesAccess>;
   groups?: Readonly<ThemeGroupsAccess>;
   actions?: ThemeActionsProvider;
+  /** Turns a theme off in CSS Loader; absent where Panel cannot write CSS Loader state (Windows). */
+  retireTheme?(cssLoaderName: string, keep: string): Promise<boolean>;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -391,6 +394,8 @@ function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountSco
       return games.pause(ms);
     },
     resume: () => games.resume(),
+    howLongToBeat: (appid: number | string, name: string) => games.howLongToBeat(appid, name),
+    protonDb: (appid: number | string) => games.protonDb(appid),
   });
 }
 
@@ -514,6 +519,10 @@ export class ThemeExtensionRuntimeHost {
   private readonly unclassifiable = new Set<string>();
   private generation = 0;
   private disposed = false;
+  private readonly retireTheme: ((cssLoaderName: string, keep: string) => Promise<boolean>) | undefined;
+  private readonly retiring = new Set<string>();
+  private keyboardOwner: string | null = null;
+  private keyboardGroup: ReadonlySet<string> = new Set();
 
   constructor({
     artwork,
@@ -530,7 +539,9 @@ export class ThemeExtensionRuntimeHost {
     games,
     groups,
     actions,
+    retireTheme,
   }: ThemeExtensionRuntimeHostOptions) {
+    this.retireTheme = retireTheme;
     this.ambient = ambient;
     this.actions = actions;
     this.storage = storage;
@@ -671,6 +682,7 @@ export class ThemeExtensionRuntimeHost {
   // theme owns, so several home runtimes run together while no section is claimed twice.
   private desired(candidates: readonly RuntimeSelection[]): Map<string, RuntimeSelection> {
     const desired = new Map<string, RuntimeSelection>();
+    this.forgetKeyboardThemesOff(candidates);
     if (candidates.length === 1) {
       desired.set(candidates[0].fingerprint, candidates[0]);
       return desired;
@@ -682,11 +694,50 @@ export class ThemeExtensionRuntimeHost {
       bySurface.set(surface, [...(bySurface.get(surface) ?? []), candidate]);
     }
     for (const [surface, group] of bySurface) {
-      for (const selection of surface === "home" ? homeRuntimes(group) : group.length === 1 ? group : []) {
+      for (const selection of surface === "home" ? homeRuntimes(group) : [this.keyboardRuntime(group)]) {
         desired.set(selection.fingerprint, selection);
       }
     }
     return desired;
+  }
+
+  // Only one keyboard theme dresses Steam's keyboard: one turned on next to the owner replaces it, and the one it
+  // replaces is turned off in CSS Loader so their styles never stack. With no owner (two on at startup) the first
+  // listed wins. The owner is remembered, never re-derived from what is mounted, or the choice would flip each mount.
+  private keyboardRuntime(group: readonly RuntimeSelection[]): RuntimeSelection {
+    const names = group.map((selection) => selection.theme.name);
+    const mountedKeys = new Set([...this.active.values()].map((runtime) => runtime.key));
+    const owner = this.keyboardOwner !== null && names.includes(this.keyboardOwner)
+      ? this.keyboardOwner
+      : group.find((selection) => mountedKeys.has(selection.key) || this.pending.has(selection.fingerprint))?.theme.name ?? null;
+    const arrival = owner === null
+      ? undefined
+      : group.find((selection) => selection.theme.name !== owner && !this.keyboardGroup.has(selection.theme.name));
+    const winner = arrival ?? group.find((selection) => selection.theme.name === owner) ?? group[0];
+    this.keyboardOwner = winner.theme.name;
+    this.keyboardGroup = new Set(names);
+    for (const selection of group) {
+      if (selection !== winner) this.retire(selection.theme.name, winner.theme.name);
+    }
+    return winner;
+  }
+
+  // Runs on every reconcile, also with a single candidate: a theme turned off leaves the keyboard group and its
+  // retirement, so turning it on again counts as a new arrival. One attempt per theme while it stays on: a
+  // refusal is logged, not retried on every refresh.
+  private forgetKeyboardThemesOff(candidates: readonly RuntimeSelection[]): void {
+    const on = new Set(candidates.map((candidate) => candidate.theme.name));
+    for (const name of this.retiring) if (!on.has(name)) this.retiring.delete(name);
+    this.keyboardGroup = new Set([...this.keyboardGroup].filter((name) => on.has(name)));
+    if (this.keyboardOwner !== null && !on.has(this.keyboardOwner)) this.keyboardOwner = null;
+  }
+
+  private retire(cssLoaderName: string, keep: string): void {
+    if (!this.retireTheme || this.retiring.has(cssLoaderName)) return;
+    this.retiring.add(cssLoaderName);
+    void this.retireTheme(cssLoaderName, keep)
+      .then((retired) => { if (!retired) this.log("keyboard_theme_retire_failed"); })
+      .catch(() => this.log("keyboard_theme_retire_failed"));
   }
 
   private async classify(selection: RuntimeSelection): Promise<void> {

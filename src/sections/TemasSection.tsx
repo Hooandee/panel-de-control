@@ -10,6 +10,7 @@ import { ThemeHealthCard } from "../components/ThemeHealth";
 import { openThemeDetailsModal } from "../components/ThemeDetailsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { isKeyboardTheme, type ThemeCardModel } from "../themes/state";
 import { useThemes, type ThemesController } from "../themes/useThemes";
 
 export function TemasSection() {
@@ -26,21 +27,63 @@ export function TemasSection() {
           onChange={setTab}
         />
         {tab === "system"
-          ? <SystemThemes controller={controller} />
-          : <ComingSoonCard image={keyboardsPreview} keyPrefix="themes.keyboards" />}
+          ? <SystemThemes controller={controller} cards={controller.cards.filter((card) => !isKeyboardTheme(card.release))} />
+          : <KeyboardThemes controller={controller} cards={controller.cards.filter((card) => isKeyboardTheme(card.release))} />}
       </div>
     </PanelSectionRow>
   );
 }
 
-function SystemThemes({ controller }: { controller: ThemesController }) {
+function ThemeCards({ controller, cards }: { controller: ThemesController; cards: readonly ThemeCardModel[] }) {
+  if (cards.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      {cards.map((card) => (
+        <ThemeCard
+          key={card.id}
+          card={card}
+          operation={controller.operation}
+          onOpen={() => openThemeDetailsModal(card.id, () => void controller.refresh())}
+        />
+      ))}
+    </div>
+  );
+}
+
+function OperationError({ controller }: { controller: ThemesController }) {
+  const { t } = useI18n();
+  if (!controller.error) return null;
+  return (
+    <div role="alert" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
+      {t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}
+      {controller.errorCode ? (
+        <div style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          {t("themes.operation.code", { code: controller.errorCode })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Keyboard themes come from the catalog like the rest; until one is published the tab keeps its preview.
+function KeyboardThemes({ controller, cards }: { controller: ThemesController; cards: readonly ThemeCardModel[] }) {
+  if (cards.length === 0) return <ComingSoonCard image={keyboardsPreview} keyPrefix="themes.keyboards" />;
+  return (
+    <>
+      <OperationError controller={controller} />
+      <ThemeCards controller={controller} cards={cards} />
+    </>
+  );
+}
+
+function SystemThemes({ controller, cards }: { controller: ThemesController; cards: readonly ThemeCardModel[] }) {
   const { t } = useI18n();
   const publication = controller.publication;
   const catalogLoading = publication.status === "unchecked" || publication.status === "checking";
   const catalogUnavailable = publication.status === "disabled"
     || publication.status === "temporarily-unavailable"
     || publication.status === "recoverable-failure";
-  const validEmptyCatalog = publication.status === "published" && controller.cards.length === 0;
+  const validEmptyCatalog = publication.status === "published" && cards.length === 0;
   const cssChecking = controller.loading || controller.refreshing || controller.operation?.kind === "recovering";
 
   return (
@@ -79,10 +122,10 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
       </div>
     ) : null}
 
-    {catalogLoading && controller.cards.length === 0 ? (
+    {catalogLoading && cards.length === 0 ? (
       <div role="status" aria-live="polite" style={{ ...theme.card, padding: theme.space.md, color: theme.color.textMuted }}>{t("themes.remote.checking")}</div>
     ) : null}
-    {catalogUnavailable && controller.cards.length === 0 ? (
+    {catalogUnavailable && cards.length === 0 ? (
       <div style={{ ...theme.card, padding: theme.space.md }}>
         <div style={{ color: theme.color.warn }}>{t("themes.catalog.unavailable")}</div>
         <div style={{ marginTop: theme.space.sm }}>
@@ -111,29 +154,9 @@ function SystemThemes({ controller }: { controller: ThemesController }) {
       </div>
     ) : null}
 
-    {controller.error ? (
-      <div role="alert" style={{ ...theme.card, padding: theme.space.md, color: theme.color.warn }}>
-        {t(controller.recoveryBlocked ? "themes.recovery.blocked" : "themes.operation.failed")}
-        {controller.errorCode ? (
-          <div style={{ marginTop: theme.space.xs, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("themes.operation.code", { code: controller.errorCode })}
-          </div>
-        ) : null}
-      </div>
-    ) : null}
+    <OperationError controller={controller} />
 
-    {controller.cards.length > 0 ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        {controller.cards.map((card) => (
-          <ThemeCard
-            key={card.id}
-            card={card}
-            operation={controller.operation}
-            onOpen={() => openThemeDetailsModal(card.id, () => void controller.refresh())}
-          />
-        ))}
-      </div>
-    ) : null}
+    <ThemeCards controller={controller} cards={cards} />
 
     <ThemeHealthCard controller={controller} />
     </>

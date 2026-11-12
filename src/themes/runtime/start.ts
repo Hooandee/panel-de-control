@@ -166,6 +166,8 @@ interface ThemesRuntimeOptions {
   games?: Readonly<ThemeExtensionGamesAccess>;
   groups?: Readonly<ThemeGroupsAccess>;
   actions?: ThemeActionsProvider;
+  /** Turns a theme off in CSS Loader; omitted where Panel cannot (Windows). */
+  retireTheme?(cssLoaderName: string, keep: string): Promise<boolean>;
   evaluate?(source: string): ThemeExtensionExport;
   log?(code: string): void;
   createManager?(
@@ -194,6 +196,7 @@ export function startThemesRuntime({
   games,
   groups,
   actions,
+  retireTheme,
 }: ThemesRuntimeOptions): () => void {
   const qam = getQamDocument && subscribeQamDocument
     ? Object.freeze({
@@ -216,6 +219,7 @@ export function startThemesRuntime({
       games,
       groups,
       actions,
+      retireTheme,
       evaluate,
       log,
     }),

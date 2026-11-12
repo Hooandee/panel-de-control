@@ -251,12 +251,23 @@ public sealed class ThemeService
                 .Select(release => release.CssLoaderName)
                 .ToHashSet(StringComparer.Ordinal);
 
-        // Two runtimes rebuild the same Big Picture surfaces and fight over them. The catalog groups only
+        bool IsKeyboard(InstalledTheme candidate) => ThemeKinds.IsKeyboard(
+            candidate,
+            catalog.Releases.FirstOrDefault(release => release.CssLoaderName == candidate.Name)?.ExclusiveGroup);
+
+        // One keyboard theme at a time; a keyboard theme never turns a Home theme off, nor the other way round.
+        // Two Home runtimes rebuild the same Big Picture surfaces and fight over them. The catalog groups only
         // published themes, so an early theme such as Duo would otherwise run next to another runtime.
-        if (theme.Marker?.Extension is not null)
+        if (IsKeyboard(theme))
         {
             exclusive.UnionWith(library.Themes
-                .Where(candidate => candidate.Name != name && candidate.Marker?.Extension is not null)
+                .Where(candidate => candidate.Name != name && IsKeyboard(candidate))
+                .Select(candidate => candidate.Name));
+        }
+        else if (theme.Marker?.Extension is not null)
+        {
+            exclusive.UnionWith(library.Themes
+                .Where(candidate => candidate.Name != name && candidate.Marker?.Extension is not null && !IsKeyboard(candidate))
                 .Select(candidate => candidate.Name));
         }
         settings.Update(themes =>

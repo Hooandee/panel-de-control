@@ -38,6 +38,7 @@ public static class ThemesResponseBuilder
                     : theme is not null ? new[] { new LocalizedText("en", theme.Manifest.DisplayName) } : null,
                 Description = release is not null ? Texts(release.Description) : early is not null ? Texts(early.Description) : null,
                 EarlyVersion = early?.Version,
+                Keyboard = ThemeKinds.IsKeyboard(theme, release?.ExclusiveGroup),
 
                 InstalledVersion = theme?.Manifest.Version,
                 PublishedVersion = release?.Version,
