@@ -324,6 +324,8 @@ export class ThemeActivator {
         true,
       );
       if (this.adapter.hasPendingMutation()) throw stillRestoring();
+      // CSS Loader away (Steam restarting): wait for it rather than spend a reapply on nothing.
+      if ((await this.adapter.inspect()).status !== "ready") throw stillRestoring();
       let current: CssLoaderReadySnapshot | null = null;
       if ((recovery.reapplies ?? 0) < MAX_REAPPLIES && this.adapter.reapplyThemeStates) {
         recovery.reapplies = (recovery.reapplies ?? 0) + 1;

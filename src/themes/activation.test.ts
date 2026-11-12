@@ -448,6 +448,29 @@ describe("ThemeActivator", () => {
     expect(reapplies).toBe(2);
   });
 
+  it("does not spend the final reapplies while CSS Loader is away", async () => {
+    let pending = false;
+    let away = false;
+    const adapter = timingOutAdapter(() => { pending = true; });
+    adapter.hasPendingMutation = () => pending;
+    const inspect = adapter.inspect.bind(adapter);
+    adapter.inspect = async () => (away ? { status: "missing", themes: [] } : inspect());
+    const activator = new ThemeActivator(adapter);
+    await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
+    away = true;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      pending = false;
+      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
+      await Promise.resolve();
+    }
+    expect(adapter.reapplies).toBe(0);
+
+    away = false;
+    const restored = await reconcileUntilSettled(activator, () => { pending = false; });
+    expect(restored?.themes[0]).toMatchObject({ enabled: false, patches: [{ value: "Red" }] });
+    expect(activator.takeAbandonedRecovery()).toBe(false);
+  });
+
   it("recovers a timed-out mutation after restart with a newer compatible CSS Loader", async () => {
     let durable: DurableThemeActivationRecovery | null = null;
     let recoverable = false;
