@@ -1147,6 +1147,7 @@ export const it: Record<string, string> = {
   "fans.curve.custom_mode": "In modalità personalizzata la ventola non può essere controllata da qui. Il dispositivo funziona correttamente e se ne occupa il firmware. Per influire sulla ventola, scegli una modalità TDP, Silenziosa, Bilanciata o Prestazioni, nella scheda Potenza.",
   "fans.curve.kernel_pending": "Nel kernel SteamOS attuale non è disponibile un driver della ventola per questo modello. Nel frattempo puoi attivare qui sotto il controllo sperimentale.",
   "fans.armadaHandoff": "Armada OS controlla la ventola. Scegliendo una curva passa a Panel de Control, e Auto la restituisce ad Armada.",
+  "fans.pocknixHandoff": "Pocknix controlla la ventola. Scegliendo una curva passa a Panel de Control, e Auto la restituisce a Pocknix.",
   "fans.target.title": "Temperatura obiettivo",
   "fans.target.note": "La PS5 non riporta la velocità della ventola. La console la accelera quanto serve per mantenere questa temperatura: più bassa, più fresca e più rumorosa.",
   "fans.target.failed": "La console non ha accettato la modifica. Resta la temperatura precedente.",
