@@ -27,7 +27,7 @@ _LIFECYCLE_KEPT = 4
 _LIFECYCLE_EVENT_CHARS = 40
 # Steps marked around hardware writes (resume re-apply): the last one names the write a
 # freeze interrupted. Each mark is synced before the write it announces starts.
-_MARKS_KEPT = 12
+_MARKS_KEPT = 16
 _MARK_STEP_CHARS = 40
 _MARK_DETAIL_KEYS = 6
 _MARK_DETAIL_CHARS = 48
