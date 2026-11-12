@@ -115,6 +115,12 @@
     <Content Include="..\..\..\src\assets\luminous-atlas-cover.jpg">
       <Link>Assets\ThemeCovers\luminous-atlas-cover.jpg</Link>
     </Content>
+    <Content Include="..\..\..\src\assets\terciopelo-cover.jpg">
+      <Link>Assets\ThemeCovers\terciopelo-cover.jpg</Link>
+    </Content>
+    <Content Include="..\..\..\src\assets\lobo-blanco-cover.jpg">
+      <Link>Assets\ThemeCovers\lobo-blanco-cover.jpg</Link>
+    </Content>
     <Content Include="Assets\WidgetIcon.png">
       <Link>GameBar\PanelDeControl\WidgetIcon.png</Link>
     </Content>

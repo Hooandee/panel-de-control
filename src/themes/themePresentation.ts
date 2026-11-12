@@ -1,7 +1,9 @@
 import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
+import loboBlancoCover from "../assets/lobo-blanco-cover.jpg";
 import luminousAtlasCover from "../assets/luminous-atlas-cover.jpg";
+import terciopeloCover from "../assets/terciopelo-cover.jpg";
 import vidaCover from "../assets/vida-cover.jpg";
 import type { Lang } from "../i18n/languages";
 import { localizePublishedText, type PublishedThemeRelease } from "./remotePublication";
@@ -115,6 +117,46 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein Theme, inspiriert vom Weltall und von Sonnenfinsternissen. Deine Spiele werden zu Planeten auf einem wirklich schwarzen Hintergrund, mit Sternen und einem sanften Leuchten auf dem, was du gerade ausgewählt hast. Gemacht für OLED-Bildschirme, denn dort kommt es am besten zur Geltung.",
       "pt-BR": "Um tema inspirado no espaço e nos eclipses. Seus jogos viram planetas sobre um fundo preto de verdade, com estrelas e um brilho suave no que você tem selecionado. Feito para telas OLED, que é onde ele fica mais bonito.",
       fr: "Un thème inspiré de l'espace et des éclipses. Vos jeux deviennent des planètes sur un fond vraiment noir, avec des étoiles et une douce lueur sur ce que vous avez sélectionné. Pensé pour les écrans OLED, car c'est là qu'il rend le mieux.",
+    },
+  },
+  "hooandee-terciopelo": {
+    cssLoaderName: "Hooandee Terciopelo",
+    cover: terciopeloCover,
+    tagline: {
+      es: "Un teclado de terciopelo con sonido de máquina de escribir",
+      en: "A velvet keyboard that sounds like a typewriter",
+      it: "Una tastiera di velluto con il suono di una macchina da scrivere",
+      de: "Eine Samttastatur mit dem Klang einer Schreibmaschine",
+      "pt-BR": "Um teclado de veludo com som de máquina de escrever",
+      fr: "Un clavier de velours au son de machine à écrire",
+    },
+    description: {
+      es: "Un teclado de terciopelo negro con letras en champán y el sonido de una máquina de escribir. Cada tecla se hunde al pulsarla y suelta un poco de polvo dorado.",
+      en: "A black velvet keyboard with champagne legends and the sound of a typewriter. Every key sinks when pressed and lets out a little golden dust.",
+      it: "Una tastiera di velluto nero con lettere color champagne e il suono di una macchina da scrivere. Ogni tasto affonda quando lo premi e rilascia un po' di polvere dorata.",
+      de: "Eine Tastatur aus schwarzem Samt mit champagnerfarbenen Zeichen und dem Klang einer Schreibmaschine. Jede Taste sinkt beim Drücken ein und lässt ein wenig goldenen Staub frei.",
+      "pt-BR": "Um teclado de veludo preto com letras cor de champanhe e o som de uma máquina de escrever. Cada tecla afunda ao ser pressionada e solta um pouco de poeira dourada.",
+      fr: "Un clavier de velours noir aux lettres couleur champagne, avec le son d'une machine à écrire. Chaque touche s'enfonce quand on l'appuie et laisse échapper un peu de poussière dorée.",
+    },
+  },
+  "hooandee-lobo-blanco": {
+    cssLoaderName: "Hooandee Lobo Blanco",
+    cover: loboBlancoCover,
+    tagline: {
+      es: "Teclas plateadas, runas rojo sangre y un medallón de lobo",
+      en: "Silver keys, blood-red runes and a wolf medallion",
+      it: "Tasti argentati, rune rosso sangue e un medaglione a forma di lupo",
+      de: "Silberne Tasten, blutrote Runen und ein Wolfsmedaillon",
+      "pt-BR": "Teclas prateadas, runas vermelho-sangue e um medalhão de lobo",
+      fr: "Des touches argentées, des runes rouge sang et un médaillon de loup",
+    },
+    description: {
+      es: "Teclas plateadas de felpa, teclas especiales rojo sangre con su propia runa y un medallón de lobo. Cada pulsación suena a metal y las runas se encienden al tocarlas.",
+      en: "Plush silver keys, blood-red special keys with their own rune and a wolf medallion. Every press rings like metal and the runes light up when touched.",
+      it: "Tasti argentati in peluche, tasti speciali rosso sangue con la loro runa e un medaglione a forma di lupo. Ogni pressione suona come metallo e le rune si accendono al tocco.",
+      de: "Silberne Plüschtasten, blutrote Sondertasten mit eigener Rune und ein Wolfsmedaillon. Jeder Druck klingt nach Metall, und die Runen leuchten bei Berührung auf.",
+      "pt-BR": "Teclas prateadas de pelúcia, teclas especiais vermelho-sangue com sua própria runa e um medalhão de lobo. Cada toque soa como metal e as runas se acendem ao serem tocadas.",
+      fr: "Des touches argentées en peluche, des touches spéciales rouge sang avec leur propre rune et un médaillon de loup. Chaque pression sonne comme du métal et les runes s'allument au toucher.",
     },
   },
 };

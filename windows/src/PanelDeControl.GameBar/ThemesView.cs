@@ -196,6 +196,8 @@ public sealed class ThemesView : UserControl
         ["Hooandee Eclipse"] = ("eclipse-cover.jpg", 240.0 / 960),
         ["Hooandee Gallery"] = ("hooandee-cover.jpg", 240.0 / 960),
         ["Hooandee Luminous Atlas"] = ("luminous-atlas-cover.jpg", 240.0 / 960),
+        ["Hooandee Terciopelo"] = ("terciopelo-cover.jpg", 240.0 / 960),
+        ["Hooandee Lobo Blanco"] = ("lobo-blanco-cover.jpg", 240.0 / 960),
     };
 
     private static FrameworkElement? BuildCover(string themeName)
