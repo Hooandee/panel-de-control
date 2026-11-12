@@ -228,3 +228,72 @@ def test_handing_back_to_powerd_is_reported_once(tmp_path):
     backend.set_auto()
     assert backend.consume_powerd_restart() is True
     assert backend.consume_powerd_restart() is False
+
+
+def _pocknix_odin3(tmp_path):
+    # Pocknix on the Odin 3: same device-tree pwm-fan (no tach), no armada-powerd, its own daemon.
+    root = str(tmp_path)
+    fan = "sys/class/hwmon/hwmon54"
+    _write(root, f"{fan}/name", "pwmfan")
+    _write(root, f"{fan}/pwm1", 90)
+    _write(root, f"{fan}/pwm1_enable", 1)
+    _write(root, "usr/lib/systemd/system/pocknix-fancontrol.service", "[Service]\n")
+    return root, fan
+
+
+def test_pocknix_hands_the_fan_to_and_from_its_own_daemon(tmp_path):
+    from types import SimpleNamespace
+
+    from fans.armada import PocknixFanBackend
+    from fans.control import select_fan_backend
+
+    root, fan = _pocknix_odin3(tmp_path)
+    assert select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root).name == "pocknix-pwm"
+    control = FakeControl()
+    backend = PocknixFanBackend(temp_fn=lambda: 60.0, root=root, control=control)
+    assert backend.apply_curve_all(CURVE)["ok"] is True
+    assert int(_read(root, f"{fan}/pwm1")) == 128
+    assert backend.set_auto()["ok"] is True
+    assert control.calls == ["guard+", "stop", "start", "guard-"]
+    # Its daemon only moves the fan, so its restart never asks Panel to re-apply CPU levels.
+    assert backend.consume_powerd_restart() is False
+
+
+def test_armada_wins_when_both_daemons_are_installed(tmp_path):
+    from types import SimpleNamespace
+
+    from fans.control import select_fan_backend
+
+    root, _ = _pocknix_odin3(tmp_path)
+    _write(root, "usr/lib/systemd/system/armada-powerd.service", "[Service]\n")
+    assert select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root).name == "armada-pwm"
+
+
+def test_without_a_fan_daemon_the_pwm_fan_stays_generic(tmp_path):
+    from types import SimpleNamespace
+
+    from fans.control import select_fan_backend
+
+    root, _ = _pocknix_odin3(tmp_path)
+    os.remove(os.path.join(root, "usr/lib/systemd/system/pocknix-fancontrol.service"))
+    assert select_fan_backend(SimpleNamespace(key="ayn_odin3", arch="arm"), root=root).name == "generic-pwm"
+
+
+def test_pocknix_control_stops_and_restarts_its_own_unit(monkeypatch):
+    import fans.armada as armada
+
+    calls = []
+
+    def fake_run(argv):
+        calls.append(argv[1:])
+        return True, "inactive" if argv[1:2] == ["is-active"] else ""
+
+    monkeypatch.setattr(armada, "_run", fake_run)
+    control = armada.SystemdPowerdControl(pid=7, heartbeat="/nonexistent/beat", unit="pocknix-fancontrol.service")
+    control.stop_powerd()
+    control.start_powerd()
+    control.start_guard()
+    assert calls[0] == ["mask", "--runtime", "--now", "pocknix-fancontrol.service"]
+    assert ["start", "pocknix-fancontrol.service"] in calls
+    assert "exec" in " ".join(calls[-1]) and "start pocknix-fancontrol.service" in " ".join(calls[-1])
+    assert not any("armada-powerd" in " ".join(call) for call in calls)

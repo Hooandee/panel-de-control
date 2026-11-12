@@ -1,5 +1,6 @@
-"""Armada OS fan handoff: ``armada-powerd`` drives the pwm-fan every 3 s, so a Panel
-curve only holds while that daemon is stopped. Stopping it is guarded by a transient
+"""Fan handoff for ARM systems whose daemon drives the pwm-fan: ``armada-powerd`` on
+Armada OS (every 3 s) and ``pocknix-fancontrol`` on Pocknix. A Panel curve only holds
+while that daemon is stopped. Stopping it is guarded by a transient
 systemd unit that restarts the daemon as soon as Panel's fan loop stops beating,
 because pwm-fan has no firmware fallback: a dead loop would leave the fan at its last
 duty."""
@@ -8,11 +9,11 @@ import configparser
 import os
 import time
 
-from armada_os import POWERD_UNIT, powerd_present
+from armada_os import POCKNIX_FAN_UNIT, POWERD_UNIT, powerd_present, unit_present
 from fans.generic_pwm import GenericPwmFanBackend
 from fans.software_loop import _systemctl_path
 
-__all__ = ["ArmadaFanBackend", "SystemdPowerdControl", "powerd_min_duty", "powerd_present"]
+__all__ = ["ArmadaFanBackend", "PocknixFanBackend", "SystemdPowerdControl", "pocknix_fan_present", "powerd_min_duty", "powerd_present"]
 
 GUARD_PREFIX = "pdc-armada-fan-guard"
 HEARTBEAT = "/run/pdc-armada-fan.alive"
@@ -44,8 +45,13 @@ def _run(argv: list[str]) -> tuple[bool, str]:
         return False, ""
 
 
+def pocknix_fan_present(root: str = "/") -> bool:
+    return unit_present(POCKNIX_FAN_UNIT, root)
+
+
 class SystemdPowerdControl:
-    def __init__(self, pid: int | None = None, heartbeat: str = HEARTBEAT) -> None:
+    def __init__(self, pid: int | None = None, heartbeat: str = HEARTBEAT, unit: str = POWERD_UNIT) -> None:
+        self._unit = unit
         self._pid = pid if pid is not None else os.getpid()
         self._heartbeat = heartbeat
         self._guard = f"{GUARD_PREFIX}-{self._pid}"
@@ -65,8 +71,8 @@ class SystemdPowerdControl:
             f"while kill -0 {int(self._pid)} 2>/dev/null"
             f" && [ $(( $(date +%s) - $(stat -c %Y {self._heartbeat} 2>/dev/null || echo 0) ))"
             f" -lt {_HEARTBEAT_STALE_S} ]; do sleep 2; done; "
-            f"{sc} unmask --runtime {POWERD_UNIT}; {sc} reset-failed {POWERD_UNIT}; "
-            f"exec {sc} start {POWERD_UNIT}"
+            f"{sc} unmask --runtime {self._unit}; {sc} reset-failed {self._unit}; "
+            f"exec {sc} start {self._unit}"
         )
         if self.guard_active():
             return True
@@ -82,18 +88,18 @@ class SystemdPowerdControl:
         return _run([self._systemctl, "stop", self._guard])[0]
 
     def powerd_active(self) -> bool:
-        return _run([self._systemctl, "is-active", POWERD_UNIT])[1] == "active"
+        return _run([self._systemctl, "is-active", self._unit])[1] == "active"
 
     def stop_powerd(self) -> bool:
         # A runtime mask also blocks the boot-time start that can land after Panel
         # loads; /run is cleared on reboot, so a mask can never outlive the session.
-        _run([self._systemctl, "mask", "--runtime", "--now", POWERD_UNIT])
+        _run([self._systemctl, "mask", "--runtime", "--now", self._unit])
         return not self.powerd_active()
 
     def start_powerd(self) -> bool:
-        _run([self._systemctl, "unmask", "--runtime", POWERD_UNIT])
-        _run([self._systemctl, "reset-failed", POWERD_UNIT])
-        _run([self._systemctl, "start", POWERD_UNIT])
+        _run([self._systemctl, "unmask", "--runtime", self._unit])
+        _run([self._systemctl, "reset-failed", self._unit])
+        _run([self._systemctl, "start", self._unit])
         return self.powerd_active()
 
 
@@ -164,3 +170,16 @@ class ArmadaFanBackend(GenericPwmFanBackend):
     @property
     def _owns_fan(self) -> bool:
         return self._points is not None and self._powerd_stopped
+
+
+class PocknixFanBackend(ArmadaFanBackend):
+    name = "pocknix-pwm"
+
+    def __init__(self, temp_fn=None, root: str = "/", control=None, clock=time.monotonic) -> None:
+        super().__init__(temp_fn=temp_fn, root=root, clock=clock,
+                         control=control if control is not None else SystemdPowerdControl(unit=POCKNIX_FAN_UNIT))
+
+    def consume_powerd_restart(self) -> bool:
+        # pocknix-fancontrol only moves the fan; restarting it leaves the CPU levels alone.
+        self._powerd_restarted = False
+        return False
