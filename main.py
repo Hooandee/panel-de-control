@@ -10102,12 +10102,14 @@ class Plugin(AmbientRpc):
         if guard is None:
             guard = SleepCoreGuard()
             self._sleep_core_guard = guard
-        if not guard.installed and not guard.ensure():
+        if not guard.ready and not guard.ensure():
             decky.logger.warning("Sleep core guard not installed: %s", guard.last_error)
 
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
         generation = self._next_cpu_generation()
         selected = intent if intent is not None else self._cpu_intent()
+        if trigger != "set_cores":
+            selected = self._hold_cores_after_resume(selected)
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -10166,10 +10168,7 @@ class Plugin(AmbientRpc):
         if getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
-        intent = self._cpu_intent()
-        if intent.get("cores") is not None and self._resume_hold_active():
-            self._note_resume_hold("cores", requested=intent.get("cores"))
-            intent = {**intent, "cores": None}
+        intent = self._hold_cores_after_resume(self._cpu_intent())
         holder = {}
 
         def apply():
@@ -11545,6 +11544,13 @@ class Plugin(AmbientRpc):
                 pass
         self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
         self._start_resume_hold(self._resume_token)
+
+    def _hold_cores_after_resume(self, intent: dict) -> dict:
+        """During the hold every core stays online; only an explicit core change applies."""
+        if intent.get("cores") is None or not self._resume_hold_active():
+            return intent
+        self._note_resume_hold("cores", requested=intent.get("cores"))
+        return {**intent, "cores": None}
 
     def _resume_hold_active(self) -> bool:
         return getattr(self, "_resume_hold_token", None) is not None

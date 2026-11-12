@@ -147,3 +147,15 @@ def test_no_marks_outside_a_resume(tmp_path, monkeypatch):
     plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
     plugin._reapply_all()
     assert plugin._pulse.marks == []
+
+
+def test_other_cpu_changes_during_the_hold_keep_cores_online(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
+
+    async def scenario():
+        _resume(plugin)
+        intent = {**plugin._cpu_intent(), "smt": False}
+        await plugin._apply_cpu_awaited(intent, trigger="set_smt")
+        assert intents == [None]
+
+    asyncio.run(scenario())

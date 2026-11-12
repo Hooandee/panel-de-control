@@ -44,6 +44,7 @@ class SleepCoreGuard:
         self._unit = os.path.join(self._dir, UNIT_NAME)
         self._link = os.path.join(self._dir, "sleep.target.wants", UNIT_NAME)
         self._systemctl = systemctl
+        self._loaded = False
         self.last_error: str | None = None
 
     @property
@@ -55,10 +56,26 @@ class SleepCoreGuard:
             return False
         return current == UNIT_TEXT and os.path.islink(self._link)
 
+    @property
+    def ready(self) -> bool:
+        """Installed and loaded by a daemon-reload from this process."""
+        return self._loaded and self.installed
+
     def ensure(self) -> bool:
-        """Idempotent: installs the unit and reloads systemd only when missing."""
-        if self.installed:
+        """Idempotent: writes the unit when missing and reloads systemd until a reload
+        succeeds, so a failed reload is retried on the next call."""
+        if self.ready:
             return True
+        if not self.installed and not self._write():
+            return False
+        if not self._systemctl("daemon-reload"):
+            self.last_error = "daemon_reload_failed"
+            return False
+        self._loaded = True
+        self.last_error = None
+        return True
+
+    def _write(self) -> bool:
         try:
             os.makedirs(os.path.dirname(self._link), exist_ok=True)
             tmp = f"{self._unit}.tmp"
@@ -71,16 +88,13 @@ class SleepCoreGuard:
         except OSError as error:
             self.last_error = f"write:{type(error).__name__}"
             return False
-        if not self._systemctl("daemon-reload"):
-            self.last_error = "daemon_reload_failed"
-            return False
-        self.last_error = None
         return True
 
     def remove(self, reload: bool = True) -> bool:
         """reload=False (unload) skips daemon-reload to keep the stop fast; until the
         next reload systemd may still run the unit, which then finds nothing to do."""
         present = False
+        self._loaded = False
         for path in (self._link, self._unit):
             try:
                 os.unlink(path)
@@ -96,4 +110,4 @@ class SleepCoreGuard:
         return True
 
     def diagnostics(self) -> dict:
-        return {"installed": self.installed, "last_error": self.last_error}
+        return {"installed": self.installed, "loaded": self._loaded, "last_error": self.last_error}

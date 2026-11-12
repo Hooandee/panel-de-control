@@ -44,10 +44,19 @@ def test_remove_cleans_up_and_reloads_only_when_present(tmp_path):
     assert calls == [("daemon-reload",), ("daemon-reload",)]
 
 
-def test_failed_reload_is_reported(tmp_path):
-    guard, _ = _guard(tmp_path, ok=False)
+def test_failed_reload_is_reported_and_retried(tmp_path):
+    results = iter([False, True])
+    calls = []
+
+    def systemctl(*args):
+        calls.append(args)
+        return next(results)
+
+    guard = SleepCoreGuard(root=str(tmp_path), systemctl=systemctl)
     assert guard.ensure() is False
-    assert guard.diagnostics() == {"installed": True, "last_error": "daemon_reload_failed"}
+    assert guard.diagnostics() == {"installed": True, "loaded": False, "last_error": "daemon_reload_failed"}
+    assert guard.ensure() is True
+    assert guard.ready and calls == [("daemon-reload",), ("daemon-reload",)]
 
 
 def test_unit_script_onlines_only_offline_cpus(tmp_path):
