@@ -51,6 +51,9 @@ def open_port(port: int, address: str, seconds: int, run: Runner = _run, which: 
         code, zone = run([tool, "--get-default-zone"])
         if code != 0 or not zone:
             return "no_zone"
+    code, answer = run([tool, f"--zone={zone}", f"--query-port={port}/tcp"])
+    if code == 0 and answer == "yes":
+        return "already_open"
     code, _ = run([tool, f"--zone={zone}", f"--add-port={port}/tcp", f"--timeout={max(1, int(seconds))}s"])
     return f"opened:{zone}" if code == 0 else f"failed:{zone}:{code}"
 

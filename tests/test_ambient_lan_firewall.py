@@ -32,6 +32,13 @@ def test_opens_the_share_port_for_a_while_in_the_zone_of_the_lan_interface_only_
     assert not any("--permanent" in part for call in calls for part in call)
 
 
+def test_never_takes_over_a_port_someone_else_already_opened():
+    calls = []
+    answers = [("--state", (0, "running")), ("ip", (1, "")), ("--get-default-zone", (0, "public")), ("--zone=public", (0, "yes"))]
+    assert lan_firewall.open_port(41000, "10.0.0.2", 600, run=runner(answers, calls), which=lambda _: "/usr/bin/firewall-cmd") == "already_open"
+    assert not any(part.startswith("--add-port") for call in calls for part in call)
+
+
 def test_falls_back_to_the_default_zone_and_reports_a_refusal():
     calls = []
     answers = [("--state", (0, "running")), ("ip", (1, "")), ("--get-default-zone", (0, "public")), ("--zone=public", (13, ""))]
