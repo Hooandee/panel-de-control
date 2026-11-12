@@ -196,12 +196,17 @@ def restore_by_hand(folder: Path) -> bool:
     HelixSR DLL has no backup to put back: the game must not be reported clean while HelixSR still runs in it."""
     stuck = False
     for current, original in _recorded_swaps(folder):
-        if _is_helix_file(current):
-            if original.is_file() and not original.is_symlink():
+        backup = original.is_file() and not original.is_symlink()
+        if not current.exists() and not current.is_symlink():
+            if backup:
                 os.replace(original, current)
-            else:
+        elif _is_helix_file(current):
+            if backup:
+                os.replace(original, current)
+            elif current.name.lower().startswith("amd_fidelityfx_"):
+                # HelixSR's drop-in sits where the game's own FidelityFX DLL was, and nothing can bring that back.
                 stuck = True
-        elif original.is_file() and _same_file(original, current):
+        elif backup and _same_file(original, current):
             original.unlink()
     if stuck:
         return False

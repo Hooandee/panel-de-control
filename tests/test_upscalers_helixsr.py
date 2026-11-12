@@ -108,8 +108,22 @@ def test_restoring_by_hand_goes_file_by_file(tmp_path):
 
 
 def test_a_helixsr_dll_with_no_backup_keeps_its_record(tmp_path):
-    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["a.dll"]}))
-    _write(tmp_path / "a.dll", b"MZ HelixSR")
+    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["amd_fidelityfx_dx12.dll"]}))
+    _write(tmp_path / "amd_fidelityfx_dx12.dll", b"MZ HelixSR")
     assert helixsr.restore_by_hand(tmp_path) is False
     assert (tmp_path / "helixsr-install.json").exists()
-    assert (tmp_path / "a.dll").read_bytes() == b"MZ HelixSR"
+    assert (tmp_path / "amd_fidelityfx_dx12.dll").read_bytes() == b"MZ HelixSR"
+
+
+def test_a_missing_game_dll_gets_its_backup_back(tmp_path):
+    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    _write(tmp_path / "amd_fidelityfx_upscaler_dx12.original.dll", b"game fsr")
+    assert helixsr.restore_by_hand(tmp_path) is True
+    assert (tmp_path / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"game fsr"
+    assert not (tmp_path / "amd_fidelityfx_upscaler_dx12.original.dll").exists()
+
+
+def test_a_file_helixsr_added_never_blocks_its_removal(tmp_path):
+    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["helixsr_extra.dll"]}))
+    _write(tmp_path / "helixsr_extra.dll", b"MZ HelixSR")
+    assert helixsr.restore_by_hand(tmp_path) is True
