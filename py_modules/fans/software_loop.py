@@ -303,6 +303,25 @@ def _systemctl(verb: str) -> bool:
         return False
 
 
+def jupiter_fan_control_active() -> bool | None:
+    """systemd state of SteamOS's fan service; None when it cannot be read."""
+    try:
+        import subprocess
+        from controllers.detect import clean_env
+        r = subprocess.run(
+            [_systemctl_path(), "is-active", _JUPITER_SERVICE],
+            check=False, capture_output=True, text=True, timeout=5, env=clean_env(),
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    state = r.stdout.strip()
+    if state in ("active", "activating", "reloading"):
+        return True
+    if state in ("inactive", "deactivating", "failed"):
+        return False
+    return None
+
+
 class SteamDeckFanBackend(SoftwareLoopBackend):
     """Steam Deck (LCD/Galileo): write ``fan1_target`` (RPM); release = write 0.
 
@@ -324,6 +343,10 @@ class SteamDeckFanBackend(SoftwareLoopBackend):
         # Injectable for tests; defaults to real systemctl.
         self._jupiter_ctl = jupiter_ctl if jupiter_ctl is not None else _systemctl
         self._jupiter_stopped = False  # track state → idempotent (stop/start once)
+
+    @property
+    def owns_jupiter(self) -> bool:
+        return self._jupiter_stopped
 
     def _run_jupiter(self, verb: str) -> bool:
         try:

@@ -47,52 +47,65 @@ def test_broken_config_is_ignored(tmp_path):
     assert read_download_mode_limit(str(tmp_path)) is None
 
 
-def test_enters_when_an_outside_write_lands_on_the_download_limit():
+def test_candidate_when_an_outside_write_lands_on_the_download_limit():
     hold = SteamDownloadModeHold(6)
-    assert hold.observe(_deck(6, 6), {"pl2": 15, "pl3": 15}, now=10.0) == "entered"
-    assert hold.active
-    assert hold.observe(_deck(6, 6), {"pl2": 15, "pl3": 15}, now=12.0) is None
-    assert hold.active
+    assert hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, {"pl2": 15, "pl3": 15})
+    assert hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, None)
 
 
-def test_leaves_when_steamos_manager_restores_the_limit():
+def test_our_own_write_at_the_limit_is_not_a_candidate():
     hold = SteamDownloadModeHold(6)
-    hold.observe(_deck(6, 6), {"pl2": 12, "pl3": 12}, now=10.0)
-    assert hold.observe(_deck(12, 12), {"pl2": 12, "pl3": 12}, now=40.0) == "left"
-    assert not hold.active
-    assert hold.diagnostics()["last"] == {"entered_at": 10.0, "left_at": 40.0, "held_s": 30.0}
+    assert not hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, {"pl2": 6, "pl3": 6})
+    assert not hold.candidate(_deck(6, 6), {"pl2": 6, "pl3": 6}, {"pl2": 15, "pl3": 15})
 
 
-def test_own_target_at_the_limit_is_not_a_hold():
+def test_partial_or_other_values_are_not_a_candidate():
     hold = SteamDownloadModeHold(6)
-    assert hold.observe(_deck(6, 6), {"pl2": 6, "pl3": 6}, now=1.0) is None
-    assert not hold.active
-
-
-def test_partial_or_other_values_are_not_a_hold():
-    hold = SteamDownloadModeHold(6)
-    assert hold.observe(_deck(6, 15), {"pl2": 15, "pl3": 15}, now=1.0) is None
-    assert hold.observe(_deck(5, 5), {"pl2": 15, "pl3": 15}, now=1.0) is None
-    assert hold.observe(TdpObservation(readable=False), {"pl2": 15}, now=1.0) is None
-    assert not hold.active
+    target = {"pl2": 15, "pl3": 15}
+    assert not hold.candidate(_deck(6, 15), target, None)
+    assert not hold.candidate(_deck(5, 5), target, None)
+    assert not hold.candidate(TdpObservation(readable=False), target, None)
 
 
 def test_disabled_without_a_configured_limit():
     hold = SteamDownloadModeHold(None)
-    assert hold.observe(_deck(6, 6), {"pl2": 15, "pl3": 15}, now=1.0) is None
+    assert not hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, None)
     assert hold.diagnostics()["limit_w"] is None
 
 
-def test_unreadable_observation_keeps_the_hold():
+def test_leaves_when_steamos_manager_restores_the_limit():
     hold = SteamDownloadModeHold(6)
-    hold.observe(_deck(6, 6), {"pl2": 15, "pl3": 15}, now=1.0)
-    assert hold.observe(TdpObservation(readable=False), {"pl2": 15}, now=2.0) is None
+    hold.enter(10.0)
+    assert not hold.observe(_deck(6, 6), 12.0)
+    assert not hold.observe(TdpObservation(readable=False), 13.0)
     assert hold.active
+    assert hold.observe(_deck(12, 12), 40.0)
+    assert not hold.active
+    assert hold.diagnostics()["last"] == {"entered_at": 10.0, "left_at": 40.0, "held_s": 30.0}
 
 
 def test_release_clears_the_hold():
     hold = SteamDownloadModeHold(6)
-    hold.observe(_deck(6, 6), {"pl2": 15, "pl3": 15}, now=1.0)
+    hold.enter(1.0)
     assert hold.release(now=5.0) is True
     assert not hold.active
     assert hold.release(now=6.0) is False
+
+
+def test_reads_the_steamos_fan_service_state(monkeypatch):
+    import subprocess
+    import types
+
+    from fans import software_loop
+
+    for stdout, expected in (("active\n", True), ("inactive\n", False), ("failed\n", False), ("", None)):
+        monkeypatch.setattr(
+            subprocess, "run", lambda *a, _out=stdout, **k: types.SimpleNamespace(stdout=_out),
+        )
+        assert software_loop.jupiter_fan_control_active() is expected
+
+    def broken(*_args, **_kwargs):
+        raise OSError("no systemctl")
+
+    monkeypatch.setattr(subprocess, "run", broken)
+    assert software_loop.jupiter_fan_control_active() is None
