@@ -2943,3 +2943,209 @@ def test_backend_operation_logs_failed_recovery(plugin, monkeypatch):
     assert events[-1][0] == ("WARNING", "tdp", "backend_operation")
     assert events[-1][1]["operation"] == "recover"
     assert events[-1][1]["result"]["ok"] is False
+
+
+def _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=False, handles=None):
+    import main
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    monkeypatch.setattr(main, "_monotonic", lambda: 10.5)
+    monkeypatch.setattr(main, "find_session", lambda: None)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: handles)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: fan_service_active)
+    plugin._tdp_backend.name = "steamdeck-hwmon"
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+
+def _steam_enters_download_mode(plugin):
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+
+
+def test_guard_leaves_steam_download_mode_tdp_alone(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+
+    for tick in range(6):
+        plugin._tdp_guard_tick(now=10.0 + tick)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_diagnostics()["steam_download_mode"]["active"] is True
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("reapply"))
+    assert not result.ok
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_guard_resumes_once_steam_restores_the_limit(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_backend._levels.update(pl1=15, pl2=15, pl3=15)
+    plugin._tdp_guard_tick(now=40.0)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_write_authorized()
+    assert plugin._steam_download_hold.diagnostics()["last"]["held_s"] == 30.0
+    assert plugin._steam_download_hold.diagnostics()["last"]["why"] == "rails_changed"
+
+
+def test_user_tdp_change_wins_over_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("manual-watts"))
+
+    assert result.ok
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_own_write_at_the_download_limit_never_becomes_a_hold(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    plugin._tdp_profiles.set_pl1("global", 6)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game-change"))
+    plugin._tdp_profiles.set_pl1("global", 15)
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def _ticks_until_reverted(plugin, start=10.0):
+    for tick in range(12):
+        plugin._tdp_guard_tick(now=start + tick * 0.75)
+        if plugin._tdp_backend.set_levels_calls:
+            return start + tick * 0.75
+    return None
+
+
+@pytest.mark.parametrize(
+    ("fan_service_active", "handles"), [(True, None), (None, None), (False, 0)],
+)
+def test_unconfirmed_limit_is_written_back_after_a_short_wait(
+    plugin, monkeypatch, fan_service_active, handles,
+):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active, handles)
+    _steam_enters_download_mode(plugin)
+
+    reverted_at = _ticks_until_reverted(plugin)
+
+    assert not plugin._steam_download_hold.active
+    assert reverted_at is not None and reverted_at >= 15.0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_handles_win_over_the_fan_service(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    assert _ticks_until_reverted(plugin) is None
+    assert plugin._steam_download_hold.active
+
+
+def test_fan_service_stopping_late_still_enters_the_hold(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_our_fan_curve_stopping_the_service_proves_nothing(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch)
+    plugin._fan_ctrl = types.SimpleNamespace(owns_jupiter=True)
+    _steam_enters_download_mode(plugin)
+
+    assert _ticks_until_reverted(plugin) is not None
+    assert not plugin._steam_download_hold.active
+
+
+def test_leaves_the_hold_when_steam_ends_the_mode_without_restoring(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: 0)
+    plugin._tdp_guard_tick(now=21.0)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_write_authorized()
+
+
+def test_other_writers_wait_while_steam_has_not_confirmed(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    for reason in ("settle-retry", "lifecycle", "reapply"):
+        result = plugin._execute_tdp_command(plugin._capture_tdp_command(reason))
+        assert not result.ok
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 6
+
+
+def test_writes_before_the_first_guard_tick_respect_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle"))
+
+    assert not result.ok
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_no_steam_queries_when_the_plugin_does_not_own_the_tdp(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch)
+    asked = []
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: asked.append(1))
+    plugin._os_id = "anatase"
+    plugin._tdp_external_owner = True
+    _steam_enters_download_mode(plugin)
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert asked == []
+    assert not plugin._steam_download_hold.holding
+    assert plugin._tdp_reason == "external_owner"
+
+
+def test_steam_download_mode_hold_needs_the_deck_backend(plugin, monkeypatch):
+    import main
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 1

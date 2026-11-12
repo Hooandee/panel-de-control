@@ -13,7 +13,7 @@ export type MetricId =
   // the backend at apply time; see py_modules/mangohud/pdc_metrics.py).
   | "pdc_tdp" | "pdc_tdp_learn" | "pdc_auto_tdp" | "pdc_fan" | "pdc_fan_rpm"
   | "pdc_eco" | "pdc_profile" | "pdc_power" | "pdc_charge" | "pdc_bat_health"
-  | "pdc_smt" | "pdc_boost" | "pdc_cores" | "pdc_gpu_clock" | "pdc_model";
+  | "pdc_bat_power" | "pdc_bat_time" | "pdc_smt" | "pdc_boost" | "pdc_cores" | "pdc_gpu_clock" | "pdc_model";
 
 // Colour keys mirror config.py. MangoHud colours by CATEGORY, not per element:
 // gpu/cpu/vram/ram/battery tint that category's LABEL word; `text` tints every
@@ -40,8 +40,8 @@ export const isBlockGroup = (group: string): group is BlockGroup =>
 // labellable — they render as a custom_text line whose label we emit ourselves.
 const PDC_IDS: MetricId[] = [
   "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
-  "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
-  "pdc_cores", "pdc_gpu_clock", "pdc_model",
+  "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_bat_power", "pdc_bat_time",
+  "pdc_smt", "pdc_boost", "pdc_cores", "pdc_gpu_clock", "pdc_model",
 ];
 const PDC_ID_SET = new Set<MetricId>(PDC_IDS);
 const PDC_LABEL_EN: Partial<Record<MetricId, string>> = {
@@ -55,6 +55,8 @@ const PDC_LABEL_EN: Partial<Record<MetricId, string>> = {
   pdc_power: "Power",
   pdc_charge: "Limit",
   pdc_bat_health: "Health",
+  pdc_bat_power: "Battery",
+  pdc_bat_time: "Left",
   pdc_smt: "SMT",
   pdc_boost: "Boost",
   pdc_cores: "Cores",
@@ -216,6 +218,8 @@ export const METRICS: MetricMeta[] = [
   { id: "pdc_power", category: "text", group: "pdc", label: "Consumo", value: "-" },
   { id: "pdc_charge", category: "text", group: "pdc", label: "Limite", value: "-" },
   { id: "pdc_bat_health", category: "text", group: "pdc", label: "Salud", value: "-" },
+  { id: "pdc_bat_power", category: "text", group: "pdc", label: "Bateria", value: "-" },
+  { id: "pdc_bat_time", category: "text", group: "pdc", label: "Restante", value: "-" },
   { id: "pdc_smt", category: "text", group: "pdc", label: "SMT", value: "-" },
   { id: "pdc_boost", category: "text", group: "pdc", label: "Boost", value: "-" },
   { id: "pdc_cores", category: "text", group: "pdc", label: "Nucleos", value: "-" },

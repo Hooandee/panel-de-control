@@ -1,5 +1,5 @@
 import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ModalRoot, Focusable, DialogButton, TextField } from "@decky/ui";
+import { ModalRoot, Focusable, DialogButton, TextField, findSP } from "@decky/ui";
 import { createThemeNavigationAccess } from "../themes/runtime/navigationAccess";
 import { showModal } from "../navigation/showModal";
 import { LuBug, LuLightbulb } from "react-icons/lu";
@@ -23,6 +23,7 @@ import { quickAccessTabDiagnostics } from "../deckyInternal";
 import { getQamDocument } from "../qamDocument";
 import { displayReport } from "../themes/themeHealth";
 import { readSteamDisplay } from "../themes/useThemeHealth";
+import { themeSurfaceReport } from "../themes/themeSurfaceReport";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -166,6 +167,12 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
     const themeDisplay = selected.includes("themes")
       ? await readSteamDisplay().then(displayReport).catch(() => undefined)
       : undefined;
+    let themeSurface: Record<string, unknown> | undefined;
+    if (selected.includes("themes")) {
+      try {
+        themeSurface = themeSurfaceReport(findSP());
+      } catch {}
+    }
     const context = buildReportContext(
       selected,
       steamDisplay,
@@ -174,6 +181,7 @@ const ReportBody: FC<ReportModalProps> = ({ closeModal, initialCategories = [] }
       kind,
       selected.includes("hud") ? steamOverlay.diagnostics() : undefined,
       themeDisplay,
+      themeSurface,
     );
     if (selected.includes("upscalers")) context.upscalers = await upscalersReportContext();
     submitReport(selected, text, context)

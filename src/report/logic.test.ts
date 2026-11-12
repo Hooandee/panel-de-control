@@ -157,6 +157,11 @@ describe("buildReportContext", () => {
         requested_level: null,
         observed_level: null,
       },
+      last_deactivation: {
+        outcome: "not_attempted",
+        before_level: null,
+        observed_level: null,
+      },
     } as const;
 
     expect(buildReportContext(

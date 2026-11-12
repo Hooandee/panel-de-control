@@ -35,7 +35,8 @@ import game_freeze
 import theme_hltb
 import theme_protondb
 from gamescope_perf import GamescopePerf
-from user_session import spawn_args
+from user_session import UserSession, spawn_args
+from pdc_platform.user_session import find_session
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -63,6 +64,12 @@ from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
 from tdp import steamos_manager as steamos_manager_conflict
+from tdp.steam_download_mode import (
+    SteamDownloadModeHold,
+    download_mode_handles,
+    read_download_mode_limit,
+)
+from fans.software_loop import jupiter_fan_control_active
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
     CONFIRM_S,
@@ -118,6 +125,7 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
+from power.rapl import RaplPackagePower
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
@@ -255,7 +263,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
-            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
+            "activation_quarantined",
             "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
@@ -288,6 +297,17 @@ _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
+# Every value refresh is a mangohudctl reload, and mangoapp re-parses its whole config
+# on a control thread while the render thread draws it. Continuous sensor readings
+# (power draw, fan speed, battery) are therefore republished far less often than
+# applied state (TDP, profile, toggles) or a reading that just became available.
+_MIN_HUD_SENSOR_REFRESH_S = 10.0
+_HUD_SENSOR_METRICS = frozenset((
+    "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
+))
+_HUD_REDETECT_S = 15.0
+_HUD_UNOBSERVED_BACKOFF_S = 60.0
+_HUD_BATTERY_METRICS = frozenset(("pdc_bat_health", "pdc_bat_power", "pdc_bat_time"))
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
@@ -320,6 +340,16 @@ _STEAM_DECK_PROFILES = frozenset({
     "steam_deck_oled",
 })
 
+# A TDP change the user makes here wins over Steam's download mode.
+_USER_TDP_REASONS = frozenset({
+    "manual-watts", "manual-levels", "preset", "boost-mode", "firmware-mode",
+    "follow-global", "auto-toggle", "take-control", "control-enabled",
+    "battery-ceiling", "cooler-ceiling", "experimental-ac-ceiling",
+    "low-battery-hold-toggle", "low-battery-hold-toggle-off",
+    "manual-gpu-link", "manual-gpu-level", "manual-auto-restore", "auto-config",
+    "firmware-mode-rollback",
+})
+
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
 _STABLE_THEME_VERSION = re.compile(
@@ -341,9 +371,15 @@ _THEME_FAILURE_OPERATIONS = frozenset({
     "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+# CSS Loader's own target categories; anything else a theme author typed is counted as "other".
+_THEME_TARGETS = frozenset({
+    "system-wide", "home", "library", "store", "keyboard", "preset", "snippet", "background",
+    "font", "fonts", "desktop", "hero", "friends", "settings", "quick access", "downloads",
+    "lock screen", "notifications", "game page", "other",
+})
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
-_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend)$")
+_UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend|themes)$")
 _UI_DIAGNOSTIC_HISTORY = 20
 _UI_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _THEME_FOLDER_SCAN_LIMIT = 200
@@ -895,6 +931,7 @@ class Plugin(AmbientRpc):
             self._settings.get("hud_managed_path")
         )
         self._power_reader = PowerReader()
+        self._rapl_power = RaplPackagePower()
         self._gamescope_stats = GamescopeStats()
         self._gamescope_perf = GamescopePerf(
             app_id=self._gamescope_focus_app,
@@ -998,6 +1035,15 @@ class Plugin(AmbientRpc):
         self._hud_reload_retry_at = 0.0
         self._hud_conflict = None
         self._hud_last_publish_at = float("-inf")
+        self._hud_redetect_at = float("-inf")
+        self._hud_value_publish_count = 0
+        self._hud_redetect_count = 0
+        self._hud_redetect_recovered = 0
+        self._hud_last_delivery = "unknown"
+        self._hud_unobserved_reloads = 0
+        self._hud_reload_via_proc_cwd = False
+        self._hud_observe_after = float("-inf")
+        self._hud_power_source = None
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -1017,6 +1063,12 @@ class Plugin(AmbientRpc):
         )
         self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
+        self._tdp_last_written = None
+        self._steam_download_hold = SteamDownloadModeHold(
+            read_download_mode_limit()
+            if self._device.key in _STEAM_DECK_PROFILES
+            else None
+        )
         self._tdp_overshoot = HiddenOvershootMonitor()
         self._tdp_status = (
             "settling" if self._tdp_supported() else "unsupported"
@@ -2148,9 +2200,10 @@ class Plugin(AmbientRpc):
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
-        so they are only counted."""
+        so they are only counted, grouped by the CSS Loader target they declare."""
         installed = []
         other_active = 0
+        other_targets: dict[str, int] = {}
         early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
@@ -2174,6 +2227,11 @@ class Plugin(AmbientRpc):
             active = config.get("active") is True
             if not (folder / "panel-theme.json").is_file():
                 other_active += active
+                if active:
+                    target = manifest.get("target")
+                    key = target.strip().lower() if isinstance(target, str) else ""
+                    key = key if key in _THEME_TARGETS else "other"
+                    other_targets[key] = other_targets.get(key, 0) + 1
                 continue
             installed.append({
                 "name": str(manifest.get("name", ""))[:80],
@@ -2187,7 +2245,11 @@ class Plugin(AmbientRpc):
                     if isinstance(key, str) and key.startswith("Estilizar ") and isinstance(value, str)
                 },
             })
-        return {"installed": installed, "other_active_themes": other_active}
+        return {
+            "installed": installed,
+            "other_active_themes": other_active,
+            "other_active_targets": other_targets,
+        }
 
     def _theme_early_installs(self) -> dict[str, str]:
         """Installed theme name to the early version it was installed as."""
@@ -3246,6 +3308,19 @@ class Plugin(AmbientRpc):
             "readback_mismatch",
         }:
             outcome = "unavailable"
+        deactivation = overlay.get("last_deactivation")
+        deactivation = deactivation if isinstance(deactivation, dict) else {}
+        hide_outcome = deactivation.get("outcome")
+        if hide_outcome not in {
+            "not_attempted",
+            "already_hidden",
+            "confirmed",
+            "unavailable",
+            "exception",
+            "readback_timeout",
+            "readback_mismatch",
+        }:
+            hide_outcome = "not_attempted"
         return {
             "snapshot_status": "available" if raw_level is not None else "unavailable",
             "resolver": resolver,
@@ -3262,6 +3337,11 @@ class Plugin(AmbientRpc):
                 "before_level": level(activation.get("before_level")),
                 "requested_level": level(activation.get("requested_level")),
                 "observed_level": level(activation.get("observed_level")),
+            },
+            "last_deactivation": {
+                "outcome": hide_outcome,
+                "before_level": level(deactivation.get("before_level")),
+                "observed_level": level(deactivation.get("observed_level")),
             },
         }
 
@@ -3313,6 +3393,12 @@ class Plugin(AmbientRpc):
             "managed_session_count": len(getattr(self, "_hud_sessions", ())),
             "reload_pending_count": len(getattr(self, "_hud_reload_pending", ())),
             "reload_attempt": int(getattr(self, "_hud_reload_attempt", 0)),
+            "value_publish_count": int(getattr(self, "_hud_value_publish_count", 0)),
+            "redetect_count": int(getattr(self, "_hud_redetect_count", 0)),
+            "redetect_recovered": int(getattr(self, "_hud_redetect_recovered", 0)),
+            "reload_delivery": getattr(self, "_hud_last_delivery", "unknown"),
+            "unobserved_reloads": int(getattr(self, "_hud_unobserved_reloads", 0)),
+            "power_source": getattr(self, "_hud_power_source", None),
             "conflict": bool(state.get("conflict") or conflict),
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
@@ -3353,20 +3439,25 @@ class Plugin(AmbientRpc):
 
     @staticmethod
     def _with_theme_display(themes, context):
-        display = context.get("theme_display") if isinstance(context, dict) else None
-        if not isinstance(themes, dict) or not isinstance(display, dict):
+        if not isinstance(themes, dict) or not isinstance(context, dict):
             return themes
-        sanitized = {}
-        for key, value in display.items():
-            if not isinstance(key, str) or len(key) > 32:
+        result = dict(themes)
+        for source, target, limit in (("theme_display", "display", 16), ("theme_surface", "surface", 24)):
+            values = context.get(source)
+            if not isinstance(values, dict):
                 continue
-            if isinstance(value, bool) or value is None:
-                sanitized[key] = value
-            elif isinstance(value, (int, float)) and math.isfinite(value):
-                sanitized[key] = round(float(value), 3)
-            if len(sanitized) >= 16:
-                break
-        return {**themes, "display": sanitized}
+            sanitized = {}
+            for key, value in values.items():
+                if not isinstance(key, str) or len(key) > 32:
+                    continue
+                if isinstance(value, bool) or value is None:
+                    sanitized[key] = value
+                elif isinstance(value, (int, float)) and math.isfinite(value):
+                    sanitized[key] = round(float(value), 3)
+                if len(sanitized) >= limit:
+                    break
+            result[target] = sanitized
+        return result
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -3382,6 +3473,7 @@ class Plugin(AmbientRpc):
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
         frontend.pop("theme_display", None)
+        frontend.pop("theme_surface", None)
         frontend.pop("upscalers", None)
         return {
             "tools": tools,
@@ -4184,9 +4276,21 @@ class Plugin(AmbientRpc):
         self._record_tdp_transition("game-steam-setting", action="intent_saved")
         return {**self._game_power_owner_state(), "ok": True, "detail": ""}
 
+    def _steam_download_mode_active(self) -> bool:
+        hold = getattr(self, "_steam_download_hold", None)
+        return bool(hold is not None and hold.holding)
+
+    def _tdp_owner_reason(self) -> str:
+        return (
+            "steam_download_mode"
+            if self._steam_download_mode_active()
+            else "external_owner"
+        )
+
     def _tdp_write_authorized(self) -> bool:
         return (
-            self._game_power_write_allowed()
+            not self._steam_download_mode_active()
+            and self._game_power_write_allowed()
             and (getattr(self, "_os_id", None) != "anatase"
                  or self._tdp_external_owner is False)
         )
@@ -6572,7 +6676,7 @@ class Plugin(AmbientRpc):
         if not self._tdp_control_on():
             return await inactive("control_disabled")
         if not self._tdp_write_authorized():
-            return await inactive("external_owner")
+            return await inactive(self._tdp_owner_reason())
 
         await self._sync_auto_stats_reader(True)
 
@@ -7903,6 +8007,8 @@ class Plugin(AmbientRpc):
         )
         if auto_tdp and not callable(apply_targets):
             apply_targets = getattr(self._tdp_backend, "apply_targets", None)
+        self._tdp_last_written = dict(target)
+
         def apply():
             if callable(apply_targets):
                 return apply_targets(target, on_ac)
@@ -7958,6 +8064,15 @@ class Plugin(AmbientRpc):
         logical_watts = command.logical_requested["pl1"]
         if not self._game_power_write_allowed():
             return TdpResult(logical_watts, None, False, "game-power-owner")
+        released = (
+            self._steam_download_hold.release(_monotonic())
+            if command.reason in _USER_TDP_REASONS
+            else None
+        )
+        if released is not None:
+            self._journal_steam_download_mode(released, self._tdp_observation, {})
+        elif command.reason not in _USER_TDP_REASONS:
+            self._hold_for_steam_download_mode(command, _monotonic())
         if self._tdp_shutdown:
             return TdpResult(
                 logical_watts,
@@ -8039,7 +8154,7 @@ class Plugin(AmbientRpc):
             return result
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
-            self._tdp_reason = "external_owner"
+            self._tdp_reason = self._tdp_owner_reason()
             self._tdp_targets = None
             self._remember_tdp_observation(self._observe_tdp_sync())
             result = TdpResult(
@@ -8813,12 +8928,15 @@ class Plugin(AmbientRpc):
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
+        deck_observation = self._hold_for_steam_download_mode(command, now)
+        if deck_observation is True:
+            return
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
-            self._remember_tdp_observation(self._observe_tdp_sync())
+            self._remember_tdp_observation(deck_observation or self._observe_tdp_sync())
             return
         if self._firmware_mode() != _CUSTOM_MODE:
             self._tdp_status = "unverifiable"
@@ -8831,7 +8949,7 @@ class Plugin(AmbientRpc):
             )
             self._remember_tdp_observation(self._observe_tdp_sync())
             return
-        observation = self._observe_tdp_sync()
+        observation = deck_observation or self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
         probe_live_max = self._probe_tdp_live_max(command)
@@ -8972,6 +9090,70 @@ class Plugin(AmbientRpc):
             on_ac=command.on_ac,
             requested=command.requested,
         )
+
+    def _hold_for_steam_download_mode(self, command, now):
+        """True while Steam's download mode owns the TDP (this tick writes nothing);
+        otherwise the observation it read on the Deck, or None elsewhere."""
+        hold = self._steam_download_hold
+        if hold.limit_w is None or self._tdp_backend.name != "steamdeck-hwmon":
+            return None
+        if not hold.holding and not self._tdp_write_authorized():
+            return None
+        observation = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return True
+        target = build_targets(
+            command.requested, command.safe_bounds, observation,
+        ).target
+        transition = hold.step(
+            observation, target, self._tdp_last_written, now,
+            self._steam_download_signal,
+        )
+        if transition is not None:
+            self._journal_steam_download_mode(transition, observation, target)
+        if not hold.holding:
+            return observation
+        self._tdp_status = "unverifiable" if hold.active else "settling"
+        self._tdp_reason = "steam_download_mode"
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._remember_tdp_observation(observation)
+        return True
+
+    def _steam_download_signal(self) -> tuple[bool | None, str | None]:
+        """Whether Steam's download mode is on: steamos-manager's open handles first,
+        then SteamOS's fan service, which it stops for the mode (our own fan curve
+        stops it too, which proves nothing)."""
+        session = find_session()
+        handles = download_mode_handles(UserSession(*session) if session else None)
+        if handles is not None:
+            return handles > 0, "handles"
+        if getattr(self._fan_ctrl, "owns_jupiter", False):
+            return None, None
+        running = jupiter_fan_control_active()
+        return (None if running is None else not running), "fan_service"
+
+    def _journal_steam_download_mode(self, transition, observation, target):
+        details = {
+            "transition": transition,
+            "observation": observation.as_dict(),
+            "target": dict(target),
+            "game": self._current_appid,
+            **self._steam_download_hold.diagnostics(),
+        }
+        decky.logger.info(
+            "Steam download mode %s",
+            json.dumps(details, sort_keys=True, separators=(",", ":")),
+        )
+        diary = journal.active
+        if diary is not None:
+            diary.write(
+                "WARNING" if transition == "unconfirmed" else "INFO",
+                "tdp", f"steam_download_mode_{transition}",
+                observation=journal.compact_event(details["observation"]),
+                target=details["target"], game=details["game"],
+                source=details["source"], last=details["last"],
+            )
 
     def _tdp_guard_delay(self):
         if not self._tdp_backend.supported:
@@ -10523,7 +10705,7 @@ class Plugin(AmbientRpc):
         }
         self._hud_apply_status = "conflict"
 
-    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+    def _request_hud_reload(self, snapshot, *, reset_backoff, confirm=True) -> bool:
         snapshot = tuple(snapshot)
         if reset_backoff:
             self._hud_reload_attempt = 0
@@ -10531,7 +10713,16 @@ class Plugin(AmbientRpc):
             self._hud_reload_pending = ()
             self._hud_reload_retry_at = 0.0
             return False
-        result = reload_sessions(snapshot)
+        result = reload_sessions(
+            snapshot,
+            observe=(
+                confirm
+                and not self._hud_shutdown
+                and _monotonic() >= self._hud_observe_after
+            ),
+            via_proc_cwd=self._hud_reload_via_proc_cwd,
+        )
+        self._note_hud_delivery(getattr(result, "delivery", "unknown"))
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
             session
@@ -10559,9 +10750,35 @@ class Plugin(AmbientRpc):
                 self._hud_reload_retry_at = _monotonic() + delay
         return False
 
-    def _reload_mangoapp(self, sessions=None) -> bool:
+    def _note_hud_delivery(self, delivery) -> None:
+        if delivery == "unknown":
+            return
+        previous = self._hud_last_delivery
+        self._hud_last_delivery = delivery
+        if delivery == "observed_proc_cwd":
+            self._hud_reload_via_proc_cwd = True
+        elif delivery == "observed":
+            self._hud_reload_via_proc_cwd = False
+        if delivery != "unobserved":
+            if previous == "unobserved":
+                decky.logger.info("HUD reload delivery recovered: %s", delivery)
+            return
+        self._hud_unobserved_reloads += 1
+        # Stop paying the confirmation wait on every publish; check again later.
+        self._hud_observe_after = _monotonic() + _HUD_UNOBSERVED_BACKOFF_S
+        if previous != "unobserved":
+            decky.logger.warning(
+                "HUD reload delivery: %s",
+                json.dumps({
+                    "delivery": delivery,
+                    "unobserved": self._hud_unobserved_reloads,
+                    "sessions": len(self._hud_sessions),
+                }),
+            )
+
+    def _reload_mangoapp(self, sessions=None, *, confirm=True) -> bool:
         snapshot = tuple(self._hud_sessions if sessions is None else sessions)
-        return self._request_hud_reload(snapshot, reset_backoff=True)
+        return self._request_hud_reload(snapshot, reset_backoff=True, confirm=confirm)
 
     def _retry_pending_hud_reload(self) -> bool:
         if not self._hud_reload_pending:
@@ -10571,6 +10788,7 @@ class Plugin(AmbientRpc):
         return self._request_hud_reload(
             self._hud_reload_pending,
             reset_backoff=False,
+            confirm=False,
         )
 
     def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
@@ -10584,6 +10802,7 @@ class Plugin(AmbientRpc):
         model = self._hud.load() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._hud_power_source = None
             self._pdc_presets_path = None
             self._pdc_active_ids = []
             self._pdc_written = {}
@@ -10610,7 +10829,7 @@ class Plugin(AmbientRpc):
             if (
                 cap["supported"]
                 and cap["running"]
-                and not self._reload_mangoapp(cap["sessions"])
+                and not self._reload_mangoapp(cap["sessions"], confirm=False)
             ):
                 self._hud_apply_status = "pending"
             else:
@@ -10661,6 +10880,8 @@ class Plugin(AmbientRpc):
         self._hud_sessions = tuple(cap["sessions"])
         self._pdc_locale = model.get("locale", "es")
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
+        if "pdc_power" not in self._pdc_active_ids:
+            self._hud_power_source = None
         values = self._pdc_values()
         self._pdc_preview_values = values
         try:
@@ -10716,7 +10937,7 @@ class Plugin(AmbientRpc):
 
         if "pdc_power" in active:
             src["power"] = observed(
-                self._power_reader.read,
+                self._hud_package_power,
                 lambda value: isinstance(value.get("watts"), (int, float)),
             )
         if "pdc_fan_rpm" in active:
@@ -10727,10 +10948,10 @@ class Plugin(AmbientRpc):
                     for fan in value.get("fans", [])
                 ),
             )
-        if "pdc_bat_health" in active:
+        if active & _HUD_BATTERY_METRICS:
             src["battery"] = observed(
                 self._battery.read,
-                lambda value: isinstance(value.get("health_percent"), (int, float)),
+                lambda value: bool(value.get("present")),
             )
         if "pdc_charge" in active:
             src["charge"] = observed(
@@ -10778,6 +10999,15 @@ class Plugin(AmbientRpc):
             _HUD_OBSERVATION_MAX_AGE_S,
         )
         return {} if value is None else value
+
+    def _hud_package_power(self) -> dict:
+        reading = self._power_reader.read()
+        if isinstance(reading.get("watts"), (int, float)):
+            self._hud_power_source = "amdgpu"
+            return reading
+        watts = self._rapl_power.read()
+        self._hud_power_source = "rapl" if watts is not None else None
+        return {**reading, "watts": watts}
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
         """Gather the live plugin state the active pdc metrics need. Only computes what
@@ -10837,7 +11067,7 @@ class Plugin(AmbientRpc):
             power = self._fresh_pdc_source(
                 extras,
                 "power",
-                self._power_reader.read,
+                self._hud_package_power,
             )
             snap["watts"] = power.get("watts")
         if "pdc_charge" in active_ids:
@@ -10853,13 +11083,16 @@ class Plugin(AmbientRpc):
                 (int, float),
             )
             snap["charge_percent"] = cl.get("applied_percent")
-        if "pdc_bat_health" in active_ids:
+        if _HUD_BATTERY_METRICS.intersection(active_ids):
             bat = self._fresh_pdc_source(
                 extras,
                 "battery",
                 self._battery.read,
             )
             snap["bat_health"] = bat.get("health_percent")
+            snap["bat_status"] = bat.get("status")
+            snap["bat_watts"] = bat.get("power_now_w")
+            snap["bat_eta_s"] = bat.get("eta_seconds")
         if "pdc_smt" in active_ids:
             snap["smt_supported"] = self._smt.supported
             snap["smt_on"] = self._smt.enabled() if self._smt.supported else None
@@ -10904,7 +11137,59 @@ class Plugin(AmbientRpc):
             for mid in active
         }
 
+    def _hud_redetect_due(self) -> bool:
+        return (
+            self._hud_apply_status == "pending"
+            and _monotonic() >= self._hud_redetect_at
+        )
+
+    def _hud_sessions_gone(self) -> bool:
+        return bool(self._hud_sessions) and not any(
+            mangohud_detect.session_alive(session) for session in self._hud_sessions
+        )
+
+    def _redetect_hud_sessions(self) -> bool:
+        """Find a mangoapp that started after the last apply (late session start or a
+        restarted mangoapp) and re-apply to it. Returns True when a re-apply ran."""
+        self._hud_redetect_at = _monotonic() + _HUD_REDETECT_S
+        model = self._hud.load()
+        if not model["enabled"]:
+            return False
+        self._hud_redetect_count += 1
+        cap = self._detect_hud()
+        if not cap["supported"]:
+            return False
+        self._apply_hud(cap=cap, model=model)
+        if self._hud_apply_status == "reload_requested":
+            self._hud_redetect_recovered += 1
+            decky.logger.info(
+                "HUD reattached to mangoapp: %s",
+                json.dumps({
+                    "status": self._hud_apply_status,
+                    "sessions": len(self._hud_sessions),
+                    "attempts": self._hud_redetect_count,
+                }),
+            )
+        return True
+
+    def _hud_values_due(self, values, now) -> bool:
+        elapsed = now - self._hud_last_publish_at
+        changed = {
+            metric_id
+            for metric_id in set(values) | set(self._pdc_written)
+            if values.get(metric_id) != self._pdc_written.get(metric_id)
+        }
+        appeared = any(
+            self._pdc_written.get(metric_id) in (None, mangohud_pdc.DASH)
+            for metric_id in changed
+        )
+        if changed - _HUD_SENSOR_METRICS or appeared:
+            return elapsed >= _MIN_HUD_REFRESH_S
+        return elapsed >= _MIN_HUD_SENSOR_REFRESH_S
+
     def _refresh_pdc_metrics_sync(self) -> None:
+        if self._hud_redetect_due() and self._redetect_hud_sessions():
+            return
         if self._hud_reload_pending:
             self._hud_apply_status = (
                 "reload_requested"
@@ -10913,12 +11198,18 @@ class Plugin(AmbientRpc):
             )
         if not self._pdc_active_ids or not self._pdc_presets_path:
             return
+        if (
+            _monotonic() >= self._hud_redetect_at
+            and self._hud_sessions_gone()
+            and self._redetect_hud_sessions()
+        ):
+            return
         extras = self._read_pdc_sources()
         values = self._pdc_values(extras)
         if values == self._pdc_written:
             return
         now = _monotonic()
-        if now - self._hud_last_publish_at < _MIN_HUD_REFRESH_S:
+        if not self._hud_values_due(values, now):
             return
         model = self._hud.load()
         if model["enabled"]:
@@ -10937,6 +11228,7 @@ class Plugin(AmbientRpc):
             except OSError:
                 self._hud_apply_status = "failed"
                 raise
+            self._hud_value_publish_count += 1
             if self._reload_mangoapp():
                 self._pdc_written = values
                 self._hud_last_publish_at = now
@@ -10987,6 +11279,7 @@ class Plugin(AmbientRpc):
             self._hud_shutdown
             or (
                 not self._hud_reload_pending
+                and not self._hud_redetect_due()
                 and (not self._pdc_active_ids or not self._pdc_presets_path)
             )
         ):
@@ -13456,6 +13749,7 @@ class Plugin(AmbientRpc):
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),
             },
+            "steam_download_mode": self._steam_download_hold.diagnostics(),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
                 "overclock": self._steamdeck_overclock_state(),
@@ -15205,6 +15499,7 @@ class Plugin(AmbientRpc):
             ),
             # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
             "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
+            "tdp_reason": getattr(self, "_tdp_reason", None) or None,
             **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
         }
 

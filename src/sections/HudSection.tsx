@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useState } from "react";
+import { FC, ReactNode, useEffect, useRef, useState } from "react";
 import { PanelSectionRow, ToggleField, TextField, Spinner, Focusable } from "@decky/ui";
 import { RemovableRow } from "../navigation/RemovableRow";
 import { showModal } from "../navigation/showModal";
@@ -235,6 +235,7 @@ export const HudSection: FC = () => {
   } = useHud();
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const overlayRequestRef = useRef(0);
   const [steamMasterEnabled, setSteamMasterEnabled] = useState<boolean | null>(
     () => steamOverlay.diagnostics().master_enabled,
   );
@@ -261,15 +262,28 @@ export const HudSection: FC = () => {
   }
 
   const m = state.model;
-  const activateSteamOverlay = () => {
-    void steamOverlay.ensureFullHudVisible().then((result) => {
-      setSteamMasterEnabled(result.master_enabled);
+  const followSteamOverlay = (request: Promise<{ master_enabled: boolean | null }>) => {
+    const ticket = ++overlayRequestRef.current;
+    void request.then((result) => {
+      if (ticket === overlayRequestRef.current) setSteamMasterEnabled(result.master_enabled);
     });
   };
+  const activateSteamOverlay = () => followSteamOverlay(steamOverlay.ensureFullHudVisible());
+  const hideSteamOverlay = () => followSteamOverlay(steamOverlay.ensureHudHidden());
   const setHudEnabled = (enabled: boolean) => {
-    if (!enabled) steamOverlay.cancelActivation();
     setEnabled(enabled);
-    if (enabled) activateSteamOverlay();
+    if (enabled) {
+      setSteamMasterEnabled(true);
+      activateSteamOverlay();
+    } else {
+      hideSteamOverlay();
+    }
+  };
+  const resetHud = () => {
+    const wasEnabled = m.enabled;
+    reset((remote) => {
+      if (wasEnabled && !remote.model.enabled) hideSteamOverlay();
+    });
   };
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = PRESETS;
@@ -453,7 +467,7 @@ export const HudSection: FC = () => {
         desc={t("hud.reset.confirm.desc")}
         confirmLabel={t("hud.reset")}
         cancelLabel={t("hud.reset.cancel")}
-        onConfirm={reset}
+        onConfirm={resetHud}
         icon={<LuRotateCcw size={18} />}
       />,
     );
