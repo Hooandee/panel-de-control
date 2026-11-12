@@ -271,6 +271,7 @@ export default definePlugin(() => {
       },
     },
     options: themesClientOptionsWriter(themesClient),
+    retireTheme: (cssLoaderName, keep) => themesClient.retireRuntimeTheme(cssLoaderName, keep),
     client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
     getQamDocument,
