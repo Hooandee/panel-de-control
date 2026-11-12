@@ -213,7 +213,6 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
             "global_auto_config", "low_battery_hold.enabled", "charger_unstable.visible",
             "kernel_support.visible",
             "gpu_level", "global_gpu_level", "game_power_owner",
-            "ownership.status", "ownership.reason",
         )),
         ("get_tdp_conflict", ("hhd_present", "hhd_managing", "powerstation_active", "steamos_manager_active")),
     ),
@@ -4742,8 +4741,10 @@ class Plugin(AmbientRpc):
         except Exception:  # noqa: BLE001
             released_ok = False
         if enabled:
+            self._settings["board_fan_control_off"] = False
             state = driver.load(only)
         elif released_ok:
+            self._settings["board_fan_control_off"] = True
             state = driver.unload()
         else:
             # Unloading under a fan still in manual mode would strand it at its
@@ -4795,7 +4796,6 @@ class Plugin(AmbientRpc):
         if getattr(self, "_board_fans", None) is None:
             return {"supported": False}
         enabled = enabled is True
-        self._settings["board_fan_control_off"] = not enabled
         state = await self._offload_call(lambda: self._set_board_fans_sync(enabled))
         self._settings["board_fan_driver"] = bool(
             state["channels"] > 0 and (enabled or state["loaded_by_panel"]))

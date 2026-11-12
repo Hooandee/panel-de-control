@@ -321,3 +321,30 @@ def test_desktop_backend_is_read_only_without_board_control(tmp_path):
     backend = control.select_fan_backend(DESKTOP_PC, root=str(tmp_path), board_control=False)
 
     assert isinstance(backend, control.NullFanBackend)
+
+
+def test_failed_release_keeps_board_control_instead_of_stranding_the_fan(monkeypatch):
+    import asyncio
+    import main
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.release_failed = lambda: plugin._board_fans.state()
+    seen = []
+
+    class Stuck:
+        name = "generic-pwm"
+
+        def restore_auto(self):
+            return {"ok": False}
+
+    plugin._fan_ctrl = Stuck()
+
+    def select(*args, **kwargs):
+        seen.append(kwargs.get("board_control"))
+        return Stuck()
+
+    monkeypatch.setattr(main.fan_control, "select_fan_backend", select)
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+
+    assert plugin._settings.get("board_fan_control_off") is not True
+    assert seen == [True]

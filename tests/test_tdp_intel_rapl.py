@@ -611,3 +611,27 @@ def test_release_forgets_the_battery_ceiling(tmp_path):
 
     assert backend.release() is True
     assert "battery_ceiling_w" not in backend.diagnostics()
+
+
+def test_a_reset_long_after_our_write_is_drift_not_a_battery_ceiling(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("tdp.intel_rapl.time.monotonic", lambda: clock[0])
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    clock[0] += 3600.0
+    _firmware_puts_back(mmio, 25_000_000)
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_battery_ceiling_expires_so_the_higher_target_is_tried_again(tmp_path, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("tdp.intel_rapl.time.monotonic", lambda: clock[0])
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    backend.set_tdp(25, False)
+    clock[0] += 601.0
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
