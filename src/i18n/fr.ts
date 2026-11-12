@@ -591,6 +591,8 @@ export const fr: Record<string, string> = {
   "up.phase.pace": "{rate} Mo/s, encore {eta}",
   "up.phase.unpack": "Préparation de HelixSR",
   "up.helix.needsFsr31": "{name} ne fonctionne que dans les jeux avec FSR 3.1",
+  "up.fsr4.oldProton": "Avec Proton {version}, FSR 4 peut faire planter le jeu. Choisissez Proton 10 ou plus récent dans Propriétés > Compatibilité",
+  "up.helix.otherGpu": "HelixSR est conçu pour le Steam Deck. Sur ce GPU, il peut faire planter le jeu : FSR 4 avec OptiScaler est le choix testé",
   "up.helix.pick.fsr": "Dans le jeu, choisissez AMD FSR. La qualité se règle dans son menu",
   "up.error.helixsr_no_fsr": "Ce jeu n'a pas FSR 3.1, HLX FSR 4 n'a donc rien à remplacer",
   "up.error.helixsr_failed": "HelixSR n'a pas pu terminer",

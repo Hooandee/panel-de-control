@@ -67,6 +67,25 @@ export function buildBlocker(
   return null;
 }
 
+/** Proton's major version when Steam's compatibility tool name states it (`proton_9`, `GE-Proton9-26`), else null. */
+export function protonMajor(compatName: string): number | null {
+  const match = /^proton_(\d+)$/i.exec(compatName) ?? /^GE-Proton(\d+)-/i.exec(compatName);
+  return match ? Number(match[1]) : null;
+}
+
+/** The Proton version FSR 4 would crash on, or null. Its compute shaders need the vkd3d-proton of Proton 10 or later;
+ * on Proton 9 they fail to compile and the game stops. */
+export function fsr4OldProton(build: Pick<BuildInfo, "family" | "version" | "engine"> | undefined, compatName: string): number | null {
+  if (!build || build.family !== "fsr" || !build.version.startsWith("4") || build.engine === "proton") return null;
+  const major = protonMajor(compatName);
+  return major !== null && major < 10 ? major : null;
+}
+
+/** HelixSR is built for RDNA 1 and 2 (the Steam Deck); on other GPUs it can take the game down. */
+export function helixOffItsGpu(build: Pick<BuildInfo, "engine"> | undefined, gpu: string): boolean {
+  return build?.engine === "helixsr" && !["rdna1", "rdna2"].includes(gpu);
+}
+
 /** The FSR 4 switch the game's Proton understands on this GPU, or null. */
 export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string }[], visible: (pill: never) => boolean): string | null {
   const pill = pills.find((p) => p.exclusiveGroup === "fsr4-upgrade" && visible(p as never));
