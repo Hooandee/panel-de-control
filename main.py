@@ -296,6 +296,7 @@ _HUD_SENSOR_METRICS = frozenset((
     "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
 ))
 _HUD_REDETECT_S = 15.0
+_HUD_UNOBSERVED_BACKOFF_S = 60.0
 _HUD_BATTERY_METRICS = frozenset(("pdc_bat_health", "pdc_bat_power", "pdc_bat_time"))
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
@@ -1015,7 +1016,7 @@ class Plugin(AmbientRpc):
         self._hud_last_delivery = "unknown"
         self._hud_unobserved_reloads = 0
         self._hud_reload_via_proc_cwd = False
-        self._hud_delivery_log_at = float("-inf")
+        self._hud_observe_after = float("-inf")
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -10544,7 +10545,7 @@ class Plugin(AmbientRpc):
             return False
         result = reload_sessions(
             snapshot,
-            observe=not self._hud_shutdown,
+            observe=not self._hud_shutdown and _monotonic() >= self._hud_observe_after,
             via_proc_cwd=self._hud_reload_via_proc_cwd,
         )
         self._note_hud_delivery(getattr(result, "delivery", "unknown"))
@@ -10582,16 +10583,14 @@ class Plugin(AmbientRpc):
             self._hud_reload_via_proc_cwd = True
         elif delivery == "observed":
             self._hud_reload_via_proc_cwd = False
-        if delivery == "unobserved":
-            self._hud_unobserved_reloads += 1
-        routine = ("observed", "observed_proc_cwd", "unknown")
-        now = _monotonic()
-        if (
-            delivery != previous
-            and not (delivery in routine and previous in routine)
-            and now >= self._hud_delivery_log_at
-        ):
-            self._hud_delivery_log_at = now + 60.0
+        if delivery != "unobserved":
+            if previous == "unobserved" and delivery != "unknown":
+                decky.logger.info("HUD reload delivery recovered: %s", delivery)
+            return
+        self._hud_unobserved_reloads += 1
+        # Stop paying the confirmation wait on every publish; check again later.
+        self._hud_observe_after = _monotonic() + _HUD_UNOBSERVED_BACKOFF_S
+        if previous != "unobserved":
             decky.logger.warning(
                 "HUD reload delivery: %s",
                 json.dumps({

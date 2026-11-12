@@ -479,4 +479,30 @@ describe("SteamOverlayController", () => {
     expect(perf.SetPerfOverlayLevel).not.toHaveBeenCalled();
     expect(result.last_deactivation.outcome).toBe("already_hidden");
   });
+
+  it("switching back on restores the Steam level the user had before the hide", async () => {
+    const perf = store(3);
+    perf.SetPerfOverlayLevel.mockImplementation((next: number) => {
+      perf.msgSettingsGlobal!.perf_overlay_level = next;
+    });
+    const clock = { now: 0 };
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+      2,
+      () => clock.now,
+    );
+
+    await controller.ensureHudHidden();
+    clock.now = 10_000;
+    const result = await controller.ensureFullHudVisible();
+
+    expect(perf.SetPerfOverlayLevel).toHaveBeenLastCalledWith(3);
+    expect(result.last_activation).toEqual({
+      outcome: "confirmed",
+      before_level: 0,
+      requested_level: 3,
+      observed_level: 3,
+    });
+  });
 });

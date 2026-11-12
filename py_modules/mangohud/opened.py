@@ -32,6 +32,16 @@ def _load_libc():
         return None
 
 
+def contains_open(data: bytes) -> bool:
+    offset = 0
+    while offset + _EVENT_HEADER.size <= len(data):
+        _wd, mask, _cookie, length = _EVENT_HEADER.unpack_from(data, offset)
+        if mask & _IN_OPEN:
+            return True
+        offset += _EVENT_HEADER.size + length
+    return False
+
+
 class OpenWatch:
     """Tells whether anything opened a file after the watch started.
 
@@ -66,7 +76,7 @@ class OpenWatch:
             data = os.read(self._fd, 4096)
         except OSError:
             return None
-        return len(data) >= _EVENT_HEADER.size
+        return contains_open(data)
 
     def close(self) -> None:
         if self._fd >= 0:

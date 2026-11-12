@@ -276,8 +276,10 @@ export const HudSection: FC = () => {
     else hideSteamOverlay();
   };
   const resetHud = () => {
-    reset();
-    if (m.enabled) hideSteamOverlay();
+    const wasEnabled = m.enabled;
+    reset((remote) => {
+      if (wasEnabled && !remote.model.enabled) hideSteamOverlay();
+    });
   };
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = PRESETS;

@@ -60,15 +60,20 @@ def test_subdomains_are_not_mistaken_for_the_package(tmp_path):
     assert reader.read() == 5.0
 
 
-def test_too_short_a_gap_is_not_a_reading(tmp_path):
+def test_a_read_too_soon_repeats_the_last_result(tmp_path):
     path = _domain(str(tmp_path), energy=0)
     clock = {"now": 0.0}
     reader = RaplPackagePower(root=str(tmp_path), clock=lambda: clock["now"])
     reader.read()
     _energy(path, 1_000_000)
     clock["now"] = 0.1
-
     assert reader.read() is None
+
+    clock["now"] = 1.0
+    assert reader.read() == 1.0
+    _energy(path, 9_000_000)
+    clock["now"] = 1.2
+    assert reader.read() == 1.0
 
 
 def test_a_machine_without_rapl_is_not_rescanned_every_read(tmp_path, monkeypatch):

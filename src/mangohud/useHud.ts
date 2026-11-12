@@ -91,7 +91,7 @@ export interface HudController {
   reload: () => void;
   reloadStatus: ReloadStatus;
   saveStatus: SaveStatus;
-  reset: () => void;
+  reset: (onApplied?: (remote: HudState) => void) => void;
   resolveConflict: (action: "keep_external" | "use_pdc") => void;
 }
 
@@ -369,7 +369,7 @@ export function useHud(): HudController {
     );
   };
 
-  const reset = () => {
+  const reset = (onApplied?: (remote: HudState) => void) => {
     if (commandPendingRef.current || commandInFlightRef.current) return;
     clearDebounce();
     dirtyRef.current = false;
@@ -385,6 +385,7 @@ export function useHud(): HudController {
         accept(remote);
         setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
         if (!isApplyError(remote.applyStatus)) scheduleSaveFeedbackReset();
+        onApplied?.(remote);
       },
       () => setSaveStatus("error"),
     );

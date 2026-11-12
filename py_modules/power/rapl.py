@@ -8,8 +8,9 @@ class RaplPackagePower:
 
     Intel handhelds have no amdgpu hwmon, so this is their package power source.
     `energy_uj` is root-only on current kernels (MangoHud, running as the user,
-    reads 0 W there). Power is the counter delta over wall time between two reads:
-    the first read, a counter reset or a too-short gap return None, never a guess."""
+    reads 0 W there). Power is the counter delta over wall time between two reads;
+    a read sooner than `_MIN_GAP_S` repeats the last result. The first read and an
+    unreadable or reset counter return None, never a guess."""
 
     _MIN_GAP_S = 0.5
     _REPROBE_S = 60.0
@@ -20,6 +21,7 @@ class RaplPackagePower:
         self._domain = None
         self._last = None
         self._probe_at = float("-inf")
+        self._watts = None
 
     def _find_domain(self):
         pattern = os.path.join(self._root, "sys/class/powercap/intel-rapl:*")
@@ -57,16 +59,17 @@ class RaplPackagePower:
             self._domain = None
             self._last = None
             return None
-        previous, self._last = self._last, (energy, now)
+        previous = self._last
+        if previous is not None and now - previous[1] < self._MIN_GAP_S:
+            return self._watts
+        self._last = (energy, now)
         if previous is None:
             return None
         delta_uj = energy - previous[0]
-        elapsed = now - previous[1]
         if delta_uj < 0:
             wrap = self._read_int(os.path.join(self._domain, "max_energy_range_uj"))
-            if not wrap:
-                return None
-            delta_uj += wrap
-        if elapsed < self._MIN_GAP_S or delta_uj < 0:
-            return None
-        return round(delta_uj / elapsed / 1_000_000, 1)
+            delta_uj = delta_uj + wrap if wrap else -1
+        self._watts = (
+            round(delta_uj / (now - previous[1]) / 1_000_000, 1) if delta_uj >= 0 else None
+        )
+        return self._watts

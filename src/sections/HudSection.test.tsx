@@ -225,6 +225,9 @@ describe("HudSection QAM composition", () => {
     dialog.props.onConfirm();
 
     expect(mocks.reset).toHaveBeenCalledOnce();
+    expect(mocks.ensureHudHidden).not.toHaveBeenCalled();
+    const onApplied = mocks.reset.mock.calls[0][0] as (remote: { model: { enabled: boolean } }) => void;
+    onApplied({ model: { enabled: false } });
     expect(mocks.ensureHudHidden).toHaveBeenCalledOnce();
   });
 

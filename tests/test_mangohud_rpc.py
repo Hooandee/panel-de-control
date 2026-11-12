@@ -1557,3 +1557,27 @@ def test_a_reload_path_that_worked_is_reused(tmp_path, monkeypatch):
     assert p._hud_reload_via_proc_cwd is True
     p._note_hud_delivery("observed")
     assert p._hud_reload_via_proc_cwd is False
+
+
+def test_unconfirmed_delivery_pauses_the_confirmation_wait(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    clock = {"now": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    observed = []
+
+    def reload_snapshot(snapshot, **kwargs):
+        observed.append(kwargs["observe"])
+        identities = tuple((session.pid, session.starttime) for session in snapshot)
+        return types.SimpleNamespace(requested=identities, pending=(), delivery="unknown")
+
+    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
+    session = _session(main, str(tmp_path / "presets.conf"), 4)
+    monkeypatch.setattr(main.mangohud_detect, "session_alive", lambda *_a, **_k: True)
+
+    p._note_hud_delivery("unobserved")
+    p._request_hud_reload((session,), reset_backoff=True)
+    clock["now"] += main._HUD_UNOBSERVED_BACKOFF_S + 1
+    p._request_hud_reload((session,), reset_backoff=True)
+
+    assert observed == [False, True]

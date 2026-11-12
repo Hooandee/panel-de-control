@@ -267,6 +267,7 @@ export class SteamOverlayController {
   private lastDeactivation: SteamOverlayDeactivation = NOT_DEACTIVATED;
   private deactivationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
   private lastWrite: { level: number; at: number } | null = null;
+  private levelBeforeHide: number | null = null;
   private activationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
   private activationGeneration = 0;
 
@@ -325,7 +326,8 @@ export class SteamOverlayController {
 
   // Panel's presets.conf is removed when its HUD is switched off, so any visible Steam
   // level falls back to MangoHud's built-in preset (the full stock HUD). Hiding the
-  // level is what makes "Show HUD" off actually hide the overlay.
+  // level is what makes "Show HUD" off actually hide the overlay; the hidden level is
+  // restored when the HUD is switched back on.
   ensureHudHidden(): Promise<SteamOverlayDiagnostics> {
     if (this.deactivationInFlight) return this.deactivationInFlight;
     this.cancelActivation();
@@ -375,6 +377,7 @@ export class SteamOverlayController {
     } catch {
       return this.finishDeactivation("exception", before, this.diagnostics().raw_level);
     }
+    if (before !== HIDDEN_LEVEL) this.levelBeforeHide = before;
     const observed = await this.awaitLevel(HIDDEN_LEVEL);
     const outcome = observed === HIDDEN_LEVEL
       ? "confirmed"
@@ -442,31 +445,33 @@ export class SteamOverlayController {
       return this.finishActivation("already_visible", before, null, before);
     }
 
+    const target = this.levelBeforeHide ?? FULL_HUD_LEVEL;
     const resolved = this.resolveStore();
     const store = resolved?.store;
     const setter = store?.SetPerfOverlayLevel;
     if (!store || typeof setter !== "function") {
-      return this.finishActivation("unavailable", before, FULL_HUD_LEVEL, before);
+      return this.finishActivation("unavailable", before, target, before);
     }
 
     try {
-      this.writeLevel(store, setter, FULL_HUD_LEVEL);
+      this.writeLevel(store, setter, target);
     } catch {
       return this.finishActivation(
         "exception",
         before,
-        FULL_HUD_LEVEL,
+        target,
         this.diagnostics().raw_level,
       );
     }
+    this.levelBeforeHide = null;
 
-    const observed = await this.awaitLevel(FULL_HUD_LEVEL);
-    const outcome = observed === FULL_HUD_LEVEL
+    const observed = await this.awaitLevel(target);
+    const outcome = observed === target
       ? "confirmed"
       : observed === before
         ? "readback_timeout"
         : "readback_mismatch";
-    return this.finishActivation(outcome, before, FULL_HUD_LEVEL, observed);
+    return this.finishActivation(outcome, before, target, observed);
   }
 }
 
