@@ -5258,11 +5258,7 @@ class Plugin(AmbientRpc):
             if self._settings.get("fan_release_pending") is not True:
                 return True
             released = self._restore_fans_safe()
-            nothing_to_release = (
-                not getattr(self._fan_ctrl, "supported", False)
-                and getattr(self, "_ps5_fan", None) is None
-            )
-            if released or nothing_to_release:
+            if released:
                 self._settings["fan_release_pending"] = False
                 self._save()
             self._fan_apply_confirmed = False
@@ -14495,7 +14491,8 @@ class Plugin(AmbientRpc):
         except Exception:  # noqa: BLE001
             released = False
         try:
-            if getattr(self, "_fan_ctrl", None) is not None:
+            # NullFanBackend never held a fan, so there is nothing for it to hand back.
+            if getattr(getattr(self, "_fan_ctrl", None), "supported", False):
                 result = self._fan_ctrl.restore_auto()
                 released = released and bool(
                     isinstance(result, dict) and result.get("ok")
