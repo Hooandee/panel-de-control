@@ -779,6 +779,22 @@ def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
     }}
 
 
+def test_report_adds_the_home_surface_geometry_next_to_the_display(theme_rpc):
+    main, _, _ = theme_rpc
+
+    themes = main.Plugin._with_theme_display({"installed": []}, {
+        "theme_display": {"scale": 1.5},
+        "theme_surface": {"vw": 854, "first_overlap": 12, "first_wide": True, "title": "Game", "x" * 40: 1},
+    })
+
+    assert themes == {
+        "installed": [],
+        "display": {"scale": 1.5},
+        "surface": {"vw": 854.0, "first_overlap": 12.0, "first_wide": True},
+    }
+    assert main.Plugin._with_theme_display({"installed": []}, {}) == {"installed": []}
+
+
 def test_early_rpcs_delegate_to_the_theme_service_and_sanitize_failures(theme_rpc):
     main, plugin, _ = theme_rpc
     calls = []

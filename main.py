@@ -3359,20 +3359,25 @@ class Plugin(AmbientRpc):
 
     @staticmethod
     def _with_theme_display(themes, context):
-        display = context.get("theme_display") if isinstance(context, dict) else None
-        if not isinstance(themes, dict) or not isinstance(display, dict):
+        if not isinstance(themes, dict) or not isinstance(context, dict):
             return themes
-        sanitized = {}
-        for key, value in display.items():
-            if not isinstance(key, str) or len(key) > 32:
+        result = dict(themes)
+        for source, target, limit in (("theme_display", "display", 16), ("theme_surface", "surface", 24)):
+            values = context.get(source)
+            if not isinstance(values, dict):
                 continue
-            if isinstance(value, bool) or value is None:
-                sanitized[key] = value
-            elif isinstance(value, (int, float)) and math.isfinite(value):
-                sanitized[key] = round(float(value), 3)
-            if len(sanitized) >= 16:
-                break
-        return {**themes, "display": sanitized}
+            sanitized = {}
+            for key, value in values.items():
+                if not isinstance(key, str) or len(key) > 32:
+                    continue
+                if isinstance(value, bool) or value is None:
+                    sanitized[key] = value
+                elif isinstance(value, (int, float)) and math.isfinite(value):
+                    sanitized[key] = round(float(value), 3)
+                if len(sanitized) >= limit:
+                    break
+            result[target] = sanitized
+        return result
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -3388,6 +3393,7 @@ class Plugin(AmbientRpc):
         frontend = dict(context) if isinstance(context, dict) else {}
         frontend.pop("hud", None)
         frontend.pop("theme_display", None)
+        frontend.pop("theme_surface", None)
         frontend.pop("upscalers", None)
         return {
             "tools": tools,
