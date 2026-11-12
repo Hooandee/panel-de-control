@@ -11,7 +11,7 @@ from xml.sax.saxutils import escape
 import lights
 
 UNAVAILABLE = 3
-TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN") or "bottom_touchscreen"
+TOUCHSCREEN = os.environ.get("ARMADA_SECONDARY_TOUCHSCREEN", "bottom_touchscreen")
 ORIENTATION = os.environ.get("ARMADA_PANEL_ORIENTATION", "")
 
 LIVE_S = 0.5

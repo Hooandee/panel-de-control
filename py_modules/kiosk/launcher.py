@@ -54,7 +54,6 @@ class KioskLauncher:
             f"--nice={NICE}", f"--property=CPUWeight={CPU_WEIGHT}",
             # In the environment, not argv: any local user can read a command line.
             f"--setenv={URL_ENV}={url}",
-            f"--setenv=ARMADA_SECONDARY_TOUCHSCREEN={self.display.touchscreen}",
             f"--setenv=ARMADA_PANEL_ORIENTATION={self.display.orientation}",
             *launch_argv(),
         ])

@@ -107,7 +107,6 @@ def test_start_runs_a_transient_user_unit_in_the_session():
     assert cmd[0].endswith("systemd-run")
     assert f"--unit={UNIT}" in cmd
     assert "--setenv=PDC_KIOSK_URL=http://127.0.0.1:4000/?k=t" in cmd
-    assert "--setenv=ARMADA_SECONDARY_TOUCHSCREEN=bottom_touchscreen" in cmd
     assert "--setenv=ARMADA_PANEL_ORIENTATION=left" in cmd
     assert "--nice=10" in cmd and "--property=CPUWeight=20" in cmd
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
