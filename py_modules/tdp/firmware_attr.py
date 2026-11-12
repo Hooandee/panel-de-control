@@ -128,6 +128,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._handoff = None
         self._custom_return_pending = False
         self._last_write_error = None
+        self._firmware_io_error = False
         self.cap_boost_to_active = bool(cap_boost_to_active)
         self._readback_settle_delays = tuple(
             float(delay) for delay in (readback_settle_delays or ())
@@ -322,11 +323,15 @@ class FirmwareAttrBackend(TDPBackend):
         write_failures = []
         if restore_rails:
             for surface, rail, path in reversed(surfaces):
+                if self._unchanged_after_io_error(path, snapshot[path]):
+                    continue
                 if not self._write(path, snapshot[path]):
                     write_failures.append(self._failed_write_label(surface, rail))
-        if self._pp_dir and not self._write(
-            os.path.join(self._pp_dir, "profile"),
-            profile,
+        profile_path = os.path.join(self._pp_dir, "profile") if self._pp_dir else None
+        if (
+            profile_path
+            and not (self._firmware_io_error and self.read_profile() == profile)
+            and not self._write(profile_path, profile)
         ):
             write_failures.append("platform-profile")
 
@@ -526,6 +531,7 @@ class FirmwareAttrBackend(TDPBackend):
             self._handoff["retry_at"] = 0.0
 
     def recover_runtime_transaction(self):
+        self._firmware_io_error = False
         result = {"ok": True, "detail": "no firmware recovery pending"}
         if self._runtime_lock_payload is not None:
             self._refresh_recovery_capabilities()
@@ -631,8 +637,15 @@ class FirmwareAttrBackend(TDPBackend):
             return True
         except OSError as error:
             self._last_write_error = errno.errorcode.get(error.errno, "OSError")
+            if error.errno == errno.EIO:
+                self._firmware_io_error = True
             journal.write_failed(path, value, error)
             return False
+
+    def _unchanged_after_io_error(self, path, value):
+        # Lenovo WMI answers EIO only after a ~4 s timeout. Once the firmware is failing,
+        # rewriting a rail that already reads the snapshot only stacks more timeouts.
+        return self._firmware_io_error and self._read_int(path) == value
 
     def _write_rejected_above_live_max(self, surface, rail, value, ac):
         if not (
@@ -970,6 +983,7 @@ class FirmwareAttrBackend(TDPBackend):
         }
         surfaces = self._transaction_surfaces(targets)
         snapshot, previous_profile, missing = self._capture_transaction(surfaces)
+        self._firmware_io_error = False
         if missing:
             return TdpResult(
                 pl1,
