@@ -144,21 +144,32 @@ class HelixSR:
         return self._bridge("remove", "--game", str(game)).get("game") or {}
 
 
+_RECORD = "helixsr-install.json"
+
+
+def _recorded_swaps(folder: Path) -> list[tuple[Path, Path]]:
+    """(game file, HelixSR's *.original.dll backup of it) for each file HelixSR's record says it replaced."""
+    try:
+        record = json.loads((folder / _RECORD).read_text())
+    except (OSError, ValueError):
+        record = {}
+    names = record.get("files", []) if isinstance(record, dict) else []
+    return [(folder / name, folder / Path(name).with_suffix(".original.dll").name)
+            for name in names if isinstance(name, str) and "/" not in name]
+
+
+def _drop_record(folder: Path) -> None:
+    for name in (_RECORD, "helixsr.ini"):
+        (folder / name).unlink(missing_ok=True)
+
+
 def remove_by_hand(folder: Path) -> None:
     """When HelixSR's release is gone (deleted, or a newer Panel ships another), put the game's FSR back from
     the *.original.dll HelixSR's drop-in keeps, as its bridge would."""
-    try:
-        record = json.loads((folder / "helixsr-install.json").read_text())
-    except (OSError, ValueError):
-        record = {}
-    for name in record.get("files", []) if isinstance(record, dict) else []:
-        if not isinstance(name, str) or "/" in name:
-            continue
-        original = folder / Path(name).with_suffix(".original.dll").name
+    for current, original in _recorded_swaps(folder):
         if original.is_file():
-            os.replace(original, folder / name)
-    for name in ("helixsr-install.json", "helixsr.ini"):
-        (folder / name).unlink(missing_ok=True)
+            os.replace(original, current)
+    _drop_record(folder)
 
 
 def not_installed(detail: str) -> bool:
@@ -169,14 +180,7 @@ def not_installed(detail: str) -> bool:
 def forget(folder: Path) -> None:
     """Drop HelixSR's own record when its files are already gone. The game's files stay as they are; a backup is
     deleted only when it is byte for byte the file the game has now, so nothing that differs is lost."""
-    try:
-        record = json.loads((folder / "helixsr-install.json").read_text())
-    except (OSError, ValueError):
-        record = {}
-    for name in record.get("files", []) if isinstance(record, dict) else []:
-        if not isinstance(name, str) or "/" in name:
-            continue
-        current, original = folder / name, folder / Path(name).with_suffix(".original.dll").name
+    for current, original in _recorded_swaps(folder):
         try:
             if (original.is_file() and not original.is_symlink() and not current.is_symlink()
                     and original.stat().st_size == current.stat().st_size
@@ -184,8 +188,7 @@ def forget(folder: Path) -> None:
                 original.unlink()
         except OSError:
             continue
-    for name in ("helixsr-install.json", "helixsr.ini"):
-        (folder / name).unlink(missing_ok=True)
+    _drop_record(folder)
 
 
 def read_install_log(install: dict) -> dict:

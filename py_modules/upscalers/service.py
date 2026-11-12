@@ -1151,7 +1151,7 @@ class UpscalerService:
         record = Path(install.get("helix_file", ""))
         if not record.is_file():
             # HelixSR already took itself out (HelixSR Desktop, or a game update over its DLL): nothing to restore.
-            self._log_helix_gone(install, "record_missing")
+            self._log_helix_gone("record_missing")
         elif self.helix.ready():
             try:
                 self._helix("remove", root)
@@ -1160,7 +1160,7 @@ class UpscalerService:
                     raise
                 # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
                 helixsr.forget(record.parent)
-                self._log_helix_gone(install, "bridge_not_installed")
+                self._log_helix_gone("bridge_not_installed")
         else:
             helixsr.remove_by_hand(record.parent)
         log = Path(install.get("log", ""))
@@ -1170,7 +1170,7 @@ class UpscalerService:
         shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
         return []
 
-    def _log_helix_gone(self, install: dict, reason: str) -> None:
+    def _log_helix_gone(self, reason: str) -> None:
         if self.logger:
             self.logger.info(f"HelixSR was already out of the game ({reason}); clearing Panel's record of it")
 
