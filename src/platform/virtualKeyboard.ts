@@ -1,6 +1,12 @@
+/** Steam returns `Unsubscribe` here (Deck, 2026-11) and `Unregister` on other subscribable values. */
+interface Subscription {
+  Unsubscribe?: () => void;
+  Unregister?: () => void;
+}
+
 interface ShowingValue {
   Value?: boolean;
-  Subscribe?: (callback: () => void) => { Unsubscribe?: () => void } | undefined;
+  Subscribe?: (callback: () => void) => Subscription | undefined;
 }
 
 interface SteamWindowStore {
@@ -23,7 +29,7 @@ function showingValue(): ShowingValue | null {
 export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): () => void {
   const value = showingValue();
   listener(!!value?.Value);
-  let handle: { Unsubscribe?: () => void } | undefined;
+  let handle: Subscription | undefined;
   try {
     handle = value?.Subscribe?.(() => listener(!!value.Value));
   } catch {
@@ -31,7 +37,8 @@ export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): 
   }
   return () => {
     try {
-      handle?.Unsubscribe?.();
+      if (handle?.Unsubscribe) handle.Unsubscribe();
+      else handle?.Unregister?.();
     } catch {
       // Steam already tore the keyboard manager down.
     }

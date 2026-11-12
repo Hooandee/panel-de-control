@@ -19,13 +19,21 @@ const ROOT_ID = "pdc-ambient-layer";
 const STYLE_ID = "pdc-ambient-layer-style";
 const FADE_MS = 900;
 const PAGE_START_MS = 8000;
-/** Quick retries for a blip, then slower ones: after a Steam restart Panel's media server can come up late. */
-const RETRY_DELAYS_MS = [1000, 3000, 10_000, 30_000, 60_000];
+/**
+ * Quick retries for a blip, then slower ones that never stop for the user's own media: after a Steam
+ * restart or a return from desktop mode the media server or CEF's video decoder can take minutes to come
+ * back (Deck LCD: err=4 on a working H.264 file for about two minutes after signing in again).
+ */
+const RETRY_DELAYS_MS = [1000, 3000, 10_000, 30_000, 60_000, 120_000];
+const SLOW_RETRY_MS = 300_000;
+/** Slow retries are reported once an hour, not each time. */
+const SLOW_RETRY_REPORT_EVERY = 12;
 const TRAILER_RETRY_DELAYS_MS = [1000, 3000];
 const STALL_CHECK_MS = 5000;
 /** Checks in a row without the playing video moving before it is loaded again. */
 const STALL_CHECKS = 2;
 const STALL_RELOADS = 3;
+const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 const HOST_KEY = "BasicHome";
 const ART_ATTR = "data-pdc-ambient-art";
 /**
@@ -169,11 +177,15 @@ export class BackgroundLayer {
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
   private stall = { at: -1, checks: 0, reloads: 0, url: "" };
+  /** A video that stayed stuck after every reload is left alone until another one is shown. */
+  private stallExhausted = "";
 
   constructor(
     private readonly getDocument: () => Document | null,
     private readonly onVideoSize: (url: string, width: number, height: number) => void = () => undefined,
     private readonly onLoadFailure: (detail: string) => void = () => undefined,
+    /** A video the browser cannot decode (CEF loses H.264 at times); the owner can offer another encoding. */
+    private readonly onUndecodable: (url: string) => void = () => undefined,
   ) {}
 
   get mounted(): boolean {
@@ -275,6 +287,7 @@ export class BackgroundLayer {
       if (result === "ready" && video.videoHeight === 0) result = "no_picture";
       if (result === "ready" && generation === this.generation) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
       if (result !== "ready" && result !== "cancelled") this.lastFailure = videoState(video);
+      if (generation === this.generation && (result === "no_picture" || (result === "error" && video.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED))) this.onUndecodable(media.url);
       element = video;
     } else if (media.kind === "page") {
       const frame = doc.createElement("iframe");
@@ -297,15 +310,17 @@ export class BackgroundLayer {
       incoming.replaceChildren();
       this.syncNativeArt();
       if (result !== "cancelled") {
-        const delays = media.kind === "page" ? TRAILER_RETRY_DELAYS_MS : RETRY_DELAYS_MS;
-        const retrying = attempt < delays.length;
+        const trailer = media.kind === "page";
+        const delays = trailer ? TRAILER_RETRY_DELAYS_MS : RETRY_DELAYS_MS;
+        const retrying = !trailer || attempt < delays.length;
         const state = media.kind === "video" && this.lastFailure ? `; ${this.lastFailure}` : "";
         this.lastFailure = "";
-        this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
+        const slow = attempt - delays.length;
+        if (slow < 0 || slow % SLOW_RETRY_REPORT_EVERY === 0) this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
         if (retrying) this.retryTimer = setTimeout(() => {
           this.retryTimer = null;
           if (generation === this.generation) void this.swap(media, attempt + 1);
-        }, delays[attempt]);
+        }, delays[attempt] ?? SLOW_RETRY_MS);
       }
       return;
     }
@@ -353,7 +368,7 @@ export class BackgroundLayer {
       this.stall.checks = 0;
       return;
     }
-    if (this.stallTimer !== null) return;
+    if (this.stallTimer !== null || (this.current?.url ?? "") === this.stallExhausted) return;
     this.stallTimer = setInterval(() => this.checkStall(), STALL_CHECK_MS);
   }
 
@@ -368,12 +383,16 @@ export class BackgroundLayer {
       this.stall.checks = 0;
       return;
     }
+    if (video.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED) this.onUndecodable(media.url);
     if (video.paused && !video.error) void video.play().catch(() => undefined);
     if (++this.stall.checks < STALL_CHECKS && !video.error) return;
     this.stall.checks = 0;
     const reloading = this.stall.reloads < STALL_RELOADS;
     this.onLoadFailure(`background video stalled; reload=${this.stall.reloads + 1}; reloading=${reloading}; ${videoState(video)}`);
-    if (!reloading) return this.watchStall(false);
+    if (!reloading) {
+      this.stallExhausted = media.url;
+      return this.watchStall(false);
+    }
     this.stall.reloads += 1;
     this.current = null;
     void this.swap(media);

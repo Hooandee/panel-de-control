@@ -204,6 +204,7 @@ export class AmbientRuntime {
   private saveSequence = 0;
   private librarySession: LibrarySession | null = null;
 
+  private readonly undecodable = new Set<string>();
   private audibleKey: string | null = null;
   private audibleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly audibleChecked = new Set<string>();
@@ -220,6 +221,7 @@ export class AmbientRuntime {
       spDocument,
       (url, _w, height) => this.maybeOptimize(url, height),
       (detail) => void rpc.recordAmbientEvent("playback_error", detail).catch(() => undefined),
+      (url) => this.decodeFallback(url),
     );
     this.channel.setFrameSource(() => this.layer.activeMedia());
     this.musicActivity = new MusicActivity((playing) => this.channel.setMusicPlaying(playing));
@@ -334,7 +336,7 @@ export class AmbientRuntime {
       this.savedQueue = queueSignature(settings.music.queue, settings.music.repeat, settings.music.shuffle);
       this.player.setModes(settings.music.repeat, settings.music.shuffle);
     }
-    const steamRestarted = markSteamSession();
+    const steamRestarted = !!settings && markSteamSession();
     if (settings?.music.enabled && steamRestarted) {
       // A Panel reload keeps the music going; a fresh Steam (boot, restart, back from desktop) starts silent.
       console.info("[Ambient] music left paused after Steam started");
@@ -440,6 +442,7 @@ export class AmbientRuntime {
     this.urls.clear();
     this.pendingUrls.clear();
     this.optimized.clear();
+    this.undecodable.clear();
     this.previewRequests.clear();
     this.patch({ previews: {}, currentUrl: null, previewUrl: null });
   }
@@ -1043,6 +1046,34 @@ export class AmbientRuntime {
   }
 
 
+  /**
+   * Steam's CEF sometimes cannot decode H.264 at all (Deck LCD after a Steam restart: every H.264 file
+   * fails with kUnsupportedConfig while VP8/VP9 play). A local video that fails that way gets a VP9 copy.
+   */
+  private decodeFallback(url: string): void {
+    const current = this.snapshot.current;
+    if (!current || current.kind !== "video" || !current.ref.startsWith("local:")) return;
+    const key = `${current.ref}|${this.settings()?.background.videoQuality ?? "fluid"}`;
+    if (this.undecodable.has(key) || this.noSpace.has(key) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
+    this.undecodable.add(key);
+    const view = spDocument()?.defaultView;
+    const height = Math.min(720, Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1)));
+    const generation = this.cacheGeneration;
+    void rpc.recordAmbientEvent("playback_error", "background video undecodable; encoding vp9").catch(() => undefined);
+    void rpc.optimizeAmbientMedia(current.ref, height, 30, "vp9")
+      .then((result) => {
+        if (this.stopped || generation !== this.cacheGeneration) return;
+        if ("id" in result) {
+          this.optimized.set(key, result.id);
+          if (this.snapshot.current?.ref === current.ref) void this.render();
+        } else {
+          if (result.error === "no_space") this.reportNoSpace(key);
+          void rpc.recordAmbientEvent("playback_error", `background vp9 copy failed: ${result.error}`).catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+  }
+
   private syncMusicOwnership(decision: ArbiterDecision, settings: AmbientSettings): void {
     if (decision.music !== "panel") {
       if (this.player.isPlaying) this.player.pause();
@@ -1562,9 +1593,14 @@ export class AmbientRuntime {
     return this.applyServerSettings(rpc.addAmbientFolder(path, scope), true);
   }
 
-  async addFavorite(scope: "background" | "radio", url: string, name: string, art = "", subtitle = ""): Promise<boolean> {
-    if (scope === "radio" && await this.savedAsChannelList(url, name)) return true;
+  addFavorite(scope: "background" | "radio", url: string, name: string, art = "", subtitle = ""): Promise<boolean> {
     return this.applyServerSettings(rpc.addAmbientFavorite(scope, url, name, art, subtitle));
+  }
+
+  /** A link typed or pasted in the library: a channel list goes to Lists, anything else is saved as a favorite. */
+  async addLink(scope: "background" | "radio", url: string, name: string): Promise<boolean> {
+    if (scope === "radio" && await this.savedAsChannelList(url, name)) return true;
+    return this.addFavorite(scope, url, name);
   }
 
   /**

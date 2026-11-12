@@ -47,7 +47,7 @@ DISCOVER_TTL_SEC = 600
 PLAYLIST_TTL_SEC = 6 * 3600
 DISCOVER_CACHE_SIZE = 64
 _log = logging.getLogger(__name__)
-_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image", "music", "share_firewall", "floating_missing"}
+_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image", "music", "share_firewall", "floating_missing", "playlist_error"}
 
 
 _GAME_MEDIA_TTL_S = 7 * 24 * 3600
@@ -726,7 +726,7 @@ class AmbientService:
                 atomic_json_save(self._installed_path, current)
             return changed
 
-    def optimize_media(self, media_id: str, height: int, fps: int = 30) -> dict[str, Any]:
+    def optimize_media(self, media_id: str, height: int, fps: int = 30, codec: str = "h264") -> dict[str, Any]:
         source = self._resolve(media_id)
         if source is None:
             return {"error": "unknown_media"}
@@ -737,9 +737,9 @@ class AmbientService:
                 return {"error": "unused_media"}
         height = max(144, min(2160, int(height)))
         cache = os.path.join(self._cache_dir, "optimized")
-        existed = os.path.isfile(os.path.join(cache, output_name(source, height, fps)))
+        existed = os.path.isfile(os.path.join(cache, output_name(source, height, fps, codec)))
         try:
-            result = optimize(source, cache, height, self._cancel, fps)
+            result = optimize(source, cache, height, self._cancel, fps, codec)
         except OptimizeError as exc:
             self.record_event("serve_error", f"optimize:{exc.reason}")
             return {"error": exc.reason}

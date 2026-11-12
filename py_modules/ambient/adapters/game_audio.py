@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from typing import Any, Callable, Optional
 
@@ -9,6 +10,8 @@ from pdc_platform.user_session import find_session, session_command
 # Steam's own UI plays Ambiente's media, so its streams are never the game's.
 _STEAM_BINARIES = frozenset({"steamwebhelper", "steam"})
 _TIMEOUT_S = 3
+# Bluetooth sink names carry the device address (bluez_output.AA_BB_CC_DD_EE_FF.1).
+_MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
 
 Runner = Callable[[list[str]], Optional[str]]
 
@@ -39,7 +42,7 @@ def steam_streams(sink_inputs: list[dict[str, Any]]) -> list[str]:
         if props.get("application.process.binary") not in _STEAM_BINARIES:
             continue
         channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
-        percents = [str(c.get("value_percent", "?")).rstrip("%") for c in channels]
+        percents = [int(p) for p in (str(c.get("value_percent", "")).rstrip("%") for c in channels) if p.isdigit()]
         found.append(f"vol={max(percents, default='?')} mute={stream.get('mute')} corked={stream.get('corked')} sink={stream.get('sink')}")
     return found
 
@@ -69,7 +72,7 @@ class GameAudio:
         if not isinstance(parsed, list):
             return "unreadable"
         streams = steam_streams(parsed)
-        default = (self._runner(["pactl", "get-default-sink"]) or "?").strip()
+        default = _MAC.sub("<mac>", (self._runner(["pactl", "get-default-sink"]) or "?").strip())
         return f"streams={len(streams)} default_sink={default[:60]} " + " | ".join(streams[:4])
 
     def set_level(self, percent: int) -> dict[str, Any]:

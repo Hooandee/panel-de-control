@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Literal, Optional
 
 from .adapters.remote_sources import RemoteError, bing_images, nasa_images
-from .adapters.optimizer import FRAME_RATES
+from .adapters.optimizer import CODECS, FRAME_RATES
 from .service import AmbientService
 
 _SCOPES = ("background", "radio")
@@ -198,10 +198,10 @@ class AmbientRpc:
 
         return await self._ambient_call(cache, pool="network")
 
-    async def optimize_ambient_media(self, media_id: str, height: int, fps: int = 30) -> dict[str, Any]:
-        if not isinstance(media_id, str) or not isinstance(height, int) or isinstance(height, bool) or fps not in FRAME_RATES:
+    async def optimize_ambient_media(self, media_id: str, height: int, fps: int = 30, codec: str = "h264") -> dict[str, Any]:
+        if not isinstance(media_id, str) or not isinstance(height, int) or isinstance(height, bool) or fps not in FRAME_RATES or codec not in CODECS:
             return {"error": "invalid_arguments"}
-        return await self._ambient_call(lambda s: s.optimize_media(media_id, height, fps), pool="jobs")
+        return await self._ambient_call(lambda s: s.optimize_media(media_id, height, fps, codec), pool="jobs")
 
     async def search_ambient_radio(self, name: str = "", country: str = "", tag: str = "") -> list[dict[str, Any]]:
         args = [a if isinstance(a, str) else "" for a in (name, country, tag)]

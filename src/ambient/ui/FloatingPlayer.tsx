@@ -426,7 +426,7 @@ export const FloatingPlayer: FC = () => {
   return (
     <>
       {inGame && visible && <OverGameComposition level={controlling ? UIComposition.Overlay : UIComposition.Notification} />}
-      {fullscreen && createPortal(<div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 2147482998, pointerEvents: "none" }} />, host)}
+      {fullscreen && visible && createPortal(<div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 2147482998, pointerEvents: "none" }} />, host)}
       {createPortal(
         <div
           ref={card}

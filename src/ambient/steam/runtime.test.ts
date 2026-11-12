@@ -608,6 +608,33 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
+  it("swaps a local video the browser cannot decode for a VP9 copy, once", async () => {
+    const configured = settings();
+    configured.background.optimizeVideos = false;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.scanAmbientSources.mockResolvedValue({ collections: { "known.images": [{ id: "local:a", name: "a.mp4", kind: "video", size: 1, mtime: 1 }] }, music: [], truncated: false });
+    rpcMock.optimizeAmbientMedia.mockReset().mockResolvedValue({ id: "opt:vp9", url: "http://127.0.0.1:1/m/t/opt:vp9" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    const failDecode = async (src: string) => {
+      const video = await vi.waitFor(() => {
+        const found = [...document.querySelectorAll<HTMLVideoElement>("#pdc-ambient-layer video")].find((v) => v.src.endsWith(src));
+        if (!found) throw new Error("no video yet");
+        return found;
+      });
+      Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+      video.dispatchEvent(new Event("error"));
+    };
+    try {
+      await runtime.start();
+      await failDecode("local:a");
+      await vi.waitFor(() => expect(rpcMock.optimizeAmbientMedia).toHaveBeenCalledWith("local:a", expect.any(Number), 30, "vp9"));
+      await vi.waitFor(() => expect(runtime.getSnapshot().currentUrl).toBe("http://127.0.0.1:1/m/t/opt:vp9"));
+      await failDecode("opt:vp9");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(rpcMock.optimizeAmbientMedia).toHaveBeenCalledTimes(1);
+    } finally { runtime.stop(); }
+  });
+
   it("does not reconcile on startup during a game", async () => {
     rpcMock.getAmbientState.mockResolvedValue({ settings: settings(), knownFolders: {}, collections: [], mediaServer: "stopped" });
     const runtime = new AmbientRuntime(ports(true) as unknown as AmbientPorts);
@@ -1001,10 +1028,15 @@ describe("AmbientRuntime", () => {
     const runtime = new AmbientRuntime(p as unknown as AmbientPorts);
     try {
       await runtime.start();
-      expect(await runtime.addFavorite("radio", list, "")).toBe(true);
+      expect(await runtime.addLink("radio", list, "")).toBe(true);
       expect(rpcMock.addAmbientPlaylist).toHaveBeenCalledWith(list, "tv");
       expect(rpcMock.addAmbientFavorite).not.toHaveBeenCalled();
       expect(p.notify).toHaveBeenCalledWith("ambient.lists.title", "ambient.lists.fromLink");
+      rpcMock.inspectAmbientLink.mockClear();
+      rpcMock.addAmbientFavorite.mockResolvedValue(configured);
+      await runtime.addFavorite("radio", list, "Mirror station");
+      expect(rpcMock.inspectAmbientLink).not.toHaveBeenCalled();
+      expect(rpcMock.addAmbientFavorite).toHaveBeenCalledWith("radio", list, "Mirror station", "", "");
       rpcMock.inspectAmbientLink.mockClear();
       expect(await runtime.enqueueLinks([list, "https://live.test/one.m3u8", "https://radio.test/stream.mp3"])).toBe(3);
       expect(rpcMock.inspectAmbientLink).toHaveBeenCalledTimes(2);

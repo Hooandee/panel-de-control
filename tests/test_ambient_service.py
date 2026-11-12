@@ -149,15 +149,20 @@ def test_optimize_media_indexes_result(service, monkeypatch, tmp_path):
     item = service.scan()["collections"]["known.images"][1]
     out = tmp_path / "cache" / "optimized" / "opt-abc.mp4"
 
-    def fake_optimize(source, cache_dir, height, cancel=None, fps=30):
+    calls = []
+
+    def fake_optimize(source, cache_dir, height, cancel=None, fps=30, codec="h264"):
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"SMALL")
         assert (height, fps) == (800, 15)
+        calls.append(codec)
         return Optimized(str(out), "h264_vaapi")
 
     monkeypatch.setattr("ambient.service.optimize", fake_optimize)
     result = service.optimize_media(item["id"], 800, 15)
     assert result["encoder"] == "h264_vaapi" and result["id"] == "opt:opt-abc"
+    service.optimize_media(item["id"], 800, 15, "vp9")
+    assert calls == ["h264", "vp9"]
     assert service.media_url(result["id"]).startswith("http://127.0.0.1:")
 
 

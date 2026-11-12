@@ -47,3 +47,13 @@ def test_describes_where_steams_own_sound_goes_without_names():
     assert summary == "streams=1 default_sink=ROG Xbox Ally EQ vol=65 mute=True corked=False sink=109"
     assert "song" not in summary
     assert GameAudio(lambda argv: None).steam_output() == "unreadable"
+    headset = GameAudio(lambda argv: listing if argv[1] == "-f" else "bluez_output.AA_BB_CC_DD_EE_FF.1\n").steam_output()
+    assert "AA_BB" not in headset and "bluez_output.<mac>.1" in headset
+
+
+def test_reports_the_loudest_channel_as_a_number():
+    from ambient.adapters.game_audio import steam_streams
+
+    stream = _stream(7, "steamwebhelper", percent="95%")
+    stream["volume"]["front-left"]["value_percent"] = "100%"
+    assert steam_streams([stream])[0].startswith("vol=100 ")

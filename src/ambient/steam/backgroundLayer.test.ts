@@ -256,6 +256,22 @@ describe("BackgroundLayer failed loads", () => {
     expect(failure).toHaveBeenCalledTimes(3);
   });
 
+  it("never gives up on the user's own video, but reports slow retries only now and then", async () => {
+    layer.apply({ kind: "video", url: "http://127.0.0.1/decoder-gone.mp4" }, hiddenArt);
+    const fail = async (wait: number) => {
+      document.querySelector("video")!.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(wait);
+    };
+    for (const wait of [1000, 3000, 10_000, 30_000, 60_000, 120_000]) await fail(wait);
+    expect(failure).toHaveBeenCalledTimes(6);
+    for (let i = 0; i < 13; i++) await fail(300_000);
+    expect(failure).toHaveBeenCalledTimes(8);
+    const back = document.querySelector("video")!;
+    back.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(back);
+  });
+
   it("leaves Steam art instead of a grey box when a video has sound but no picture", async () => {
     picture.height = 0;
     layer.apply({ kind: "video", url: "http://127.0.0.1/audio-only.mp4" }, hiddenArt);
@@ -284,7 +300,28 @@ describe("BackgroundLayer failed loads", () => {
     expect(failure).toHaveBeenLastCalledWith(expect.stringContaining("reloading=false"));
     const calls = failure.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
+    for (let i = 0; i < 5; i++) {
+      layer.apply({ kind: "video", url: "http://127.0.0.1/frozen.mp4" }, hiddenArt);
+      await vi.advanceTimersByTimeAsync(20_000);
+    }
     expect(failure).toHaveBeenCalledTimes(calls);
+  });
+
+  it("asks for another encoding when the browser cannot decode a video", async () => {
+    const undecodable = vi.fn();
+    layer.dispose();
+    layer = new BackgroundLayer(() => document, undefined, failure, undecodable);
+    layer.apply({ kind: "video", url: "http://127.0.0.1/h264.mp4" }, hiddenArt);
+    const video = document.querySelector("video")!;
+    Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+    video.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(undecodable).toHaveBeenCalledWith("http://127.0.0.1/h264.mp4");
+    picture.height = 0;
+    layer.apply({ kind: "video", url: "http://127.0.0.1/no-picture.mp4" }, hiddenArt);
+    document.querySelector("video")!.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(undecodable).toHaveBeenLastCalledWith("http://127.0.0.1/no-picture.mp4");
   });
 
   it("does not watch a video that is meant to be paused", async () => {
