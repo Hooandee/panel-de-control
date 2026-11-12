@@ -19,6 +19,7 @@ from ..core.cache_policy import cache_filename
 Opener = Callable[[urllib.request.Request, float], Any]
 
 TIMEOUT_SEC = 15.0
+HEAD_BUDGET_SEC = 3.0
 MAX_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_VIDEO_BYTES = 300 * 1024 * 1024
 MAX_PLAYLIST_BYTES = 8 * 1024 * 1024
@@ -198,6 +199,15 @@ def fetch_head(url: str, opener: Opener = default_opener, limit: int = 64 * 1024
         raise ValueError("unsupported_url")
     with opener(build_request(url), TIMEOUT_SEC) as response:
         media_type = str(getattr(response, "headers", {}).get("Content-Type", "") or "").lower()
-        if media_type.startswith(("audio/", "video/")) and "mpegurl" not in media_type:
+        if media_type.startswith(("audio/", "video/", "application/ogg")) and "mpegurl" not in media_type:
             return ""
-        return response.read(limit).decode("utf-8", errors="replace")
+        # A stream sent as application/octet-stream trickles in forever; a list arrives at once.
+        data = b""
+        deadline = time.monotonic() + HEAD_BUDGET_SEC
+        read = response.read1 if hasattr(response, "read1") else response.read
+        while len(data) < limit and time.monotonic() < deadline:
+            chunk = read(min(16 * 1024, limit - len(data)))
+            if not chunk:
+                break
+            data += chunk
+        return data.decode("utf-8", errors="replace")

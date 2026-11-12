@@ -170,6 +170,11 @@ function playing(options: LayerOptions): boolean {
   return options.visible && options.motion === "play";
 }
 
+/** Loads may run while the layer is shown, still frozen on low battery too, but never during a game. */
+function loading(options: LayerOptions): boolean {
+  return options.visible && options.motion !== "pause";
+}
+
 function release(container: Element): void {
   container.querySelectorAll("video").forEach((video) => {
     video.pause();
@@ -188,7 +193,7 @@ export class BackgroundLayer {
   private generation = 0;
   private load: AbortController | null = null;
   private lastFailure = "";
-  /** The last medium that did not load, tried again when the layer plays again after being hidden or paused. */
+  /** The last medium that did not load, tried again once loads are allowed again (game over, layer shown). */
   private failed: { media: LayerMedia; attempt: number } | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -241,7 +246,7 @@ export class BackgroundLayer {
   }
 
   apply(media: LayerMedia | null, options: LayerOptions): boolean {
-    const resumed = playing(options) && !playing(this.options);
+    const resumed = loading(options) && !loading(this.options);
     this.options = options;
     if (media === null) {
       this.dispose();
@@ -338,11 +343,10 @@ export class BackgroundLayer {
         const slow = attempt - delays.length;
         if (slow < 0 || slow % SLOW_RETRY_REPORT_EVERY === 0) this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
         this.failed = { media, attempt: attempt + 1 };
-        // Hidden or paused (a game is running, even with Home open over it) the retry waits for the layer to
-        // play again instead of decoding during the game.
+        // During a game (even with Home open over it) or while hidden, the retry waits instead of decoding.
         if (retrying) this.retryTimer = setTimeout(() => {
           this.retryTimer = null;
-          if (generation === this.generation && playing(this.options)) void this.swap(media, attempt + 1);
+          if (generation === this.generation && loading(this.options)) void this.swap(media, attempt + 1);
         }, delays[attempt] ?? SLOW_RETRY_MS);
       }
       return;

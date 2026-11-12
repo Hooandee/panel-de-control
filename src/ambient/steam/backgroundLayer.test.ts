@@ -364,6 +364,19 @@ describe("BackgroundLayer failed loads", () => {
     expect(layer.activeMedia()).toBe(again);
   });
 
+  it("keeps retrying a failed video on low battery, when the background is frozen but shown", async () => {
+    const media = { kind: "video" as const, url: "http://127.0.0.1/low-battery.mp4" };
+    const frozen = { ...hiddenArt, motion: "freeze" as const };
+    layer.apply(media, frozen);
+    document.querySelector("video")!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1000);
+    const again = document.querySelector("video")!;
+    expect(again).not.toBeNull();
+    again.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(again);
+  });
+
   it("gives a video without a picture another go when the layer shows again, not before", async () => {
     picture.height = 0;
     const media = { kind: "video" as const, url: "http://127.0.0.1/no-picture-yet.mp4" };

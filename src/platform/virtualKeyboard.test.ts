@@ -66,6 +66,17 @@ describe("subscribeVirtualKeyboard", () => {
     expect(seen).toEqual([false, true]);
   });
 
+  it("goes quiet after unsubscribing even when Steam gave no handle to release", () => {
+    let fire = () => undefined as void;
+    const value = { Value: false, Subscribe: (callback: () => void) => { fire = callback; return undefined; } };
+    vi.stubGlobal("SteamUIStore", { ActiveWindowInstance: { VirtualKeyboardManager: { IsShowingVirtualKeyboard: value } } });
+    const seen: boolean[] = [];
+    subscribeVirtualKeyboard((showing) => seen.push(showing))();
+    value.Value = true;
+    fire();
+    expect(seen).toEqual([false]);
+  });
+
   it("reads as hidden without Steam's keyboard manager", () => {
     vi.stubGlobal("SteamUIStore", undefined);
     const seen: boolean[] = [];

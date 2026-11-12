@@ -67,6 +67,7 @@ def test_a_playlist_served_as_audio_mpegurl_is_still_read():
 
     class Response:
         headers = {"Content-Type": "audio/x-mpegurl"}
+        parts = [b"#EXTM3U\n"]
 
         def __enter__(self):
             return self
@@ -75,7 +76,7 @@ def test_a_playlist_served_as_audio_mpegurl_is_still_read():
             return False
 
         def read(self, size):
-            return b"#EXTM3U\n"
+            return self.parts.pop(0) if self.parts else b""
 
     assert remote_sources.fetch_head("https://lists.test/tv.m3u", opener=lambda request, timeout: Response()) == "#EXTM3U\n"
 
@@ -90,3 +91,26 @@ def test_a_rule_opened_after_the_share_ended_is_closed_at_once(tmp_path, monkeyp
     service._open_share_firewall("http://192.168.1.5:41000/s/token/", 600)
     assert closed == [(41000, "home")] and service._share_rule is None
     service.close()
+
+
+def test_a_stream_sent_as_octet_stream_is_read_for_a_few_seconds_at_most(monkeypatch):
+    from ambient.adapters import remote_sources
+
+    clock = [0.0]
+    monkeypatch.setattr(remote_sources.time, "monotonic", lambda: clock[0])
+
+    class Trickle:
+        headers = {"Content-Type": "application/octet-stream"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read1(self, size):
+            clock[0] += 1.0
+            return b"x" * 10
+
+    text = remote_sources.fetch_head("https://radio.test/live", opener=lambda request, timeout: Trickle())
+    assert len(text) == 30

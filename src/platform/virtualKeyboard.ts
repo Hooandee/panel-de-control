@@ -72,5 +72,6 @@ export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): 
   return () => {
     clearInterval(timer);
     release(handle);
+    value = null;
   };
 }
