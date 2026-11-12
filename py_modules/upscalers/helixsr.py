@@ -167,7 +167,23 @@ def not_installed(detail: str) -> bool:
 
 
 def forget(folder: Path) -> None:
-    """Drop HelixSR's own record when its files are already gone; the game's files and backups stay as they are."""
+    """Drop HelixSR's own record when its files are already gone. The game's files stay as they are; a backup is
+    deleted only when it is byte for byte the file the game has now, so nothing that differs is lost."""
+    try:
+        record = json.loads((folder / "helixsr-install.json").read_text())
+    except (OSError, ValueError):
+        record = {}
+    for name in record.get("files", []) if isinstance(record, dict) else []:
+        if not isinstance(name, str) or "/" in name:
+            continue
+        current, original = folder / name, folder / Path(name).with_suffix(".original.dll").name
+        try:
+            if (original.is_file() and not original.is_symlink() and not current.is_symlink()
+                    and original.stat().st_size == current.stat().st_size
+                    and original.read_bytes() == current.read_bytes()):
+                original.unlink()
+        except OSError:
+            continue
     for name in ("helixsr-install.json", "helixsr.ini"):
         (folder / name).unlink(missing_ok=True)
 

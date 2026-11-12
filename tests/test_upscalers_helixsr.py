@@ -89,3 +89,16 @@ def test_hlx_fsr4_proves_itself_in_its_own_log(tmp_path):
     assert facts["output"] == [1280, 800]
     assert "resolution" not in facts
     assert helixsr.verdict(facts) == "active"
+
+
+def test_forget_drops_only_a_backup_identical_to_the_games_file(tmp_path):
+    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["a.dll", "b.dll", "../c.dll"]}))
+    _write(tmp_path / "a.dll", b"game update")
+    _write(tmp_path / "a.original.dll", b"game update")
+    _write(tmp_path / "b.dll", b"game update")
+    _write(tmp_path / "b.original.dll", b"older game")
+    helixsr.forget(tmp_path)
+    assert not (tmp_path / "a.original.dll").exists()
+    assert (tmp_path / "b.original.dll").read_bytes() == b"older game"
+    assert (tmp_path / "a.dll").read_bytes() == b"game update"
+    assert not (tmp_path / "helixsr-install.json").exists()

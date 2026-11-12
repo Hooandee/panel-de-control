@@ -1454,7 +1454,7 @@ def test_helixsr_already_gone_from_the_game_never_blocks_a_switch(steam, helix_c
 
     assert ("remove",) in service.helix.calls
     assert service.game(APPID)["install"]["build"] == "fsr-test"
-    # HelixSR's old backup is never put back over the game's updated FSR.
+    # HelixSR's old backup is never put back over the game's updated FSR, and is kept since it differs from it.
     assert (target / "amd_fidelityfx_upscaler_dx12.original.dll").read_bytes() == b"game fsr"
     assert not (target / "helixsr-install.json").exists()
 
