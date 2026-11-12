@@ -82,6 +82,7 @@ class SecondaryDisplay:
     touchscreen: str
     session: UserSession
     backlight: str = ""
+    orientation: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,4 +135,5 @@ def detect(
     if session is None:
         return Detection(None, "no_session")
     backlight = env.get("ARMADA_SECONDARY_BACKLIGHT", "")
-    return Detection(SecondaryDisplay("armada-lease", connector, touchscreen, session, backlight), "ok")
+    orientation = env.get("ARMADA_PANEL_ORIENTATION", "")
+    return Detection(SecondaryDisplay("armada-lease", connector, touchscreen, session, backlight, orientation), "ok")

@@ -12,6 +12,16 @@ ARMADA_DEVICE_NAME=AYN\\ Thor
 ARMADA_SECONDARY_CONNECTOR=DSI-1
 ARMADA_SECONDARY_TOUCHSCREEN=bottom_touchscreen
 ARMADA_GAMESCOPE_FAKE_OUTPUT_MM=''
+ARMADA_PANEL_ORIENTATION=right
+"""
+
+# Excerpt of /usr/libexec/armada/device-env on an AYANEO Pocket DS (Armada 20261010).
+POCKET_DS_ENV = """ARMADA_DEVICE_ID=ayaneo-pocket-ds
+ARMADA_DEVICE_NAME=AYANEO\\ Pocket\\ DS
+ARMADA_SECONDARY_CONNECTOR=DSI-2
+ARMADA_SECONDARY_BACKLIGHT=sy7758-backlight
+ARMADA_SECONDARY_TOUCHSCREEN=bottom_touchscreen
+ARMADA_PANEL_ORIENTATION=left
 """
 
 SESSION = UserSession(1000, "/run/user/1000", "armada")
@@ -34,7 +44,13 @@ def test_parses_armada_device_env_shell_quoting():
 def test_thor_in_game_mode_has_a_secondary_display(monkeypatch):
     monkeypatch.setattr(displays, "session_for_uid", lambda uid: SESSION if uid == 1000 else None)
     found = detect(exists=_exists(*ALL_PRESENT), owner_uid=lambda _p: 1000, run=lambda _a: THOR_ENV)
-    assert found == Detection(SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION, "ae94000.dsi.0"), "ok")
+    assert found == Detection(SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION, "ae94000.dsi.0", "right"), "ok")
+
+
+def test_pocket_ds_reports_its_bottom_panel_mounted_the_other_way(monkeypatch):
+    monkeypatch.setattr(displays, "session_for_uid", lambda uid: SESSION if uid == 1000 else None)
+    found = detect(exists=_exists(*ALL_PRESENT), owner_uid=lambda _p: 1000, run=lambda _a: POCKET_DS_ENV)
+    assert found.display == SecondaryDisplay("armada-lease", "DSI-2", "bottom_touchscreen", SESSION, "sy7758-backlight", "left")
 
 
 def test_every_missing_piece_has_its_own_reason(monkeypatch):
@@ -79,7 +95,7 @@ def _launcher(results):
         calls.append((cmd, env, identity))
         return results.pop(0) if results else (0, "")
 
-    display = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION)
+    display = SecondaryDisplay("armada-lease", "DSI-1", "bottom_touchscreen", SESSION, orientation="left")
     return KioskLauncher(display, runner=runner), calls
 
 
@@ -91,6 +107,8 @@ def test_start_runs_a_transient_user_unit_in_the_session():
     assert cmd[0].endswith("systemd-run")
     assert f"--unit={UNIT}" in cmd
     assert "--setenv=PDC_KIOSK_URL=http://127.0.0.1:4000/?k=t" in cmd
+    assert "--setenv=ARMADA_SECONDARY_TOUCHSCREEN=bottom_touchscreen" in cmd
+    assert "--setenv=ARMADA_PANEL_ORIENTATION=left" in cmd
     assert "--nice=10" in cmd and "--property=CPUWeight=20" in cmd
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
 
