@@ -2,6 +2,7 @@ import duoCover from "../assets/duo-cover.jpg";
 import eclipseCover from "../assets/eclipse-cover.jpg";
 import hooandeeCover from "../assets/hooandee-cover.jpg";
 import loboBlancoCover from "../assets/lobo-blanco-cover.jpg";
+import loopCover from "../assets/loop-cover.jpg";
 import luminousAtlasCover from "../assets/luminous-atlas-cover.jpg";
 import terciopeloCover from "../assets/terciopelo-cover.jpg";
 import vidaCover from "../assets/vida-cover.jpg";
@@ -117,6 +118,26 @@ const PRESENTATIONS: Readonly<Record<string, ThemePresentation>> = {
       de: "Ein Theme, inspiriert vom Weltall und von Sonnenfinsternissen. Deine Spiele werden zu Planeten auf einem wirklich schwarzen Hintergrund, mit Sternen und einem sanften Leuchten auf dem, was du gerade ausgewählt hast. Gemacht für OLED-Bildschirme, denn dort kommt es am besten zur Geltung.",
       "pt-BR": "Um tema inspirado no espaço e nos eclipses. Seus jogos viram planetas sobre um fundo preto de verdade, com estrelas e um brilho suave no que você tem selecionado. Feito para telas OLED, que é onde ele fica mais bonito.",
       fr: "Un thème inspiré de l'espace et des éclipses. Vos jeux deviennent des planètes sur un fond vraiment noir, avec des étoiles et une douce lueur sur ce que vous avez sélectionné. Pensé pour les écrans OLED, car c'est là qu'il rend le mieux.",
+    },
+  },
+  "hooandee-loop": {
+    cssLoaderName: "Hooandee Loop",
+    cover: loopCover,
+    tagline: {
+      es: "Tus portadas, enormes y en 3D",
+      en: "Your covers, huge and in 3D",
+      it: "Le tue copertine, enormi e in 3D",
+      de: "Deine Cover, riesig und in 3D",
+      "pt-BR": "Suas capas, enormes e em 3D",
+      fr: "Vos jaquettes, immenses et en 3D",
+    },
+    description: {
+      es: "Tus portadas, enormes y en 3D. Giran con suavidad sobre un suelo de cristal oscuro que las refleja, con el logo delante, el fondo del juego detrás y su ficha en cuanto te paras. A para jugar.",
+      en: "Your covers, huge and in 3D. They glide over a dark glass floor that reflects them, with the logo in front, the game's art behind and its details as soon as you stop. Press A to play.",
+      it: "Le tue copertine, enormi e in 3D. Scorrono morbide su un pavimento di vetro scuro che le riflette, con il logo davanti, l'arte del gioco dietro e la sua scheda appena ti fermi. Premi A per giocare.",
+      de: "Deine Cover, riesig und in 3D. Sie gleiten über einen dunklen Glasboden, der sie spiegelt, mit dem Logo davor, dem Artwork des Spiels dahinter und seinen Details, sobald du anhältst. Drück A zum Spielen.",
+      "pt-BR": "Suas capas, enormes e em 3D. Elas deslizam sobre um piso de vidro escuro que as reflete, com o logo na frente, a arte do jogo atrás e a ficha dele assim que você para. Aperte A para jogar.",
+      fr: "Vos jaquettes, immenses et en 3D. Elles glissent sur un sol de verre sombre qui les reflète, avec le logo devant, l'illustration du jeu derrière et sa fiche dès que vous vous arrêtez. Appuyez sur A pour jouer.",
     },
   },
   "hooandee-terciopelo": {

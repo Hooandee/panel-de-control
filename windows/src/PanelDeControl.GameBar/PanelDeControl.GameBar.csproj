@@ -112,6 +112,9 @@
     <Content Include="..\..\..\src\assets\hooandee-cover.jpg">
       <Link>Assets\ThemeCovers\hooandee-cover.jpg</Link>
     </Content>
+    <Content Include="..\..\..\src\assets\loop-cover.jpg">
+      <Link>Assets\ThemeCovers\loop-cover.jpg</Link>
+    </Content>
     <Content Include="..\..\..\src\assets\luminous-atlas-cover.jpg">
       <Link>Assets\ThemeCovers\luminous-atlas-cover.jpg</Link>
     </Content>
