@@ -102,3 +102,14 @@ def test_forget_drops_only_a_backup_identical_to_the_games_file(tmp_path):
     assert (tmp_path / "b.original.dll").read_bytes() == b"older game"
     assert (tmp_path / "a.dll").read_bytes() == b"game update"
     assert not (tmp_path / "helixsr-install.json").exists()
+
+
+def test_restoring_by_hand_keeps_a_file_the_game_already_updated(tmp_path):
+    _write(tmp_path / "helixsr-install.json", json.dumps({"files": ["a.dll", "b.dll"]}))
+    _write(tmp_path / "a.dll", b"MZ HLX-FSR-4")
+    _write(tmp_path / "a.original.dll", b"game a")
+    _write(tmp_path / "b.dll", b"game b update")
+    _write(tmp_path / "b.original.dll", b"game b old")
+    helixsr.remove_by_hand(tmp_path, only_helix=True)
+    assert (tmp_path / "a.dll").read_bytes() == b"game a"
+    assert (tmp_path / "b.dll").read_bytes() == b"game b update"

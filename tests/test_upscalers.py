@@ -1492,6 +1492,7 @@ def test_helixsr_in_a_game_moved_to_another_library_is_still_removed(steam, heli
 
     assert service.helix.calls == [("remove",)]
     assert not (game / "bin/x64_dx12/helixsr-install.json").exists()
+    assert not (game / "bin/x64_dx12" / games.MANIFEST_DIR).exists()
 
 
 def test_helixsr_record_gone_is_uninstalled_without_the_bridge(steam, helix_catalog, proc):
@@ -1749,3 +1750,11 @@ def test_panel_quality_maps_to_reframeworks_upscaler(quality, expected):
     keys = _reframework_upscaler_keys({"quality": quality})
     assert keys["TemporalUpscaler_Enabled"] == "true"
     assert {k: v for k, v in keys.items() if k != "TemporalUpscaler_Enabled" and v is not None} == expected
+
+
+def test_relocation_takes_the_game_folder_not_a_subfolder_with_its_name(tmp_path):
+    from upscalers.service import _relocated
+    root = tmp_path / "new/steamapps/common/Foo"
+    old_target = tmp_path / "old/steamapps/common/Foo/Foo/Binaries/Win64"
+    moved = _relocated(old_target / "helixsr-install.json", old_target, root)
+    assert moved == root / "Foo/Binaries/Win64/helixsr-install.json"

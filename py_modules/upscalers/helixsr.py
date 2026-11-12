@@ -164,11 +164,12 @@ def _drop_record(folder: Path) -> None:
         (folder / name).unlink(missing_ok=True)
 
 
-def remove_by_hand(folder: Path) -> None:
+def remove_by_hand(folder: Path, only_helix: bool = False) -> None:
     """When HelixSR's release is gone (deleted, or a newer Panel ships another), put the game's FSR back from
-    the *.original.dll HelixSR's drop-in keeps, as its bridge would."""
+    the *.original.dll HelixSR's drop-in keeps, as its bridge would. With `only_helix`, a file the game has since
+    replaced with its own keeps its update."""
     for current, original in _recorded_swaps(folder):
-        if original.is_file():
+        if original.is_file() and (not only_helix or _is_helix_file(current)):
             os.replace(original, current)
     _drop_record(folder)
 

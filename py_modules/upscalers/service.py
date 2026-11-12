@@ -1148,7 +1148,8 @@ class UpscalerService:
             return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
-        record = _relocated(Path(install.get("helix_file", "")), Path(install.get("target", "")), root)
+        old_target = Path(install.get("target", ""))
+        record = _relocated(Path(install.get("helix_file", "")), old_target, root)
         if not record.is_file():
             # HelixSR already took itself out (HelixSR Desktop, or a game update over its DLL): nothing to restore.
             self._log_helix_gone("record_missing")
@@ -1160,7 +1161,7 @@ class UpscalerService:
                     raise
                 if helixsr.still_swapped(record.parent):
                     # The bridge no longer recognises a DLL an older HelixSR release put in: restore it by hand.
-                    helixsr.remove_by_hand(record.parent)
+                    helixsr.remove_by_hand(record.parent, only_helix=True)
                     self._log_helix_gone("bridge_not_installed_restored")
                 else:
                     # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
@@ -1168,11 +1169,11 @@ class UpscalerService:
                     self._log_helix_gone("bridge_not_installed")
         else:
             helixsr.remove_by_hand(record.parent)
-        log = Path(install.get("log", ""))
+        log = _relocated(Path(install.get("log", "")), old_target, root)
         for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
             if generated.name and generated.is_file():
                 generated.unlink()
-        shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
+        shutil.rmtree(_relocated(old_target / games.MANIFEST_DIR, old_target, root), ignore_errors=True)
         return []
 
     def _log_helix_gone(self, reason: str) -> None:
@@ -2203,11 +2204,13 @@ def _recipe_info(recipe) -> dict | None:
 
 def _relocated(path: Path, old_target: Path, root: Path) -> Path:
     """`path` saved under the game's old folder, seen under its current one (the game moved to another library)."""
-    if path.is_file():
+    if path.exists():
         return path
-    for ancestor in old_target.parents:
-        if ancestor.name == root.name and path.is_relative_to(ancestor):
-            return root / path.relative_to(ancestor)
+    # The game folder itself, not a subfolder that happens to share its name (UE games: Foo/Foo/Binaries).
+    folders = [ancestor for ancestor in (old_target, *old_target.parents) if ancestor.name == root.name]
+    folder = next((ancestor for ancestor in folders if ancestor.parent.name == "common"), folders[-1] if folders else None)
+    if folder is not None and path.is_relative_to(folder):
+        return root / path.relative_to(folder)
     return path
 
 
