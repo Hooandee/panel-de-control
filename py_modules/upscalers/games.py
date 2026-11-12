@@ -59,6 +59,8 @@ class Installed:
     # (launcher, game key, runner) for Heroic/Lutris shortcuts; overrides then go to the launcher.
     launcher: tuple[str, str, str | None] | None = None
     build_id: str | None = None
+    # Why a shortcut is listed by Steam but has no game Panel can work on (a store game not installed).
+    unavailable: str | None = None
 
 
 def steam_roots(home: str) -> list[Path]:
@@ -121,6 +123,24 @@ def _wrapped(home: str, appid: str, name: str, exe: str, launch_options: str) ->
     return Installed(appid, name, root, STATE_FULLY_INSTALLED, target.relative_to(root).as_posix(), True)
 
 
+def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options: str, start: Path) -> Installed:
+    """A shortcut that does not point at a .exe: a script running a Windows game, or something native."""
+    wrapped = _wrapped(home, appid, name, exe, launch_options) if home else None
+    if wrapped:
+        return wrapped
+    key = launchers.unifideck_key(launch_options) if home and "unifideck" in exe.lower() else None
+    if key:
+        row = launchers.unifideck_row(home, key)
+        if row is None or not row[0]:
+            return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
+                             unavailable="unifideck_not_installed" if row is None else "unifideck_no_exe")
+        if not Path(row[0]).is_file():
+            return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
+                             unavailable="unifideck_missing")
+    # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
+    return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+
+
 def find_shortcut(home: str, appid: str) -> Installed | None:
     """A non-Steam shortcut: any executable added to Steam, wherever it came from."""
     for root in steam_roots(home):
@@ -145,9 +165,7 @@ def find_shortcut(home: str, appid: str) -> Installed | None:
                     return None
                 name = str(entry.get("appname") or appid)
                 if exe.suffix.lower() != ".exe":
-                    wrapped = _wrapped(home, appid, name, str(exe), str(entry.get("launchoptions") or ""))
-                    # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
-                    return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+                    return _script_shortcut(home, appid, name, str(exe), str(entry.get("launchoptions") or ""), start)
                 relative = None
                 if exe.is_file():
                     try:
@@ -172,8 +190,7 @@ def from_hint(appid: str, hint: dict | None, home: str = "") -> Installed | None
         return None
     name = str(hint.get("name") or appid)
     if exe.suffix.lower() != ".exe":
-        wrapped = _wrapped(home, appid, name, str(exe), str(hint.get("opts") or "")) if home else None
-        return wrapped or Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
+        return _script_shortcut(home, appid, name, str(exe), str(hint.get("opts") or ""), start)
     try:
         relative = exe.resolve().relative_to(start.resolve()).as_posix()
     except (ValueError, OSError):

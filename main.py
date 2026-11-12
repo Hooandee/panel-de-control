@@ -176,6 +176,7 @@ from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
 from upscalers import UpscalerError, UpscalerService
 from upscalers import diagnostics as upscaler_diagnostics
+from upscalers.service import REPORT_BUDGET_S as UPSCALER_REPORT_BUDGET_S
 from kiosk.controller import KioskController
 from remote_access import RemoteAccess
 from steam_inventory_compat import SteamInventoryCompat
@@ -435,6 +436,14 @@ def _user_home() -> str:
 
 
 _UPSCALERS_LOCK = threading.Lock()
+
+
+def _snapshot_partial(partial: dict) -> dict:
+    """What the upscaler report read before its wait ran out; the reading thread may still be adding to it."""
+    snapshot = dict(partial)
+    if isinstance(snapshot.get("games"), list):
+        snapshot["games"] = list(snapshot["games"])
+    return snapshot
 
 
 def _upscalers_journal(level: str, event: str, **fields) -> None:
@@ -1561,10 +1570,11 @@ class Plugin(AmbientRpc):
         frontend = upscaler_diagnostics.frontend_context(context.get("upscalers") if isinstance(context, dict) else None)
         backend = {"source": "current_game", "stable_appid": str(getattr(self, "_current_appid", "") or "")[:160],
                    "name": str(getattr(self, "_current_game_name", "") or "")[:160]}
+        partial: dict = {}
         try:
-            result = await asyncio.wait_for(self._upscalers_call("report", frontend), timeout=4)
+            result = await asyncio.wait_for(self._upscalers_call("report", frontend, UPSCALER_REPORT_BUDGET_S, partial), timeout=4)
         except Exception as error:  # noqa: BLE001
-            result = {"error": "diagnostics_unavailable", "reason": type(error).__name__, "frontend": frontend}
+            result = {**_snapshot_partial(partial), "error": "diagnostics_unavailable", "reason": type(error).__name__, "frontend": frontend}
         return {**result, "backend_running": backend}
 
     async def diagnose_upscaler(self, appid: str) -> dict:

@@ -39,6 +39,7 @@ export interface UpscalerJob {
 
 export interface UpscalersOverview {
   gpu: string;
+  device?: string;
   display: [number, number] | null;
   preferred: string;
   builds: BuildInfo[];
@@ -97,7 +98,7 @@ export interface HistoryEntry {
   at: number;
   result: UpscalerStatus;
   exe: string | null;
-  facts?: { fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] } };
+  facts?: { fg?: string; upscaler?: string; fsr4?: string; version?: string; resolution?: { render: number[]; output: number[] }; initial_resolution?: { render: number[]; output: number[] } };
 }
 
 export interface GameDetail {

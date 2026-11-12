@@ -62,7 +62,7 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
         return original(home, appid, entry, installed)
     monkeypatch.setattr(diagnostics, 'game_report', report)
     result = service.report()['games']
-    assert result[0] == {'appid': 'bad', 'error': 'OSError'}
+    assert {k: v for k, v in result[0].items() if k != 'elapsed_ms'} == {'appid': 'bad', 'error': 'OSError'}
     assert result[1]['appid'] == 'good'
 
 
@@ -189,3 +189,49 @@ def test_report_lists_the_versions_offered_on_this_gpu(steam, fake_catalog, proc
     builds = service.report()["builds"]
     assert builds and all(set(row) <= {"id", "supported", "may_fallback"} for row in builds)
     assert {row["id"] for row in builds} == {b.id for b in catalog.BUILDS.values() if b.available}
+
+
+def test_report_stops_reading_games_past_its_budget(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    service.state['games'] = {str(i): {'history': [{'at': i}]} for i in range(5)}
+    now = [0.0]
+    monkeypatch.setattr('upscalers.service.time.monotonic', lambda: now[0])
+    original = service.diagnose
+    def slow(appid):
+        now[0] += 2
+        return original(appid)
+    monkeypatch.setattr(service, 'diagnose', slow)
+    report = service.report(budget_s=3)
+    assert [g['appid'] for g in report['games']] == ['4', '3']
+    assert report['games_skipped'] == ['2', '1', '0']
+    assert 'reading' not in report and 'mako' in report and 'builds' in report
+
+
+def test_partial_report_keeps_what_was_read_before_a_stuck_game(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    service.state['games'] = {'fast': {'history': [{'at': 2}]}, 'stuck': {'history': [{'at': 1}]}}
+    partial = {}
+    original = service.diagnose
+    def diagnose(appid):
+        if appid == 'stuck':
+            raise KeyboardInterrupt
+        return original(appid)
+    monkeypatch.setattr(service, 'diagnose', diagnose)
+    try:
+        service.report(partial=partial)
+    except KeyboardInterrupt:
+        pass
+    assert [g['appid'] for g in partial['games']] == ['fast']
+    assert partial['reading'] == 'stuck'
+    assert partial['gpu'] == service.gpu
+
+
+def test_one_failing_report_section_keeps_the_rest(steam, fake_catalog, proc, monkeypatch):
+    service = _service(steam, fake_catalog, proc)
+    def broken():
+        raise OSError('private detail')
+    monkeypatch.setattr(service.lsfg, 'report', broken)
+    report = service.report()
+    assert report['lsfg'] == {'error': 'OSError'}
+    assert 'private detail' not in json.dumps(report)
+    assert 'mako' in report and 'helixsr' in report

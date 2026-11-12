@@ -44,6 +44,19 @@ def test_report_failure_keeps_separate_running_identities(plugin, monkeypatch):
     assert 'upscalers' not in plugin._launch_report_state({'upscalers': {'running': 'private'}})['frontend']
 
 
+def test_report_timeout_keeps_games_read_before_it(plugin, monkeypatch):
+    async def slow(method, frontend, budget, partial):
+        partial.update({'gpu': 'rdna3', 'games': [{'appid': '526870', 'elapsed_ms': 900}], 'reading': '1934680'})
+        raise TimeoutError()
+    monkeypatch.setattr(plugin, '_upscalers_call', slow)
+    report = asyncio.run(plugin._upscalers_report({'upscalers': {'status': 'available'}}))
+    assert report['error'] == 'diagnostics_unavailable'
+    assert report['reason'] == 'TimeoutError'
+    assert report['games'] == [{'appid': '526870', 'elapsed_ms': 900}]
+    assert report['reading'] == '1934680'
+    assert report['frontend']['status'] == 'available'
+
+
 def test_plugin_close_stops_lossless_log_monitor(plugin, tmp_path, monkeypatch):
     from types import SimpleNamespace
     from upscalers.lsfg import Lsfg
