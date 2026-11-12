@@ -22,7 +22,7 @@ const PAGE_START_MS = 8000;
 /**
  * Quick retries for a blip, then slower ones that never stop for the user's own media: after a Steam
  * restart or a return from desktop mode the media server or CEF's video decoder can take minutes to come
- * back (Deck LCD: err=4 on a working H.264 file for about two minutes after signing in again).
+ * back.
  */
 const RETRY_DELAYS_MS = [1000, 3000, 10_000, 30_000, 60_000, 120_000];
 const SLOW_RETRY_MS = 300_000;
@@ -283,7 +283,6 @@ export class BackgroundLayer {
       const ready = waitForMedia(video, load.signal);
       video.src = media.url;
       result = await ready;
-      // Sound but no picture (a codec the GPU decoder lost, an audio-only file) paints a flat grey box.
       if (result === "ready" && video.videoHeight === 0) result = "no_picture";
       if (result === "ready" && generation === this.generation) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
       if (result !== "ready" && result !== "cancelled") this.lastFailure = videoState(video);

@@ -338,7 +338,6 @@ export class AmbientRuntime {
     }
     const steamRestarted = !!settings && markSteamSession();
     if (settings?.music.enabled && steamRestarted) {
-      // A Panel reload keeps the music going; a fresh Steam (boot, restart, back from desktop) starts silent.
       console.info("[Ambient] music left paused after Steam started");
       void rpc.recordAmbientEvent("music", "paused_at_steam_start").catch(() => undefined);
       await this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: false } }));
@@ -1047,8 +1046,8 @@ export class AmbientRuntime {
 
 
   /**
-   * Steam's CEF sometimes cannot decode H.264 at all (Deck LCD after a Steam restart: every H.264 file
-   * fails with kUnsupportedConfig while VP8/VP9 play). A local video that fails that way gets a VP9 copy.
+   * Steam's CEF can lose H.264 decoding entirely after a Steam restart (kUnsupportedConfig on every
+   * H.264 file while VP8/VP9 still play). A local video that fails that way gets a VP9 copy.
    */
   private decodeFallback(url: string): void {
     const current = this.snapshot.current;

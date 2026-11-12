@@ -131,7 +131,6 @@ export const FloatingPlayer: FC = () => {
   const mode = music?.overlay ?? "peek";
   const pillWanted = !qamOpen && (mode === "always" || (mode === "peek" && peekUntil > Date.now()));
   const videoRunning = video && (playing || player?.status === "loading" || player?.status === "retrying");
-  // Steam's keyboard (chat, search) sits under the card; covering it also swallowed trackpad typing.
   const visible = !!player?.track && !keyboardShown && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
   const rightInset = qamOpen && surface ? qamPanelWidth(surface.document) ?? 0 : 0;
   const normalWidth = viewport ? cardWidth(viewport, rightInset, video, music?.videoScale ?? 40) : 0;

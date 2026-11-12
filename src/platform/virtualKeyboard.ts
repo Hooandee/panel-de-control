@@ -1,4 +1,4 @@
-/** Steam returns `Unsubscribe` here (Deck, 2026-11) and `Unregister` on other subscribable values. */
+/** Steam returns `Unsubscribe` from this value and `Unregister` from other subscribable values. */
 interface Subscription {
   Unsubscribe?: () => void;
   Unregister?: () => void;
