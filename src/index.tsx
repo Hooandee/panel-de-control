@@ -86,6 +86,7 @@ import {
   configureSectionHandoffStore,
   configureThemeFailureReporter,
   configureCssLoaderSlowMutationReporter,
+  slowMutationBucket,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
@@ -174,10 +175,11 @@ export default definePlugin(() => {
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
   const releaseSlowMutationReporter = configureCssLoaderSlowMutationReporter(
-    ({ method, elapsedMs, settled }) => {
-      console.warn(`CSS Loader ${method} took ${Math.round(elapsedMs / 1000)} s (${settled})`);
-      recordUiDiagnostic("themes", `css_loader_${method}_${settled}`);
-    },
+    ({ method, elapsedMs, settled }) => recordUiDiagnostic(
+      "themes",
+      `css_loader_${method}_${settled}`,
+      slowMutationBucket(elapsedMs),
+    ),
   );
   const releaseSectionHandoffStore = configureSectionHandoffStore({
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),

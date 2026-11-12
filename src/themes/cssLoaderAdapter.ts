@@ -393,6 +393,11 @@ export class CssLoaderAdapter {
     return after;
   }
 
+  // Puts enabled flags and patch values back without reloading CSS Loader.
+  async reapplyThemeStates(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
+    return this.restoreCompatibleSnapshotState(expected, await this.requireReady());
+  }
+
   async reconcileRecoveredThemes(
     recoveries: readonly CssLoaderRecoveryExpectation[],
     before: CssLoaderReadySnapshot,

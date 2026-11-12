@@ -6,6 +6,7 @@ export interface ThemeActivationAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
   setThemeState(name: string, enabled: boolean): Promise<CssLoaderSnapshot>;
   restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
+  reapplyThemeStates?(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
   hasPendingMutation(): boolean;
   waitForPendingMutation(): Promise<void>;
 }
@@ -315,9 +316,15 @@ export class ThemeActivator {
     // would otherwise be relaunched forever. Wait for it to settle, then keep the current state.
     if (recovery.failures >= MAX_RESTORATION_FAILURES) {
       if (!this.adapter.hasPendingMutation()) {
-        const current = await this.adapter.inspect();
-        if (current.status === "ready" && this.isFullyRestored(recovery.initial, current as CssLoaderReadySnapshot)) {
-          return this.acknowledgeRecovery(recovery, current as CssLoaderReadySnapshot);
+        // The reloads that timed out never got to put the previous states back: try that once,
+        // without another reload, before keeping the current state.
+        try {
+          const reapplied = await this.adapter.reapplyThemeStates?.(recovery.initial);
+          if (reapplied && this.isFullyRestored(recovery.initial, reapplied)) {
+            return this.acknowledgeRecovery(recovery, reapplied);
+          }
+        } catch (error) {
+          console.warn("Theme recovery could not reapply the previous theme states", error);
         }
         const kept = await this.abandonRecovery(recovery);
         if (kept) return kept;
