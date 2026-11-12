@@ -79,7 +79,9 @@ class IntelRaplBackend(TDPBackend):
         write_max_ac: int | None = None,
         sync_surfaces: bool = False,
         baseline_path: str | None = None,
+        battery_ceiling: bool = False,
     ) -> None:
+        self._battery_ceiling_enabled = bool(battery_ceiling)
         self._fallback = fallback
         self._write_limits = fallback.with_ac_max(write_max_ac)
         self._root = root
@@ -565,7 +567,8 @@ class IntelRaplBackend(TDPBackend):
         # MSI Claw firmware puts its own battery PL1 back on the MMIO surface a few
         # seconds after any higher write. Rewriting it is a fight the package never
         # sees, so the reverted value is published as the live ceiling until AC.
-        if self._on_ac is not False or not self._sync_surfaces:
+        if (self._on_ac is not False or not self._sync_surfaces
+                or not self._battery_ceiling_enabled):
             return None
         if read_on_ac(self._root):
             self._battery_ceiling_w = None

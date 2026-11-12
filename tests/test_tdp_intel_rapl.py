@@ -494,12 +494,13 @@ class TestIntelRapl:
         assert b.read_tolerance_w == 1
 
 
-def _baseline_backend(tmp_path):
+def _baseline_backend(tmp_path, battery_ceiling=True):
     return IntelRaplBackend(
         _FALLBACK,
         root=str(tmp_path),
         sync_surfaces=True,
         baseline_path=str(tmp_path / "run/rapl-baseline.lock"),
+        battery_ceiling=battery_ceiling,
     )
 
 
@@ -647,5 +648,15 @@ def test_plugging_in_clears_the_battery_ceiling_before_any_write(tmp_path):
     ac.mkdir(parents=True)
     (ac / "type").write_text("Mains")
     (ac / "online").write_text("1")
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_other_intel_machines_keep_reporting_a_rival_instead_of_a_ceiling(tmp_path):
+    mmio = _mk_rapl(str(tmp_path), _MMIO, pl1_uw=25_000_000)
+    _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=30_000_000)
+    backend = _baseline_backend(tmp_path, battery_ceiling=False)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
 
     assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None

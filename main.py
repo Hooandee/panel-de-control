@@ -233,7 +233,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
-            "board_fans.enabled", "board_fans.loaded", "board_fans.loaded_by_panel",
+            "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
+            "board_fans.loaded_by_panel",
         )),
     ),
     "audio": (
@@ -15491,7 +15492,12 @@ class Plugin(AmbientRpc):
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
-        fans_released = self._restore_fans_safe()
+        fans_released = (
+            self._restore_fans_safe()
+            if self._module_enabled("fanControl")
+            or self._settings.get("fan_release_pending") is True
+            else True
+        )
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
         self._restore_audio_safe()

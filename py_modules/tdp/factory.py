@@ -187,6 +187,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
             auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
             write_max_ac=device.experimental_tdp_max_ac,
             sync_surfaces=True,
+            battery_ceiling=device.key.startswith("msi_claw"),
             # The desktop power coordinator captures and restores its own baseline.
             baseline_path=(
                 None

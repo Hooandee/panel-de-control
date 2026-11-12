@@ -721,8 +721,21 @@ def test_reenabling_fan_control_releases_again_on_the_next_disable(tmp_path, mon
     plugin._reapply_fans_sync()
 
     assert first == 1
-    assert fan.restores - fan.curves >= 1
+    assert fan.restores == 2
     assert plugin._settings["fan_release_pending"] is False
+
+
+def test_shutdown_leaves_fans_alone_while_fan_control_is_off(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+    released = fan.restores
+
+    plugin._perform_shutdown_handoff("unload")
+
+    assert fan.restores == released
 
 
 def test_release_interrupted_before_a_restart_is_retried_at_start(tmp_path, monkeypatch):
