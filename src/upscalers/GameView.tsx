@@ -24,7 +24,7 @@ import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
-  buildBlocker, fsr4OldProton, helixOffItsGpu, protonFsr4Env, restoredChoice,
+  buildBlocker, protonFsr4Env, restoredChoice,
 } from "./model";
 import { scalerSwitching } from "./scalerTransition";
 import { MakoScaling } from "./MakoScaling";
@@ -496,7 +496,6 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
     ? INPUT_NAMES[recommendedInputKey] : null;
-  const oldProton = detail && !detail.native && !spatial ? fsr4OldProton(selected, compat ?? "") : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
   const modeChanged = installedEngine !== selectedEngine && [installedEngine, selectedEngine].every((engine) => engine === "dll" || engine === "optiscaler");
@@ -669,7 +668,6 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {oldProton !== null && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.fsr4.oldProton", { version: oldProton })}</Notice>}
       {recommendedInput && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
       </Notice>}
@@ -680,7 +678,6 @@ export const GameView: FC<{
           ref={imageControls} onDirty={setImageDirty}
           onSavedForNextLaunch={() => setApplied("restart")} />
       )}
-      {detail && !detail.native && helixOffItsGpu(selected, overview.gpu) && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t("up.helix.otherGpu")}</Notice>}
       {detail && !detail.native && helix && <Note>{t("up.helix.pick.fsr")}</Note>}
       {detail && !detail.native && selected?.engine === "proton" && <Note>{t("up.proton.note")}</Note>}
 

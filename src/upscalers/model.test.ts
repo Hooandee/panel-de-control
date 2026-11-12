@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, fsr4OldProton, helixOffItsGpu, protonMajor, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("keeps the last measured output height after an unverifiable DLL result", () => {
@@ -161,26 +161,4 @@ describe("launch options the user already had", () => {
 it("keeps previously installed routes available for user choice", () => {
   expect(fgOffer({}, { fsrfg: [] }, "rdna3", true, "optiscaler")).toEqual({ own: "fsr", options: ["optiscaler", "lsfg"] });
   expect(fgOffer({ optiscaler: {} }, {}, "rdna3", false, null).options).toEqual(["optiscaler"]);
-});
-
-describe("FSR 4 on an old Proton and HelixSR off the Deck", () => {
-  const fsr4 = { family: "fsr", version: "4.1.2", engine: "optiscaler" } as const;
-  it("reads Proton's major version only from names that state it", () => {
-    expect([protonMajor("proton_9"), protonMajor("GE-Proton9-26"), protonMajor("proton_11"), protonMajor("proton_experimental"), protonMajor("")])
-      .toEqual([9, 9, 11, null, null]);
-  });
-  it("warns for FSR 4 below Proton 10 and nothing else", () => {
-    expect(fsr4OldProton(fsr4, "proton_9")).toBe(9);
-    expect(fsr4OldProton({ ...fsr4, engine: "dll" }, "GE-Proton8-32")).toBe(8);
-    expect(fsr4OldProton(fsr4, "proton_10")).toBeNull();
-    expect(fsr4OldProton(fsr4, "proton_experimental")).toBeNull();
-    expect(fsr4OldProton({ ...fsr4, version: "3.1.5" }, "proton_9")).toBeNull();
-    expect(fsr4OldProton({ family: "proton", version: "FSR 4", engine: "proton" }, "proton_9")).toBeNull();
-    expect(fsr4OldProton(undefined, "proton_9")).toBeNull();
-  });
-  it("flags HelixSR only away from RDNA 1 and 2", () => {
-    expect(helixOffItsGpu({ engine: "helixsr" }, "rdna3")).toBe(true);
-    expect(helixOffItsGpu({ engine: "helixsr" }, "rdna2")).toBe(false);
-    expect(helixOffItsGpu({ engine: "optiscaler" }, "rdna3")).toBe(false);
-  });
 });
