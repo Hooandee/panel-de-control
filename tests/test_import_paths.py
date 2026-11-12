@@ -111,11 +111,27 @@ def test_plugin_names_avoid_known_distro_packages():
     assert own_top_level_names(PY_MODULES) & KNOWN_SYSTEM_PACKAGES == set()
 
 
+def _ancestors(tree, target):
+    parents = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+    node = target
+    while node in parents:
+        node = parents[node]
+        yield node
+
+
 def test_main_fixes_import_order_before_any_plugin_import():
     tree = ast.parse((ROOT / "main.py").read_text())
     own = own_top_level_names(PY_MODULES)
     first_own = None
-    for node in tree.body:
+    module_level = [
+        node for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        and not any(isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) for parent in _ancestors(tree, node))
+    ]
+    for node in sorted(module_level, key=lambda n: (n.lineno, n.col_offset)):
         if isinstance(node, ast.Import):
             tops = [alias.name.split(".")[0] for alias in node.names]
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
