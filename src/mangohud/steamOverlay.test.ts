@@ -505,4 +505,28 @@ describe("SteamOverlayController", () => {
       observed_level: 3,
     });
   });
+
+  it("forgets the saved level once the user's own level is already visible", async () => {
+    const perf = store(3);
+    perf.SetPerfOverlayLevel.mockImplementation((next: number) => {
+      perf.msgSettingsGlobal!.perf_overlay_level = next;
+    });
+    const clock = { now: 0 };
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+      2,
+      () => clock.now,
+    );
+
+    await controller.ensureHudHidden();
+    clock.now = 10_000;
+    perf.msgSettingsGlobal!.perf_overlay_level = 1;
+    await controller.ensureFullHudVisible();
+    perf.msgSettingsGlobal!.perf_overlay_level = 0;
+    clock.now = 20_000;
+    await controller.ensureFullHudVisible();
+
+    expect(perf.SetPerfOverlayLevel).toHaveBeenLastCalledWith(1);
+  });
 });

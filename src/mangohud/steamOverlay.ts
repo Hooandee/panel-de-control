@@ -442,6 +442,7 @@ export class SteamOverlayController {
       return this.finishActivation("unavailable", null, null, null);
     }
     if (before !== HIDDEN_LEVEL && this.pendingWrite() !== HIDDEN_LEVEL) {
+      this.levelBeforeHide = null;
       return this.finishActivation("already_visible", before, null, before);
     }
 

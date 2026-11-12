@@ -70,11 +70,12 @@ class OpenWatch:
         if self._fd < 0:
             return None
         try:
-            ready, _, _ = select.select([self._fd], [], [], max(0.0, timeout_s))
-            if not ready:
+            poller = select.poll()
+            poller.register(self._fd, select.POLLIN)
+            if not poller.poll(max(0, int(timeout_s * 1000))):
                 return False
             data = os.read(self._fd, 4096)
-        except OSError:
+        except (OSError, ValueError):
             return None
         return contains_open(data)
 

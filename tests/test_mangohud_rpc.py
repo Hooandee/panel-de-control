@@ -1517,14 +1517,21 @@ def test_unobserved_reload_is_logged_and_counted(tmp_path, monkeypatch):
     warnings = []
     monkeypatch.setattr(main.decky.logger, "warning", lambda *args: warnings.append(args))
 
+    infos = []
+    monkeypatch.setattr(main.decky.logger, "info", lambda *args: infos.append(args))
+
     p._note_hud_delivery("unobserved")
+    p._note_hud_delivery("unknown")
     p._note_hud_delivery("unobserved")
+    assert p._hud_report_diagnostics(p._hud_state())["reload_delivery"] == "unobserved"
+    p._note_hud_delivery("unknown")
     p._note_hud_delivery("observed")
 
     diagnostics = p._hud_report_diagnostics(p._hud_state())
     assert diagnostics["unobserved_reloads"] == 2
     assert diagnostics["reload_delivery"] == "observed"
     assert len(warnings) == 1
+    assert len(infos) == 1
 
 
 def test_a_sensor_reading_that_appears_is_published_promptly(tmp_path, monkeypatch):
@@ -1581,3 +1588,25 @@ def test_unconfirmed_delivery_pauses_the_confirmation_wait(tmp_path, monkeypatch
     p._request_hud_reload((session,), reset_backoff=True)
 
     assert observed == [False, True]
+
+
+def test_switching_the_hud_off_does_not_wait_for_reload_confirmation(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, presets, 6)])
+    observed = []
+
+    def reload_snapshot(snapshot, **kwargs):
+        observed.append(kwargs["observe"])
+        identities = tuple((session.pid, session.starttime) for session in snapshot)
+        return types.SimpleNamespace(requested=identities, pending=(), delivery="unknown")
+
+    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    observed.clear()
+
+    state = asyncio.run(p.set_hud_enabled(False))
+
+    assert observed == [False]
+    assert state["applyStatus"] == "disabled"

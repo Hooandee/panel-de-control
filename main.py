@@ -10535,7 +10535,7 @@ class Plugin(AmbientRpc):
         }
         self._hud_apply_status = "conflict"
 
-    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+    def _request_hud_reload(self, snapshot, *, reset_backoff, confirm=True) -> bool:
         snapshot = tuple(snapshot)
         if reset_backoff:
             self._hud_reload_attempt = 0
@@ -10545,7 +10545,11 @@ class Plugin(AmbientRpc):
             return False
         result = reload_sessions(
             snapshot,
-            observe=not self._hud_shutdown and _monotonic() >= self._hud_observe_after,
+            observe=(
+                confirm
+                and not self._hud_shutdown
+                and _monotonic() >= self._hud_observe_after
+            ),
             via_proc_cwd=self._hud_reload_via_proc_cwd,
         )
         self._note_hud_delivery(getattr(result, "delivery", "unknown"))
@@ -10577,6 +10581,8 @@ class Plugin(AmbientRpc):
         return False
 
     def _note_hud_delivery(self, delivery) -> None:
+        if delivery == "unknown":
+            return
         previous = self._hud_last_delivery
         self._hud_last_delivery = delivery
         if delivery == "observed_proc_cwd":
@@ -10584,7 +10590,7 @@ class Plugin(AmbientRpc):
         elif delivery == "observed":
             self._hud_reload_via_proc_cwd = False
         if delivery != "unobserved":
-            if previous == "unobserved" and delivery != "unknown":
+            if previous == "unobserved":
                 decky.logger.info("HUD reload delivery recovered: %s", delivery)
             return
         self._hud_unobserved_reloads += 1
@@ -10600,9 +10606,9 @@ class Plugin(AmbientRpc):
                 }),
             )
 
-    def _reload_mangoapp(self, sessions=None) -> bool:
+    def _reload_mangoapp(self, sessions=None, *, confirm=True) -> bool:
         snapshot = tuple(self._hud_sessions if sessions is None else sessions)
-        return self._request_hud_reload(snapshot, reset_backoff=True)
+        return self._request_hud_reload(snapshot, reset_backoff=True, confirm=confirm)
 
     def _retry_pending_hud_reload(self) -> bool:
         if not self._hud_reload_pending:
@@ -10651,7 +10657,7 @@ class Plugin(AmbientRpc):
             if (
                 cap["supported"]
                 and cap["running"]
-                and not self._reload_mangoapp(cap["sessions"])
+                and not self._reload_mangoapp(cap["sessions"], confirm=False)
             ):
                 self._hud_apply_status = "pending"
             else:
