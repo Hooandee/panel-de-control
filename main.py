@@ -10831,11 +10831,12 @@ class Plugin(AmbientRpc):
 
     def _hud_package_power(self) -> dict:
         reading = self._power_reader.read()
-        self._hud_power_source = "amdgpu"
-        if not isinstance(reading.get("watts"), (int, float)):
-            reading = {**reading, "watts": self._rapl_power.read()}
-            self._hud_power_source = "rapl"
-        return reading
+        if isinstance(reading.get("watts"), (int, float)):
+            self._hud_power_source = "amdgpu"
+            return reading
+        watts = self._rapl_power.read()
+        self._hud_power_source = "rapl" if watts is not None else None
+        return {**reading, "watts": watts}
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
         """Gather the live plugin state the active pdc metrics need. Only computes what

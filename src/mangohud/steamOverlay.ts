@@ -465,9 +465,8 @@ export class SteamOverlayController {
         this.diagnostics().raw_level,
       );
     }
-    this.levelBeforeHide = null;
-
     const observed = await this.awaitLevel(target);
+    if (observed === target) this.levelBeforeHide = null;
     const outcome = observed === target
       ? "confirmed"
       : observed === before

@@ -1628,3 +1628,14 @@ def test_pending_reload_retries_do_not_wait_for_confirmation(tmp_path, monkeypat
     p._retry_pending_hud_reload()
 
     assert observed == [False, False]
+
+
+def test_power_source_is_unknown_when_nothing_reads(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 1})
+    monkeypatch.setattr(p._rapl_power, "read", lambda: None)
+    p._pdc_active_ids = ["pdc_power"]
+
+    assert p._pdc_values() == {"pdc_power": "-"}
+    assert p._hud_report_diagnostics(p._hud_state())["power_source"] is None

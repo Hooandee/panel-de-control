@@ -272,8 +272,12 @@ export const HudSection: FC = () => {
   const hideSteamOverlay = () => followSteamOverlay(steamOverlay.ensureHudHidden());
   const setHudEnabled = (enabled: boolean) => {
     setEnabled(enabled);
-    if (enabled) activateSteamOverlay();
-    else hideSteamOverlay();
+    if (enabled) {
+      setSteamMasterEnabled(true);
+      activateSteamOverlay();
+    } else {
+      hideSteamOverlay();
+    }
   };
   const resetHud = () => {
     const wasEnabled = m.enabled;

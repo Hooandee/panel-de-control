@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   setEnabled: vi.fn(),
   resolveConflict: vi.fn(),
   ensureFullHudVisible: vi.fn(async () => ({})),
-  cancelActivation: vi.fn(),
   ensureHudHidden: vi.fn(async () => ({ master_enabled: false })),
   reset: vi.fn(),
   showModal: vi.fn(),
@@ -116,7 +115,6 @@ vi.mock("../mangohud/steamOverlay", () => ({
   steamOverlay: {
     diagnostics: () => ({ master_enabled: mocks.steamMasterEnabled }),
     ensureFullHudVisible: mocks.ensureFullHudVisible,
-    cancelActivation: mocks.cancelActivation,
     ensureHudHidden: mocks.ensureHudHidden,
   },
 }));
