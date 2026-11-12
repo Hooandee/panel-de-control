@@ -139,6 +139,7 @@ interface ActivationRecovery {
   snapshot?: CssLoaderReadySnapshot;
   error?: unknown;
   failures: number;
+  reapplied?: boolean;
 }
 
 const MAX_RESTORATION_FAILURES = 3;
@@ -313,27 +314,41 @@ export class ThemeActivator {
       recovery.snapshot = undefined;
     }
     // After repeated failures, never queue another CSS Loader reload: one that outlasts the timeout
-    // would otherwise be relaunched forever. Wait for it to settle, then keep the current state.
+    // would otherwise be relaunched forever. Once nothing is pending, put the previous states back a
+    // single time without reloading (the timed-out reloads never got that far), else keep the current state.
     if (recovery.failures >= MAX_RESTORATION_FAILURES) {
-      if (!this.adapter.hasPendingMutation()) {
-        // The reloads that timed out never got to put the previous states back: try that once,
-        // without another reload, before keeping the current state.
-        try {
-          const reapplied = await this.adapter.reapplyThemeStates?.(recovery.initial);
-          if (reapplied && this.isFullyRestored(recovery.initial, reapplied)) {
-            return this.acknowledgeRecovery(recovery, reapplied);
-          }
-        } catch (error) {
-          console.warn("Theme recovery could not reapply the previous theme states", error);
-        }
-        const kept = await this.abandonRecovery(recovery);
-        if (kept) return kept;
-      }
-      throw new ThemeActivationError(
+      const stillRestoring = () => new ThemeActivationError(
         "rollback_failed",
         "The previous theme state is still being restored",
         true,
       );
+      if (this.adapter.hasPendingMutation()) throw stillRestoring();
+      let current: CssLoaderReadySnapshot | null = null;
+      if (!recovery.reapplied && this.adapter.reapplyThemeStates) {
+        recovery.reapplied = true;
+        try {
+          current = await this.adapter.reapplyThemeStates(recovery.initial);
+        } catch (error) {
+          console.warn("Theme recovery could not reapply the previous theme states", error);
+          if (this.adapter.hasPendingMutation()) throw stillRestoring();
+        }
+      }
+      if (!current) {
+        const inspected = await this.adapter.inspect();
+        if (inspected.status === "ready") current = inspected as CssLoaderReadySnapshot;
+      }
+      if (current && this.isFullyRestored(recovery.initial, current)) {
+        try {
+          await recovery.journal.settle(recovery.transaction);
+          return await this.acknowledgeRecovery(recovery, current);
+        } catch (error) {
+          const detail = error instanceof Error ? `: ${error.message}` : "";
+          throw new ThemeActivationError("rollback_failed", `The restored theme state could not be recorded${detail}`, true);
+        }
+      }
+      const kept = await this.abandonRecovery(recovery);
+      if (kept) return kept;
+      throw stillRestoring();
     }
     try {
       const restored = await this.attemptRecovery(recovery);
