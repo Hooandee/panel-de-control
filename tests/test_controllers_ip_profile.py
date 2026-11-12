@@ -231,3 +231,24 @@ def test_apply_empty_override_reverts_button_to_default():
     out = ip.apply_overrides_to_profile(profile, {"LeftPaddle1": [{"key": "bad"}]})
     # No valid target → our entry is dropped so the daemon's default takes over.
     assert out["mapping"] == []
+
+
+def test_source_renames_follow_the_button_to_its_new_capability():
+    caps = GO1_GRIPS + ["Gamepad:Button:RightStickTouch"]
+    assert ip.source_renames("legion_go", caps) == {"LeftStickTouch": "RightStickTouch"}
+
+
+def test_source_renames_follow_a_daemon_downgrade_too():
+    caps = GO1_GRIPS + ["Gamepad:Button:LeftStickTouch", "Gamepad:Button:RightStickTouch"]
+    assert ip.source_renames("legion_go", caps) == {"RightStickTouch": "LeftStickTouch"}
+
+
+def test_source_renames_empty_without_live_capabilities():
+    assert ip.source_renames("legion_go", []) == {}
+    assert ip.source_renames("legion_go_2", GO2_CAPS) == {}
+
+
+def test_source_renames_xbox_ally_old_paddle_names():
+    caps = ["Gamepad:Button:LeftPaddle2", "Gamepad:Button:RightPaddle2"]
+    assert ip.source_renames("rog_xbox_ally_x", caps) == {
+        "LeftPaddle1": "LeftPaddle2", "RightPaddle1": "RightPaddle2"}

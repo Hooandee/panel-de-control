@@ -230,51 +230,50 @@ def _log_unmapped(error) -> None:
 
 
 class _MemEC:
-    """Byte access to the EC window through /dev/mem. Never raises."""
+    """Byte access to the EC window through /dev/mem. Never raises. Maps per access:
+    a mapping kept open would fault (SIGBUS) if a driver later claimed the range."""
 
     def __init__(self, path: str = "/dev/mem", base: int = GO1_EC_BASE, size: int = 0x1000) -> None:
         self._path = path
         self._base = base
         self._size = size
-        self._map = None
         self._lock = threading.Lock()
         self.error: Optional[str] = None
 
-    def _ensure(self):
-        if self._map is None:
-            import mmap
+    def _access(self, fn):
+        import mmap
+        with self._lock:
             fd = os.open(self._path, os.O_RDWR | os.O_SYNC)
             try:
-                self._map = mmap.mmap(fd, self._size, mmap.MAP_SHARED,
-                                      mmap.PROT_READ | mmap.PROT_WRITE, offset=self._base)
+                with mmap.mmap(fd, self._size, mmap.MAP_SHARED,
+                               mmap.PROT_READ | mmap.PROT_WRITE, offset=self._base) as window:
+                    return fn(window)
             finally:
                 os.close(fd)
-        return self._map
 
     def available(self) -> bool:
-        with self._lock:
-            try:
-                self._ensure()
-                return True
-            except (OSError, ValueError) as error:
-                self.error = type(error).__name__ + ":" + str(getattr(error, "errno", ""))
-                return False
+        try:
+            self._access(lambda window: window[0])
+            return True
+        except (OSError, ValueError) as error:
+            self.error = type(error).__name__ + ":" + str(getattr(error, "errno", ""))
+            return False
 
     def read(self, off: int) -> Optional[int]:
-        with self._lock:
-            try:
-                return self._ensure()[off]
-            except (OSError, ValueError, IndexError):
-                return None
+        try:
+            return self._access(lambda window: window[off])
+        except (OSError, ValueError, IndexError):
+            return None
 
     def write(self, off: int, val: int) -> bool:
-        with self._lock:
-            try:
-                self._ensure()[off] = val & 0xFF
-                return True
-            except (OSError, ValueError, IndexError) as error:
-                journal.write_failed(f"legion-go-ec:{off:#05x}", val, error)
-                return False
+        def poke(window):
+            window[off] = val & 0xFF
+        try:
+            self._access(poke)
+            return True
+        except (OSError, ValueError, IndexError) as error:
+            journal.write_failed(f"legion-go-ec:{off:#05x}", val, error)
+            return False
 
 
 class LegionGoFanTableBackend(SoftwareLoopBackend):

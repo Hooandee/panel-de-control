@@ -67,3 +67,20 @@ def test_game_profile_and_forget(tmp_path):
     s.forget_game("7")
     assert s.has_game("7") is False
     assert s.game_profile("7") is None
+
+
+def test_rename_sources_moves_global_and_game_overrides(tmp_path):
+    import json
+    p = tmp_path / "remap.json"
+    p.write_text(json.dumps({
+        "global": {"LeftStickTouch": [{"key": "KeyEsc"}]},
+        "games": {"10": {"overrides": {"LeftStickTouch": [{"gamepad": "South"}],
+                                       "RightStickTouch": [{"gamepad": "North"}]},
+                         "follow_global": False}},
+    }))
+    store = RemapStore(str(p))
+    assert store.rename_sources({"LeftStickTouch": "RightStickTouch"}) is True
+    assert store.overrides_for("global") == {"RightStickTouch": [{"key": "KeyEsc"}]}
+    assert store.game_profile("10") == {"RightStickTouch": [{"gamepad": "North"}]}
+    assert RemapStore(str(p)).overrides_for("global") == {"RightStickTouch": [{"key": "KeyEsc"}]}
+    assert store.rename_sources({"LeftStickTouch": "RightStickTouch"}) is False

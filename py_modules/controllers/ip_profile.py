@@ -147,6 +147,19 @@ def buttons_for(device_key, capabilities) -> list:
     ]
 
 
+def source_renames(device_key, capabilities) -> dict:
+    """{old source: current source} for buttons whose capability changed between
+    daemon versions, so a stored remap follows its physical button."""
+    current = {label: cap for cap, label in buttons_for(device_key, capabilities)}
+    renames = {}
+    for variant in DEVICE_BUTTON_VARIANTS.get(device_key or "", []):
+        for cap, label in variant:
+            new = current.get(label)
+            if new is not None and new != cap and cap not in current.values():
+                renames[cap] = new
+    return renames
+
+
 def is_known_device(device_key) -> bool:
     """Whether we have a known button map for this device."""
     return (

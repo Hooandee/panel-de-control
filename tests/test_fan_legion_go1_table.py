@@ -239,3 +239,19 @@ def test_real_ec_is_never_opened_under_a_test_root(tmp_path):
     _dmi(str(tmp_path))
     backend = LegionGoFanTableBackend(root=str(tmp_path))
     assert backend.supported is False
+
+
+def test_mem_window_maps_per_access(tmp_path):
+    import mmap
+
+    from fans.legion_ec import _MemEC
+
+    page = mmap.ALLOCATIONGRANULARITY
+    dev = tmp_path / "mem"
+    dev.write_bytes(bytes(2 * page))
+    ec = _MemEC(str(dev), base=page, size=page)
+    assert ec.available() is True
+    assert ec.write(0x30E, 1) is True
+    assert ec.read(0x30E) == 1
+    assert dev.read_bytes()[page + 0x30E] == 1
+    assert _MemEC(str(tmp_path / "missing")).available() is False
