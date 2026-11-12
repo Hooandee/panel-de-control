@@ -48,7 +48,7 @@ export async function startInstallJob(game: JobGame, choice: UpscalerChoice): Pr
     return job;
   } catch (error) {
     await transition?.finish(false);
-    throw error;
+    throw transition?.previousRemoved ? new Error("transition_failed_clean") : error;
   }
 }
 
@@ -76,7 +76,11 @@ export function trackJob(job: UpscalerJob, game: JobGame, request?: UpscalerChoi
       const success = next.state === "done" && !!next.result && !notice;
       try {
         await transition.finish(success);
-        if (!success && next.state === "done") next = { ...next, state: "error", error: transition.previousRemoved ? "transition_failed_clean" : "transition_failed" };
+        // Whatever failed, a switch that took HelixSR out at its start can't bring it back: say so.
+        if (!success && transition.previousRemoved) {
+          next = { ...next, state: "error", error: "transition_failed_clean" };
+          notice = { key: "up.error.transition_failed_clean" };
+        } else if (!success && next.state === "done") next = { ...next, state: "error", error: "transition_failed" };
       } catch (error) {
         next = { ...next, state: "error", error: error instanceof Error ? error.message : "transition_restore_failed" };
         notice = { key: `up.error.${next.error}` };

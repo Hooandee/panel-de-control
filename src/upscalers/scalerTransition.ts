@@ -19,6 +19,7 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
   const release = lockScalerSwitch(game.appid);
   let previous: MakoProfile | null = null;
   let token: string | null = null;
+  let previousRemoved = false;
   const rollback = async () => {
     const restore = await finishScalerTransition(game.appid, token!, true);
     if (restore) {
@@ -39,13 +40,13 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
     const checkpoint = await beginScalerTransition(game.appid);
     token = checkpoint.token;
     previous = checkpoint.previous_mako;
+    previousRemoved = !!checkpoint.helix_removed;
     if (checkpoint.recovery) {
       await rollback();
       token = null;
       throw new Error("transition_recovered");
     }
     if (direction === "installed" && previous?.scaling_enabled) await saveMakoProfile(game.appid, game.liveAppid, { scaling_enabled: false }, game.isNonSteam);
-    const previousRemoved = !!checkpoint.helix_removed;
     return { previousRemoved, finish: async success => {
       try {
         if (success) {
@@ -64,6 +65,6 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
     try { if (token) await rollback(); }
     catch { throw new Error("transition_restore_failed"); }
     finally { release(); }
-    throw error;
+    throw previousRemoved ? new Error("transition_failed_clean") : error;
   }
 }

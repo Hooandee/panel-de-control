@@ -83,3 +83,8 @@ it("never claims the previous upscaler came back when HelixSR left as the switch
   expect(change!.previousRemoved).toBe(true);
   await expect(change!.finish(true)).rejects.toThrow("transition_failed_clean");
 });
+it("says HelixSR is gone when the switch fails before handing over", async () => {
+  api.beginScalerTransition.mockResolvedValue({ token: "snapshot", restore: null, recovery: false, previous_mako: previous, helix_removed: true });
+  vi.mocked(saveMakoProfile).mockRejectedValueOnce(new Error("launch_failed"));
+  await expect(prepareScalerTransition(game, "installed", true)).rejects.toThrow("transition_failed_clean");
+});

@@ -110,3 +110,18 @@ it("says HelixSR is gone when spatial Mako fails after the switch took it out", 
   await expect(saveExclusiveMakoProfile(game, { scaling_enabled: true })).rejects.toThrow("transition_failed_clean");
   expect(mocks.finish).toHaveBeenCalledWith(false);
 });
+it("says HelixSR is gone when an install that took it out ends in an error", async () => {
+  job.kind = "install";
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  const started = await startInstallJob(game, { build: "fsr", quality: "native", sharpness: null });
+  const completed = waitForJobCompletion(started.id).catch(error => error.message);
+  job = { ...job, state: "error", error: "download_failed" };
+  await vi.advanceTimersByTimeAsync(250);
+  expect(await completed).toBe("transition_failed_clean");
+  expect(mocks.finish).toHaveBeenCalledWith(false);
+});
+it("says HelixSR is gone when the install cannot even start after taking it out", async () => {
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  mocks.installUpscaler.mockRejectedValue(new Error("busy"));
+  await expect(startInstallJob(game, { build: "fsr", quality: "native", sharpness: null })).rejects.toThrow("transition_failed_clean");
+});

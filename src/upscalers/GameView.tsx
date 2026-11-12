@@ -266,6 +266,8 @@ export const GameView: FC<{
     } catch (error) {
       recordUiEvent("upscalers", "action_error", { appid, code: upscalerErrorCode(error) }, false);
       setMessage(errorText(t, upscalerErrorCode(error)));
+      // HelixSR came out before the failure: the page must stop showing it installed.
+      if (upscalerErrorCode(error) === "transition_failed_clean") { void load(); onChanged(); }
     }
   };
 
