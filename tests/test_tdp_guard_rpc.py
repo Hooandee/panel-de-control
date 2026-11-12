@@ -2945,10 +2945,12 @@ def test_backend_operation_logs_failed_recovery(plugin, monkeypatch):
     assert events[-1][1]["result"]["ok"] is False
 
 
-def _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=False):
+def _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=False, handles=None):
     import main
     from tdp.steam_download_mode import SteamDownloadModeHold
 
+    monkeypatch.setattr(main, "find_session", lambda: None)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: handles)
     monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: fan_service_active)
     plugin._tdp_backend.name = "steamdeck-hwmon"
     plugin._steam_download_hold = SteamDownloadModeHold(6)
@@ -2988,6 +2990,7 @@ def test_guard_resumes_once_steam_restores_the_limit(plugin, monkeypatch):
     assert not plugin._steam_download_hold.active
     assert plugin._tdp_write_authorized()
     assert plugin._steam_download_hold.diagnostics()["last"]["held_s"] == 30.0
+    assert plugin._steam_download_hold.diagnostics()["last"]["why"] == "rails_changed"
 
 
 def test_user_tdp_change_wins_over_steam_download_mode(plugin, monkeypatch):
@@ -3018,28 +3021,72 @@ def test_own_write_at_the_download_limit_never_becomes_a_hold(plugin, monkeypatc
     assert plugin._tdp_backend._levels["pl1"] == 15
 
 
-@pytest.mark.parametrize("fan_service_active", [True, None])
-def test_no_hold_while_steamos_fan_service_runs(plugin, monkeypatch, fan_service_active):
-    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active)
+def _ticks_until_reverted(plugin, start=10.0):
+    for tick in range(12):
+        plugin._tdp_guard_tick(now=start + tick * 0.75)
+        if plugin._tdp_backend.set_levels_calls:
+            return start + tick * 0.75
+    return None
+
+
+@pytest.mark.parametrize(
+    ("fan_service_active", "handles"), [(True, None), (None, None), (False, 0)],
+)
+def test_unconfirmed_limit_is_written_back_after_a_short_wait(
+    plugin, monkeypatch, fan_service_active, handles,
+):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active, handles)
     _steam_enters_download_mode(plugin)
 
-    plugin._tdp_guard_tick(now=10.0)
-    plugin._tdp_guard_tick(now=10.75)
+    reverted_at = _ticks_until_reverted(plugin)
 
     assert not plugin._steam_download_hold.active
-    assert plugin._tdp_backend.set_levels_calls == 1
+    assert reverted_at is not None and reverted_at >= 15.0
+    assert plugin._tdp_backend._levels["pl1"] == 15
 
 
-def test_no_hold_when_our_fan_curve_stopped_the_service(plugin, monkeypatch):
+def test_handles_win_over_the_fan_service(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    assert _ticks_until_reverted(plugin) is None
+    assert plugin._steam_download_hold.active
+
+
+def test_fan_service_stopping_late_still_enters_the_hold(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_our_fan_curve_stopping_the_service_proves_nothing(plugin, monkeypatch):
     _steam_download_mode_deck(plugin, monkeypatch)
     plugin._fan_ctrl = types.SimpleNamespace(owns_jupiter=True)
     _steam_enters_download_mode(plugin)
 
+    assert _ticks_until_reverted(plugin) is not None
+    assert not plugin._steam_download_hold.active
+
+
+def test_leaves_the_hold_when_steam_ends_the_mode_without_restoring(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
     plugin._tdp_guard_tick(now=10.0)
-    plugin._tdp_guard_tick(now=10.75)
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: 0)
+    plugin._tdp_guard_tick(now=21.0)
 
     assert not plugin._steam_download_hold.active
-    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_write_authorized()
 
 
 def test_steam_download_mode_hold_needs_the_deck_backend(plugin, monkeypatch):

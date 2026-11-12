@@ -1,6 +1,10 @@
 import os
 
-from tdp.steam_download_mode import SteamDownloadModeHold, read_download_mode_limit
+from tdp.steam_download_mode import (
+    SteamDownloadModeHold,
+    download_mode_handles,
+    read_download_mode_limit,
+)
 from tdp.types import RailReading, TdpObservation
 
 DECK_TOML = """[tdp_limit]
@@ -47,49 +51,118 @@ def test_broken_config_is_ignored(tmp_path):
     assert read_download_mode_limit(str(tmp_path)) is None
 
 
-def test_candidate_when_an_outside_write_lands_on_the_download_limit():
+TARGET = {"pl2": 15, "pl3": 15}
+
+
+def _on():
+    return True
+
+
+def _off():
+    return False
+
+
+def _unknown():
+    return None
+
+
+def test_enters_when_steam_confirms_an_outside_write_on_the_limit():
     hold = SteamDownloadModeHold(6)
-    assert hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, {"pl2": 15, "pl3": 15})
-    assert hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, None)
+    assert hold.step(_deck(6, 6), TARGET, {"pl2": 15, "pl3": 15}, 1.0, _on) == "entered"
+    assert hold.active and hold.holding
 
 
-def test_our_own_write_at_the_limit_is_not_a_candidate():
+def test_our_own_write_at_the_limit_is_never_a_hold():
     hold = SteamDownloadModeHold(6)
-    assert not hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, {"pl2": 6, "pl3": 6})
-    assert not hold.candidate(_deck(6, 6), {"pl2": 6, "pl3": 6}, {"pl2": 15, "pl3": 15})
+    assert hold.step(_deck(6, 6), TARGET, {"pl2": 6, "pl3": 6}, 1.0, _on) is None
+    assert hold.step(_deck(6, 6), {"pl2": 6, "pl3": 6}, None, 1.0, _on) is None
+    assert not hold.holding
 
 
-def test_partial_or_other_values_are_not_a_candidate():
+def test_partial_or_other_values_are_not_a_hold():
     hold = SteamDownloadModeHold(6)
-    target = {"pl2": 15, "pl3": 15}
-    assert not hold.candidate(_deck(6, 15), target, None)
-    assert not hold.candidate(_deck(5, 5), target, None)
-    assert not hold.candidate(TdpObservation(readable=False), target, None)
+    for observation in (_deck(6, 15), _deck(5, 5), TdpObservation(readable=False)):
+        assert hold.step(observation, TARGET, None, 1.0, _on) is None
+        assert not hold.holding
 
 
 def test_disabled_without_a_configured_limit():
     hold = SteamDownloadModeHold(None)
-    assert not hold.candidate(_deck(6, 6), {"pl2": 15, "pl3": 15}, None)
+    assert hold.step(_deck(6, 6), TARGET, None, 1.0, _on) is None
+    assert not hold.holding
     assert hold.diagnostics()["limit_w"] is None
+
+
+def test_waits_for_steam_to_confirm_before_writing_back():
+    hold = SteamDownloadModeHold(6)
+    assert hold.step(_deck(6, 6), TARGET, None, 1.0, _off) is None
+    assert hold.holding and not hold.active
+    assert hold.step(_deck(6, 6), TARGET, None, 3.0, _on) == "entered"
+    assert hold.active
+
+
+def test_unconfirmed_limit_is_reported_once_then_released():
+    hold = SteamDownloadModeHold(6)
+    hold.step(_deck(6, 6), TARGET, None, 1.0, _unknown)
+    assert hold.step(_deck(6, 6), TARGET, None, 6.5, _unknown) == "unconfirmed"
+    assert not hold.holding
+    assert hold.step(_deck(6, 6), TARGET, None, 7.0, _unknown) is None
+    hold.step(_deck(15, 15), TARGET, None, 8.0, _unknown)
+    assert hold.diagnostics()["pending_since"] is None
 
 
 def test_leaves_when_steamos_manager_restores_the_limit():
     hold = SteamDownloadModeHold(6)
-    hold.enter(10.0)
-    assert not hold.observe(_deck(6, 6), 12.0)
-    assert not hold.observe(TdpObservation(readable=False), 13.0)
+    hold.step(_deck(6, 6), TARGET, None, 10.0, _on)
+    assert hold.step(_deck(6, 6), TARGET, None, 12.0, _on) is None
+    assert hold.step(TdpObservation(readable=False), TARGET, None, 13.0, _on) is None
     assert hold.active
-    assert hold.observe(_deck(12, 12), 40.0)
+    assert hold.step(_deck(12, 12), TARGET, None, 40.0, _on) == "left"
     assert not hold.active
-    assert hold.diagnostics()["last"] == {"entered_at": 10.0, "left_at": 40.0, "held_s": 30.0}
+    assert hold.diagnostics()["last"] == {
+        "entered_at": 10.0, "left_at": 40.0, "held_s": 30.0, "why": "rails_changed",
+    }
+
+
+def test_leaves_when_steam_says_the_mode_ended_without_a_restore():
+    hold = SteamDownloadModeHold(6)
+    hold.step(_deck(6, 6), TARGET, None, 10.0, _on)
+    assert hold.step(_deck(6, 6), TARGET, None, 15.0, _off) is None
+    assert hold.step(_deck(6, 6), TARGET, None, 21.0, _off) == "left"
+    assert hold.diagnostics()["last"]["why"] == "steam_left"
 
 
 def test_release_clears_the_hold():
     hold = SteamDownloadModeHold(6)
-    hold.enter(1.0)
+    hold.step(_deck(6, 6), TARGET, None, 1.0, _on)
     assert hold.release(now=5.0) is True
-    assert not hold.active
+    assert not hold.active and not hold.holding
     assert hold.release(now=6.0) is False
+
+
+def _session():
+    from user_session import UserSession
+
+    return UserSession(1000, "/run/user/1000", "deck")
+
+
+def test_counts_steamos_manager_download_mode_handles(monkeypatch):
+    import types
+
+    monkeypatch.setattr("os.geteuid", lambda: 1000)
+    for stdout, rc, expected in (
+        ('a{su} 1 "steam" 3\n', 0, 1), ("as 0\n", 0, 0), ("", 1, None), ("garbage", 0, None),
+    ):
+        def run(*_args, _out=stdout, _rc=rc, **_kwargs):
+            return types.SimpleNamespace(stdout=_out, returncode=_rc)
+
+        assert download_mode_handles(_session(), run=run) == expected
+    assert download_mode_handles(None) is None
+
+    def broken(*_args, **_kwargs):
+        raise OSError("no busctl")
+
+    assert download_mode_handles(_session(), run=broken) is None
 
 
 def test_reads_the_steamos_fan_service_state(monkeypatch):

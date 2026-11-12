@@ -35,7 +35,8 @@ import game_freeze
 import theme_hltb
 import theme_protondb
 from gamescope_perf import GamescopePerf
-from user_session import spawn_args
+from user_session import UserSession, spawn_args
+from pdc_platform.user_session import find_session
 from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
@@ -63,7 +64,11 @@ from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
 from tdp import steamos_manager as steamos_manager_conflict
-from tdp.steam_download_mode import SteamDownloadModeHold, read_download_mode_limit
+from tdp.steam_download_mode import (
+    SteamDownloadModeHold,
+    download_mode_handles,
+    read_download_mode_limit,
+)
 from fans.software_loop import jupiter_fan_control_active
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -326,6 +331,7 @@ _USER_TDP_REASONS = frozenset({
     "follow-global", "auto-toggle", "take-control", "control-enabled",
     "battery-ceiling", "cooler-ceiling", "experimental-ac-ceiling",
     "low-battery-hold-toggle", "low-battery-hold-toggle-off",
+    "manual-gpu-link", "manual-gpu-level", "manual-auto-restore", "auto-config",
 })
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
@@ -8991,29 +8997,34 @@ class Plugin(AmbientRpc):
         target = build_targets(
             command.requested, command.safe_bounds, observation,
         ).target
-        if hold.observe(observation, now):
-            self._journal_steam_download_mode("left", observation, target)
-        elif (
-            hold.candidate(observation, target, self._tdp_last_written)
-            and self._jupiter_stopped_by_steam()
-        ):
-            hold.enter(now)
-            self._journal_steam_download_mode("entered", observation, target)
-        if not hold.active:
+        transition = hold.step(
+            observation, target, self._tdp_last_written, now,
+            self._steam_download_signal,
+        )
+        if transition is not None:
+            self._journal_steam_download_mode(transition, observation, target)
+        if not hold.holding:
             return observation
-        self._tdp_status = "unverifiable"
+        self._tdp_status = "unverifiable" if hold.active else "settling"
         self._tdp_reason = "steam_download_mode"
         self._tdp_targets = None
         self._tdp_reconcile_memory = ReconcileMemory()
         self._remember_tdp_observation(observation)
         return True
 
-    def _jupiter_stopped_by_steam(self) -> bool:
-        """steamos-manager stops SteamOS's fan service on entering download mode; we
-        stop it too while driving our own fan curve, which does not count."""
+    def _steam_download_signal(self) -> bool | None:
+        """Whether Steam's download mode is on: steamos-manager's open handles first,
+        then SteamOS's fan service, which it stops for the mode (our own fan curve
+        stops it too, which proves nothing)."""
+        session = find_session()
+        handles = download_mode_handles(UserSession(*session) if session else None)
+        self._steam_download_source = "handles" if handles is not None else "fan_service"
+        if handles is not None:
+            return handles > 0
         if getattr(self._fan_ctrl, "owns_jupiter", False):
-            return False
-        return jupiter_fan_control_active() is False
+            return None
+        running = jupiter_fan_control_active()
+        return None if running is None else not running
 
     def _journal_steam_download_mode(self, transition, observation, target):
         details = {
@@ -9021,6 +9032,7 @@ class Plugin(AmbientRpc):
             "observation": observation.as_dict(),
             "target": dict(target),
             "game": self._current_appid,
+            "signal": getattr(self, "_steam_download_source", None),
             **self._steam_download_hold.diagnostics(),
         }
         decky.logger.info(
@@ -9030,10 +9042,11 @@ class Plugin(AmbientRpc):
         diary = journal.active
         if diary is not None:
             diary.write(
-                "INFO", "tdp", f"steam_download_mode_{transition}",
+                "WARNING" if transition == "unconfirmed" else "INFO",
+                "tdp", f"steam_download_mode_{transition}",
                 observation=journal.compact_event(details["observation"]),
                 target=details["target"], game=details["game"],
-                last=details["last"],
+                signal=details["signal"], last=details["last"],
             )
 
     def _tdp_guard_delay(self):
