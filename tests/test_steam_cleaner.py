@@ -611,7 +611,7 @@ def test_interrupted_journal_available_before_scan_and_never_resumes(tmp_path):
 
 
 def test_diagnostic_ids_survive_report_redaction(tmp_path):
-    from report.collector import redact_text
+    from pdc_report.collector import redact_text
     home, steam = make_steam(tmp_path)
     data(steam)
     cleaner = service(home)
@@ -921,7 +921,7 @@ def test_deeper_mount_keeps_its_own_name_and_stays_connected(tmp_path, monkeypat
 
 
 def test_scan_records_why_every_game_stays_blocked(tmp_path):
-    from report.collector import steam_cleaner_snapshot
+    from pdc_report.collector import steam_cleaner_snapshot
 
     home, steam = make_steam(tmp_path)
     for appid in ("10", "20"):
