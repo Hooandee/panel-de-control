@@ -30,10 +30,22 @@ def grid_rects() -> dict[str, Rect]:
     }
 
 
-def logical_point(panel_x: float, panel_y: float, panel_w: int, panel_h: int) -> tuple[float, float]:
+# How the portrait panel is mounted, as Armada's ARMADA_PANEL_ORIENTATION names it:
+# "right" is a quarter turn clockwise (Thor), "left" a quarter turn counter-clockwise (Pocket DS).
+RIGHT, LEFT = "right", "left"
+
+
+def panel_orientation(value: str | None) -> str:
+    return LEFT if value == LEFT else RIGHT
+
+
+def logical_point(panel_x: float, panel_y: float, panel_w: int, panel_h: int, orientation: str = RIGHT) -> tuple[float, float]:
+    if orientation == LEFT:
+        return (panel_h - panel_y) * WIDTH / panel_h, panel_x * HEIGHT / panel_w
     return panel_y * WIDTH / panel_h, (panel_w - panel_x) * HEIGHT / panel_w
 
 
-# The panel is mounted a quarter turn clockwise.
-def rotation(panel_w: int, panel_h: int) -> tuple[float, float, float, float, float, float]:
+def rotation(panel_w: int, panel_h: int, orientation: str = RIGHT) -> tuple[float, float, float, float, float, float]:
+    if orientation == LEFT:
+        return (0.0, -panel_h / WIDTH, panel_w / HEIGHT, 0.0, 0.0, float(panel_h))
     return (0.0, panel_h / WIDTH, -panel_w / HEIGHT, 0.0, float(panel_w), 0.0)

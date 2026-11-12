@@ -37,6 +37,14 @@ public sealed class ThemeManifestTests
         """;
 
     [Fact]
+    public void ReadsTheCssLoaderTargetAndRecognisesKeyboardThemes()
+    {
+        Assert.True(ThemeManifest.Parse("""{"name":"Hooandee Terciopelo","version":"0.2.0","target":"Keyboard"}""").IsKeyboard);
+        Assert.False(ThemeManifest.Parse("""{"name":"Hooandee Vida","version":"0.2.0","target":"System-Wide"}""").IsKeyboard);
+        Assert.Null(ThemeManifest.Parse("""{"name":"Hooandee Eclipse","version":"0.2.5"}""").Target);
+    }
+
+    [Fact]
     public void ParsesInjectsAndPatchesInDeclarationOrder()
     {
         var manifest = ThemeManifest.Parse(Eclipse);

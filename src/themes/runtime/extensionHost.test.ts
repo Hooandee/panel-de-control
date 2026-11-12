@@ -130,7 +130,7 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
   function recordingEvaluate(mounted: string[], stopped: string[]) {
     return vi.fn((source: string): ThemeExtensionExport => Object.freeze({
       abiVersion: 1 as const,
-      ...(source === "keyboard-theme" ? { surface: "keyboard" as const } : {}),
+      ...(source.startsWith("keyboard-theme") ? { surface: "keyboard" as const } : {}),
       mount: () => {
         mounted.push(source);
         return () => { stopped.push(source); };
@@ -152,6 +152,101 @@ describe("ThemeExtensionRuntimeHost surfaces", () => {
     expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
     host.dispose();
     expect(stopped.sort()).toEqual(["example-theme", "keyboard-theme"]);
+  });
+
+  const SECOND_KEYBOARD: ThemeExtensionDescriptor = {
+    catalogId: "keyboard-theme-two", cssLoaderName: "Keyboard Two", version: "1.0.0", abiVersion: 1, sha256: "t".repeat(64),
+  };
+  const secondKeyboardTheme = theme({ id: "Keyboard Two", name: "Keyboard Two", displayName: "Keyboard Two", version: "1.0.0" });
+
+  it("lets a keyboard theme turned on next to the mounted one replace it and turns the old one off", async () => {
+    const mounted: string[] = [];
+    const stopped: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([HOME, KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, stopped), retireTheme,
+    });
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme]));
+    await settle(); await settle();
+    expect(mounted.sort()).toEqual(["example-theme", "keyboard-theme"]);
+
+    host.reconcile(snapshot([homeTheme, keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(retireTheme).toHaveBeenCalledTimes(1);
+    expect(retireTheme).toHaveBeenCalledWith("Keyboard Theme", "Keyboard Two");
+    expect(stopped).toEqual(["keyboard-theme"]);
+    expect(mounted).toContain("keyboard-theme-two");
+
+    host.reconcile(snapshot([homeTheme, { ...keyboardTheme, enabled: false }, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(retireTheme).toHaveBeenCalledTimes(1);
+    expect(mounted.filter((source) => source === "keyboard-theme-two")).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("lets the replaced keyboard theme win again when turned back on with no other runtime theme on", async () => {
+    const mounted: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, []), retireTheme,
+    });
+    const off = { ...keyboardTheme, enabled: false };
+
+    host.reconcile(snapshot([keyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([off, secondKeyboardTheme]));
+    await settle(); await settle();
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+
+    expect(retireTheme.mock.calls).toEqual([["Keyboard Theme", "Keyboard Two"], ["Keyboard Two", "Keyboard Theme"]]);
+    expect(mounted).toEqual(["keyboard-theme", "keyboard-theme-two", "keyboard-theme"]);
+    host.dispose();
+  });
+
+  it("keeps the first listed keyboard theme when two are on at startup", async () => {
+    const mounted: string[] = [];
+    const retireTheme = vi.fn(async () => true);
+    const host = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document,
+      evaluate: recordingEvaluate(mounted, []), retireTheme,
+    });
+
+    host.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+
+    expect(mounted).toEqual(["keyboard-theme"]);
+    expect(retireTheme).toHaveBeenCalledWith("Keyboard Two", "Keyboard Theme");
+    host.dispose();
+  });
+
+  it("still mounts one keyboard theme where Panel cannot turn the other off, and logs a refused retirement", async () => {
+    const mounted: string[] = [];
+    const log = vi.fn();
+    const withoutWriter = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document, evaluate: recordingEvaluate(mounted, []),
+    });
+    withoutWriter.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(mounted).toEqual(["keyboard-theme"]);
+    withoutWriter.dispose();
+
+    const refused = new ThemeExtensionRuntimeHost({
+      client: surfaceClient([KEYBOARD, SECOND_KEYBOARD]), doc: document, evaluate: recordingEvaluate([], []),
+      retireTheme: vi.fn(async () => false), log,
+    });
+    refused.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle(); await settle();
+    expect(log).toHaveBeenCalledWith("keyboard_theme_retire_failed");
+    refused.reconcile(snapshot([keyboardTheme, secondKeyboardTheme]));
+    await settle(); await settle();
+    expect(log).toHaveBeenCalledTimes(1);
+    refused.dispose();
   });
 
   it("keeps two home runtimes CSS-only", async () => {
@@ -453,7 +548,7 @@ describe("ThemeExtensionRuntimeHost", () => {
   });
 
   it("lets a theme freeze the game and thaws it when the theme goes", async () => {
-    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) };
+    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) };
     const mountWith = (use: (context: ThemeExtensionMountContext) => void) => new ThemeExtensionRuntimeHost({
       client: client(),
       doc: document,
@@ -1168,13 +1263,15 @@ describe("theme storage", () => {
   });
 
   it("offers game controls only when Panel provides them", async () => {
-    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) });
+    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) });
     let seen: ThemeExtensionMountContext | undefined;
     const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
     host.reconcile(snapshot());
     await settle();
     await settle();
     expect(await seen?.games?.forceClose!(730)).toBe("terminated");
+    expect(await seen?.games?.howLongToBeat!(730, "Counter-Strike 2")).toBeNull();
+    expect(games.howLongToBeat).toHaveBeenCalledWith(730, "Counter-Strike 2");
     host.dispose();
   });
 });
