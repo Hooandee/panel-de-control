@@ -221,7 +221,7 @@ public sealed class ThemePackageTests : IDisposable
         {
             var folder = Path.Combine(root, name);
             CopyDirectory(Path.Combine(root, Name), folder);
-            File.WriteAllText(Path.Combine(folder, "theme.json"), $$"""{"name":"{{name}}","version":"0.2.0","target":"Keyboard","inject":{"tokens.css":["bigpicture"]}}""");
+            File.WriteAllText(Path.Combine(folder, "theme.json"), $$$"""{"name":"{{{name}}}","version":"0.2.0","target":"Keyboard","inject":{"tokens.css":["bigpicture"]}}""");
             File.WriteAllText(
                 Path.Combine(folder, "panel-theme.json"),
                 File.ReadAllText(Path.Combine(folder, "panel-theme.json")).Replace("hooandee-eclipse", catalogId));
