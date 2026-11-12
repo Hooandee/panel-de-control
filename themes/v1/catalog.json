@@ -69,39 +69,6 @@
     },
     {
       "schemaVersion": 1,
-      "catalogId": "hooandee-loop",
-      "cssLoaderName": "Hooandee Loop",
-      "version": "0.1.0",
-      "displayName": {
-        "es": "Loop",
-        "en": "Loop",
-        "it": "Loop"
-      },
-      "description": {
-        "es": "Tus portadas, enormes y en 3D. Giran con suavidad sobre un suelo de cristal oscuro que las refleja, con el logo delante, el fondo del juego detrás y su ficha en cuanto te paras. A para jugar.",
-        "en": "Your covers, huge and in 3D. They glide over a dark glass floor that reflects them, with the logo in front, the game's art behind and its details as soon as you stop. Press A to play.",
-        "it": "Le tue copertine, enormi e in 3D. Scorrono morbide su un pavimento di vetro scuro che le riflette, con il logo davanti, l'arte del gioco dietro e la sua scheda appena ti fermi. Premi A per giocare."
-      },
-      "author": "Hooandee",
-      "tags": [],
-      "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.0/theme.zip",
-        "size": 55523,
-        "sha256": "6c35e60cf523f1b42e0e590842decbf4cb06c8d92cde78a81b1486ad13b4abc3"
-      },
-      "minimumVersions": {
-        "panel": "0.86.0",
-        "cssLoader": "2.1.2",
-        "cssLoaderBackend": 9
-      },
-      "notes": {
-        "es": "Loop sustituye el Inicio y el menú de Steam fuera de los juegos; con un juego delante, el botón Steam abre el menú de siempre.",
-        "en": "Loop replaces the Home screen and the Steam menu outside games; with a game in front, the Steam button opens the usual menu.",
-        "it": "Loop sostituisce la Home e il menu di Steam fuori dai giochi; con un gioco in primo piano, il tasto Steam apre il menu di sempre."
-      }
-    },
-    {
-      "schemaVersion": 1,
       "catalogId": "hooandee-luminous-atlas",
       "cssLoaderName": "Hooandee Luminous Atlas",
       "version": "1.1.6",
