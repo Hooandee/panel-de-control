@@ -1,9 +1,8 @@
 """Brings every CPU core back online right before the system sleeps.
 
-Hard freezes on resume (#1235 Deck LCD, #1123/#1030 Legion Go, #1082 GPD Win 5) all
-happened with cores switched off by Panel. A runtime systemd unit ordered before
-sleep.target runs even when the plugin is busy or stuck, and /run is gone after a
-reboot. Panel limits the cores again once the machine has been awake for a while.
+Sleeping with cores switched off can freeze the machine on resume. A runtime systemd
+unit ordered before sleep.target runs even when the plugin is busy or stuck, and /run
+is gone after a reboot.
 """
 from __future__ import annotations
 

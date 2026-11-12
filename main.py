@@ -304,9 +304,8 @@ _ROG_CHARGE_LIMIT_PROFILES = frozenset({
 })
 # After a resume: pulse samples every 2 s and marks each re-apply step for this long.
 _RESUME_WINDOW_S = 60.0
-# Hard freezes right after a resume (#1235 Deck LCD, #1123/#1030 Legion Go, #1082 GPD
-# Win 5) all happened with cores switched off by Panel; the Legion Go ones also had a
-# manual GPU clock written seconds after waking. Both wait this long after a resume.
+# Switching cores off or pinning the GPU clock seconds after a resume can freeze the
+# machine; both wait this long after waking.
 _RESUME_HOLD_S = 30.0
 
 _STEAM_DECK_PROFILES = frozenset({
@@ -11529,11 +11528,23 @@ class Plugin(AmbientRpc):
         if not self._in_resume_window():
             return lambda step: None
         token = getattr(self, "_resume_token", 0)
+        return lambda step: self._queue_pulse_mark(f"reapply:{step}", token)
 
-        def mark(step):
-            self._offload(lambda: self._pulse_mark(f"reapply:{step}", token=token))
+    def _queue_pulse_mark(self, step, token) -> None:
+        """Synced on the serial executor, so it lands on disk before the write queued next."""
+        self._offload(lambda: self._pulse_mark(step, token=token))
 
-        return mark
+    def _on_resume_detected(self, suspend_seconds) -> None:
+        self._resume_token = int(getattr(self, "_resume_token", 0)) + 1
+        self._resume_at = time.monotonic()
+        beat = getattr(self, "_pulse", None)
+        if beat is not None:
+            try:
+                beat.burst(_RESUME_WINDOW_S)
+            except Exception:  # noqa: BLE001
+                pass
+        self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
+        self._start_resume_hold(self._resume_token)
 
     def _resume_hold_active(self) -> bool:
         return getattr(self, "_resume_hold_token", None) is not None
@@ -11577,14 +11588,13 @@ class Plugin(AmbientRpc):
         self._log_resume_hold("released", held=held)
         if not held:
             return
-        # Synced before each write job runs (same serial executor, FIFO).
         if "cores" in held:
-            self._offload(lambda: self._pulse_mark("release:cores", token=token))
+            self._queue_pulse_mark("release:cores", token)
             self._apply_cpu()
         if "gpu" in held:
-            self._offload(lambda: self._pulse_mark("release:gpu", token=token))
+            self._queue_pulse_mark("release:gpu", token)
             self._apply_gpu_clock()
-        self._offload(lambda: self._pulse_mark("release:done", token=token))
+        self._queue_pulse_mark("release:done", token)
 
     def _resume_hold_diagnostics(self) -> dict:
         guard = getattr(self, "_sleep_core_guard", None)
@@ -14858,20 +14868,7 @@ class Plugin(AmbientRpc):
         recent = getattr(self, "_lifecycle_recent", None) or []
         self._lifecycle_recent = [*recent, {"t": round(time.time(), 1), "event": event.get("event")}][-4:]
         if event.get("event") == "resume_detected":
-            self._resume_token = int(getattr(self, "_resume_token", 0)) + 1
-            self._resume_at = time.monotonic()
-            beat = getattr(self, "_pulse", None)
-            if beat is not None:
-                try:
-                    beat.burst(_RESUME_WINDOW_S)
-                except Exception:  # noqa: BLE001
-                    pass
-            self._pulse_mark(
-                "resume", sync=False,
-                suspend_s=event.get("suspend_seconds"),
-                token=self._resume_token,
-            )
-            self._start_resume_hold(self._resume_token)
+            self._on_resume_detected(event.get("suspend_seconds"))
             self._reset_auto_session("resume")
         if event.get("event") in ("resume_detected", "ac_changed"):
             expedite = getattr(self._tdp_backend, "expedite_handoff_retry", None)

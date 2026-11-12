@@ -1,7 +1,5 @@
-"""Hard freezes right after a resume (#1235, #1123, #1082, #1030) all had cores switched
-off by Panel; the Legion Go ones also re-wrote a manual GPU clock seconds after waking.
-For _RESUME_HOLD_S after a resume Panel keeps every core online and leaves the GPU as
-the kernel restored it, marks each step in the pulse, then applies both once."""
+"""For _RESUME_HOLD_S after a resume every core stays online and the GPU stays as the
+kernel restored it; each step is marked in the pulse and both apply once afterwards."""
 import asyncio
 import dataclasses
 

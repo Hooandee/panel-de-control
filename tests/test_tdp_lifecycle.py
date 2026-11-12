@@ -616,8 +616,8 @@ def test_poller_reads_wakeup_count_off_the_event_loop():
 
 
 def test_charger_change_while_asleep_waits_for_the_resume_reapply():
-    # Legion Go (#1123): AC changed during the suspend, so the AC path re-applied every
-    # control 0.06 s after waking. The delayed resume re-apply reads AC live instead.
+    # AC changed during the suspend: the delayed resume re-apply reads AC live instead of
+    # re-applying every control the instant the machine wakes.
     full, events = [], []
     wc = {"v": 0}
     suspended = {"v": 0.0}

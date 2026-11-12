@@ -317,8 +317,7 @@ class LifecycleManager:
             flapping = self._record_ac_change(now, now if wall is None else wall)
             if resumed_now:
                 # Charger plugged or pulled while asleep: the delayed resume re-apply
-                # (live AC) covers it; writing everything right at wake is what the
-                # Legion Go froze on (#1123).
+                # reads AC live, so nothing is written the instant the machine wakes.
                 self._emit("ac_changed", on_ac=bool(ac), deferred_to_resume=True)
             elif flapping:
                 self._ac_stable_at = now + self._AC_STABLE_S
