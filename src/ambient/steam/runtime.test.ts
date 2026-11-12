@@ -219,6 +219,7 @@ describe("AmbientRuntime", () => {
 
   it("after Steam starts, music that was on stays paused and off until the user plays it; an update in a running Steam keeps it going", async () => {
     delete (globalThis as Record<string, unknown>).__pdcAmbientSteamSession;
+    const clock = vi.spyOn(performance, "now").mockReturnValue(20_000);
     const configured = settings();
     configured.music.enabled = true;
     configured.music.source = "radio";
@@ -237,14 +238,14 @@ describe("AmbientRuntime", () => {
       expect(rpcMock.recordAmbientEvent).toHaveBeenCalledWith("music", "paused_at_steam_start");
     } finally { runtime.stop(); }
     delete (globalThis as Record<string, unknown>).__pdcAmbientSteamSession;
-    vi.spyOn(performance, "now").mockReturnValue(30 * 60_000);
+    clock.mockReturnValue(30 * 60_000);
     const reloaded = new AmbientRuntime(ports() as unknown as AmbientPorts);
     rpcMock.getAmbientState.mockResolvedValue({ settings: { ...configured, music: { ...configured.music, enabled: true } }, knownFolders: {}, collections: [], mediaServer: "stopped" });
     try {
       await reloaded.start();
       await vi.waitFor(() => expect(reloaded.getSnapshot().player.track?.live).toBe(true));
       expect(reloaded.getSnapshot().player.status).not.toBe("paused");
-    } finally { reloaded.stop(); }
+    } finally { reloaded.stop(); clock.mockRestore(); }
   });
 
   it("looks once at how a started track is played, a few seconds in, for reports of silence", async () => {
@@ -607,6 +608,34 @@ describe("AmbientRuntime", () => {
       await runtime.reload();
       await loadVideo();
       await vi.waitFor(() => expect(rpcMock.optimizeAmbientMedia).toHaveBeenCalledTimes(2));
+    } finally { runtime.stop(); }
+  });
+
+  it("asks for the VP9 copy again when a game cancelled the first encode", async () => {
+    const configured = settings();
+    configured.background.optimizeVideos = false;
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.scanAmbientSources.mockResolvedValue({ collections: { "known.images": [{ id: "local:a", name: "a.mp4", kind: "video", size: 1, mtime: 1 }] }, music: [], truncated: false });
+    rpcMock.optimizeAmbientMedia.mockReset().mockResolvedValueOnce({ error: "cancelled" }).mockResolvedValue({ id: "opt:vp9", url: "http://127.0.0.1:1/m/t/opt:vp9" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    const failDecode = async () => {
+      const video = await vi.waitFor(() => {
+        const found = [...document.querySelectorAll<HTMLVideoElement>("#pdc-ambient-layer video")].find((v) => v.src.endsWith("local:a") && !v.error);
+        if (!found) throw new Error("no video yet");
+        return found;
+      });
+      Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+      Object.defineProperty(video, "readyState", { configurable: true, get: () => 1 });
+      video.dispatchEvent(new Event("error"));
+    };
+    try {
+      await runtime.start();
+      await failDecode();
+      await vi.waitFor(() => expect(rpcMock.optimizeAmbientMedia).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await failDecode();
+      await vi.waitFor(() => expect(rpcMock.optimizeAmbientMedia).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(runtime.getSnapshot().currentUrl).toBe("http://127.0.0.1:1/m/t/opt:vp9"));
     } finally { runtime.stop(); }
   });
 

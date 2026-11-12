@@ -279,7 +279,9 @@ describe("BackgroundLayer failed loads", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(layer.activeMedia()).toBeNull();
     expect(document.documentElement.hasAttribute("data-pdc-ambient-art")).toBe(false);
-    expect(failure).toHaveBeenCalledWith(expect.stringContaining("background video no_picture; attempt=1"));
+    expect(failure).toHaveBeenCalledWith(expect.stringContaining("background video no_picture; attempt=1; retrying=false"));
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(failure).toHaveBeenCalledTimes(1);
   });
 
   it("loads a playing background video again when it stops moving, a bounded number of times", async () => {

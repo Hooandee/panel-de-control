@@ -312,6 +312,16 @@ describe("FloatingPlayer fullscreen", () => {
     expect(card().style.display).toBe("");
   });
 
+  it("leaves control mode when Steam's keyboard opens so the keys reach the keyboard", () => {
+    const store = runtimeStore(false);
+    render(<FloatingPlayer />);
+    act(() => store.publish({ overlayControl: true }));
+    expect(platform.capture).not.toBeNull();
+    act(() => platform.keyboard!(true));
+    expect(store.runtime.stopOverlayControl).toHaveBeenCalled();
+    expect(platform.capture).toBeNull();
+  });
+
   it("hides the video card under Steam's keyboard without stopping the sound", () => {
     const store = runtimeStore(false);
     render(<FloatingPlayer />);

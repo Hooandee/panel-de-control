@@ -189,6 +189,15 @@ def fetch_text(url: str, opener: Opener = default_opener, limit: int = MAX_PLAYL
     return data.decode("utf-8", errors="replace")
 
 
-def fetch_head(url: str, opener: Opener = default_opener, limit: int = 256 * 1024) -> str:
-    """The first `limit` bytes of a text resource, enough to tell what kind of file it is."""
-    return _read(url, opener, limit).decode("utf-8", errors="replace")
+def fetch_head(url: str, opener: Opener = default_opener, limit: int = 64 * 1024) -> str:
+    """The first `limit` bytes of a text resource, enough to tell what kind of file it is.
+
+    A live audio or video stream answers with its media type and is not read at all.
+    """
+    if not url.lower().startswith(("https://", "http://")):
+        raise ValueError("unsupported_url")
+    with opener(build_request(url), TIMEOUT_SEC) as response:
+        media_type = str(getattr(response, "headers", {}).get("Content-Type", "") or "").lower()
+        if media_type.startswith(("audio/", "video/")):
+            return ""
+        return response.read(limit).decode("utf-8", errors="replace")

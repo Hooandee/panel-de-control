@@ -323,7 +323,8 @@ export class BackgroundLayer {
       if (result !== "cancelled") {
         const trailer = media.kind === "page";
         const delays = trailer ? TRAILER_RETRY_DELAYS_MS : RETRY_DELAYS_MS;
-        const retrying = !trailer || attempt < delays.length;
+        // A file without a picture stays that way; only a different encoding (the owner's call) helps.
+        const retrying = result !== "no_picture" && (!trailer || attempt < delays.length);
         const state = media.kind === "video" && this.lastFailure ? `; ${this.lastFailure}` : "";
         this.lastFailure = "";
         const slow = attempt - delays.length;
@@ -334,6 +335,10 @@ export class BackgroundLayer {
         }, delays[attempt] ?? SLOW_RETRY_MS);
       }
       return;
+    }
+    if (this.stallExhausted === media.url) {
+      this.stallExhausted = "";
+      this.stall.url = "";
     }
     element.dataset.media = "";
     if (element.parentElement !== incoming) incoming.replaceChildren(element);

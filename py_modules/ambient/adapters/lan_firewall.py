@@ -53,3 +53,10 @@ def open_port(port: int, address: str, seconds: int, run: Runner = _run, which: 
             return "no_zone"
     code, _ = run([tool, f"--zone={zone}", f"--add-port={port}/tcp", f"--timeout={max(1, int(seconds))}s"])
     return f"opened:{zone}" if code == 0 else f"failed:{zone}:{code}"
+
+
+def close_port(port: int, zone: str, run: Runner = _run, which: Callable[[str], Optional[str]] = shutil.which) -> None:
+    """Drops the rule early when the share ends before its time limit."""
+    tool = which("firewall-cmd")
+    if tool:
+        run([tool, f"--zone={zone}", f"--remove-port={port}/tcp"])

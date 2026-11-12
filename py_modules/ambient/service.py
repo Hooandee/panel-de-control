@@ -61,6 +61,7 @@ class AmbientService:
     def __init__(self, state_dir: str, cache_dir: str, home: str):
         self._settings_path = os.path.join(state_dir, "settings.json")
         self._game_audio = GameAudio()
+        self._share_rule: Optional[tuple[int, str]] = None
         self._game_media_path = os.path.join(cache_dir, "game-media.json")
         self._game_media: Optional[dict[str, Any]] = None
         self._cache_dir = cache_dir
@@ -113,8 +114,13 @@ class AmbientService:
 
     def _open_share_firewall(self, url: str, seconds: int) -> None:
         parsed = urllib.parse.urlsplit(url)
-        if parsed.hostname and parsed.port:
-            self.record_event("share_firewall", lan_firewall.open_port(parsed.port, parsed.hostname, seconds))
+        if not (parsed.hostname and parsed.port):
+            return
+        result = lan_firewall.open_port(parsed.port, parsed.hostname, seconds)
+        self.record_event("share_firewall", result)
+        if result.startswith("opened:"):
+            with self._lock:
+                self._share_rule = (parsed.port, result.split(":", 1)[1])
 
     def take_shared(self) -> dict[str, Any]:
         share = self._share
@@ -126,6 +132,10 @@ class AmbientService:
         share = self._share
         if share is not None:
             share.stop()
+        with self._lock:
+            rule, self._share_rule = self._share_rule, None
+        if rule is not None:
+            threading.Thread(target=lan_firewall.close_port, args=rule, name="ambient-share-firewall", daemon=True).start()
 
     def cancel_jobs(self) -> None:
         """Stops a running optimization (e.g. a game started); later jobs start fresh."""

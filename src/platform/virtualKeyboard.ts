@@ -13,6 +13,9 @@ interface SteamWindowStore {
   ActiveWindowInstance?: { VirtualKeyboardManager?: { IsShowingVirtualKeyboard?: ShowingValue } };
 }
 
+/** Steam's window can be missing at boot or replaced later (overlay, UI restart); the value is looked up again. */
+const RECHECK_MS = 5000;
+
 function showingValue(): ShowingValue | null {
   try {
     const store = (globalThis as { SteamUIStore?: SteamWindowStore }).SteamUIStore;
@@ -22,25 +25,45 @@ function showingValue(): ShowingValue | null {
   }
 }
 
+function release(handle: Subscription | undefined): void {
+  try {
+    if (handle?.Unsubscribe) handle.Unsubscribe();
+    else handle?.Unregister?.();
+  } catch {
+    // Steam already tore the keyboard manager down.
+  }
+}
+
 /**
  * Follows Steam's on-screen keyboard. Without Steam's value (other clients, older builds) it reports
  * the keyboard as hidden, so callers keep their previous behaviour.
  */
 export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): () => void {
-  const value = showingValue();
-  listener(!!value?.Value);
+  let value: ShowingValue | null | undefined;
   let handle: Subscription | undefined;
-  try {
-    handle = value?.Subscribe?.(() => listener(!!value.Value));
-  } catch {
+  let last: boolean | null = null;
+  const report = (showing: boolean) => {
+    if (showing === last) return;
+    last = showing;
+    listener(showing);
+  };
+  const attach = () => {
+    const current = showingValue();
+    if (current === value && (handle || !current)) return;
+    release(handle);
     handle = undefined;
-  }
-  return () => {
+    value = current;
+    report(!!current?.Value);
     try {
-      if (handle?.Unsubscribe) handle.Unsubscribe();
-      else handle?.Unregister?.();
+      handle = current?.Subscribe?.(() => report(!!current.Value));
     } catch {
-      // Steam already tore the keyboard manager down.
+      handle = undefined;
     }
+  };
+  attach();
+  const timer = setInterval(attach, RECHECK_MS);
+  return () => {
+    clearInterval(timer);
+    release(handle);
   };
 }

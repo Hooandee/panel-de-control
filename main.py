@@ -15173,7 +15173,10 @@ class Plugin(AmbientRpc):
 
     def _support_ambient_state(self) -> dict:
         state = self.ambient_diagnostics()
-        state.pop("events", None)
+        for live in ("events", "indexed", "queueLength", "shareActive", "mediaServer", "themeImages"):
+            state.pop(live, None)
+        if isinstance(state.get("setup"), dict):
+            state["setup"] = {k: v for k, v in state["setup"].items() if k != "volume"}
         return state
 
     def _support_settings_state(self) -> dict:

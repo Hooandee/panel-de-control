@@ -226,6 +226,10 @@ export const FloatingPlayer: FC = () => {
     if (snapshot?.overlayControl && !player?.track) runtime?.stopOverlayControl();
   }, [snapshot?.overlayControl, player?.track, runtime]);
 
+  useEffect(() => {
+    if (keyboardShown && controlling) runtime?.stopOverlayControl();
+  }, [keyboardShown, controlling, runtime]);
+
   const qamWasOpen = useRef(qamOpen);
   useEffect(() => {
     const opened = qamOpen && !qamWasOpen.current;

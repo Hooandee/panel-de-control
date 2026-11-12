@@ -13,8 +13,8 @@ from .service import AmbientService
 _SCOPES = ("background", "radio")
 _FOLDER_SCOPES = ("background", "music", "library")
 
-Pool = Literal["quick", "jobs", "network", "lookup"]
-_POOL_WORKERS: dict[str, int] = {"quick": 2, "jobs": 1, "network": 2, "lookup": 2}
+Pool = Literal["quick", "jobs", "network", "lookup", "probe"]
+_POOL_WORKERS: dict[str, int] = {"quick": 2, "jobs": 1, "network": 2, "lookup": 2, "probe": 1}
 
 
 class AmbientRpc:
@@ -150,12 +150,12 @@ class AmbientRpc:
     async def check_ambient_audio(self, detail: str) -> bool:
         if not isinstance(detail, str):
             return False
-        return bool(await self._ambient_call(lambda s: s.check_audio(detail[:200]), pool="network"))
+        return bool(await self._ambient_call(lambda s: s.check_audio(detail[:200]), pool="probe"))
 
     async def inspect_ambient_link(self, url: str) -> dict[str, Any]:
         if not isinstance(url, str) or len(url) > 2048 or not url.lower().startswith(("https://", "http://")):
             return {"kind": "unknown"}
-        return await self._ambient_call(lambda s: s.inspect_link(url), pool="network") or {"kind": "unknown"}
+        return await self._ambient_call(lambda s: s.inspect_link(url), pool="probe") or {"kind": "unknown"}
 
     async def remove_ambient_playlist(self, playlist_id: str) -> Optional[dict[str, Any]]:
         if not isinstance(playlist_id, str):

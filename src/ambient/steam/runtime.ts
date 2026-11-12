@@ -1049,11 +1049,11 @@ export class AmbientRuntime {
   }
 
   /** Asks the backend for a re-encoded copy and, once ready, shows it in place of the original. */
-  /** Returns false only when the request never reached the backend, so the caller may ask again. */
+  /** False when the copy was not attempted to the end (no backend, or cancelled by a game), so the caller may ask again. */
   private async encodeCopy(ref: string, key: string, height: number, fps: number, codec: "h264" | "vp9"): Promise<boolean> {
     const generation = this.cacheGeneration;
     const result = await rpc.optimizeAmbientMedia(ref, height, fps, codec).catch(() => null);
-    if (!result) return false;
+    if (!result || ("error" in result && result.error === "cancelled")) return false;
     if (this.stopped || generation !== this.cacheGeneration) return true;
     if ("id" in result) {
       this.optimized.set(key, result.id);

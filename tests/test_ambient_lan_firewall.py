@@ -36,3 +36,27 @@ def test_falls_back_to_the_default_zone_and_reports_a_refusal():
     calls = []
     answers = [("--state", (0, "running")), ("ip", (1, "")), ("--get-default-zone", (0, "public")), ("--zone=public", (13, ""))]
     assert lan_firewall.open_port(41000, "10.0.0.2", 600, run=runner(answers, calls), which=lambda _: "/usr/bin/firewall-cmd") == "failed:public:13"
+
+
+def test_removes_the_rule_when_the_share_ends_early():
+    calls = []
+    lan_firewall.close_port(41000, "home", run=lambda c: calls.append(list(c)) or (0, ""), which=lambda _: "/usr/bin/firewall-cmd")
+    assert calls == [["/usr/bin/firewall-cmd", "--zone=home", "--remove-port=41000/tcp"]]
+
+
+def test_a_live_stream_link_is_not_read():
+    from ambient.adapters import remote_sources
+
+    class Response:
+        headers = {"Content-Type": "audio/mpeg"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, size):
+            raise AssertionError("the stream must not be read")
+
+    assert remote_sources.fetch_head("https://radio.test/live.m3u", opener=lambda request, timeout: Response()) == ""
