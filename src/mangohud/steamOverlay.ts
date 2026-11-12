@@ -12,6 +12,21 @@ export type SteamOverlayActivationOutcome =
   | "readback_timeout"
   | "readback_mismatch";
 
+export type SteamOverlayDeactivationOutcome =
+  | "not_attempted"
+  | "already_hidden"
+  | "confirmed"
+  | "unavailable"
+  | "exception"
+  | "readback_timeout"
+  | "readback_mismatch";
+
+export interface SteamOverlayDeactivation {
+  outcome: SteamOverlayDeactivationOutcome;
+  before_level: number | null;
+  observed_level: number | null;
+}
+
 export interface SteamOverlayActivation {
   outcome: SteamOverlayActivationOutcome;
   before_level: number | null;
@@ -31,6 +46,7 @@ export interface SteamOverlayDiagnostics {
   service_state: number | null;
   show_over_steam: boolean | null;
   last_activation: SteamOverlayActivation;
+  last_deactivation: SteamOverlayDeactivation;
 }
 
 interface SteamPerfSettings {
@@ -65,6 +81,7 @@ interface SteamWebpackChunks {
   push(chunk: [unknown[], Record<string, never>, (runtime: SteamWebpackRuntime) => void]): unknown;
 }
 
+const HIDDEN_LEVEL = 0;
 const FULL_HUD_LEVEL = 1;
 const READBACK_DELAY_MS = 100;
 const DEFAULT_READBACK_ATTEMPTS = 10;
@@ -73,6 +90,12 @@ const NOT_ATTEMPTED: SteamOverlayActivation = {
   outcome: "not_attempted",
   before_level: null,
   requested_level: null,
+  observed_level: null,
+};
+
+const NOT_DEACTIVATED: SteamOverlayDeactivation = {
+  outcome: "not_attempted",
+  before_level: null,
   observed_level: null,
 };
 
@@ -238,6 +261,8 @@ const wait: Wait = (milliseconds) => new Promise((resolve) => {
 
 export class SteamOverlayController {
   private lastActivation: SteamOverlayActivation = NOT_ATTEMPTED;
+  private lastDeactivation: SteamOverlayDeactivation = NOT_DEACTIVATED;
+  private deactivationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
   private activationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
   private activationGeneration = 0;
 
@@ -271,11 +296,14 @@ export class SteamOverlayController {
         ? settings.is_show_perf_overlay_over_steam_enabled
         : null,
       last_activation: { ...this.lastActivation },
+      last_deactivation: { ...this.lastDeactivation },
     };
   }
 
   ensureFullHudVisible(): Promise<SteamOverlayDiagnostics> {
     if (this.activationInFlight) return this.activationInFlight;
+    this.activationGeneration += 1;
+    this.deactivationInFlight = null;
     const activation = this.activateFullHud(this.activationGeneration);
     this.activationInFlight = activation;
     const clear = () => {
@@ -288,6 +316,84 @@ export class SteamOverlayController {
   cancelActivation(): void {
     this.activationGeneration += 1;
     this.activationInFlight = null;
+  }
+
+  // Panel's presets.conf is removed when its HUD is switched off, so any visible Steam
+  // level falls back to MangoHud's built-in preset (the full stock HUD). Hiding the
+  // level is what makes "Show HUD" off actually hide the overlay.
+  ensureHudHidden(): Promise<SteamOverlayDiagnostics> {
+    if (this.deactivationInFlight) return this.deactivationInFlight;
+    this.cancelActivation();
+    const deactivation = this.hideHud(this.activationGeneration);
+    this.deactivationInFlight = deactivation;
+    const clear = () => {
+      if (this.deactivationInFlight === deactivation) this.deactivationInFlight = null;
+    };
+    void deactivation.then(clear, clear);
+    return deactivation;
+  }
+
+  private finishDeactivation(
+    outcome: SteamOverlayDeactivationOutcome,
+    beforeLevel: number | null,
+    observedLevel: number | null,
+  ): SteamOverlayDiagnostics {
+    this.lastDeactivation = {
+      outcome,
+      before_level: beforeLevel,
+      observed_level: observedLevel,
+    };
+    recordUiEvent(
+      "hud",
+      "steam_overlay_hide",
+      { ...this.lastDeactivation },
+      outcome === "confirmed" || outcome === "already_hidden",
+    );
+    return this.diagnostics();
+  }
+
+  private async hideHud(generation: number): Promise<SteamOverlayDiagnostics> {
+    const before = this.diagnostics().raw_level ?? await this.readHydratedLevel();
+    if (generation !== this.activationGeneration) return this.diagnostics();
+    if (before === null) return this.finishDeactivation("unavailable", null, null);
+    if (before === HIDDEN_LEVEL) {
+      return this.finishDeactivation("already_hidden", before, before);
+    }
+    const store = this.resolveStore()?.store;
+    const setter = store?.SetPerfOverlayLevel;
+    if (!store || typeof setter !== "function") {
+      return this.finishDeactivation("unavailable", before, before);
+    }
+    try {
+      setter.call(store, HIDDEN_LEVEL);
+    } catch {
+      return this.finishDeactivation("exception", before, this.diagnostics().raw_level);
+    }
+    const observed = await this.awaitLevelChange(before);
+    const outcome = observed === HIDDEN_LEVEL
+      ? "confirmed"
+      : observed === before
+        ? "readback_timeout"
+        : "readback_mismatch";
+    return this.finishDeactivation(outcome, before, observed);
+  }
+
+  private async readHydratedLevel(): Promise<number | null> {
+    let level = this.diagnostics().raw_level;
+    for (let attempt = 0; level === null && attempt < this.readbackAttempts; attempt += 1) {
+      await this.waitForReadback(READBACK_DELAY_MS);
+      level = this.diagnostics().raw_level;
+    }
+    return level;
+  }
+
+  private async awaitLevelChange(previous: number): Promise<number | null> {
+    let observed = this.diagnostics().raw_level;
+    for (let attempt = 0; attempt < this.readbackAttempts && observed === previous; attempt += 1) {
+      await this.waitForReadback(READBACK_DELAY_MS);
+      observed = this.diagnostics().raw_level;
+    }
+    return observed;
   }
 
   private finishActivation(
@@ -307,26 +413,13 @@ export class SteamOverlayController {
   }
 
   private async activateFullHud(generation: number): Promise<SteamOverlayDiagnostics> {
-    let before = this.diagnostics();
-    for (
-      let attempt = 0;
-      before.raw_level === null && attempt < this.readbackAttempts;
-      attempt += 1
-    ) {
-      await this.waitForReadback(READBACK_DELAY_MS);
-      before = this.diagnostics();
-    }
+    const before = this.diagnostics().raw_level ?? await this.readHydratedLevel();
     if (generation !== this.activationGeneration) return this.diagnostics();
-    if (before.raw_level === null) {
+    if (before === null) {
       return this.finishActivation("unavailable", null, null, null);
     }
-    if (before.raw_level !== 0) {
-      return this.finishActivation(
-        "already_visible",
-        before.raw_level,
-        null,
-        before.raw_level,
-      );
+    if (before !== HIDDEN_LEVEL) {
+      return this.finishActivation("already_visible", before, null, before);
     }
 
     const resolved = this.resolveStore();
@@ -347,11 +440,7 @@ export class SteamOverlayController {
       );
     }
 
-    let observed = this.diagnostics().raw_level;
-    for (let attempt = 0; attempt < this.readbackAttempts && observed === 0; attempt += 1) {
-      await this.waitForReadback(READBACK_DELAY_MS);
-      observed = this.diagnostics().raw_level;
-    }
+    const observed = await this.awaitLevelChange(HIDDEN_LEVEL);
     const outcome = observed === FULL_HUD_LEVEL
       ? "confirmed"
       : observed === 0

@@ -118,6 +118,20 @@ def power(snap):
     return watts or DASH
 
 
+def bat_power(snap):
+    if snap.get("bat_status") != "Discharging":
+        return DASH
+    return _watts(snap.get("bat_watts")) or DASH
+
+
+def bat_time(snap):
+    seconds = snap.get("bat_eta_s")
+    if snap.get("bat_status") != "Discharging" or not isinstance(seconds, (int, float)):
+        return DASH
+    minutes = max(0, round(seconds / 60))
+    return f"{minutes // 60}h{minutes % 60:02d}"
+
+
 def model(snap):
     # Just the model name — the full chip string overruns the row.
     return str(snap.get("model_name") or DASH)
@@ -194,6 +208,8 @@ FORMATTERS = {
     "pdc_power": power,
     "pdc_charge": charge,
     "pdc_bat_health": bat_health,
+    "pdc_bat_power": bat_power,
+    "pdc_bat_time": bat_time,
     "pdc_smt": smt,
     "pdc_boost": boost,
     "pdc_cores": cores,

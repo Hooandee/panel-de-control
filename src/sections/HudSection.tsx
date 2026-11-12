@@ -267,9 +267,14 @@ export const HudSection: FC = () => {
     });
   };
   const setHudEnabled = (enabled: boolean) => {
-    if (!enabled) steamOverlay.cancelActivation();
     setEnabled(enabled);
-    if (enabled) activateSteamOverlay();
+    if (enabled) {
+      activateSteamOverlay();
+    } else {
+      void steamOverlay.ensureHudHidden().then((result) => {
+        setSteamMasterEnabled(result.master_enabled);
+      });
+    }
   };
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = PRESETS;

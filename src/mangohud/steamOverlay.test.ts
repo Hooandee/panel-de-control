@@ -308,4 +308,116 @@ describe("SteamOverlayController", () => {
     });
     expect(JSON.stringify(result)).not.toContain("PRIVATE");
   });
+
+  it.each([1, 2, 3, 4])("hides a visible raw level %s and confirms the readback", async (level) => {
+    const perf = store(level);
+    perf.SetPerfOverlayLevel.mockImplementation((next: number) => {
+      perf.msgSettingsGlobal!.perf_overlay_level = next;
+    });
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+    );
+
+    const result = await controller.ensureHudHidden();
+
+    expect(perf.SetPerfOverlayLevel).toHaveBeenCalledWith(0);
+    expect(result.last_deactivation).toEqual({
+      outcome: "confirmed",
+      before_level: level,
+      observed_level: 0,
+    });
+    expect(result.master_enabled).toBe(false);
+  });
+
+  it("leaves an already hidden Steam HUD untouched", async () => {
+    const perf = store(0);
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+    );
+
+    const result = await controller.ensureHudHidden();
+
+    expect(perf.SetPerfOverlayLevel).not.toHaveBeenCalled();
+    expect(result.last_deactivation.outcome).toBe("already_hidden");
+  });
+
+  it("does not claim the HUD is hidden when Steam keeps it visible", async () => {
+    const perf = store(1);
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+      2,
+    );
+
+    const result = await controller.ensureHudHidden();
+
+    expect(result.last_deactivation).toEqual({
+      outcome: "readback_timeout",
+      before_level: 1,
+      observed_level: 1,
+    });
+    expect(result.master_enabled).toBe(true);
+  });
+
+  it("does not hide anything it cannot read", async () => {
+    const perf = store(undefined);
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+      2,
+    );
+
+    const result = await controller.ensureHudHidden();
+
+    expect(perf.SetPerfOverlayLevel).not.toHaveBeenCalled();
+    expect(result.last_deactivation.outcome).toBe("unavailable");
+  });
+
+  it("switching the HUD back on cancels a hide that has not written yet", async () => {
+    const perf = store(undefined);
+    let finishWait: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { finishWait = resolve; });
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      () => waiting,
+      1,
+    );
+
+    const hide = controller.ensureHudHidden();
+    perf.msgSettingsGlobal = {
+      perf_overlay_level: 2,
+      perf_overlay_service_state: 2,
+      is_show_perf_overlay_over_steam_enabled: false,
+    };
+    const show = controller.ensureFullHudVisible();
+    finishWait?.();
+    await Promise.all([hide, show]);
+
+    expect(perf.SetPerfOverlayLevel).not.toHaveBeenCalledWith(0);
+  });
+
+  it("switching the HUD off cancels a pending activation", async () => {
+    const perf = store(undefined);
+    let finishWait: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { finishWait = resolve; });
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      () => waiting,
+      1,
+    );
+
+    const show = controller.ensureFullHudVisible();
+    const hide = controller.ensureHudHidden();
+    perf.msgSettingsGlobal = {
+      perf_overlay_level: 0,
+      perf_overlay_service_state: 2,
+      is_show_perf_overlay_over_steam_enabled: false,
+    };
+    finishWait?.();
+    await Promise.all([show, hide]);
+
+    expect(perf.SetPerfOverlayLevel).not.toHaveBeenCalledWith(1);
+  });
 });

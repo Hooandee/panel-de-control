@@ -177,6 +177,9 @@ def test_hud_report_diagnostics_are_useful_without_custom_content(
         "managed_session_count": 2,
         "reload_pending_count": 1,
         "reload_attempt": 2,
+        "value_publish_count": 0,
+        "redetect_count": 0,
+        "redetect_recovered": 0,
         "conflict": True,
         "conflict_reason": "external_config",
         "shutdown": False,
@@ -218,6 +221,12 @@ def test_hud_report_diagnostics_allowlist_frontend_steam_overlay(
                     "observed_level": 1,
                     "error": "PRIVATE-ERROR",
                 },
+                "last_deactivation": {
+                    "outcome": "confirmed",
+                    "before_level": 1,
+                    "observed_level": 0,
+                    "error": "PRIVATE-ERROR",
+                },
             }
         }
     }
@@ -240,6 +249,11 @@ def test_hud_report_diagnostics_allowlist_frontend_steam_overlay(
             "before_level": 0,
             "requested_level": 1,
             "observed_level": 1,
+        },
+        "last_deactivation": {
+            "outcome": "confirmed",
+            "before_level": 1,
+            "observed_level": 0,
         },
     }
     assert "PRIVATE" not in json.dumps(diagnostics)
@@ -1106,6 +1120,7 @@ def test_dynamic_hud_publication_is_bounded_to_one_per_second(
         "read",
         lambda: {"watts": watts["value"], "gpu_busy": 99},
     )
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
     asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
     publications = []
 
@@ -1272,3 +1287,223 @@ def test_refresh_queued_before_shutdown_cannot_rewrite_after_restore(
     assert closed.is_set()
     assert not os.path.exists(presets)
     assert not os.path.exists(f"{presets}.pdc-managed")
+
+
+def _session(main, presets, pid):
+    return main.mangohud_detect.HudSession(
+        pid=pid,
+        starttime=pid * 10,
+        uid=os.getuid(),
+        cwd=str(os.path.dirname(presets)),
+        presets_path=presets,
+        presets_supported=True,
+    )
+
+
+def _live_sessions(main, monkeypatch, sessions):
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **_kwargs: tuple(sessions),
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda session, **_kwargs: session in sessions,
+    )
+
+
+def _record_reloads(main, monkeypatch):
+    reloaded = []
+
+    def reload_snapshot(snapshot, **_kwargs):
+        identities = tuple((session.pid, session.starttime) for session in snapshot)
+        reloaded.append(tuple(session.pid for session in snapshot))
+        return types.SimpleNamespace(requested=identities, pending=())
+
+    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
+    return reloaded
+
+
+def test_hud_attaches_to_mangoapp_that_starts_after_the_plugin(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    sessions = []
+    _live_sessions(main, monkeypatch, sessions)
+    reloaded = _record_reloads(main, monkeypatch)
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: 12)
+
+    state = asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
+
+    assert state["applyStatus"] == "pending"
+    assert not os.path.exists(presets)
+    assert p._hud_redetect_due()
+
+    sessions.append(_session(main, presets, 77))
+    p._refresh_pdc_metrics_sync()
+
+    assert "custom_text=TDP 12W" in open(presets).read()
+    assert reloaded == [(77,)]
+    assert p._hud_apply_status == "reload_requested"
+    assert p._hud_report_diagnostics(p._hud_state())["redetect_recovered"] == 1
+
+
+def test_hud_redetect_is_rate_limited_while_no_mangoapp_runs(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [])
+    scans = []
+    detect = main.mangohud_detect.detect_sessions
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **kwargs: scans.append(True) or detect(**kwargs),
+    )
+    clock = {"now": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    scans.clear()
+
+    p._refresh_pdc_metrics_sync()
+    clock["now"] += 2
+    p._refresh_pdc_metrics_sync()
+    clock["now"] += main._HUD_REDETECT_S
+    p._refresh_pdc_metrics_sync()
+
+    assert len(scans) == 2
+
+
+def test_hud_redetect_never_writes_while_the_hud_is_off(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, presets, 5)])
+    p._hud_apply_status = "pending"
+
+    p._refresh_pdc_metrics_sync()
+
+    assert not os.path.exists(presets)
+
+
+def test_hud_values_follow_a_restarted_mangoapp(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    first = _session(main, presets, 10)
+    sessions = [first]
+    _live_sessions(main, monkeypatch, sessions)
+    reloaded = _record_reloads(main, monkeypatch)
+    applied = {"watts": 11}
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
+    clock = {"now": 50.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
+    reloaded.clear()
+
+    sessions[:] = [_session(main, presets, 20)]
+    applied["watts"] = 14
+    clock["now"] += 3
+    p._refresh_pdc_metrics_sync()
+
+    assert "custom_text=TDP 14W" in open(presets).read()
+    assert reloaded == [(20,)]
+    assert p._hud_sessions == (sessions[0],)
+
+
+def test_hud_sensor_only_changes_reload_less_often(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
+    reloaded = _record_reloads(main, monkeypatch)
+    power = {"watts": 6.0}
+    monkeypatch.setattr(
+        p._power_reader,
+        "read",
+        lambda: {"watts": power["watts"], "gpu_busy": 10},
+    )
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
+    clock = {"now": 10.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
+    reloaded.clear()
+
+    power["watts"] = 9.0
+    clock["now"] += 2
+    p._refresh_pdc_metrics_sync()
+    assert reloaded == []
+    assert "custom_text=Consumo 6W" in open(presets).read()
+
+    clock["now"] += main._MIN_HUD_SENSOR_REFRESH_S
+    p._refresh_pdc_metrics_sync()
+    assert reloaded == [(3,)]
+    assert "custom_text=Consumo 9W" in open(presets).read()
+
+
+def test_hud_state_changes_still_publish_promptly_next_to_sensors(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
+    reloaded = _record_reloads(main, monkeypatch)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 6.0, "gpu_busy": 10})
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
+    applied = {"watts": 11}
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
+    clock = {"now": 10.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    asyncio.run(p.set_hud_config({
+        "items": _items("pdc_tdp", "pdc_power"),
+        "enabled": True,
+    }))
+    reloaded.clear()
+
+    applied["watts"] = 15
+    clock["now"] += main._MIN_HUD_REFRESH_S + 0.5
+    p._refresh_pdc_metrics_sync()
+
+    assert reloaded == [(3,)]
+    assert "custom_text=TDP 15W" in open(presets).read()
+    assert p._hud_report_diagnostics(p._hud_state())["value_publish_count"] == 1
+
+
+def test_hud_power_falls_back_to_rapl_without_amdgpu(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: False)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 4})
+    monkeypatch.setattr(p._rapl_power, "read", lambda: 9.4)
+    p._pdc_active_ids = ["pdc_power"]
+
+    assert p._pdc_values() == {"pdc_power": "9W"}
+
+
+def test_hud_power_keeps_amdgpu_as_the_source_when_present(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 4})
+    monkeypatch.setattr(p._rapl_power, "read", lambda: 30.0)
+    p._pdc_active_ids = ["pdc_power"]
+
+    assert p._pdc_values() == {"pdc_power": "-"}
+
+
+def test_hud_battery_metrics_come_from_the_battery_reader(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    monkeypatch.setattr(p._battery, "read", lambda: {
+        "present": True,
+        "status": "Discharging",
+        "health_percent": 100,
+        "power_now_w": 6.8,
+        "eta_seconds": 37094,
+    })
+    p._pdc_active_ids = ["pdc_bat_power", "pdc_bat_time", "pdc_bat_health"]
+
+    assert p._pdc_values() == {
+        "pdc_bat_power": "7W",
+        "pdc_bat_time": "10h18",
+        "pdc_bat_health": "100%",
+    }

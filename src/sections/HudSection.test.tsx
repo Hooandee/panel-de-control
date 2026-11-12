@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   resolveConflict: vi.fn(),
   ensureFullHudVisible: vi.fn(async () => ({})),
   cancelActivation: vi.fn(),
+  ensureHudHidden: vi.fn(async () => ({ master_enabled: false })),
   hudEnabled: false,
   steamMasterEnabled: true as boolean | null,
   uniformTextSize: false,
@@ -114,6 +115,7 @@ vi.mock("../mangohud/steamOverlay", () => ({
     diagnostics: () => ({ master_enabled: mocks.steamMasterEnabled }),
     ensureFullHudVisible: mocks.ensureFullHudVisible,
     cancelActivation: mocks.cancelActivation,
+    ensureHudHidden: mocks.ensureHudHidden,
   },
 }));
 
@@ -197,14 +199,14 @@ describe("HudSection QAM composition", () => {
     expect(mocks.ensureFullHudVisible).toHaveBeenCalledOnce();
   });
 
-  it("does not change Steam when the user disables the HUD", () => {
+  it("hides Steam's HUD when the user disables the HUD", () => {
     mocks.hudEnabled = true;
     render(<HudSection />);
 
     fireEvent.click(screen.getByText("copy:hud.show"));
 
     expect(mocks.setEnabled).toHaveBeenCalledWith(false);
-    expect(mocks.cancelActivation).toHaveBeenCalledOnce();
+    expect(mocks.ensureHudHidden).toHaveBeenCalledOnce();
     expect(mocks.ensureFullHudVisible).not.toHaveBeenCalled();
   });
 
