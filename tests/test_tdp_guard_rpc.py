@@ -2949,6 +2949,7 @@ def _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=False, han
     import main
     from tdp.steam_download_mode import SteamDownloadModeHold
 
+    monkeypatch.setattr(main, "_monotonic", lambda: 10.5)
     monkeypatch.setattr(main, "find_session", lambda: None)
     monkeypatch.setattr(main, "download_mode_handles", lambda session: handles)
     monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: fan_service_active)
@@ -3099,6 +3100,18 @@ def test_other_writers_wait_while_steam_has_not_confirmed(plugin, monkeypatch):
         assert not result.ok
     assert plugin._tdp_backend.set_levels_calls == 0
     assert plugin._tdp_backend._levels["pl1"] == 6
+
+
+def test_writes_before_the_first_guard_tick_respect_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle"))
+
+    assert not result.ok
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
 
 
 def test_no_steam_queries_when_the_plugin_does_not_own_the_tdp(plugin, monkeypatch):
