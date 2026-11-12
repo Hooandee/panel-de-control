@@ -348,6 +348,22 @@ describe("BackgroundLayer failed loads", () => {
     expect(layer.activeMedia()).toBe(again);
   });
 
+  it("does not retry during a game with Home open over it, and tries again once the game ends", async () => {
+    const media = { kind: "video" as const, url: "http://127.0.0.1/in-game.mp4" };
+    const inGame = { ...hiddenArt, motion: "pause" as const };
+    layer.apply(media, inGame);
+    document.querySelector("video")!.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(document.querySelector("video")).toBeNull();
+    expect(failure).toHaveBeenCalledTimes(1);
+    layer.apply(media, hiddenArt);
+    const again = document.querySelector("video")!;
+    again.dispatchEvent(new Event("loadeddata"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.activeMedia()).toBe(again);
+  });
+
   it("gives a video without a picture another go when the layer shows again, not before", async () => {
     picture.height = 0;
     const media = { kind: "video" as const, url: "http://127.0.0.1/no-picture-yet.mp4" };

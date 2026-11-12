@@ -166,6 +166,10 @@ function waitForMedia(element: HTMLVideoElement | HTMLIFrameElement, signal: Abo
   });
 }
 
+function playing(options: LayerOptions): boolean {
+  return options.visible && options.motion === "play";
+}
+
 function release(container: Element): void {
   container.querySelectorAll("video").forEach((video) => {
     video.pause();
@@ -184,7 +188,7 @@ export class BackgroundLayer {
   private generation = 0;
   private load: AbortController | null = null;
   private lastFailure = "";
-  /** The last medium that did not load, tried again when the layer shows after being hidden. */
+  /** The last medium that did not load, tried again when the layer plays again after being hidden or paused. */
   private failed: { media: LayerMedia; attempt: number } | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -237,7 +241,7 @@ export class BackgroundLayer {
   }
 
   apply(media: LayerMedia | null, options: LayerOptions): boolean {
-    const shown = options.visible && !this.options.visible;
+    const resumed = playing(options) && !playing(this.options);
     this.options = options;
     if (media === null) {
       this.dispose();
@@ -250,7 +254,7 @@ export class BackgroundLayer {
     this.syncNativeArt();
     root.style.display = options.visible ? "" : "none";
     if (!this.current || this.current.url !== media.url || this.current.kind !== media.kind) void this.swap(media);
-    else if (shown && this.failed && this.retryTimer === null && !this.load) void this.swap(this.failed.media, this.failed.attempt);
+    else if (resumed && this.failed && this.retryTimer === null && !this.load) void this.swap(this.failed.media, this.failed.attempt);
     this.syncVideos();
     return true;
   }
@@ -334,10 +338,11 @@ export class BackgroundLayer {
         const slow = attempt - delays.length;
         if (slow < 0 || slow % SLOW_RETRY_REPORT_EVERY === 0) this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
         this.failed = { media, attempt: attempt + 1 };
-        // Hidden (a game is running) the retry waits for the layer to show again instead of decoding in game.
+        // Hidden or paused (a game is running, even with Home open over it) the retry waits for the layer to
+        // play again instead of decoding during the game.
         if (retrying) this.retryTimer = setTimeout(() => {
           this.retryTimer = null;
-          if (generation === this.generation && this.options.visible) void this.swap(media, attempt + 1);
+          if (generation === this.generation && playing(this.options)) void this.swap(media, attempt + 1);
         }, delays[attempt] ?? SLOW_RETRY_MS);
       }
       return;
@@ -371,7 +376,7 @@ export class BackgroundLayer {
   }
 
   private syncVideos(): void {
-    const play = this.options.motion === "play" && this.options.visible;
+    const play = playing(this.options);
     this.root?.querySelectorAll("video").forEach((video) => {
       if (play && video.closest("[data-active]")) void video.play().catch(() => undefined);
       else video.pause();

@@ -53,6 +53,19 @@ describe("subscribeVirtualKeyboard", () => {
     expect(second.callbacks.size).toBe(0);
   });
 
+  it("polls a value that cannot be subscribed to", () => {
+    vi.useFakeTimers();
+    const value = { Value: false };
+    vi.stubGlobal("SteamUIStore", { ActiveWindowInstance: { VirtualKeyboardManager: { IsShowingVirtualKeyboard: value } } });
+    const seen: boolean[] = [];
+    const stop = subscribeVirtualKeyboard((showing) => seen.push(showing));
+    value.Value = true;
+    vi.advanceTimersByTime(5000);
+    stop();
+    vi.useRealTimers();
+    expect(seen).toEqual([false, true]);
+  });
+
   it("reads as hidden without Steam's keyboard manager", () => {
     vi.stubGlobal("SteamUIStore", undefined);
     const seen: boolean[] = [];

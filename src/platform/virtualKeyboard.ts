@@ -49,14 +49,20 @@ export function subscribeVirtualKeyboard(listener: (showing: boolean) => void): 
   };
   const attach = () => {
     const current = showingValue();
-    if (current === value && (handle || !current)) return;
+    if (current === value && (handle || !current)) {
+      // Without a way to subscribe, reading the value on every check is the only way to follow it.
+      if (current && !current.Subscribe) report(!!current.Value);
+      return;
+    }
     release(handle);
     handle = undefined;
     value = current;
     report(!!current?.Value);
     try {
       // A Steam build that registers without returning a handle must not be subscribed again every check.
-      handle = current?.Subscribe?.(() => report(!!current.Value)) ?? (current ? {} : undefined);
+      handle = current?.Subscribe?.(() => {
+        if (value === current) report(!!current.Value);
+      }) ?? (current ? {} : undefined);
     } catch {
       handle = undefined;
     }

@@ -122,14 +122,16 @@ class AmbientService:
         if not result.startswith("opened:"):
             return
         rule = (parsed.port, result.split(":", 1)[1])
-        share = self._share
-        if share is None or not share.active or share.port != parsed.port:
-            # The share already ended (or a newer one replaced it) while firewalld was answering.
-            lan_firewall.close_port(*rule)
-            return
         with self._lock:
-            stale, self._share_rule = self._share_rule, rule
-        if stale is not None and stale != rule:
+            share = self._share
+            current = share is not None and share.active and share.port == parsed.port
+            stale = self._share_rule if current else None
+            if current:
+                self._share_rule = rule
+        # A share that ended (or was replaced) while firewalld was answering closes its rule at once.
+        if not current:
+            lan_firewall.close_port(*rule)
+        elif stale is not None and stale != rule:
             lan_firewall.close_port(*stale)
 
     def take_shared(self) -> dict[str, Any]:
@@ -139,10 +141,10 @@ class AmbientService:
         return {"links": share.take(), "active": share.active}
 
     def stop_share(self) -> None:
-        share = self._share
-        if share is not None:
-            share.stop()
         with self._lock:
+            share = self._share
+            if share is not None:
+                share.stop()
             rule, self._share_rule = self._share_rule, None
         if rule is not None:
             threading.Thread(target=lan_firewall.close_port, args=rule, name="ambient-share-firewall", daemon=True).start()
