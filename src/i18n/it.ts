@@ -1370,7 +1370,7 @@ export const it: Record<string, string> = {
   "tdp.fwmode.low-power": "Silenziosa",
   "tdp.fwmode.balanced": "Bilanciata",
   "tdp.fwmode.performance": "Prestazioni",
-  "tdp.fwmode.active": "In questa modalità, il firmware controlla potenza e ventola. Sposta il cursore per personalizzarle.",
+  "tdp.fwmode.active": "In questa modalità, il firmware controlla la potenza, e la ventola finché Ventole è su Auto. Sposta il cursore per personalizzarle.",
   "tdp.fwmode.custom": "Modalità personalizzata: regola la potenza con il cursore.",
   "tdp.boost.title": "Boost",
   "tdp.boost.mode.estable": "Stabile",
