@@ -1862,8 +1862,8 @@ class UpscalerService:
         if own.get("launch_identity_shared") == digest:
             return appid
         if own.get("launch_identity") != digest and self._identity_held_elsewhere(appid, digest):
-            # One emulator or launcher behind several shortcuts (BotW and TotK on the same Yuzu): the first
-            # keeps the shared identity, the others are told apart by their own shortcut id from then on.
+            # Several shortcuts on one emulator or launcher: the first keeps the shared identity, the others are
+            # told apart by their own shortcut id from then on.
             if claim:
                 self._game_state(appid)["launch_identity_shared"] = digest
                 self._save()

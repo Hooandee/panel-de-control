@@ -429,15 +429,10 @@ _UPSCALERS_LOCK = threading.Lock()
 
 def _snapshot_partial(partial: dict) -> dict:
     """What the upscaler report read before its wait ran out; the reading thread may still be adding to it."""
-    for _ in range(3):
-        try:
-            snapshot = dict(partial)
-            if isinstance(snapshot.get("games"), list):
-                snapshot["games"] = list(snapshot["games"])
-            return snapshot
-        except RuntimeError:
-            continue
-    return {}
+    snapshot = dict(partial)
+    if isinstance(snapshot.get("games"), list):
+        snapshot["games"] = list(snapshot["games"])
+    return snapshot
 
 
 def _upscalers_journal(level: str, event: str, **fields) -> None:

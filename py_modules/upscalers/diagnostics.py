@@ -606,7 +606,6 @@ def windows_components(record) -> dict | None:
     return {"at": record.get("at"), "error": str(record["error"])[:40] if record.get("error") else None, "attempts": attempts}
 
 
-
 _CRASH_MAX_AGE_S = 14 * 24 * 3600
 _CRASH_FILE_LIMIT = 256 * 1024
 _CRASH_MODULE = re.compile(r"([A-Za-z0-9_.\-]{1,80}\.(?:dll|exe))!", re.I)

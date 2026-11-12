@@ -82,12 +82,8 @@ export function steamMachineStrain(
 /** The height the game draws at: its own last report, even from start-up, else the screen's. Steam can let a game
  * draw at 4K on a 1440p monitor and gamescope scales it down, so the monitor alone undercounts. */
 export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[], display: [number, number] | null): number | undefined {
-  for (let index = history.length - 1; index >= 0; index--) {
-    const facts = history[index].facts;
-    const output = facts?.resolution?.output ?? facts?.initial_resolution?.output;
-    if (output?.length === 2 && output.every((size) => Number.isFinite(size) && size > 0)) return output[1];
-  }
-  return display ? Math.min(...display) : undefined;
+  const outputs = history.map(({ facts }) => ({ facts: { resolution: facts?.resolution ?? facts?.initial_resolution } }));
+  return lastOutputHeight(outputs) ?? (display ? Math.min(...display) : undefined);
 }
 
 /** Games whose own update took away the input OptiScaler needs; the page says so instead of a silent failure. */
