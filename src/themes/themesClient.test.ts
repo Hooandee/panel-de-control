@@ -5,7 +5,7 @@ import { CssLoaderOperationError, type CssLoaderReadySnapshot } from "./cssLoade
 import type { CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import { ThemeInstallError } from "./panelThemeInstaller";
-import { ThemesClient, type ThemesDependencies } from "./themesClient";
+import { ThemesClient, slowMutationBucket, type ThemesDependencies } from "./themesClient";
 
 const RELEASE: PublishedThemeRelease = {
   catalogId: "example-theme",
@@ -931,5 +931,11 @@ describe("ThemesClient cleanup with a stale choice", () => {
 
     expect(deactivate).not.toHaveBeenCalled();
     expect(deps.adapter.disableAllExcept).not.toHaveBeenCalled();
+  });
+});
+
+describe("slowMutationBucket", () => {
+  it("groups slow CSS Loader calls into a few ranges", () => {
+    expect([6_000, 16_000, 31_000, 65_000, 120_000].map(slowMutationBucket)).toEqual(["5s", "15s", "30s", "60s", "90s"]);
   });
 });
