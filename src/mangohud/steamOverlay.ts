@@ -380,6 +380,7 @@ export class SteamOverlayController {
     const restorable = before !== HIDDEN_LEVEL ? before : pending;
     if (restorable !== null && restorable !== HIDDEN_LEVEL) this.levelBeforeHide = restorable;
     const observed = await this.awaitLevel(HIDDEN_LEVEL);
+    if (generation !== this.activationGeneration) return this.diagnostics();
     const outcome = observed === HIDDEN_LEVEL
       ? "confirmed"
       : observed === before

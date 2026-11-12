@@ -10634,6 +10634,7 @@ class Plugin(AmbientRpc):
         model = self._hud.load() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._hud_power_source = None
             self._pdc_presets_path = None
             self._pdc_active_ids = []
             self._pdc_written = {}
@@ -10711,6 +10712,8 @@ class Plugin(AmbientRpc):
         self._hud_sessions = tuple(cap["sessions"])
         self._pdc_locale = model.get("locale", "es")
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
+        if "pdc_power" not in self._pdc_active_ids:
+            self._hud_power_source = None
         values = self._pdc_values()
         self._pdc_preview_values = values
         try:

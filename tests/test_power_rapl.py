@@ -32,11 +32,11 @@ def test_package_power_is_the_energy_delta_over_time(tmp_path):
 
 
 def test_counter_wrap_uses_the_reported_range(tmp_path):
-    path = _domain(str(tmp_path), energy=990, wrap=1000)
+    path = _domain(str(tmp_path), energy=9_000_000, wrap=10_000_000)
     clock = {"now": 0.0}
     reader = RaplPackagePower(root=str(tmp_path), clock=lambda: clock["now"])
     reader.read()
-    _energy(path, 2_000_000 - 10)
+    _energy(path, 1_000_000)
     clock["now"] = 1.0
 
     assert reader.read() == 2.0

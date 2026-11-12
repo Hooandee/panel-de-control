@@ -556,4 +556,23 @@ describe("SteamOverlayController", () => {
 
     expect(perf.SetPerfOverlayLevel).toHaveBeenLastCalledWith(3);
   });
+
+  it("a hide cancelled by switching back on does not report a failed hide", async () => {
+    const perf = store(1);
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      () => pending,
+      1,
+      () => 1_000,
+    );
+
+    const hide = controller.ensureHudHidden();
+    const show = controller.ensureFullHudVisible();
+    release?.();
+    await Promise.all([hide, show]);
+
+    expect(controller.diagnostics().last_deactivation.outcome).toBe("not_attempted");
+  });
 });

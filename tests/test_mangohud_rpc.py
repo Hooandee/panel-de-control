@@ -1382,9 +1382,11 @@ def test_hud_redetect_never_writes_while_the_hud_is_off(tmp_path, monkeypatch):
     p._init()
     _live_sessions(main, monkeypatch, [_session(main, presets, 5)])
     p._hud_apply_status = "pending"
+    applied = []
+    monkeypatch.setattr(p, "_apply_hud", lambda **kwargs: applied.append(kwargs))
 
-    p._refresh_pdc_metrics_sync()
-
+    assert p._redetect_hud_sessions() is False
+    assert applied == []
     assert not os.path.exists(presets)
 
 
@@ -1638,4 +1640,18 @@ def test_power_source_is_unknown_when_nothing_reads(tmp_path, monkeypatch):
     p._pdc_active_ids = ["pdc_power"]
 
     assert p._pdc_values() == {"pdc_power": "-"}
+    assert p._hud_report_diagnostics(p._hud_state())["power_source"] is None
+
+
+def test_power_source_clears_when_power_is_no_longer_shown(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, str(tmp_path / "presets.conf"), 2)])
+    _record_reloads(main, monkeypatch)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 6.0, "gpu_busy": 1})
+    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
+    assert p._hud_report_diagnostics(p._hud_state())["power_source"] == "amdgpu"
+
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
     assert p._hud_report_diagnostics(p._hud_state())["power_source"] is None
