@@ -3089,6 +3089,36 @@ def test_leaves_the_hold_when_steam_ends_the_mode_without_restoring(plugin, monk
     assert plugin._tdp_write_authorized()
 
 
+def test_other_writers_wait_while_steam_has_not_confirmed(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    for reason in ("settle-retry", "lifecycle", "reapply"):
+        result = plugin._execute_tdp_command(plugin._capture_tdp_command(reason))
+        assert not result.ok
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 6
+
+
+def test_no_steam_queries_when_the_plugin_does_not_own_the_tdp(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch)
+    asked = []
+    monkeypatch.setattr(main, "download_mode_handles", lambda session: asked.append(1))
+    plugin._os_id = "anatase"
+    plugin._tdp_external_owner = True
+    _steam_enters_download_mode(plugin)
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert asked == []
+    assert not plugin._steam_download_hold.holding
+    assert plugin._tdp_reason == "external_owner"
+
+
 def test_steam_download_mode_hold_needs_the_deck_backend(plugin, monkeypatch):
     import main
     from tdp.steam_download_mode import SteamDownloadModeHold

@@ -55,15 +55,15 @@ TARGET = {"pl2": 15, "pl3": 15}
 
 
 def _on():
-    return True
+    return True, "handles"
 
 
 def _off():
-    return False
+    return False, "handles"
 
 
 def _unknown():
-    return None
+    return None, None
 
 
 def test_enters_when_steam_confirms_an_outside_write_on_the_limit():
@@ -121,6 +121,7 @@ def test_leaves_when_steamos_manager_restores_the_limit():
     assert not hold.active
     assert hold.diagnostics()["last"] == {
         "entered_at": 10.0, "left_at": 40.0, "held_s": 30.0, "why": "rails_changed",
+        "source": "handles",
     }
 
 
@@ -130,6 +131,43 @@ def test_leaves_when_steam_says_the_mode_ended_without_a_restore():
     assert hold.step(_deck(6, 6), TARGET, None, 15.0, _off) is None
     assert hold.step(_deck(6, 6), TARGET, None, 21.0, _off) == "left"
     assert hold.diagnostics()["last"]["why"] == "steam_left"
+
+
+def test_stops_asking_steam_after_an_unconfirmed_limit():
+    hold = SteamDownloadModeHold(6)
+    calls = []
+
+    def signal():
+        calls.append(1)
+        return None, None
+
+    for tick in range(20):
+        hold.step(_deck(6, 6), TARGET, None, 1.0 + tick, signal)
+    assert len(calls) == 6
+
+
+def test_fan_service_only_hold_has_a_time_cap():
+    from tdp.steam_download_mode import FALLBACK_MAX_S
+
+    hold = SteamDownloadModeHold(6)
+    hold.step(_deck(6, 6), TARGET, None, 0.0, lambda: (True, "fan_service"))
+    assert hold.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S - 1, lambda: (True, "fan_service")) is None
+    assert hold.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S, lambda: (True, "fan_service")) == "left"
+    assert hold.diagnostics()["last"]["why"] == "timeout"
+
+    confirmed = SteamDownloadModeHold(6)
+    confirmed.step(_deck(6, 6), TARGET, None, 0.0, _on)
+    assert confirmed.step(_deck(6, 6), TARGET, None, FALLBACK_MAX_S, _on) is None
+    assert confirmed.active
+
+
+def test_release_during_the_wait_lets_the_write_through():
+    hold = SteamDownloadModeHold(6)
+    hold.step(_deck(6, 6), TARGET, None, 1.0, _unknown)
+    assert hold.holding
+    assert hold.release(now=2.0) is False
+    assert not hold.holding
+    assert hold.step(_deck(6, 6), TARGET, None, 3.0, _on) is None
 
 
 def test_release_clears_the_hold():

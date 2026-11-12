@@ -332,6 +332,7 @@ _USER_TDP_REASONS = frozenset({
     "battery-ceiling", "cooler-ceiling", "experimental-ac-ceiling",
     "low-battery-hold-toggle", "low-battery-hold-toggle-off",
     "manual-gpu-link", "manual-gpu-level", "manual-auto-restore", "auto-config",
+    "firmware-mode-rollback",
 })
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
@@ -4203,7 +4204,7 @@ class Plugin(AmbientRpc):
 
     def _steam_download_mode_active(self) -> bool:
         hold = getattr(self, "_steam_download_hold", None)
-        return bool(hold is not None and hold.active)
+        return bool(hold is not None and hold.holding)
 
     def _tdp_owner_reason(self) -> str:
         return (
@@ -8830,7 +8831,7 @@ class Plugin(AmbientRpc):
             self._tdp_reason = "external_owner"
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
-            self._remember_tdp_observation(self._observe_tdp_sync())
+            self._remember_tdp_observation(deck_observation or self._observe_tdp_sync())
             return
         if self._firmware_mode() != _CUSTOM_MODE:
             self._tdp_status = "unverifiable"
@@ -8991,6 +8992,8 @@ class Plugin(AmbientRpc):
         hold = self._steam_download_hold
         if hold.limit_w is None or self._tdp_backend.name != "steamdeck-hwmon":
             return None
+        if not hold.holding and not self._tdp_write_authorized():
+            return None
         observation = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return True
@@ -9012,19 +9015,18 @@ class Plugin(AmbientRpc):
         self._remember_tdp_observation(observation)
         return True
 
-    def _steam_download_signal(self) -> bool | None:
+    def _steam_download_signal(self) -> tuple[bool | None, str | None]:
         """Whether Steam's download mode is on: steamos-manager's open handles first,
         then SteamOS's fan service, which it stops for the mode (our own fan curve
         stops it too, which proves nothing)."""
         session = find_session()
         handles = download_mode_handles(UserSession(*session) if session else None)
-        self._steam_download_source = "handles" if handles is not None else "fan_service"
         if handles is not None:
-            return handles > 0
+            return handles > 0, "handles"
         if getattr(self._fan_ctrl, "owns_jupiter", False):
-            return None
+            return None, None
         running = jupiter_fan_control_active()
-        return None if running is None else not running
+        return (None if running is None else not running), "fan_service"
 
     def _journal_steam_download_mode(self, transition, observation, target):
         details = {
@@ -9032,7 +9034,6 @@ class Plugin(AmbientRpc):
             "observation": observation.as_dict(),
             "target": dict(target),
             "game": self._current_appid,
-            "signal": getattr(self, "_steam_download_source", None),
             **self._steam_download_hold.diagnostics(),
         }
         decky.logger.info(
@@ -9046,7 +9047,7 @@ class Plugin(AmbientRpc):
                 "tdp", f"steam_download_mode_{transition}",
                 observation=journal.compact_event(details["observation"]),
                 target=details["target"], game=details["game"],
-                signal=details["signal"], last=details["last"],
+                source=details["source"], last=details["last"],
             )
 
     def _tdp_guard_delay(self):

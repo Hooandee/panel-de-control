@@ -22,6 +22,9 @@ _LOW_POWER = "com.steampowered.SteamOSManager1.LowPowerMode1"
 # steamos-manager writes the limit a moment before it stops jupiter-fan-control.
 PENDING_S = 5.0
 RECHECK_S = 10.0
+# Without steamos-manager's handles the fan service is the only witness, and it stays
+# stopped if steamos-manager dies mid-mode; long downloads still fit.
+FALLBACK_MAX_S = 3 * 3600.0
 
 
 def read_download_mode_limit(root: str = "/") -> int | None:
@@ -63,6 +66,7 @@ class SteamDownloadModeHold:
         self._pending_since: float | None = None
         self._checked_at = float("-inf")
         self._unconfirmed_reported = False
+        self._source: str | None = None
         self._last: dict | None = None
         self._count = 0
 
@@ -91,7 +95,7 @@ class SteamDownloadModeHold:
         target: dict,
         last_written: dict | None,
         now: float,
-        steam_signal: Callable[[], bool | None],
+        steam_signal: Callable[[], tuple[bool | None, str | None]],
     ) -> str | None:
         """Advance one guard tick; returns 'entered', 'left' or 'unconfirmed' on a
         transition. `holding` tells the guard to write nothing this tick."""
@@ -102,9 +106,11 @@ class SteamDownloadModeHold:
             transition = None
             if self._at_limit(observation) is False:
                 transition = self._leave(now, "rails_changed")
+            elif self._source != "handles" and now - self._entered_at >= FALLBACK_MAX_S:
+                transition = self._leave(now, "timeout")
             elif now - self._checked_at >= RECHECK_S:
                 self._checked_at = now
-                if steam_signal() is False:
+                if steam_signal()[0] is False:
                     transition = self._leave(now, "steam_left")
             self.holding = self.active
             return transition
@@ -113,9 +119,14 @@ class SteamDownloadModeHold:
             self._unconfirmed_reported = False
             self.holding = False
             return None
-        if steam_signal():
+        if self._unconfirmed_reported:
+            self.holding = False
+            return None
+        on, source = steam_signal()
+        if on:
             self.active = self.holding = True
             self._entered_at = self._checked_at = now
+            self._source = source
             self._pending_since = None
             self._count += 1
             return "entered"
@@ -128,10 +139,14 @@ class SteamDownloadModeHold:
         return "unconfirmed"
 
     def release(self, now: float) -> bool:
-        if not self.active:
-            return False
-        self._leave(now, "user")
-        return True
+        """A user TDP change ends the hold or the wait for Steam's confirmation."""
+        if self.active:
+            self._leave(now, "user")
+            return True
+        if self.holding:
+            self.holding = False
+            self._unconfirmed_reported = True
+        return False
 
     def _leave(self, now: float, why: str) -> str:
         entered = self._entered_at if self._entered_at is not None else now
@@ -140,6 +155,7 @@ class SteamDownloadModeHold:
             "left_at": now,
             "held_s": round(now - entered, 1),
             "why": why,
+            "source": self._source,
         }
         self.active = self.holding = False
         self._entered_at = None
@@ -150,6 +166,7 @@ class SteamDownloadModeHold:
             "limit_w": self.limit_w,
             "active": self.active,
             "pending_since": self._pending_since,
+            "source": self._source,
             "entered_at": self._entered_at,
             "count": self._count,
             "last": self._last,
