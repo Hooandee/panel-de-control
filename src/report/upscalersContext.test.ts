@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("../launch/steamApi", () => ({ listInstalledGames: vi.fn(() => []) }));
 vi.mock("../tdp/runningGame", () => ({ readRunningGame: vi.fn(() => null) }));
-vi.mock("../upscalers/overlays", () => ({ reportedAppids: vi.fn(() => []) }));
+vi.mock("../upscalers/overlays", () => ({ reportedAppids: vi.fn(() => []), readCoverBadges: () => true, readInGameMode: () => "off" }));
 import { listInstalledGames } from "../launch/steamApi";
 import { readRunningGame } from "../tdp/runningGame";
 import { reportedAppids } from "../upscalers/overlays";
@@ -11,7 +11,7 @@ import { steamFacts, upscalersReportContext } from "./upscalersContext";
 afterEach(() => { vi.resetAllMocks(); delete (globalThis as any).SteamClient; delete (globalThis as any).App; });
 
 it("records no observed game without RPC dependencies", async () => {
-  expect(await upscalersReportContext()).toEqual({ collected_at: expect.any(String), status: "available", running: null, games: {} });
+  expect(await upscalersReportContext()).toEqual({ collected_at: expect.any(String), status: "available", badges: { covers: true, in_game: "off" }, running: null, games: {} });
   expect(listInstalledGames).not.toHaveBeenCalled();
 });
 
@@ -36,7 +36,7 @@ it("does not use another shortcut's identity and bounds text", async () => {
 
 it("degrades to partial context without preventing a report", async () => {
   vi.mocked(readRunningGame).mockImplementation(() => { throw new Error("unavailable"); });
-  expect(await upscalersReportContext()).toEqual({ collected_at: expect.any(String), status: "unavailable", running: null, games: {} });
+  expect(await upscalersReportContext()).toEqual({ collected_at: expect.any(String), status: "unavailable", badges: { covers: true, in_game: "off" }, running: null, games: {} });
 });
 
 it("adds Steam's live facts for every game Panel set up, without the owner's id", async () => {

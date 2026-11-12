@@ -11,7 +11,7 @@ import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/d
 import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
-import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
+import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
@@ -32,6 +32,8 @@ export const EscaladoresSection: FC = () => {
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
+  const [coversOpen, setCoversOpen] = useState(false);
+  const [covers, setCovers] = useState(readCoverBadges);
 
   const refresh = useCallback(async () => {
     try {
@@ -112,6 +114,12 @@ export const EscaladoresSection: FC = () => {
                   value={inGame}
                   onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
                   options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
+                />}
+                <Fold label={t("up.covers.title")} open={coversOpen} onToggle={() => setCoversOpen(!coversOpen)} />
+                {coversOpen && <SegmentRow
+                  value={covers ? "on" : "off"}
+                  onChange={(value) => { setCovers(value === "on"); writeCoverBadges(value === "on"); }}
+                  options={(["on", "off"] as const).map((value) => ({ value, label: t(`up.covers.${value}`) }))}
                 />}
                 <Fold label={t("up.list.manage")} open={bulkOpen} onToggle={() => setBulkOpen(!bulkOpen)} />
                 <NavigationGroup flow-children="column" childFocusDisabled={!bulkOpen} aria-hidden={!bulkOpen} style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
