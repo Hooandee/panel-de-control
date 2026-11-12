@@ -558,6 +558,7 @@ def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rp
         "unreadable_theme_folders": 0,
         "installed": [],
         "other_active_themes": 0,
+        "other_active_targets": {},
         "health": {
             "folders": {},
             "cleanup": {"available": False, "moved": 0, "disabled": 0},
@@ -690,8 +691,10 @@ def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rp
         {"active": False, "Estilizar Inicio": "Yes"},
         panel=True, runtime=True,
     )
-    theme("Someone Private.profile", {"name": "Someone Private.profile", "version": "1"}, {"active": True})
-    theme("Art Hero", {"name": "Art Hero", "version": "2"}, {"active": False})
+    theme("Someone Private.profile", {"name": "Someone Private.profile", "version": "1", "target": "Preset"}, {"active": True})
+    theme("Art Hero", {"name": "Art Hero", "version": "2", "target": "Home"}, {"active": False})
+    theme("Tilted Home", {"name": "Tilted Home", "version": "3", "target": "Home"}, {"active": True})
+    theme("Odd Target", {"name": "Odd Target", "version": "1", "target": "Someone's <home>"}, {"active": True})
 
     diagnostics = plugin._theme_report_diagnostics()
 
@@ -705,8 +708,10 @@ def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rp
             "sections": {"Estilizar Inicio": "Yes"},
         },
     ]
-    assert diagnostics["other_active_themes"] == 1
+    assert diagnostics["other_active_themes"] == 3
+    assert diagnostics["other_active_targets"] == {"Preset": 1, "Home": 1, "other": 1}
     assert "Someone Private" not in str(diagnostics)
+    assert "Tilted" not in str(diagnostics)
 
 
 def test_theme_health_rpcs_set_aside_and_restore_leftovers(theme_rpc, monkeypatch):

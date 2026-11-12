@@ -253,7 +253,8 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "ambient": (("_support_ambient_state", None),),
     "themes": (
         ("_theme_report_diagnostics", (
-            "early_themes", "installed", "other_active_themes", "activation_phase", "activation_quarantined",
+            "early_themes", "installed", "other_active_themes", "other_active_targets", "activation_phase",
+            "activation_quarantined",
             "recent_failures", "health",
         )),
         ("_support_custom_artwork", None),
@@ -339,6 +340,7 @@ _THEME_FAILURE_OPERATIONS = frozenset({
     "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+_THEME_TARGET = re.compile(r"^[A-Za-z][A-Za-z -]{0,31}$")
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
 _UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend|themes)$")
@@ -2143,9 +2145,10 @@ class Plugin(AmbientRpc):
 
     def _installed_theme_inventory(self) -> dict:
         """Hooandee themes by name; other themes and CSS Loader profiles can carry personal names,
-        so they are only counted."""
+        so they are only counted, grouped by the CSS Loader target they declare."""
         installed = []
         other_active = 0
+        other_targets: dict[str, int] = {}
         early_installs = self._theme_early_installs()
         try:
             folders = sorted(entry for entry in self._themes_root().iterdir() if entry.is_dir())
@@ -2169,6 +2172,10 @@ class Plugin(AmbientRpc):
             active = config.get("active") is True
             if not (folder / "panel-theme.json").is_file():
                 other_active += active
+                if active:
+                    target = manifest.get("target")
+                    key = target if isinstance(target, str) and _THEME_TARGET.match(target) else "other"
+                    other_targets[key] = other_targets.get(key, 0) + 1
                 continue
             installed.append({
                 "name": str(manifest.get("name", ""))[:80],
@@ -2182,7 +2189,11 @@ class Plugin(AmbientRpc):
                     if isinstance(key, str) and key.startswith("Estilizar ") and isinstance(value, str)
                 },
             })
-        return {"installed": installed, "other_active_themes": other_active}
+        return {
+            "installed": installed,
+            "other_active_themes": other_active,
+            "other_active_targets": other_targets,
+        }
 
     def _theme_early_installs(self) -> dict[str, str]:
         """Installed theme name to the early version it was installed as."""
