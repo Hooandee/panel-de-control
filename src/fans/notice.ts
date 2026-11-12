@@ -16,5 +16,7 @@ export function fanCurveNotice(cs: FanCurveState, t: Translate): string {
 
 /** The system daemon that owns the fan in Auto and hands it over while a curve runs. */
 export function fanHandoffNotice(cs: FanCurveState, t: Translate): string | null {
-  return cs.source === "armada-pwm" ? t("fans.armadaHandoff") : null;
+  if (cs.source === "armada-pwm") return t("fans.armadaHandoff");
+  if (cs.source === "pocknix-pwm") return t("fans.pocknixHandoff");
+  return null;
 }
