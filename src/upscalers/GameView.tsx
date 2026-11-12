@@ -266,6 +266,7 @@ export const GameView: FC<{
     } catch (error) {
       recordUiEvent("upscalers", "action_error", { appid, code: upscalerErrorCode(error) }, false);
       setMessage(errorText(t, upscalerErrorCode(error)));
+      if (["transition_failed_clean", "transition_restore_failed"].includes(upscalerErrorCode(error))) { void load(); onChanged(); }
     }
   };
 

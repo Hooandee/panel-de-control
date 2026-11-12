@@ -9,13 +9,43 @@ import type { LaunchReceipt } from "./launchOwnership";
 const WRAPPERS = ["mako-run", "mako-launch", "mako-framegen"];
 const ENVS = ["MAKO_CONFIG", "MAKO_PROFILE"];
 
-function isMakoWrapper(token: string): boolean {
+export function isMakoWrapper(token: string): boolean {
   return WRAPPERS.includes(token.replace(/^(["'])(.*)\1$/, "$2").split("/").pop() ?? "");
 }
 
 /** Mako in the launch options that Panel did not put there: another tool's setup for this game. */
 export function hasMakoLeftover(launch: string, receipt: LaunchReceipt | null | undefined): boolean {
   return !receipt?.wrappers.added.length && configuredLaunchTools(launch).includes("Mako");
+}
+
+const unquote = (value: string) => value.replace(/^(["'])(.*)\1$/, "$2");
+
+/** Whether a Mako value is exactly what Panel writes for profile `pdc-<id>`. */
+function isPanelMakoValue(name: string, value: string, id: string): boolean {
+  const plain = unquote(value);
+  const folder = `/panel-de-control/mako/${id}/`;
+  if (name === "MAKO_PROFILE") return plain === `pdc-${id}`;
+  if (name === "MAKO_CONFIG") return plain.endsWith(`${folder}conf.toml`);
+  if (name === "MAKO_LAUNCH_CONFIG") return plain.endsWith(`${folder}launcher.conf`);
+  return false;
+}
+
+/** Panel's own Mako options as a fresh receipt, or null unless every Mako part is exactly Panel's (shortcuts use their launch identity as id). */
+export function adoptedMakoReceipt(launch: string): LaunchReceipt | null {
+  const parsed = parse(launch);
+  if (parsed.malformed) return null;
+  const added = parsed.wrappers.filter(isMakoWrapper);
+  if (added.length !== 1 || !/\/panel-de-control\/mako\/[^/]+\/bin\/mako-launch$/.test(unquote(added[0]))) return null;
+  const at = parsed.wrappers.indexOf(added[0]);
+  if (parsed.wrappers[at + 1]?.startsWith("-")) return null;
+  const env = parsed.envs.filter((entry) => entry.name.startsWith("MAKO_"));
+  const id = unquote(env.find((entry) => entry.name === "MAKO_PROFILE")?.value ?? "").match(/^pdc-([A-Za-z0-9_.:-]+)$/)?.[1];
+  if (!id || !env.every((entry) => isPanelMakoValue(entry.name, entry.value, id))) return null;
+  return {
+    version: 1,
+    env: env.map((entry) => ({ name: entry.name, before: null, applied: entry.value })),
+    wrappers: { before: parsed.wrappers.filter((token) => token !== added[0]), applied: [...parsed.wrappers], added },
+  };
 }
 
 /** The launch options without Mako's wrapper, its own flags and its variables; null when there is nothing safe to take out. */

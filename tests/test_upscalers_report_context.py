@@ -69,7 +69,7 @@ def test_report_keeps_other_games_when_one_diagnostic_fails(steam, fake_catalog,
 def test_frontend_rejects_wrong_types_and_non_live_ids():
     result = diagnostics.frontend_context({'collected_at': 1, 'status': [],
         'running': {'live_appid': '../not-id', 'name': False, 'stable_appid': 42}})
-    assert result == {'status': 'unavailable', 'running': {'is_non_steam': None}, 'games': {}}
+    assert result == {'status': 'unavailable', 'badges': {'covers': None, 'in_game': None}, 'running': {'is_non_steam': None}, 'games': {}}
 
 
 def test_diagnostic_failure_does_not_stop_operation(steam, fake_catalog, proc, monkeypatch):
@@ -235,3 +235,9 @@ def test_one_failing_report_section_keeps_the_rest(steam, fake_catalog, proc, mo
     assert report['lsfg'] == {'error': 'OSError'}
     assert 'private detail' not in json.dumps(report)
     assert 'mako' in report and 'helixsr' in report
+
+
+def test_badge_preferences_reach_the_report_and_nothing_else_does():
+    context = diagnostics.frontend_context({"status": "available", "badges": {"covers": False, "in_game": "always", "x": "y"}})
+    assert context["badges"] == {"covers": False, "in_game": "always"}
+    assert diagnostics.frontend_context({"badges": {"covers": "no", "in_game": "rm -rf"}})["badges"] == {"covers": None, "in_game": None}
