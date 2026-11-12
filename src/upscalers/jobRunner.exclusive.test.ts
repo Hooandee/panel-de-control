@@ -92,3 +92,12 @@ it("records ownership before launch application and rolls back if that record fa
   expect(mocks.recordUpscalerArgs).toHaveBeenCalledWith(game.appid, ["-dx11"], ["dxgi=n,b"], []);
   expect(mocks.finish).toHaveBeenCalledWith(false);
 });
+
+it("does not uninstall again what opening the transition already took out (HelixSR)", async () => {
+  mocks.getUpscalersGame.mockResolvedValueOnce({ install: { build: "hlx-fsr4", engine: "helixsr" }, analysis: { foreign: false } })
+    .mockResolvedValueOnce({ install: null, analysis: { foreign: false } });
+  const request = { scaling_enabled: true };
+  await saveExclusiveMakoProfile(game, request);
+  expect(mocks.uninstallUpscaler).not.toHaveBeenCalled();
+  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false);
+});

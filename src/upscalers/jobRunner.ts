@@ -154,7 +154,8 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
   if (!detail.install && detail.analysis.foreign) throw new Error("foreign");
   const transition = await prepareScalerTransition(game, "mako");
   try {
-    if (detail.install) {
+    // Opening the transition takes HelixSR out by itself; only what is still installed needs an uninstall.
+    if (detail.install && (await getUpscalersGame(game.appid)).install) {
       const job = await uninstallUpscaler(game.appid);
       const completed = waitForJobCompletion(job.id);
       trackJob(job, game);
