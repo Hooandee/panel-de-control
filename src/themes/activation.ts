@@ -331,7 +331,7 @@ export class ThemeActivator {
           current = await this.adapter.reapplyThemeStates(recovery.initial);
         } catch (error) {
           console.warn("Theme recovery could not reapply the previous theme states", error);
-          if (this.adapter.hasPendingMutation()) throw stillRestoring();
+          if (this.adapter.hasPendingMutation() || recovery.reapplies < MAX_REAPPLIES) throw stillRestoring();
         }
       }
       if (!current) {
@@ -436,6 +436,9 @@ export class ThemeActivator {
           recovery.error = undefined;
         },
         (error: unknown) => {
+          // A background reload that timed out again counts towards giving up, so a stuck Steam tab
+          // does not cost twice as many reloads as the cap allows.
+          if (this.adapter.hasPendingMutation()) recovery.failures += 1;
           recovery.status = "needed";
           recovery.error = error;
         },

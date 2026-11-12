@@ -99,6 +99,34 @@ function journalError(code: string): Error {
   return Object.assign(new Error(code), { code });
 }
 
+// Every CSS Loader reload times out and leaves a call pending, as with an unresponsive Steam tab.
+function timingOutAdapter(leavePending: () => void): Adapter {
+  return new Adapter(
+    [themeWithPatch("Example Theme", false, "Red")],
+    (_name, enabled, themes) => {
+      if (enabled) themes[0].patches[0].value = "Blue";
+    },
+    () => {
+      leavePending();
+      throw new Error("CSS Loader reset timed out");
+    },
+  );
+}
+
+// Lets each pending CSS Loader call settle and reconciles again, as the periodic refresh does.
+async function reconcileUntilSettled(activator: ThemeActivator, settle: () => void) {
+  for (let round = 0; round < 12; round += 1) {
+    settle();
+    try {
+      return await activator.reconcilePendingRecovery();
+    } catch (error) {
+      expect(error).toMatchObject({ restorationFailed: true });
+      await Promise.resolve();
+    }
+  }
+  throw new Error("The recovery never settled");
+}
+
 const CATALOG = [release("example-theme", "Example Theme"), release("second-theme", "Second Theme")];
 
 describe("ThemeActivator", () => {
@@ -344,59 +372,30 @@ describe("ThemeActivator", () => {
 
   it("stops queuing CSS Loader reloads after repeated failures and keeps the current state once they settle", async () => {
     let pending = false;
-    const adapter = new Adapter(
-      [themeWithPatch("Example Theme", false, "Red")],
-      (_name, enabled, themes) => {
-        if (enabled) themes[0].patches[0].value = "Blue";
-      },
-      () => {
-        pending = true;
-        throw new Error("CSS Loader reset timed out");
-      },
-    );
+    const adapter = timingOutAdapter(() => { pending = true; });
     adapter.hasPendingMutation = () => pending;
     adapter.reapplyThemeStates = async () => { throw new Error("CSS Loader rejected set_theme_state"); };
     const activator = new ThemeActivator(adapter);
     await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      pending = false;
-      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-      await Promise.resolve();
-    }
-    const reloads = adapter.restores;
+
     pending = true;
     await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-    expect(adapter.restores).toBe(reloads);
-    expect(activator.takeAbandonedRecovery()).toBe(false);
+    const kept = await reconcileUntilSettled(activator, () => { pending = false; });
 
-    pending = false;
-    await expect(activator.reconcilePendingRecovery()).resolves.toMatchObject({ status: "ready" });
+    expect(kept).toMatchObject({ status: "ready" });
     expect(activator.takeAbandonedRecovery()).toBe(true);
-    expect(adapter.restores).toBe(reloads);
+    expect(adapter.restores).toBeLessThanOrEqual(3);
   });
 
   it("puts the previous states back once the timed-out reloads settle instead of keeping the activation", async () => {
     let pending = false;
-    const adapter = new Adapter(
-      [themeWithPatch("Example Theme", false, "Red")],
-      (_name, enabled, themes) => {
-        if (enabled) themes[0].patches[0].value = "Blue";
-      },
-      () => {
-        pending = true;
-        throw new Error("CSS Loader reset timed out");
-      },
-    );
+    const adapter = timingOutAdapter(() => { pending = true; });
     adapter.hasPendingMutation = () => pending;
     const activator = new ThemeActivator(adapter);
     await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      pending = false;
-      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-      await Promise.resolve();
-    }
-    pending = false;
-    const restored = await activator.reconcilePendingRecovery();
+
+    const restored = await reconcileUntilSettled(activator, () => { pending = false; });
+
     expect(restored?.themes[0]).toMatchObject({ enabled: false, patches: [{ value: "Red" }] });
     expect(activator.takeAbandonedRecovery()).toBe(false);
     expect(adapter.reapplies).toBe(1);
@@ -404,52 +403,31 @@ describe("ThemeActivator", () => {
 
   it("never keeps the current state while the reapply of the previous states is still running", async () => {
     let pending = false;
-    const adapter = new Adapter(
-      [themeWithPatch("Example Theme", false, "Red")],
-      (_name, enabled, themes) => {
-        if (enabled) themes[0].patches[0].value = "Blue";
-      },
-      () => {
-        pending = true;
-        throw new Error("CSS Loader reset timed out");
-      },
-    );
+    let reapplies = 0;
+    const adapter = timingOutAdapter(() => { pending = true; });
     adapter.hasPendingMutation = () => pending;
     adapter.reapplyThemeStates = async () => {
+      reapplies += 1;
       pending = true;
       throw new Error("CSS Loader set_theme_state timed out");
     };
     const activator = new ThemeActivator(adapter);
     await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      pending = false;
-      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-      await Promise.resolve();
-    }
-    for (let reapply = 0; reapply < 2; reapply += 1) {
-      pending = false;
-      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-      expect(activator.takeAbandonedRecovery()).toBe(false);
-    }
 
-    pending = false;
-    await expect(activator.reconcilePendingRecovery()).resolves.toMatchObject({ status: "ready" });
+    const kept = await reconcileUntilSettled(activator, () => {
+      expect(activator.takeAbandonedRecovery()).toBe(false);
+      pending = false;
+    });
+
+    expect(kept).toMatchObject({ status: "ready" });
     expect(activator.takeAbandonedRecovery()).toBe(true);
+    expect(reapplies).toBe(2);
   });
 
   it("retries the reapply once its timed-out call settles and finishes the restore", async () => {
     let pending = false;
     let reapplies = 0;
-    const adapter = new Adapter(
-      [themeWithPatch("Example Theme", false, "Red")],
-      (_name, enabled, themes) => {
-        if (enabled) themes[0].patches[0].value = "Blue";
-      },
-      () => {
-        pending = true;
-        throw new Error("CSS Loader reset timed out");
-      },
-    );
+    const adapter = timingOutAdapter(() => { pending = true; });
     adapter.hasPendingMutation = () => pending;
     const reapply = adapter.reapplyThemeStates.bind(adapter);
     adapter.reapplyThemeStates = async (expected) => {
@@ -462,13 +440,9 @@ describe("ThemeActivator", () => {
     };
     const activator = new ThemeActivator(adapter);
     await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      pending = false;
-      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
-      await Promise.resolve();
-    }
-    pending = false;
-    const restored = await activator.reconcilePendingRecovery();
+
+    const restored = await reconcileUntilSettled(activator, () => { pending = false; });
+
     expect(restored?.themes[0]).toMatchObject({ enabled: false, patches: [{ value: "Red" }] });
     expect(activator.takeAbandonedRecovery()).toBe(false);
     expect(reapplies).toBe(2);

@@ -712,6 +712,33 @@ describe("CssLoaderAdapter mutations", () => {
     }
   });
 
+  it("gives the reapplied theme states the reload timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let enabled = false;
+      const call = vi.fn((method: string) => {
+        if (method === "get_themes") return Promise.resolve([{ ...RAW_THEME, enabled }]);
+        if (method === "set_theme_state") {
+          return new Promise((done) => setTimeout(() => {
+            enabled = true;
+            done({ success: true, message: "" });
+          }, 10_000));
+        }
+        return Promise.reject(new Error(`Unexpected method: ${method}`));
+      });
+      const adapter = new CssLoaderAdapter(host({ call }));
+      const expected = { status: "ready" as const, themes: [{ ...(await adapter.requireReady()).themes[0], enabled: true }] };
+
+      const reapplied = adapter.reapplyThemeStates(expected);
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expect(reapplied).resolves.toMatchObject({ themes: [{ enabled: true }] });
+      expect(adapter.hasPendingMutation()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports a reset that settles only after the deadline", async () => {
     vi.useFakeTimers();
     try {
