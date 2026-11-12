@@ -101,3 +101,12 @@ it("does not uninstall again what opening the transition already took out (Helix
   expect(mocks.uninstallUpscaler).not.toHaveBeenCalled();
   expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false);
 });
+
+it("says HelixSR is gone when spatial Mako fails after the switch took it out", async () => {
+  mocks.getUpscalersGame.mockResolvedValueOnce({ install: { build: "hlx-fsr4", engine: "helixsr" }, analysis: { foreign: false } })
+    .mockResolvedValueOnce({ install: null, analysis: { foreign: false } });
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  mocks.saveMakoProfile.mockRejectedValue(new Error("launch_failed"));
+  await expect(saveExclusiveMakoProfile(game, { scaling_enabled: true })).rejects.toThrow("transition_failed_clean");
+  expect(mocks.finish).toHaveBeenCalledWith(false);
+});

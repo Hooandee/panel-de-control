@@ -1799,3 +1799,28 @@ def test_the_transition_says_when_helixsr_came_out(steam, helix_catalog, proc):
     assert service.begin_scaler_transition(APPID)["helix_removed"] is True
     service.finish_scaler_transition(APPID, service.scaler_transitions.pending(APPID)["token"], rollback=False)
     assert service.begin_scaler_transition(APPID)["helix_removed"] is False
+
+
+def test_a_switch_that_cannot_start_after_helixsr_came_out_says_so(steam, helix_catalog, proc, monkeypatch):
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+
+    def fail(*args, **kwargs):
+        raise OSError("disk")
+
+    monkeypatch.setattr(service.scaler_transitions, "begin", fail)
+    with pytest.raises(UpscalerError, match="transition_failed_clean"):
+        service.begin_scaler_transition(APPID)
+    assert service.game(APPID)["install"] is None
+
+
+def test_relocation_prefers_the_game_steam_runs_over_a_copy_left_behind(tmp_path):
+    from upscalers.service import _relocated
+    old_target = tmp_path / "old/steamapps/common/Foo/bin"
+    root = tmp_path / "new/steamapps/common/Foo"
+    for base in (old_target, root / "bin"):
+        _write(base / "helixsr-install.json", "{}")
+    assert _relocated(old_target / "helixsr-install.json", old_target, root) == root / "bin/helixsr-install.json"
+    (root / "bin/helixsr-install.json").unlink()
+    assert _relocated(old_target / "helixsr-install.json", old_target, root) == old_target / "helixsr-install.json"

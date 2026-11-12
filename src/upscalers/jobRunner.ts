@@ -166,7 +166,7 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
     await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam);
   } catch (error) {
     await transition?.finish(false);
-    throw error;
+    throw transition?.previousRemoved ? new Error("transition_failed_clean") : error;
   }
   await transition?.finish(true);
 }

@@ -75,6 +75,8 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
       await load();
       if (alive.current) setSaved(true);
     } catch (caught) {
+      // HelixSR came out before the failure: the page must stop showing it installed.
+      if (upscalerErrorCode(caught) === "transition_failed_clean") onChanged?.();
       if (alive.current) {
         const key = `up.error.${upscalerErrorCode(caught)}`;
         setError(t(key) === key ? t("up.error.generic") : t(key));

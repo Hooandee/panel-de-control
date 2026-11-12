@@ -563,13 +563,19 @@ class UpscalerService:
                 # HelixSR's files are its bridge's to restore, not a checkpoint's: it comes out before the switch, so
                 # a switch that fails leaves the game with its own FSR instead of with HelixSR.
                 entry["previous"] = diagnostics.snapshot(install)
-                self._drop(install, installed.root)
+                try:
+                    self._drop(install, installed.root)
+                except OSError as error:
+                    if self.logger:
+                        self.logger.warning(f"HelixSR removal before a switch failed: {type(error).__name__}")
+                    raise UpscalerError("helixsr_failed", type(error).__name__) from None
                 entry["install"] = None
                 self._save()
                 install = None
             if install and install.get("engine", "optiscaler") not in ("optiscaler", "dll"):
                 raise UpscalerError("transition_unsupported")
-            if not install and not installed.native and self.game(appid)["analysis"]["foreign"]:
+            # Right after HelixSR came out, what is left is HelixSR's or the game's, not another tool's setup.
+            if not install and not helix_removed and not installed.native and self.game(appid)["analysis"]["foreign"]:
                 raise UpscalerError("foreign")
             restore = {"overrides": _overrides(install) if install.get("engine") != "dll" else [],
                        "args": list(install.get("args", [])), "env": {}} if install else None
@@ -579,10 +585,13 @@ class UpscalerService:
                                                            self.mako_status(appid).get("profiles", {}).get(appid),
                                                            self._managed_configuration(install.get("target")) if install else {})
                 return {**checkpoint, "helix_removed": helix_removed}
-            except scaler_transition.TransitionError as error:
-                raise UpscalerError(str(error)) from None
-            except (OSError, ValueError):
-                raise UpscalerError("transition_conflict") from None
+            except (scaler_transition.TransitionError, OSError, ValueError) as error:
+                code = str(error) if isinstance(error, scaler_transition.TransitionError) else "transition_conflict"
+                if helix_removed:
+                    if self.logger:
+                        self.logger.warning(f"Switch could not start after HelixSR came out: {code}")
+                    code = "transition_failed_clean"
+                raise UpscalerError(code) from None
 
     def finish_scaler_transition(self, appid: str, token: str, rollback: bool = False) -> dict | None:
         with self._image_lock:
@@ -2205,15 +2214,15 @@ def _recipe_info(recipe) -> dict | None:
 
 
 def _relocated(path: Path, old_target: Path, root: Path) -> Path:
-    """`path` saved under the game's old folder, seen under its current one (the game moved to another library)."""
-    if path.exists():
-        return path
+    """`path` saved under the game's old folder, seen under its current one: the game may have moved to another
+    library, and a copy left in the old one is not the game Steam runs."""
     # The game folder itself, not a subfolder that happens to share its name (UE games: Foo/Foo/Binaries).
     folders = [ancestor for ancestor in (old_target, *old_target.parents) if ancestor.name == root.name]
     folder = next((ancestor for ancestor in folders if ancestor.parent.name == "common"), folders[-1] if folders else None)
-    if folder is not None and path.is_relative_to(folder):
-        return root / path.relative_to(folder)
-    return path
+    if folder is None or not path.is_relative_to(folder):
+        return path
+    current = root / path.relative_to(folder)
+    return current if current.exists() or not path.exists() else path
 
 
 def _is_helix(install: dict | None) -> bool:
