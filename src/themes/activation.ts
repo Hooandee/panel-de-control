@@ -139,10 +139,11 @@ interface ActivationRecovery {
   snapshot?: CssLoaderReadySnapshot;
   error?: unknown;
   failures: number;
-  reapplied?: boolean;
+  reapplies?: number;
 }
 
 const MAX_RESTORATION_FAILURES = 3;
+const MAX_REAPPLIES = 2;
 
 export class ThemeActivator {
   private running = false;
@@ -314,8 +315,8 @@ export class ThemeActivator {
       recovery.snapshot = undefined;
     }
     // After repeated failures, never queue another CSS Loader reload: one that outlasts the timeout
-    // would otherwise be relaunched forever. Once nothing is pending, put the previous states back a
-    // single time without reloading (the timed-out reloads never got that far), else keep the current state.
+    // would otherwise be relaunched forever. Once nothing is pending, put the previous states back
+    // without reloading (the timed-out reloads never got that far), else keep the current state.
     if (recovery.failures >= MAX_RESTORATION_FAILURES) {
       const stillRestoring = () => new ThemeActivationError(
         "rollback_failed",
@@ -324,8 +325,8 @@ export class ThemeActivator {
       );
       if (this.adapter.hasPendingMutation()) throw stillRestoring();
       let current: CssLoaderReadySnapshot | null = null;
-      if (!recovery.reapplied && this.adapter.reapplyThemeStates) {
-        recovery.reapplied = true;
+      if ((recovery.reapplies ?? 0) < MAX_REAPPLIES && this.adapter.reapplyThemeStates) {
+        recovery.reapplies = (recovery.reapplies ?? 0) + 1;
         try {
           current = await this.adapter.reapplyThemeStates(recovery.initial);
         } catch (error) {
@@ -345,6 +346,11 @@ export class ThemeActivator {
           const detail = error instanceof Error ? `: ${error.message}` : "";
           throw new ThemeActivationError("rollback_failed", `The restored theme state could not be recorded${detail}`, true);
         }
+      }
+      try {
+        await recovery.journal.settle(recovery.transaction);
+      } catch (error) {
+        console.warn("Theme recovery could not settle before keeping the current state", error);
       }
       const kept = await this.abandonRecovery(recovery);
       if (kept) return kept;
