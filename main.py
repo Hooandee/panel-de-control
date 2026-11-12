@@ -4728,11 +4728,13 @@ class Plugin(AmbientRpc):
             return {"supported": False}
         # A driver the system loads itself is driven by the curve until the user turns the
         # toggle off, so the toggle follows the fan backend actually in use.
-        controlled = (
-            self._settings.get("board_fan_control_off") is not True
-            and getattr(getattr(self, "_fan_ctrl", None), "name", None) == "generic-pwm"
+        opted_out = self._settings.get("board_fan_control_off") is True
+        controlled = not opted_out and (
+            self._settings.get("board_fan_driver") is True
+            or getattr(getattr(self, "_fan_ctrl", None), "name", None) == "generic-pwm"
         )
-        return {**driver.state(), "supported": True, "enabled": controlled}
+        return {**driver.state(), "supported": True, "enabled": controlled,
+                "control_off": opted_out}
 
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
@@ -5242,7 +5244,7 @@ class Plugin(AmbientRpc):
             if self._settings.get("fan_release_pending") is not True:
                 return True
             released = self._restore_fans_safe()
-            if released:
+            if released or not getattr(self._fan_ctrl, "supported", False):
                 self._settings["fan_release_pending"] = False
                 self._save()
             self._fan_apply_confirmed = False

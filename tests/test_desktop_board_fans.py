@@ -367,3 +367,13 @@ def test_opt_out_survives_a_driver_that_could_not_be_unloaded(monkeypatch):
     plugin._restore_board_fans()
 
     assert calls == []
+
+
+def test_opted_out_state_is_reported_so_the_toggle_stays_reachable(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings["board_fan_control_off"] = True
+
+    state = plugin._board_fan_state()
+
+    assert state["enabled"] is False
+    assert state["control_off"] is True

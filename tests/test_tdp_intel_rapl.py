@@ -635,3 +635,17 @@ def test_battery_ceiling_expires_so_the_higher_target_is_tried_again(tmp_path, m
     backend.set_tdp(25, False)
     clock[0] += 601.0
     assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None
+
+
+def test_plugging_in_clears_the_battery_ceiling_before_any_write(tmp_path):
+    mmio, backend = _claw_battery_firmware(tmp_path)
+    backend.set_tdp(30, False)
+    _firmware_puts_back(mmio, 25_000_000)
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w == 25
+
+    ac = tmp_path / "sys/class/power_supply/ADP1"
+    ac.mkdir(parents=True)
+    (ac / "type").write_text("Mains")
+    (ac / "online").write_text("1")
+
+    assert backend.observe().surfaces["intel-rapl"]["pl1"].max_w is None

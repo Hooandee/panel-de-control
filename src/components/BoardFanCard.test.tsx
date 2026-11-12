@@ -4,7 +4,7 @@ vi.mock("@decky/api", () => ({ callable: () => async () => ({}) }));
 vi.mock("@decky/ui", () => ({ PanelSectionRow: () => null, ToggleField: () => null }));
 
 import type { BoardFanState } from "../api";
-import { boardFanNote } from "./BoardFanCard";
+import { boardFanNote, boardFanToggleVisible } from "./BoardFanCard";
 
 describe("boardFanNote", () => {
   it.each([
@@ -16,5 +16,13 @@ describe("boardFanNote", () => {
     [{ supported: true, available: [], channels: 2, enabled: false }, "fans.board.present"],
   ] as [BoardFanState, string][])("picks an honest note for %j", (state, key) => {
     expect(boardFanNote(state)).toBe(key);
+  });
+});
+
+describe("boardFanToggleVisible", () => {
+  it("keeps the toggle reachable after opting out of fans no listed driver provides", () => {
+    expect(boardFanToggleVisible({ supported: true, available: [], channels: 0, control_off: true })).toBe(true);
+    expect(boardFanToggleVisible({ supported: true, available: [], channels: 2 })).toBe(true);
+    expect(boardFanToggleVisible({ supported: true, available: [], channels: 0 })).toBe(false);
   });
 });

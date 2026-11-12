@@ -5,6 +5,7 @@ from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 import journal
+from lifecycle import read_on_ac
 
 # A revert this soon after our own write is the firmware; later ones (resume, other tools) are drift.
 _FIRMWARE_REVERT_WINDOW_S = 60.0
@@ -565,6 +566,9 @@ class IntelRaplBackend(TDPBackend):
         # seconds after any higher write. Rewriting it is a fight the package never
         # sees, so the reverted value is published as the live ceiling until AC.
         if self._on_ac is not False or not self._sync_surfaces:
+            return None
+        if read_on_ac(self._root):
+            self._battery_ceiling_w = None
             return None
         now = time.monotonic()
         if (self._battery_ceiling_w is not None

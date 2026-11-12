@@ -694,6 +694,7 @@ export interface BoardFanState {
   loaded?: string[];
   loaded_by_panel?: string[];
   channels?: number;
+  control_off?: boolean;
   last?: { action: string; ok: boolean; channels: number; detail: string } | null;
 }
 
