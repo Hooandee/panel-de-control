@@ -39,6 +39,7 @@ export interface UpscalerJob {
 
 export interface UpscalersOverview {
   gpu: string;
+  device?: string;
   display: [number, number] | null;
   preferred: string;
   builds: BuildInfo[];

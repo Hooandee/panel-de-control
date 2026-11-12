@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, steamMachineStrain, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("keeps the last measured output height after an unverifiable DLL result", () => {
@@ -161,4 +161,19 @@ describe("launch options the user already had", () => {
 it("keeps previously installed routes available for user choice", () => {
   expect(fgOffer({}, { fsrfg: [] }, "rdna3", true, "optiscaler")).toEqual({ own: "fsr", options: ["optiscaler", "lsfg"] });
   expect(fgOffer({ optiscaler: {} }, {}, "rdna3", false, null).options).toEqual(["optiscaler"]);
+});
+
+describe("what overloads the Steam Machine at 4K", () => {
+  const fsr4 = { family: "fsr", version: "4.1.2", engine: "optiscaler" } as const;
+  const helix = { family: "helixsr", version: "FSR 4", engine: "helixsr" } as const;
+  const tv: [number, number] = [3840, 2160];
+  it("flags HelixSR and native FSR 4 only on a Steam Machine driving 4K", () => {
+    expect(steamMachineStrain("steam_machine", tv, helix, null)).toBe("helix");
+    expect(steamMachineStrain("steam_machine", tv, fsr4, "native")).toBe("native");
+    expect(steamMachineStrain("steam_machine", tv, fsr4, "balanced")).toBeNull();
+    expect(steamMachineStrain("steam_machine", [1920, 1080], helix, null)).toBeNull();
+    expect(steamMachineStrain("rog_ally_x", tv, helix, null)).toBeNull();
+    expect(steamMachineStrain("steam_machine", tv, { ...fsr4, engine: "dll" }, "native")).toBeNull();
+    expect(steamMachineStrain("steam_machine", null, helix, null)).toBeNull();
+  });
 });

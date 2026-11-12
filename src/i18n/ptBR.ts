@@ -591,6 +591,8 @@ export const ptBR: Record<string, string> = {
   "up.phase.pace": "{rate} MB/s, faltam {eta}",
   "up.phase.unpack": "Preparando o HelixSR",
   "up.helix.needsFsr31": "{name} só funciona em jogos com FSR 3.1",
+  "up.steamMachine.helix": "Em 4K no Steam Machine, o HelixSR roda a menos da metade dos FPS do FSR 4 com OptiScaler e quase enche a memória de vídeo: o jogo pode fechar",
+  "up.steamMachine.native": "Em 4K no Steam Machine, a qualidade Nativa quase enche a memória de vídeo e o jogo pode fechar. Equilibrado ou Desempenho deixam folga",
   "up.helix.pick.fsr": "No jogo, escolha AMD FSR. A qualidade é escolhida no menu dele",
   "up.error.helixsr_no_fsr": "Este jogo não tem FSR 3.1, então o HLX FSR 4 não tem o que substituir",
   "up.error.helixsr_failed": "O HelixSR não conseguiu terminar",

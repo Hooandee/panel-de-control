@@ -235,6 +235,7 @@ class UpscalerService:
                 }
         return {
             "gpu": self.gpu,
+            "device": self.device,
             "display": panel_resolution(self.drm),
             "preferred": catalog.preferred_build(self.gpu),
             "builds": catalog.describe(self.gpu, self.device),

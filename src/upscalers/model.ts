@@ -67,6 +67,18 @@ export function buildBlocker(
   return null;
 }
 
+/** What overloads the Steam Machine's 8 GB Navi 33 at 4K: HelixSR runs a heavier model there at under half the frame
+ * rate of OptiScaler and nearly fills video memory, and native quality FSR 4 leaves about half a gigabyte free. */
+export function steamMachineStrain(
+  device: string | undefined, display: [number, number] | null, build: Pick<BuildInfo, "engine" | "family" | "version"> | undefined,
+  quality: string | null | undefined,
+): "helix" | "native" | null {
+  if (device !== "steam_machine" || !display || Math.max(...display) < 3840 || !build) return null;
+  if (build.engine === "helixsr") return "helix";
+  const optiscaler = (build.engine ?? "optiscaler") === "optiscaler";
+  return optiscaler && build.family === "fsr" && build.version.startsWith("4") && quality === "native" ? "native" : null;
+}
+
 /** The FSR 4 switch the game's Proton understands on this GPU, or null. */
 export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string }[], visible: (pill: never) => boolean): string | null {
   const pill = pills.find((p) => p.exclusiveGroup === "fsr4-upgrade" && visible(p as never));

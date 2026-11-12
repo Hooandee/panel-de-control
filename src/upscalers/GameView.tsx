@@ -24,7 +24,7 @@ import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
-  buildBlocker, protonFsr4Env, restoredChoice,
+  buildBlocker, protonFsr4Env, restoredChoice, steamMachineStrain,
 } from "./model";
 import { scalerSwitching } from "./scalerTransition";
 import { MakoScaling } from "./MakoScaling";
@@ -496,6 +496,7 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
     ? INPUT_NAMES[recommendedInputKey] : null;
+  const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, overview.display, selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
   const modeChanged = installedEngine !== selectedEngine && [installedEngine, selectedEngine].every((engine) => engine === "dll" || engine === "optiscaler");
@@ -668,6 +669,7 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
+      {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
       {recommendedInput && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
       </Notice>}
