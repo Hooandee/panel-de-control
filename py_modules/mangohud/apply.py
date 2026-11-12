@@ -54,28 +54,41 @@ def apply_hud(
     return result.content
 
 
-def reload_sessions(sessions, proc_root=_PROC, watch_factory=None):
+def reload_sessions(sessions, proc_root=_PROC, watch_factory=None, *, observe=True, via_proc_cwd=False):
+    """Ask every session to reload. With `observe`, delivery is confirmed by
+    mangoapp re-opening presets.conf; an unconfirmed request is retried once
+    through the other working-directory path and then reported, not resent."""
     sessions = tuple(sessions)
     if not sessions:
         return ReloadResult((), ())
+    if not observe:
+        return _request_reloads(sessions, proc_root, via_proc_cwd)
     watch_factory = watch_factory or OpenWatch
     with watch_factory(sessions[0].presets_path) as watch:
-        result = _request_reloads(sessions, proc_root)
+        result = _request_reloads(sessions, proc_root, via_proc_cwd)
         if not result.requested or not watch.available:
             return result
         opened = watch.opened(_DELIVERY_WAIT_S)
     if opened is None:
         return result
     if opened:
-        return ReloadResult(result.requested, result.pending, "observed")
+        return ReloadResult(
+            result.requested,
+            result.pending,
+            "observed_proc_cwd" if via_proc_cwd else "observed",
+        )
     # The IPC queue is keyed on the working directory; a path read from outside
     # mangoapp's mount namespace can name a different directory than its own.
     with watch_factory(sessions[0].presets_path) as watch:
-        retry = _request_reloads(sessions, proc_root, via_proc_cwd=True)
+        retry = _request_reloads(sessions, proc_root, not via_proc_cwd)
         opened = watch.opened(_DELIVERY_WAIT_S) if retry.requested else False
     if opened:
-        return ReloadResult(retry.requested, retry.pending, "observed_proc_cwd")
-    return ReloadResult((), result.requested + result.pending, "unobserved")
+        return ReloadResult(
+            retry.requested,
+            retry.pending,
+            "observed" if via_proc_cwd else "observed_proc_cwd",
+        )
+    return ReloadResult((), result.pending, "unobserved")
 
 
 def _request_reloads(sessions, proc_root, via_proc_cwd=False):

@@ -10,7 +10,16 @@ _IN_CLOEXEC = 0o2000000
 _EVENT_HEADER = struct.Struct("iIII")
 
 
+_LIBC = []
+
+
 def _libc():
+    if not _LIBC:
+        _LIBC.append(_load_libc())
+    return _LIBC[0]
+
+
+def _load_libc():
     name = ctypes.util.find_library("c")
     if not name:
         return None

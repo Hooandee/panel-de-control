@@ -1069,7 +1069,7 @@ export const ptBR: Record<string, string> = {
   "params.pill.noDxr.desc": "Desliga o rastreamento de raios para ganhar desempenho na GPU integrada.",
   "params.recommended": "Recomendado",
   "params.startHere": "Iniciar aqui",
-  "params.pill.mangohud.help": "Exibe dados em tempo real (FPS, temperatura, watts). No modo Jogo o Steam já desenha o próprio HUD, então esta opção mostraria dois; para um único HUD use a seção HUD do Painel de Controle.",
+  "params.pill.mangohud.help": "Exibe dados em tempo real (FPS, temperatura, watts). Se o overlay de desempenho do Steam estiver ativo, esta opção mostra um segundo HUD; para um só use a seção HUD do Painel de Controle.",
   "params.pill.gamemode.help": "Pede ao sistema o modo de desempenho enquanto você joga. No SteamOS, faz pouca diferença porque o sistema já é otimizado; é mais útil no modo desktop.",
   "params.pill.lsfg.help": "Insere quadros intermediários (Lossless Scaling) para mais fluidez. Ótimo para jogos de 30-40 FPS. Ajuste o multiplicador no plugin lsfg-vk.",
   "params.pill.makoRun.help": "Gera quadros intermediários com Mako para mais fluidez. Usa o wrapper ~/.local/bin/mako-run, que precisa ser executável.",

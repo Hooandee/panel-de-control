@@ -1069,7 +1069,7 @@ export const de: Record<string, string> = {
   "params.pill.noDxr.desc": "Deaktiviert Raytracing, um auf der integrierten GPU mehr Leistung zu erhalten.",
   "params.recommended": "Empfohlen",
   "params.startHere": "Für den Einstieg",
-  "params.pill.mangohud.help": "Blendet Echtzeitdaten wie FPS, Temperatur und Watt ein. Im Spielmodus zeichnet Steam bereits ein eigenes HUD, mit dieser Option erscheinen also zwei; für ein einzelnes HUD den HUD-Bereich des Kontrollzentrums verwenden.",
+  "params.pill.mangohud.help": "Blendet Echtzeitdaten wie FPS, Temperatur und Watt ein. Ist das Leistungs-Overlay von Steam aktiv, erscheint mit dieser Option ein zweites HUD; für nur eines den HUD-Bereich des Kontrollzentrums verwenden.",
   "params.pill.gamemode.help": "Fordert beim Spielen den Leistungsmodus des Systems an. Unter SteamOS ist der Unterschied gering, da es bereits optimiert ist. Im Desktopmodus ist er eher spürbar.",
   "params.pill.lsfg.help": "Fügt mit Lossless Scaling Zwischenbilder ein, damit Bewegungen flüssiger wirken. Ideal für Spiele mit 30 bis 40 FPS. Den Multiplikator stellst du im Plugin lsfg-vk ein.",
   "params.pill.makoRun.help": "Erzeugt mit Mako Zwischenbilder für flüssigere Bewegungen. Das Skript ~/.local/bin/mako-run muss ausführbar sein.",

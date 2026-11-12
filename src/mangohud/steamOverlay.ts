@@ -84,6 +84,9 @@ interface SteamWebpackChunks {
 const HIDDEN_LEVEL = 0;
 const FULL_HUD_LEVEL = 1;
 const READBACK_DELAY_MS = 100;
+// Steam applies a level write asynchronously; until then its store still reports
+// the previous level, so a recent own write outranks the readback.
+const PENDING_WRITE_MS = 2_000;
 const DEFAULT_READBACK_ATTEMPTS = 10;
 
 const NOT_ATTEMPTED: SteamOverlayActivation = {
@@ -263,6 +266,7 @@ export class SteamOverlayController {
   private lastActivation: SteamOverlayActivation = NOT_ATTEMPTED;
   private lastDeactivation: SteamOverlayDeactivation = NOT_DEACTIVATED;
   private deactivationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
+  private lastWrite: { level: number; at: number } | null = null;
   private activationInFlight: Promise<SteamOverlayDiagnostics> | null = null;
   private activationGeneration = 0;
 
@@ -270,6 +274,7 @@ export class SteamOverlayController {
     private readonly resolveStore: StoreResolver = resolveSteamPerfStore,
     private readonly waitForReadback: Wait = wait,
     private readonly readbackAttempts = DEFAULT_READBACK_ATTEMPTS,
+    private readonly now: () => number = () => Date.now(),
   ) {}
 
   diagnostics(): SteamOverlayDiagnostics {
@@ -356,7 +361,8 @@ export class SteamOverlayController {
     const before = this.diagnostics().raw_level ?? await this.readHydratedLevel();
     if (generation !== this.activationGeneration) return this.diagnostics();
     if (before === null) return this.finishDeactivation("unavailable", null, null);
-    if (before === HIDDEN_LEVEL) {
+    const pending = this.pendingWrite();
+    if (before === HIDDEN_LEVEL && (pending === null || pending === HIDDEN_LEVEL)) {
       return this.finishDeactivation("already_hidden", before, before);
     }
     const store = this.resolveStore()?.store;
@@ -365,11 +371,11 @@ export class SteamOverlayController {
       return this.finishDeactivation("unavailable", before, before);
     }
     try {
-      setter.call(store, HIDDEN_LEVEL);
+      this.writeLevel(store, setter, HIDDEN_LEVEL);
     } catch {
       return this.finishDeactivation("exception", before, this.diagnostics().raw_level);
     }
-    const observed = await this.awaitLevelChange(before);
+    const observed = await this.awaitLevel(HIDDEN_LEVEL);
     const outcome = observed === HIDDEN_LEVEL
       ? "confirmed"
       : observed === before
@@ -387,13 +393,27 @@ export class SteamOverlayController {
     return level;
   }
 
-  private async awaitLevelChange(previous: number): Promise<number | null> {
+  private async awaitLevel(target: number): Promise<number | null> {
     let observed = this.diagnostics().raw_level;
-    for (let attempt = 0; attempt < this.readbackAttempts && observed === previous; attempt += 1) {
+    for (let attempt = 0; attempt < this.readbackAttempts && observed !== target; attempt += 1) {
       await this.waitForReadback(READBACK_DELAY_MS);
       observed = this.diagnostics().raw_level;
     }
     return observed;
+  }
+
+  private writeLevel(
+    store: SteamPerfStore,
+    setter: (level: number) => unknown,
+    level: number,
+  ): void {
+    setter.call(store, level);
+    this.lastWrite = { level, at: this.now() };
+  }
+
+  private pendingWrite(): number | null {
+    const write = this.lastWrite;
+    return write && this.now() - write.at < PENDING_WRITE_MS ? write.level : null;
   }
 
   private finishActivation(
@@ -418,7 +438,7 @@ export class SteamOverlayController {
     if (before === null) {
       return this.finishActivation("unavailable", null, null, null);
     }
-    if (before !== HIDDEN_LEVEL) {
+    if (before !== HIDDEN_LEVEL && this.pendingWrite() !== HIDDEN_LEVEL) {
       return this.finishActivation("already_visible", before, null, before);
     }
 
@@ -426,27 +446,27 @@ export class SteamOverlayController {
     const store = resolved?.store;
     const setter = store?.SetPerfOverlayLevel;
     if (!store || typeof setter !== "function") {
-      return this.finishActivation("unavailable", 0, FULL_HUD_LEVEL, 0);
+      return this.finishActivation("unavailable", before, FULL_HUD_LEVEL, before);
     }
 
     try {
-      setter.call(store, FULL_HUD_LEVEL);
+      this.writeLevel(store, setter, FULL_HUD_LEVEL);
     } catch {
       return this.finishActivation(
         "exception",
-        0,
+        before,
         FULL_HUD_LEVEL,
         this.diagnostics().raw_level,
       );
     }
 
-    const observed = await this.awaitLevelChange(HIDDEN_LEVEL);
+    const observed = await this.awaitLevel(FULL_HUD_LEVEL);
     const outcome = observed === FULL_HUD_LEVEL
       ? "confirmed"
-      : observed === 0
+      : observed === before
         ? "readback_timeout"
         : "readback_mismatch";
-    return this.finishActivation(outcome, 0, FULL_HUD_LEVEL, observed);
+    return this.finishActivation(outcome, before, FULL_HUD_LEVEL, observed);
   }
 }
 

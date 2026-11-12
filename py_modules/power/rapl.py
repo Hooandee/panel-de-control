@@ -12,12 +12,14 @@ class RaplPackagePower:
     the first read, a counter reset or a too-short gap return None, never a guess."""
 
     _MIN_GAP_S = 0.5
+    _REPROBE_S = 60.0
 
     def __init__(self, root="/", clock=time.monotonic):
         self._root = root
         self._clock = clock
         self._domain = None
         self._last = None
+        self._probe_at = float("-inf")
 
     def _find_domain(self):
         pattern = os.path.join(self._root, "sys/class/powercap/intel-rapl:*")
@@ -42,6 +44,10 @@ class RaplPackagePower:
 
     def read(self):
         if self._domain is None:
+            now = self._clock()
+            if now < self._probe_at:
+                return None
+            self._probe_at = now + self._REPROBE_S
             self._domain = self._find_domain()
             if self._domain is None:
                 return None

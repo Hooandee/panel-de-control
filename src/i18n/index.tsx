@@ -1116,7 +1116,7 @@ const es: Record<string, string> = {
   "params.recommended": "Recomendado",
   "params.startHere": "Para empezar",
   // Ayuda larga (se despliega al tocar la fila)
-  "params.pill.mangohud.help": "Superpone datos en tiempo real (FPS, temperatura, vatios). En modo Juego Steam ya dibuja su propio HUD y con esta opción saldrían dos; para un solo HUD usa la sección HUD de Panel de Control.",
+  "params.pill.mangohud.help": "Superpone datos en tiempo real (FPS, temperatura, vatios). Si el HUD de rendimiento de Steam está activo, con esta opción salen dos; para uno solo usa la sección HUD de Panel de Control.",
   "params.pill.gamemode.help": "Pide modo rendimiento al sistema mientras juegas. En SteamOS aporta poco (ya va optimizado); se nota más en escritorio.",
   "params.pill.lsfg.help": "Inserta fotogramas intermedios (Lossless Scaling) para más fluidez. Ideal en juegos a 30-40 FPS. El multiplicador se ajusta en el plugin lsfg-vk.",
   "params.pill.makoRun.help": "Genera fotogramas intermedios con Mako para mayor fluidez. Usa el wrapper ~/.local/bin/mako-run, que debe ser ejecutable.",
@@ -3017,7 +3017,7 @@ const en: Record<string, string> = {
   "params.recommended": "Recommended",
   "params.startHere": "Start here",
   // Long help (expands when you tap the row)
-  "params.pill.mangohud.help": "Overlays live data (FPS, temperature, watts). In Game Mode Steam already draws its own HUD, so this option would show two; for a single HUD use the HUD section of Panel de Control.",
+  "params.pill.mangohud.help": "Overlays live data (FPS, temperature, watts). If Steam's performance overlay is on, this option shows a second HUD; for a single one use the HUD section of Panel de Control.",
   "params.pill.gamemode.help": "Asks the system for performance mode while you play. On SteamOS it adds little (already optimized); more useful on desktop.",
   "params.pill.lsfg.help": "Inserts in-between frames (Lossless Scaling) for smoothness. Great for 30-40 FPS games. Tune the multiplier in the lsfg-vk plugin.",
   "params.pill.makoRun.help": "Generates in-between frames with Mako for extra smoothness. Uses the wrapper ~/.local/bin/mako-run, which must be executable.",

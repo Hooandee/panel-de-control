@@ -69,3 +69,17 @@ def test_too_short_a_gap_is_not_a_reading(tmp_path):
     clock["now"] = 0.1
 
     assert reader.read() is None
+
+
+def test_a_machine_without_rapl_is_not_rescanned_every_read(tmp_path, monkeypatch):
+    clock = {"now": 0.0}
+    reader = RaplPackagePower(root=str(tmp_path), clock=lambda: clock["now"])
+    scans = []
+    monkeypatch.setattr(reader, "_find_domain", lambda: scans.append(True))
+
+    for _ in range(5):
+        reader.read()
+    clock["now"] = RaplPackagePower._REPROBE_S + 1
+    reader.read()
+
+    assert len(scans) == 2

@@ -493,7 +493,7 @@ def test_successful_write_and_reload_reports_requested_not_applied(tmp_path, mon
     monkeypatch.setattr(
         main,
         "reload_sessions",
-        lambda sessions: types.SimpleNamespace(
+        lambda sessions, **_kwargs: types.SimpleNamespace(
             requested=tuple((session.pid, session.starttime) for session in sessions),
             pending=(),
         ),
@@ -526,7 +526,7 @@ def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
     monkeypatch.setattr(
         main,
         "reload_sessions",
-        lambda sessions: types.SimpleNamespace(
+        lambda sessions, **_kwargs: types.SimpleNamespace(
             requested=tuple((session.pid, session.starttime) for session in sessions),
             pending=(),
         ),
@@ -952,7 +952,7 @@ def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
     )
     calls = []
 
-    def reload_sessions(sessions):
+    def reload_sessions(sessions, **_kwargs):
         calls.append(tuple(sessions))
         if len(calls) == 1:
             return types.SimpleNamespace(
@@ -1524,4 +1524,36 @@ def test_unobserved_reload_is_logged_and_counted(tmp_path, monkeypatch):
     diagnostics = p._hud_report_diagnostics(p._hud_state())
     assert diagnostics["unobserved_reloads"] == 2
     assert diagnostics["reload_delivery"] == "observed"
-    assert len(warnings) == 2
+    assert len(warnings) == 1
+
+
+def test_a_sensor_reading_that_appears_is_published_promptly(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
+    reloaded = _record_reloads(main, monkeypatch)
+    power = {"watts": None}
+    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": power["watts"], "gpu_busy": 1})
+    clock = {"now": 10.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
+    reloaded.clear()
+
+    power["watts"] = 8.0
+    clock["now"] += main._MIN_HUD_REFRESH_S + 0.5
+    p._refresh_pdc_metrics_sync()
+
+    assert reloaded == [(3,)]
+    assert "custom_text=Consumo 8W" in open(presets).read()
+
+
+def test_a_reload_path_that_worked_is_reused(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+
+    p._note_hud_delivery("observed_proc_cwd")
+    assert p._hud_reload_via_proc_cwd is True
+    p._note_hud_delivery("observed")
+    assert p._hud_reload_via_proc_cwd is False

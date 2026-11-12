@@ -288,9 +288,9 @@ _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
 # Every value refresh is a mangohudctl reload, and mangoapp re-parses its whole config
-# on a control thread while the render thread draws it. Readings that change on their
-# own (power draw, fan speed) are therefore republished far less often than state the
-# user changes (TDP, profile, toggles).
+# on a control thread while the render thread draws it. Continuous sensor readings
+# (power draw, fan speed, battery) are therefore republished far less often than
+# applied state (TDP, profile, toggles) or a reading appearing or going away.
 _MIN_HUD_SENSOR_REFRESH_S = 10.0
 _HUD_SENSOR_METRICS = frozenset((
     "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
@@ -1014,6 +1014,8 @@ class Plugin(AmbientRpc):
         self._hud_redetect_recovered = 0
         self._hud_last_delivery = "unknown"
         self._hud_unobserved_reloads = 0
+        self._hud_reload_via_proc_cwd = False
+        self._hud_delivery_log_at = float("-inf")
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -10540,7 +10542,11 @@ class Plugin(AmbientRpc):
             self._hud_reload_pending = ()
             self._hud_reload_retry_at = 0.0
             return False
-        result = reload_sessions(snapshot)
+        result = reload_sessions(
+            snapshot,
+            observe=not self._hud_shutdown,
+            via_proc_cwd=self._hud_reload_via_proc_cwd,
+        )
         self._note_hud_delivery(getattr(result, "delivery", "unknown"))
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
@@ -10572,10 +10578,20 @@ class Plugin(AmbientRpc):
     def _note_hud_delivery(self, delivery) -> None:
         previous = self._hud_last_delivery
         self._hud_last_delivery = delivery
+        if delivery == "observed_proc_cwd":
+            self._hud_reload_via_proc_cwd = True
+        elif delivery == "observed":
+            self._hud_reload_via_proc_cwd = False
         if delivery == "unobserved":
             self._hud_unobserved_reloads += 1
-        routine = ("observed", "unknown")
-        if delivery != previous and not (delivery in routine and previous in routine):
+        routine = ("observed", "observed_proc_cwd", "unknown")
+        now = _monotonic()
+        if (
+            delivery != previous
+            and not (delivery in routine and previous in routine)
+            and now >= self._hud_delivery_log_at
+        ):
+            self._hud_delivery_log_at = now + 60.0
             decky.logger.warning(
                 "HUD reload delivery: %s",
                 json.dumps({
@@ -10981,7 +10997,11 @@ class Plugin(AmbientRpc):
             for metric_id in set(values) | set(self._pdc_written)
             if values.get(metric_id) != self._pdc_written.get(metric_id)
         }
-        if changed - _HUD_SENSOR_METRICS:
+        appeared_or_lost = any(
+            mangohud_pdc.DASH in (values.get(metric_id), self._pdc_written.get(metric_id))
+            for metric_id in changed
+        )
+        if changed - _HUD_SENSOR_METRICS or appeared_or_lost:
             return elapsed >= _MIN_HUD_REFRESH_S
         return elapsed >= _MIN_HUD_SENSOR_REFRESH_S
 

@@ -945,7 +945,7 @@ export const it: Record<string, string> = {
   "params.pill.noDxr.desc": "Disabilita il ray tracing per migliorare le prestazioni della GPU integrata.",
   "params.recommended": "Consigliato",
   "params.startHere": "Inizia da qui",
-  "params.pill.mangohud.help": "Mostra dati in tempo reale sopra il gioco, come FPS, temperatura e watt. In modalità Gioco Steam disegna già il suo HUD, quindi con questa opzione ne compaiono due; per un solo HUD usa la sezione HUD di Pannello di controllo.",
+  "params.pill.mangohud.help": "Mostra dati in tempo reale sopra il gioco, come FPS, temperatura e watt. Se l'overlay prestazioni di Steam è attivo, con questa opzione compare un secondo HUD; per averne uno solo usa la sezione HUD di Pannello di controllo.",
   "params.pill.gamemode.help": "Richiede al sistema la modalità prestazioni mentre giochi. Su SteamOS serve poco, perché è già ottimizzato, mentre si nota di più in modalità desktop.",
   "params.pill.lsfg.help": "Inserisce fotogrammi intermedi con Lossless Scaling per aumentare la fluidità. È ideale per i giochi a 30-40 FPS. Il moltiplicatore si regola nel plugin lsfg-vk.",
   "params.pill.makoRun.help": "Genera fotogrammi intermedi con Mako per una maggiore fluidità. Usa il wrapper ~/.local/bin/mako-run, che deve essere eseguibile.",

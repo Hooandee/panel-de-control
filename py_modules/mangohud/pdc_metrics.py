@@ -119,16 +119,20 @@ def power(snap):
 
 
 def bat_power(snap):
-    if snap.get("bat_status") != "Discharging":
+    watts = snap.get("bat_watts")
+    if snap.get("bat_status") != "Discharging" or not isinstance(watts, (int, float)):
         return DASH
-    return _watts(snap.get("bat_watts")) or DASH
+    return _watts(abs(watts))
 
 
 def bat_time(snap):
+    # Some firmware reports a signed discharge current, which makes the ETA negative.
     seconds = snap.get("bat_eta_s")
     if snap.get("bat_status") != "Discharging" or not isinstance(seconds, (int, float)):
         return DASH
-    minutes = max(0, round(seconds / 60))
+    minutes = round(abs(seconds) / 60)
+    if minutes <= 0:
+        return DASH
     return f"{minutes // 60}h{minutes % 60:02d}"
 
 
