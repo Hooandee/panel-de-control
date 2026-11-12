@@ -7,6 +7,7 @@ import {
   countCssLoaderStyles,
   diagnoseThemeHealth,
   hooandeeNames,
+  interfaceThemeNames,
   parseThemeHealth,
   readSteamSettings,
   removeCssLoaderStyles,
@@ -228,5 +229,13 @@ describe("CSS Loader styles", () => {
     expect(countCssLoaderStyles([reachable, gone])).toBe(2);
     expect(removeCssLoaderStyles([reachable, gone])).toBe(2);
     expect(styles.every((item) => item.remove.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("never counts a keyboard theme as a second interface theme", () => {
+    const names = interfaceThemeNames([
+      { cssLoaderName: "Hooandee Vida" },
+      { cssLoaderName: "Hooandee Terciopelo", exclusiveGroup: "keyboard" },
+    ]);
+    expect([...names]).toEqual(["Hooandee Vida"]);
   });
 });
