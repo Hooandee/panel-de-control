@@ -3,25 +3,185 @@
 ## [0.89.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.88.0...panel-de-control-v0.89.0) (2026-11-12)
 
 
-### Features
+### Español
 
-* **themes:** keyboard themes one at a time, and How Long to Beat and ProtonDB for themes ([#1262](https://github.com/Hooandee/panel-de-control/issues/1262)) ([fb071e9](https://github.com/Hooandee/panel-de-control/commit/fb071e98640d5369a08b2be20f9c45f2b94dec0f))
+* **Panel de Control vuelve a arrancar en Armada:** Tras la última actualización de Armada se quedaba cargando sin fin en el Odin 3, la Pocket Fit, la Retroid Pocket 6 y otras máquinas ARM. Ya carga con normalidad.
+* **Se acabaron los cuelgues al despertar con núcleos apagados:** Si tenías núcleos de CPU apagados, algunas máquinas como la Steam Deck LCD, la Legion Go o la GPD Win 5 se quedaban colgadas al volver del reposo y había que forzar el apagado. Ahora todos los núcleos se encienden justo antes de suspender y tu límite vuelve unos segundos después de despertar.
+* **Descargas con la pantalla apagada en la Steam Deck:** Panel de Control se peleaba con el modo descarga de Steam, y la Deck podía colgarse o apagarse mientras descargaba con la pantalla apagada. Ahora le deja el control mientras dura la descarga y lo recupera al terminar.
+* **El HUD se apaga de verdad:** Al desactivarlo aparecía el HUD completo de Steam con la gráfica de frametime. Ahora desaparece del todo y vuelve como estaba al encenderlo.
+* **Valores del HUD siempre al día:** El TDP, el consumo y el ventilador se quedaban congelados si el HUD arrancaba después que Panel de Control. Ahora se vuelve a enganchar solo, y lo que cambia sin parar se refresca cada 10 segundos en lugar de cada 2, lo que quita trabajo al HUD.
+* **Batería en el HUD:** Nuevas filas con el consumo de la batería y el tiempo que le queda mientras se descarga. En las MSI Claw con Intel el consumo ya no sale como un guion.
+* **Desactivar es desactivar:** Con el control de ventiladores apagado, Panel de Control los devolvía a automático en cada cambio de juego o al despertar, pisando a herramientas como CoolerControl. Ahora los suelta una vez y no vuelve a tocarlos. En los PC de sobremesa, apagar los ventiladores de placa ya detiene la curva.
+* **TDP bajo en la ROG Ally:** El firmware de ASUS no acepta menos de 15 W en los picos, así que con 8 W la media se respeta pero hay picos cortos más altos. La sección Potencia ahora lo explica, en vez de parecer que ignora tu límite.
+* **Potencia ya no se queda cargando en la Legion Go S:** Con el firmware que tarda en responder, la sección Potencia se quedaba cargando y el arranque pasaba del minuto. Ahora abre con normalidad.
+* **MSI Claw:** En las Claw con Intel y en batería ya no sale el aviso de que algo te cambia el TDP: es el límite de batería del propio firmware y ahora se trata como tal. En la Claw A8 vuelven SPPT y FPPT también fuera de Anatase.
+* **Legion Go original con ventiladores, límite de carga y M2:** La curva de ventilador y el límite de carga al 80 % no aparecían con los sistemas actuales. Ya están de vuelta, y el botón M2 se puede reasignar también con las versiones nuevas de InputPlumber.
+* **Ventilador del Odin 3 en Pocknix:** Panel de Control y el control de ventilador de Pocknix ya no se pelean. Al poner una curva se encarga Panel de Control y en Automático se lo devuelve a Pocknix.
+* **Cambiar de escalador después de actualizar el juego:** Si una actualización del juego o HelixSR Desktop quitaban HelixSR, Escaladores seguía creyéndolo instalado y no dejaba pasar a otro escalador. Ahora se da cuenta y el cambio funciona.
+* **Mako se desactiva siempre:** Si las opciones de lanzamiento de Mako cambiaban por fuera, desactivarlo o pasar a Lossless fallaba con «No se pudieron guardar los cambios». Ahora se quita sin problemas.
+* **Mako en emuladores compartidos:** Con varios juegos en el mismo emulador, como Breath of the Wild y Tears of the Kingdom, Mako solo funcionaba en el primero. Ahora cada juego tiene el suyo.
+* **Etiqueta de las portadas opcional:** Una opción nueva en Escaladores oculta la etiqueta verde del escalador, como «FSR 4.1», en las portadas.
+* **Unifideck más limpio:** Los juegos de Unifideck que no están instalados ya no aparecen en Escaladores como juegos de Linux.
+* **Avisos que ayudan a elegir:** En la Steam Machine con juegos a 4K, Escaladores avisa de que HelixSR o la calidad nativa pueden agotar la memoria de vídeo. En Where Winds Meet explica por qué OptiScaler no tiene nada que sustituir. No se bloquea nada.
+* **Temas sin errores de espera en bucle:** Si una pestaña de Steam no respondía, los temas podían quedarse reintentando sin fin con errores de tiempo de espera. Ahora dejan de insistir, esperan a CSS Loader y vuelven a dejar los temas como estaban.
+* **Un solo tema de teclado a la vez:** Con dos temas de teclado activos se mezclaban y el teclado quedaba a medias. Ahora, al activar uno, el anterior se apaga.
+* **How Long to Beat y ProtonDB en los temas:** Los temas ya pueden mostrar cuánto se tarda en terminar un juego y su medalla de ProtonDB en la ficha del juego.
+* **Fondos de vídeo tras reiniciar Steam:** Después de reiniciar Steam, algunos fondos de vídeo de Ambiente se quedaban en negro o en gris. Ahora se prepara una copia que Steam sí puede reproducir y se usa esa.
+* **Trailers con temas de CSS Loader:** Con temas como Obsidian y un color puesto en el fondo de juegos recientes, ese color tapaba el trailer del juego. Ya se ve el trailer.
+* **El reproductor deja libre el teclado:** El mini reproductor de Ambiente ya no se pone encima del teclado de Steam en el chat o en la búsqueda. Se esconde mientras escribes y la música sigue sonando.
+* **La música ya no arranca sola:** Al encender Steam, la radio o la música de Ambiente se quedan en pausa hasta que les das al play.
+* **Listas M3U pegadas como enlace:** Un enlace a una lista de canales, como la de TDTChannels, va a Listas en vez de intentar reproducirse como una sola emisora.
+* **Pantalla inferior de la AYANEO Pocket DS del derecho:** Ya no sale boca abajo. Se gira según cómo está montada la pantalla en cada máquina.
 
+### English
 
-### Bug Fixes
+* **Panel de Control starts again on Armada:** After the latest Armada update it kept loading forever on the Odin 3, the Pocket Fit, the Retroid Pocket 6 and other ARM machines. It now loads normally.
+* **No more freezes when waking with cores switched off:** If you had CPU cores switched off, some machines such as the Steam Deck LCD, the Legion Go or the GPD Win 5 froze when waking from sleep and needed a forced power off. Now every core comes back on right before sleeping, and your limit returns a few seconds after waking.
+* **Downloads with the screen off on the Steam Deck:** Panel de Control fought Steam's download mode, and the Deck could freeze or power off while downloading with the screen off. It now leaves Steam in charge while the download lasts and takes over again when it ends.
+* **The HUD really turns off:** Switching it off brought up Steam's full HUD with the frametime graph. It now disappears completely and comes back as it was when you turn it on.
+* **HUD values always up to date:** TDP, power draw and fan speed froze if the HUD started after Panel de Control. It now reattaches on its own, and values that change all the time refresh every 10 seconds instead of every 2, which takes load off the HUD.
+* **Battery in the HUD:** New rows show battery power draw and the time left while discharging. On Intel MSI Claw handhelds power draw no longer shows as a dash.
+* **Off means off:** With fan control turned off, Panel de Control handed the fans back to automatic on every game change or wake, overriding tools like CoolerControl. It now lets go once and leaves them alone. On desktop PCs, turning board fans off now stops the curve.
+* **Low TDP on the ROG Ally:** ASUS firmware does not accept less than 15 W for peaks, so at 8 W the average holds but short peaks go higher. The Power section now explains this instead of looking like it ignores your limit.
+* **Power no longer stuck loading on the Legion Go S:** With firmware that is slow to answer, the Power section kept loading and startup took over a minute. It now opens normally.
+* **MSI Claw:** On Intel Claw handhelds running on battery, the notice that something is changing your TDP is gone: it is the firmware's own battery limit and is now treated as one. On the Claw A8, SPPT and FPPT are back outside Anatase too.
+* **Original Legion Go gets fans, charge limit and M2:** The fan curve and the 80 % charge limit were missing on current systems. They are back, and the M2 button can be remapped on newer InputPlumber versions too.
+* **Odin 3 fan on Pocknix:** Panel de Control and Pocknix's fan control no longer fight. With a curve set Panel de Control takes over, and on Auto it hands the fan back to Pocknix.
+* **Switching upscalers after a game update:** If a game update or HelixSR Desktop removed HelixSR, Escaladores still thought it was installed and would not switch to another upscaler. It now notices and the switch works.
+* **Mako always turns off:** If Mako's launch options were changed elsewhere, turning it off or moving to Lossless failed with "Could not save the changes". It now comes off cleanly.
+* **Mako on shared emulators:** With several games on the same emulator, like Breath of the Wild and Tears of the Kingdom, Mako only worked on the first one. Each game now gets its own.
+* **Optional cover badges:** A new option in Escaladores hides the green upscaler badge, like "FSR 4.1", on covers.
+* **Cleaner Unifideck list:** Unifideck games that are not installed no longer show up in Escaladores as Linux games.
+* **Notices that help you choose:** On the Steam Machine with games at 4K, Escaladores warns that HelixSR or native quality can run out of video memory. In Where Winds Meet it explains why OptiScaler has nothing to replace. Nothing is blocked.
+* **Themes without endless timeout errors:** If a Steam tab stopped answering, themes could keep retrying forever with timeout errors. They now stop insisting, wait for CSS Loader and put your themes back as they were.
+* **One keyboard theme at a time:** With two keyboard themes on, they got mixed and the keyboard was left half done. Turning one on now turns the previous one off.
+* **How Long to Beat and ProtonDB in themes:** Themes can now show how long a game takes to beat and its ProtonDB medal on the game page.
+* **Video backgrounds after restarting Steam:** After a Steam restart, some Ambiente video backgrounds stayed black or grey. A copy that Steam can play is now made and used instead.
+* **Trailers with CSS Loader themes:** With themes like Obsidian and a colour set for the recent games background, that colour covered the game trailer. The trailer now shows.
+* **The player stays off the keyboard:** Ambiente's mini player no longer sits on top of Steam's keyboard in chat or search. It hides while you type and the music keeps playing.
+* **Music no longer starts by itself:** When Steam starts, Ambiente's radio or music stays paused until you press play.
+* **M3U lists pasted as a link:** A link to a channel list, like TDTChannels', goes to Lists instead of being played as a single station.
+* **AYANEO Pocket DS bottom screen the right way up:** It no longer shows upside down. It now turns the way the screen is mounted on each machine.
 
-* **ambient:** video backgrounds after a Steam restart, theme colour over trailers, keyboard, startup music and M3U links ([#1267](https://github.com/Hooandee/panel-de-control/issues/1267)) ([2e77609](https://github.com/Hooandee/panel-de-control/commit/2e77609d33bde90ad8063b3a6d754fd359ec2546))
-* **fans:** hand the Odin 3 fan to and from pocknix-fancontrol on Pocknix ([#1271](https://github.com/Hooandee/panel-de-control/issues/1271)) ([a60002a](https://github.com/Hooandee/panel-de-control/commit/a60002aa2c553c87f63ab08f988217a8b0d6140f))
-* **hud:** hide the overlay when it is switched off and keep live values updating ([#1283](https://github.com/Hooandee/panel-de-control/issues/1283)) ([9ec9862](https://github.com/Hooandee/panel-de-control/commit/9ec9862bde3e2fdf7aa7f11341d2c3de9a96d3df))
-* **kiosk:** turn the bottom screen the way Armada says the panel is mounted ([#1270](https://github.com/Hooandee/panel-de-control/issues/1270)) ([0d9c2d5](https://github.com/Hooandee/panel-de-control/commit/0d9c2d5c9823659be6683595c091fcc5e4aa3023))
-* **legion:** fan curve, charge limit and M2 on the original Legion Go ([#1268](https://github.com/Hooandee/panel-de-control/issues/1268)) ([bda6acb](https://github.com/Hooandee/panel-de-control/commit/bda6acb2b11a4ed5c4ba8a512aa4f6f7bc83c3a2))
-* load the plugin's own Python modules ahead of same-named system packages ([#1265](https://github.com/Hooandee/panel-de-control/issues/1265)) ([dce034b](https://github.com/Hooandee/panel-de-control/commit/dce034b631e03368ebaf9ffcb3f3fcb08ce7dff5))
-* stop freezes when waking from sleep with CPU cores switched off ([#1266](https://github.com/Hooandee/panel-de-control/issues/1266)) ([6a750e1](https://github.com/Hooandee/panel-de-control/commit/6a750e1dc329d9f2f587707ec5699f68834535f2))
-* stop writing fans and TDP that are turned off, and explain firmware power limits ([#1284](https://github.com/Hooandee/panel-de-control/issues/1284)) ([ea141c7](https://github.com/Hooandee/panel-de-control/commit/ea141c754373629e82471c4d9f54767e40da6da5))
-* **tdp:** stop fighting Steam's download mode on the Steam Deck ([#1285](https://github.com/Hooandee/panel-de-control/issues/1285)) ([6988d3c](https://github.com/Hooandee/panel-de-control/commit/6988d3c99c5c1666ccea2e3795b28d3544a04900))
-* **themes:** stop endless CSS Loader timeouts and report more theme context ([#1281](https://github.com/Hooandee/panel-de-control/issues/1281)) ([a393a2a](https://github.com/Hooandee/panel-de-control/commit/a393a2a34b3648467fb7b9db9a492cd6e5481ce3))
-* **upscalers:** complete support reports, Mako on shared emulators, Unifideck, Steam Machine 4K and Where Winds Meet notices ([#1272](https://github.com/Hooandee/panel-de-control/issues/1272)) ([66dca28](https://github.com/Hooandee/panel-de-control/commit/66dca281b6ff6cf0ea0976040bfdbad870f3e2ed))
-* **upscalers:** switch away from a HelixSR the game replaced, turn Mako off when its launch record drifted, and hide cover badges ([#1282](https://github.com/Hooandee/panel-de-control/issues/1282)) ([ed6c2f0](https://github.com/Hooandee/panel-de-control/commit/ed6c2f004f41d895affeddf6ace7a226a64199fa))
+### Italiano
+
+* **Panel de Control torna ad avviarsi su Armada:** Dopo l'ultimo aggiornamento di Armada restava in caricamento infinito su Odin 3, Pocket Fit, Retroid Pocket 6 e altre macchine ARM. Ora si carica normalmente.
+* **Basta blocchi al risveglio con i core spenti:** Se avevi dei core della CPU spenti, alcune macchine come Steam Deck LCD, Legion Go o GPD Win 5 si bloccavano al risveglio e bisognava forzare lo spegnimento. Ora tutti i core si riaccendono appena prima della sospensione e il tuo limite torna pochi secondi dopo il risveglio.
+* **Download a schermo spento su Steam Deck:** Panel de Control litigava con la modalità download di Steam, e il Deck poteva bloccarsi o spegnersi mentre scaricava a schermo spento. Ora lascia il controllo a Steam per tutta la durata del download e lo riprende alla fine.
+* **L'HUD si spegne davvero:** Disattivandolo compariva l'HUD completo di Steam con il grafico del frametime. Ora sparisce del tutto e torna com'era quando lo riattivi.
+* **Valori dell'HUD sempre aggiornati:** TDP, consumo e ventola restavano bloccati se l'HUD partiva dopo Panel de Control. Ora si ricollega da solo, e i valori che cambiano di continuo si aggiornano ogni 10 secondi invece che ogni 2, alleggerendo l'HUD.
+* **Batteria nell'HUD:** Nuove righe con il consumo della batteria e l'autonomia residua durante la scarica. Sulle MSI Claw con Intel il consumo non appare più come un trattino.
+* **Disattivato vuol dire disattivato:** Con il controllo delle ventole spento, Panel de Control le rimetteva in automatico a ogni cambio di gioco o risveglio, scavalcando strumenti come CoolerControl. Ora le rilascia una volta e non le tocca più. Sui PC desktop, spegnere le ventole della scheda madre ora ferma la curva.
+* **TDP basso su ROG Ally:** Il firmware ASUS non accetta meno di 15 W per i picchi, quindi a 8 W la media viene rispettata ma ci sono brevi picchi più alti. La sezione Potenza ora lo spiega, invece di sembrare che ignori il tuo limite.
+* **Potenza non resta più in caricamento su Legion Go S:** Con il firmware lento a rispondere, la sezione Potenza restava in caricamento e l'avvio superava il minuto. Ora si apre normalmente.
+* **MSI Claw:** Sulle Claw con Intel a batteria non compare più l'avviso che qualcosa cambia il tuo TDP: è il limite di batteria del firmware e ora viene trattato come tale. Sulla Claw A8 tornano SPPT e FPPT anche fuori da Anatase.
+* **Legion Go originale con ventole, limite di carica e M2:** La curva delle ventole e il limite di carica all'80 % mancavano sui sistemi attuali. Sono tornati, e il tasto M2 si può rimappare anche con le versioni nuove di InputPlumber.
+* **Ventola di Odin 3 su Pocknix:** Panel de Control e il controllo ventola di Pocknix non litigano più. Con una curva impostata se ne occupa Panel de Control, e in Automatico la ventola torna a Pocknix.
+* **Cambiare upscaler dopo un aggiornamento del gioco:** Se un aggiornamento del gioco o HelixSR Desktop toglievano HelixSR, Escaladores lo credeva ancora installato e non lasciava passare a un altro upscaler. Ora se ne accorge e il cambio funziona.
+* **Mako si disattiva sempre:** Se le opzioni di avvio di Mako venivano cambiate altrove, disattivarlo o passare a Lossless falliva con «Impossibile salvare le modifiche». Ora si toglie senza problemi.
+* **Mako sugli emulatori condivisi:** Con più giochi sullo stesso emulatore, come Breath of the Wild e Tears of the Kingdom, Mako funzionava solo sul primo. Ora ogni gioco ha il suo.
+* **Etichetta sulle copertine facoltativa:** Una nuova opzione in Escaladores nasconde l'etichetta verde dell'upscaler, come «FSR 4.1», sulle copertine.
+* **Unifideck più pulito:** I giochi di Unifideck non installati non compaiono più in Escaladores come giochi Linux.
+* **Avvisi che aiutano a scegliere:** Sulla Steam Machine con giochi in 4K, Escaladores avvisa che HelixSR o la qualità nativa possono esaurire la memoria video. In Where Winds Meet spiega perché OptiScaler non ha niente da sostituire. Non viene bloccato nulla.
+* **Temi senza errori di attesa a ripetizione:** Se una scheda di Steam non rispondeva, i temi potevano riprovare all'infinito con errori di timeout. Ora smettono di insistere, aspettano CSS Loader e rimettono i temi com'erano.
+* **Un solo tema della tastiera alla volta:** Con due temi della tastiera attivi si mescolavano e la tastiera restava a metà. Ora, attivandone uno, il precedente si spegne.
+* **How Long to Beat e ProtonDB nei temi:** I temi ora possono mostrare quanto ci vuole a finire un gioco e la sua medaglia ProtonDB nella scheda del gioco.
+* **Sfondi video dopo il riavvio di Steam:** Dopo un riavvio di Steam alcuni sfondi video di Ambiente restavano neri o grigi. Ora viene preparata una copia che Steam riesce a riprodurre e si usa quella.
+* **Trailer con i temi di CSS Loader:** Con temi come Obsidian e un colore impostato per lo sfondo dei giochi recenti, quel colore copriva il trailer del gioco. Ora il trailer si vede.
+* **Il lettore lascia libera la tastiera:** Il mini lettore di Ambiente non si mette più sopra la tastiera di Steam nella chat o nella ricerca. Si nasconde mentre scrivi e la musica continua.
+* **La musica non parte più da sola:** All'avvio di Steam la radio o la musica di Ambiente restano in pausa finché non premi play.
+* **Liste M3U incollate come link:** Un link a una lista di canali, come quella di TDTChannels, va in Liste invece di essere riprodotto come una singola emittente.
+* **Schermo inferiore di AYANEO Pocket DS nel verso giusto:** Non appare più capovolto. Ora ruota secondo come è montato lo schermo su ogni macchina.
+
+### Deutsch
+
+* **Panel de Control startet wieder unter Armada:** Nach dem letzten Armada-Update lud es auf dem Odin 3, dem Pocket Fit, dem Retroid Pocket 6 und anderen ARM-Geräten endlos. Jetzt lädt es wieder normal.
+* **Keine Hänger mehr beim Aufwachen mit abgeschalteten Kernen:** Wenn CPU-Kerne abgeschaltet waren, froren manche Geräte wie das Steam Deck LCD, der Legion Go oder der GPD Win 5 beim Aufwachen ein und mussten hart ausgeschaltet werden. Jetzt werden alle Kerne kurz vor dem Ruhezustand wieder eingeschaltet, und dein Limit kommt wenige Sekunden nach dem Aufwachen zurück.
+* **Downloads bei ausgeschaltetem Bildschirm auf dem Steam Deck:** Panel de Control kam dem Download-Modus von Steam in die Quere, und das Deck konnte beim Herunterladen mit ausgeschaltetem Bildschirm hängen bleiben oder sich ausschalten. Jetzt überlässt es Steam die Kontrolle, solange der Download läuft, und übernimmt danach wieder.
+* **Das HUD geht wirklich aus:** Beim Ausschalten erschien das vollständige HUD von Steam mit der Frametime-Grafik. Jetzt verschwindet es ganz und kommt beim Einschalten so zurück, wie es war.
+* **HUD-Werte immer aktuell:** TDP, Verbrauch und Lüfter froren ein, wenn das HUD nach Panel de Control startete. Jetzt verbindet es sich von selbst neu, und Werte, die sich ständig ändern, werden alle 10 statt alle 2 Sekunden aktualisiert, was das HUD entlastet.
+* **Akku im HUD:** Neue Zeilen zeigen beim Entladen den Akkuverbrauch und die Restlaufzeit. Auf MSI Claw mit Intel erscheint der Verbrauch nicht mehr als Strich.
+* **Aus heißt aus:** Bei ausgeschalteter Lüftersteuerung setzte Panel de Control die Lüfter bei jedem Spielwechsel oder Aufwachen auf Automatik zurück und überging Tools wie CoolerControl. Jetzt gibt es sie einmal frei und lässt sie danach in Ruhe. Auf Desktop-PCs stoppt das Ausschalten der Mainboard-Lüfter jetzt die Kurve.
+* **Niedriger TDP auf dem ROG Ally:** Die ASUS-Firmware akzeptiert für Spitzen nicht weniger als 15 W, daher hält bei 8 W der Durchschnitt, aber kurze Spitzen liegen höher. Der Bereich Leistung erklärt das jetzt, statt so zu wirken, als würde er dein Limit ignorieren.
+* **Leistung lädt auf dem Legion Go S nicht mehr endlos:** Mit Firmware, die langsam antwortet, blieb der Bereich Leistung beim Laden hängen und der Start dauerte über eine Minute. Jetzt öffnet er normal.
+* **MSI Claw:** Auf Claw mit Intel im Akkubetrieb erscheint der Hinweis, dass etwas deinen TDP ändert, nicht mehr: Das ist das Akkulimit der Firmware und wird jetzt auch so behandelt. Auf dem Claw A8 sind SPPT und FPPT auch außerhalb von Anatase zurück.
+* **Original Legion Go mit Lüftern, Ladelimit und M2:** Lüfterkurve und 80-%-Ladelimit fehlten auf aktuellen Systemen. Sie sind zurück, und die M2-Taste lässt sich auch mit neueren InputPlumber-Versionen belegen.
+* **Odin-3-Lüfter unter Pocknix:** Panel de Control und die Lüftersteuerung von Pocknix kommen sich nicht mehr in die Quere. Mit einer Kurve übernimmt Panel de Control, auf Automatisch geht der Lüfter zurück an Pocknix.
+* **Upscaler nach einem Spiel-Update wechseln:** Wenn ein Spiel-Update oder HelixSR Desktop HelixSR entfernt hatte, hielt Escaladores es weiter für installiert und ließ keinen anderen Upscaler zu. Jetzt merkt es das und der Wechsel klappt.
+* **Mako lässt sich immer ausschalten:** Wurden die Startoptionen von Mako anderswo geändert, schlug Ausschalten oder der Wechsel zu Lossless mit „Änderungen konnten nicht gespeichert werden“ fehl. Jetzt wird es sauber entfernt.
+* **Mako auf gemeinsam genutzten Emulatoren:** Mit mehreren Spielen auf demselben Emulator, etwa Breath of the Wild und Tears of the Kingdom, funktionierte Mako nur beim ersten. Jetzt hat jedes Spiel sein eigenes.
+* **Abzeichen auf den Covern optional:** Eine neue Option in Escaladores blendet das grüne Upscaler-Abzeichen wie „FSR 4.1“ auf den Covern aus.
+* **Aufgeräumtere Unifideck-Liste:** Nicht installierte Unifideck-Spiele erscheinen in Escaladores nicht mehr als Linux-Spiele.
+* **Hinweise, die bei der Wahl helfen:** Auf der Steam Machine mit Spielen in 4K warnt Escaladores, dass HelixSR oder native Qualität den Grafikspeicher erschöpfen können. Bei Where Winds Meet erklärt es, warum OptiScaler nichts zu ersetzen hat. Nichts wird blockiert.
+* **Themes ohne endlose Timeout-Fehler:** Wenn ein Steam-Tab nicht mehr antwortete, konnten Themes endlos mit Timeout-Fehlern neu versuchen. Jetzt hören sie auf, warten auf CSS Loader und stellen deine Themes wieder so her, wie sie waren.
+* **Nur ein Tastatur-Theme gleichzeitig:** Mit zwei aktiven Tastatur-Themes vermischten sie sich und die Tastatur blieb halb fertig. Jetzt schaltet das Aktivieren eines Themes das vorherige ab.
+* **How Long to Beat und ProtonDB in Themes:** Themes können jetzt auf der Spielseite anzeigen, wie lange ein Spiel dauert und welche ProtonDB-Medaille es hat.
+* **Videohintergründe nach einem Steam-Neustart:** Nach einem Neustart von Steam blieben manche Videohintergründe in Ambiente schwarz oder grau. Jetzt wird eine Kopie erstellt, die Steam abspielen kann, und diese verwendet.
+* **Trailer mit CSS-Loader-Themes:** Mit Themes wie Obsidian und einer Farbe für den Hintergrund der zuletzt gespielten Spiele verdeckte diese Farbe den Trailer. Jetzt ist der Trailer zu sehen.
+* **Der Player lässt die Tastatur frei:** Der Mini-Player von Ambiente liegt nicht mehr über der Steam-Tastatur im Chat oder in der Suche. Er blendet sich beim Tippen aus und die Musik läuft weiter.
+* **Musik startet nicht mehr von selbst:** Beim Start von Steam bleiben Radio oder Musik in Ambiente pausiert, bis du auf Play drückst.
+* **Als Link eingefügte M3U-Listen:** Ein Link zu einer Senderliste, etwa der von TDTChannels, landet unter Listen, statt als einzelner Sender abgespielt zu werden.
+* **Unterer Bildschirm des AYANEO Pocket DS richtig herum:** Er steht nicht mehr auf dem Kopf. Er dreht sich jetzt so, wie der Bildschirm im jeweiligen Gerät eingebaut ist.
+
+### Português (Brasil)
+
+* **Panel de Control volta a abrir no Armada:** Depois da última atualização do Armada ele ficava carregando sem parar no Odin 3, no Pocket Fit, no Retroid Pocket 6 e em outras máquinas ARM. Agora carrega normalmente.
+* **Chega de travar ao acordar com núcleos desligados:** Se você tinha núcleos da CPU desligados, algumas máquinas como o Steam Deck LCD, o Legion Go ou o GPD Win 5 travavam ao voltar do repouso e era preciso forçar o desligamento. Agora todos os núcleos ligam logo antes de suspender, e seu limite volta alguns segundos depois de acordar.
+* **Downloads com a tela apagada no Steam Deck:** O Panel de Control brigava com o modo de download da Steam, e o Deck podia travar ou desligar baixando com a tela apagada. Agora ele deixa a Steam no controle enquanto o download dura e retoma quando termina.
+* **O HUD desliga de verdade:** Ao desativar, aparecia o HUD completo da Steam com o gráfico de frametime. Agora ele some por completo e volta como estava quando você liga de novo.
+* **Valores do HUD sempre atualizados:** TDP, consumo e ventoinha ficavam congelados se o HUD abrisse depois do Panel de Control. Agora ele se reconecta sozinho, e o que muda o tempo todo atualiza a cada 10 segundos em vez de a cada 2, aliviando o HUD.
+* **Bateria no HUD:** Novas linhas mostram o consumo da bateria e o tempo restante enquanto ela descarrega. Nos MSI Claw com Intel o consumo não aparece mais como um traço.
+* **Desligado é desligado:** Com o controle das ventoinhas desligado, o Panel de Control as devolvia ao automático a cada troca de jogo ou ao acordar, passando por cima de ferramentas como o CoolerControl. Agora ele solta uma vez e não mexe mais. Nos PCs de mesa, desligar as ventoinhas da placa agora para a curva.
+* **TDP baixo no ROG Ally:** O firmware da ASUS não aceita menos de 15 W nos picos, então com 8 W a média é respeitada, mas há picos curtos mais altos. A seção Potência agora explica isso, em vez de parecer que ignora seu limite.
+* **Potência não fica mais carregando no Legion Go S:** Com o firmware que demora a responder, a seção Potência ficava carregando e a inicialização passava de um minuto. Agora abre normalmente.
+* **MSI Claw:** Nos Claw com Intel na bateria, o aviso de que algo está mudando seu TDP não aparece mais: é o limite de bateria do próprio firmware e agora é tratado assim. No Claw A8, SPPT e FPPT voltam também fora do Anatase.
+* **Legion Go original com ventoinhas, limite de carga e M2:** A curva das ventoinhas e o limite de carga em 80 % não apareciam nos sistemas atuais. Voltaram, e o botão M2 pode ser remapeado também nas versões novas do InputPlumber.
+* **Ventoinha do Odin 3 no Pocknix:** O Panel de Control e o controle de ventoinha do Pocknix não brigam mais. Com uma curva definida, o Panel de Control assume, e no Automático devolve a ventoinha ao Pocknix.
+* **Trocar de upscaler depois de atualizar o jogo:** Se uma atualização do jogo ou o HelixSR Desktop tiravam o HelixSR, o Escaladores continuava achando que ele estava instalado e não deixava trocar de upscaler. Agora ele percebe e a troca funciona.
+* **Mako sempre desliga:** Se as opções de inicialização do Mako fossem mudadas por fora, desligar ou trocar para o Lossless falhava com "Não foi possível salvar as alterações". Agora ele sai sem problemas.
+* **Mako em emuladores compartilhados:** Com vários jogos no mesmo emulador, como Breath of the Wild e Tears of the Kingdom, o Mako só funcionava no primeiro. Agora cada jogo tem o seu.
+* **Etiqueta nas capas opcional:** Uma opção nova no Escaladores esconde a etiqueta verde do upscaler, como "FSR 4.1", nas capas.
+* **Lista do Unifideck mais limpa:** Jogos do Unifideck que não estão instalados não aparecem mais no Escaladores como jogos de Linux.
+* **Avisos que ajudam a escolher:** No Steam Machine com jogos em 4K, o Escaladores avisa que o HelixSR ou a qualidade nativa podem esgotar a memória de vídeo. Em Where Winds Meet, explica por que o OptiScaler não tem nada para substituir. Nada é bloqueado.
+* **Temas sem erros de espera sem fim:** Se uma aba da Steam parava de responder, os temas podiam ficar tentando de novo sem parar com erros de tempo esgotado. Agora eles param de insistir, esperam o CSS Loader e deixam seus temas como estavam.
+* **Um tema de teclado por vez:** Com dois temas de teclado ativos eles se misturavam e o teclado ficava pela metade. Agora, ao ativar um, o anterior é desligado.
+* **How Long to Beat e ProtonDB nos temas:** Os temas agora podem mostrar quanto tempo leva para terminar um jogo e a medalha do ProtonDB na página do jogo.
+* **Fundos de vídeo depois de reiniciar a Steam:** Depois de reiniciar a Steam, alguns fundos de vídeo do Ambiente ficavam pretos ou cinza. Agora é feita uma cópia que a Steam consegue reproduzir, e ela é usada no lugar.
+* **Trailers com temas do CSS Loader:** Com temas como o Obsidian e uma cor definida no fundo dos jogos recentes, essa cor cobria o trailer do jogo. Agora o trailer aparece.
+* **O player deixa o teclado livre:** O mini player do Ambiente não fica mais em cima do teclado da Steam no chat ou na busca. Ele se esconde enquanto você digita e a música continua tocando.
+* **A música não começa mais sozinha:** Ao abrir a Steam, o rádio ou a música do Ambiente ficam pausados até você apertar play.
+* **Listas M3U coladas como link:** Um link para uma lista de canais, como a da TDTChannels, vai para Listas em vez de tocar como uma única rádio.
+* **Tela inferior do AYANEO Pocket DS do lado certo:** Ela não aparece mais de cabeça para baixo. Agora gira conforme a tela está montada em cada máquina.
+
+### Français
+
+* **Panel de Control redémarre sur Armada :** Après la dernière mise à jour d'Armada, il chargeait sans fin sur l'Odin 3, la Pocket Fit, la Retroid Pocket 6 et d'autres machines ARM. Il se charge de nouveau normalement.
+* **Fini les blocages au réveil avec des cœurs désactivés :** Si vous aviez désactivé des cœurs du processeur, certaines machines comme le Steam Deck LCD, la Legion Go ou le GPD Win 5 se figeaient au sortir de la veille et il fallait forcer l'extinction. Désormais tous les cœurs se rallument juste avant la mise en veille, et votre limite revient quelques secondes après le réveil.
+* **Téléchargements écran éteint sur le Steam Deck :** Panel de Control se battait avec le mode téléchargement de Steam, et le Deck pouvait se figer ou s'éteindre en téléchargeant écran éteint. Il laisse maintenant Steam aux commandes pendant le téléchargement et reprend la main à la fin.
+* **Le HUD s'éteint vraiment :** En le désactivant, le HUD complet de Steam apparaissait avec le graphique du frametime. Il disparaît maintenant complètement et revient tel quel quand vous le rallumez.
+* **Valeurs du HUD toujours à jour :** Le TDP, la consommation et le ventilateur restaient figés si le HUD démarrait après Panel de Control. Il se reconnecte maintenant tout seul, et les valeurs qui changent sans arrêt se mettent à jour toutes les 10 secondes au lieu de 2, ce qui allège le HUD.
+* **La batterie dans le HUD :** De nouvelles lignes affichent la consommation de la batterie et l'autonomie restante pendant la décharge. Sur les MSI Claw Intel, la consommation ne s'affiche plus comme un tiret.
+* **Désactivé veut dire désactivé :** Avec le contrôle des ventilateurs coupé, Panel de Control les remettait en automatique à chaque changement de jeu ou réveil, en écrasant des outils comme CoolerControl. Il les libère maintenant une fois et n'y touche plus. Sur les PC de bureau, couper les ventilateurs de la carte mère arrête désormais la courbe.
+* **TDP bas sur la ROG Ally :** Le firmware ASUS n'accepte pas moins de 15 W pour les pics, donc à 8 W la moyenne est respectée mais de courts pics montent plus haut. La section Puissance l'explique maintenant, au lieu de donner l'impression d'ignorer votre limite.
+* **Puissance ne reste plus en chargement sur la Legion Go S :** Avec un firmware lent à répondre, la section Puissance restait en chargement et le démarrage dépassait la minute. Elle s'ouvre maintenant normalement.
+* **MSI Claw :** Sur les Claw Intel sur batterie, l'avertissement indiquant que quelque chose modifie votre TDP a disparu : c'est la limite batterie du firmware, désormais traitée comme telle. Sur la Claw A8, SPPT et FPPT reviennent aussi en dehors d'Anatase.
+* **Legion Go d'origine avec ventilateurs, limite de charge et M2 :** La courbe des ventilateurs et la limite de charge à 80 % manquaient sur les systèmes actuels. Elles sont de retour, et le bouton M2 peut aussi être réassigné avec les nouvelles versions d'InputPlumber.
+* **Ventilateur de l'Odin 3 sous Pocknix :** Panel de Control et le contrôle du ventilateur de Pocknix ne se battent plus. Avec une courbe, Panel de Control prend la main, et en Automatique il rend le ventilateur à Pocknix.
+* **Changer d'upscaler après une mise à jour du jeu :** Si une mise à jour du jeu ou HelixSR Desktop retirait HelixSR, Escaladores le croyait toujours installé et refusait de passer à un autre upscaler. Il s'en rend compte maintenant et le changement fonctionne.
+* **Mako se désactive toujours :** Si les options de lancement de Mako étaient modifiées ailleurs, le désactiver ou passer à Lossless échouait avec « Impossible d'enregistrer les modifications ». Il se retire maintenant proprement.
+* **Mako sur les émulateurs partagés :** Avec plusieurs jeux sur le même émulateur, comme Breath of the Wild et Tears of the Kingdom, Mako ne fonctionnait que sur le premier. Chaque jeu a maintenant le sien.
+* **Badge sur les jaquettes facultatif :** Une nouvelle option dans Escaladores masque le badge vert de l'upscaler, comme « FSR 4.1 », sur les jaquettes.
+* **Liste Unifideck plus propre :** Les jeux Unifideck non installés n'apparaissent plus dans Escaladores comme des jeux Linux.
+* **Des avertissements qui aident à choisir :** Sur la Steam Machine avec des jeux en 4K, Escaladores prévient que HelixSR ou la qualité native peuvent épuiser la mémoire vidéo. Dans Where Winds Meet, il explique pourquoi OptiScaler n'a rien à remplacer. Rien n'est bloqué.
+* **Thèmes sans erreurs d'attente à répétition :** Si un onglet de Steam ne répondait plus, les thèmes pouvaient réessayer sans fin avec des erreurs de délai dépassé. Ils arrêtent maintenant d'insister, attendent CSS Loader et remettent vos thèmes comme avant.
+* **Un seul thème de clavier à la fois :** Avec deux thèmes de clavier actifs, ils se mélangeaient et le clavier restait à moitié appliqué. Activer un thème désactive maintenant le précédent.
+* **How Long to Beat et ProtonDB dans les thèmes :** Les thèmes peuvent maintenant afficher le temps nécessaire pour finir un jeu et sa médaille ProtonDB sur la page du jeu.
+* **Fonds vidéo après un redémarrage de Steam :** Après un redémarrage de Steam, certains fonds vidéo d'Ambiente restaient noirs ou gris. Une copie que Steam sait lire est maintenant préparée et utilisée à la place.
+* **Bandes-annonces avec les thèmes CSS Loader :** Avec des thèmes comme Obsidian et une couleur choisie pour le fond des jeux récents, cette couleur masquait la bande-annonce. Elle s'affiche maintenant.
+* **Le lecteur laisse le clavier libre :** Le mini-lecteur d'Ambiente ne se place plus au-dessus du clavier de Steam dans le chat ou la recherche. Il se cache pendant la saisie et la musique continue.
+* **La musique ne démarre plus toute seule :** Au lancement de Steam, la radio ou la musique d'Ambiente restent en pause jusqu'à ce que vous appuyiez sur lecture.
+* **Listes M3U collées comme lien :** Un lien vers une liste de chaînes, comme celle de TDTChannels, va dans Listes au lieu d'être lu comme une seule station.
+* **Écran inférieur de l'AYANEO Pocket DS dans le bon sens :** Il ne s'affiche plus à l'envers. Il pivote maintenant selon le montage de l'écran sur chaque machine.
 
 ## [0.88.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.87.0...panel-de-control-v0.88.0) (2026-11-11)
 
