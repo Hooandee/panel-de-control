@@ -426,6 +426,7 @@
   <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
   <data name="ThemesPickerUnavailable" xml:space="preserve"><value>le sélecteur de fichiers n'a pas pu s'ouvrir ; il s'ouvre aussi depuis Panel de Control dans Démarrer</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>avec un autre thème actif il n'y a pas d'animations ; il faut en désactiver un</value></data>
+  <data name="ThemesKeyboardsHeading" xml:space="preserve"><value>Claviers</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>ce zip n'est pas une early publiée de ce thème</value></data>
   <data name="ThemesGroup_appearance" xml:space="preserve"><value>Apparence</value></data>
   <data name="ThemesGroup_grid" xml:space="preserve"><value>Grille</value></data>

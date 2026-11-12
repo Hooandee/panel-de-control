@@ -52,6 +52,8 @@ vi.mock("./api", () => ({
   setThemeArtwork: vi.fn(async () => ({ ok: true })),
   pauseThemeGame: vi.fn(async () => false),
   resumeThemeGame: vi.fn(async () => {}),
+  getThemeHltb: vi.fn(async () => ({ result: "not_found" })),
+  getThemeProtonDb: vi.fn(async () => ({ result: "not_found" })),
   setDuoArtwork: vi.fn(async () => ({ ok: true })),
   checkThemeEarly: vi.fn(),
   earlyThemeArchiveFolder: vi.fn(),

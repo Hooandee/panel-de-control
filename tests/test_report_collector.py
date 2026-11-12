@@ -1,8 +1,8 @@
 import os
 import types
 
-from report import collector as report_collector
-from report.collector import (
+from pdc_report import collector as report_collector
+from pdc_report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,

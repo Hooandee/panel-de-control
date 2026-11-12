@@ -7,6 +7,7 @@ import {
   cleanupPlan,
   diagnoseThemeHealth,
   hooandeeNames,
+  interfaceThemeNames,
   readSteamSettings,
   removeCssLoaderStyles,
   SET_ASIDE_KINDS,
@@ -96,7 +97,7 @@ export function useThemeHealth(controller: ThemesController): ThemeHealthView {
   );
   const findings = useMemo(
     () => backend && display && keep
-      ? diagnoseThemeHealth(controller.snapshot, backend, display, keep, new Set(controller.cards.map((card) => card.release.cssLoaderName)))
+      ? diagnoseThemeHealth(controller.snapshot, backend, display, keep, interfaceThemeNames(controller.cards.map((card) => card.release)))
       : [],
     [backend, display, keep, controller.snapshot, controller.cards],
   );

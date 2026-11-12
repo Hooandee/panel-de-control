@@ -68,6 +68,50 @@ function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDepend
 }
 
 describe("ThemesClient", () => {
+  it("turns off a keyboard theme a runtime replaced, even one Panel does not publish, and answers false without a writer", async () => {
+    const keyboard = { ...INSTALLED_THEME, id: "Keyboard", name: "Keyboard", displayName: "Keyboard" };
+    const winner = { ...INSTALLED_THEME, id: "Winner", name: "Winner", displayName: "Winner" };
+    const before: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, winner] };
+    const after: CssLoaderReadySnapshot = { ...READY, themes: [{ ...keyboard, enabled: false }, winner] };
+    const setThemeState = vi.fn(async () => after);
+    const base = dependencies();
+    const client = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect: vi.fn(async () => before), requireReady: vi.fn(async () => before), setThemeState },
+    }));
+    await client.refresh();
+
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).toHaveBeenCalledWith("Keyboard", false);
+    expect(client.getSnapshot().snapshot).toEqual(after);
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).toHaveBeenCalledTimes(1);
+
+    const withoutWriter = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect: vi.fn(async () => before), requireReady: vi.fn(async () => before) },
+    }));
+    await withoutWriter.refresh();
+    await expect(withoutWriter.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(false);
+  });
+
+  it("leaves the replaced keyboard theme on when a recovery turned the one replacing it off", async () => {
+    const keyboard = { ...INSTALLED_THEME, id: "Keyboard", name: "Keyboard", displayName: "Keyboard" };
+    const winner = { ...INSTALLED_THEME, id: "Winner", name: "Winner", displayName: "Winner" };
+    const before: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, winner] };
+    const recovered: CssLoaderReadySnapshot = { ...READY, themes: [keyboard, { ...winner, enabled: false }] };
+    const inspect = vi.fn(async () => before);
+    const setThemeState = vi.fn(async () => recovered);
+    const base = dependencies();
+    const client = new ThemesClient(dependencies({
+      adapter: { ...base.adapter, inspect, requireReady: vi.fn(async () => before), setThemeState },
+    }));
+    await client.refresh();
+    inspect.mockResolvedValue(recovered);
+
+    await expect(client.retireRuntimeTheme("Keyboard", "Winner")).resolves.toBe(true);
+    expect(setThemeState).not.toHaveBeenCalled();
+    expect(client.getSnapshot().snapshot).toEqual(recovered);
+  });
+
   it("reports a setting change for a theme Panel does not know instead of dropping it silently", async () => {
     const reportFailure = vi.fn();
     const client = new ThemesClient(dependencies({ reportFailure }));
