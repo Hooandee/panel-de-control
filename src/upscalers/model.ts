@@ -90,6 +90,15 @@ export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[]
   return display ? Math.min(...display) : undefined;
 }
 
+/** Games whose own update took away the input OptiScaler needs; the page says so instead of a silent failure. */
+const GAME_NOTICES: Record<string, string> = {
+  "3564740": "up.notice.dlssRemoved",
+};
+
+export function gameNotice(steamAppid: string | number | null | undefined): string | null {
+  return steamAppid == null ? null : GAME_NOTICES[String(steamAppid)] ?? null;
+}
+
 /** The FSR 4 switch the game's Proton understands on this GPU, or null. */
 export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string }[], visible: (pill: never) => boolean): string | null {
   const pill = pills.find((p) => p.exclusiveGroup === "fsr4-upgrade" && visible(p as never));

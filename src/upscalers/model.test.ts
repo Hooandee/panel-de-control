@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, gameOutputHeight, steamMachineStrain, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, gameNotice, gameOutputHeight, steamMachineStrain, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("keeps the last measured output height after an unverifiable DLL result", () => {
@@ -180,5 +180,14 @@ describe("what overloads the Steam Machine at 4K", () => {
     expect(gameOutputHeight(startUp, [2560, 1440])).toBe(2160);
     expect(gameOutputHeight([], [2560, 1440])).toBe(1440);
     expect(gameOutputHeight([], null)).toBeUndefined();
+  });
+});
+
+describe("per-game notices", () => {
+  it("names the games whose update took away OptiScaler's input", () => {
+    expect(gameNotice("3564740")).toBe("up.notice.dlssRemoved");
+    expect(gameNotice(3564740)).toBe("up.notice.dlssRemoved");
+    expect(gameNotice("526870")).toBeNull();
+    expect(gameNotice(null)).toBeNull();
   });
 });

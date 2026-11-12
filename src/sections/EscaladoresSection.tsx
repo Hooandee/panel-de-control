@@ -132,7 +132,7 @@ export const EscaladoresSection: FC = () => {
             const frameGen = engines?.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
               : engines?.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
             const scaler = install ? badgeLabel(build, install.options?.model, install.build).full : engines?.mako?.spatial ? "Mako" : null;
-            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" · ");
+            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />
