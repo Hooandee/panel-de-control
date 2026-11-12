@@ -360,6 +360,34 @@ describe("ThemeActivator", () => {
     expect(adapter.restores).toBe(reloads);
   });
 
+  it("acknowledges a recovery whose late reload restored the previous state instead of keeping the current one", async () => {
+    let pending = false;
+    let attempts = 0;
+    const adapter = new Adapter(
+      [themeWithPatch("Example Theme", false, "Red")],
+      (_name, enabled, themes) => {
+        if (enabled) themes[0].patches[0].value = "Blue";
+      },
+      (expected, themes) => {
+        attempts += 1;
+        pending = true;
+        if (attempts >= 3) themes.splice(0, themes.length, ...structuredClone(expected.themes));
+        throw new Error("CSS Loader reset timed out");
+      },
+    );
+    adapter.hasPendingMutation = () => pending;
+    const activator = new ThemeActivator(adapter);
+    await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      pending = false;
+      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
+      await Promise.resolve();
+    }
+    pending = false;
+    await expect(activator.reconcilePendingRecovery()).resolves.toMatchObject({ status: "ready" });
+    expect(activator.takeAbandonedRecovery()).toBe(false);
+  });
+
   it("recovers a timed-out mutation after restart with a newer compatible CSS Loader", async () => {
     let durable: DurableThemeActivationRecovery | null = null;
     let recoverable = false;

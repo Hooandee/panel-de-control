@@ -315,6 +315,10 @@ export class ThemeActivator {
     // would otherwise be relaunched forever. Wait for it to settle, then keep the current state.
     if (recovery.failures >= MAX_RESTORATION_FAILURES) {
       if (!this.adapter.hasPendingMutation()) {
+        const current = await this.adapter.inspect();
+        if (current.status === "ready" && this.isFullyRestored(recovery.initial, current as CssLoaderReadySnapshot)) {
+          return this.acknowledgeRecovery(recovery, current as CssLoaderReadySnapshot);
+        }
         const kept = await this.abandonRecovery(recovery);
         if (kept) return kept;
       }
@@ -330,7 +334,7 @@ export class ThemeActivator {
     } catch (error) {
       recovery.failures += 1;
       if (this.adapter.hasPendingMutation()) {
-        this.beginDeferredRecovery(recovery);
+        if (recovery.failures < MAX_RESTORATION_FAILURES) this.beginDeferredRecovery(recovery);
       } else if (recovery.failures >= MAX_RESTORATION_FAILURES) {
         const kept = await this.abandonRecovery(recovery);
         if (kept) return kept;
@@ -382,7 +386,9 @@ export class ThemeActivator {
       await this.acknowledgeRecovery(recovery, recovery.snapshot!);
     } catch (error) {
       recovery.failures += 1;
-      if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
+      if (this.adapter.hasPendingMutation() && recovery.failures < MAX_RESTORATION_FAILURES) {
+        this.beginDeferredRecovery(recovery);
+      }
       recovery.error = error;
       throw new ThemeActivationError(
         "rollback_failed",
