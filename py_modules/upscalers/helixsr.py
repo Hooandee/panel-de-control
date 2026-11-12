@@ -164,22 +164,12 @@ def _drop_record(folder: Path) -> None:
         (folder / name).unlink(missing_ok=True)
 
 
-def remove_by_hand(folder: Path, only_helix: bool = False) -> None:
-    """When HelixSR's release is gone (deleted, or a newer Panel ships another), put the game's FSR back from
-    the *.original.dll HelixSR's drop-in keeps, as its bridge would. With `only_helix`, a file the game has since
-    replaced with its own keeps its update."""
-    for current, original in _recorded_swaps(folder):
-        if original.is_file() and (not only_helix or _is_helix_file(current)):
-            os.replace(original, current)
-    _drop_record(folder)
-
-
 def not_installed(detail: str) -> bool:
-    """The bridge's answer when the game no longer has HelixSR's files (its own update put its FSR back)."""
+    """The bridge's answer when it no longer sees HelixSR in the game (often: the game's update put its FSR back)."""
     return bool(re.match(r"HelixSR( Scaler)? is not installed in ", detail or ""))
 
 
-# Strings HelixSR's drop-in carries (its own log lines); AMD's FidelityFX DLLs never do.
+# Strings HelixSR's drop-in carries (its own log lines, checked in 3.2.0 and 3.3.0); AMD's FidelityFX DLLs never do.
 _HELIX_SIGNATURES = (b"HLX-FSR-4", b"HelixSR")
 
 
@@ -191,23 +181,32 @@ def _is_helix_file(path: Path) -> bool:
         return False
 
 
-def still_swapped(folder: Path) -> bool:
-    """Whether a file HelixSR's record lists is still HelixSR's own DLL, whatever its bridge answered."""
-    return any(_is_helix_file(current) for current, _ in _recorded_swaps(folder))
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return (not a.is_symlink() and not b.is_symlink() and a.stat().st_size == b.stat().st_size
+                and a.read_bytes() == b.read_bytes())
+    except OSError:
+        return False
 
 
-def forget(folder: Path) -> None:
-    """Drop HelixSR's own record when its files are already gone. The game's files stay as they are; a backup is
-    deleted only when it is byte for byte the file the game has now, so nothing that differs is lost."""
+def restore_by_hand(folder: Path) -> bool:
+    """Take HelixSR out without its bridge (its release is gone, or it no longer recognises the game) the way the
+    bridge would, file by file: a DLL that is still HelixSR's gets the game's backup back; one the game has since
+    updated keeps its update, and a backup identical to it is dropped. False, with HelixSR's record kept, when a
+    HelixSR DLL has no backup to put back: the game must not be reported clean while HelixSR still runs in it."""
+    stuck = False
     for current, original in _recorded_swaps(folder):
-        try:
-            if (original.is_file() and not original.is_symlink() and not current.is_symlink()
-                    and original.stat().st_size == current.stat().st_size
-                    and original.read_bytes() == current.read_bytes()):
-                original.unlink()
-        except OSError:
-            continue
+        if _is_helix_file(current):
+            if original.is_file() and not original.is_symlink():
+                os.replace(original, current)
+            else:
+                stuck = True
+        elif original.is_file() and _same_file(original, current):
+            original.unlink()
+    if stuck:
+        return False
     _drop_record(folder)
+    return True
 
 
 def read_install_log(install: dict) -> dict:

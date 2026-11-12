@@ -1424,7 +1424,7 @@ def test_helixsr_comes_out_even_when_its_release_is_gone(steam, helix_catalog, p
     service = _service(steam, helix_catalog, proc)
     service.helix = FakeHelix()
     service.install(APPID, {"build": "hlx-fsr4"})
-    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"hlx")
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"MZ HLX-FSR-4")
     (target / "helixsr-install.json").write_text(json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
     service.helix = FakeHelix(ready=False)
     service.uninstall(APPID)
@@ -1493,6 +1493,38 @@ def test_helixsr_in_a_game_moved_to_another_library_is_still_removed(steam, heli
     assert service.helix.calls == [("remove",)]
     assert not (game / "bin/x64_dx12/helixsr-install.json").exists()
     assert not (game / "bin/x64_dx12" / games.MANIFEST_DIR).exists()
+
+
+def test_a_game_updated_after_helixsrs_release_went_keeps_its_update(steam, helix_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"updated game fsr")
+    (target / "helixsr-install.json").write_text(json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    service.helix = FakeHelix(ready=False)
+
+    service.uninstall(APPID)
+
+    assert (target / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"updated game fsr"
+    assert service.game(APPID)["install"] is None
+
+
+def test_a_helixsr_dll_with_no_backup_is_never_reported_removed(steam, helix_catalog, proc):
+    _, game = steam
+    target = game / "bin/x64_dx12"
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    (target / "amd_fidelityfx_upscaler_dx12.dll").write_bytes(b"MZ HLX-FSR-4")
+    (target / "amd_fidelityfx_upscaler_dx12.original.dll").unlink()
+    (target / "helixsr-install.json").write_text(json.dumps({"files": ["amd_fidelityfx_upscaler_dx12.dll"]}))
+    service.helix = FakeHelix(ready=False)
+
+    with pytest.raises(UpscalerError, match="helixsr_failed"):
+        service.uninstall(APPID)
+    assert service.game(APPID)["install"]["build"] == "hlx-fsr4"
 
 
 def test_helixsr_record_gone_is_uninstalled_without_the_bridge(steam, helix_catalog, proc):
@@ -1758,3 +1790,12 @@ def test_relocation_takes_the_game_folder_not_a_subfolder_with_its_name(tmp_path
     old_target = tmp_path / "old/steamapps/common/Foo/Foo/Binaries/Win64"
     moved = _relocated(old_target / "helixsr-install.json", old_target, root)
     assert moved == root / "Foo/Binaries/Win64/helixsr-install.json"
+
+
+def test_the_transition_says_when_helixsr_came_out(steam, helix_catalog, proc):
+    service = _service(steam, helix_catalog, proc)
+    service.helix = FakeHelix()
+    service.install(APPID, {"build": "hlx-fsr4"})
+    assert service.begin_scaler_transition(APPID)["helix_removed"] is True
+    service.finish_scaler_transition(APPID, service.scaler_transitions.pending(APPID)["token"], rollback=False)
+    assert service.begin_scaler_transition(APPID)["helix_removed"] is False

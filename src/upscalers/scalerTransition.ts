@@ -13,7 +13,8 @@ export function lockScalerSwitch(appid: string): () => void {
   return () => { switching.delete(appid); changed(); };
 }
 
-export interface ScalerTransition { finish: (success: boolean) => Promise<void> }
+/** `previousRemoved`: the previous upscaler (HelixSR) came out when the switch began, so a failed switch can't bring it back. */
+export interface ScalerTransition { finish: (success: boolean) => Promise<void>; previousRemoved: boolean }
 export async function prepareScalerTransition(game: JobGame, direction: "mako" | "installed", required = false): Promise<ScalerTransition | null> {
   const release = lockScalerSwitch(game.appid);
   let previous: MakoProfile | null = null;
@@ -44,13 +45,14 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
       throw new Error("transition_recovered");
     }
     if (direction === "installed" && previous?.scaling_enabled) await saveMakoProfile(game.appid, game.liveAppid, { scaling_enabled: false }, game.isNonSteam);
-    return { finish: async success => {
+    const previousRemoved = !!checkpoint.helix_removed;
+    return { previousRemoved, finish: async success => {
       try {
         if (success) {
           try { await finishScalerTransition(game.appid, token!, false); }
           catch {
             try { await rollback(); } catch { throw new Error("transition_restore_failed"); }
-            throw new Error("transition_failed");
+            throw new Error(previousRemoved ? "transition_failed_clean" : "transition_failed");
           }
         } else await rollback();
       } catch (error) {

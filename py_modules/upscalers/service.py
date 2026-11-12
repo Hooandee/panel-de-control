@@ -558,7 +558,8 @@ class UpscalerService:
                 raise UpscalerError("updating")
             entry = self._game_state(appid)
             install = entry.get("install")
-            if _is_helix(install):
+            helix_removed = _is_helix(install)
+            if helix_removed:
                 # HelixSR's files are its bridge's to restore, not a checkpoint's: it comes out before the switch, so
                 # a switch that fails leaves the game with its own FSR instead of with HelixSR.
                 entry["previous"] = diagnostics.snapshot(install)
@@ -573,10 +574,11 @@ class UpscalerService:
             restore = {"overrides": _overrides(install) if install.get("engine") != "dll" else [],
                        "args": list(install.get("args", [])), "env": {}} if install else None
             try:
-                return self.scaler_transitions.begin(appid, installed.root, entry, restore,
-                                                     install.get("target") if install else None,
-                                                     self.mako_status(appid).get("profiles", {}).get(appid),
-                                                     self._managed_configuration(install.get("target")) if install else {})
+                checkpoint = self.scaler_transitions.begin(appid, installed.root, entry, restore,
+                                                           install.get("target") if install else None,
+                                                           self.mako_status(appid).get("profiles", {}).get(appid),
+                                                           self._managed_configuration(install.get("target")) if install else {})
+                return {**checkpoint, "helix_removed": helix_removed}
             except scaler_transition.TransitionError as error:
                 raise UpscalerError(str(error)) from None
             except (OSError, ValueError):
@@ -1159,16 +1161,9 @@ class UpscalerService:
             except UpscalerError as error:
                 if not helixsr.not_installed(error.detail):
                     raise
-                if helixsr.still_swapped(record.parent):
-                    # The bridge no longer recognises a DLL an older HelixSR release put in: restore it by hand.
-                    helixsr.remove_by_hand(record.parent, only_helix=True)
-                    self._log_helix_gone("bridge_not_installed_restored")
-                else:
-                    # The game's own FSR replaced HelixSR's; restoring the old backup would undo the game's update.
-                    helixsr.forget(record.parent)
-                    self._log_helix_gone("bridge_not_installed")
+                self._restore_helix_by_hand(record.parent, "bridge_not_installed")
         else:
-            helixsr.remove_by_hand(record.parent)
+            self._restore_helix_by_hand(record.parent, "release_missing")
         log = _relocated(Path(install.get("log", "")), old_target, root)
         for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
             if generated.name and generated.is_file():
@@ -1176,9 +1171,16 @@ class UpscalerService:
         shutil.rmtree(_relocated(old_target / games.MANIFEST_DIR, old_target, root), ignore_errors=True)
         return []
 
+    def _restore_helix_by_hand(self, folder: Path, reason: str) -> None:
+        if not helixsr.restore_by_hand(folder):
+            if self.logger:
+                self.logger.warning(f"HelixSR removal by hand left a HelixSR DLL with no backup ({reason})")
+            raise UpscalerError("helixsr_failed", "HelixSR's DLL has no backup of the game's file")
+        self._log_helix_gone(reason)
+
     def _log_helix_gone(self, reason: str) -> None:
         if self.logger:
-            self.logger.info(f"HelixSR was already out of the game ({reason}); clearing Panel's record of it")
+            self.logger.info(f"HelixSR taken out without its bridge ({reason}); Panel's record of it cleared")
 
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]

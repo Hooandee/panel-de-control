@@ -76,3 +76,10 @@ it("recovers a pending install transition even if spatial Mako is already disabl
   await expect(prepareScalerTransition(game, "installed")).rejects.toThrow("transition_recovered");
   expect(saveMakoProfile).toHaveBeenLastCalledWith("1", 1, previous, false);
 });
+it("never claims the previous upscaler came back when HelixSR left as the switch began", async () => {
+  api.beginScalerTransition.mockResolvedValue({ token: "snapshot", restore: null, recovery: false, previous_mako: previous, helix_removed: true });
+  api.finishScalerTransition.mockRejectedValueOnce(new Error("transition_conflict")).mockResolvedValue(null);
+  const change = await prepareScalerTransition(game, "installed", true);
+  expect(change!.previousRemoved).toBe(true);
+  await expect(change!.finish(true)).rejects.toThrow("transition_failed_clean");
+});

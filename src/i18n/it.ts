@@ -641,6 +641,7 @@ export const it: Record<string, string> = {
   "up.error.unsupported_gpu": "La tua GPU non supporta questa versione",
   "up.error.busy": "È in corso un'altra operazione",
   "up.error.transition_failed": "Impossibile cambiare upscaler. È stato ripristinato quello precedente.",
+  "up.error.transition_failed_clean": "Impossibile cambiare upscaler. HelixSR era già stato rimosso, quindi il gioco usa il suo FSR.",
   "up.error.transition_restore_failed": "Ripristino incompleto. Riprova dopo aver chiuso il gioco.",
   "up.error.transition_conflict": "Alcuni file del gioco sono cambiati. Sono stati conservati senza sovrascriverli.",
   "up.error.transition_unsupported": "Questa installazione non consente il cambio automatico di upscaler.",

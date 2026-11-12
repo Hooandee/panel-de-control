@@ -76,7 +76,7 @@ export function trackJob(job: UpscalerJob, game: JobGame, request?: UpscalerChoi
       const success = next.state === "done" && !!next.result && !notice;
       try {
         await transition.finish(success);
-        if (!success && next.state === "done") next = { ...next, state: "error", error: "transition_failed" };
+        if (!success && next.state === "done") next = { ...next, state: "error", error: transition.previousRemoved ? "transition_failed_clean" : "transition_failed" };
       } catch (error) {
         next = { ...next, state: "error", error: error instanceof Error ? error.message : "transition_restore_failed" };
         notice = { key: `up.error.${next.error}` };
