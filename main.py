@@ -15240,6 +15240,7 @@ class Plugin(AmbientRpc):
             ),
             # Panel's own eco screen-off; the sample's `screen` is the kernel's DPMS readback.
             "screen_asleep": getattr(getattr(self, "_screen_sleep", None), "asleep", None),
+            "tdp_reason": getattr(self, "_tdp_reason", None) or None,
             **{key: sample.get(key) for key in ("tdp_w", "w", "cpu_c", "gpu_c", "rpm", "ac")},
         }
 
