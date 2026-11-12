@@ -312,8 +312,15 @@ describe("BackgroundLayer failed loads", () => {
     layer.dispose();
     layer = new BackgroundLayer(() => document, undefined, failure, undecodable);
     layer.apply({ kind: "video", url: "http://127.0.0.1/h264.mp4" }, hiddenArt);
+    const unreachable = document.querySelector("video")!;
+    Object.defineProperty(unreachable, "error", { configurable: true, get: () => ({ code: 4 }) });
+    unreachable.dispatchEvent(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(undecodable).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
     const video = document.querySelector("video")!;
     Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+    Object.defineProperty(video, "readyState", { configurable: true, get: () => 1 });
     video.dispatchEvent(new Event("error"));
     await vi.advanceTimersByTimeAsync(0);
     expect(undecodable).toHaveBeenCalledWith("http://127.0.0.1/h264.mp4");

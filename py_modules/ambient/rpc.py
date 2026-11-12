@@ -150,7 +150,7 @@ class AmbientRpc:
     async def check_ambient_audio(self, detail: str) -> bool:
         if not isinstance(detail, str):
             return False
-        return bool(await self._ambient_call(lambda s: s.check_audio(detail[:200])))
+        return bool(await self._ambient_call(lambda s: s.check_audio(detail[:200]), pool="network"))
 
     async def inspect_ambient_link(self, url: str) -> dict[str, Any]:
         if not isinstance(url, str) or len(url) > 2048 or not url.lower().startswith(("https://", "http://")):

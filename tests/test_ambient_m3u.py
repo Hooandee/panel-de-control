@@ -46,3 +46,5 @@ def test_a_channel_list_with_an_m3u8_name_is_told_apart_from_an_hls_playlist():
     assert not is_channel_list(master)
     assert not is_channel_list(single)
     assert not is_channel_list("<html>not found</html>")
+    mirrors = "#EXTM3U\n#EXTINF:-1,Radio X (1/2)\nhttps://a.test/x\n#EXTINF:-1,Radio X (2/2)\nhttps://b.test/x\n"
+    assert not is_channel_list(mirrors)

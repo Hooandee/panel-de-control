@@ -336,7 +336,7 @@ export class AmbientRuntime {
       this.savedQueue = queueSignature(settings.music.queue, settings.music.repeat, settings.music.shuffle);
       this.player.setModes(settings.music.repeat, settings.music.shuffle);
     }
-    const steamRestarted = !!settings && markSteamSession();
+    const steamRestarted = !!settings && markSteamSession() && steamJustStarted();
     if (settings?.music.enabled && steamRestarted) {
       console.info("[Ambient] music left paused after Steam started");
       void rpc.recordAmbientEvent("music", "paused_at_steam_start").catch(() => undefined);
@@ -1040,24 +1040,29 @@ export class AmbientRuntime {
     const current = this.snapshot.current;
     if (!current || current.kind !== "video" || !current.ref.startsWith("local:")) return;
     const key = `${current.ref}|${this.settings()?.background.videoQuality ?? "fluid"}`;
-    if (this.undecodable.has(key) || this.noSpace.has(key) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
+    if (this.undecodable.has(key) || this.noSpace.has(`${key}|vp9`) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
     this.undecodable.add(key);
     void rpc.recordAmbientEvent("playback_error", "background video undecodable; encoding vp9").catch(() => undefined);
-    void this.encodeCopy(current.ref, key, Math.min(720, screenPixelHeight()), 30, "vp9");
+    void this.encodeCopy(current.ref, key, Math.min(720, screenPixelHeight()), 30, "vp9").then((done) => {
+      if (!done) this.undecodable.delete(key);
+    });
   }
 
   /** Asks the backend for a re-encoded copy and, once ready, shows it in place of the original. */
-  private async encodeCopy(ref: string, key: string, height: number, fps: number, codec: "h264" | "vp9"): Promise<void> {
+  /** Returns false only when the request never reached the backend, so the caller may ask again. */
+  private async encodeCopy(ref: string, key: string, height: number, fps: number, codec: "h264" | "vp9"): Promise<boolean> {
     const generation = this.cacheGeneration;
     const result = await rpc.optimizeAmbientMedia(ref, height, fps, codec).catch(() => null);
-    if (!result || this.stopped || generation !== this.cacheGeneration) return;
+    if (!result) return false;
+    if (this.stopped || generation !== this.cacheGeneration) return true;
     if ("id" in result) {
       this.optimized.set(key, result.id);
       if (this.snapshot.current?.ref === ref) void this.render();
-      return;
+      return true;
     }
-    if (result.error === "no_space") this.reportNoSpace(key);
+    if (result.error === "no_space") this.reportNoSpace(codec === "vp9" ? `${key}|vp9` : key);
     if (codec === "vp9") void rpc.recordAmbientEvent("playback_error", `background vp9 copy failed: ${result.error}`).catch(() => undefined);
+    return true;
   }
 
   private syncMusicOwnership(decision: ArbiterDecision, settings: AmbientSettings): void {
@@ -1699,6 +1704,12 @@ function screenPixelHeight(): number {
 }
 
 const STEAM_SESSION_KEY = "__pdcAmbientSteamSession";
+/** Decky loads plugins within this time of Steam's UI starting; a later first start is an update or reinstall. */
+const STEAM_START_WINDOW_MS = 180_000;
+
+function steamJustStarted(): boolean {
+  return typeof performance !== "undefined" && performance.now() < STEAM_START_WINDOW_MS;
+}
 const M3U_LINK = /^https?:\/\/[^?#]+\.m3u8?(?:[?#]|$)/i;
 
 /** True the first time Ambiente starts in this Steam UI: the mark lives in Steam's JS context, so a Panel reload keeps it. */

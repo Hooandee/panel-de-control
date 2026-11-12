@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from typing import Any, Callable, Optional
 
@@ -10,10 +9,15 @@ from pdc_platform.user_session import find_session, session_command
 # Steam's own UI plays Ambiente's media, so its streams are never the game's.
 _STEAM_BINARIES = frozenset({"steamwebhelper", "steam"})
 _TIMEOUT_S = 3
-# Bluetooth sink names carry the device address (bluez_output.AA_BB_CC_DD_EE_FF.1).
-_MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
+
 
 Runner = Callable[[list[str]], Optional[str]]
+
+
+def _sink_kind(name: str) -> str:
+    """Bus and profile of a sink without the middle, which holds Bluetooth addresses and USB serials."""
+    parts = name.split(".")
+    return f"{parts[0]}..{parts[-1]}" if len(parts) > 2 else parts[0][:60]
 
 
 def _volume_percents(stream: dict[str, Any]) -> list[int]:
@@ -73,7 +77,7 @@ class GameAudio:
         if not isinstance(parsed, list):
             return "unreadable"
         streams = steam_streams(parsed)
-        default = _MAC.sub("<mac>", (self._runner(["pactl", "get-default-sink"]) or "?").strip())
+        default = _sink_kind((self._runner(["pactl", "get-default-sink"]) or "?").strip())
         return f"streams={len(streams)} default_sink={default[:60]} " + " | ".join(streams[:4])
 
     def set_level(self, percent: int) -> dict[str, Any]:

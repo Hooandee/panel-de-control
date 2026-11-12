@@ -34,6 +34,17 @@ const STALL_CHECK_MS = 5000;
 const STALL_CHECKS = 2;
 const STALL_RELOADS = 3;
 const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+const HAVE_METADATA = 1;
+/** A minute of normal playback forgives earlier reloads. */
+const STALL_FORGIVE_CHECKS = 12;
+
+/**
+ * The browser read the file but cannot decode it. A file that never arrived (media server not up yet)
+ * reports the same error code, but without metadata.
+ */
+function undecodable(video: HTMLVideoElement): boolean {
+  return video.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED && video.readyState >= HAVE_METADATA;
+}
 const HOST_KEY = "BasicHome";
 const ART_ATTR = "data-pdc-ambient-art";
 /**
@@ -176,7 +187,7 @@ export class BackgroundLayer {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
-  private stall = { at: -1, checks: 0, reloads: 0, url: "" };
+  private stall = { at: -1, checks: 0, reloads: 0, playing: 0, url: "" };
   /** A video that stayed stuck after every reload is left alone until another one is shown. */
   private stallExhausted = "";
 
@@ -260,6 +271,7 @@ export class BackgroundLayer {
     const doc = this.getDocument();
     if (!root || !doc) return;
     this.cancelPending();
+    if (media.url !== this.stallExhausted) this.stallExhausted = "";
     const generation = ++this.generation;
     const load = new AbortController();
     this.load = load;
@@ -286,7 +298,7 @@ export class BackgroundLayer {
       if (result === "ready" && video.videoHeight === 0) result = "no_picture";
       if (result === "ready" && generation === this.generation) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
       if (result !== "ready" && result !== "cancelled") this.lastFailure = videoState(video);
-      if (generation === this.generation && (result === "no_picture" || (result === "error" && video.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED))) this.onUndecodable(media.url);
+      if (generation === this.generation && (result === "no_picture" || (result === "error" && undecodable(video)))) this.onUndecodable(media.url);
       element = video;
     } else if (media.kind === "page") {
       const frame = doc.createElement("iframe");
@@ -375,14 +387,16 @@ export class BackgroundLayer {
     const video = this.root?.querySelector<HTMLVideoElement>("[data-slot][data-active] video");
     const media = this.current;
     if (!video || !media || media.kind !== "video" || this.load) return this.watchStall(false);
-    if (this.stall.url !== media.url) this.stall = { at: -1, checks: 0, reloads: 0, url: media.url };
+    if (this.stall.url !== media.url) this.stall = { at: -1, checks: 0, reloads: 0, playing: 0, url: media.url };
     const moved = video.currentTime !== this.stall.at;
     this.stall.at = video.currentTime;
     if (moved && !video.error) {
       this.stall.checks = 0;
+      if (++this.stall.playing >= STALL_FORGIVE_CHECKS) this.stall.reloads = 0;
       return;
     }
-    if (video.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED) this.onUndecodable(media.url);
+    this.stall.playing = 0;
+    if (undecodable(video)) this.onUndecodable(media.url);
     if (video.paused && !video.error) void video.play().catch(() => undefined);
     if (++this.stall.checks < STALL_CHECKS && !video.error) return;
     this.stall.checks = 0;

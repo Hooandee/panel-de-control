@@ -370,7 +370,7 @@ def test_inspect_link_reads_only_the_head_and_says_list_stream_or_unknown(tmp_pa
     from ambient.service import AmbientService
 
     bodies = {
-        "https://lists.test/tv.m3u8": "#EXTM3U\n#EXTINF:-1,La 1\nhttps://tv.test/la1.m3u8\n#EXTINF:-1,La 2\nhttps://tv.test/la2.m3u8\n",
+        "https://lists.test/tv.m3u8": "#EXTM3U\n#EXTINF:-1 group-title=\"TV\",La 1\nhttps://tv.test/la1.m3u8\n#EXTINF:-1 group-title=\"TV\",La 2\nhttps://tv.test/la2.m3u8\n",
         "https://live.test/channel.m3u8": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow.m3u8\n",
     }
 

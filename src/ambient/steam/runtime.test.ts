@@ -217,7 +217,7 @@ describe("AmbientRuntime", () => {
     } finally { runtime.stop(); }
   });
 
-  it("after Steam starts, music that was on stays paused and off until the user plays it", async () => {
+  it("after Steam starts, music that was on stays paused and off until the user plays it; an update in a running Steam keeps it going", async () => {
     delete (globalThis as Record<string, unknown>).__pdcAmbientSteamSession;
     const configured = settings();
     configured.music.enabled = true;
@@ -236,6 +236,8 @@ describe("AmbientRuntime", () => {
       expect(runtime.getSnapshot().state?.settings.music.enabled).toBe(false);
       expect(rpcMock.recordAmbientEvent).toHaveBeenCalledWith("music", "paused_at_steam_start");
     } finally { runtime.stop(); }
+    delete (globalThis as Record<string, unknown>).__pdcAmbientSteamSession;
+    vi.spyOn(performance, "now").mockReturnValue(30 * 60_000);
     const reloaded = new AmbientRuntime(ports() as unknown as AmbientPorts);
     rpcMock.getAmbientState.mockResolvedValue({ settings: { ...configured, music: { ...configured.music, enabled: true } }, knownFolders: {}, collections: [], mediaServer: "stopped" });
     try {
@@ -622,6 +624,7 @@ describe("AmbientRuntime", () => {
         return found;
       });
       Object.defineProperty(video, "error", { configurable: true, get: () => ({ code: 4 }) });
+      Object.defineProperty(video, "readyState", { configurable: true, get: () => 1 });
       video.dispatchEvent(new Event("error"));
     };
     try {

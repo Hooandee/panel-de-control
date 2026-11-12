@@ -48,7 +48,9 @@ def test_describes_where_steams_own_sound_goes_without_names():
     assert "song" not in summary
     assert GameAudio(lambda argv: None).steam_output() == "unreadable"
     headset = GameAudio(lambda argv: listing if argv[1] == "-f" else "bluez_output.AA_BB_CC_DD_EE_FF.1\n").steam_output()
-    assert "AA_BB" not in headset and "bluez_output.<mac>.1" in headset
+    assert "AA_BB" not in headset and "default_sink=bluez_output..1 " in headset
+    usb = GameAudio(lambda argv: listing if argv[1] == "-f" else "alsa_output.usb-Maker_Headset_SN12345-00.analog-stereo\n").steam_output()
+    assert "SN12345" not in usb and "default_sink=alsa_output..analog-stereo " in usb
 
 
 def test_reports_the_loudest_channel_as_a_number():
