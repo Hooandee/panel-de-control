@@ -296,6 +296,7 @@ _HUD_SENSOR_METRICS = frozenset((
     "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
 ))
 _HUD_REDETECT_S = 15.0
+_HUD_BATTERY_METRICS = frozenset(("pdc_bat_health", "pdc_bat_power", "pdc_bat_time"))
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
@@ -10752,7 +10753,7 @@ class Plugin(AmbientRpc):
                     for fan in value.get("fans", [])
                 ),
             )
-        if active & {"pdc_bat_health", "pdc_bat_power", "pdc_bat_time"}:
+        if active & _HUD_BATTERY_METRICS:
             src["battery"] = observed(
                 self._battery.read,
                 lambda value: bool(value.get("present")),
@@ -10884,7 +10885,7 @@ class Plugin(AmbientRpc):
                 (int, float),
             )
             snap["charge_percent"] = cl.get("applied_percent")
-        if {"pdc_bat_health", "pdc_bat_power", "pdc_bat_time"} & set(active_ids):
+        if _HUD_BATTERY_METRICS.intersection(active_ids):
             bat = self._fresh_pdc_source(
                 extras,
                 "battery",
