@@ -9,6 +9,36 @@ from mangohud.config import build_presets_conf, coerce_model
 from mangohud.detect import detect_sessions, presets_path, presets_supported, session_alive
 
 
+class _Watch:
+    def __init__(self, opened):
+        self._answers = list(opened) if isinstance(opened, list) else None
+        self._opened = opened
+
+    def __call__(self, _path):
+        return self
+
+    @property
+    def available(self):
+        return self._answers is not None or self._opened is not None
+
+    def opened(self, _timeout_s):
+        if self._answers is not None:
+            return self._answers.pop(0)
+        return self._opened
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _no_inotify(monkeypatch):
+    monkeypatch.setattr(apply, "OpenWatch", _Watch(None))
+
+
+
 # ---- detect: pure decision from a process environ ----
 
 def test_presets_supported_flag():
@@ -528,3 +558,70 @@ def test_reload_process_failure_is_non_fatal(tmp_path, monkeypatch):
 
     assert result.requested == ()
     assert result.pending == ((20, 9001),)
+
+
+def _one_live_session(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    for path in (proc, home, cwd):
+        path.mkdir()
+    _fake_mangoapp(
+        proc, 30, 1000, {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"}, starttime=7, cwd=cwd,
+    )
+    monkeypatch.setattr(apply.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/mangohudctl")
+    monkeypatch.setattr(
+        apply.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0})(),
+    )
+    return proc, detect_sessions(home=str(home), uid=1000, proc_root=str(proc))
+
+
+def test_reload_is_delivered_when_mangoapp_reopens_its_presets(tmp_path, monkeypatch):
+    proc, sessions = _one_live_session(tmp_path, monkeypatch)
+
+    result = reload_sessions(sessions, proc_root=str(proc), watch_factory=_Watch(True))
+
+    assert result.requested == ((30, 7),)
+    assert result.delivery == "observed"
+
+
+def test_an_unread_reload_stays_pending_despite_a_zero_exit(tmp_path, monkeypatch):
+    proc, sessions = _one_live_session(tmp_path, monkeypatch)
+
+    result = reload_sessions(sessions, proc_root=str(proc), watch_factory=_Watch(False))
+
+    assert result.requested == ()
+    assert result.pending == ((30, 7),)
+    assert result.delivery == "unobserved"
+
+
+def test_without_inotify_the_exit_code_still_decides(tmp_path, monkeypatch):
+    proc, sessions = _one_live_session(tmp_path, monkeypatch)
+
+    result = reload_sessions(sessions, proc_root=str(proc), watch_factory=_Watch(None))
+
+    assert result.requested == ((30, 7),)
+    assert result.delivery == "unknown"
+
+
+def test_unread_reload_retries_through_mangoapps_own_cwd(tmp_path, monkeypatch):
+    proc, sessions = _one_live_session(tmp_path, monkeypatch)
+    cwds = []
+    monkeypatch.setattr(
+        apply.subprocess,
+        "run",
+        lambda *_args, **kwargs: cwds.append(kwargs["cwd"])
+        or type("Result", (), {"returncode": 0})(),
+    )
+
+    result = reload_sessions(
+        sessions,
+        proc_root=str(proc),
+        watch_factory=_Watch([False, True]),
+    )
+
+    assert cwds == [sessions[0].cwd, os.path.join(str(proc), "30", "cwd")]
+    assert result.requested == ((30, 7),)
+    assert result.delivery == "observed_proc_cwd"

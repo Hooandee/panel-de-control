@@ -1011,6 +1011,8 @@ class Plugin(AmbientRpc):
         self._hud_value_publish_count = 0
         self._hud_redetect_count = 0
         self._hud_redetect_recovered = 0
+        self._hud_last_delivery = "unknown"
+        self._hud_unobserved_reloads = 0
         self._pdc_active_ids = []
         self._pdc_locale = "es"
         self._pdc_written = {}
@@ -3344,6 +3346,8 @@ class Plugin(AmbientRpc):
             "value_publish_count": int(getattr(self, "_hud_value_publish_count", 0)),
             "redetect_count": int(getattr(self, "_hud_redetect_count", 0)),
             "redetect_recovered": int(getattr(self, "_hud_redetect_recovered", 0)),
+            "reload_delivery": getattr(self, "_hud_last_delivery", "unknown"),
+            "unobserved_reloads": int(getattr(self, "_hud_unobserved_reloads", 0)),
             "conflict": bool(state.get("conflict") or conflict),
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
@@ -10536,6 +10540,7 @@ class Plugin(AmbientRpc):
             self._hud_reload_retry_at = 0.0
             return False
         result = reload_sessions(snapshot)
+        self._note_hud_delivery(getattr(result, "delivery", "unknown"))
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
             session
@@ -10562,6 +10567,22 @@ class Plugin(AmbientRpc):
                 delay = delays[min(self._hud_reload_attempt - 1, len(delays) - 1)]
                 self._hud_reload_retry_at = _monotonic() + delay
         return False
+
+    def _note_hud_delivery(self, delivery) -> None:
+        previous = self._hud_last_delivery
+        self._hud_last_delivery = delivery
+        if delivery == "unobserved":
+            self._hud_unobserved_reloads += 1
+        routine = ("observed", "unknown")
+        if delivery != previous and not (delivery in routine and previous in routine):
+            decky.logger.warning(
+                "HUD reload delivery: %s",
+                json.dumps({
+                    "delivery": delivery,
+                    "unobserved": self._hud_unobserved_reloads,
+                    "sessions": len(self._hud_sessions),
+                }),
+            )
 
     def _reload_mangoapp(self, sessions=None) -> bool:
         snapshot = tuple(self._hud_sessions if sessions is None else sessions)

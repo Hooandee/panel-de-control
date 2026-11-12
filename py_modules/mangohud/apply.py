@@ -6,14 +6,17 @@ import subprocess
 from mangohud.config import build_presets_conf
 from mangohud import ownership
 from mangohud.detect import session_alive
+from mangohud.opened import OpenWatch
 
 _PROC = "/proc"
+_DELIVERY_WAIT_S = 0.75
 
 
 @dataclass(frozen=True)
 class ReloadResult:
     requested: tuple[tuple[int, int], ...]
     pending: tuple[tuple[int, int], ...]
+    delivery: str = "unknown"
 
 
 def clear_presets(path, *, owner=None, trusted_root=None, raise_conflict=False):
@@ -51,7 +54,31 @@ def apply_hud(
     return result.content
 
 
-def reload_sessions(sessions, proc_root=_PROC):
+def reload_sessions(sessions, proc_root=_PROC, watch_factory=None):
+    sessions = tuple(sessions)
+    if not sessions:
+        return ReloadResult((), ())
+    watch_factory = watch_factory or OpenWatch
+    with watch_factory(sessions[0].presets_path) as watch:
+        result = _request_reloads(sessions, proc_root)
+        if not result.requested or not watch.available:
+            return result
+        opened = watch.opened(_DELIVERY_WAIT_S)
+    if opened is None:
+        return result
+    if opened:
+        return ReloadResult(result.requested, result.pending, "observed")
+    # The IPC queue is keyed on the working directory; a path read from outside
+    # mangoapp's mount namespace can name a different directory than its own.
+    with watch_factory(sessions[0].presets_path) as watch:
+        retry = _request_reloads(sessions, proc_root, via_proc_cwd=True)
+        opened = watch.opened(_DELIVERY_WAIT_S) if retry.requested else False
+    if opened:
+        return ReloadResult(retry.requested, retry.pending, "observed_proc_cwd")
+    return ReloadResult((), result.requested + result.pending, "unobserved")
+
+
+def _request_reloads(sessions, proc_root, via_proc_cwd=False):
     identities = tuple((session.pid, session.starttime) for session in sessions)
     search_path = os.pathsep.join(
         part for part in (os.environ.get("PATH"), "/usr/local/bin:/usr/bin:/bin") if part
@@ -73,7 +100,11 @@ def reload_sessions(sessions, proc_root=_PROC):
             result = subprocess.run(
                 [binary, "set", "reload_config", "true"],
                 check=False,
-                cwd=session.cwd,
+                cwd=(
+                    os.path.join(proc_root, str(session.pid), "cwd")
+                    if via_proc_cwd
+                    else session.cwd
+                ),
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

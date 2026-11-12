@@ -180,6 +180,8 @@ def test_hud_report_diagnostics_are_useful_without_custom_content(
         "value_publish_count": 0,
         "redetect_count": 0,
         "redetect_recovered": 0,
+        "reload_delivery": "unknown",
+        "unobserved_reloads": 0,
         "conflict": True,
         "conflict_reason": "external_config",
         "shutdown": False,
@@ -1507,3 +1509,19 @@ def test_hud_battery_metrics_come_from_the_battery_reader(tmp_path, monkeypatch)
         "pdc_bat_time": "10h18",
         "pdc_bat_health": "100%",
     }
+
+
+def test_unobserved_reload_is_logged_and_counted(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    warnings = []
+    monkeypatch.setattr(main.decky.logger, "warning", lambda *args: warnings.append(args))
+
+    p._note_hud_delivery("unobserved")
+    p._note_hud_delivery("unobserved")
+    p._note_hud_delivery("observed")
+
+    diagnostics = p._hud_report_diagnostics(p._hud_state())
+    assert diagnostics["unobserved_reloads"] == 2
+    assert diagnostics["reload_delivery"] == "observed"
+    assert len(warnings) == 2
