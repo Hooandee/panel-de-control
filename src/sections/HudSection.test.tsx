@@ -218,8 +218,10 @@ describe("HudSection QAM composition", () => {
     mocks.hudEnabled = true;
     render(<HudSection />);
 
-    fireEvent.click(screen.getAllByText("copy:hud.reset").at(-1)!);
-    const dialog = mocks.showModal.mock.calls.at(-1)?.[0] as { props: { onConfirm: () => void } };
+    const resetButtons = screen.getAllByText("copy:hud.reset");
+    fireEvent.click(resetButtons[resetButtons.length - 1]);
+    const calls = mocks.showModal.mock.calls;
+    const dialog = calls[calls.length - 1][0] as { props: { onConfirm: () => void } };
     dialog.props.onConfirm();
 
     expect(mocks.reset).toHaveBeenCalledOnce();
