@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadyThere, applyLaunch, buildBlocker, steamMachineStrain, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
+import { alreadyThere, applyLaunch, buildBlocker, gameOutputHeight, steamMachineStrain, downloadPace, launchAfterJob, buildLabel, defaultChoice, fgOffer, lastOutputHeight, renderHeight, restoredChoice, revertLaunch, withEnv, withOverride, withoutOverride } from "./model";
 
 describe("upscaler model", () => {
   it("keeps the last measured output height after an unverifiable DLL result", () => {
@@ -166,14 +166,19 @@ it("keeps previously installed routes available for user choice", () => {
 describe("what overloads the Steam Machine at 4K", () => {
   const fsr4 = { family: "fsr", version: "4.1.2", engine: "optiscaler" } as const;
   const helix = { family: "helixsr", version: "FSR 4", engine: "helixsr" } as const;
-  const tv: [number, number] = [3840, 2160];
-  it("flags HelixSR and native FSR 4 only on a Steam Machine driving 4K", () => {
-    expect(steamMachineStrain("steam_machine", tv, helix, null)).toBe("helix");
-    expect(steamMachineStrain("steam_machine", tv, fsr4, "native")).toBe("native");
-    expect(steamMachineStrain("steam_machine", tv, fsr4, "balanced")).toBeNull();
-    expect(steamMachineStrain("steam_machine", [1920, 1080], helix, null)).toBeNull();
-    expect(steamMachineStrain("rog_ally_x", tv, helix, null)).toBeNull();
-    expect(steamMachineStrain("steam_machine", tv, { ...fsr4, engine: "dll" }, "native")).toBeNull();
-    expect(steamMachineStrain("steam_machine", null, helix, null)).toBeNull();
+  it("flags HelixSR and native FSR 4 only on a Steam Machine drawing 4K", () => {
+    expect(steamMachineStrain("steam_machine", 2160, helix, null)).toBe("helix");
+    expect(steamMachineStrain("steam_machine", 2160, fsr4, "native")).toBe("native");
+    expect(steamMachineStrain("steam_machine", 2160, fsr4, "balanced")).toBeNull();
+    expect(steamMachineStrain("steam_machine", 1440, helix, null)).toBeNull();
+    expect(steamMachineStrain("rog_ally_x", 2160, helix, null)).toBeNull();
+    expect(steamMachineStrain("steam_machine", 2160, { ...fsr4, engine: "dll" }, "native")).toBeNull();
+    expect(steamMachineStrain("steam_machine", undefined, helix, null)).toBeNull();
+  });
+  it("takes the game's own output over a smaller monitor", () => {
+    const startUp = [{ facts: { initial_resolution: { render: [1920, 1080], output: [3840, 2160] } } }] as never;
+    expect(gameOutputHeight(startUp, [2560, 1440])).toBe(2160);
+    expect(gameOutputHeight([], [2560, 1440])).toBe(1440);
+    expect(gameOutputHeight([], null)).toBeUndefined();
   });
 });

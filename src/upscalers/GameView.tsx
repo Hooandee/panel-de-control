@@ -24,7 +24,7 @@ import { useProtonCapabilities } from "../launch/useProtonCapabilities";
 import { theme } from "../theme";
 import {
   QUALITIES, badgeLabel, buildLabel, defaultChoice, lastOutputHeight, megabytes, renderHeight,
-  buildBlocker, protonFsr4Env, restoredChoice, steamMachineStrain,
+  buildBlocker, gameOutputHeight, protonFsr4Env, restoredChoice, steamMachineStrain,
 } from "./model";
 import { scalerSwitching } from "./scalerTransition";
 import { MakoScaling } from "./MakoScaling";
@@ -496,7 +496,7 @@ export const GameView: FC<{
   const inputHintShown = !scalerSeenWorking && qualityMode.mode !== "locked";
   const recommendedInput = optiscalerRecipe && !detail?.native && recommendedInputKey && inputHintShown
     ? INPUT_NAMES[recommendedInputKey] : null;
-  const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, overview.display, selected, choice.quality) : null;
+  const strain = detail && !detail.native && !spatial ? steamMachineStrain(overview.device, gameOutputHeight(detail?.history ?? [], overview.display), selected, choice.quality) : null;
   const recipeBlocked = !!solution?.blocked_reason || (optiscalerRecipe && !solution && !!detail?.recipe_info?.blocked);
   const automaticLuma = optiscalerRecipe && !detail?.recipe_info?.luma_detected && !!detail?.recipe_info?.automatic?.includes("Luma");
   const modeChanged = installedEngine !== selectedEngine && [installedEngine, selectedEngine].every((engine) => engine === "dll" || engine === "optiscaler");
