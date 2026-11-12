@@ -23,7 +23,7 @@ import time
 import urllib.parse
 
 import device_tree
-from report import connected_devices
+from pdc_report import connected_devices
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.

@@ -13,6 +13,7 @@ from typing import Optional
 from pdc_platform.host_env import clean_env
 
 FRAME_RATES = (10, 15, 24, 30)
+CODECS = ("h264", "vp9")
 TIMEOUT_SEC = 900
 _KNOWN_FFMPEG = ("/usr/bin/ffmpeg",)
 
@@ -55,10 +56,19 @@ def build_commands(ffmpeg: str, source: str, target: str, height: int, fps: int 
     return [vaapi, software]
 
 
-def output_name(source: str, height: int, fps: int = 30) -> str:
+def vp9_command(ffmpeg: str, source: str, target: str, height: int, fps: int = 30) -> list[str]:
+    """Software VP9 for a Steam whose CEF cannot decode H.264 at the moment (it still plays VP8/VP9)."""
+    return [
+        ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+        "-vf", f"scale=-2:{height},fps={fps}", "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8",
+        "-row-mt", "1", "-b:v", "0", "-crf", "36", "-pix_fmt", "yuv420p", "-an", "-f", "webm", target,
+    ]
+
+
+def output_name(source: str, height: int, fps: int = 30, codec: str = "h264") -> str:
     stat = os.stat(source)
-    key = f"{os.path.realpath(source)}:{stat.st_size}:{int(stat.st_mtime)}:{height}" + ("" if fps == 30 else f":{fps}fps")
-    return "opt-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:32] + ".mp4"
+    key = f"{os.path.realpath(source)}:{stat.st_size}:{int(stat.st_mtime)}:{height}" + ("" if fps == 30 else f":{fps}fps") + ("" if codec == "h264" else f":{codec}")
+    return "opt-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:32] + (".webm" if codec == "vp9" else ".mp4")
 
 
 def _background_priority() -> None:
@@ -104,18 +114,20 @@ def _run(command: list[str], cancel: Optional[threading.Event], timeout: float =
     return code
 
 
-def optimize(source: str, cache_dir: str, height: int, cancel: Optional[threading.Event] = None, fps: int = 30) -> Optimized:
-    """Re-encode a video once for the screen height and frame rate: hardware H.264 first, software second."""
+def optimize(source: str, cache_dir: str, height: int, cancel: Optional[threading.Event] = None, fps: int = 30, codec: str = "h264") -> Optimized:
+    """Re-encode a video once for the screen height and frame rate: hardware H.264 first, software second;
+    or software VP9 when asked."""
     ffmpeg = find_ffmpeg()
     if ffmpeg is None:
         raise OptimizeError("no_encoder")
-    target = os.path.join(cache_dir, output_name(source, height, fps))
+    target = os.path.join(cache_dir, output_name(source, height, fps, codec))
     if os.path.isfile(target):
         return Optimized(target, "cached")
-    partial = target + ".part.mp4"
+    partial = target + (".part.webm" if codec == "vp9" else ".part.mp4")
     try:
         os.makedirs(cache_dir, exist_ok=True)
-        for command in build_commands(ffmpeg, source, partial, height, fps):
+        commands = [vp9_command(ffmpeg, source, partial, height, fps)] if codec == "vp9" else build_commands(ffmpeg, source, partial, height, fps)
+        for command in commands:
             encoder = command[command.index("-c:v") + 1]
             if cancel is not None and cancel.is_set():
                 break

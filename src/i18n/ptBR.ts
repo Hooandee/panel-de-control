@@ -1273,6 +1273,7 @@ export const ptBR: Record<string, string> = {
   "fans.curve.custom_mode": "No modo personalizado, o Painel de Controle não pode controlar a ventoinha. Tudo bem: o firmware continua cuidando dela. Para influenciar a ventoinha, escolha um modo de TDP (Silencioso, Equilibrado ou Desempenho) na aba Potência.",
   "fans.curve.kernel_pending": "Nenhum driver de ventoinha está disponível para este modelo no kernel atual do SteamOS. Enquanto isso, você pode ativar abaixo o controle experimental.",
   "fans.armadaHandoff": "O Armada OS controla a ventoinha. Ao escolher uma curva, o Panel de Control assume, e Auto devolve ao Armada.",
+  "fans.pocknixHandoff": "O Pocknix controla a ventoinha. Ao escolher uma curva, o Panel de Control assume, e Auto devolve ao Pocknix.",
   "fans.target.title": "Temperatura alvo",
   "fans.target.note": "O PS5 não informa a velocidade da ventoinha. O console acelera o quanto for preciso para manter esta temperatura: mais baixa, mais fresca e mais barulhenta.",
   "fans.target.failed": "O console não aceitou a mudança. A temperatura anterior foi mantida.",

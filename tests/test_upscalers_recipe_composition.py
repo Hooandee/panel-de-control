@@ -131,7 +131,7 @@ def test_non_optiscaler_routes_do_not_fetch_or_apply_reframework(steam, re_catal
 
 def test_real_asset_digest_survives_current_and_previous_report_redaction():
     from copy import deepcopy
-    from report.collector import redact_obj
+    from pdc_report.collector import redact_obj
 
     asset = catalog.ASSETS["reframework-nightly"]
     install = {"engine": "dll", "components": [{"id": asset.id, "sha256": asset.sha256}]}

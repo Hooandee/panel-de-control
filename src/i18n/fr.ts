@@ -1273,6 +1273,7 @@ export const fr: Record<string, string> = {
   "fans.curve.custom_mode": "En mode personnalisé, le ventilateur ne peut pas être contrôlé d'ici. Tout va bien : le firmware s'en charge. Pour agir sur le ventilateur, choisissez un mode de TDP (Silencieux, Équilibré ou Performances) dans l'onglet Puissance.",
   "fans.curve.kernel_pending": "Aucun pilote de ventilateur n'est disponible pour ce modèle dans le kernel actuel de SteamOS. En attendant, vous pouvez activer le contrôle expérimental ci-dessous.",
   "fans.armadaHandoff": "Armada OS gère le ventilateur. Si vous choisissez une courbe, le Centre de contrôle prend la main ; repasser en automatique la rend à Armada.",
+  "fans.pocknixHandoff": "Pocknix gère le ventilateur. Si vous choisissez une courbe, le Centre de contrôle prend la main ; repasser en automatique la rend à Pocknix.",
   "fans.target.title": "Température cible",
   "fans.target.note": "La PS5 n'indique pas la vitesse du ventilateur. La console l'accélère autant que nécessaire pour tenir cette température : plus basse, plus fraîche et plus bruyante.",
   "fans.target.failed": "La console n'a pas accepté le changement. La température précédente est conservée.",

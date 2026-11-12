@@ -7,7 +7,7 @@ import pulse
 from journal import Journal
 from journal_context import active_themes
 from pulse import Pulse, report, system_sample
-from report import collector as report_collector
+from pdc_report import collector as report_collector
 
 
 def _pulse(directory, *, boot="boot-a", now=None, **kwargs):
@@ -91,7 +91,7 @@ def test_system_sample_reads_memory_pressure_gpu_and_steam_memory(tmp_path):
 
     assert sample["avail_mb"] == 2000 and sample["total_mb"] == 15625 and sample["psi_mem"] == 12.5
     assert sample["load1"] == 3.1 and sample["up"] == 321.5
-    assert sample["gpu"] == {"busy": 97, "vram_mb": 512, "vram_total_mb": 12288, "gtt_mb": None}
+    assert sample["gpu"] == {"busy": 97, "level": None, "vram_mb": 512, "vram_total_mb": 12288, "gtt_mb": None}
     assert sample["proc"]["steamwebhelper"]["n"] == 2 and "bash" not in sample["proc"]
 
 
@@ -273,7 +273,7 @@ def test_process_cpu_never_attributes_reused_pid_or_negative_delta(tmp_path):
 
 
 def test_performance_readbacks_are_real_and_missing_is_unknown(tmp_path):
-    assert pulse.performance_sample(str(tmp_path)) == {'boost': None, 'cpu_khz': None, 'power_caps_uw': []}
+    assert pulse.performance_sample(str(tmp_path)) == {'cpus_online': None, 'boost': None, 'cpu_khz': None, 'power_caps_uw': []}
     cpu = tmp_path / 'sys/devices/system/cpu/cpufreq'
     (cpu / 'policy0').mkdir(parents=True)
     (cpu / 'boost').write_text('0')
@@ -363,3 +363,76 @@ def test_known_cpu_is_unknown_if_a_group_member_has_no_valid_delta(tmp_path):
     _cpu_process(tmp_path, 11, 100, born=200, name='steamwebhelper')
     sampler.clock = lambda: 16.0
     assert sampler.sample()['known_cpu_pct']['steamwebhelper'] is None
+
+
+def test_a_synced_mark_is_on_disk_before_the_write_it_announces(tmp_path):
+    times = iter([100.0, 104.0, 104.5])
+    beat = _pulse(tmp_path, now=lambda: next(times))
+    beat.tick()
+    beat.mark("gpu_resume:write", token=3, requested="800-1200")
+    saved = json.loads((tmp_path / "pulse.json").read_text())
+    assert [{k: v for k, v in m.items() if k != "t"} for m in saved["marks"]] == [
+        {"step": "gpu_resume:write", "token": 3, "requested": "800-1200"}
+    ]
+
+    end = _pulse(tmp_path, boot="boot-b").set_aside_previous()
+    assert end["system_rebooted"] is True
+    assert end["marks"][-1]["step"] == "gpu_resume:write"
+    assert report(str(tmp_path))["unclean"][0]["marks"][-1]["step"] == "gpu_resume:write"
+
+
+def test_marks_are_bounded(tmp_path):
+    beat = _pulse(tmp_path)
+    for index in range(30):
+        beat.mark("x" * 100, sync=False, **{f"k{n}": "v" * 100 for n in range(10)}, n=index)
+    beat.tick()
+    saved = json.loads((tmp_path / "pulse.json").read_text())
+    assert len(saved["marks"]) == pulse._MARKS_KEPT
+    assert all(len(mark["step"]) <= 40 and len(mark) <= 2 + pulse._MARK_DETAIL_KEYS for mark in saved["marks"])
+
+
+def test_after_a_resume_the_pulse_samples_faster_for_a_while(tmp_path):
+    now = [1000.0]
+    beat = _pulse(tmp_path, now=lambda: now[0])
+    assert beat._next_wait() == 10.0
+    beat.burst(60)
+    assert beat._next_wait() == 2.0
+    now[0] += 61
+    assert beat._next_wait() == 10.0
+
+
+def test_an_unsynced_mark_wakes_the_thread_which_writes_without_sampling(tmp_path):
+    samples = []
+
+    def sample():
+        samples.append(1)
+        return {"avail_mb": 900}
+
+    beat = Pulse(str(tmp_path), sample=sample, interval_s=30, current_boot=lambda: "boot-a")
+    beat.start()
+    deadline = time.time() + 2
+    while not samples and time.time() < deadline:
+        time.sleep(0.01)
+    beat.mark("resume", sync=False)
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        saved = json.loads((tmp_path / "pulse.json").read_text() or "{}")
+        if saved.get("marks"):
+            break
+        time.sleep(0.01)
+    beat.stop()
+    assert saved["marks"][-1]["step"] == "resume"
+    assert len(samples) == 1
+
+
+def test_pulse_reads_online_cpus_and_gpu_level(tmp_path):
+    cpu = tmp_path / "sys/devices/system/cpu"
+    cpu.mkdir(parents=True)
+    (cpu / "online").write_text("0-3,6\n")
+    device = tmp_path / "sys/class/drm/card1/device"
+    device.mkdir(parents=True)
+    (device / "gpu_busy_percent").write_text("4")
+    (device / "power_dpm_force_performance_level").write_text("manual\n")
+    sample = system_sample(str(tmp_path))
+    assert sample["performance"]["cpus_online"] == "0-3,6"
+    assert sample["gpu"]["level"] == "manual"

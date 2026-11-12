@@ -5,7 +5,7 @@ namespace PanelDeControl.Core.Reports;
 
 /// <summary>
 /// Removes what could identify a person or a single unit from report text, with the same rules as the
-/// Linux collector (<c>py_modules/report/collector.py</c>) so both platforms send comparable bundles.
+/// Linux collector (<c>py_modules/pdc_report/collector.py</c>) so both platforms send comparable bundles.
 /// </summary>
 public sealed class ReportRedactor
 {

@@ -1273,6 +1273,7 @@ export const de: Record<string, string> = {
   "fans.curve.custom_mode": "Im benutzerdefinierten Modus kann das Kontrollzentrum den Lüfter nicht steuern. Die Firmware übernimmt weiterhin sicher. Wähle im Tab Leistung einen TDP-Modus wie Leise, Ausgewogen oder Leistung, um den Lüfter zu beeinflussen.",
   "fans.curve.kernel_pending": "Für dieses Modell ist im aktuellen SteamOS-Kernel kein Lüftertreiber verfügbar. Bis dahin kannst du weiter unten die experimentelle Steuerung aktivieren.",
   "fans.armadaHandoff": "Armada OS steuert den Lüfter. Mit einer Kurve übernimmt Panel de Control, Auto gibt ihn an Armada zurück.",
+  "fans.pocknixHandoff": "Pocknix steuert den Lüfter. Mit einer Kurve übernimmt Panel de Control, Auto gibt ihn an Pocknix zurück.",
   "fans.target.title": "Zieltemperatur",
   "fans.target.note": "Die PS5 meldet keine Lüfterdrehzahl. Die Konsole dreht den Lüfter so weit hoch, wie nötig ist, um diese Temperatur zu halten: niedriger heißt kühler und lauter.",
   "fans.target.failed": "Die Konsole hat die Änderung nicht übernommen. Die vorherige Temperatur bleibt.",
