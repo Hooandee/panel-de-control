@@ -432,6 +432,16 @@ export class AmbientPlayer {
     return this.wantPlaying;
   }
 
+  /** How the current track is being played, for reports of silent playback. */
+  describeOutput(): string {
+    const active = this.active;
+    if (!active) return "engine=none";
+    const engine = active === this.youtube ? "youtube" : active === this.video ? "window" : "audio";
+    const element = active as MediaLike & { muted?: boolean; paused?: boolean; readyState?: number };
+    const time = Number.isFinite(active.currentTime) ? active.currentTime.toFixed(1) : "?";
+    return `engine=${engine} vol=${active.volume.toFixed(2)} scale=${this.scale.toFixed(2)} muted=${element.muted ?? "?"} paused=${element.paused ?? "?"} ready=${element.readyState ?? "?"} t=${time} err=${active.error?.code ?? 0}`;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.clearRetry();

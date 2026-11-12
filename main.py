@@ -15328,9 +15328,13 @@ class Plugin(AmbientRpc):
         home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return journal_context.custom_artwork(os.path.join(home, ".local", "share", "Steam", "userdata"))
 
-    @staticmethod
-    def _support_ambient_state() -> dict:
-        return {"available": False}
+    def _support_ambient_state(self) -> dict:
+        state = self.ambient_diagnostics()
+        for live in ("events", "indexed", "queueLength", "shareActive", "mediaServer", "themeImages", "musicEnabled"):
+            state.pop(live, None)
+        if isinstance(state.get("setup"), dict):
+            state["setup"] = {k: v for k, v in state["setup"].items() if k != "volume"}
+        return state
 
     def _support_settings_state(self) -> dict:
         prefs = self._settings.get("ui_prefs")

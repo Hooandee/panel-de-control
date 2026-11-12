@@ -17,7 +17,7 @@ def service(tmp_path, monkeypatch):
     svc = AmbientService(str(tmp_path / "state"), str(tmp_path / "cache"), str(home))
     monkeypatch.setattr(svc, "media_url", lambda media: "http://127.0.0.1/media/" + media)
 
-    def convert(source, cache_dir, height, cancel=None, fps=30):
+    def convert(source, cache_dir, height, cancel=None, fps=30, codec="h264"):
         target = Path(cache_dir) / output_name(source, height, fps)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"converted")

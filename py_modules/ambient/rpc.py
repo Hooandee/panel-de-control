@@ -7,14 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Literal, Optional
 
 from .adapters.remote_sources import RemoteError, bing_images, nasa_images
-from .adapters.optimizer import FRAME_RATES
+from .adapters.optimizer import CODECS, FRAME_RATES
 from .service import AmbientService
 
 _SCOPES = ("background", "radio")
 _FOLDER_SCOPES = ("background", "music", "library")
 
-Pool = Literal["quick", "jobs", "network", "lookup"]
-_POOL_WORKERS: dict[str, int] = {"quick": 2, "jobs": 1, "network": 2, "lookup": 2}
+Pool = Literal["quick", "jobs", "network", "lookup", "probe"]
+_POOL_WORKERS: dict[str, int] = {"quick": 2, "jobs": 1, "network": 2, "lookup": 2, "probe": 1}
 
 
 class AmbientRpc:
@@ -147,6 +147,16 @@ class AmbientRpc:
             return None
         return await self._ambient_call(lambda s: s.add_playlist(url, name), pool="network")
 
+    async def check_ambient_audio(self, detail: str) -> bool:
+        if not isinstance(detail, str):
+            return False
+        return bool(await self._ambient_call(lambda s: s.check_audio(detail[:200]), pool="probe"))
+
+    async def inspect_ambient_link(self, url: str) -> dict[str, Any]:
+        if not isinstance(url, str) or len(url) > 2048 or not url.lower().startswith(("https://", "http://")):
+            return {"kind": "unknown"}
+        return await self._ambient_call(lambda s: s.inspect_link(url), pool="probe") or {"kind": "unknown"}
+
     async def remove_ambient_playlist(self, playlist_id: str) -> Optional[dict[str, Any]]:
         if not isinstance(playlist_id, str):
             return None
@@ -188,10 +198,10 @@ class AmbientRpc:
 
         return await self._ambient_call(cache, pool="network")
 
-    async def optimize_ambient_media(self, media_id: str, height: int, fps: int = 30) -> dict[str, Any]:
-        if not isinstance(media_id, str) or not isinstance(height, int) or isinstance(height, bool) or fps not in FRAME_RATES:
+    async def optimize_ambient_media(self, media_id: str, height: int, fps: int = 30, codec: str = "h264") -> dict[str, Any]:
+        if not isinstance(media_id, str) or not isinstance(height, int) or isinstance(height, bool) or fps not in FRAME_RATES or codec not in CODECS:
             return {"error": "invalid_arguments"}
-        return await self._ambient_call(lambda s: s.optimize_media(media_id, height, fps), pool="jobs")
+        return await self._ambient_call(lambda s: s.optimize_media(media_id, height, fps, codec), pool="jobs")
 
     async def search_ambient_radio(self, name: str = "", country: str = "", tag: str = "") -> list[dict[str, Any]]:
         args = [a if isinstance(a, str) else "" for a in (name, country, tag)]
