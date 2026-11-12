@@ -409,7 +409,7 @@ def _frontend_exception_detail(line: str) -> dict:
         "origin": origin,
     }
     if origin == "panel":
-        # Panel's bundle is not minified: with the version, the line number is the exact place that failed.
+        # Panel's bundle isn't minified: with the version, the line is the exact spot.
         line_number = _PANEL_BUNDLE_LINE.search(line)
         if line_number:
             detail["line"] = int(line_number.group("line"))

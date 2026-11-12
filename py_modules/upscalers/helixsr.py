@@ -149,7 +149,6 @@ _RECORD = "helixsr-install.json"
 
 
 def _recorded_swaps(folder: Path) -> list[tuple[Path, Path]]:
-    """(game file, HelixSR's *.original.dll backup of it) for each file HelixSR's record says it replaced."""
     try:
         record = json.loads((folder / _RECORD).read_text())
     except (OSError, ValueError):
@@ -165,11 +164,11 @@ def _drop_record(folder: Path) -> None:
 
 
 def not_installed(detail: str) -> bool:
-    """The bridge's answer when it no longer sees HelixSR in the game (often: the game's update put its FSR back)."""
+    """The bridge's answer once HelixSR's DLL is gone, usually replaced by a game update."""
     return bool(re.match(r"HelixSR( Scaler)? is not installed in ", detail or ""))
 
 
-# Strings HelixSR's drop-in carries (its own log lines, checked in 3.2.0 and 3.3.0); AMD's FidelityFX DLLs never do.
+# HelixSR's drop-in carries these strings (checked in 3.2.0 and 3.3.0); AMD's FidelityFX DLLs never do.
 _HELIX_SIGNATURES = (b"HLX-FSR-4", b"HelixSR")
 
 
@@ -190,10 +189,7 @@ def _same_file(a: Path, b: Path) -> bool:
 
 
 def restore_by_hand(folder: Path) -> bool:
-    """Take HelixSR out without its bridge (its release is gone, or it no longer recognises the game) the way the
-    bridge would, file by file: a DLL that is still HelixSR's gets the game's backup back; one the game has since
-    updated keeps its update, and a backup identical to it is dropped. False, with HelixSR's record kept, when a
-    HelixSR DLL has no backup to put back: the game must not be reported clean while HelixSR still runs in it."""
+    """Undo HelixSR without its bridge, never putting an old backup over a game update; False if a HelixSR DLL has no backup."""
     stuck = False
     for current, original in _recorded_swaps(folder):
         backup = original.is_file() and not original.is_symlink()
@@ -204,7 +200,7 @@ def restore_by_hand(folder: Path) -> bool:
             if backup:
                 os.replace(original, current)
             elif current.name.lower().startswith("amd_fidelityfx_"):
-                # HelixSR's drop-in sits where the game's own FidelityFX DLL was, and nothing can bring that back.
+                # Nothing can bring back the game's own FidelityFX DLL here.
                 stuck = True
         elif backup and _same_file(original, current):
             original.unlink()

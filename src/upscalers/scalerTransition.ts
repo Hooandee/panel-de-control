@@ -13,7 +13,7 @@ export function lockScalerSwitch(appid: string): () => void {
   return () => { switching.delete(appid); changed(); };
 }
 
-/** `previousRemoved`: the previous upscaler (HelixSR) came out when the switch began, so a failed switch can't bring it back. */
+/** `previousRemoved`: HelixSR came out when the switch began and a failed switch won't bring it back. */
 export interface ScalerTransition { finish: (success: boolean) => Promise<void>; previousRemoved: boolean }
 export async function prepareScalerTransition(game: JobGame, direction: "mako" | "installed", required = false): Promise<ScalerTransition | null> {
   const release = lockScalerSwitch(game.appid);

@@ -20,7 +20,7 @@ export function hasMakoLeftover(launch: string, receipt: LaunchReceipt | null | 
 
 const unquote = (value: string) => value.replace(/^(["'])(.*)\1$/, "$2");
 
-/** The values Panel itself writes for one Mako profile `pdc-<id>`, so nobody else's setup is ever mistaken for it. */
+/** Whether a Mako value is exactly what Panel writes for profile `pdc-<id>`. */
 function isPanelMakoValue(name: string, value: string, id: string): boolean {
   const plain = unquote(value);
   const folder = `/panel-de-control/mako/${id}/`;
@@ -30,11 +30,7 @@ function isPanelMakoValue(name: string, value: string, id: string): boolean {
   return false;
 }
 
-/**
- * A receipt for Panel's own Mako options in place, as if Panel had just written them; null when anything Mako there
- * is not exactly what Panel writes for one of its profiles (another profile or path, a Mako wrapper with its own
- * flags). The profile id comes from the options themselves: shortcuts use their launch identity, not their appid.
- */
+/** Panel's own Mako options as a fresh receipt, or null unless every Mako part is exactly Panel's (shortcuts use their launch identity as id). */
 export function adoptedMakoReceipt(launch: string): LaunchReceipt | null {
   const parsed = parse(launch);
   if (parsed.malformed) return null;

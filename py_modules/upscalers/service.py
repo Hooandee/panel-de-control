@@ -560,8 +560,7 @@ class UpscalerService:
             install = entry.get("install")
             helix_removed = _is_helix(install)
             if helix_removed:
-                # HelixSR's files are its bridge's to restore, not a checkpoint's: it comes out before the switch, so
-                # a switch that fails leaves the game with its own FSR instead of with HelixSR.
+                # HelixSR comes out before the switch: a failed switch leaves the game's own FSR, not HelixSR.
                 entry["previous"] = diagnostics.snapshot(install)
                 try:
                     self._drop(install, installed.root)
@@ -574,7 +573,7 @@ class UpscalerService:
                 install = None
             if install and install.get("engine", "optiscaler") not in ("optiscaler", "dll"):
                 raise UpscalerError("transition_unsupported")
-            # Right after HelixSR came out, what is left is HelixSR's or the game's, not another tool's setup.
+            # What HelixSR leaves behind is not another tool's setup.
             if not install and not helix_removed and not installed.native and self.game(appid)["analysis"]["foreign"]:
                 raise UpscalerError("foreign")
             restore = {"overrides": _overrides(install) if install.get("engine") != "dll" else [],
@@ -1162,8 +1161,7 @@ class UpscalerService:
         old_target = Path(install.get("target", ""))
         record = _relocated(Path(install.get("helix_file", "")), old_target, root)
         if not record.is_file():
-            # No record where Panel expects it: HelixSR Desktop took it out, or the game moved somewhere Panel can't
-            # map. The bridge still gets a say on the folder Steam runs; "not installed" means there is nothing left.
+            # No record: the bridge still decides; "not installed" means nothing of HelixSR is left.
             if self.helix.ready():
                 try:
                     self._helix("remove", root)
@@ -2221,9 +2219,8 @@ def _recipe_info(recipe) -> dict | None:
 
 
 def _relocated(path: Path, old_target: Path, root: Path) -> Path:
-    """`path` saved under the game's old folder, seen under its current one: the game may have moved to another
-    library, and a copy left in the old one is not the game Steam runs."""
-    # The game folder itself, not a subfolder that happens to share its name (UE games: Foo/Foo/Binaries).
+    """`path` under the game's current folder when the game moved to another library."""
+    # The game folder, not a same-named subfolder (UE games: Foo/Foo/Binaries).
     folders = [ancestor for ancestor in (old_target, *old_target.parents) if ancestor.name == root.name]
     folder = next((ancestor for ancestor in folders if ancestor.parent.name == "common"), folders[-1] if folders else None)
     if folder is None or not path.is_relative_to(folder):

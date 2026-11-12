@@ -76,7 +76,6 @@ export function trackJob(job: UpscalerJob, game: JobGame, request?: UpscalerChoi
       const success = next.state === "done" && !!next.result && !notice;
       try {
         await transition.finish(success);
-        // Whatever failed, a switch that took HelixSR out at its start can't bring it back: say so.
         if (!success && transition.previousRemoved) {
           next = { ...next, state: "error", error: "transition_failed_clean" };
           notice = { key: "up.error.transition_failed_clean" };
@@ -158,7 +157,7 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
   if (!detail.install && detail.analysis.foreign) throw new Error("foreign");
   const transition = await prepareScalerTransition(game, "mako");
   try {
-    // Opening the transition takes HelixSR out by itself; only what is still installed needs an uninstall.
+    // The transition already took HelixSR out.
     if (detail.install && (await getUpscalersGame(game.appid)).install) {
       const job = await uninstallUpscaler(game.appid);
       const completed = waitForJobCompletion(job.id);

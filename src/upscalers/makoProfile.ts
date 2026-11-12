@@ -19,10 +19,7 @@ function staleReceipt(launch: string, receipt: LaunchReceipt): boolean {
 }
 const token = (value: string) => /^[A-Za-z0-9_./:-]+$/.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
 
-/**
- * Panel runs Mako for this game, yet its receipt no longer matches the Mako options in the launch options (rewritten
- * by hand or by another tool with Panel's own values): every change was refused as someone else's and rolled back.
- */
+/** Takes back Panel's own Mako options when its receipt no longer matches them. */
 async function adoptOwnMako(appid: string, liveAppid: number, desired: LaunchOverlay): Promise<void> {
   const [details, receipt] = await Promise.all([readAppDetails(liveAppid), getUpscalerLaunchReceipt(appid, "mako")]);
   if (!details) return;

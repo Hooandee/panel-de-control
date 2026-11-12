@@ -75,7 +75,6 @@ export function MakoScaling({ appid, liveAppid, isNonSteam, disabled, gameRunnin
       await load();
       if (alive.current) setSaved(true);
     } catch (caught) {
-      // The install changed under the failure (HelixSR came out, or a rollback stopped half way): read it again.
       if (["transition_failed_clean", "transition_restore_failed"].includes(upscalerErrorCode(caught))) onChanged?.();
       if (alive.current) {
         const key = `up.error.${upscalerErrorCode(caught)}`;
