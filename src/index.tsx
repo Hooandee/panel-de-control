@@ -177,8 +177,7 @@ export default definePlugin(() => {
   const releaseSlowMutationReporter = configureCssLoaderSlowMutationReporter(
     ({ method, elapsedMs, settled }) => recordUiDiagnostic(
       "themes",
-      `css_loader_${method}_${settled}`,
-      slowMutationBucket(elapsedMs),
+      `css_loader_${method}_${settled}_${slowMutationBucket(elapsedMs)}`,
     ),
   );
   const releaseSectionHandoffStore = configureSectionHandoffStore({

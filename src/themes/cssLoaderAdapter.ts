@@ -393,10 +393,9 @@ export class CssLoaderAdapter {
     return after;
   }
 
-  // Puts enabled flags and patch values back without reloading CSS Loader. Each call injects into
-  // every Steam tab, so it gets the reload timeout: the tab that slowed the reloads slows these too.
+  // Puts enabled flags and patch values back without reloading CSS Loader.
   async reapplyThemeStates(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
-    return this.restoreCompatibleSnapshotState(expected, await this.requireReady(), new Set(), this.reloadTimeoutMs);
+    return this.restoreCompatibleSnapshotState(expected, await this.requireReady());
   }
 
   async reconcileRecoveredThemes(
@@ -484,7 +483,6 @@ export class CssLoaderAdapter {
     expected: CssLoaderReadySnapshot,
     current: CssLoaderReadySnapshot,
     allowedVersionChanges: ReadonlySet<string> = new Set(),
-    timeoutMs = this.timeoutMs,
   ): Promise<CssLoaderReadySnapshot> {
     for (const expectedTheme of expected.themes) {
       const currentTheme = current.themes.find((theme) => theme.name === expectedTheme.name);
@@ -502,7 +500,7 @@ export class CssLoaderAdapter {
             expectedTheme.name,
             expectedPatch.name,
             expectedPatch.value,
-          ], timeoutMs);
+          ]);
         }
       }
       if (currentTheme.enabled !== expectedTheme.enabled) {
@@ -511,7 +509,7 @@ export class CssLoaderAdapter {
           expectedTheme.enabled,
           false,
           false,
-        ], timeoutMs);
+        ]);
       }
     }
     return this.requireReady();
