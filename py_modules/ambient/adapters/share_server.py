@@ -101,6 +101,15 @@ class ShareServer:
         port = listener.getsockname()[1]
         return {"url": f"http://{address}:{port}/s/{self.token}/", "expiresIn": int(self._ttl)}
 
+    @property
+    def port(self) -> int:
+        with self._lock:
+            listener = self._socket
+        try:
+            return listener.getsockname()[1] if listener else 0
+        except OSError:
+            return 0
+
     def stop(self) -> None:
         with self._lock:
             listener, self._socket = self._socket, None

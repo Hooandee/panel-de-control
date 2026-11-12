@@ -66,7 +66,7 @@ export const LinksTab: FC<{ runtime: AmbientRuntime; snapshot: AmbientSnapshot; 
   return (
     <>
       {header}
-      <AddLinkBar hint={t(purpose === "background" ? "ambient.add.url.formats" : "ambient.lib.links.hint")} onAdd={(url, name) => runtime.addFavorite(purpose === "background" ? "background" : "radio", url, name)} />
+      <AddLinkBar hint={t(purpose === "background" ? "ambient.add.url.formats" : "ambient.lib.links.hint")} onAdd={(url, name) => runtime.addLink(purpose === "background" ? "background" : "radio", url, name)} />
       <div style={{ display: "grid", gridTemplateColumns: purpose === "background" ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: theme.space.md, gridTemplateRows: purpose === "background" ? "minmax(0, 1fr) auto" : undefined, flex: 1, minHeight: 0 }}>
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div ref={listRef} style={{ flex: 1, minHeight: 0 }}>

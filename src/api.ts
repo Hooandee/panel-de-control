@@ -1424,3 +1424,5 @@ export const cancelUpscalersJob = callable<[], UpscalerJob | null>("cancel_upsca
 // A theme's menus over the running game freeze it meanwhile (py_modules/game_freeze.py).
 export const pauseThemeGame = callable<[appid: string, ms: number], boolean>("pause_theme_game");
 export const resumeThemeGame = callable<[], void>("resume_theme_game");
+export const getThemeHltb = callable<[appid: string, name: string], unknown>("get_theme_hltb");
+export const getThemeProtonDb = callable<[appid: string], unknown>("get_theme_protondb");

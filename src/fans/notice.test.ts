@@ -37,6 +37,7 @@ describe("fanHandoffNotice", () => {
   const t = (key: string) => key;
   it("explains the Armada handoff only on that backend", () => {
     expect(fanHandoffNotice({ source: "armada-pwm" } as never, t)).toBe("fans.armadaHandoff");
+    expect(fanHandoffNotice({ source: "pocknix-pwm" } as never, t)).toBe("fans.pocknixHandoff");
     expect(fanHandoffNotice({ source: "generic-pwm" } as never, t)).toBeNull();
   });
 });

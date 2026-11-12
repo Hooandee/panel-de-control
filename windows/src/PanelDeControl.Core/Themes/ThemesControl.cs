@@ -297,6 +297,10 @@ public sealed class ThemeEntry
     [DataMember(Name = "early_version", Order = 14, EmitDefaultValue = false)]
     public string? EarlyVersion { get; set; }
 
+    /// <summary>An on-screen keyboard theme: listed apart, and never counted against a Home theme's runtime.</summary>
+    [DataMember(Name = "keyboard", Order = 15, EmitDefaultValue = false)]
+    public bool Keyboard { get; set; }
+
 
     public bool Installed => InstalledVersion is not null;
 

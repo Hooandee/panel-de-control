@@ -25,6 +25,12 @@ _STOP_WAIT_S = 0.5
 _MAX_SCREENS = 4
 _LIFECYCLE_KEPT = 4
 _LIFECYCLE_EVENT_CHARS = 40
+# Steps marked around hardware writes (resume re-apply): the last one names the write a
+# freeze interrupted. Each mark is synced before the write it announces starts.
+_MARKS_KEPT = 16
+_MARK_STEP_CHARS = 40
+_MARK_DETAIL_KEYS = 6
+_MARK_DETAIL_CHARS = 48
 _WATCHED_PROCESSES = ("steamwebhelper", "steam", "gamescope", "gamescope-wl", "python3", "PluginLoader", "Panel de Contro")
 
 
@@ -86,8 +92,11 @@ def _gpu(root: str) -> dict | None:
         vram = _number(os.path.join(device, "mem_info_vram_used"))
         vram_total = _number(os.path.join(device, "mem_info_vram_total"))
         gtt = _number(os.path.join(device, "mem_info_gtt_used"))
+        level = (_read(os.path.join(device, "power_dpm_force_performance_level")) or "").strip()
         return {
             "busy": busy,
+            # "manual" = a pinned clock window (Panel or Steam), which the kernel restores on resume.
+            "level": level[:16] or None,
             "vram_mb": vram // 1048576 if vram is not None else None,
             "vram_total_mb": vram_total // 1048576 if vram_total is not None else None,
             "gtt_mb": gtt // 1048576 if gtt is not None else None,
@@ -214,6 +223,8 @@ def performance_sample(root: str = "/") -> dict:
         if len(caps) >= 8:
             break
     return {
+        # Kernel's online CPU list ("0-3,6"): cores switched off across a suspend show here.
+        "cpus_online": (_read(os.path.join(root, "sys/devices/system/cpu/online")) or "").strip()[:32] or None,
         "boost": _number(os.path.join(base, "boost")),
         "cpu_khz": {"min": min(clocks), "max": max(clocks)} if clocks else None,
         "power_caps_uw": caps,
@@ -288,6 +299,10 @@ class Pulse:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._write_lock = threading.Lock()
+        self._marks: collections.deque = collections.deque(maxlen=_MARKS_KEPT)
+        self._wake = threading.Event()
+        self._fast_until = 0.0
+        self._fast_interval_s = interval_s
         self.write_failures = 0
 
     @property
@@ -329,6 +344,7 @@ class Pulse:
         if self._thread is not None:
             return
         self._stop.clear()
+        self._wake.clear()
         self._thread = threading.Thread(target=self._run, name="pdc-pulse", daemon=True)
         self._thread.start()
 
@@ -336,11 +352,35 @@ class Pulse:
         """Called from the event loop while Decky unloads: waits briefly, never on a
         slow disk."""
         self._stop.set()
+        self._wake.set()
         thread = self._thread
         self._thread = None
         if thread is not None:
             thread.join(_STOP_WAIT_S)
         self._persist(stopped=True, wait_s=_STOP_WAIT_S)
+
+    def mark(self, step: str, *, sync: bool = True, **detail: Any) -> None:
+        """Records a step. sync=True (worker threads, right before a hardware write)
+        persists before returning; from the event loop pass sync=False and the pulse
+        thread writes it at once, without sampling."""
+        entry: dict[str, Any] = {"t": round(self._clock(), 2), "step": str(step)[:_MARK_STEP_CHARS]}
+        for key, value in list(detail.items())[:_MARK_DETAIL_KEYS]:
+            entry[str(key)[:24]] = value if isinstance(value, (bool, int, float)) or value is None else str(value)[:_MARK_DETAIL_CHARS]
+        self._marks.append(entry)
+        if sync:
+            self._persist(stopped=False)
+        else:
+            self._wake.set()
+
+    def burst(self, seconds: float, interval_s: float = 2.0) -> None:
+        """Samples every interval_s for the next seconds (after a resume, a freeze
+        within seconds is otherwise dated to a 10 s window)."""
+        self._fast_until = max(self._fast_until, self._clock() + seconds)
+        self._fast_interval_s = min(self._interval_s, interval_s)
+        self._wake.set()
+
+    def _next_wait(self) -> float:
+        return self._fast_interval_s if self._clock() < self._fast_until else self._interval_s
 
     def tick(self) -> None:
         try:
@@ -365,6 +405,7 @@ class Pulse:
             "interval_s": self._interval_s,
             "stopped": stopped,
             "samples": list(self._samples),
+            "marks": list(self._marks),
         }
         if self._recent is not None:
             try:
@@ -396,10 +437,18 @@ class Pulse:
                 self._on_unclean(end)
             except Exception:  # noqa: BLE001
                 self.write_failures += 1
+        sample_due = True
         while True:
-            self.tick()
-            if self._stop.wait(self._interval_s):
+            if sample_due:
+                self.tick()
+            else:
+                self._persist(stopped=False)
+            deadline = time.monotonic() + self._next_wait()
+            woke = self._wake.wait(max(0.0, deadline - time.monotonic()))
+            self._wake.clear()
+            if self._stop.is_set():
                 return
+            sample_due = not woke or time.monotonic() >= deadline
 
 
 def lifecycle_tail(events: list) -> list:
@@ -446,6 +495,7 @@ def summarize_unclean(previous: dict, current_boot: str | None) -> dict:
         "system_rebooted": previous.get("boot") != current_boot if previous.get("boot") and current_boot else None,
         "last": last,
         "lifecycle": lifecycle_tail(previous["lifecycle"]) if isinstance(previous.get("lifecycle"), list) else None,
+        "marks": list(previous["marks"])[-_MARKS_KEPT:] if isinstance(previous.get("marks"), list) else None,
     }
 
 

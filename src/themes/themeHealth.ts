@@ -1,3 +1,5 @@
+import { isKeyboardTheme } from "./state";
+import type { PublishedThemeRelease } from "./remotePublication";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 
 export type ThemeFolderKind =
@@ -210,6 +212,11 @@ export function displayReport(display: SteamDisplayState): Record<string, number
     height: display.height,
     css_loader_styles: display.cssLoaderStyles,
   };
+}
+
+/** Catalog themes that restyle the interface: a keyboard theme only dresses Steam's keyboard and runs next to them. */
+export function interfaceThemeNames(releases: Iterable<Pick<PublishedThemeRelease, "cssLoaderName" | "exclusiveGroup">>): Set<string> {
+  return new Set([...releases].filter((release) => !isKeyboardTheme(release)).map((release) => release.cssLoaderName));
 }
 
 export function hooandeeNames(backend: ThemeHealthBackend, catalogNames: Iterable<string>): Set<string> {

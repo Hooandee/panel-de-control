@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import errno
+import http.client
+import logging
 import json
 import os
 import threading
 import time
+import urllib.parse
 from collections import OrderedDict, deque
 from typing import Any, Callable, Literal, Optional
 
 from json_store import atomic_json_save
 
-from .adapters import radio_browser, remote_sources
+from .adapters import lan_firewall, radio_browser, remote_sources
 from .adapters.game_audio import GameAudio
 from .adapters.generated_cache import GeneratedCache
 from .adapters.installed_games import snapshot as installed_snapshot
@@ -26,7 +29,7 @@ from .adapters.theme_images import ThemeImageStore, valid_owner
 from .adapters.steam_screenshots import screenshot_folders
 from .core import collections as coll
 from .core.image_header import ImageInfo, probe as probe_image
-from .core.m3u import parse_m3u
+from .core.m3u import is_channel_list, parse_m3u
 from .core.media_types import media_kind
 from .core.path_guard import resolve_servable
 from .core.settings import default_settings, normalize_settings
@@ -44,7 +47,8 @@ _MAX_IMAGE_PROBES = 256
 DISCOVER_TTL_SEC = 600
 PLAYLIST_TTL_SEC = 6 * 3600
 DISCOVER_CACHE_SIZE = 64
-_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image"}
+_log = logging.getLogger(__name__)
+_EVENT_KINDS = {"playback_error", "radio_error", "conflict", "power", "serve_error", "remote_error", "cache", "video_fullscreen", "share", "selection", "theme_image", "music", "share_firewall", "floating_missing", "playlist_error"}
 
 
 _GAME_MEDIA_TTL_S = 7 * 24 * 3600
@@ -58,6 +62,7 @@ class AmbientService:
     def __init__(self, state_dir: str, cache_dir: str, home: str):
         self._settings_path = os.path.join(state_dir, "settings.json")
         self._game_audio = GameAudio()
+        self._share_rule: Optional[tuple[int, str]] = None
         self._game_media_path = os.path.join(cache_dir, "game-media.json")
         self._game_media: Optional[dict[str, Any]] = None
         self._cache_dir = cache_dir
@@ -104,7 +109,30 @@ class AmbientService:
             share = self._share
         session = share.start(texts)
         self.record_event("share", "started" if "url" in session else session.get("error", "failed"))
+        if "url" in session:
+            threading.Thread(target=self._open_share_firewall, args=(session["url"], session["expiresIn"]), name="ambient-share-firewall", daemon=True).start()
         return session
+
+    def _open_share_firewall(self, url: str, seconds: int) -> None:
+        parsed = urllib.parse.urlsplit(url)
+        if not (parsed.hostname and parsed.port):
+            return
+        result = lan_firewall.open_port(parsed.port, parsed.hostname, seconds)
+        self.record_event("share_firewall", result)
+        if not result.startswith("opened:"):
+            return
+        rule = (parsed.port, result.split(":", 1)[1])
+        with self._lock:
+            share = self._share
+            current = share is not None and share.active and share.port == parsed.port
+            stale = self._share_rule if current else None
+            if current:
+                self._share_rule = rule
+        # A share that ended (or was replaced) while firewalld was answering closes its rule at once.
+        if not current:
+            lan_firewall.close_port(*rule)
+        elif stale is not None and stale != rule:
+            lan_firewall.close_port(*stale)
 
     def take_shared(self) -> dict[str, Any]:
         share = self._share
@@ -113,9 +141,13 @@ class AmbientService:
         return {"links": share.take(), "active": share.active}
 
     def stop_share(self) -> None:
-        share = self._share
-        if share is not None:
-            share.stop()
+        with self._lock:
+            share = self._share
+            if share is not None:
+                share.stop()
+            rule, self._share_rule = self._share_rule, None
+        if rule is not None:
+            threading.Thread(target=lan_firewall.close_port, args=rule, name="ambient-share-firewall", daemon=True).start()
 
     def cancel_jobs(self) -> None:
         """Stops a running optimization (e.g. a game started); later jobs start fresh."""
@@ -716,7 +748,7 @@ class AmbientService:
                 atomic_json_save(self._installed_path, current)
             return changed
 
-    def optimize_media(self, media_id: str, height: int, fps: int = 30) -> dict[str, Any]:
+    def optimize_media(self, media_id: str, height: int, fps: int = 30, codec: str = "h264") -> dict[str, Any]:
         source = self._resolve(media_id)
         if source is None:
             return {"error": "unknown_media"}
@@ -727,9 +759,9 @@ class AmbientService:
                 return {"error": "unused_media"}
         height = max(144, min(2160, int(height)))
         cache = os.path.join(self._cache_dir, "optimized")
-        existed = os.path.isfile(os.path.join(cache, output_name(source, height, fps)))
+        existed = os.path.isfile(os.path.join(cache, output_name(source, height, fps, codec)))
         try:
-            result = optimize(source, cache, height, self._cancel, fps)
+            result = optimize(source, cache, height, self._cancel, fps, codec)
         except OptimizeError as exc:
             self.record_event("serve_error", f"optimize:{exc.reason}")
             return {"error": exc.reason}
@@ -782,6 +814,19 @@ class AmbientService:
             if not any(p["url"] == url for p in playlists):
                 playlists.append({"id": coll.stable_id("list", url), "name": name.strip() or url, "url": url})
             return self._commit(settings)
+
+    def check_audio(self, detail: str) -> bool:
+        """One look per started track at where Steam's sound goes, for reports of silent media."""
+        return self.record_event("music", f"playing {detail}; steam {self._game_audio.steam_output()}")
+
+    def inspect_link(self, url: str) -> dict[str, Any]:
+        """Whether a pasted .m3u/.m3u8 link is a list of channels (saved as a list) or one stream."""
+        try:
+            text = remote_sources.fetch_head(url)
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            self.record_event("radio_error", f"inspect:{type(error).__name__}")
+            return {"kind": "unknown"}
+        return {"kind": "list"} if is_channel_list(text) else {"kind": "stream"}
 
     def remove_playlist(self, playlist_id: str) -> dict[str, Any]:
         with self._lock:
@@ -869,7 +914,9 @@ class AmbientService:
     def record_event(self, kind: str, detail: str) -> bool:
         if kind not in _EVENT_KINDS:
             return False
-        self._events.append({"kind": kind, "detail": str(detail)[:120], "at": int(time.time())})
+        detail = str(detail)[:240]
+        self._events.append({"kind": kind, "detail": detail, "at": int(time.time())})
+        _log.log(logging.WARNING if kind.endswith("_error") else logging.INFO, "Ambient %s: %s", kind, detail)
         return True
 
     def diagnostics(self) -> dict[str, Any]:
@@ -891,5 +938,27 @@ class AmbientService:
             "shareActive": bool(self._share and self._share.active),
             "themeImages": len(self._theme_images),
             "claims": settings["claims"],
+            "setup": _settings_summary(settings),
             "events": list(self._events),
         }
+
+
+def _settings_summary(settings: dict[str, Any]) -> dict[str, Any]:
+    """The choices that change what the user sees or hears, without paths, names or links."""
+    background, music, radio = settings["background"], settings["music"], settings["radio"]
+    return {
+        "gameArt": background.get("gameArt"),
+        "transition": background.get("transition"),
+        "optimizeVideos": background.get("optimizeVideos"),
+        "videoQuality": background.get("videoQuality"),
+        "collections": len(background.get("collections", [])),
+        "perGame": len(background.get("perGame", {})),
+        "overlay": music.get("overlay"),
+        "videoOn": music.get("videoOn"),
+        "volume": music.get("volume"),
+        "inGameMediaLevel": music.get("inGameMediaLevel"),
+        "inGameGameLevel": music.get("inGameGameLevel"),
+        "queueKinds": sorted({entry.get("kind", "audio") + (":live" if entry.get("live") else "") for entry in music.get("queue", [])}),
+        "radioFavorites": len(radio.get("favorites", [])),
+        "playlists": len(radio.get("playlists", [])),
+    }

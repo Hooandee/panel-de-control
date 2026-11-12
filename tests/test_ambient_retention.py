@@ -16,7 +16,7 @@ def svc(tmp_path, monkeypatch):
     home.mkdir()
     service = AmbientService(str(tmp_path / "state"), str(tmp_path / "cache"), str(home))
 
-    def convert(source, cache_dir, height, cancel=None, fps=30):
+    def convert(source, cache_dir, height, cancel=None, fps=30, codec="h264"):
         target = Path(cache_dir) / output_name(source, height, fps)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"converted")
@@ -74,9 +74,9 @@ def test_removal_while_conversion_runs_does_not_leave_orphan(svc, tmp_path, monk
     folder, original, ref, target = source(svc, tmp_path)
     convert = __import__("ambient.service", fromlist=["optimize"]).optimize
 
-    def removing(source, cache, height, cancel=None, fps=30):
+    def removing(source, cache, height, cancel=None, fps=30, codec="h264"):
         svc.remove_item("background", stable_id("folder", str(folder)))
-        return convert(source, cache, height, cancel, fps)
+        return convert(source, cache, height, cancel, fps, codec)
 
     monkeypatch.setattr("ambient.service.optimize", removing)
     result = svc.optimize_media(ref, 200)

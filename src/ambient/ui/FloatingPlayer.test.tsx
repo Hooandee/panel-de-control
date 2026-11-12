@@ -13,6 +13,7 @@ import { setAmbientRuntime } from "./useAmbient";
 const platform = vi.hoisted(() => ({
   composition: null as number | null,
   capture: null as ((button: number) => void) | null,
+  keyboard: null as ((showing: boolean) => void) | null,
   trees: [] as Array<{ id?: string; m_ID?: string; m_Root?: { m_element: HTMLElement }; Root?: { Element: HTMLElement } }>,
 }));
 
@@ -24,6 +25,13 @@ vi.mock("@decky/ui", () => ({
 }));
 vi.mock("../../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("../../platform/qamSurface", () => ({ subscribeQamSurface: () => () => undefined, onQamLeftEdge: () => () => undefined, qamPanelWidth: () => 0 }));
+vi.mock("../../platform/virtualKeyboard", () => ({
+  subscribeVirtualKeyboard: (listener: (showing: boolean) => void) => {
+    platform.keyboard = listener;
+    listener(false);
+    return () => { platform.keyboard = null; };
+  },
+}));
 vi.mock("../../platform/buttonCapture", () => ({
   captureButtons: (_buttons: readonly number[], callback: (button: number) => void) => {
     platform.capture = callback;
@@ -288,6 +296,39 @@ describe("FloatingPlayer fullscreen", () => {
     expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(false);
     act(() => store.publish({ player: { ...store.snapshot().player, status: "playing" } }));
     expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(true);
+  });
+
+  it("steps aside while Steam's keyboard is up, even when set to always show, and comes back after", () => {
+    const store = runtimeStore(false);
+    const settings = structuredClone(store.snapshot().state!.settings);
+    settings.music.overlay = "always";
+    act(() => store.publish({ state: { ...store.snapshot().state!, settings }, player: { ...store.snapshot().player, status: "paused", video: false } }));
+    render(<FloatingPlayer />);
+    const card = () => document.getElementById("pdc-ambient-floating")!.firstElementChild as HTMLElement;
+    expect(card().style.display).toBe("");
+    act(() => platform.keyboard!(true));
+    expect(card().style.display).toBe("none");
+    act(() => platform.keyboard!(false));
+    expect(card().style.display).toBe("");
+  });
+
+  it("leaves control mode when Steam's keyboard opens so the keys reach the keyboard", () => {
+    const store = runtimeStore(false);
+    render(<FloatingPlayer />);
+    act(() => store.publish({ overlayControl: true }));
+    expect(platform.capture).not.toBeNull();
+    act(() => platform.keyboard!(true));
+    expect(store.runtime.stopOverlayControl).toHaveBeenCalled();
+    expect(platform.capture).toBeNull();
+  });
+
+  it("hides the video card under Steam's keyboard without stopping the sound", () => {
+    const store = runtimeStore(false);
+    render(<FloatingPlayer />);
+    expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(true);
+    act(() => platform.keyboard!(true));
+    expect(store.runtime.setVideoVisible).toHaveBeenLastCalledWith(false);
+    expect(store.runtime.pauseMusic).not.toHaveBeenCalled();
   });
 
   it("keeps the video out of the way on library tabs that have no slot for it, without stopping the sound", () => {

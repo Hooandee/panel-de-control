@@ -149,15 +149,20 @@ def test_optimize_media_indexes_result(service, monkeypatch, tmp_path):
     item = service.scan()["collections"]["known.images"][1]
     out = tmp_path / "cache" / "optimized" / "opt-abc.mp4"
 
-    def fake_optimize(source, cache_dir, height, cancel=None, fps=30):
+    calls = []
+
+    def fake_optimize(source, cache_dir, height, cancel=None, fps=30, codec="h264"):
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"SMALL")
         assert (height, fps) == (800, 15)
+        calls.append(codec)
         return Optimized(str(out), "h264_vaapi")
 
     monkeypatch.setattr("ambient.service.optimize", fake_optimize)
     result = service.optimize_media(item["id"], 800, 15)
     assert result["encoder"] == "h264_vaapi" and result["id"] == "opt:opt-abc"
+    service.optimize_media(item["id"], 800, 15, "vp9")
+    assert calls == ["h264", "vp9"]
     assert service.media_url(result["id"]).startswith("http://127.0.0.1:")
 
 
@@ -358,3 +363,30 @@ def test_empty_global_catalog_section_reports_incomplete_and_preserves_previous(
     assert event["detail"] == "catalog_incomplete"
     monkeypatch.setattr(rb, empty_section, lambda: complete[empty_section])
     assert service.radio_catalog() == complete
+
+
+def test_inspect_link_reads_only_the_head_and_says_list_stream_or_unknown(tmp_path, monkeypatch):
+    from ambient.adapters import remote_sources
+    from ambient.service import AmbientService
+
+    bodies = {
+        "https://lists.test/tv.m3u8": "#EXTM3U\n#EXTINF:-1 group-title=\"TV\",La 1\nhttps://tv.test/la1.m3u8\n#EXTINF:-1 group-title=\"TV\",La 2\nhttps://tv.test/la2.m3u8\n",
+        "https://live.test/channel.m3u8": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow.m3u8\n",
+    }
+
+    def fake_head(url):
+        if url == "https://shoutcast.test/x.m3u":
+            import http.client
+            raise http.client.BadStatusLine("ICY 200 OK")
+        if url not in bodies:
+            raise OSError("offline")
+        return bodies[url]
+
+    monkeypatch.setattr(remote_sources, "fetch_head", fake_head)
+    service = AmbientService(state_dir=str(tmp_path / "state"), cache_dir=str(tmp_path / "cache"), home=str(tmp_path))
+    assert service.inspect_link("https://lists.test/tv.m3u8") == {"kind": "list"}
+    assert service.inspect_link("https://live.test/channel.m3u8") == {"kind": "stream"}
+    assert service.inspect_link("https://down.test/x.m3u8") == {"kind": "unknown"}
+    assert service.diagnostics()["events"][-1]["detail"] == "inspect:OSError"
+    assert service.inspect_link("https://shoutcast.test/x.m3u") == {"kind": "unknown"}
+    service.close()

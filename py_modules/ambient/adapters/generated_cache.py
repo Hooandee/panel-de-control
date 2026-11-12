@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from json_store import atomic_json_save
 
-_GENERATED = re.compile(r"(?:optimized/opt-[0-9a-f]{32}\.mp4|[0-9a-f]{64}\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mkv|mov))")
+_GENERATED = re.compile(r"(?:optimized/opt-[0-9a-f]{32}\.(?:mp4|webm)|[0-9a-f]{64}\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mkv|mov))")
 
 
 class GeneratedCache:

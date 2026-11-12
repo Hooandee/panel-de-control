@@ -123,7 +123,7 @@ def test_advanced_current_value_is_not_a_documented_choice(tmp_path):
 
 def test_job_references_survive_real_redaction_without_mutating_runtime(steam, fake_catalog, proc):
     from copy import deepcopy
-    from report.collector import redact_obj
+    from pdc_report.collector import redact_obj
 
     service = _service(steam, fake_catalog, proc)
     first, second = 'a1b2c3d4e5f6', 'f6e5d4c3b2a1'

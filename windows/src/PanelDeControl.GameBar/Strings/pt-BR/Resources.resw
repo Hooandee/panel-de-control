@@ -426,6 +426,7 @@
   <data name="ThemesEarlyAvailable" xml:space="preserve"><value>Early {0}</value></data>
   <data name="ThemesPickerUnavailable" xml:space="preserve"><value>não foi possível abrir o seletor de arquivos; ele também abre pelo Panel de Control no Iniciar</value></data>
   <data name="ThemesStateRuntimeConflict" xml:space="preserve"><value>com outro tema ativo não há animações; é preciso desligar um</value></data>
+  <data name="ThemesKeyboardsHeading" xml:space="preserve"><value>Teclados</value></data>
   <data name="ThemesErrorEarlyUnpublished" xml:space="preserve"><value>esse zip não é uma early publicada deste tema</value></data>
   <data name="ThemesGroup_appearance" xml:space="preserve"><value>Aparência</value></data>
   <data name="ThemesGroup_grid" xml:space="preserve"><value>Grade</value></data>
