@@ -15492,11 +15492,12 @@ class Plugin(AmbientRpc):
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
+        settings = getattr(self, "_settings", None)
+        fans_off = settings is not None and not self._module_enabled("fanControl")
         fans_released = (
-            self._restore_fans_safe()
-            if self._module_enabled("fanControl")
-            or self._settings.get("fan_release_pending") is True
-            else True
+            True
+            if fans_off and settings.get("fan_release_pending") is not True
+            else self._restore_fans_safe()
         )
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
