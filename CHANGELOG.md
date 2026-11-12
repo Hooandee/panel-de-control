@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.89.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.88.0...panel-de-control-v0.89.0) (2026-11-12)
+
+
+### Features
+
+* **themes:** keyboard themes one at a time, and How Long to Beat and ProtonDB for themes ([#1262](https://github.com/Hooandee/panel-de-control/issues/1262)) ([fb071e9](https://github.com/Hooandee/panel-de-control/commit/fb071e98640d5369a08b2be20f9c45f2b94dec0f))
+
+
+### Bug Fixes
+
+* **ambient:** video backgrounds after a Steam restart, theme colour over trailers, keyboard, startup music and M3U links ([#1267](https://github.com/Hooandee/panel-de-control/issues/1267)) ([2e77609](https://github.com/Hooandee/panel-de-control/commit/2e77609d33bde90ad8063b3a6d754fd359ec2546))
+* **fans:** hand the Odin 3 fan to and from pocknix-fancontrol on Pocknix ([#1271](https://github.com/Hooandee/panel-de-control/issues/1271)) ([a60002a](https://github.com/Hooandee/panel-de-control/commit/a60002aa2c553c87f63ab08f988217a8b0d6140f))
+* **hud:** hide the overlay when it is switched off and keep live values updating ([#1283](https://github.com/Hooandee/panel-de-control/issues/1283)) ([9ec9862](https://github.com/Hooandee/panel-de-control/commit/9ec9862bde3e2fdf7aa7f11341d2c3de9a96d3df))
+* **kiosk:** turn the bottom screen the way Armada says the panel is mounted ([#1270](https://github.com/Hooandee/panel-de-control/issues/1270)) ([0d9c2d5](https://github.com/Hooandee/panel-de-control/commit/0d9c2d5c9823659be6683595c091fcc5e4aa3023))
+* **legion:** fan curve, charge limit and M2 on the original Legion Go ([#1268](https://github.com/Hooandee/panel-de-control/issues/1268)) ([bda6acb](https://github.com/Hooandee/panel-de-control/commit/bda6acb2b11a4ed5c4ba8a512aa4f6f7bc83c3a2))
+* load the plugin's own Python modules ahead of same-named system packages ([#1265](https://github.com/Hooandee/panel-de-control/issues/1265)) ([dce034b](https://github.com/Hooandee/panel-de-control/commit/dce034b631e03368ebaf9ffcb3f3fcb08ce7dff5))
+* stop freezes when waking from sleep with CPU cores switched off ([#1266](https://github.com/Hooandee/panel-de-control/issues/1266)) ([6a750e1](https://github.com/Hooandee/panel-de-control/commit/6a750e1dc329d9f2f587707ec5699f68834535f2))
+* stop writing fans and TDP that are turned off, and explain firmware power limits ([#1284](https://github.com/Hooandee/panel-de-control/issues/1284)) ([ea141c7](https://github.com/Hooandee/panel-de-control/commit/ea141c754373629e82471c4d9f54767e40da6da5))
+* **tdp:** stop fighting Steam's download mode on the Steam Deck ([#1285](https://github.com/Hooandee/panel-de-control/issues/1285)) ([6988d3c](https://github.com/Hooandee/panel-de-control/commit/6988d3c99c5c1666ccea2e3795b28d3544a04900))
+* **themes:** stop endless CSS Loader timeouts and report more theme context ([#1281](https://github.com/Hooandee/panel-de-control/issues/1281)) ([a393a2a](https://github.com/Hooandee/panel-de-control/commit/a393a2a34b3648467fb7b9db9a492cd6e5481ce3))
+* **upscalers:** complete support reports, Mako on shared emulators, Unifideck, Steam Machine 4K and Where Winds Meet notices ([#1272](https://github.com/Hooandee/panel-de-control/issues/1272)) ([66dca28](https://github.com/Hooandee/panel-de-control/commit/66dca281b6ff6cf0ea0976040bfdbad870f3e2ed))
+* **upscalers:** switch away from a HelixSR the game replaced, turn Mako off when its launch record drifted, and hide cover badges ([#1282](https://github.com/Hooandee/panel-de-control/issues/1282)) ([ed6c2f0](https://github.com/Hooandee/panel-de-control/commit/ed6c2f004f41d895affeddf6ace7a226a64199fa))
+
 ## [0.88.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.87.0...panel-de-control-v0.88.0) (2026-11-11)
 
 
