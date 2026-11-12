@@ -79,3 +79,14 @@ it("holds shortcuts back until it knows whether a game is behind them", async ()
   expect(screen.getByText("Shortcut")).toBeTruthy();
   games.pop();
 });
+
+it("asks for compatibility in batches the backend accepts", async () => {
+  const api = await import("../api");
+  const extra = Array.from({ length: 399 }, (_, i) => ({ liveAppid: 1000 + i, instanceKey: `x${i}`, name: `G${i}`, coverUrls: [], lastPlayed: 0, isNonSteam: false }));
+  games.push(...extra);
+  vi.mocked(api.getUpscalersCompat).mockClear();
+  await act(async () => { render(<EscaladoresSection />); });
+  const sizes = vi.mocked(api.getUpscalersCompat).mock.calls.map(([ids]) => ids.length);
+  expect(sizes).toEqual([400, 1]);
+  games.splice(2, extra.length);
+});

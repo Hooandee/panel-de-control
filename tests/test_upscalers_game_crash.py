@@ -51,3 +51,11 @@ def test_crash_folders_named_by_guid_are_ordered_by_date(tmp_path, monkeypatch):
     _crash(tmp_path, "7", "Game", "UECC-Windows-FFFF_0000", CONTEXT.replace("OptiScaler", "Older"), age=120)
     _crash(tmp_path, "7", "Game", "UECC-Windows-8888_0000")
     assert diagnostics.game_crash("/home/x", "7")["modules"][0] == "OptiScaler.dll"
+
+
+def test_a_user_name_with_spaces_never_reaches_the_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(games, "library_paths", lambda home: [tmp_path])
+    _crash(tmp_path, "9", "Game", "a", CONTEXT.replace("someone", "John Smith"))
+    message = diagnostics.game_crash("/home/x", "9")["message"]
+    assert "John" not in message and "Smith" not in message
+    assert message.endswith("in OptiScaler.dll")

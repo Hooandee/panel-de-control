@@ -128,7 +128,7 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
     wrapped = _wrapped(home, appid, name, exe, launch_options) if home else None
     if wrapped:
         return wrapped
-    key = launchers.unifideck_key(launch_options) if home else None
+    key = launchers.unifideck_key(launch_options) if home and "unifideck" in exe.lower() else None
     if key:
         row = launchers.unifideck_row(home, key)
         if row is None or not row[0]:

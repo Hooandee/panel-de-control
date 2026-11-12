@@ -148,3 +148,9 @@ def test_unavailable_shortcuts_are_flagged_and_never_patched(steam, fake_catalog
     monkeypatch.setattr(games, "find_installed", lambda home, appid: missing if appid == "99" else None)
     assert service.compatibility(["99"]) == {"99": {"native": False, "inputs": [], "unavailable": "unifideck_not_installed"}}
     assert service._find("99") is None
+
+
+def test_a_script_that_only_mentions_a_store_id_stays_listed(home):
+    script = _script(home / "Games/emu/run.sh", "exec ./emu\n")
+    found = games.from_hint("14", {"exe": str(script), "dir": str(script.parent), "name": "Emu", "opts": "epic:abc %command%"}, str(home))
+    assert (found.native, found.unavailable) == (True, None)

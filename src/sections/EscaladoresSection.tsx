@@ -74,7 +74,11 @@ export const EscaladoresSection: FC = () => {
   useEffect(() => {
     if (!appids) return;
     let alive = true;
-    getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined)
+    const ids = appids.split(",");
+    // The backend answers at most 400 games per call; a whole store library can be longer.
+    const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
+    Promise.all(batches.map((batch) => getUpscalersCompat(batch).catch(() => ({}))))
+      .then((parts) => { if (alive) setCompat(Object.assign({}, ...parts)); })
       .finally(() => { if (alive) setCompatRead(true); });
     return () => { alive = false; };
   }, [appids]);

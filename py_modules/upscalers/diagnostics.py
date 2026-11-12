@@ -609,6 +609,7 @@ def windows_components(record) -> dict | None:
 _CRASH_MAX_AGE_S = 14 * 24 * 3600
 _CRASH_FILE_LIMIT = 256 * 1024
 _CRASH_MODULE = re.compile(r"([A-Za-z0-9_.\-]{1,80}\.(?:dll|exe))!", re.I)
+_USER_HOME = re.compile(r"(?:[A-Za-z]:)?[\\/](?:home|users)[\\/][^\\/\r\n:<>\"']{1,64}", re.I)
 _PATHLIKE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\\/\s\"'<>]+)+[\\/]?")
 
 
@@ -655,7 +656,8 @@ def game_crash(home: str, appid: str) -> dict | None:
             text = stream.read(_CRASH_FILE_LIMIT).decode("utf-8", "replace")
     except OSError:
         return {"at": round(newest[0]), "readable": False}
-    message = _PATHLIKE.sub(lambda m: re.split(r"[\\/]", m.group(0).rstrip("\\/"))[-1], _xml_tag(text, "ErrorMessage"))
+    message = _PATHLIKE.sub(lambda m: re.split(r"[\\/]", m.group(0).rstrip("\\/"))[-1],
+                            _USER_HOME.sub("", _xml_tag(text, "ErrorMessage")))
     stack = _xml_tag(text, "CallStack") or _xml_tag(text, "PCallStack")
     modules = list(dict.fromkeys(match.group(1) for match in _CRASH_MODULE.finditer(stack)))[:8]
     return {
