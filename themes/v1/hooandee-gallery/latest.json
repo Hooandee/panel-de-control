@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-gallery",
   "cssLoaderName": "Hooandee Gallery",
-  "version": "0.9.57",
+  "version": "0.9.58",
   "displayName": {
     "es": "Hooandee",
     "en": "Hooandee",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.57/theme.zip",
-    "size": 153397,
-    "sha256": "b38c57d0d48ab7b838863db685be8ef0aa0eace5de72ca9449866900826d950e"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.58/theme.zip",
+    "size": 153604,
+    "sha256": "b09c2252a7fcfdde02157084fcd3e4758e0a14f3efec2d24b58f11620a1a14bc"
   },
   "minimumVersions": {
     "panel": "0.38.0",
@@ -26,8 +26,8 @@
     "cssLoaderBackend": 9
   },
   "notes": {
-    "es": "El carrusel vuelve a reproducir los sonidos nativos de Steam al cambiar de juego.",
-    "en": "The carousel plays native Steam navigation sounds again when switching games.",
-    "it": "Il carosello riproduce di nuovo i suoni di navigazione nativi di Steam quando cambi gioco."
+    "es": "La pantalla de descargas vuelve a verse bien con las versiones nuevas de Steam: la gráfica ocupa todo su ancho, se ve la portada del juego y el botón de pausa ya no se corta.",
+    "en": "The downloads page looks right again on newer Steam versions: the graph uses its full width, the game artwork shows and the pause button is no longer cut off.",
+    "it": "La pagina dei download torna a vedersi bene con le versioni recenti di Steam: il grafico occupa tutta la larghezza, l'immagine del gioco si vede e il pulsante di pausa non è più tagliato."
   }
 }
