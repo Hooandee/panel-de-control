@@ -30,7 +30,6 @@ export interface CssLoaderAdapterOptions {
   timeoutMs?: number;
   reloadTimeoutMs?: number;
   onSlowMutation?: (event: CssLoaderSlowMutation) => void;
-  now?: () => number;
 }
 
 // CSS Loader retries each Steam tab three times and only gives up on a tab after 5 s without an
@@ -128,7 +127,6 @@ export class CssLoaderAdapter {
   private readonly timeoutMs: number;
   private readonly reloadTimeoutMs: number;
   private readonly onSlowMutation: ((event: CssLoaderSlowMutation) => void) | undefined;
-  private readonly now: () => number;
   private uncertainMutation: Promise<void> | null = null;
 
   constructor(
@@ -138,11 +136,10 @@ export class CssLoaderAdapter {
     this.timeoutMs = options.timeoutMs ?? 5_000;
     this.reloadTimeoutMs = options.reloadTimeoutMs ?? DEFAULT_RELOAD_TIMEOUT_MS;
     this.onSlowMutation = options.onSlowMutation;
-    this.now = options.now ?? (() => Date.now());
   }
 
   private reportSlowMutation(method: string, startedAt: number, settled: CssLoaderSlowMutation["settled"]): void {
-    const elapsedMs = this.now() - startedAt;
+    const elapsedMs = Date.now() - startedAt;
     if (settled !== "late" && elapsedMs < this.timeoutMs) return;
     try {
       this.onSlowMutation?.({ method, elapsedMs, settled });
@@ -193,7 +190,7 @@ export class CssLoaderAdapter {
     }
     let settled = false;
     let timedOut = false;
-    const startedAt = this.now();
+    const startedAt = Date.now();
     const operation = Promise.resolve().then(() => this.host.call(method, ...args));
     void operation.then(
       () => {
