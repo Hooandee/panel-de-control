@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-luminous-atlas",
+  "cssLoaderName": "Hooandee Luminous Atlas",
+  "version": "1.1.7",
+  "displayName": {
+    "es": "Luminous Atlas",
+    "en": "Luminous Atlas",
+    "it": "Luminous Atlas"
+  },
+  "description": {
+    "es": "Un tema táctico inspirado en los menús de atlas y mapas de los RPG de estrategia. Pergamino verde oscuro, tinta marfil y marcos de latón, con portadas personalizables, menú de acceso rápido y elementos dinámicos.",
+    "en": "A tactical theme inspired by the atlas and map menus of strategy RPGs. Dark green parchment, ivory ink and brass frames, with customizable covers, a quick access menu and dynamic elements.",
+    "it": "Un tema tattico ispirato ai menu da atlante e mappa dei giochi di ruolo strategici. Pergamena verde scura, inchiostro avorio e cornici d'ottone, con copertine personalizzabili, menu di accesso rapido ed elementi dinamici."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-luminous-atlas/1.1.7/theme.zip",
+    "size": 389399,
+    "sha256": "698bff64a043eb146711d66a24d3c8ad03ed494f24473e5c918fbfa10324ddbe"
+  },
+  "minimumVersions": {
+    "panel": "0.56.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "Los menús desplegables largos, como el de herramientas de compatibilidad, ya no se cortan arriba y abajo y se pueden recorrer enteros.",
+    "en": "Long dropdown menus, like the compatibility tool list, are no longer cut off at the top and bottom and scroll all the way.",
+    "it": "I menu a tendina lunghi, come quello degli strumenti di compatibilità, non vengono più tagliati in alto e in basso e si scorrono fino in fondo."
+  }
+}
