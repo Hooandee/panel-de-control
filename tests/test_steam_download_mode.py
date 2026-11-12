@@ -172,17 +172,18 @@ def test_release_during_the_wait_lets_the_write_through():
     hold = SteamDownloadModeHold(6)
     hold.step(_deck(6, 6), TARGET, None, 1.0, _unknown)
     assert hold.holding
-    assert hold.release(now=2.0) is False
+    assert hold.release(now=2.0) == "wait_released"
     assert not hold.holding
+    assert hold.diagnostics()["pending_since"] is None
     assert hold.step(_deck(6, 6), TARGET, None, 3.0, _on) is None
 
 
 def test_release_clears_the_hold():
     hold = SteamDownloadModeHold(6)
     hold.step(_deck(6, 6), TARGET, None, 1.0, _on)
-    assert hold.release(now=5.0) is True
+    assert hold.release(now=5.0) == "released"
     assert not hold.active and not hold.holding
-    assert hold.release(now=6.0) is False
+    assert hold.release(now=6.0) is None
 
 
 def _session():

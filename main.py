@@ -7963,11 +7963,13 @@ class Plugin(AmbientRpc):
         logical_watts = command.logical_requested["pl1"]
         if not self._game_power_write_allowed():
             return TdpResult(logical_watts, None, False, "game-power-owner")
-        if (
-            command.reason in _USER_TDP_REASONS
-            and self._steam_download_hold.release(time.monotonic())
-        ):
-            self._journal_steam_download_mode("released", self._tdp_observation, {})
+        released = (
+            self._steam_download_hold.release(time.monotonic())
+            if command.reason in _USER_TDP_REASONS
+            else None
+        )
+        if released is not None:
+            self._journal_steam_download_mode(released, self._tdp_observation, {})
         if self._tdp_shutdown:
             return TdpResult(
                 logical_watts,

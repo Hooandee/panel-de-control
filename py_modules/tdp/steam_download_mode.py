@@ -136,17 +136,20 @@ class SteamDownloadModeHold:
         if self.holding or self._unconfirmed_reported:
             return None
         self._unconfirmed_reported = True
+        self._pending_since = None
         return "unconfirmed"
 
-    def release(self, now: float) -> bool:
+    def release(self, now: float) -> str | None:
         """A user TDP change ends the hold or the wait for Steam's confirmation."""
         if self.active:
             self._leave(now, "user")
-            return True
+            return "released"
         if self.holding:
             self.holding = False
+            self._pending_since = None
             self._unconfirmed_reported = True
-        return False
+            return "wait_released"
+        return None
 
     def _leave(self, now: float, why: str) -> str:
         entered = self._entered_at if self._entered_at is not None else now
@@ -159,6 +162,7 @@ class SteamDownloadModeHold:
         }
         self.active = self.holding = False
         self._entered_at = None
+        self._pending_since = None
         # Settled for these rails: no new wait or hold until they leave the limit.
         self._unconfirmed_reported = True
         return "left"
