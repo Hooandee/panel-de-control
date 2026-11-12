@@ -285,6 +285,7 @@ def test_board_driven_by_the_system_reports_control_until_opted_out(monkeypatch)
     import asyncio
     plugin = _plugin(monkeypatch, channels_after_load=3)
     plugin._board_fans.calls.append("load")
+    plugin._fan_ctrl = types.SimpleNamespace(name="generic-pwm", restore_auto=lambda: {"ok": True})
 
     assert plugin._board_fan_state()["enabled"] is True
 
@@ -348,3 +349,21 @@ def test_failed_release_keeps_board_control_instead_of_stranding_the_fan(monkeyp
 
     assert plugin._settings.get("board_fan_control_off") is not True
     assert seen == [True]
+
+
+def test_no_driven_fans_means_the_toggle_reads_off(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.calls.append("load")
+
+    assert plugin._board_fan_state()["enabled"] is False
+
+
+def test_opt_out_survives_a_driver_that_could_not_be_unloaded(monkeypatch):
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._settings.update({"board_fan_driver": True, "board_fan_control_off": True})
+    calls = []
+    plugin._offload = lambda fn, done=None: calls.append(fn)
+
+    plugin._restore_board_fans()
+
+    assert calls == []

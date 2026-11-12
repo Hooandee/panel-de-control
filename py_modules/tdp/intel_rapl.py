@@ -332,6 +332,8 @@ class IntelRaplBackend(TDPBackend):
         return max(self._fallback.min_w, min(int(watts), maximum))
 
     def apply_auto_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
+        self._written_at = None
+        self._battery_ceiling_w = None
         requested = int(targets["pl1"])
         if not self.auto_tdp_safe:
             return TdpResult(requested, None, False, "complete PL1/PL2 RAPL control unavailable")

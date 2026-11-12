@@ -112,8 +112,8 @@ export function ownershipMessage(
     return { key: "tdp.ownership.overshootUnresolved", vars: { target: ownership.overshoot.target_w }, warn: true };
   }
   if (ownership.conflict_persistent) return { key: "tdp.ownership.conflict", vars: {}, warn: true };
-  // ASUS firmware publishes a higher minimum for the boost rails than for sustained power, so
-  // a low limit holds on average but short peaks still reach that boost minimum.
+  // Firmware that publishes a higher minimum for the boost rails than for sustained power keeps
+  // a low limit on average while short peaks still reach that boost minimum.
   if (
     ownership.reason === "live_min"
     && view.boostFloor !== null

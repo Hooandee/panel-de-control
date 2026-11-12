@@ -550,6 +550,7 @@ DEFAULTS = {
     "board_fan_driver": False,
     "board_fan_module": None,
     "board_fan_control_off": False,
+    "fan_release_pending": False,
     # PlayStation 5 fan target (°C) for the firmware autoservo; None = untouched.
     "ps5_fan_target_c": None,
     # PlayStation 5 light preset (None = untouched) and thermal guard / overheat beep.
@@ -2000,7 +2001,7 @@ class Plugin(AmbientRpc):
         if disabled and module_id in ("system", "chargeLimit"):
             self._clear_charge_limit_full_once()
         if fans_were_on and not self._module_enabled("fanControl"):
-            self._fans_released_while_off = False
+            self._settings["fan_release_pending"] = True
         release_requested = (
             dict(targets.requested)
             if module_id == "power"
@@ -4725,13 +4726,13 @@ class Plugin(AmbientRpc):
         driver = getattr(self, "_board_fans", None)
         if driver is None:
             return {"supported": False}
-        state = driver.state()
-        # A board whose driver the system already loads is driven by the curve until the
-        # user turns the toggle off; the toggle must show that control, not only our load.
-        controlled = self._settings.get("board_fan_control_off") is not True and (
-            self._settings.get("board_fan_driver") is True or bool(state.get("channels"))
+        # A driver the system loads itself is driven by the curve until the user turns the
+        # toggle off, so the toggle follows the fan backend actually in use.
+        controlled = (
+            self._settings.get("board_fan_control_off") is not True
+            and getattr(getattr(self, "_fan_ctrl", None), "name", None) == "generic-pwm"
         )
-        return {**state, "supported": True, "enabled": controlled}
+        return {**driver.state(), "supported": True, "enabled": controlled}
 
     def _set_board_fans_sync(self, enabled: bool, only: str | None = None) -> dict:
         driver = self._board_fans
@@ -5182,7 +5183,8 @@ class Plugin(AmbientRpc):
 
     def _restore_board_fans(self) -> None:
         if (getattr(self, "_board_fans", None) is None
-                or self._settings.get("board_fan_driver") is not True):
+                or self._settings.get("board_fan_driver") is not True
+                or self._settings.get("board_fan_control_off") is True):
             return
         module = self._settings.get("board_fan_module")
         self._offload(
@@ -5237,14 +5239,15 @@ class Plugin(AmbientRpc):
         if not self._module_enabled("fanControl"):
             # Fan control disabled: hand the fans back once and stop writing, so another
             # tool (CoolerControl, fancontrol) keeps what it sets afterwards.
-            if getattr(self, "_fans_released_while_off", True):
+            if self._settings.get("fan_release_pending") is not True:
                 return True
             released = self._restore_fans_safe()
-            self._fans_released_while_off = bool(released)
+            if released:
+                self._settings["fan_release_pending"] = False
+                self._save()
             self._fan_apply_confirmed = False
             self._log_fan_transition("module_disabled", ok=bool(released))
             return released
-        self._fans_released_while_off = False
         try:
             hw_state = self._fan_ctrl.read_state()
             if self._desktop_mode_on() and hw_state.get("independent"):
