@@ -20,10 +20,22 @@ export interface CssLoaderHost {
   call(method: string, ...args: unknown[]): Promise<unknown>;
 }
 
+export interface CssLoaderSlowMutation {
+  method: string;
+  elapsedMs: number;
+  settled: "ok" | "error" | "late";
+}
+
 export interface CssLoaderAdapterOptions {
   timeoutMs?: number;
   reloadTimeoutMs?: number;
+  onSlowMutation?: (event: CssLoaderSlowMutation) => void;
+  now?: () => number;
 }
+
+// CSS Loader retries each Steam tab three times and only gives up on a tab after 5 s without an
+// answer, so a single unresponsive tab stretches reset past 30 s.
+const DEFAULT_RELOAD_TIMEOUT_MS = 90_000;
 
 export type CssLoaderReadySnapshot = CssLoaderSnapshot & { status: "ready" };
 
@@ -115,6 +127,8 @@ function errorInfo(error: unknown): CssLoaderErrorInfo {
 export class CssLoaderAdapter {
   private readonly timeoutMs: number;
   private readonly reloadTimeoutMs: number;
+  private readonly onSlowMutation: ((event: CssLoaderSlowMutation) => void) | undefined;
+  private readonly now: () => number;
   private uncertainMutation: Promise<void> | null = null;
 
   constructor(
@@ -122,7 +136,17 @@ export class CssLoaderAdapter {
     options: CssLoaderAdapterOptions = {},
   ) {
     this.timeoutMs = options.timeoutMs ?? 5_000;
-    this.reloadTimeoutMs = options.reloadTimeoutMs ?? 15_000;
+    this.reloadTimeoutMs = options.reloadTimeoutMs ?? DEFAULT_RELOAD_TIMEOUT_MS;
+    this.onSlowMutation = options.onSlowMutation;
+    this.now = options.now ?? (() => Date.now());
+  }
+
+  private reportSlowMutation(method: string, startedAt: number, settled: CssLoaderSlowMutation["settled"]): void {
+    const elapsedMs = this.now() - startedAt;
+    if (settled !== "late" && elapsedMs < this.timeoutMs) return;
+    try {
+      this.onSlowMutation?.({ method, elapsedMs, settled });
+    } catch {}
   }
 
   private async callWithTimeout(
@@ -168,15 +192,24 @@ export class CssLoaderAdapter {
       );
     }
     let settled = false;
+    let timedOut = false;
+    const startedAt = this.now();
     const operation = Promise.resolve().then(() => this.host.call(method, ...args));
     void operation.then(
-      () => { settled = true; },
-      () => { settled = true; },
+      () => {
+        settled = true;
+        this.reportSlowMutation(method, startedAt, timedOut ? "late" : "ok");
+      },
+      () => {
+        settled = true;
+        this.reportSlowMutation(method, startedAt, timedOut ? "late" : "error");
+      },
     );
     try {
       return await this.awaitWithTimeout(timeoutMs, method, operation);
     } catch (error) {
       if (error instanceof CssLoaderOperationError && error.code === "timeout" && !settled) {
+        timedOut = true;
         const pending = operation.then(() => undefined, () => undefined);
         this.uncertainMutation = pending;
         void pending.then(() => {

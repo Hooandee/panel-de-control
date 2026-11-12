@@ -50,7 +50,7 @@ import { openThemeHealthModal } from "./components/ThemeHealth";
 import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
-import { startFrontendErrorReporting } from "./system/uiDiagnostics";
+import { recordUiDiagnostic, startFrontendErrorReporting } from "./system/uiDiagnostics";
 import { setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
@@ -85,6 +85,7 @@ import {
   configureEarlyArchivePicker,
   configureSectionHandoffStore,
   configureThemeFailureReporter,
+  configureCssLoaderSlowMutationReporter,
   createProductionThemesDependencies,
 } from "./themes/themesClient";
 import { configureThemeEarlyCheckHost, configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
@@ -171,6 +172,13 @@ export default definePlugin(() => {
   });
   const releaseThemeFailureReporter = configureThemeFailureReporter(
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
+  );
+  const releaseSlowMutationReporter = configureCssLoaderSlowMutationReporter(
+    ({ method, elapsedMs, settled }) => recordUiDiagnostic(
+      "themes",
+      `css_loader_${method}_${settled}`,
+      `${Math.round(elapsedMs / 1000)}s`,
+    ),
   );
   const releaseSectionHandoffStore = configureSectionHandoffStore({
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),
@@ -342,6 +350,7 @@ export default definePlugin(() => {
       releaseThemeHealthHost();
       releaseThemeExtensionHost();
       releaseThemeFailureReporter();
+      releaseSlowMutationReporter();
       releaseSectionHandoffStore();
       releaseCssLoaderHost();
     },

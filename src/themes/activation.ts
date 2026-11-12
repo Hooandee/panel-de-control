@@ -389,6 +389,7 @@ export class ThemeActivator {
           recovery.error = undefined;
         },
         (error: unknown) => {
+          recovery.failures += 1;
           recovery.status = "needed";
           recovery.error = error;
         },

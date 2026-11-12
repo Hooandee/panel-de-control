@@ -3,6 +3,7 @@ import {
   CssLoaderAdapter,
   CssLoaderOperationError,
   type CssLoaderReadySnapshot,
+  type CssLoaderSlowMutation,
 } from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
@@ -152,6 +153,7 @@ const MAX_INSTALL_RECONCILE_FAILURES = 3;
 let productionDependencies: ThemesDependencies | undefined;
 let failureReporter: ((failure: ThemeFailureReport) => unknown) | undefined;
 let sectionHandoffStore: SectionHandoffStore | undefined;
+let slowMutationReporter: ((event: CssLoaderSlowMutation) => void) | undefined;
 let earlyArchivePicker: (() => Promise<string | null>) | undefined;
 
 export function configureEarlyArchivePicker(picker: () => Promise<string | null>): () => void {
@@ -170,6 +172,15 @@ export function configureThemeFailureReporter(
   };
 }
 
+export function configureCssLoaderSlowMutationReporter(
+  reporter: (event: CssLoaderSlowMutation) => void,
+): () => void {
+  slowMutationReporter = reporter;
+  return () => {
+    if (slowMutationReporter === reporter) slowMutationReporter = undefined;
+  };
+}
+
 export function configureSectionHandoffStore(store: SectionHandoffStore): () => void {
   sectionHandoffStore = store;
   return () => {
@@ -179,7 +190,9 @@ export function configureSectionHandoffStore(store: SectionHandoffStore): () => 
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
-  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost());
+  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(), {
+    onSlowMutation: (event) => slowMutationReporter?.(event),
+  });
   productionDependencies = {
     adapter,
     installer: createPanelThemeInstaller(),
