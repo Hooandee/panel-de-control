@@ -134,12 +134,9 @@ def _script_shortcut(home: str, appid: str, name: str, exe: str, launch_options:
         if row is None or not row[0]:
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
                              unavailable="unifideck_not_installed" if row is None else "unifideck_no_exe")
-        folder = Path(row[1]) if row[1] and Path(row[1]).is_dir() else Path(row[0]).parent
-        if not Path(row[0]).is_file() or not folder.is_dir():
+        if not Path(row[0]).is_file():
             return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True,
                              unavailable="unifideck_missing")
-        # A GOG Linux build (its start.sh or binary): native, in its own folder rather than Unifideck's.
-        return Installed(appid, name, folder, STATE_FULLY_INSTALLED, None, True, native=True)
     # Otherwise an AppImage, script or Linux binary: its start folder is not a Windows game to patch.
     return Installed(appid, name, start, STATE_FULLY_INSTALLED, None, True, native=True)
 

@@ -43,3 +43,11 @@ def test_old_or_missing_crashes_are_not_reported(tmp_path, monkeypatch):
     assert diagnostics.game_crash("/home/x", "1") is None
     _crash(tmp_path, "1", "Game", "a", age=30 * 24 * 3600)
     assert diagnostics.game_crash("/home/x", "1") is None
+
+
+def test_crash_folders_named_by_guid_are_ordered_by_date(tmp_path, monkeypatch):
+    monkeypatch.setattr(games, "library_paths", lambda home: [tmp_path])
+    _crash(tmp_path, "7", "Game", "UECC-Windows-0000_0000", CONTEXT.replace("OptiScaler", "Old"), age=60)
+    _crash(tmp_path, "7", "Game", "UECC-Windows-FFFF_0000", CONTEXT.replace("OptiScaler", "Older"), age=120)
+    _crash(tmp_path, "7", "Game", "UECC-Windows-8888_0000")
+    assert diagnostics.game_crash("/home/x", "7")["modules"][0] == "OptiScaler.dll"

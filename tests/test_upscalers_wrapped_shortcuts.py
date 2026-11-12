@@ -134,12 +134,12 @@ def test_a_unifideck_row_without_an_executable_is_unavailable(home):
     assert found.unavailable == "unifideck_no_exe"
 
 
-def test_a_unifideck_linux_build_is_native_in_its_own_folder(home):
+def test_a_unifideck_linux_build_stays_native(home):
     script = _script(home / "GOG Games/SOR4/start.sh", "exec ./game\n")
     launcher = _unifideck(home, f"gog:42={script}\t{script.parent}\t-5\n")
     found = games.from_hint("13", {"exe": str(launcher), "dir": str(launcher.parent), "name": "SOR4",
                                    "opts": "gog:42"}, str(home))
-    assert (found.native, found.unavailable, found.root) == (True, None, script.parent)
+    assert (found.native, found.unavailable, found.root) == (True, None, launcher.parent)
 
 
 def test_unavailable_shortcuts_are_flagged_and_never_patched(steam, fake_catalog, proc, monkeypatch, tmp_path):

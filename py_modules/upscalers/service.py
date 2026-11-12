@@ -1878,8 +1878,9 @@ class UpscalerService:
         for previous, entry in self.state["games"].items():
             if previous == appid or entry.get("launch_identity") != digest:
                 continue
-            other = self._find(previous)
-            if other is not None and other.shortcut and self._shortcut_launch_identity(other) == digest:
+            # Only a shortcut still in shortcuts.vdf: a remembered hint of a removed one is the same game re-added.
+            other = games.find_installed(self.home, previous)
+            if other is not None and other.shortcut and not other.unavailable and self._shortcut_launch_identity(other) == digest:
                 return True
         return False
 

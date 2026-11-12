@@ -158,6 +158,7 @@ def test_shortcuts_sharing_one_emulator_keep_separate_profiles(steam, fake_catal
     installed = {key: Installed(key, name, tmp_path, 4, "yuzu.exe", True, True)
                  for key, name in (("111", "Breath of the Wild"), ("222", "Tears of the Kingdom"))}
     monkeypatch.setattr(service, "_find", installed.get)
+    monkeypatch.setattr("upscalers.games.find_installed", lambda home, appid: installed.get(appid))
     receipt = {"version": 1, "env": [], "wrappers": {"before": [], "applied": [], "added": []}}
     service.mako_game("111", {"multiplier": 3})
     first = next(iter(service.mako.profiles))
@@ -184,3 +185,21 @@ def test_steam_and_unresolved_receipt_keys_stay_unchanged(steam, fake_catalog, p
     assert service.mako_status(APPID)["profiles"] == {APPID: {"multiplier": 2}}
     assert service._launch_owner(APPID) == APPID
     assert service._launch_owner("missing") == "missing"
+
+
+def test_a_re_added_shortcut_keeps_its_profile_when_only_a_hint_remains(steam, fake_catalog, proc, monkeypatch, tmp_path):
+    from upscalers import games
+    from upscalers.games import Installed
+    service = _service(steam, fake_catalog, proc)
+    service.mako = StoredMako()
+    live = {"111": Installed("111", "Game", tmp_path, 4, "game.exe", True, True)}
+    monkeypatch.setattr(games, "find_installed", lambda home, appid: live.get(appid))
+    service.mako_game("111", {"multiplier": 3})
+    key = next(iter(service.mako.profiles))
+    live.clear()
+    live["222"] = Installed("222", "Game", tmp_path, 4, "game.exe", True, True)
+    monkeypatch.setattr(games, "from_hint", lambda appid, hint, home="": Installed("111", "Game", tmp_path, 4, "game.exe", True, True) if appid == "111" else None)
+    assert service.mako_runtime("222")["requested"] == {"multiplier": 3}
+    service.mako_game("222", {"multiplier": 4})
+    assert service.mako.profiles == {key: {"multiplier": 4}}
+    assert "launch_identity_shared" not in service.state["games"]["222"]

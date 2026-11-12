@@ -66,3 +66,16 @@ it("leaves out store shortcuts with no installed game behind them", async () => 
   expect(screen.getByText("B")).toBeTruthy();
   expect(screen.getByText("up.list.linux")).toBeTruthy();
 });
+
+it("holds shortcuts back until it knows whether a game is behind them", async () => {
+  const api = await import("../api");
+  games.push({ liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });
+  let answer: (value: unknown) => void = () => undefined;
+  vi.mocked(api.getUpscalersCompat).mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }) as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.queryByText("Shortcut")).toBeNull();
+  expect(screen.getByText("A")).toBeTruthy();
+  await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
+  expect(screen.getByText("Shortcut")).toBeTruthy();
+  games.pop();
+});

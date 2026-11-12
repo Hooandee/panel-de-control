@@ -27,6 +27,7 @@ export const EscaladoresSection: FC = () => {
   const [held] = useState(takeHeldPage);
   const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
   const [compat, setCompat] = useState<Record<string, GameCompat>>({});
+  const [compatRead, setCompatRead] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -73,11 +74,14 @@ export const EscaladoresSection: FC = () => {
   useEffect(() => {
     if (!appids) return;
     let alive = true;
-    getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined);
+    getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined)
+      .finally(() => { if (alive) setCompatRead(true); });
     return () => { alive = false; };
   }, [appids]);
   // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
-  const listed = useMemo(() => games.filter((g) => !compat[String(g.liveAppid)]?.unavailable), [games, compat]);
+  // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
+  const listed = useMemo(() => games.filter((g) => compatRead ? !compat[String(g.liveAppid)]?.unavailable : !g.isNonSteam),
+    [games, compat, compatRead]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>

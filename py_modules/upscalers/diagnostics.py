@@ -618,6 +618,14 @@ def _xml_tag(text: str, tag: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _entries(folder: Path, limit: int) -> list[Path]:
+    try:
+        with os.scandir(folder) as found:
+            return [Path(entry.path) for _, entry in zip(range(limit), found)]
+    except OSError:
+        return []
+
+
 def game_crash(home: str, appid: str) -> dict | None:
     """The newest crash Unreal recorded in the game's prefix: when, its message and the modules on top of the stack.
 
@@ -626,17 +634,12 @@ def game_crash(home: str, appid: str) -> dict | None:
     newest = None
     for library in games.library_paths(home):
         local = library / "steamapps/compatdata" / str(appid) / "pfx/drive_c/users/steamuser/AppData/Local"
-        try:
-            projects = sorted(local.iterdir())[:64]
-        except OSError:
-            continue
-        for project in projects:
+        for project in _entries(local, 64):
             crashes = project / "Saved/Crashes"
-            try:
-                folders = sorted(crashes.iterdir())[:32] if crashes.is_dir() and not crashes.is_symlink() else []
-            except OSError:
+            if crashes.is_symlink() or not crashes.is_dir():
                 continue
-            for folder in folders:
+            # Unreal names crash folders by GUID: the newest is found by date, never by name.
+            for folder in _entries(crashes, 256):
                 context = folder / "CrashContext.runtime-xml"
                 try:
                     if context.is_symlink() or not context.is_file():
