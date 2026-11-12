@@ -175,7 +175,7 @@ export function configureThemeFailureReporter(
 // Coarse, so repeated slow calls fold into one diagnostic entry instead of one per duration.
 export function slowMutationBucket(elapsedMs: number): string {
   const seconds = elapsedMs / 1000;
-  return seconds >= 90 ? "90s" : seconds >= 60 ? "60s" : seconds >= 30 ? "30s" : "15s";
+  return seconds >= 90 ? "90s" : seconds >= 60 ? "60s" : seconds >= 30 ? "30s" : seconds >= 15 ? "15s" : "5s";
 }
 
 export function configureCssLoaderSlowMutationReporter(

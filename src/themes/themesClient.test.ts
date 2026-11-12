@@ -936,6 +936,6 @@ describe("ThemesClient cleanup with a stale choice", () => {
 
 describe("slowMutationBucket", () => {
   it("groups slow CSS Loader calls into a few ranges", () => {
-    expect([16_000, 31_000, 65_000, 120_000].map(slowMutationBucket)).toEqual(["15s", "30s", "60s", "90s"]);
+    expect([6_000, 16_000, 31_000, 65_000, 120_000].map(slowMutationBucket)).toEqual(["5s", "15s", "30s", "60s", "90s"]);
   });
 });
