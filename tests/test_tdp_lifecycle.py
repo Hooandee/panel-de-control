@@ -613,3 +613,29 @@ def test_poller_reads_wakeup_count_off_the_event_loop():
     asyncio.run(scenario())
 
     assert reader_threads and loop_thread not in reader_threads
+
+
+def test_charger_change_while_asleep_waits_for_the_resume_reapply():
+    # Legion Go (#1123): AC changed during the suspend, so the AC path re-applied every
+    # control 0.06 s after waking. The delayed resume re-apply reads AC live instead.
+    full, events = [], []
+    wc = {"v": 0}
+    suspended = {"v": 0.0}
+    ac = {"v": True}
+    lm = LifecycleManager(apply_cb=lambda on_ac: full.append(on_ac),
+                          reassert_cb=lambda on_ac: None,
+                          wakeup_delay=4.0,
+                          read_wakeup=lambda: wc["v"],
+                          read_suspend=lambda: suspended["v"],
+                          read_ac=lambda: ac["v"],
+                          event_cb=events.append)
+    lm.check(now=0.0)
+    wc["v"], suspended["v"], ac["v"] = 1, 600.0, False
+    lm.check(now=1.0)
+    assert full == []
+    assert events[-1] == {"event": "ac_changed", "on_ac": False, "deferred_to_resume": True}
+    lm.check(now=5.0)
+    assert full == [False]
+    ac["v"] = True
+    lm.check(now=7.0)            # an ordinary charger change once awake still applies at once
+    assert full == [False, True]
