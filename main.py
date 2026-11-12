@@ -24,6 +24,8 @@ from typing import Literal
 import decky
 
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
+# First plugin import: puts py_modules ahead of system packages with the same name.
+import pdc_import_paths  # noqa: F401
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
 import decky_socket_guard
@@ -166,8 +168,8 @@ from mangohud import ownership as mangohud_ownership
 from mangohud.apply import apply_hud, clear_presets, reload_sessions
 from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
-from report import collector as report_collector
-from report import client as report_client
+from pdc_report import collector as report_collector
+from pdc_report import client as report_client
 from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths

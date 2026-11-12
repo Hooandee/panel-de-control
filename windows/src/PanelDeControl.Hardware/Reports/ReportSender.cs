@@ -8,7 +8,7 @@ using PanelDeControl.Core.Reports;
 namespace PanelDeControl.Hardware.Reports;
 
 /// <summary>
-/// Sends a bundle to the report service the Linux plugin uses (<c>py_modules/report/client.py</c>). It only
+/// Sends a bundle to the report service the Linux plugin uses (<c>py_modules/pdc_report/client.py</c>). It only
 /// ever writes: reading a report back is a developer tool on the service, behind its own key.
 /// </summary>
 public sealed class ReportSender

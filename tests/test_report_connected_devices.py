@@ -1,6 +1,6 @@
 import os
 
-from report import collector, connected_devices
+from pdc_report import collector, connected_devices
 
 
 def _write(path, value):
