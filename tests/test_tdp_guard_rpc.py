@@ -2943,3 +2943,71 @@ def test_backend_operation_logs_failed_recovery(plugin, monkeypatch):
     assert events[-1][0] == ("WARNING", "tdp", "backend_operation")
     assert events[-1][1]["operation"] == "recover"
     assert events[-1][1]["result"]["ok"] is False
+
+
+def _steam_download_mode_deck(plugin):
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    plugin._tdp_backend.name = "steamdeck-hwmon"
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend.set_levels_calls = 0
+
+
+def test_guard_leaves_steam_download_mode_tdp_alone(plugin):
+    _steam_download_mode_deck(plugin)
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+
+    for tick in range(6):
+        plugin._tdp_guard_tick(now=10.0 + tick)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert not plugin._tdp_write_authorized()
+    assert plugin._tdp_diagnostics()["steam_download_mode"]["active"] is True
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("reapply"))
+    assert not result.ok
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_guard_resumes_once_steam_restores_the_limit(plugin):
+    _steam_download_mode_deck(plugin)
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_backend._levels.update(pl1=15, pl2=15, pl3=15)
+    plugin._tdp_guard_tick(now=40.0)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_write_authorized()
+    assert plugin._steam_download_hold.diagnostics()["last"]["held_s"] == 30.0
+
+
+def test_user_tdp_change_wins_over_steam_download_mode(plugin):
+    _steam_download_mode_deck(plugin)
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+    plugin._tdp_guard_tick(now=10.0)
+
+    result = asyncio.run(plugin._apply_tdp_now("manual-watts"))
+
+    assert result.ok
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_steam_download_mode_hold_needs_the_deck_backend(plugin):
+    from tdp.steam_download_mode import SteamDownloadModeHold
+
+    plugin._steam_download_hold = SteamDownloadModeHold(6)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels.update(pl1=6, pl2=6, pl3=6)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert not plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 1

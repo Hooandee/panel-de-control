@@ -63,6 +63,7 @@ from tdp.low_battery_hold import LOW_BATTERY_PERCENT, decide_hold
 from tdp.measured_power import MeasuredLimitWatch
 from tdp import powerstation as powerstation_conflict
 from tdp import steamos_manager as steamos_manager_conflict
+from tdp.steam_download_mode import SteamDownloadModeHold, read_download_mode_limit
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
     CONFIRM_S,
@@ -316,6 +317,12 @@ _RESUME_HOLD_S = 30.0
 _STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
+})
+
+# A TDP change the user makes here wins over Steam's download mode.
+_USER_TDP_REASONS = frozenset({
+    "manual-watts", "manual-levels", "preset", "boost-mode", "firmware-mode",
+    "follow-global", "auto-toggle", "take-control", "control-enabled",
 })
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
@@ -1015,6 +1022,11 @@ class Plugin(AmbientRpc):
         )
         self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
+        self._steam_download_hold = SteamDownloadModeHold(
+            read_download_mode_limit()
+            if self._device.key in _STEAM_DECK_PROFILES
+            else None
+        )
         self._tdp_overshoot = HiddenOvershootMonitor()
         self._tdp_status = (
             "settling" if self._tdp_supported() else "unsupported"
@@ -4180,8 +4192,10 @@ class Plugin(AmbientRpc):
         return {**self._game_power_owner_state(), "ok": True, "detail": ""}
 
     def _tdp_write_authorized(self) -> bool:
+        hold = getattr(self, "_steam_download_hold", None)
         return (
-            self._game_power_write_allowed()
+            not (hold is not None and hold.active)
+            and self._game_power_write_allowed()
             and (getattr(self, "_os_id", None) != "anatase"
                  or self._tdp_external_owner is False)
         )
@@ -8232,6 +8246,13 @@ class Plugin(AmbientRpc):
         auto_guard=None,
         auto_watts=None,
     ):
+        if (
+            reason in _USER_TDP_REASONS
+            and self._steam_download_hold.release(time.monotonic())
+        ):
+            self._journal_steam_download_mode(
+                "released", self._tdp_observation, {},
+            )
         ui_floor = reason in ("auto-ui-floor", "auto-focus-floor")
         if auto_guard is not None and self._ui_active and not ui_floor:
             return TdpResult(
@@ -8781,6 +8802,8 @@ class Plugin(AmbientRpc):
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
+        if self._hold_for_steam_download_mode(command, now):
+            return
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
@@ -8940,6 +8963,50 @@ class Plugin(AmbientRpc):
             on_ac=command.on_ac,
             requested=command.requested,
         )
+
+    def _hold_for_steam_download_mode(self, command, now) -> bool:
+        """True while Steam's download mode owns the TDP; this tick writes nothing."""
+        hold = self._steam_download_hold
+        if hold.limit_w is None or self._tdp_backend.name != "steamdeck-hwmon":
+            return False
+        observation = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return True
+        target = build_targets(
+            command.requested, command.safe_bounds, observation,
+        ).target
+        transition = hold.observe(observation, target, now)
+        if transition is not None:
+            self._journal_steam_download_mode(transition, observation, target)
+        if not hold.active:
+            return False
+        self._tdp_status = "unverifiable"
+        self._tdp_reason = "steam_download_mode"
+        self._tdp_targets = None
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._remember_tdp_observation(observation)
+        return True
+
+    def _journal_steam_download_mode(self, transition, observation, target):
+        details = {
+            "transition": transition,
+            "observation": observation.as_dict(),
+            "target": dict(target),
+            "game": self._current_appid,
+            **self._steam_download_hold.diagnostics(),
+        }
+        decky.logger.info(
+            "Steam download mode %s",
+            json.dumps(details, sort_keys=True, separators=(",", ":")),
+        )
+        diary = journal.active
+        if diary is not None:
+            diary.write(
+                "INFO", "tdp", f"steam_download_mode_{transition}",
+                observation=journal.compact_event(details["observation"]),
+                target=details["target"], game=details["game"],
+                last=details["last"],
+            )
 
     def _tdp_guard_delay(self):
         if not self._tdp_backend.supported:
@@ -13424,6 +13491,7 @@ class Plugin(AmbientRpc):
                 "status": dict(self._auto_status),
                 "history": list(self._auto_history),
             },
+            "steam_download_mode": self._steam_download_hold.diagnostics(),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
                 "overclock": self._steamdeck_overclock_state(),
