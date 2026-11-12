@@ -1561,7 +1561,7 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
     cpu_gpu = bundle["state"]["cpu_gpu_diagnostics"]
-    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply"}
+    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply", "resume_hold"}
     assert cpu_gpu["cpu"]["supported"] is False
     assert cpu_gpu["gpu"]["supported"] is False
     assert bundle["state"]["lifecycle_diagnostics"] == plugin._lifecycle.diagnostics()

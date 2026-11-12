@@ -151,6 +151,7 @@ from cpu.controls import CoreControl, SmtControl, select_boost
 from cpu.coordinator import CpuCoordinator, CpuCoordinatorResult
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 from cpu.profiles import CpuProfileStore
+from cpu.sleep_guard import SleepCoreGuard
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 from controllers import detect as controller_detect
@@ -305,6 +306,12 @@ _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_xbox_ally",
     "rog_xbox_ally_x",
 })
+# After a resume: pulse samples every 2 s and marks each re-apply step for this long.
+_RESUME_WINDOW_S = 60.0
+# Switching cores off or pinning the GPU clock seconds after a resume can freeze the
+# machine; both wait this long after waking.
+_RESUME_HOLD_S = 30.0
+
 _STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
@@ -3434,6 +3441,7 @@ class Plugin(AmbientRpc):
             "settings": report_settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
             "gpu_profiles": _rj("gpu_profiles.json"),
+            "cpu_profiles": _rj("cpu_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
             "desktop_fans": _rj("desktop_fans.json"),
             "color": _rj("color.json"),
@@ -9170,20 +9178,31 @@ class Plugin(AmbientRpc):
             and self._charge_limit_late_probe_eligible()
         ):
             schedule_charge_limit_reconcile()
+        # After a resume, every hardware step goes through the serial executor behind a
+        # synced pulse mark: a freeze names the step that was running.
+        mark = self._resume_step_marker()
+        mark("cpu")
         self._apply_cpu()
+        mark("gpu")
         self._apply_gpu_clock()
+        mark("tdp")
         self._schedule_tdp_apply(tdp_reason, on_ac)
         if self._desktop_mode_on():
             self._offload(self._reapply_desktop_power)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on() and not self._desktop_power_active():
             self._offload(self._restore_power_handoff)
+        mark("fans")
         self._reapply_fans()   # self-offloading
         # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
         # HDR first and load the color look after (both self-offloading, FIFO executor).
+        mark("hdr")
         self._reapply_hdr()
+        mark("color")
         self._reapply_color()
+        mark("audio")
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
+        mark("done")
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
         # Re-assert the overlay when mangoapp comes up on its independent serial worker.
         self._schedule_hud_apply()
@@ -10097,17 +10116,40 @@ class Plugin(AmbientRpc):
             enabled = self._module_enabled("system")
         coordinator = self._ensure_cpu_coordinator()
         self._cpu_recovery_reapply_pending = False
-        return coordinator.apply(
+        result = coordinator.apply(
             intent,
             generation,
             enabled=bool(enabled),
             eco=bool(self._settings.get("eco_enabled", False)),
             preserve_frequency_ownership=preserve_frequency_ownership,
         )
+        self._guard_sleep_with_cores_off()
+        return result
+
+    def _guard_sleep_with_cores_off(self) -> None:
+        """Runs on the serial executor: with any core switched off, make sure the
+        system brings them back before it sleeps."""
+        cores = getattr(self, "_cores", None)
+        if not getattr(cores, "supported", False) or getattr(self, "_cpu_shutdown", False):
+            return
+        try:
+            limited = cores.active() < cores.max_cores
+        except Exception:  # noqa: BLE001
+            return
+        if not limited:
+            return
+        guard = getattr(self, "_sleep_core_guard", None)
+        if guard is None:
+            guard = SleepCoreGuard()
+            self._sleep_core_guard = guard
+        if not guard.ready and not guard.ensure():
+            decky.logger.warning("Sleep core guard not installed: %s", guard.last_error)
 
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
         generation = self._next_cpu_generation()
         selected = intent if intent is not None else self._cpu_intent()
+        if trigger != "set_cores":
+            selected = self._hold_cores_after_resume(selected)
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -10166,7 +10208,7 @@ class Plugin(AmbientRpc):
         if getattr(self, "_cpu_shutdown", False):
             return
         generation = self._next_cpu_generation()
-        intent = self._cpu_intent()
+        intent = self._hold_cores_after_resume(self._cpu_intent())
         holder = {}
 
         def apply():
@@ -11484,6 +11526,9 @@ class Plugin(AmbientRpc):
             lo, hi = g.get("min"), g.get("max")
             if lo is not None and hi is not None:
                 requested = {"mode": "manual", "min_mhz": int(lo), "max_mhz": int(hi)}
+                if self._resume_hold_active():
+                    self._note_resume_hold("gpu", requested=f"{lo}-{hi}")
+                    return
                 self._gpu_requested = requested
                 holder = {}
                 self._gpu_manual_inflight += 1
@@ -11512,6 +11557,99 @@ class Plugin(AmbientRpc):
                 "error_type": type(exc).__name__,
             }
             self._record_gpu_clock_transition(result, "reapply")
+
+    # ---- After a resume ----------------------------------------------------------
+    def _in_resume_window(self) -> bool:
+        resumed = getattr(self, "_resume_at", None)
+        return resumed is not None and time.monotonic() - resumed < _RESUME_WINDOW_S
+
+    def _resume_step_marker(self):
+        if not self._in_resume_window():
+            return lambda step: None
+        token = getattr(self, "_resume_token", 0)
+        return lambda step: self._queue_pulse_mark(f"reapply:{step}", token)
+
+    def _queue_pulse_mark(self, step, token) -> None:
+        """Synced on the serial executor, so it lands on disk before the write queued next."""
+        self._offload(lambda: self._pulse_mark(step, token=token))
+
+    def _on_resume_detected(self, suspend_seconds) -> None:
+        self._resume_token = int(getattr(self, "_resume_token", 0)) + 1
+        self._resume_at = time.monotonic()
+        beat = getattr(self, "_pulse", None)
+        if beat is not None:
+            try:
+                beat.burst(_RESUME_WINDOW_S)
+            except Exception:  # noqa: BLE001
+                pass
+        self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
+        self._start_resume_hold(self._resume_token)
+
+    def _hold_cores_after_resume(self, intent: dict) -> dict:
+        """During the hold every core stays online; only an explicit core change applies."""
+        if intent.get("cores") is None or not self._resume_hold_active():
+            return intent
+        self._note_resume_hold("cores", requested=intent.get("cores"))
+        return {**intent, "cores": None}
+
+    def _resume_hold_active(self) -> bool:
+        return getattr(self, "_resume_hold_token", None) is not None
+
+    def _start_resume_hold(self, token) -> None:
+        """Core limits and a manual GPU clock wait until the machine has been awake
+        for _RESUME_HOLD_S; everything else re-applies as before."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._resume_hold_token = token
+        self._resume_hold_noted = set()
+        loop.call_later(_RESUME_HOLD_S, self._release_resume_hold, token)
+
+    def _note_resume_hold(self, what, **detail) -> None:
+        noted = getattr(self, "_resume_hold_noted", None)
+        if noted is None or what in noted:
+            return
+        noted.add(what)
+        self._log_resume_hold("held", what=what, **detail)
+        self._pulse_mark(f"hold:{what}", sync=False, token=self._resume_hold_token)
+
+    def _log_resume_hold(self, action, **detail) -> None:
+        event = {"action": action, "token": getattr(self, "_resume_token", 0), **detail}
+        history = getattr(self, "_resume_hold_history", None)
+        if history is None:
+            history = deque(maxlen=8)
+            self._resume_hold_history = history
+        history.append({"at": round(time.time(), 1), **event})
+        decky.logger.info("Resume hold %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
+
+    def _release_resume_hold(self, token) -> None:
+        if getattr(self, "_resume_hold_token", None) != token:
+            return  # a newer resume restarted the hold
+        held = sorted(getattr(self, "_resume_hold_noted", None) or ())
+        self._resume_hold_token = None
+        self._resume_hold_noted = None
+        if getattr(self, "_shutting_down", False):
+            return
+        self._log_resume_hold("released", held=held)
+        if not held:
+            return
+        if "cores" in held:
+            self._queue_pulse_mark("release:cores", token)
+            self._apply_cpu()
+        if "gpu" in held:
+            self._queue_pulse_mark("release:gpu", token)
+            self._apply_gpu_clock()
+        self._queue_pulse_mark("release:done", token)
+
+    def _resume_hold_diagnostics(self) -> dict:
+        guard = getattr(self, "_sleep_core_guard", None)
+        return {
+            "active": self._resume_hold_active(),
+            "hold_s": _RESUME_HOLD_S,
+            "history": list(getattr(self, "_resume_hold_history", ())),
+            "sleep_core_guard": guard.diagnostics() if guard is not None else None,
+        }
 
     async def _release_gpu_clock(self, trigger) -> bool:
         self._init()
@@ -11900,7 +12038,14 @@ class Plugin(AmbientRpc):
                 "pending": getattr(self._tdp_reconcile_memory, "pending_since", None) is not None,
             },
         }
-        return {"cpu": cpu, "gpu": gpu, "steamdeck_ppt": deck_ppt, "reapply": reapply}
+        try:
+            resume_hold = self._resume_hold_diagnostics()
+        except Exception as exc:  # noqa: BLE001
+            resume_hold = {"error_type": type(exc).__name__}
+        return {
+            "cpu": cpu, "gpu": gpu, "steamdeck_ppt": deck_ppt, "reapply": reapply,
+            "resume_hold": resume_hold,
+        }
 
     async def get_gpu_clock(self) -> dict:
         self._init()
@@ -14769,6 +14914,7 @@ class Plugin(AmbientRpc):
         recent = getattr(self, "_lifecycle_recent", None) or []
         self._lifecycle_recent = [*recent, {"t": round(time.time(), 1), "event": event.get("event")}][-4:]
         if event.get("event") == "resume_detected":
+            self._on_resume_detected(event.get("suspend_seconds"))
             self._reset_auto_session("resume")
         if event.get("event") in ("resume_detected", "ac_changed"):
             expedite = getattr(self._tdp_backend, "expedite_handoff_retry", None)
@@ -14981,6 +15127,15 @@ class Plugin(AmbientRpc):
             on_unclean=lambda end: diary.write("WARNING", "session", "previous_unclean_end", **end),
         )
         self._pulse.start()
+
+    def _pulse_mark(self, step, *, sync=True, **detail) -> None:
+        beat = getattr(self, "_pulse", None)
+        if beat is None:
+            return
+        try:
+            beat.mark(step, sync=sync, **detail)
+        except Exception:  # noqa: BLE001 - diagnostics never block an apply
+            pass
 
     def _stop_pulse(self) -> None:
         beat, self._pulse = getattr(self, "_pulse", None), None
@@ -15319,6 +15474,9 @@ class Plugin(AmbientRpc):
             else self._release_cpu_controls_sync(stage)
         )
         decky.logger.info(f"Shutdown stage {stage}:cpu-handoff ok=%s", cpu_released)
+        guard = getattr(self, "_sleep_core_guard", None)
+        if cpu_released and guard is not None:
+            guard.remove(reload=False)
         gpu_released = (
             self._release_gpu_clock_sync(stage, preserve_ownership=True)
             if preserve_recovery
