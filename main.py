@@ -340,7 +340,12 @@ _THEME_FAILURE_OPERATIONS = frozenset({
     "cleaning", "restoring",
 })
 _THEME_FAILURE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
-_THEME_TARGET = re.compile(r"^[A-Za-z][A-Za-z -]{0,31}$")
+# CSS Loader's own target categories; anything else a theme author typed is counted as "other".
+_THEME_TARGETS = frozenset({
+    "system-wide", "home", "library", "store", "keyboard", "preset", "snippet", "background",
+    "font", "fonts", "desktop", "hero", "friends", "settings", "quick access", "downloads",
+    "lock screen", "notifications", "game page", "other",
+})
 _THEME_FAILURE_MESSAGE_CHARS = 240
 _THEME_FAILURE_HISTORY = 5
 _UI_DIAGNOSTIC_AREA = re.compile(r"^(cleaner|proton|media|frontend|themes)$")
@@ -2174,7 +2179,8 @@ class Plugin(AmbientRpc):
                 other_active += active
                 if active:
                     target = manifest.get("target")
-                    key = target if isinstance(target, str) and _THEME_TARGET.match(target) else "other"
+                    key = target.strip().lower() if isinstance(target, str) else ""
+                    key = key if key in _THEME_TARGETS else "other"
                     other_targets[key] = other_targets.get(key, 0) + 1
                 continue
             installed.append({

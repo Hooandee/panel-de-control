@@ -328,6 +328,38 @@ describe("ThemeActivator", () => {
     expect(activator.takeAbandonedRecovery()).toBe(false);
   });
 
+  it("stops queuing CSS Loader reloads after repeated failures and keeps the current state once they settle", async () => {
+    let pending = false;
+    const adapter = new Adapter(
+      [themeWithPatch("Example Theme", false, "Red")],
+      (_name, enabled, themes) => {
+        if (enabled) themes[0].patches[0].value = "Blue";
+      },
+      () => {
+        pending = true;
+        throw new Error("CSS Loader reset timed out");
+      },
+    );
+    adapter.hasPendingMutation = () => pending;
+    const activator = new ThemeActivator(adapter);
+    await expect(activator.activate("example-theme", CATALOG)).rejects.toMatchObject({ restorationFailed: true });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      pending = false;
+      await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
+      await Promise.resolve();
+    }
+    const reloads = adapter.restores;
+    pending = true;
+    await expect(activator.reconcilePendingRecovery()).rejects.toMatchObject({ restorationFailed: true });
+    expect(adapter.restores).toBe(reloads);
+    expect(activator.takeAbandonedRecovery()).toBe(false);
+
+    pending = false;
+    await expect(activator.reconcilePendingRecovery()).resolves.toMatchObject({ status: "ready" });
+    expect(activator.takeAbandonedRecovery()).toBe(true);
+    expect(adapter.restores).toBe(reloads);
+  });
+
   it("recovers a timed-out mutation after restart with a newer compatible CSS Loader", async () => {
     let durable: DurableThemeActivationRecovery | null = null;
     let recoverable = false;

@@ -31,7 +31,7 @@ describe("themeSurfaceReport", () => {
     expect(themeSurfaceReport(window)).toEqual({
       vw: 1038, vh: 584, home_items: 3,
       first_w: 430, first_h: 200, first_wide: true, first_overlap: 10,
-      more_center: -124, more_focused: true,
+      more_center: -124,
       main_canvases: 1, main_canvas_h: 120,
     });
   });

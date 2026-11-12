@@ -45,7 +45,6 @@ export function themeSurfaceReport(view: Window | null | undefined): SurfaceRepo
     ?? linkOf(more);
   if (moreBox) {
     report.more_center = Math.round(moreBox.left + moreBox.width / 2 - view.innerWidth / 2);
-    report.more_focused = !!more?.classList.contains("gpfocuswithin");
   }
 
   const canvases = [...doc.querySelectorAll("#Main canvas")].map(rectOf).filter((rect): rect is DOMRect => !!rect);

@@ -174,11 +174,10 @@ export default definePlugin(() => {
     ({ operation, code, message }) => recordThemeFailure(operation, code, message),
   );
   const releaseSlowMutationReporter = configureCssLoaderSlowMutationReporter(
-    ({ method, elapsedMs, settled }) => recordUiDiagnostic(
-      "themes",
-      `css_loader_${method}_${settled}`,
-      `${Math.round(elapsedMs / 1000)}s`,
-    ),
+    ({ method, elapsedMs, settled }) => {
+      console.warn(`CSS Loader ${method} took ${Math.round(elapsedMs / 1000)} s (${settled})`);
+      recordUiDiagnostic("themes", `css_loader_${method}_${settled}`);
+    },
   );
   const releaseSectionHandoffStore = configureSectionHandoffStore({
     read: () => parseSectionHandoffs(readString("pdc:themeSectionHandoffs")),

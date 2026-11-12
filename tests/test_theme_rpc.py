@@ -709,7 +709,7 @@ def test_report_lists_hooandee_themes_and_only_counts_other_active_ones(theme_rp
         },
     ]
     assert diagnostics["other_active_themes"] == 3
-    assert diagnostics["other_active_targets"] == {"Preset": 1, "Home": 1, "other": 1}
+    assert diagnostics["other_active_targets"] == {"preset": 1, "home": 1, "other": 1}
     assert "Someone Private" not in str(diagnostics)
     assert "Tilted" not in str(diagnostics)
 

@@ -311,6 +311,19 @@ export class ThemeActivator {
       recovery.status = "needed";
       recovery.snapshot = undefined;
     }
+    // After repeated failures, never queue another CSS Loader reload: one that outlasts the timeout
+    // would otherwise be relaunched forever. Wait for it to settle, then keep the current state.
+    if (recovery.failures >= MAX_RESTORATION_FAILURES) {
+      if (!this.adapter.hasPendingMutation()) {
+        const kept = await this.abandonRecovery(recovery);
+        if (kept) return kept;
+      }
+      throw new ThemeActivationError(
+        "rollback_failed",
+        "The previous theme state is still being restored",
+        true,
+      );
+    }
     try {
       const restored = await this.attemptRecovery(recovery);
       return await this.acknowledgeRecovery(recovery, restored);
@@ -389,7 +402,6 @@ export class ThemeActivator {
           recovery.error = undefined;
         },
         (error: unknown) => {
-          recovery.failures += 1;
           recovery.status = "needed";
           recovery.error = error;
         },

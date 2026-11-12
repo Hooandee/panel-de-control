@@ -35,6 +35,8 @@ export interface CssLoaderAdapterOptions {
 // CSS Loader retries each Steam tab three times and only gives up on a tab after 5 s without an
 // answer, so a single unresponsive tab stretches reset past 30 s.
 const DEFAULT_RELOAD_TIMEOUT_MS = 90_000;
+// Panel's former reload limit: calls that take longer are worth a line in the report.
+const SLOW_MUTATION_MS = 15_000;
 
 export type CssLoaderReadySnapshot = CssLoaderSnapshot & { status: "ready" };
 
@@ -140,7 +142,7 @@ export class CssLoaderAdapter {
 
   private reportSlowMutation(method: string, startedAt: number, settled: CssLoaderSlowMutation["settled"]): void {
     const elapsedMs = Date.now() - startedAt;
-    if (settled !== "late" && elapsedMs < this.timeoutMs) return;
+    if (settled !== "late" && elapsedMs < SLOW_MUTATION_MS) return;
     try {
       this.onSlowMutation?.({ method, elapsedMs, settled });
     } catch {}
