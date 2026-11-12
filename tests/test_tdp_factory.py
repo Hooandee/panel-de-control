@@ -1467,7 +1467,7 @@ def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
 
     assert backend.supported is True
     assert backend.name == "ryzenadj"
-    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]
 
 
 def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
@@ -1481,7 +1481,7 @@ def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
     )
 
     assert isinstance(backend, NullBackend)
-    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]
 
 
 def test_steam_deck_uses_hwmon(tmp_path):

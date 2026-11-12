@@ -275,7 +275,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None, desktop_cpu=False,
         return [deck]
     if os_id != "anatase":
         if key == "msi_claw_a8":
-            return [ryzenadj]
+            # The SPPT/FPPT rails live in msi-wmi-platform; ryzenadj cannot read them back.
+            return [msi_a8, ryzenadj]
         if key == "onexplayer_apex":
             # ALIB cannot read back; on Strix Halo it let a 30 W limit draw 70 W.
             return [ryzenadj, *unreadable_tail]
