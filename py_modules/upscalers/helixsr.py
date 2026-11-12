@@ -9,6 +9,7 @@ runs as the user who owns the games, never as root.
 """
 
 import json
+import mmap
 import os
 import re
 import shutil
@@ -144,21 +145,69 @@ class HelixSR:
         return self._bridge("remove", "--game", str(game)).get("game") or {}
 
 
-def remove_by_hand(folder: Path) -> None:
-    """When HelixSR's release is gone (deleted, or a newer Panel ships another), put the game's FSR back from
-    the *.original.dll HelixSR's drop-in keeps, as its bridge would."""
+_RECORD = "helixsr-install.json"
+
+
+def _recorded_swaps(folder: Path) -> list[tuple[Path, Path]]:
     try:
-        record = json.loads((folder / "helixsr-install.json").read_text())
+        record = json.loads((folder / _RECORD).read_text())
     except (OSError, ValueError):
         record = {}
-    for name in record.get("files", []) if isinstance(record, dict) else []:
-        if not isinstance(name, str) or "/" in name:
-            continue
-        original = folder / Path(name).with_suffix(".original.dll").name
-        if original.is_file():
-            os.replace(original, folder / name)
-    for name in ("helixsr-install.json", "helixsr.ini"):
+    names = record.get("files", []) if isinstance(record, dict) else []
+    return [(folder / name, folder / Path(name).with_suffix(".original.dll").name)
+            for name in names if isinstance(name, str) and "/" not in name]
+
+
+def _drop_record(folder: Path) -> None:
+    for name in (_RECORD, "helixsr.ini"):
         (folder / name).unlink(missing_ok=True)
+
+
+def not_installed(detail: str) -> bool:
+    """The bridge's answer once HelixSR's DLL is gone, usually replaced by a game update."""
+    return bool(re.match(r"HelixSR( Scaler)? is not installed in ", detail or ""))
+
+
+# HelixSR's drop-in carries these strings (checked in 3.2.0 and 3.3.0); AMD's FidelityFX DLLs never do.
+_HELIX_SIGNATURES = (b"HLX-FSR-4", b"HelixSR")
+
+
+def _is_helix_file(path: Path) -> bool:
+    try:
+        with open(path, "rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            return any(data.find(signature) >= 0 for signature in _HELIX_SIGNATURES)
+    except (OSError, ValueError):
+        return False
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return (not a.is_symlink() and not b.is_symlink() and a.stat().st_size == b.stat().st_size
+                and a.read_bytes() == b.read_bytes())
+    except OSError:
+        return False
+
+
+def restore_by_hand(folder: Path) -> bool:
+    """Undo HelixSR without its bridge, never putting an old backup over a game update; False if a HelixSR DLL has no backup."""
+    stuck = False
+    for current, original in _recorded_swaps(folder):
+        backup = original.is_file() and not original.is_symlink()
+        if not current.exists() and not current.is_symlink():
+            if backup:
+                os.replace(original, current)
+        elif _is_helix_file(current):
+            if backup:
+                os.replace(original, current)
+            elif current.name.lower().startswith("amd_fidelityfx_"):
+                # Nothing can bring back the game's own FidelityFX DLL here.
+                stuck = True
+        elif backup and _same_file(original, current):
+            original.unlink()
+    if stuck:
+        return False
+    _drop_record(folder)
+    return True
 
 
 def read_install_log(install: dict) -> dict:

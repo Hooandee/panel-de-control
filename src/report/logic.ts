@@ -65,10 +65,12 @@ export function buildReportContext(
   kind: ReportKind = "bug",
   steamOverlay?: SteamOverlayDiagnostics,
   themeDisplay?: Record<string, unknown>,
+  themeSurface?: Record<string, unknown>,
 ): Record<string, unknown> {
   const steamPerformance = steamPerformanceDiagnostics();
   return {
     ...(themeDisplay ? { theme_display: themeDisplay } : {}),
+    ...(themeSurface ? { theme_surface: themeSurface } : {}),
     ...launch,
     ...displayReportContext(selected, display),
     ...(selected.includes("hud") && steamOverlay

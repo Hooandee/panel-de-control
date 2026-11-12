@@ -50,6 +50,7 @@ function statusKey(live: AutoTdpLive): string {
   }
   if (
     live.reason === "external_owner"
+    || live.reason === "steam_download_mode"
     || live.reason === "tdp_unsupported"
     || live.reason === "control_disabled"
     || live.reason === "apply_unconfirmed"

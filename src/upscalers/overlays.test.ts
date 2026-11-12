@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@decky/ui", () => ({ findSP: () => null }));
-vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn() }));
+vi.mock("@decky/api", () => ({ routerHook: {}, callable: () => vi.fn(() => Promise.resolve()) }));
 
 import { hostOf, isCollection, isHidden, tileOf } from "./overlays";
 
@@ -155,5 +155,16 @@ describe("covers without an upscaler install", () => {
   it("name Mako or Lossless Scaling instead of staying blank", async () => {
     const { publishOverview } = await import("./overlays");
     expect(() => publishOverview({ builds: [], installs: {}, engines: { "292030": { mako: { spatial: true, fg: false, multiplier: null } } } } as never)).not.toThrow();
+  });
+});
+
+describe("cover badges switch", () => {
+  it("is on until turned off, and the choice is kept", async () => {
+    const { readCoverBadges, writeCoverBadges } = await import("./overlays");
+    expect(readCoverBadges()).toBe(true);
+    writeCoverBadges(false);
+    expect(readCoverBadges()).toBe(false);
+    writeCoverBadges(true);
+    expect(readCoverBadges()).toBe(true);
   });
 });

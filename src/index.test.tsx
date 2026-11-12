@@ -135,6 +135,8 @@ vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} })
 vi.mock("./themes/themesClient", () => ({
   configureEarlyArchivePicker: () => () => {},
   configureThemeFailureReporter: () => () => undefined,
+  configureCssLoaderSlowMutationReporter: () => () => undefined,
+  slowMutationBucket: () => "",
   configureSectionHandoffStore: () => () => undefined,
   createProductionThemesDependencies: () => ({}),
 }));
