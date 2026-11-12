@@ -19,6 +19,13 @@ const ROOT_ID = "pdc-ambient-layer";
 const STYLE_ID = "pdc-ambient-layer-style";
 const FADE_MS = 900;
 const PAGE_START_MS = 8000;
+/** Quick retries for a blip, then slower ones: after a Steam restart Panel's media server can come up late. */
+const RETRY_DELAYS_MS = [1000, 3000, 10_000, 30_000, 60_000];
+const TRAILER_RETRY_DELAYS_MS = [1000, 3000];
+const STALL_CHECK_MS = 5000;
+/** Checks in a row without the playing video moving before it is loaded again. */
+const STALL_CHECKS = 2;
+const STALL_RELOADS = 3;
 const HOST_KEY = "BasicHome";
 const ART_ATTR = "data-pdc-ambient-art";
 /**
@@ -27,10 +34,19 @@ const ART_ATTR = "data-pdc-ambient-art";
  */
 const LEGACY_NATIVE_ART = `div:has(> img[src*="library_hero_blur"])`;
 const NATIVE_ART_KEY = "RecentGamesBackground";
+/**
+ * The box holding those wrappers. Steam leaves it transparent, but CSS Loader themes tint it (Obsidian's
+ * "Recent Games Background" paints it a solid colour and multiplies the hero over it): hiding only the
+ * hero left that colour covering Panel's background and trailers.
+ */
+const NATIVE_ART_BOX_KEY = "RecentGamesBackgroundImages";
 
-function layerCss(nativeArtClass: string | null): string {
+function layerCss(nativeArtClass: string | null, nativeArtBoxClass: string | null): string {
   const nativeArt = nativeArtClass ? [LEGACY_NATIVE_ART, `.${nativeArtClass}`] : [LEGACY_NATIVE_ART];
   const forRoot = (state: string) => nativeArt.map((selector) => `:root[${ART_ATTR}=${state}] ${selector}`).join(",");
+  const box = nativeArtBoxClass
+    ? `:root[${ART_ATTR}=hide] .${nativeArtBoxClass},:root[${ART_ATTR}=blend] .${nativeArtBoxClass}{background:none!important}`
+    : "";
   return `
 #${ROOT_ID}{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;contain:strict}
 #${ROOT_ID}>[data-slot]{position:absolute;inset:0;opacity:0;transition:opacity ${FADE_MS}ms ease}
@@ -41,6 +57,7 @@ function layerCss(nativeArtClass: string | null): string {
 ${nativeArt.join(",")}{transition:opacity 400ms ease}
 ${forRoot("hide")}{opacity:0!important}
 ${forRoot("blend")}{opacity:${BLEND_GAME_ART_OPACITY}!important}
+${box}
 @keyframes pdc-ambient-kb{from{transform:scale(1)}to{transform:scale(1.07) translate(-1.2%,-1%)}}
 @media (prefers-reduced-motion:reduce){#${ROOT_ID} [data-media]{animation:none!important}#${ROOT_ID}>[data-slot]{transition:none}}
 `;
@@ -94,7 +111,12 @@ async function screenSizedImage(doc: Document, url: string): Promise<HTMLImageEl
   return img;
 }
 
-type LoadResult = "ready" | "error" | "timeout" | "cancelled";
+type LoadResult = "ready" | "error" | "timeout" | "cancelled" | "no_picture";
+
+/** What the reports need to tell a missing codec, a dead stream and a stalled decoder apart. */
+function videoState(video: HTMLVideoElement): string {
+  return `ready=${video.readyState} net=${video.networkState} err=${video.error?.code ?? 0} size=${video.videoWidth}x${video.videoHeight} t=${video.currentTime.toFixed(1)} paused=${video.paused}`;
+}
 /** Every attempt owns its listeners and deadline, including cancellation on replacement. */
 function waitForMedia(element: HTMLVideoElement | HTMLIFrameElement, signal: AbortSignal): Promise<LoadResult> {
   return new Promise((resolve) => {
@@ -142,8 +164,11 @@ export class BackgroundLayer {
   private options: LayerOptions = { transition: "fade", nativeArt: "show", motion: "play", visible: true };
   private generation = 0;
   private load: AbortController | null = null;
+  private lastFailure = "";
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
+  private stallTimer: ReturnType<typeof setInterval> | null = null;
+  private stall = { at: -1, checks: 0, reloads: 0, url: "" };
 
   constructor(
     private readonly getDocument: () => Document | null,
@@ -166,7 +191,7 @@ export class BackgroundLayer {
     if (!doc.getElementById(STYLE_ID)) {
       const style = doc.createElement("style");
       style.id = STYLE_ID;
-      style.textContent = layerCss(steamClass(NATIVE_ART_KEY));
+      style.textContent = layerCss(steamClass(NATIVE_ART_KEY), steamClass(NATIVE_ART_BOX_KEY));
       doc.head.appendChild(style);
     }
     const root = doc.createElement("div");
@@ -246,7 +271,10 @@ export class BackgroundLayer {
       const ready = waitForMedia(video, load.signal);
       video.src = media.url;
       result = await ready;
-      if (result === "ready" && generation === this.generation && video.videoHeight > 0) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
+      // Sound but no picture (a codec the GPU decoder lost, an audio-only file) paints a flat grey box.
+      if (result === "ready" && video.videoHeight === 0) result = "no_picture";
+      if (result === "ready" && generation === this.generation) this.onVideoSize(media.url, video.videoWidth, video.videoHeight);
+      if (result !== "ready" && result !== "cancelled") this.lastFailure = videoState(video);
       element = video;
     } else if (media.kind === "page") {
       const frame = doc.createElement("iframe");
@@ -263,14 +291,17 @@ export class BackgroundLayer {
       element = await screenSizedImage(doc, media.url);
     }
     if (generation !== this.generation || !this.root) return;
+    this.load = null;
     if (result !== "ready") {
       release(incoming);
       incoming.replaceChildren();
       this.syncNativeArt();
       if (result !== "cancelled") {
-        const delays = [1000, 3000];
+        const delays = media.kind === "page" ? TRAILER_RETRY_DELAYS_MS : RETRY_DELAYS_MS;
         const retrying = attempt < delays.length;
-        this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}`);
+        const state = media.kind === "video" && this.lastFailure ? `; ${this.lastFailure}` : "";
+        this.lastFailure = "";
+        this.onLoadFailure(`background ${media.kind} ${result}; attempt=${attempt + 1}; retrying=${retrying}${state}`);
         if (retrying) this.retryTimer = setTimeout(() => {
           this.retryTimer = null;
           if (generation === this.generation) void this.swap(media, attempt + 1);
@@ -307,10 +338,50 @@ export class BackgroundLayer {
       if (play && video.closest("[data-active]")) void video.play().catch(() => undefined);
       else video.pause();
     });
+    this.watchStall(play && !!this.root?.querySelector("[data-slot][data-active] video"));
+  }
+
+  /**
+   * A background video that should play but no longer moves (a decoder lost after leaving desktop
+   * mode, a stream that dried up) is loaded again, a few times per video, instead of staying black.
+   */
+  private watchStall(active: boolean): void {
+    if (!active) {
+      if (this.stallTimer !== null) clearInterval(this.stallTimer);
+      this.stallTimer = null;
+      this.stall.at = -1;
+      this.stall.checks = 0;
+      return;
+    }
+    if (this.stallTimer !== null) return;
+    this.stallTimer = setInterval(() => this.checkStall(), STALL_CHECK_MS);
+  }
+
+  private checkStall(): void {
+    const video = this.root?.querySelector<HTMLVideoElement>("[data-slot][data-active] video");
+    const media = this.current;
+    if (!video || !media || media.kind !== "video" || this.load) return this.watchStall(false);
+    if (this.stall.url !== media.url) this.stall = { at: -1, checks: 0, reloads: 0, url: media.url };
+    const moved = video.currentTime !== this.stall.at;
+    this.stall.at = video.currentTime;
+    if (moved && !video.error) {
+      this.stall.checks = 0;
+      return;
+    }
+    if (video.paused && !video.error) void video.play().catch(() => undefined);
+    if (++this.stall.checks < STALL_CHECKS && !video.error) return;
+    this.stall.checks = 0;
+    const reloading = this.stall.reloads < STALL_RELOADS;
+    this.onLoadFailure(`background video stalled; reload=${this.stall.reloads + 1}; reloading=${reloading}; ${videoState(video)}`);
+    if (!reloading) return this.watchStall(false);
+    this.stall.reloads += 1;
+    this.current = null;
+    void this.swap(media);
   }
 
   private unmount(): void {
     this.cancelPending();
+    this.watchStall(false);
     this.generation += 1;
     if (this.root) release(this.root);
     this.root?.remove();

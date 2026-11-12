@@ -183,3 +183,12 @@ def fetch_text(url: str, opener: Opener = default_opener, limit: int = MAX_PLAYL
     if len(data) > limit:
         raise ValueError("playlist_too_large")
     return data.decode("utf-8", errors="replace")
+
+
+def fetch_head(url: str, opener: Opener = default_opener, limit: int = 256 * 1024) -> str:
+    """The first `limit` bytes of a text resource, enough to tell what kind of file it is."""
+    if not url.lower().startswith(("https://", "http://")):
+        raise ValueError("unsupported_url")
+    with opener(build_request(url), TIMEOUT_SEC) as response:
+        data = response.read(limit)
+    return data.decode("utf-8", errors="replace")

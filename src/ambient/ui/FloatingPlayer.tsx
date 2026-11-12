@@ -8,6 +8,7 @@ import { theme } from "../../theme";
 import { CONTROL_BUTTONS, CONTROL_IDLE_MS, GamepadButton, controlAction, keyToButton } from "../core/overlayControl";
 import { captureButtons } from "../../platform/buttonCapture";
 import { onQamLeftEdge, qamPanelWidth, subscribeQamSurface, type QamSurface } from "../../platform/qamSurface";
+import { subscribeVirtualKeyboard } from "../../platform/virtualKeyboard";
 import {
   cardWidth,
   fullscreenVideoBounds,
@@ -85,7 +86,9 @@ export const FloatingPlayer: FC = () => {
   const drag = useRef<Drag | null>(null);
   const frame = useRef<number | null>(null);
 
+  const [keyboardShown, setKeyboardShown] = useState(false);
   useEffect(() => subscribeQamSurface(setSurface), []);
+  useEffect(() => subscribeVirtualKeyboard(setKeyboardShown), []);
   useEffect(() => runtime?.markFloatingMounted(), [runtime]);
 
   useEffect(() => {
@@ -128,7 +131,8 @@ export const FloatingPlayer: FC = () => {
   const mode = music?.overlay ?? "peek";
   const pillWanted = !qamOpen && (mode === "always" || (mode === "peek" && peekUntil > Date.now()));
   const videoRunning = video && (playing || player?.status === "loading" || player?.status === "retrying");
-  const visible = !!player?.track && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
+  // Steam's keyboard (chat, search) sits under the card; covering it also swallowed trackpad typing.
+  const visible = !!player?.track && !keyboardShown && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
   const rightInset = qamOpen && surface ? qamPanelWidth(surface.document) ?? 0 : 0;
   const normalWidth = viewport ? cardWidth(viewport, rightInset, video, music?.videoScale ?? 40) : 0;
   const width = fullscreen && viewport ? viewport.width : docked ? dockBounds?.width ?? 0 : normalWidth;

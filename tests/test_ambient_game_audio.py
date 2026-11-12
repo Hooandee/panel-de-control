@@ -30,3 +30,20 @@ def test_sets_only_streams_that_differ():
 def test_reports_unsupported_without_pactl_json():
     assert GameAudio(lambda argv: None).set_level(50) == {"supported": False, "streams": 0}
     assert GameAudio(lambda argv: "Unknown option -f").set_level(50) == {"supported": False, "streams": 0}
+
+
+def test_describes_where_steams_own_sound_goes_without_names():
+    steam = _stream(7, "steamwebhelper", "Chromium", "65%")
+    steam.update({"mute": True, "corked": False, "sink": 109})
+    steam["properties"]["media.name"] = "Some song title"
+    listing = json.dumps([steam, _stream(3, "wine64-preloader", "game", "80%")])
+
+    def runner(argv):
+        if argv[:3] == ["pactl", "-f", "json"]:
+            return listing
+        return "ROG Xbox Ally EQ\n" if argv[1] == "get-default-sink" else None
+
+    summary = GameAudio(runner).steam_output()
+    assert summary == "streams=1 default_sink=ROG Xbox Ally EQ vol=65 mute=True corked=False sink=109"
+    assert "song" not in summary
+    assert GameAudio(lambda argv: None).steam_output() == "unreadable"

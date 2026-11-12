@@ -33,3 +33,16 @@ def test_ignores_non_http_entries_and_caps_size():
     text = "#EXTM3U\n" + "".join(f"#EXTINF:-1,C{i}\nhttps://s.test/{i}\n" for i in range(MAX_CHANNELS + 5))
     assert len(parse_m3u(text)) == MAX_CHANNELS
     assert parse_m3u("file:///etc/passwd\nrtmp://x/y\n") == []
+
+
+def test_a_channel_list_with_an_m3u8_name_is_told_apart_from_an_hls_playlist():
+    from ambient.core.m3u import is_channel_list
+
+    assert is_channel_list(PLAYLIST)
+    media = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nseg1.ts\n#EXTINF:6.0,\nseg2.ts\n"
+    master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2000000\nhigh.m3u8\n"
+    single = "#EXTM3U\n#EXTINF:-1,Only one\nhttps://tv.test/one.m3u8\n"
+    assert not is_channel_list(media)
+    assert not is_channel_list(master)
+    assert not is_channel_list(single)
+    assert not is_channel_list("<html>not found</html>")

@@ -55,3 +55,14 @@ def parse_m3u(text: str) -> list[dict[str, Any]]:
         if len(channels) >= MAX_CHANNELS:
             break
     return channels
+
+
+def is_channel_list(text: str) -> bool:
+    """An IPTV/radio list (several #EXTINF entries, each its own stream), not an HLS playlist.
+
+    HLS media and master playlists always carry #EXT-X- tags; channel lists such as TDTChannels'
+    `tv.m3u8` share the extension but never do.
+    """
+    if "#EXT-X-" in text.upper():
+        return False
+    return text.upper().count("#EXTINF") >= 2 and len(parse_m3u(text)) >= 2

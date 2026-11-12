@@ -358,3 +358,26 @@ def test_empty_global_catalog_section_reports_incomplete_and_preserves_previous(
     assert event["detail"] == "catalog_incomplete"
     monkeypatch.setattr(rb, empty_section, lambda: complete[empty_section])
     assert service.radio_catalog() == complete
+
+
+def test_inspect_link_reads_only_the_head_and_says_list_stream_or_unknown(tmp_path, monkeypatch):
+    from ambient.adapters import remote_sources
+    from ambient.service import AmbientService
+
+    bodies = {
+        "https://lists.test/tv.m3u8": "#EXTM3U\n#EXTINF:-1,La 1\nhttps://tv.test/la1.m3u8\n#EXTINF:-1,La 2\nhttps://tv.test/la2.m3u8\n",
+        "https://live.test/channel.m3u8": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow.m3u8\n",
+    }
+
+    def fake_head(url):
+        if url not in bodies:
+            raise OSError("offline")
+        return bodies[url]
+
+    monkeypatch.setattr(remote_sources, "fetch_head", fake_head)
+    service = AmbientService(state_dir=str(tmp_path / "state"), cache_dir=str(tmp_path / "cache"), home=str(tmp_path))
+    assert service.inspect_link("https://lists.test/tv.m3u8") == {"kind": "list"}
+    assert service.inspect_link("https://live.test/channel.m3u8") == {"kind": "stream"}
+    assert service.inspect_link("https://down.test/x.m3u8") == {"kind": "unknown"}
+    assert service.diagnostics()["events"][-1]["detail"] == "inspect:OSError"
+    service.close()

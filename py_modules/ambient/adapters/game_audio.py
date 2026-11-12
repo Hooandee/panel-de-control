@@ -31,6 +31,19 @@ def game_streams(sink_inputs: list[dict[str, Any]]) -> list[tuple[int, int]]:
     return streams
 
 
+def steam_streams(sink_inputs: list[dict[str, Any]]) -> list[str]:
+    """Steam's own sink inputs (where Ambiente sounds): volume, mute, paused and the sink they go to."""
+    found: list[str] = []
+    for stream in sink_inputs:
+        props = stream.get("properties") or {}
+        if props.get("application.process.binary") not in _STEAM_BINARIES:
+            continue
+        channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
+        percents = [str(c.get("value_percent", "?")).rstrip("%") for c in channels]
+        found.append(f"vol={max(percents, default='?')} mute={stream.get('mute')} corked={stream.get('corked')} sink={stream.get('sink')}")
+    return found
+
+
 class GameAudio:
     """Sets the volume of the running game's audio streams, leaving Steam's own audio alone."""
 
@@ -46,6 +59,18 @@ class GameAudio:
         except (OSError, subprocess.SubprocessError):
             return None
         return out.stdout if out.returncode == 0 else None
+
+    def steam_output(self) -> str:
+        listing = self._runner(["pactl", "-f", "json", "list", "sink-inputs"])
+        try:
+            parsed = json.loads(listing) if listing is not None else None
+        except ValueError:
+            parsed = None
+        if not isinstance(parsed, list):
+            return "unreadable"
+        streams = steam_streams(parsed)
+        default = (self._runner(["pactl", "get-default-sink"]) or "?").strip()
+        return f"streams={len(streams)} default_sink={default[:60]} " + " | ".join(streams[:4])
 
     def set_level(self, percent: int) -> dict[str, Any]:
         percent = int(max(0, min(100, percent)))

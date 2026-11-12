@@ -99,6 +99,7 @@ const SELECTION_TICK_MS = 400;
 const TRAILER_MAX_HEIGHT = 360;
 const CLAIM_CHECK_MS = 30000;
 const POSITION_SAVE_MS = 15000;
+const AUDIBLE_CHECK_MS = 8000;
 const RESUME_TICK_MS = 2000;
 const CACHE_RECONCILE_MS = 60000;
 const QUEUE_SAVE_MS = 1500;
@@ -203,6 +204,9 @@ export class AmbientRuntime {
   private saveSequence = 0;
   private librarySession: LibrarySession | null = null;
 
+  private audibleKey: string | null = null;
+  private audibleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly audibleChecked = new Set<string>();
   private claimChangedAt = Date.now();
   private pendingPainter: { id: string; since: number } | null = null;
   private signalTimer: ReturnType<typeof setTimeout> | null = null;
@@ -267,7 +271,9 @@ export class AmbientRuntime {
       this.patch({ player });
       this.scheduleQueueSave(player);
       this.musicActivity.update(musicAudible(player));
+      this.watchAudible(player);
     }));
+    this.cleanups.push(() => this.watchAudible(null));
     this.cleanups.push(this.channel.onClaimsChanged(() => {
       this.claimChangedAt = Date.now();
       this.checkSignals();
@@ -328,8 +334,32 @@ export class AmbientRuntime {
       this.savedQueue = queueSignature(settings.music.queue, settings.music.repeat, settings.music.shuffle);
       this.player.setModes(settings.music.repeat, settings.music.shuffle);
     }
-    if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
+    const steamRestarted = markSteamSession();
+    if (settings?.music.enabled && steamRestarted) {
+      // A Panel reload keeps the music going; a fresh Steam (boot, restart, back from desktop) starts silent.
+      console.info("[Ambient] music left paused after Steam started");
+      void rpc.recordAmbientEvent("music", "paused_at_steam_start").catch(() => undefined);
+      await this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: false } }));
+      if (settings.music.queue.length) void this.restoreSavedQueue(settings, false);
+    } else if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
     else if (settings?.music.queue.length) void this.restoreSavedQueue(settings, false);
+  }
+
+  /** Once per started track, a few seconds in: how it is being played and where Steam sends the sound. */
+  private watchAudible(player: PlayerSnapshot | null): void {
+    const key = player?.status === "playing" && player.track ? `${player.queueIndex}|${player.track.id}` : null;
+    if (key === this.audibleKey) return;
+    if (this.audibleTimer !== null) clearTimeout(this.audibleTimer);
+    this.audibleTimer = null;
+    this.audibleKey = key;
+    if (!key || this.audibleChecked.has(key)) return;
+    this.audibleTimer = setTimeout(() => {
+      this.audibleTimer = null;
+      if (this.stopped || this.audibleKey !== key) return;
+      if (this.audibleChecked.size > 200) this.audibleChecked.clear();
+      this.audibleChecked.add(key);
+      void rpc.checkAmbientAudio(`${this.inGame ? "in_game " : ""}${this.player.describeOutput()}`).catch(() => undefined);
+    }, AUDIBLE_CHECK_MS);
   }
 
   stop(): void {
@@ -1220,11 +1250,13 @@ export class AmbientRuntime {
     return tracks.filter((t): t is Track => t !== null);
   }
 
-  /** Links sent from a phone or pasted: each one becomes a queue entry; pictures are left out. */
-  enqueueLinks(urls: string[]): number {
-    const tracks = urls.filter((url) => linkKind(url) !== "image").map(linkTrack);
+  /** Links sent from a phone or pasted: each one becomes a queue entry; pictures are left out, channel lists go to Lists. */
+  async enqueueLinks(urls: string[]): Promise<number> {
+    const playable = urls.filter((url) => linkKind(url) !== "image");
+    const lists = await Promise.all(playable.map((url) => this.savedAsChannelList(url, "")));
+    const tracks = playable.filter((_, index) => !lists[index]).map(linkTrack);
     this.enqueue(tracks);
-    return tracks.length;
+    return tracks.length + lists.filter(Boolean).length;
   }
 
   /** Opens the page a phone on the same network uses to send links; texts are the page's own copy. */
@@ -1235,7 +1267,7 @@ export class AmbientRuntime {
   /** Queues whatever the phone sent since the last call. */
   async pollShare(): Promise<{ added: number; active: boolean }> {
     const result = await rpc.takeAmbientShared().catch(() => ({ links: [] as string[], active: false }));
-    return { added: result.links.length ? this.enqueueLinks(result.links) : 0, active: result.active };
+    return { added: result.links.length ? await this.enqueueLinks(result.links) : 0, active: result.active };
   }
 
   stopShare(): void {
@@ -1530,8 +1562,22 @@ export class AmbientRuntime {
     return this.applyServerSettings(rpc.addAmbientFolder(path, scope), true);
   }
 
-  addFavorite(scope: "background" | "radio", url: string, name: string, art = "", subtitle = ""): Promise<boolean> {
+  async addFavorite(scope: "background" | "radio", url: string, name: string, art = "", subtitle = ""): Promise<boolean> {
+    if (scope === "radio" && await this.savedAsChannelList(url, name)) return true;
     return this.applyServerSettings(rpc.addAmbientFavorite(scope, url, name, art, subtitle));
+  }
+
+  /**
+   * Channel lists often end in .m3u8 like a single stream (TDTChannels' tv.m3u8); played as one they
+   * only fail. Such a link goes to Lists instead, where its channels can be picked.
+   */
+  private async savedAsChannelList(url: string, name: string): Promise<boolean> {
+    if (!M3U_LINK.test(url)) return false;
+    const inspected = await rpc.inspectAmbientLink(url).catch(() => ({ kind: "unknown" as const }));
+    if (inspected.kind !== "list") return false;
+    const saved = await this.addPlaylist(url, name || linkName(url));
+    if (saved) this.ports.notify(this.ports.translate("ambient.lists.title"), this.ports.translate("ambient.lists.fromLink"));
+    return saved;
   }
 
   addPlaylist(url: string, name: string): Promise<boolean> {
@@ -1623,6 +1669,17 @@ function toQueued(track: Track): QueuedTrack {
 
 function queueSignature(queue: readonly QueuedTrack[], repeat: RepeatMode, shuffle: boolean): string {
   return JSON.stringify([repeat, shuffle, queue.map((q) => q.id)]);
+}
+
+const STEAM_SESSION_KEY = "__pdcAmbientSteamSession";
+const M3U_LINK = /^https?:\/\/[^?#]+\.m3u8?(?:[?#]|$)/i;
+
+/** True the first time Ambiente starts in this Steam UI: the mark lives in Steam's JS context, so a Panel reload keeps it. */
+function markSteamSession(): boolean {
+  const scope = globalThis as Record<string, unknown>;
+  const first = scope[STEAM_SESSION_KEY] !== true;
+  scope[STEAM_SESSION_KEY] = true;
+  return first;
 }
 
 function stationTrack(station: Station): Track {

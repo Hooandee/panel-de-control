@@ -14,6 +14,7 @@ const rpcMock = vi.hoisted(() => ({
   reconcileAmbientCache: vi.fn(async () => false),
   getAmbientRemoteFeed: vi.fn(async () => []),
   recordAmbientEvent: vi.fn(async () => true),
+  checkAmbientAudio: vi.fn(async (_detail: string) => true),
   cancelAmbientJobs: vi.fn(async () => true),
   resolveAmbientRadio: vi.fn(async () => null),
   getAmbientSuggestedStations: vi.fn(async () => []),
@@ -23,6 +24,8 @@ const rpcMock = vi.hoisted(() => ({
   optimizeAmbientMedia: vi.fn(),
   addAmbientFolder: vi.fn(),
   addAmbientFavorite: vi.fn(),
+  addAmbientPlaylist: vi.fn(),
+  inspectAmbientLink: vi.fn(async (_url: string) => ({ kind: "stream" })),
   removeAmbientItem: vi.fn(),
   restoreAmbientSuggested: vi.fn(),
   setAmbientGameVolume: vi.fn(async () => ({ supported: true, streams: 1 })),
@@ -103,6 +106,8 @@ describe("AmbientRuntime", () => {
   });
 
   beforeEach(() => {
+    // Most cases are Panel reloads inside a running Steam; the fresh-Steam case clears this mark itself.
+    (globalThis as Record<string, unknown>).__pdcAmbientSteamSession = true;
     rpcMock.getAmbientRadioCatalog.mockReset();
     rpcMock.discoverAmbientRadio.mockReset();
     rpcMock.saveAmbientSettings.mockImplementation(async (s) => s);
@@ -209,6 +214,55 @@ describe("AmbientRuntime", () => {
       expect(runtime.getSnapshot().player.track?.id).toBe("local:song");
       expect(audio.volume).toBe(0.23);
       expect(runtime.getSnapshot().player.video).toBe(false);
+    } finally { runtime.stop(); }
+  });
+
+  it("after Steam starts, music that was on stays paused and off until the user plays it", async () => {
+    delete (globalThis as Record<string, unknown>).__pdcAmbientSteamSession;
+    const configured = settings();
+    configured.music.enabled = true;
+    configured.music.source = "radio";
+    configured.music.stationId = "station";
+    configured.music.queue = [{ id: "remote:https://s.test/live", url: "https://s.test/live", title: "Radio", subtitle: "", art: "", kind: "audio", live: true }];
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.recordAmbientEvent.mockClear();
+    const audio = audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.waitFor(() => expect(runtime.getSnapshot().player.queue).toHaveLength(1));
+      expect(runtime.getSnapshot().player.status).toBe("paused");
+      expect(audio.play).not.toHaveBeenCalled();
+      expect(runtime.getSnapshot().state?.settings.music.enabled).toBe(false);
+      expect(rpcMock.recordAmbientEvent).toHaveBeenCalledWith("music", "paused_at_steam_start");
+    } finally { runtime.stop(); }
+    const reloaded = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    rpcMock.getAmbientState.mockResolvedValue({ settings: { ...configured, music: { ...configured.music, enabled: true } }, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    try {
+      await reloaded.start();
+      await vi.waitFor(() => expect(reloaded.getSnapshot().player.track?.live).toBe(true));
+      expect(reloaded.getSnapshot().player.status).not.toBe("paused");
+    } finally { reloaded.stop(); }
+  });
+
+  it("looks once at how a started track is played, a few seconds in, for reports of silence", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const configured = settings();
+    configured.music.enabled = true;
+    configured.music.queue = [{ id: "remote:https://s.test/live", url: "https://s.test/live", title: "Radio", subtitle: "", art: "", kind: "audio", live: true }];
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.checkAmbientAudio.mockClear();
+    const audio = audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await vi.waitFor(() => expect(runtime.getSnapshot().player.track?.live).toBe(true));
+      audio.dispatchEvent(new Event("playing"));
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(rpcMock.checkAmbientAudio).toHaveBeenCalledTimes(1);
+      expect(rpcMock.checkAmbientAudio.mock.calls[0][0]).toMatch(/^engine=audio vol=/);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(rpcMock.checkAmbientAudio).toHaveBeenCalledTimes(1);
     } finally { runtime.stop(); }
   });
 
@@ -932,6 +986,29 @@ describe("AmbientRuntime", () => {
       await runtime.reload();
       expect(runtime.getSnapshot().current?.ref).toBe("local:chosen");
       expect(state.settings.background.collections).toContain(folder);
+    } finally { runtime.stop(); }
+  });
+
+  it("saves a channel list pasted as a link, or sent from a phone, to Lists instead of playing it", async () => {
+    const configured = settings();
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const list = "https://www.tdtchannels.com/lists/tv.m3u8";
+    rpcMock.inspectAmbientLink.mockImplementation(async (url: string) => ({ kind: url === list ? "list" : "stream" }));
+    rpcMock.addAmbientPlaylist.mockImplementation(async (url: string, name: string) => ({ ...configured, radio: { ...configured.radio, playlists: [{ id: "list.tdt", name, url }] } }));
+    rpcMock.addAmbientFavorite.mockClear();
+    audioStub();
+    const p = ports();
+    const runtime = new AmbientRuntime(p as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      expect(await runtime.addFavorite("radio", list, "")).toBe(true);
+      expect(rpcMock.addAmbientPlaylist).toHaveBeenCalledWith(list, "tv");
+      expect(rpcMock.addAmbientFavorite).not.toHaveBeenCalled();
+      expect(p.notify).toHaveBeenCalledWith("ambient.lists.title", "ambient.lists.fromLink");
+      rpcMock.inspectAmbientLink.mockClear();
+      expect(await runtime.enqueueLinks([list, "https://live.test/one.m3u8", "https://radio.test/stream.mp3"])).toBe(3);
+      expect(rpcMock.inspectAmbientLink).toHaveBeenCalledTimes(2);
+      expect(runtime.getSnapshot().player.queue.map((q) => q.track.url)).toEqual(["https://live.test/one.m3u8", "https://radio.test/stream.mp3"]);
     } finally { runtime.stop(); }
   });
 

@@ -47,6 +47,7 @@ export const keepAmbientThemeImages = callable<[owner: string, refs: string[]], 
 export const getAmbientThemeImages = callable<[], Record<string, ThemeImageEntry>>("get_ambient_theme_images");
 export const getAmbientVideoPage = callable<[], string | null>("get_ambient_video_page");
 export const addAmbientPlaylist = callable<[url: string, name: string], AmbientSettings | null>("add_ambient_playlist");
+export const inspectAmbientLink = callable<[url: string], { kind: "list" | "stream" | "unknown" }>("inspect_ambient_link");
 export const removeAmbientPlaylist = callable<[playlistId: string], AmbientSettings | null>("remove_ambient_playlist");
 export const getAmbientPlaylist = callable<[playlistId: string], PlaylistContents | null>("get_ambient_playlist");
 export const addAmbientFolder = callable<[path: string, scope: "background" | "music" | "library"], AmbientSettings | null>("add_ambient_folder");
@@ -66,6 +67,7 @@ export const getAmbientRadioCatalog = callable<[forceRefresh?: boolean], RadioCa
 export const discoverAmbientRadio = callable<[filters: RadioFilters], Station[]>("discover_ambient_radio");
 export const cancelAmbientJobs = callable<[], boolean>("cancel_ambient_jobs");
 export const recordAmbientEvent = callable<[kind: string, detail: string], boolean>("record_ambient_event");
+export const checkAmbientAudio = callable<[detail: string], boolean>("check_ambient_audio");
 
 export type ShareSession = { url: string; expiresIn: number } | { error: string };
 export const startAmbientShare = callable<[texts: Record<string, string>], ShareSession>("start_ambient_share");
