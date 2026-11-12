@@ -432,7 +432,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     3. ``legion_wmi_fan`` (Legion Go original) — hardware curve table, present
        only when the kernel ships the lenovo/legion WMI fan driver.
     4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    5. Legion Go 2 raw-EC software loop.
+    5. Legion Go 2 raw-EC software loop, then the Legion Go original's software loop
+       through its firmware fan table (EC window over /dev/mem).
     6. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
        EC interface is unofficial; off = read-only monitor via NullFanBackend).
     7. ``NullFanBackend`` when nothing supported is found (read-only safety).
@@ -461,9 +462,10 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
             return backend
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
-    from fans.legion_ec import LegionGo2FanBackend
+    from fans.legion_ec import LegionGo2FanBackend, LegionGoFanTableBackend
     for backend in (SteamDeckFanBackend(temp_fn=temp_fn, root=root),
-                    LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
+                    LegionGo2FanBackend(temp_fn=temp_fn, root=root),
+                    LegionGoFanTableBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
     # Raw-EC control on devices with no hardware curve table is opt-in (unofficial

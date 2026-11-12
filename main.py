@@ -228,7 +228,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
-            "target_temp.target", "target_temp.other_controller",
+            "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
         )),
     ),
     "audio": (
@@ -5345,6 +5345,12 @@ class Plugin(AmbientRpc):
         }
         if getattr(self, "_board_fans", None) is not None:
             state["board_fans"] = self._board_fan_state()
+        backend_diagnostics = getattr(self._fan_ctrl, "diagnostics", None)
+        if callable(backend_diagnostics):
+            try:
+                state["backend_diagnostics"] = backend_diagnostics() or None
+            except Exception as error:  # noqa: BLE001
+                state["backend_diagnostics"] = {"error": type(error).__name__}
         if getattr(self, "_ps5_fan", None) is not None:
             state["target_temp"] = self._ps5_fan_state()
         if self._desktop_mode_on() and hw_state.get("independent"):
@@ -9939,8 +9945,10 @@ class Plugin(AmbientRpc):
             if actual is not None:
                 applied_percent = actual
         full_charge_once_active = self._charge_limit_full_once_active()
+        firmware_mode = getattr(self._charge_limit, "active", None)
         return {
             "backend": getattr(self._charge_limit, "name", "unsupported"),
+            "firmware_mode": firmware_mode() if callable(firmware_mode) else None,
             "supported": supported,
             "adjustable": self._charge_limit.adjustable,
             "managed": managed,

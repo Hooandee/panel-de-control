@@ -1,6 +1,7 @@
 import os
 
 from battery.charge_limit import (
+    LenovoChargeTypes,
     LenovoConservationMode,
     NullChargeLimit,
     SteamDeckChargeLimit,
@@ -407,3 +408,74 @@ def test_qcom_full_charge_to_100_also_lifts_the_resume_threshold(tmp_path):
     assert start.read_text().strip() == "95"
     assert backend.set(80) is True
     assert start.read_text().strip() == "95"
+
+
+# --- Lenovo charge_types (Legion Go original on lenovo-wmi-other kernels) ---
+
+def _mk_charge_types(root, value="[Standard] Long_Life", name="BATT"):
+    d = os.path.join(root, "sys/class/power_supply", name)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "type"), "w") as f:
+        f.write("Battery")
+    p = os.path.join(d, "charge_types")
+    with open(p, "w") as f:
+        f.write(value)
+    return p
+
+
+class _Go1:
+    key = "legion_go"
+
+
+def test_select_legion_go_uses_charge_types_long_life(tmp_path):
+    _mk_charge_types(str(tmp_path))
+    cl = select_charge_limit(_Go1(), root=str(tmp_path))
+    assert isinstance(cl, LenovoChargeTypes)
+    assert cl.supported is True
+    assert cl.adjustable is False
+    assert cl.name == "lenovo-charge-types"
+
+
+def test_charge_types_set_writes_long_life_and_confirms(tmp_path):
+    p = _mk_charge_types(str(tmp_path))
+    cl = LenovoChargeTypes(root=str(tmp_path))
+    assert cl.set(80) is True
+    assert open(p).read() == "Long_Life"
+    assert cl.active() == "Long_Life"
+
+
+def test_charge_types_disable_restores_standard(tmp_path):
+    p = _mk_charge_types(str(tmp_path), value="Standard [Long_Life]")
+    cl = LenovoChargeTypes(root=str(tmp_path))
+    assert cl.active() == "Long_Life"
+    assert cl.disable() is True
+    assert open(p).read() == "Standard"
+
+
+def test_charge_types_without_long_life_is_unsupported(tmp_path):
+    _mk_charge_types(str(tmp_path), value="[Fast] Standard")
+    assert LenovoChargeTypes(root=str(tmp_path)).supported is False
+
+
+def test_charge_types_set_fails_when_firmware_keeps_standard(tmp_path, monkeypatch):
+    _mk_charge_types(str(tmp_path))
+    import battery.charge_limit as charge_limit
+
+    cl = LenovoChargeTypes(root=str(tmp_path))
+    monkeypatch.setattr(charge_limit, "write_str", lambda path, value: True)
+    assert cl.set(80) is False
+
+
+def test_standard_threshold_still_wins_over_charge_types(tmp_path):
+    _mk_bat(str(tmp_path), value="80")
+    _mk_charge_types(str(tmp_path))
+    assert isinstance(select_charge_limit(_Go1(), root=str(tmp_path)), SysfsChargeLimit)
+
+
+def test_charge_types_only_selected_for_legion(tmp_path):
+    _mk_charge_types(str(tmp_path))
+
+    class Ally:
+        key = "rog_ally"
+
+    assert not isinstance(select_charge_limit(Ally(), root=str(tmp_path)), LenovoChargeTypes)

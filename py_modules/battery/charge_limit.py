@@ -215,11 +215,63 @@ class LenovoConservationMode(ChargeLimitBackend):
         return write_str(self._path, 0) and read_int(self._path) == 0
 
 
+class LenovoChargeTypes(ChargeLimitBackend):
+    """Lenovo `power_supply/*/charge_types` with a `Long_Life` mode (Legion Go
+    original on kernels where lenovo-wmi-other extends the battery). Long_Life is
+    the firmware's fixed 80 % cap, so this is an on/off control like
+    conservation_mode. The firmware answers reads, so the bracketed readback is the
+    applied truth."""
+
+    adjustable = False
+    name = "lenovo-charge-types"
+    _ON = "Long_Life"
+    _OFF = "Standard"
+
+    def __init__(self, root="/"):
+        self._path = self._find(root)
+        self.supported = self._path is not None
+
+    @staticmethod
+    def _modes(text):
+        return [token.strip("[]") for token in (text or "").split()]
+
+    @classmethod
+    def _find(cls, root):
+        for d in sorted(glob.glob(os.path.join(root, _SUPPLY, "*"))):
+            path = os.path.join(d, "charge_types")
+            modes = cls._modes(read_str(path))
+            if cls._ON in modes and cls._OFF in modes:
+                return path
+        return None
+
+    def active(self):
+        text = read_str(self._path) if self.supported else None
+        tokens = (text or "").split()
+        selected = [t.strip("[]") for t in tokens if t.startswith("[")]
+        if selected:
+            return selected[0]
+        return tokens[0] if len(tokens) == 1 else None
+
+    def get(self):
+        return None  # firmware-fixed threshold; percent unknown
+
+    def _select(self, mode):
+        if not self.supported:
+            return False
+        return write_str(self._path, mode) and self.active() == mode
+
+    def set(self, percent):
+        return self._select(self._ON)
+
+    def disable(self):
+        return self._select(self._OFF)
+
+
 def select_charge_limit(device, root="/"):
     """Pick the charge-limit strategy for the detected device (mirrors
     tdp.factory). Steam Deck uses its hwmon level; Legion falls back to Lenovo
-    conservation mode (on/off) when the standard threshold is absent; ASUS uses
-    the standard threshold. MSI Claw is probed via the standard path. Falls back
+    charge_types Long_Life, then conservation mode (both on/off) when the standard
+    threshold is absent; ASUS uses the standard threshold. MSI Claw is probed via the standard path. Falls back
     to Null (honest) when nothing is present."""
     key = getattr(device, "key", "")
     if key == "steam_machine":
@@ -234,7 +286,7 @@ def select_charge_limit(device, root="/"):
         # mistake an accessory Deck hwmon or unrelated Lenovo ACPI node for support.
         candidates = [SysfsChargeLimit]
     elif key.startswith("legion"):
-        candidates = [SysfsChargeLimit, LenovoConservationMode]
+        candidates = [SysfsChargeLimit, LenovoChargeTypes, LenovoConservationMode]
     else:
         # Unrecognised / other: probe every known interface, standard threshold first.
         candidates = [SysfsChargeLimit, SteamDeckChargeLimit, LenovoConservationMode]
