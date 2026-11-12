@@ -1444,6 +1444,7 @@ export const it: Record<string, string> = {
   "tdp.ownership.constrained": "Il dispositivo limita la potenza a {applied} W per ora.",
   "tdp.ownership.powerLimited": "Il dispositivo limita la potenza a {applied} W con questa alimentazione.",
   "tdp.ownership.minimum": "Il dispositivo non scende sotto {applied} W.",
+  "tdp.ownership.boostFloor": "Resta a {applied} W in media. Il dispositivo consente brevi picchi fino a {boost} W.",
   "tdp.ownership.rejectedUnknown": "Il dispositivo non consente questo valore in questo momento.",
   "tdp.ownership.conflict": "Qualcosa sul dispositivo sta cambiando il limite di potenza.",
   "tdp.ownership.rejected": "Il dispositivo non consente {target} W in questo momento. Resta a {applied} W.",

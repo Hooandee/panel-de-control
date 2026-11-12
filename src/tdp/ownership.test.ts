@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ownershipView } from "./ownership";
+import { ownershipMessage, ownershipView } from "./ownership";
 
 const base = {
   status: "in_sync" as const,
@@ -221,5 +221,46 @@ describe("ownershipView", () => {
       status: "unverifiable",
       reason: "firmware_mode",
     }).show).toBe(false);
+  });
+});
+
+describe("ownershipMessage boost floor", () => {
+  const allyEightWatts = {
+    ...base,
+    status: "constrained" as const,
+    reason: "live_min",
+    requested: { pl1: 8, pl2: 8, pl3: 8 },
+    target: { pl1: 8, pl2: 15, pl3: 15 },
+    applied: { pl1: 8, pl2: 15, pl3: 15 },
+  };
+
+  it("explains short boost peaks when only the boost rails sit on the firmware minimum", () => {
+    expect(ownershipMessage(allyEightWatts, 7)).toEqual({
+      key: "tdp.ownership.boostFloor",
+      vars: { applied: 8, boost: 15 },
+      warn: false,
+    });
+  });
+
+  it("never claims the sustained limit is a minimum the device refuses to go below", () => {
+    expect(ownershipMessage(allyEightWatts, 7)?.key).not.toBe("tdp.ownership.minimum");
+  });
+
+  it("waits until the boost rails are confirmed", () => {
+    expect(ownershipMessage({ ...allyEightWatts, applied: { pl1: 8, pl2: 8, pl3: 8 } }, 7)?.key)
+      .not.toBe("tdp.ownership.boostFloor");
+  });
+
+  it("keeps Panel's own safety floors silent", () => {
+    expect(ownershipMessage({ ...allyEightWatts, reason: "safe_min" }, 7)).toBeNull();
+  });
+
+  it("does not replace a sustained-floor notice", () => {
+    expect(ownershipMessage({
+      ...allyEightWatts,
+      requested: { pl1: 5, pl2: 5, pl3: 5 },
+      target: { pl1: 7, pl2: 15, pl3: 15 },
+      applied: { pl1: 7, pl2: 15, pl3: 15 },
+    }, 7)).toBeNull();
   });
 });

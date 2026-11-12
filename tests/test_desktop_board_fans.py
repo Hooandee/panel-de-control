@@ -279,3 +279,45 @@ def test_a_crashing_release_counts_as_not_released(monkeypatch):
 
     asyncio.run(plugin.set_board_fan_enabled(False))
     assert plugin._board_fans.calls == ["kept"]
+
+
+def test_board_driven_by_the_system_reports_control_until_opted_out(monkeypatch):
+    import asyncio
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    plugin._board_fans.calls.append("load")
+
+    assert plugin._board_fan_state()["enabled"] is True
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+
+    assert plugin._settings["board_fan_control_off"] is True
+    assert plugin._board_fan_state()["enabled"] is False
+
+
+def test_opt_out_selects_no_board_writer_even_when_the_system_keeps_the_driver(monkeypatch):
+    import asyncio
+    import main
+    plugin = _plugin(monkeypatch, channels_after_load=3)
+    seen = []
+
+    def select(*args, **kwargs):
+        seen.append(kwargs.get("board_control"))
+        return type(plugin._fan_ctrl)()
+
+    monkeypatch.setattr(main.fan_control, "select_fan_backend", select)
+
+    asyncio.run(plugin.set_board_fan_enabled(False))
+    asyncio.run(plugin.set_board_fan_enabled(True))
+
+    assert seen == [False, True]
+    assert plugin._settings["board_fan_control_off"] is False
+
+
+def test_desktop_backend_is_read_only_without_board_control(tmp_path):
+    from device_profiles import DESKTOP_PC
+    from fans import control
+    _board_chip(str(tmp_path))
+
+    backend = control.select_fan_backend(DESKTOP_PC, root=str(tmp_path), board_control=False)
+
+    assert isinstance(backend, control.NullFanBackend)

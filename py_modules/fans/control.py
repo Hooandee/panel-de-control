@@ -422,7 +422,8 @@ def experimental_ec_backends(temp_fn=None, root: str = "/") -> list:
 _DESKTOP_MIN_DUTY = 77
 
 
-def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False):
+def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False,
+                       board_control=True):
     """Return the best available fan-control backend for this device.
 
     Chip/attr based (not device-name based) so it's robust across the matrix:
@@ -447,6 +448,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     if getattr(device, "key", None) == "zotac_gaming_zone":
         return ZotacFanReadOnlyBackend()
     if getattr(device, "key", None) == "desktop_pc":
+        if not board_control:
+            return NullFanBackend()
         from fans.generic_pwm import GenericPwmFanBackend
         board = GenericPwmFanBackend(temp_fn=temp_fn, root=root,
                                      min_duty=_DESKTOP_MIN_DUTY, spinning_only=True)
