@@ -57,7 +57,7 @@ def apply_hud(
 def reload_sessions(sessions, proc_root=_PROC, watch_factory=None, *, observe=True, via_proc_cwd=False):
     """Ask every session to reload. With `observe`, delivery is confirmed by
     mangoapp re-opening presets.conf; an unconfirmed request is retried once
-    through the other working-directory path and then reported, not resent."""
+    through the other working-directory path and then reported as unobserved."""
     sessions = tuple(sessions)
     if not sessions:
         return ReloadResult((), ())
@@ -88,7 +88,7 @@ def reload_sessions(sessions, proc_root=_PROC, watch_factory=None, *, observe=Tr
             retry.pending,
             "observed" if via_proc_cwd else "observed_proc_cwd",
         )
-    return ReloadResult((), result.pending, "unobserved")
+    return ReloadResult(result.requested, result.pending, "unobserved")
 
 
 def _request_reloads(sessions, proc_root, via_proc_cwd=False):

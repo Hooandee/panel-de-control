@@ -163,9 +163,6 @@ class PowerReader:
             self._amdgpu_hwmon = self._find_amdgpu_dir()
         return self._amdgpu_hwmon
 
-    def has_amdgpu_power(self) -> bool:
-        return self._amdgpu() is not None
-
     def read_watts(self):
         """Actual power draw in watts (float, 1 decimal), or None if unavailable."""
         return self._read_watts_from(self._amdgpu())

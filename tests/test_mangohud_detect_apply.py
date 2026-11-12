@@ -587,12 +587,12 @@ def test_reload_is_delivered_when_mangoapp_reopens_its_presets(tmp_path, monkeyp
     assert result.delivery == "observed"
 
 
-def test_an_unread_reload_is_reported_without_queueing_more_reloads(tmp_path, monkeypatch):
+def test_an_unread_reload_is_reported_and_not_retried(tmp_path, monkeypatch):
     proc, sessions = _one_live_session(tmp_path, monkeypatch)
 
     result = reload_sessions(sessions, proc_root=str(proc), watch_factory=_Watch(False))
 
-    assert result.requested == ()
+    assert result.requested == ((30, 7),)
     assert result.pending == ()
     assert result.delivery == "unobserved"
 

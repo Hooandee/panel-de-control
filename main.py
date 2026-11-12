@@ -290,7 +290,7 @@ _MIN_HUD_REFRESH_S = 1.0
 # Every value refresh is a mangohudctl reload, and mangoapp re-parses its whole config
 # on a control thread while the render thread draws it. Continuous sensor readings
 # (power draw, fan speed, battery) are therefore republished far less often than
-# applied state (TDP, profile, toggles) or a reading appearing or going away.
+# applied state (TDP, profile, toggles) or a reading that just became available.
 _MIN_HUD_SENSOR_REFRESH_S = 10.0
 _HUD_SENSOR_METRICS = frozenset((
     "pdc_power", "pdc_fan_rpm", "pdc_bat_power", "pdc_bat_time",
@@ -10828,7 +10828,7 @@ class Plugin(AmbientRpc):
 
     def _hud_package_power(self) -> dict:
         reading = self._power_reader.read()
-        if not self._power_reader.has_amdgpu_power():
+        if not isinstance(reading.get("watts"), (int, float)):
             reading = {**reading, "watts": self._rapl_power.read()}
         return reading
 
@@ -11002,11 +11002,11 @@ class Plugin(AmbientRpc):
             for metric_id in set(values) | set(self._pdc_written)
             if values.get(metric_id) != self._pdc_written.get(metric_id)
         }
-        appeared_or_lost = any(
-            mangohud_pdc.DASH in (values.get(metric_id), self._pdc_written.get(metric_id))
+        appeared = any(
+            self._pdc_written.get(metric_id) in (None, mangohud_pdc.DASH)
             for metric_id in changed
         )
-        if changed - _HUD_SENSOR_METRICS or appeared_or_lost:
+        if changed - _HUD_SENSOR_METRICS or appeared:
             return elapsed >= _MIN_HUD_REFRESH_S
         return elapsed >= _MIN_HUD_SENSOR_REFRESH_S
 

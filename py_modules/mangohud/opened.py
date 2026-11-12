@@ -20,9 +20,7 @@ def _libc():
 
 
 def _load_libc():
-    name = ctypes.util.find_library("c")
-    if not name:
-        return None
+    name = ctypes.util.find_library("c") or "libc.so.6"
     try:
         libc = ctypes.CDLL(name, use_errno=True)
         libc.inotify_init1.argtypes = [ctypes.c_int]

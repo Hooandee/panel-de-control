@@ -377,7 +377,8 @@ export class SteamOverlayController {
     } catch {
       return this.finishDeactivation("exception", before, this.diagnostics().raw_level);
     }
-    if (before !== HIDDEN_LEVEL) this.levelBeforeHide = before;
+    const restorable = before !== HIDDEN_LEVEL ? before : pending;
+    if (restorable !== null && restorable !== HIDDEN_LEVEL) this.levelBeforeHide = restorable;
     const observed = await this.awaitLevel(HIDDEN_LEVEL);
     const outcome = observed === HIDDEN_LEVEL
       ? "confirmed"

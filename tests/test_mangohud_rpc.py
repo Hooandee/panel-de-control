@@ -1122,7 +1122,6 @@ def test_dynamic_hud_publication_is_bounded_to_one_per_second(
         "read",
         lambda: {"watts": watts["value"], "gpu_busy": 99},
     )
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
     asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
     publications = []
 
@@ -1425,7 +1424,6 @@ def test_hud_sensor_only_changes_reload_less_often(tmp_path, monkeypatch):
         "read",
         lambda: {"watts": power["watts"], "gpu_busy": 10},
     )
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
     clock = {"now": 10.0}
     monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
     asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
@@ -1450,7 +1448,6 @@ def test_hud_state_changes_still_publish_promptly_next_to_sensors(tmp_path, monk
     _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
     reloaded = _record_reloads(main, monkeypatch)
     monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 6.0, "gpu_busy": 10})
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
     applied = {"watts": 11}
     monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
     clock = {"now": 10.0}
@@ -1473,7 +1470,6 @@ def test_hud_state_changes_still_publish_promptly_next_to_sensors(tmp_path, monk
 def test_hud_power_falls_back_to_rapl_without_amdgpu(tmp_path, monkeypatch):
     _main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: False)
     monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 4})
     monkeypatch.setattr(p._rapl_power, "read", lambda: 9.4)
     p._pdc_active_ids = ["pdc_power"]
@@ -1481,15 +1477,14 @@ def test_hud_power_falls_back_to_rapl_without_amdgpu(tmp_path, monkeypatch):
     assert p._pdc_values() == {"pdc_power": "9W"}
 
 
-def test_hud_power_keeps_amdgpu_as_the_source_when_present(tmp_path, monkeypatch):
+def test_hud_power_keeps_amdgpu_as_the_source_when_it_reads(tmp_path, monkeypatch):
     _main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
-    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 4})
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 7.0, "gpu_busy": 4})
     monkeypatch.setattr(p._rapl_power, "read", lambda: 30.0)
     p._pdc_active_ids = ["pdc_power"]
 
-    assert p._pdc_values() == {"pdc_power": "-"}
+    assert p._pdc_values() == {"pdc_power": "7W"}
 
 
 def test_hud_battery_metrics_come_from_the_battery_reader(tmp_path, monkeypatch):
@@ -1541,7 +1536,6 @@ def test_a_sensor_reading_that_appears_is_published_promptly(tmp_path, monkeypat
     _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
     reloaded = _record_reloads(main, monkeypatch)
     power = {"watts": None}
-    monkeypatch.setattr(p._power_reader, "has_amdgpu_power", lambda: True)
     monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": power["watts"], "gpu_busy": 1})
     clock = {"now": 10.0}
     monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])

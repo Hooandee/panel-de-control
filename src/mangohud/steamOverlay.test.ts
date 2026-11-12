@@ -529,4 +529,31 @@ describe("SteamOverlayController", () => {
 
     expect(perf.SetPerfOverlayLevel).toHaveBeenLastCalledWith(1);
   });
+
+  it("keeps the level to restore when switched off before Steam applied the restore", async () => {
+    const perf = store(3);
+    perf.SetPerfOverlayLevel.mockImplementation((next: number) => {
+      perf.msgSettingsGlobal!.perf_overlay_level = next;
+    });
+    const clock = { now: 0 };
+    const controller = new SteamOverlayController(
+      () => ({ store: perf, resolver: "global" }),
+      async () => {},
+      1,
+      () => clock.now,
+    );
+    await controller.ensureHudHidden();
+    clock.now = 10_000;
+    perf.SetPerfOverlayLevel.mockImplementation(() => {});
+    await controller.ensureFullHudVisible();
+    clock.now = 10_100;
+    await controller.ensureHudHidden();
+    perf.SetPerfOverlayLevel.mockImplementation((next: number) => {
+      perf.msgSettingsGlobal!.perf_overlay_level = next;
+    });
+    clock.now = 30_000;
+    await controller.ensureFullHudVisible();
+
+    expect(perf.SetPerfOverlayLevel).toHaveBeenLastCalledWith(3);
+  });
 });
