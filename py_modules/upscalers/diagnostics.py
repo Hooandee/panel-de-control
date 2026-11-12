@@ -480,6 +480,7 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
         "provenance": provenance(installed),
         "shortcut": installed.shortcut if installed else None,
         "native": installed.native if installed else None,
+        "unavailable": installed.unavailable if installed else None,
         "manual_exe_selected": bool(entry.get("exe")),
         "identity": fields(entry.get("identity"), ("steam_appid", "name", "source")),
         "launcher": list(installed.launcher) if installed and installed.launcher else None,
@@ -604,3 +605,60 @@ def windows_components(record) -> dict | None:
                 for item in record.get("attempts", [])[:8] if isinstance(item, dict)]
     return {"at": record.get("at"), "error": str(record["error"])[:40] if record.get("error") else None, "attempts": attempts}
 
+
+
+_CRASH_MAX_AGE_S = 14 * 24 * 3600
+_CRASH_FILE_LIMIT = 256 * 1024
+_CRASH_MODULE = re.compile(r"([A-Za-z0-9_.\-]{1,80}\.(?:dll|exe))!", re.I)
+_PATHLIKE = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][^\\/\s\"'<>]+)+[\\/]?")
+
+
+def _xml_tag(text: str, tag: str) -> str:
+    match = re.search(rf"<{tag}>(.*?)</{tag}>", text, re.S)
+    return match.group(1).strip() if match else ""
+
+
+def game_crash(home: str, appid: str) -> dict | None:
+    """The newest crash Unreal recorded in the game's prefix: when, its message and the modules on top of the stack.
+
+    Unreal shows its crash as a Windows dialog; whether OptiScaler or an FSR DLL sits in that stack is what tells
+    a Panel install apart from the game's own fault."""
+    newest = None
+    for library in games.library_paths(home):
+        local = library / "steamapps/compatdata" / str(appid) / "pfx/drive_c/users/steamuser/AppData/Local"
+        try:
+            projects = sorted(local.iterdir())[:64]
+        except OSError:
+            continue
+        for project in projects:
+            crashes = project / "Saved/Crashes"
+            try:
+                folders = sorted(crashes.iterdir())[:32] if crashes.is_dir() and not crashes.is_symlink() else []
+            except OSError:
+                continue
+            for folder in folders:
+                context = folder / "CrashContext.runtime-xml"
+                try:
+                    if context.is_symlink() or not context.is_file():
+                        continue
+                    stamp = context.stat().st_mtime
+                except OSError:
+                    continue
+                if newest is None or stamp > newest[0]:
+                    newest = (stamp, context)
+    if newest is None or time.time() - newest[0] > _CRASH_MAX_AGE_S:
+        return None
+    try:
+        with newest[1].open("rb") as stream:
+            text = stream.read(_CRASH_FILE_LIMIT).decode("utf-8", "replace")
+    except OSError:
+        return {"at": round(newest[0]), "readable": False}
+    message = _PATHLIKE.sub(lambda m: re.split(r"[\\/]", m.group(0).rstrip("\\/"))[-1], _xml_tag(text, "ErrorMessage"))
+    stack = _xml_tag(text, "CallStack") or _xml_tag(text, "PCallStack")
+    modules = list(dict.fromkeys(match.group(1) for match in _CRASH_MODULE.finditer(stack)))[:8]
+    return {
+        "at": round(newest[0]),
+        "type": _xml_tag(text, "CrashType")[:40] or None,
+        "message": message.splitlines()[0][:200] if message else None,
+        "modules": modules,
+    }

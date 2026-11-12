@@ -76,6 +76,8 @@ export const EscaladoresSection: FC = () => {
     getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined);
     return () => { alive = false; };
   }, [appids]);
+  // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
+  const listed = useMemo(() => games.filter((g) => !compat[String(g.liveAppid)]?.unavailable), [games, compat]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
@@ -105,7 +107,7 @@ export const EscaladoresSection: FC = () => {
                 />}
                 <Fold label={t("up.list.manage")} open={bulkOpen} onToggle={() => setBulkOpen(!bulkOpen)} />
                 <NavigationGroup flow-children="column" childFocusDisabled={!bulkOpen} aria-hidden={!bulkOpen} style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
-                  <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
+                  <BulkPanel games={listed} overview={overview} compat={compat} onChanged={() => void refresh()} />
                 </NavigationGroup>
               </NavigationGroup>
               <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, fontSize: theme.font.caption, color: theme.color.textMuted, paddingBottom: 4 }}>
@@ -114,10 +116,10 @@ export const EscaladoresSection: FC = () => {
               </div>
             </>
           )}
-          {overview && games.length === 0 && (
+          {overview && listed.length === 0 && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.empty")}</span>
           )}
-          {overview && games.map((game) => {
+          {overview && listed.map((game) => {
             const install = overview.installs[String(game.liveAppid)];
             const build = install && overview.builds.find((b) => b.id === install.build);
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);

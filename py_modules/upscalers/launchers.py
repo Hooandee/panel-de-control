@@ -320,22 +320,37 @@ def _script_text(path: Path) -> str:
     return data.decode("utf-8", "replace") if data.startswith(b"#!") or path.suffix.lower() in (".sh", ".desktop") else ""
 
 
+def unifideck_key(launch_options: str) -> str | None:
+    store = _UNIFIDECK_ID.search(launch_options)
+    return store.group(0) if store else None
+
+
+def unifideck_row(home: str, key: str) -> tuple[str, str] | None:
+    """(exe, work_dir) that Unifideck's games.map lists for `store:id`; None when the game has no row (not installed).
+
+    Unifideck adds a shortcut for every game of every connected store; only installed ones get a row."""
+    try:
+        lines = (Path(home) / UNIFIDECK_MAP).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        # `store:id=exe<TAB>workdir<TAB>appid` today, `store:id|exe|workdir` in older releases.
+        name, separator, value = line.partition("=") if "=" in line.split("|")[0] else line.partition("|")
+        if name.strip() != key:
+            continue
+        columns = [column.strip() for column in re.split(r"[\t|]" if separator == "|" else r"\t", value)]
+        return columns[0], columns[1] if len(columns) > 1 else ""
+    return None
+
+
 def wrapped_exe(home: str, exe: str, launch_options: str) -> Path | None:
     """The Windows executable a script shortcut ends up running, when the shortcut or its script names one that exists."""
     shortcut = Path(exe.strip().strip('"'))
     base = shortcut.parent
-    store = _UNIFIDECK_ID.search(launch_options)
-    if store:
-        try:
-            lines = (Path(home) / UNIFIDECK_MAP).read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            lines = []
-        for line in lines:
-            # `store:id=exe<TAB>workdir<TAB>appid` today, `store:id|exe|workdir` in older releases.
-            key, separator, value = line.partition("=") if "=" in line.split("|")[0] else line.partition("|")
-            target = Path(re.split(r"[\t|]" if separator == "|" else r"\t", value)[0].strip())
-            if key.strip() == store.group(0) and target.suffix.lower() == ".exe" and target.is_file():
-                return target
+    key = unifideck_key(launch_options)
+    row = unifideck_row(home, key) if key else None
+    if row and Path(row[0]).suffix.lower() == ".exe" and Path(row[0]).is_file():
+        return Path(row[0])
     direct = _first_exe(launch_options, home, base)
     if direct:
         return direct

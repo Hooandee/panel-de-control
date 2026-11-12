@@ -17,6 +17,8 @@ from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, 
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
+# The support report waits four seconds for this section; games stop being read past this point.
+REPORT_BUDGET_S = 2.5
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
@@ -289,8 +291,11 @@ class UpscalerService:
         """What each game ships (or that it runs natively on Linux), cached by install folder mtime."""
         result = {}
         for appid in appids[:400]:
-            installed = self._find(str(appid))
+            installed = self._locate(str(appid))
             if installed is None:
+                continue
+            if installed.unavailable:
+                result[installed.appid] = {"native": False, "inputs": [], "unavailable": installed.unavailable}
                 continue
             try:
                 stamp = installed.root.stat().st_mtime
@@ -308,9 +313,13 @@ class UpscalerService:
             result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
         return result
 
-    def _find(self, appid: str) -> games.Installed | None:
+    def _locate(self, appid: str) -> games.Installed | None:
         hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
         return games.find_installed(self.home, appid) or games.from_hint(appid, hint, self.home)
+
+    def _find(self, appid: str) -> games.Installed | None:
+        installed = self._locate(appid)
+        return None if installed is None or installed.unavailable else installed
 
     def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
         """Real game behind a non-Steam shortcut; worked out once, then remembered."""
@@ -1848,18 +1857,31 @@ class UpscalerService:
         if installed is None or not installed.shortcut:
             return appid
         digest = self._shortcut_launch_identity(installed)
-        for previous, entry in self.state["games"].items():
-            if previous == appid or entry.get("launch_identity") != digest:
-                continue
-            other = self._find(previous)
-            if other is not None and other.shortcut and self._shortcut_launch_identity(other) == digest:
-                raise UpscalerError("mako_identity_ambiguous")
+        own = self.state["games"].get(appid) or {}
+        if own.get("launch_identity_shared") == digest:
+            return appid
+        if own.get("launch_identity") != digest and self._identity_held_elsewhere(appid, digest):
+            # One emulator or launcher behind several shortcuts (BotW and TotK on the same Yuzu): the first
+            # keeps the shared identity, the others are told apart by their own shortcut id from then on.
+            if claim:
+                self._game_state(appid)["launch_identity_shared"] = digest
+                self._save()
+            return appid
         if claim:
             entry = self._game_state(appid)
             if entry.get("launch_identity") != digest:
                 entry["launch_identity"] = digest
                 self._save()
         return str(int(digest[:16], 16)) if mako_profile else "ns:" + digest
+
+    def _identity_held_elsewhere(self, appid: str, digest: str) -> bool:
+        for previous, entry in self.state["games"].items():
+            if previous == appid or entry.get("launch_identity") != digest:
+                continue
+            other = self._find(previous)
+            if other is not None and other.shortcut and self._shortcut_launch_identity(other) == digest:
+                return True
+        return False
 
     def mako_status(self, appid: str | None = None) -> dict:
         status = self.mako.status()
@@ -1991,6 +2013,7 @@ class UpscalerService:
             if not installed.native:
                 report["game_files"] = diagnostics.game_files(installed, analysis, owned)
                 report["proton_prefix"] = diagnostics.proton_prefix(self.home, appid)
+                report["game_crash"] = diagnostics.game_crash(self.home, appid)
         info = _recipe_info(recipe)
         report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy"))
         if info:
@@ -2015,37 +2038,57 @@ class UpscalerService:
                     report["recipe"].update(blocked=True, error=error.code)
         return report
 
-    def report(self, context=None) -> dict:
+    def report(self, context=None, budget_s: float = REPORT_BUDGET_S, partial: dict | None = None) -> dict:
+        """Fills `partial` as it goes, so a caller that stops waiting still sends what was read."""
+        started = time.monotonic()
+        result = partial if partial is not None else {}
         context = diagnostics.frontend_context(context)
+        job = self.job()
+        result.update({
+            "gpu": self.gpu, "device": self.device, "frontend": context,
+            "job": diagnostics.with_job_reference(diagnostics.fields(job, ("id", "appid", "kind", "state", "phase", "done", "total", "error", "started")), "id"),
+            "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
+            "games": [],
+        })
         touched = [(appid, entry) for appid, entry in self.state["games"].items()
                    if isinstance(entry.get("install"), dict) or entry.get("history") or entry.get("exe")
                    or entry.get("actions") or entry.get("identity")]
         touched.sort(key=lambda item: max([h.get("at", 0) for h in
                      [*item[1].get("history", []), *item[1].get("actions", [])]] or [0]), reverse=True)
-        job = self.job()
         priority = [str(value) for value in ((context.get("running") or {}).get("live_appid"),
                     (job or {}).get("appid")) if value is not None]
         appids = list(dict.fromkeys([*priority, *(appid for appid, _ in touched)]))[:12]
-        reports = []
-        for appid in appids:
+        for index, appid in enumerate(appids):
+            if index and time.monotonic() - started > budget_s:
+                result["games_skipped"] = appids[index:]
+                break
+            game_started = time.monotonic()
+            result["reading"] = appid
             try:
-                reports.append(self.diagnose(appid))
+                report = self.diagnose(appid)
             except Exception as error:
-                reports.append({"appid": appid, "error": type(error).__name__})
-        return {
-            "gpu": self.gpu, "device": self.device, "frontend": context,
+                report = {"appid": appid, "error": type(error).__name__}
+            report["elapsed_ms"] = round((time.monotonic() - game_started) * 1000)
+            result["games"].append(report)
+        sections = (
             # What the user was offered on this GPU, so a "not supported" complaint shows what Panel showed.
-            "builds": [diagnostics.fields(row, ("id", "supported", "may_fallback"))
-                       for row in catalog.describe(self.gpu, self.device) if row.get("available")],
-            "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
-            "environment": diagnostics.environment(),
-            "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
-            "job": diagnostics.with_job_reference(diagnostics.fields(job, ("id", "appid", "kind", "state", "phase", "done", "total", "error", "started")), "id"),
-            "lsfg": self.lsfg.report(),
-            "mako": self.mako.report(),
-            "helixsr": {"downloaded": self.helix.ready(), "release": self.helix.release.name},
-            "games": reports,
-        }
+            ("builds", lambda: [diagnostics.fields(row, ("id", "supported", "may_fallback"))
+                                for row in catalog.describe(self.gpu, self.device) if row.get("available")]),
+            ("environment", diagnostics.environment),
+            ("cached_assets", lambda: [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)]),
+            ("lsfg", self.lsfg.report),
+            ("mako", self.mako.report),
+            ("helixsr", lambda: {"downloaded": self.helix.ready(), "release": self.helix.release.name}),
+        )
+        for key, read in sections:
+            result["reading"] = key
+            try:
+                result[key] = read()
+            except Exception as error:
+                result[key] = {"error": type(error).__name__}
+        result.pop("reading", None)
+        result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
+        return result
 
     def support_state(self) -> dict:
         mako_status = self.mako.status()

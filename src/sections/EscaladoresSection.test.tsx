@@ -55,3 +55,14 @@ it("names Mako and Lossless in the list instead of the game's own techniques", a
   expect(screen.getByText("Lossless ×4")).toBeTruthy();
   expect(screen.queryByText("DLSS, XeSS")).toBeNull();
 });
+
+it("leaves out store shortcuts with no installed game behind them", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
+    "1": { inputs: [], native: false, unavailable: "unifideck_not_installed" }, "2": { inputs: [], native: true },
+  } as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.queryByText("A")).toBeNull();
+  expect(screen.getByText("B")).toBeTruthy();
+  expect(screen.getByText("up.list.linux")).toBeTruthy();
+});

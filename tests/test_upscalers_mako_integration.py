@@ -151,20 +151,30 @@ def test_shortcut_identity_survives_alias_but_isolates_paths(steam, fake_catalog
     assert service._load()["games"]["222"]["launch_identity"]
 
 
-def test_live_duplicate_shortcut_cannot_claim_receipt(steam, fake_catalog, proc, monkeypatch, tmp_path):
+def test_shortcuts_sharing_one_emulator_keep_separate_profiles(steam, fake_catalog, proc, monkeypatch, tmp_path):
     from upscalers.games import Installed
     service = _service(steam, fake_catalog, proc)
     service.mako = StoredMako()
-    installed = {key: Installed(key, "Duplicate", tmp_path, 4, "game.exe", True, True) for key in ("111", "222")}
+    installed = {key: Installed(key, name, tmp_path, 4, "yuzu.exe", True, True)
+                 for key, name in (("111", "Breath of the Wild"), ("222", "Tears of the Kingdom"))}
     monkeypatch.setattr(service, "_find", installed.get)
+    receipt = {"version": 1, "env": [], "wrappers": {"before": [], "applied": [], "added": []}}
     service.mako_game("111", {"multiplier": 3})
-    assert service.mako_status("222") == {"profiles": {}, "ready": False, "reason": "mako_identity_ambiguous",
-                                          "scaler_transition_pending": False}
-    assert "222" not in service.state["games"]
-    for call in (lambda: service.mako_game("222", None), lambda: service.mako_game("222", {}),
-                 lambda: service.get_launch_receipt("222", "mako")):
-        with pytest.raises(UpscalerError, match="mako_identity_ambiguous"):
-            call()
+    first = next(iter(service.mako.profiles))
+    assert first != "111"
+    status = service.mako_status("222")
+    assert "reason" not in status and "222" not in status["profiles"]
+    assert service.mako_runtime("222")["requested"] is None
+    service.mako_game("222", {"multiplier": 2})
+    service.set_launch_receipt("222", "mako", receipt)
+    assert service.mako.profiles == {first: {"multiplier": 3}, "222": {"multiplier": 2}}
+    assert service.mako_runtime("111")["requested"] == {"multiplier": 3}
+    assert service.mako_runtime("222")["requested"] == {"multiplier": 2}
+    assert service.get_launch_receipt("222", "mako") == receipt
+    assert service.get_launch_receipt("111", "mako") is None
+    installed.pop("111")
+    assert service.mako_runtime("222")["requested"] == {"multiplier": 2}
+    assert service._load()["games"]["222"]["launch_identity_shared"]
 
 
 def test_steam_and_unresolved_receipt_keys_stay_unchanged(steam, fake_catalog, proc):
