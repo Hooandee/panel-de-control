@@ -548,7 +548,7 @@ describe("ThemeExtensionRuntimeHost", () => {
   });
 
   it("lets a theme freeze the game and thaws it when the theme goes", async () => {
-    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) };
+    const games = { forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) };
     const mountWith = (use: (context: ThemeExtensionMountContext) => void) => new ThemeExtensionRuntimeHost({
       client: client(),
       doc: document,
@@ -1263,13 +1263,15 @@ describe("theme storage", () => {
   });
 
   it("offers game controls only when Panel provides them", async () => {
-    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}) });
+    const games = Object.freeze({ forceClose: vi.fn(async () => "terminated" as const), pause: vi.fn(async () => true), resume: vi.fn(async () => {}), howLongToBeat: vi.fn(async () => null), protonDb: vi.fn(async () => null) });
     let seen: ThemeExtensionMountContext | undefined;
     const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document, games, evaluate: capturing((c) => { seen = c; }) });
     host.reconcile(snapshot());
     await settle();
     await settle();
     expect(await seen?.games?.forceClose!(730)).toBe("terminated");
+    expect(await seen?.games?.howLongToBeat!(730, "Counter-Strike 2")).toBeNull();
+    expect(games.howLongToBeat).toHaveBeenCalledWith(730, "Counter-Strike 2");
     host.dispose();
   });
 });

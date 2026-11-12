@@ -394,6 +394,8 @@ function scopedGames(games: Readonly<ThemeExtensionGamesAccess>, scope: MountSco
       return games.pause(ms);
     },
     resume: () => games.resume(),
+    howLongToBeat: (appid: number | string, name: string) => games.howLongToBeat(appid, name),
+    protonDb: (appid: number | string) => games.protonDb(appid),
   });
 }
 
