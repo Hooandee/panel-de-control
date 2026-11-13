@@ -69,6 +69,40 @@
     },
     {
       "schemaVersion": 1,
+      "catalogId": "hooandee-lobo-blanco",
+      "cssLoaderName": "Hooandee Lobo Blanco",
+      "version": "0.9.10",
+      "displayName": {
+        "es": "Lobo Blanco",
+        "en": "Lobo Blanco",
+        "it": "Lobo Blanco"
+      },
+      "description": {
+        "es": "Teclas plateadas de felpa, teclas especiales rojo sangre con su propia runa y un medallión de lobo. Cada pulsación suena a metal y las runas se encienden al tocarlas.",
+        "en": "Plush silver keys, blood-red special keys with their own rune and a wolf medallion. Every press rings like metal and the runes light up when touched.",
+        "it": "Tasti argentati in peluche, tasti speciali rosso sangue con la loro runa e un medaglione a forma di lupo. Ogni pressione suona come metallo e le rune si accendono al tocco."
+      },
+      "author": "Hooandee",
+      "tags": [],
+      "artifact": {
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.10/theme.zip",
+        "size": 359016,
+        "sha256": "1be09b1b1e7099546c278f6e79df781056d006e8114542ff94f3cb8a1d3f6543"
+      },
+      "minimumVersions": {
+        "panel": "0.89.0",
+        "cssLoader": "2.1.2",
+        "cssLoaderBackend": 9
+      },
+      "exclusiveGroup": "keyboard",
+      "notes": {
+        "es": "Viste el teclado en pantalla de Steam y convive con tu tema de Inicio.",
+        "en": "Dresses Steam's on-screen keyboard and works alongside your Home theme.",
+        "it": "Veste la tastiera su schermo di Steam e convive con il tuo tema della Home."
+      }
+    },
+    {
+      "schemaVersion": 1,
       "catalogId": "hooandee-loop",
       "cssLoaderName": "Hooandee Loop",
       "version": "0.1.1",
