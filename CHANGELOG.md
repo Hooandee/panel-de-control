@@ -3,10 +3,35 @@
 ## [0.89.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.0...panel-de-control-v0.89.1) (2026-11-13)
 
 
-### Bug Fixes
+### Español
 
-* **themes:** show Loop's own menu and its Escalera mode in Loop's card ([#1277](https://github.com/Hooandee/panel-de-control/issues/1277)) ([df4bdb5](https://github.com/Hooandee/panel-de-control/commit/df4bdb5f3df7cd86c231fd0b4f001816e1074760))
-* **upscalers:** install Luma automatically for Persona 5 Royal ([#1293](https://github.com/Hooandee/panel-de-control/issues/1293)) ([09c6a44](https://github.com/Hooandee/panel-de-control/commit/09c6a44b265a03a42bea6e6f85d44f4cfe278226))
+* **Persona 5 Royal ya escala sin pasos a mano:** Escaladores solo avisaba de que el juego necesita Luma y no se podía activar. Ahora instala Luma y todo lo que necesita por su cuenta: eliges DLSS en los ajustes del juego y Panel de Control aplica FSR 4.1.2 Lite. La escala de renderizado se cambia desde el propio juego.
+* **La tarjeta de Loop enseña lo que hay:** La imagen de Loop en Temas ahora muestra su propio menú y el modo Escalera, para que sepas cómo queda antes de activarlo.
+
+### English
+
+* **Persona 5 Royal now upscales with no manual steps:** Escaladores only said the game needs Luma and could not turn it on. It now installs Luma and everything it needs by itself: pick DLSS in the game's settings and Panel de Control applies FSR 4.1.2 Lite. The render scale is changed from the game itself.
+* **Loop's card shows what you get:** Loop's picture in Themes now shows its own menu and the Escalera mode, so you can see how it looks before turning it on.
+
+### Italiano
+
+* **Persona 5 Royal ora si scala senza passaggi manuali:** Escaladores diceva solo che il gioco ha bisogno di Luma e non si poteva attivare. Ora installa Luma e tutto ciò che serve da solo: scegli DLSS nelle impostazioni del gioco e Panel de Control applica FSR 4.1.2 Lite. La scala di rendering si cambia dal gioco stesso.
+* **La scheda di Loop mostra com'è davvero:** L'immagine di Loop in Temi ora mostra il suo menu e la modalità Escalera, così vedi com'è prima di attivarlo.
+
+### Deutsch
+
+* **Persona 5 Royal skaliert jetzt ohne Handarbeit:** Escaladores wies nur darauf hin, dass das Spiel Luma braucht, und ließ sich nicht einschalten. Jetzt installiert es Luma und alles Nötige selbst: Wähle DLSS in den Spieleinstellungen und Panel de Control wendet FSR 4.1.2 Lite an. Die Renderskalierung stellst du im Spiel selbst ein.
+* **Die Karte von Loop zeigt, was dich erwartet:** Das Bild von Loop unter Themes zeigt jetzt sein eigenes Menü und den Modus Escalera, damit du vor dem Einschalten siehst, wie es aussieht.
+
+### Português (Brasil)
+
+* **Persona 5 Royal agora escala sem passos manuais:** O Escaladores só avisava que o jogo precisa do Luma e não dava para ativar. Agora ele instala o Luma e tudo de que precisa sozinho: escolha DLSS nas configurações do jogo e o Panel de Control aplica o FSR 4.1.2 Lite. A escala de renderização é ajustada no próprio jogo.
+* **O card do Loop mostra o que você vai ter:** A imagem do Loop em Temas agora mostra o menu dele e o modo Escalera, para você ver como fica antes de ativar.
+
+### Français
+
+* **Persona 5 Royal se met à l'échelle sans étapes manuelles :** Escaladores se contentait d'indiquer que le jeu a besoin de Luma et ne pouvait pas l'activer. Il installe maintenant Luma et tout ce qu'il faut tout seul : choisissez DLSS dans les réglages du jeu et Panel de Control applique FSR 4.1.2 Lite. L'échelle de rendu se règle dans le jeu lui-même.
+* **La carte de Loop montre ce qui vous attend :** L'image de Loop dans Thèmes montre maintenant son propre menu et le mode Escalera, pour voir le rendu avant de l'activer.
 
 ## [0.89.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.88.0...panel-de-control-v0.89.0) (2026-11-12)
 
