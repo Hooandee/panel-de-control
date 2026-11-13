@@ -18,6 +18,8 @@
   <ItemGroup>
     <None Include="../../../shared/fixtures/*.json" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../shared/fixtures/upscalers/*.json" Link="Fixtures/Upscalers/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../shared/upscalers/catalog.json" Link="Data/Upscalers/catalog.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../game-recipes/**/*.json" Link="Data/GameRecipes/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../shared/devices/*.json" Link="Devices/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
