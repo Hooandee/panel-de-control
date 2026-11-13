@@ -1,35 +1,38 @@
 {
   "name": "Resident Evil 7 Biohazard",
-  "revision": 1,
-  "conditions": {
-    "engine": [
-      "optiscaler"
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "re7.exe",
+    "args": [],
+    "ini": {
+      "Spoofing.Dxgi": "false",
+      "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+      "refw-pdup-re7",
+      "puredark-upscaler-base"
     ],
-    "platform": [
-      "linux"
+    "source_urls": [
+      "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+      "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-7-Biohazard"
     ],
-    "arch": [
-      "x86_64"
-    ]
+    "effective_api": "d3d12",
+    "optiscaler_root_files": [
+      "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false
   },
-  "exe": "re7.exe",
-  "args": [],
-  "ini": {
-    "Spoofing.Dxgi": "false",
-    "Menu.OverlayMenu": "true"
-  },
-  "dependencies": [
-    "refw-pdup-re7",
-    "puredark-upscaler-base"
-  ],
-  "source_urls": [
-    "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
-    "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-7-Biohazard"
-  ],
-  "effective_api": "d3d12",
-  "optiscaler_root_files": [
-    "libxess.dll"
-  ],
-  "reframework_upscaler": true,
-  "optiscaler_fg": false
+  "windows": {
+    "status": "unknown"
+  }
 }

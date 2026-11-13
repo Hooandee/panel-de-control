@@ -5,10 +5,38 @@ This directory is the versioned, public catalog used by Panel de Control. Each g
 - `catalog.json`: schema and catalog versions.
 - `assets.json`: pinned release downloads, exact sizes and SHA-256 hashes.
 - `dependencies.json`: reusable file mappings and supported Proton prerequisites.
-- `games/`: executable paths, explicit engine/platform/architecture conditions, launch arguments, OptiScaler settings and dependency IDs.
+- `games/`: one file per game with its name and one block per operating system (`linux`, `windows`). A block holds that system's executable path, engine/architecture conditions, launch arguments, OptiScaler settings and dependency IDs.
 - `schema.json`: document shapes; the loader additionally validates references, dependency cycles, duplicate keys, case-insensitive destinations, source origins and bounded reads.
 
-Increase a game's `revision` when changing its behavior and `catalog_version` when changing any catalog data. Keep sources on each game and release provenance on each asset. Recipes contain data only: scripts, shell commands and arbitrary Winetricks verbs are not accepted. Supported prerequisite verbs are `vcrun2022` and `msvcrt40`.
+## One block per operating system
+
+Every game file has both a `linux` and a `windows` block, and each block has a `status`:
+
+- `tested`: a full recipe, verified on that system.
+- `untested`: a full recipe, written but not yet verified there.
+- `unknown`: nobody has studied the game on that system yet. The block holds only `status`.
+- `not_applicable`: the game needs no recipe there, or cannot use one. The block holds only `status`.
+
+```json
+{
+  "name": "Baldur's Gate 3",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": { "engine": ["optiscaler"], "arch": ["x86_64"] },
+    "exe": "bin/bg3_dx11.exe",
+    "args": ["--skip-launcher"],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": ["https://github.com/optiscaler/OptiScaler/wiki"]
+  },
+  "windows": { "status": "unknown" }
+}
+```
+
+Blocks are independent: nothing is inherited from one system to the other, including `revision`, `game_settings` and the evidence fields. The block key is the platform, so conditions only list engines, architectures and optional game builds. The loader validates both blocks on every system, so a broken Windows block also fails the Linux tests, but `Catalog.match` only returns the block of the system it runs on. `dependencies.json` is shared; a `proton_dependency` (directly or through `requires`) is only accepted in a `linux` block.
+
+Increase a block's `revision` when changing its behavior and `catalog_version` when changing any catalog data. Keep sources on each game and release provenance on each asset. Recipes contain data only: scripts, shell commands and arbitrary Winetricks verbs are not accepted. Supported prerequisite verbs are `vcrun2022` and `msvcrt40`.
 
 File mappings use `destination: archive member`, relative to the selected executable directory and archive root respectively. Paths cannot escape those roots. The installer must also reject archive symlinks and reparse points, verify downloads against the pinned hash and size, preserve unrelated files and roll back failed changes. Dependency files are merged first; the selected OptiScaler files take precedence for shared upscaler libraries.
 
@@ -16,15 +44,15 @@ Final Fantasy VII Remake uses the official Luma release `latest-800`. Its `dxgi.
 
 ## Loader API
 
-`load(directory)` validates the whole catalog and raises `CatalogError` on invalid data. `bundled()` caches the distributed catalog and returns an empty catalog if loading fails. `Catalog.match(appid, engine, platform=None, arch=None)` returns a matching recipe or `None`; omitted platform and architecture use the actual host, with AMD64/ARM64 normalized. `Catalog.dependency_order(ids)` returns prerequisites before dependents, without duplicates. Assets and dependencies are available by ID through `Catalog.assets` and `Catalog.dependencies`.
+`load(directory)` validates the whole catalog and raises `CatalogError` on invalid data. `bundled()` caches the distributed catalog and returns an empty catalog if loading fails. `Catalog.match(appid, engine, platform=None, arch=None)` returns the recipe of that platform's block when it has one and its conditions match, or `None`; omitted platform and architecture use the actual host, with AMD64/ARM64 normalized. `Catalog.games` maps each appid to its name, the status of every block and the recipes it carries. `Catalog.dependency_order(ids)` returns prerequisites before dependents, without duplicates. Assets and dependencies are available by ID through `Catalog.assets` and `Catalog.dependencies`.
 
 Validate changes with `python -m pytest tests/test_upscalers_recipe_catalog.py tests/test_upscalers.py`. Include this entire directory when packaging Panel de Control.
 
 ## Game updates
 
-The canonical recipe path remains `game-recipes/games/<Steam appid>.json`, independent of runtime refactors. `tested_game_builds` and `tested_at` record observed game builds and the evidence date; they do not guarantee compatibility with every version. An optional `conditions.game_builds` restricts application to listed builds. When that restriction exists, missing or different build IDs do not match. Without it, a game update alone does not disable the recipe. Pass the installed build as `Catalog.match(..., game_build=build_id)`.
+The canonical recipe path remains `game-recipes/games/<Steam appid>.json`, independent of runtime refactors. `tested_game_builds` and `tested_at` record observed game builds and the evidence date; they do not guarantee compatibility with every version. An optional `conditions.game_builds` in a block restricts application to listed builds. When that restriction exists, missing or different build IDs do not match. Without it, a game update alone does not disable the recipe. Pass the installed build as `Catalog.match(..., game_build=build_id)`.
 
-After a game update, verify prerequisites and launch behavior, append the observed build and update the evidence date. If changed files or configuration require a different recipe, update its mappings/settings, increment the game revision and catalog version, and re-run the catalog tests. Add a build restriction only when compatibility requires one.
+After a game update, verify prerequisites and launch behavior, append the observed build and update the evidence date. If changed files or configuration require a different recipe, update its mappings/settings, increment the block's revision and the catalog version, and re-run the catalog tests. Add a build restriction only when compatibility requires one.
 
 `configuration` applies allowlisted INI keys while preserving unrelated settings. Remake sets `ReShade.ini` → `Luma.SRUserType=2` so Luma supplies DLSS input to OptiScaler even after a previous disabled selection. The installer stages this edit and includes it in its file rollback. A nonempty `INSTALL.BasePath` redirect is unsupported; an existing configuration is never silently replaced.
 
