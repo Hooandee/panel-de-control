@@ -1,0 +1,663 @@
+{
+  "schema_version": 1,
+  "algorithm": "steam.library",
+  "cases": [
+    {
+      "id": "libraries_from_libraryfolders",
+      "operation": "library_paths",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps"
+        ]
+      },
+      "expected": [
+        "home/.local/share/Steam",
+        "SD/SteamLibrary"
+      ]
+    },
+    {
+      "id": "libraries_without_libraryfolders",
+      "operation": "library_paths",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/.keep": {}
+        }
+      },
+      "expected": [
+        "home/.local/share/Steam"
+      ]
+    },
+    {
+      "id": "libraries_with_malformed_libraryfolders",
+      "operation": "library_paths",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\" { \"0\" { \"path\" \"{root}/SD/SteamLibrary\" }"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps"
+        ]
+      },
+      "expected": [
+        "home/.local/share/Steam"
+      ]
+    },
+    {
+      "id": "libraries_skip_entries_without_path",
+      "operation": "library_paths",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\" { \"0\" { \"label\" \"x\" } \"1\" \"{root}/SD/SteamLibrary\" \"2\" { \"path\" { \"nested\" \"x\" } } }"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps"
+        ]
+      },
+      "expected": [
+        "home/.local/share/Steam"
+      ]
+    },
+    {
+      "id": "installed_in_second_library",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 4,
+        "build_id": "12345",
+        "update_state": null
+      }
+    },
+    {
+      "id": "installed_downloading_update",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"1030\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 1030,
+        "build_id": "12345",
+        "update_state": "running"
+      }
+    },
+    {
+      "id": "installed_update_pending",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"6\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 6,
+        "build_id": "12345",
+        "update_state": "pending"
+      }
+    },
+    {
+      "id": "installed_flags_like_python_int",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\" 1_024 \"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 1024,
+        "build_id": "12345",
+        "update_state": "running"
+      }
+    },
+    {
+      "id": "installed_flags_not_a_number",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"abc\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 0,
+        "build_id": "12345",
+        "update_state": "pending"
+      }
+    },
+    {
+      "id": "installed_without_flags_name_or_build",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"buildid\"\t\t\"beta\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "292030",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 0,
+        "build_id": null,
+        "update_state": "pending"
+      }
+    },
+    {
+      "id": "installed_installdir_with_slash",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher/bin\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher/bin"
+        ],
+        "appid": "292030"
+      },
+      "expected": null
+    },
+    {
+      "id": "installed_folder_missing",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps"
+        ],
+        "appid": "292030"
+      },
+      "expected": null
+    },
+    {
+      "id": "installed_empty_installdir",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/"
+        ],
+        "appid": "292030"
+      },
+      "expected": null
+    },
+    {
+      "id": "installed_after_malformed_manifest",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          },
+          "home/.local/share/Steam/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\" {"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "292030"
+      },
+      "expected": {
+        "appid": "292030",
+        "name": "Witcher",
+        "root": "SD/SteamLibrary/steamapps/common/Witcher",
+        "state_flags": 4,
+        "build_id": "12345",
+        "update_state": null
+      }
+    },
+    {
+      "id": "installed_nested_installdir_is_ignored",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_292030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"292030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n\t\"installdir\" { \"a\" \"b\" }\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/None"
+        ],
+        "appid": "292030"
+      },
+      "expected": null
+    },
+    {
+      "id": "installed_appid_not_decimal",
+      "operation": "find_installed",
+      "input": {
+        "files": {
+          "home/.local/share/Steam/steamapps/libraryfolders.vdf": {
+            "text": "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"{root}/home/.local/share/Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"292030\"\t\t\"123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"{root}/SD/SteamLibrary\"\n\t\t\"label\"\t\t\"\"\n\t}\n\t\"2\"\n\t{\n\t\t\"path\"\t\t\"{root}/Missing\"\n\t}\n\t\"contentstatsid\"\t\t\"-123\"\n}\n"
+          },
+          "SD/SteamLibrary/steamapps/appmanifest_29x030.acf": {
+            "text": "\"AppState\"\n{\n\t\"appid\"\t\t\"29x030\"\n\t\"name\"\t\t\"Witcher\"\n\t\"installdir\"\t\t\"Witcher\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"buildid\"\t\t\"12345\"\n}\n"
+          }
+        },
+        "dirs": [
+          "SD/SteamLibrary/steamapps",
+          "SD/SteamLibrary/steamapps/common/Witcher"
+        ],
+        "appid": "29x030"
+      },
+      "expected": null
+    },
+    {
+      "id": "vdf_nested_and_lower_case_keys",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"AppState\"\n{\n\t\"AppID\"\t\"1\"\n\t\"UserConfig\"\n\t{\n\t\t\"Language\"\t\"english\"\n\t}\n}\n"
+      },
+      "expected": {
+        "value": {
+          "appstate": {
+            "appid": "1",
+            "userconfig": {
+              "language": "english"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "vdf_comments_and_bare_tokens",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "// header\n\"root\" { key value // trailing\n \"other\" \"x y\" }"
+      },
+      "expected": {
+        "value": {
+          "root": {
+            "key": "value",
+            "other": "x y"
+          }
+        }
+      }
+    },
+    {
+      "id": "vdf_escapes_only_quote_and_backslash",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"path\" \"C:\\\\Games\\\\Steam\" \"quote\" \"say \\\"hi\\\"\" \"newline\" \"a\\nb\" }"
+      },
+      "expected": {
+        "value": {
+          "root": {
+            "path": "C:\\Games\\Steam",
+            "quote": "say \"hi\"",
+            "newline": "a\\nb"
+          }
+        }
+      }
+    },
+    {
+      "id": "vdf_utf8_bom",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "﻿\"root\" { \"a\" \"b\" }"
+      },
+      "expected": {
+        "value": {
+          "root": {
+            "a": "b"
+          }
+        }
+      }
+    },
+    {
+      "id": "vdf_empty_document",
+      "operation": "parse_vdf",
+      "input": {
+        "text": ""
+      },
+      "expected": {
+        "value": {}
+      }
+    },
+    {
+      "id": "vdf_duplicate_keys_ignore_case",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"Key\" \"1\" \"key\" \"2\" }"
+      },
+      "expected": {
+        "error": "duplicate_vdf_key"
+      }
+    },
+    {
+      "id": "vdf_unclosed_object",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"a\" \"b\""
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_stray_close",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" \"x\" }"
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_key_without_value",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"a\" \"b\" } \"lonely\""
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_open_brace_as_key",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "{ \"a\" \"b\" }"
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_value_is_close_brace",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"a\" } }"
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_unterminated_quote",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"root\" { \"a\" \"b }"
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "vdf_invalid_utf8",
+      "operation": "parse_vdf",
+      "input": {
+        "base64": "InJvb3QiIHsgImEiICL/IiB9"
+      },
+      "expected": {
+        "error": "decode"
+      }
+    },
+    {
+      "id": "vdf_depth_limit_ok",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"k0\" { \"k1\" { \"k2\" { \"k3\" { \"k4\" { \"k5\" { \"k6\" { \"k7\" { \"k8\" { \"k9\" { \"k10\" { \"k11\" { \"k12\" { \"k13\" { \"k14\" { \"k15\" { \"k16\" { \"k17\" { \"k18\" { \"k19\" { \"k20\" { \"k21\" { \"k22\" { \"k23\" { \"k24\" { \"k25\" { \"k26\" { \"k27\" { \"k28\" { \"k29\" { \"k30\" { \"k31\" { \"a\" \"b\" } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } }"
+      },
+      "expected": {
+        "value": {
+          "k0": {
+            "k1": {
+              "k2": {
+                "k3": {
+                  "k4": {
+                    "k5": {
+                      "k6": {
+                        "k7": {
+                          "k8": {
+                            "k9": {
+                              "k10": {
+                                "k11": {
+                                  "k12": {
+                                    "k13": {
+                                      "k14": {
+                                        "k15": {
+                                          "k16": {
+                                            "k17": {
+                                              "k18": {
+                                                "k19": {
+                                                  "k20": {
+                                                    "k21": {
+                                                      "k22": {
+                                                        "k23": {
+                                                          "k24": {
+                                                            "k25": {
+                                                              "k26": {
+                                                                "k27": {
+                                                                  "k28": {
+                                                                    "k29": {
+                                                                      "k30": {
+                                                                        "k31": {
+                                                                          "a": "b"
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "vdf_depth_limit_exceeded",
+      "operation": "parse_vdf",
+      "input": {
+        "text": "\"k0\" { \"k1\" { \"k2\" { \"k3\" { \"k4\" { \"k5\" { \"k6\" { \"k7\" { \"k8\" { \"k9\" { \"k10\" { \"k11\" { \"k12\" { \"k13\" { \"k14\" { \"k15\" { \"k16\" { \"k17\" { \"k18\" { \"k19\" { \"k20\" { \"k21\" { \"k22\" { \"k23\" { \"k24\" { \"k25\" { \"k26\" { \"k27\" { \"k28\" { \"k29\" { \"k30\" { \"k31\" { \"k32\" { \"a\" \"b\" } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } }"
+      },
+      "expected": {
+        "error": "malformed_vdf"
+      }
+    },
+    {
+      "id": "update_state_4",
+      "operation": "update_state",
+      "input": {
+        "flags": 4
+      },
+      "expected": null
+    },
+    {
+      "id": "update_state_0",
+      "operation": "update_state",
+      "input": {
+        "flags": 0
+      },
+      "expected": "pending"
+    },
+    {
+      "id": "update_state_6",
+      "operation": "update_state",
+      "input": {
+        "flags": 6
+      },
+      "expected": "pending"
+    },
+    {
+      "id": "update_state_2",
+      "operation": "update_state",
+      "input": {
+        "flags": 2
+      },
+      "expected": "pending"
+    },
+    {
+      "id": "update_state_1030",
+      "operation": "update_state",
+      "input": {
+        "flags": 1030
+      },
+      "expected": "running"
+    },
+    {
+      "id": "update_state_260",
+      "operation": "update_state",
+      "input": {
+        "flags": 260
+      },
+      "expected": "running"
+    },
+    {
+      "id": "update_state_1028",
+      "operation": "update_state",
+      "input": {
+        "flags": 1028
+      },
+      "expected": "running"
+    },
+    {
+      "id": "update_state_516",
+      "operation": "update_state",
+      "input": {
+        "flags": 516
+      },
+      "expected": "pending"
+    }
+  ]
+}
