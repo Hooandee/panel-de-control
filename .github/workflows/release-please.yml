@@ -12,6 +12,7 @@ on:
       - "kiosk/**"
       - "py_modules/**"
       - "game-recipes/**"
+      - "shared/upscalers/**"
       - "main.py"
       - "package.json"
       - "pnpm-lock.yaml"
