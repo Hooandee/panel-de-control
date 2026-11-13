@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.89.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.0...panel-de-control-v0.89.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **themes:** show Loop's own menu and its Escalera mode in Loop's card ([#1277](https://github.com/Hooandee/panel-de-control/issues/1277)) ([df4bdb5](https://github.com/Hooandee/panel-de-control/commit/df4bdb5f3df7cd86c231fd0b4f001816e1074760))
+* **upscalers:** install Luma automatically for Persona 5 Royal ([#1293](https://github.com/Hooandee/panel-de-control/issues/1293)) ([09c6a44](https://github.com/Hooandee/panel-de-control/commit/09c6a44b265a03a42bea6e6f85d44f4cfe278226))
+
 ## [0.89.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.88.0...panel-de-control-v0.89.0) (2026-11-12)
 
 
