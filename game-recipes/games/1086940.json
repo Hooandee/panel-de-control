@@ -1,26 +1,29 @@
 {
   "name": "Baldur's Gate 3",
-  "revision": 1,
-  "conditions": {
-    "engine": [
-      "optiscaler"
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "bin/bg3_dx11.exe",
+    "args": [
+      "--skip-launcher"
     ],
-    "platform": [
-      "linux"
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki"
     ],
-    "arch": [
-      "x86_64"
-    ]
+    "effective_api": "d3d11",
+    "recommended_input": "dlss"
   },
-  "exe": "bin/bg3_dx11.exe",
-  "args": [
-    "--skip-launcher"
-  ],
-  "ini": {},
-  "dependencies": [],
-  "source_urls": [
-    "https://github.com/optiscaler/OptiScaler/wiki"
-  ],
-  "effective_api": "d3d11",
-  "recommended_input": "dlss"
+  "windows": {
+    "status": "unknown"
+  }
 }

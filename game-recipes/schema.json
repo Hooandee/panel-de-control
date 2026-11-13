@@ -6,7 +6,7 @@
       "type": "object",
       "properties": {
         "schema_version": {
-          "const": 1
+          "const": 2
         },
         "catalog_version": {
           "type": "integer",
@@ -139,16 +139,61 @@
             "verb"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "windows_redist"
+            },
+            "provider": {
+              "const": "microsoft"
+            },
+            "component": {
+              "enum": [
+                "vc14_x64"
+              ]
+            },
+            "min_version": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+){0,3}$"
+            },
+            "page_url": {
+              "type": "string",
+              "pattern": "^https://learn\\.microsoft\\.com/",
+              "maxLength": 2048
+            },
+            "requires": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+              },
+              "uniqueItems": true,
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "kind",
+            "provider",
+            "component",
+            "min_version",
+            "page_url"
+          ],
+          "additionalProperties": false
         }
       ]
     },
-    "game": {
+    "recipe": {
+      "description": "Recipe for one operating system.",
       "type": "object",
       "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 512
+        "status": {
+          "description": "tested: verified on this OS; untested: written but not yet verified.",
+          "enum": [
+            "tested",
+            "untested"
+          ]
         },
         "revision": {
           "type": "integer",
@@ -169,19 +214,6 @@
                   "helixsr",
                   "proton",
                   "mako"
-                ]
-              }
-            },
-            "platform": {
-              "type": "array",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": {
-                "enum": [
-                  "linux",
-                  "windows",
-                  "darwin",
-                  "android"
                 ]
               }
             },
@@ -209,7 +241,6 @@
           },
           "required": [
             "engine",
-            "platform",
             "arch"
           ],
           "additionalProperties": false
@@ -318,10 +349,59 @@
             "panel",
             "game"
           ]
+        },
+        "recommended_build": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,79}$"
+        },
+        "optiscaler_root_files": {
+          "description": "Files of the selected OptiScaler build that must also sit beside the executable.",
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[^/\\\\:]+\\.[dD][lL][lL]$"
+          }
+        },
+        "reframework_upscaler": {
+          "description": "REFramework's upscaler does the upscaling; the quality setting drives its render size.",
+          "type": "boolean",
+          "default": false
+        },
+        "optiscaler_fg": {
+          "description": "False when OptiScaler's own frame generation breaks the game.",
+          "type": "boolean",
+          "default": true
+        },
+        "game_settings": {
+          "description": "Options the user must change in the game's own menu, in the game's words.",
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "setting": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "setting",
+              "value"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
-        "name",
+        "status",
         "revision",
         "conditions",
         "exe",
@@ -329,6 +409,55 @@
         "ini",
         "dependencies",
         "source_urls"
+      ],
+      "additionalProperties": false
+    },
+    "no_recipe": {
+      "description": "No recipe for this operating system. unknown: not studied yet; not_applicable: the game does not need or cannot use one there.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "unknown",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "block": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/recipe"
+        },
+        {
+          "$ref": "#/$defs/no_recipe"
+        }
+      ]
+    },
+    "game": {
+      "description": "One game. Each operating system has its own independent block; nothing is inherited between blocks.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "linux": {
+          "$ref": "#/$defs/block"
+        },
+        "windows": {
+          "$ref": "#/$defs/block"
+        }
+      },
+      "required": [
+        "name",
+        "linux",
+        "windows"
       ],
       "additionalProperties": false
     },
