@@ -105,6 +105,24 @@ public sealed class InstallParityTests : IDisposable
     }
 
     [Theory]
+    [InlineData("{\"files\": {\"../outside.dll\": null}, \"backups\": [], \"dirs\": [], \"configuration\": {}}")]
+    [InlineData("{\"files\": {}, \"backups\": [\"..\\\\outside.dll\"], \"dirs\": [], \"configuration\": {}}")]
+    [InlineData("{\"files\": {\"/etc/outside.dll\": null}, \"backups\": [], \"dirs\": [], \"configuration\": {}}")]
+    [InlineData("{\"files\": {}, \"backups\": [], \"dirs\": [\"a/../..\"], \"configuration\": {}}")]
+    public void AnEditedManifestNeverReachesOutsideTheGame(string manifest)
+    {
+        var game = Path.Combine(_root, "unsafe", "game");
+        var outside = Path.Combine(_root, "unsafe", "outside.dll");
+        Directory.CreateDirectory(Path.Combine(game, GameManifest.Folder, "backup"));
+        File.WriteAllText(outside, "not the game's");
+        File.WriteAllText(Path.Combine(game, GameManifest.Folder, GameManifest.FileName), manifest);
+
+        Assert.Equal("unsafe_folder", Assert.Throws<UpscalerException>(() => GameFiles.Remove(game)).Code);
+        Assert.True(File.Exists(outside));
+        Assert.True(Directory.Exists(Path.Combine(_root, "unsafe")));
+    }
+
+    [Theory]
     [MemberData(nameof(IniCases))]
     public void IniMatches(string name)
     {

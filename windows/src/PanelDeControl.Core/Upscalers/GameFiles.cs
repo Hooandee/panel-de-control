@@ -328,7 +328,24 @@ public static class GameFiles
         return new UpscalerException("write_failed", detail.Length > 200 ? detail.Substring(0, 200) : detail);
     }
 
-    private static string Join(string root, string relative) => Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+    /// <summary>
+    /// A manifest entry under <paramref name="root"/>. The manifest sits in a folder anyone can edit, so an absolute
+    /// path or a <c>..</c> in it would make Panel delete or move files elsewhere.
+    /// </summary>
+    private static string Join(string root, string relative)
+    {
+        var parts = relative.Split('/', '\\');
+        if (relative.Length == 0 || Path.IsPathRooted(relative) || relative.Contains(':') || parts.Any(part => part is "" or "." or ".."))
+        {
+            throw new UpscalerException("unsafe_folder", "manifest path outside the game folder");
+        }
+        var full = Path.Combine(root, string.Join(Path.DirectorySeparatorChar.ToString(), parts));
+        if (!Inside(Path.GetFullPath(full), Path.GetFullPath(root)))
+        {
+            throw new UpscalerException("unsafe_folder", "manifest path outside the game folder");
+        }
+        return full;
+    }
 
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path) || IsLink(path);
 
