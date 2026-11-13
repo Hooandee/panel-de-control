@@ -46,5 +46,13 @@
     "size": 13293690,
     "filename": "DMC5.zip",
     "format": "zip"
+  },
+  "luma-p5r-825": {
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-825/Luma-Persona_5_Royal.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+    "sha256": "a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e",
+    "size": 37256003,
+    "filename": "Luma-Persona_5_Royal.zip",
+    "format": "zip"
   }
 }

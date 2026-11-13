@@ -36,6 +36,27 @@ def test_pinned_remake_and_dependency_order():
     assert 'dxgi.dll' not in files
 
 
+def test_pinned_persona_5_royal_uses_luma_dlss_through_optiscaler():
+    catalog = rc.load()
+    game = catalog.match('1687950', 'optiscaler', 'linux', 'x86_64')
+    assert game.exe == 'P5R.exe'
+    assert game.args == ()
+    assert game.ini == {'Plugins.LoadReshade': 'true', 'Hotfix.CreateD3D12DeviceForLuma': 'false'}
+    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-p5r']
+    asset = catalog.assets['luma-p5r-825']
+    assert asset.sha256 == 'a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e'
+    assert asset.size == 37256003
+    files = catalog.dependencies['luma-p5r'].files
+    assert len(files) == 52
+    assert files['ReShade64.dll'] == 'dxgi.dll'
+    assert files['Luma-Persona 5 Royal.addon'] == 'Luma-Persona 5 Royal.addon'
+    assert 'dxgi.dll' not in files
+    recipe = recipes.recipe_for('1687950', platform='linux', arch='x86_64')
+    assert 'luma' in recipe.needs
+    assert recipe.recommended_input == 'dlss'
+    assert not recipes.recipe_for('1687950', engine='dll', platform='linux', arch='x86_64').dependencies
+
+
 def test_conditions_use_actual_host(monkeypatch):
     monkeypatch.setattr(rc.host_platform, 'system', lambda: 'Linux')
     monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
@@ -51,7 +72,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 11
+    assert recipe.catalog_version == 12
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
