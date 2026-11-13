@@ -136,6 +136,40 @@ public sealed class InstallParityTests : IDisposable
         }
     }
 
+    [Fact]
+    public void PanelIniMatches()
+    {
+        var catalog = BuildCatalog.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Data", "Upscalers", "catalog.json")));
+        var panel = Fixture["panel"]!.AsObject();
+        var values = panel["values"]!.AsArray();
+        var checkedCases = 0;
+        foreach (var pair in panel["cases"]!.AsObject())
+        {
+            var parts = pair.Key.Split('|');
+            var inputs = panel["inputs"]![parts[2]]!.AsObject().ToDictionary(
+                input => input.Key, input => (IReadOnlyList<string>)input.Value!.AsArray().Select(path => path!.GetValue<string>()).ToList());
+            var effective = UpscalerPlanner.ForGame(catalog, catalog.Build(parts[0])!, inputs, parts[1], Array.Empty<string>());
+            var generation = catalog.Assets.First(asset => asset.Id == effective.Archive).Generation;
+            var plan = UpscalerPlanner.FrameGenPlanFor(parts[1], inputs, null, generation, new[] { "d3d12" }, 2, null);
+            var recipe = panel["recipes"]![parts[3]];
+            var choice = panel["choices"]![int.Parse(parts[4], System.Globalization.CultureInfo.InvariantCulture)]!.AsObject();
+            var result = PanelIni.Compute(catalog, effective,
+                recipe?["ini"]!.AsObject().ToDictionary(item => item.Key, item => item.Value!.GetValue<string>()),
+                recipe?["optipatcher"]!.GetValue<bool>() ?? false,
+                new UpscalerChoice
+                {
+                    Quality = choice["quality"]?.GetValue<string>(),
+                    Sharpness = choice["sharpness"]?.GetValue<string>(),
+                    FrameGen = choice["fg"]?.GetValue<string>() == "on",
+                    Model = choice["model"]?.GetValue<string>(),
+                }, plan);
+            var expected = values[pair.Value!.GetValue<int>()]!.AsArray().Select(item => $"{item![0]}={item[1]}");
+            Assert.True(expected.SequenceEqual(result.Select(item => $"{item.Key}={item.Value}")), pair.Key);
+            checkedCases++;
+        }
+        Assert.True(checkedCases > 1000);
+    }
+
     public static TheoryData<string> IniCases()
     {
         var data = new TheoryData<string>();

@@ -9,10 +9,11 @@ windows/tests/PanelDeControl.Core.Tests/Upscalers must leave the same folders. R
 import json
 import sys
 import tempfile
+from itertools import product
 from pathlib import Path
 from unittest import mock
 
-from upscalers import games, ini, service
+from upscalers import catalog, games, ini, service
 from upscalers.service import UpscalerService
 
 FIXTURE = Path(__file__).parents[1] / "shared" / "fixtures" / "upscalers" / "install_parity.json"
@@ -88,6 +89,43 @@ ARCHIVES = {
     "nightly-10": (10, ["OptiScaler.dll", "OptiScaler.ini", "OptiScaler/fakenvapi.dll", "OptiScaler/Run.BAT",
                         "OptiScaler/sub/a.dll", "D3D12_Optiscaler/D3D12Core.dll", "readme.md"]),
 }
+
+PANEL_GPUS = ("rdna35", "rdna2", "intel", "nvidia")
+PANEL_INPUTS = {"fsr31": {"fsr31": ["amd_fidelityfx_dx12.dll"]}, "dlss": {"dlss": ["nvngx_dlss.dll"]},
+                "fsrfg": {"fsr31": ["amd_fidelityfx_dx12.dll"], "fsrfg": ["amd_fidelityfx_dx12.dll"]}}
+PANEL_CHOICES = ({}, {"quality": "performance", "sharpness": "off"}, {"quality": "native", "sharpness": "high"},
+                 {"quality": "bogus", "sharpness": "soft", "fg": "on"}, {"model": "lite"}, {"model": "full", "fg": "on"})
+
+
+class PanelRecipe:
+    """The recipe attributes `panel_ini` reads."""
+    def __init__(self, values: dict, optipatcher: bool):
+        self.ini = values
+        self.optipatcher = optipatcher
+
+
+PANEL_RECIPES = {"none": None, "ini": PanelRecipe({"Menu.OverlayMenu": "false", "Upscalers.Dx12Upscaler": "xess"}, False),
+                 "optipatcher": PanelRecipe({}, True)}
+
+
+def _panel() -> dict:
+    """OptiScaler.ini keys Panel owns for every OptiScaler build, GPU, game inputs, recipe and choice: ordered pairs."""
+    cases = {}
+    builds = [build for build in catalog.BUILDS.values() if build.engine == "optiscaler"]
+    for build, gpu, inputs, recipe, index in product(builds, PANEL_GPUS, PANEL_INPUTS, PANEL_RECIPES, range(len(PANEL_CHOICES))):
+        effective = catalog.for_game(build, PANEL_INPUTS[inputs], gpu)
+        generation = catalog.ASSETS[effective.archive].generation
+        plan = catalog.fg_plan(gpu, PANEL_INPUTS[inputs], None, generation, ["d3d12"], 2, None)
+        values = service.panel_ini(effective, PANEL_RECIPES[recipe], PANEL_CHOICES[index], plan)
+        cases[f"{build.id}|{gpu}|{inputs}|{recipe}|{index}"] = [[key, value] for key, value in values.items()]
+    values, index_of, keys = [], {}, {}
+    for key, value in cases.items():
+        text = json.dumps(value)
+        if text not in index_of:
+            index_of[text] = len(values)
+            values.append(value)
+        keys[key] = index_of[text]
+    return {"values": values, "cases": keys}
 
 
 def _tree(folder: Path) -> dict:
@@ -170,6 +208,10 @@ def snapshot() -> dict:
         "ini": {name: {"text": text, "overrides": overrides, "result": ini.apply(text, overrides),
                        "reads": {key: ini.read(ini.apply(text, overrides), key) for key in overrides}}
                 for name, (text, overrides) in INI_CASES.items()},
+        "panel": {"inputs": PANEL_INPUTS, "choices": list(PANEL_CHOICES),
+                  "recipes": {key: {"ini": value.ini, "optipatcher": value.optipatcher} if value else None
+                              for key, value in PANEL_RECIPES.items()},
+                  **_panel()},
         "archives": {name: {"generation": generation, "files": files, "sources": _archive(generation, files)}
                      for name, (generation, files) in ARCHIVES.items()},
     }
