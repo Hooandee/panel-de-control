@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-terciopelo",
+  "cssLoaderName": "Hooandee Terciopelo",
+  "version": "0.2.12",
+  "displayName": {
+    "es": "Terciopelo",
+    "en": "Terciopelo",
+    "it": "Terciopelo"
+  },
+  "description": {
+    "es": "Un teclado de terciopelo negro con letras en champán y el sonido de una máquina de escribir. Cada tecla se hunde al pulsarla y suelta un poco de polvo dorado.",
+    "en": "A black velvet keyboard with champagne legends and the sound of a typewriter. Every key sinks when pressed and lets out a little golden dust.",
+    "it": "Una tastiera di velluto nero con lettere color champagne e il suono di una macchina da scrivere. Ogni tasto affonda quando lo premi e rilascia un po' di polvere dorata."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.12/theme.zip",
+    "size": 183687,
+    "sha256": "3e36b7cdcd901b380b5a303e6d7506251d32b09e3da5dcef6ba8d72228338397"
+  },
+  "minimumVersions": {
+    "panel": "0.89.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "exclusiveGroup": "keyboard",
+  "notes": {
+    "es": "Viste el teclado en pantalla de Steam y convive con tu tema de Inicio.",
+    "en": "Dresses Steam's on-screen keyboard and works alongside your Home theme.",
+    "it": "Veste la tastiera su schermo di Steam e convive con il tuo tema della Home."
+  }
+}
