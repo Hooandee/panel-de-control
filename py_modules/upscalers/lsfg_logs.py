@@ -101,7 +101,7 @@ class RuntimeLog:
             self._thread.join(timeout=1)
 
     def report(self) -> dict:
-        from report.collector import redact_text
+        from pdc_report.collector import redact_text
 
         result = {'available': False, 'scope': 'engine', 'generation_confirmed': None,
                   'retention_bytes': MAX_BYTES, 'retention_interval_seconds': self.interval,

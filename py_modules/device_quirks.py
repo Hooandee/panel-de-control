@@ -59,6 +59,15 @@ def xbox_ally_x_20_legacy_rail_floors(device, root: str = "/") -> dict[str, int]
     return {}
 
 
+def asus_legacy_overshoot_guard(device, root: str = "/") -> bool:
+    # ROG Xbox Ally (Z2A, RC73YA): kernels without its asus-armoury power table leave only
+    # asus-nb-wmi, whose readback echoed 5 W while the APU drew 18-22 W in a game.
+    return bool(xbox_ally_x_20_legacy_rail_floors(device, root)) or (
+        getattr(device, "key", None) == "rog_xbox_ally"
+        and _read_dmi(root, "board_name").casefold() == "rc73ya"
+    )
+
+
 def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
     if (
         getattr(device, "key", None) != "legion_go_2"

@@ -92,3 +92,36 @@ it("records ownership before launch application and rolls back if that record fa
   expect(mocks.recordUpscalerArgs).toHaveBeenCalledWith(game.appid, ["-dx11"], ["dxgi=n,b"], []);
   expect(mocks.finish).toHaveBeenCalledWith(false);
 });
+
+it("does not uninstall again what opening the transition already took out (HelixSR)", async () => {
+  mocks.getUpscalersGame.mockResolvedValueOnce({ install: { build: "hlx-fsr4", engine: "helixsr" }, analysis: { foreign: false } })
+    .mockResolvedValueOnce({ install: null, analysis: { foreign: false } });
+  const request = { scaling_enabled: true };
+  await saveExclusiveMakoProfile(game, request);
+  expect(mocks.uninstallUpscaler).not.toHaveBeenCalled();
+  expect(mocks.saveMakoProfile).toHaveBeenCalledWith(game.appid, game.liveAppid, request, false);
+});
+
+it("says HelixSR is gone when spatial Mako fails after the switch took it out", async () => {
+  mocks.getUpscalersGame.mockResolvedValueOnce({ install: { build: "hlx-fsr4", engine: "helixsr" }, analysis: { foreign: false } })
+    .mockResolvedValueOnce({ install: null, analysis: { foreign: false } });
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  mocks.saveMakoProfile.mockRejectedValue(new Error("launch_failed"));
+  await expect(saveExclusiveMakoProfile(game, { scaling_enabled: true })).rejects.toThrow("transition_failed_clean");
+  expect(mocks.finish).toHaveBeenCalledWith(false);
+});
+it("says HelixSR is gone when an install that took it out ends in an error", async () => {
+  job.kind = "install";
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  const started = await startInstallJob(game, { build: "fsr", quality: "native", sharpness: null });
+  const completed = waitForJobCompletion(started.id).catch(error => error.message);
+  job = { ...job, state: "error", error: "download_failed" };
+  await vi.advanceTimersByTimeAsync(250);
+  expect(await completed).toBe("transition_failed_clean");
+  expect(mocks.finish).toHaveBeenCalledWith(false);
+});
+it("says HelixSR is gone when the install cannot even start after taking it out", async () => {
+  mocks.prepareScalerTransition.mockResolvedValue({ finish: mocks.finish, previousRemoved: true });
+  mocks.installUpscaler.mockRejectedValue(new Error("busy"));
+  await expect(startInstallJob(game, { build: "fsr", quality: "native", sharpness: null })).rejects.toThrow("transition_failed_clean");
+});

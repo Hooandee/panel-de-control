@@ -99,6 +99,7 @@ const SELECTION_TICK_MS = 400;
 const TRAILER_MAX_HEIGHT = 360;
 const CLAIM_CHECK_MS = 30000;
 const POSITION_SAVE_MS = 15000;
+const AUDIBLE_CHECK_MS = 8000;
 const RESUME_TICK_MS = 2000;
 const CACHE_RECONCILE_MS = 60000;
 const QUEUE_SAVE_MS = 1500;
@@ -203,6 +204,10 @@ export class AmbientRuntime {
   private saveSequence = 0;
   private librarySession: LibrarySession | null = null;
 
+  private readonly undecodable = new Set<string>();
+  private audibleKey: string | null = null;
+  private audibleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly audibleChecked = new Set<string>();
   private claimChangedAt = Date.now();
   private pendingPainter: { id: string; since: number } | null = null;
   private signalTimer: ReturnType<typeof setTimeout> | null = null;
@@ -216,6 +221,7 @@ export class AmbientRuntime {
       spDocument,
       (url, _w, height) => this.maybeOptimize(url, height),
       (detail) => void rpc.recordAmbientEvent("playback_error", detail).catch(() => undefined),
+      (url) => this.decodeFallback(url),
     );
     this.channel.setFrameSource(() => this.layer.activeMedia());
     this.musicActivity = new MusicActivity((playing) => this.channel.setMusicPlaying(playing));
@@ -267,7 +273,9 @@ export class AmbientRuntime {
       this.patch({ player });
       this.scheduleQueueSave(player);
       this.musicActivity.update(musicAudible(player));
+      this.watchAudible(player);
     }));
+    this.cleanups.push(() => this.watchAudible(null));
     this.cleanups.push(this.channel.onClaimsChanged(() => {
       this.claimChangedAt = Date.now();
       this.checkSignals();
@@ -328,8 +336,31 @@ export class AmbientRuntime {
       this.savedQueue = queueSignature(settings.music.queue, settings.music.repeat, settings.music.shuffle);
       this.player.setModes(settings.music.repeat, settings.music.shuffle);
     }
-    if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
+    const steamRestarted = !!settings && markSteamSession() && steamJustStarted();
+    if (settings?.music.enabled && steamRestarted) {
+      console.info("[Ambient] music left paused after Steam started");
+      void rpc.recordAmbientEvent("music", "paused_at_steam_start").catch(() => undefined);
+      await this.updateSettings((s) => ({ ...s, music: { ...s.music, enabled: false } }));
+      if (settings.music.queue.length) void this.restoreSavedQueue(settings, false);
+    } else if (settings?.music.enabled && planForGameState(this.inGame, settings.music.inGameMediaLevel).playing) void this.startMusic();
     else if (settings?.music.queue.length) void this.restoreSavedQueue(settings, false);
+  }
+
+  /** Once per started track, a few seconds in: how it is being played and where Steam sends the sound. */
+  private watchAudible(player: PlayerSnapshot | null): void {
+    const key = player?.status === "playing" && player.track ? `${player.queueIndex}|${player.track.id}` : null;
+    if (key === this.audibleKey) return;
+    if (this.audibleTimer !== null) clearTimeout(this.audibleTimer);
+    this.audibleTimer = null;
+    this.audibleKey = key;
+    if (!key || this.audibleChecked.has(key)) return;
+    this.audibleTimer = setTimeout(() => {
+      this.audibleTimer = null;
+      if (this.stopped || this.audibleKey !== key) return;
+      if (this.audibleChecked.size > 200) this.audibleChecked.clear();
+      this.audibleChecked.add(key);
+      void rpc.checkAmbientAudio(`${this.inGame ? "in_game " : ""}${this.player.describeOutput()}`).catch(() => undefined);
+    }, AUDIBLE_CHECK_MS);
   }
 
   stop(): void {
@@ -410,6 +441,7 @@ export class AmbientRuntime {
     this.urls.clear();
     this.pendingUrls.clear();
     this.optimized.clear();
+    this.undecodable.clear();
     this.previewRequests.clear();
     this.patch({ previews: {}, currentUrl: null, previewUrl: null });
   }
@@ -984,34 +1016,54 @@ export class AmbientRuntime {
   private maybeOptimize(url: string, height: number): void {
     const settings = this.settings();
     const current = this.snapshot.current;
-    const view = spDocument()?.defaultView;
-    const screenHeight = Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1));
     if (!settings?.background.optimizeVideos || !current || current.kind !== "video") return;
     const quality = settings.background.videoQuality;
-    const target = videoTarget(quality, screenHeight);
+    const target = videoTarget(quality, screenPixelHeight());
     const key = `${current.ref}|${quality}`;
     if (!current.ref.startsWith("local:") || this.optimized.has(key) || this.noSpace.has(key) || !needsCopy(quality, height, target)) return;
     if (this.snapshot.optimizing || this.urls.get(current.ref) !== url) return;
     this.patch({ optimizing: true });
     this.optimizingRef = current.ref;
-    const generation = this.cacheGeneration;
     void this.render();
-    void rpc.optimizeAmbientMedia(current.ref, target.height, target.fps)
-      .then((result) => {
-        if (this.stopped || generation !== this.cacheGeneration) return;
-        if ("id" in result) {
-          this.optimized.set(key, result.id);
-          if (this.snapshot.current?.ref === current.ref) void this.render();
-        } else if (result.error === "no_space") this.reportNoSpace(key);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        this.optimizingRef = null;
-        this.patch({ optimizing: false });
-        void this.render();
-      });
+    void this.encodeCopy(current.ref, key, target.height, target.fps, "h264").finally(() => {
+      this.optimizingRef = null;
+      this.patch({ optimizing: false });
+      void this.render();
+    });
   }
 
+  /**
+   * Steam's CEF can lose H.264 decoding entirely after a Steam restart (kUnsupportedConfig on every
+   * H.264 file while VP8/VP9 still play). A local video that fails that way gets a VP9 copy.
+   */
+  private decodeFallback(url: string): void {
+    const current = this.snapshot.current;
+    if (this.inGame || !current || current.kind !== "video" || !current.ref.startsWith("local:")) return;
+    const key = `${current.ref}|${this.settings()?.background.videoQuality ?? "fluid"}`;
+    if (this.undecodable.has(key) || this.noSpace.has(`${key}|vp9`) || this.urls.get(this.optimized.get(key) ?? current.ref) !== url) return;
+    this.undecodable.add(key);
+    void rpc.recordAmbientEvent("playback_error", "background video undecodable; encoding vp9").catch(() => undefined);
+    void this.encodeCopy(current.ref, key, Math.min(720, screenPixelHeight()), 30, "vp9").then((done) => {
+      if (!done) this.undecodable.delete(key);
+    });
+  }
+
+  /** Asks the backend for a re-encoded copy and, once ready, shows it in place of the original. */
+  /** False when the copy was not attempted to the end (no backend, or cancelled by a game), so the caller may ask again. */
+  private async encodeCopy(ref: string, key: string, height: number, fps: number, codec: "h264" | "vp9"): Promise<boolean> {
+    const generation = this.cacheGeneration;
+    const result = await rpc.optimizeAmbientMedia(ref, height, fps, codec).catch(() => null);
+    if (!result || ("error" in result && result.error === "cancelled")) return false;
+    if (this.stopped || generation !== this.cacheGeneration) return true;
+    if ("id" in result) {
+      this.optimized.set(key, result.id);
+      if (this.snapshot.current?.ref === ref) void this.render();
+      return true;
+    }
+    if (result.error === "no_space") this.reportNoSpace(codec === "vp9" ? `${key}|vp9` : key);
+    if (codec === "vp9") void rpc.recordAmbientEvent("playback_error", `background vp9 copy failed: ${result.error}`).catch(() => undefined);
+    return true;
+  }
 
   private syncMusicOwnership(decision: ArbiterDecision, settings: AmbientSettings): void {
     if (decision.music !== "panel") {
@@ -1220,11 +1272,13 @@ export class AmbientRuntime {
     return tracks.filter((t): t is Track => t !== null);
   }
 
-  /** Links sent from a phone or pasted: each one becomes a queue entry; pictures are left out. */
-  enqueueLinks(urls: string[]): number {
-    const tracks = urls.filter((url) => linkKind(url) !== "image").map(linkTrack);
+  /** Links sent from a phone or pasted: each one becomes a queue entry; pictures are left out, channel lists go to Lists. */
+  async enqueueLinks(urls: string[]): Promise<number> {
+    const playable = urls.filter((url) => linkKind(url) !== "image");
+    const lists = await Promise.all(playable.map((url) => this.savedAsChannelList(url, "")));
+    const tracks = playable.filter((_, index) => !lists[index]).map(linkTrack);
     this.enqueue(tracks);
-    return tracks.length;
+    return tracks.length + lists.filter(Boolean).length;
   }
 
   /** Opens the page a phone on the same network uses to send links; texts are the page's own copy. */
@@ -1235,7 +1289,7 @@ export class AmbientRuntime {
   /** Queues whatever the phone sent since the last call. */
   async pollShare(): Promise<{ added: number; active: boolean }> {
     const result = await rpc.takeAmbientShared().catch(() => ({ links: [] as string[], active: false }));
-    return { added: result.links.length ? this.enqueueLinks(result.links) : 0, active: result.active };
+    return { added: result.links.length ? await this.enqueueLinks(result.links) : 0, active: result.active };
   }
 
   stopShare(): void {
@@ -1534,6 +1588,25 @@ export class AmbientRuntime {
     return this.applyServerSettings(rpc.addAmbientFavorite(scope, url, name, art, subtitle));
   }
 
+  /** A link typed or pasted in the library: a channel list goes to Lists, anything else is saved as a favorite. */
+  async addLink(scope: "background" | "radio", url: string, name: string): Promise<boolean> {
+    if (scope === "radio" && await this.savedAsChannelList(url, name)) return true;
+    return this.addFavorite(scope, url, name);
+  }
+
+  /**
+   * Channel lists often end in .m3u8 like a single stream (TDTChannels' tv.m3u8); played as one they
+   * only fail. Such a link goes to Lists instead, where its channels can be picked.
+   */
+  private async savedAsChannelList(url: string, name: string): Promise<boolean> {
+    if (!M3U_LINK.test(url)) return false;
+    const inspected = await rpc.inspectAmbientLink(url).catch(() => ({ kind: "unknown" as const }));
+    if (inspected.kind !== "list") return false;
+    const saved = await this.addPlaylist(url, name || linkName(url));
+    if (saved) this.ports.notify(this.ports.translate("ambient.lists.title"), this.ports.translate("ambient.lists.fromLink"));
+    return saved;
+  }
+
   addPlaylist(url: string, name: string): Promise<boolean> {
     return this.applyServerSettings(rpc.addAmbientPlaylist(url, name));
   }
@@ -1623,6 +1696,28 @@ function toQueued(track: Track): QueuedTrack {
 
 function queueSignature(queue: readonly QueuedTrack[], repeat: RepeatMode, shuffle: boolean): string {
   return JSON.stringify([repeat, shuffle, queue.map((q) => q.id)]);
+}
+
+function screenPixelHeight(): number {
+  const view = spDocument()?.defaultView;
+  return Math.round((view?.innerHeight ?? 800) * (view?.devicePixelRatio ?? 1));
+}
+
+const STEAM_SESSION_KEY = "__pdcAmbientSteamSession";
+/** Decky loads plugins within this time of Steam's UI starting; a later first start is an update or reinstall. */
+const STEAM_START_WINDOW_MS = 180_000;
+
+function steamJustStarted(): boolean {
+  return typeof performance !== "undefined" && performance.now() < STEAM_START_WINDOW_MS;
+}
+const M3U_LINK = /^https?:\/\/[^?#]+\.m3u8?(?:[?#]|$)/i;
+
+/** True the first time Ambiente starts in this Steam UI: the mark lives in Steam's JS context, so a Panel reload keeps it. */
+function markSteamSession(): boolean {
+  const scope = globalThis as Record<string, unknown>;
+  const first = scope[STEAM_SESSION_KEY] !== true;
+  scope[STEAM_SESSION_KEY] = true;
+  return first;
 }
 
 function stationTrack(station: Station): Track {

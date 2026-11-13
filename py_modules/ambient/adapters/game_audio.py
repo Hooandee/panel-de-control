@@ -10,7 +10,19 @@ from pdc_platform.user_session import find_session, session_command
 _STEAM_BINARIES = frozenset({"steamwebhelper", "steam"})
 _TIMEOUT_S = 3
 
+
 Runner = Callable[[list[str]], Optional[str]]
+
+
+def _sink_kind(name: str) -> str:
+    """Bus and profile of a sink without the middle, which holds Bluetooth addresses and USB serials."""
+    parts = name.split(".")
+    return f"{parts[0]}..{parts[-1]}" if len(parts) > 2 else parts[0][:60]
+
+
+def _volume_percents(stream: dict[str, Any]) -> list[int]:
+    channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
+    return [int(p) for p in (str(c.get("value_percent", "")).rstrip("%") for c in channels) if p.isdigit()]
 
 
 def game_streams(sink_inputs: list[dict[str, Any]]) -> list[tuple[int, int]]:
@@ -25,10 +37,19 @@ def game_streams(sink_inputs: list[dict[str, Any]]) -> list[tuple[int, int]]:
         index = stream.get("index")
         if not isinstance(index, int):
             continue
-        channels = [c for c in (stream.get("volume") or {}).values() if isinstance(c, dict)]
-        percents = [int(str(c.get("value_percent", "100")).rstrip("%") or 100) for c in channels]
-        streams.append((index, max(percents) if percents else 100))
+        streams.append((index, max(_volume_percents(stream), default=100)))
     return streams
+
+
+def steam_streams(sink_inputs: list[dict[str, Any]]) -> list[str]:
+    """Steam's own sink inputs (where Ambiente sounds): volume, mute, paused and the sink they go to."""
+    found: list[str] = []
+    for stream in sink_inputs:
+        props = stream.get("properties") or {}
+        if props.get("application.process.binary") not in _STEAM_BINARIES:
+            continue
+        found.append(f"vol={max(_volume_percents(stream), default='?')} mute={stream.get('mute')} corked={stream.get('corked')} sink={stream.get('sink')}")
+    return found
 
 
 class GameAudio:
@@ -46,6 +67,18 @@ class GameAudio:
         except (OSError, subprocess.SubprocessError):
             return None
         return out.stdout if out.returncode == 0 else None
+
+    def steam_output(self) -> str:
+        listing = self._runner(["pactl", "-f", "json", "list", "sink-inputs"])
+        try:
+            parsed = json.loads(listing) if listing is not None else None
+        except ValueError:
+            parsed = None
+        if not isinstance(parsed, list):
+            return "unreadable"
+        streams = steam_streams(parsed)
+        default = _sink_kind((self._runner(["pactl", "get-default-sink"]) or "?").strip())
+        return f"streams={len(streams)} default_sink={default[:60]} " + " | ".join(streams[:4])
 
     def set_level(self, percent: int) -> dict[str, Any]:
         percent = int(max(0, min(100, percent)))

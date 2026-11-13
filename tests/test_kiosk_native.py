@@ -173,20 +173,40 @@ def test_grid_matches_the_web_layout_and_tiles_do_not_overlap():
             assert ra.x + ra.w <= rb.x or rb.x + rb.w <= ra.x or ra.y + ra.h <= rb.y or rb.y + rb.h <= ra.y, (a, b)
 
 
+@pytest.mark.parametrize("orientation", ["right", "left"])
 @pytest.mark.parametrize("point", [(0, 0), (620, 540), (100, 400), (612.5, 3.25)])
-def test_rotation_and_touch_mapping_are_inverse(point):
+def test_rotation_and_touch_mapping_are_inverse(point, orientation):
     panel_w, panel_h = 1080, 1240
-    xx, yx, xy, yy, x0, y0 = geometry.rotation(panel_w, panel_h)
+    xx, yx, xy, yy, x0, y0 = geometry.rotation(panel_w, panel_h, orientation)
     lx, ly = point
     px, py = xx * lx + xy * ly + x0, yx * lx + yy * ly + y0
     assert 0 <= px <= panel_w and 0 <= py <= panel_h
-    back = geometry.logical_point(px, py, panel_w, panel_h)
+    back = geometry.logical_point(px, py, panel_w, panel_h, orientation)
     assert back == pytest.approx(point)
 
 
 def test_top_left_of_the_deck_lands_on_the_panel_edge_the_landscape_top_faces():
     # Mounted a quarter turn clockwise: the deck's top edge is the panel's right (x = width) edge.
     assert geometry.logical_point(1080, 0, 1080, 1240) == (0, 0)
+
+
+def test_pocket_ds_panel_is_turned_the_other_way():
+    # A quarter turn counter-clockwise: the deck's top-left corner sits at the panel's bottom-left.
+    assert geometry.logical_point(0, 1240, 1080, 1240, "left") == (0, 0)
+    xx, yx, xy, yy, x0, y0 = geometry.rotation(1080, 1240, "left")
+    assert (x0, y0) == (0.0, 1240.0)
+    # Same deck point, opposite panel corners: Thor's mapping drawn on a Pocket DS shows it upside down.
+    right = geometry.rotation(1080, 1240, "right")
+    lx, ly = 100, 50
+    thor = (right[0] * lx + right[2] * ly + right[4], right[1] * lx + right[3] * ly + right[5])
+    ds = (xx * lx + xy * ly + x0, yx * lx + yy * ly + y0)
+    assert thor[0] + ds[0] == pytest.approx(1080) and thor[1] + ds[1] == pytest.approx(1240)
+
+
+@pytest.mark.parametrize("value", [None, "", "normal", "upside_down", "RIGHT"])
+def test_unknown_orientations_keep_the_thor_mapping(value):
+    assert geometry.panel_orientation(value) == "right"
+    assert geometry.panel_orientation("left") == "left"
 
 
 def test_fps_choices_match_the_web_kiosk():

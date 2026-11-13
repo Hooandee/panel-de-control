@@ -33,10 +33,11 @@ class AsusNbWmiBackend(TDPBackend):
         ownership_lock_path: str | None = None,
         write_max_ac: int | None = None,
         rail_floors: dict[str, int] | None = None,
+        overshoot_guard: bool = False,
     ) -> None:
         self._fallback = fallback
         self._rail_floors = dict(rail_floors or {})
-        self.hidden_overshoot_guard = bool(self._rail_floors)
+        self.hidden_overshoot_guard = bool(self._rail_floors) or bool(overshoot_guard)
         self._thermal_policy_path = os.path.join(root, _BASE, _THERMAL_POLICY)
         self.thermal_policy_reassert = self.hidden_overshoot_guard and os.path.isfile(
             self._thermal_policy_path
@@ -274,6 +275,8 @@ class AsusNbWmiBackend(TDPBackend):
         }
         if self._rail_floors:
             diagnostics["rail_floors"] = dict(self._rail_floors)
+        if self.hidden_overshoot_guard:
+            diagnostics["overshoot_guard"] = True
         if self.thermal_policy_reassert:
             diagnostics["thermal_policy"] = self.read_thermal_policy()
         if self._selection_failure:

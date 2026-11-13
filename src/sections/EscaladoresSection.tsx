@@ -11,7 +11,7 @@ import { onUpscalersGameRequest, takePendingUpscalersGame } from "../upscalers/d
 import { theme } from "../theme";
 import { BulkPanel } from "../upscalers/BulkPanel";
 import { GameView } from "../upscalers/GameView";
-import { IN_GAME_MODES, publishOverview, readInGameMode, setUpscalersSectionOpen, writeInGameMode, type InGameMode } from "../upscalers/overlays";
+import { IN_GAME_MODES, publishOverview, readCoverBadges, readInGameMode, setUpscalersSectionOpen, writeCoverBadges, writeInGameMode, type InGameMode } from "../upscalers/overlays";
 import { Fold, Label, SegmentRow } from "../upscalers/parts";
 import { badgeLabel } from "../upscalers/model";
 import { MOTION_CSS, Skeleton, statusColor } from "../upscalers/parts";
@@ -27,10 +27,13 @@ export const EscaladoresSection: FC = () => {
   const [held] = useState(takeHeldPage);
   const [selected, setSelected] = useState<GameEntry | null>(() => held ? listInstalledGames().find((g) => g.liveAppid === held.appid) ?? null : null);
   const [compat, setCompat] = useState<Record<string, GameCompat>>({});
+  const [compatRead, setCompatRead] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inGame, setInGame] = useState<InGameMode>(readInGameMode);
+  const [coversOpen, setCoversOpen] = useState(false);
+  const [covers, setCovers] = useState(readCoverBadges);
 
   const refresh = useCallback(async () => {
     try {
@@ -73,9 +76,18 @@ export const EscaladoresSection: FC = () => {
   useEffect(() => {
     if (!appids) return;
     let alive = true;
-    getUpscalersCompat(appids.split(",")).then((next) => { if (alive) setCompat(next); }).catch(() => undefined);
+    const ids = appids.split(",");
+    // The backend answers at most 400 games per call; a whole store library can be longer.
+    const batches = Array.from({ length: Math.ceil(ids.length / 400) }, (_, index) => ids.slice(index * 400, index * 400 + 400));
+    Promise.all(batches.map((batch) => getUpscalersCompat(batch).catch(() => ({}))))
+      .then((parts) => { if (alive) setCompat(Object.assign({}, ...parts)); })
+      .finally(() => { if (alive) setCompatRead(true); });
     return () => { alive = false; };
   }, [appids]);
+  // Store shortcuts with no installed game behind them (Unifideck lists a whole library) have nothing to scale.
+  // Shortcuts wait for that answer, so a library-only entry never shows up and then vanishes under the focus.
+  const listed = useMemo(() => games.filter((g) => compatRead ? !compat[String(g.liveAppid)]?.unavailable : !g.isNonSteam),
+    [games, compat, compatRead]);
 
   return (
     <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
@@ -103,9 +115,15 @@ export const EscaladoresSection: FC = () => {
                   onChange={(mode) => { setInGame(mode); writeInGameMode(mode); }}
                   options={IN_GAME_MODES.map((mode) => ({ value: mode, label: t(`up.inGame.${mode}`) }))}
                 />}
+                <Fold label={t("up.covers.title")} open={coversOpen} onToggle={() => setCoversOpen(!coversOpen)} />
+                {coversOpen && <SegmentRow
+                  value={covers ? "on" : "off"}
+                  onChange={(value) => { setCovers(value === "on"); writeCoverBadges(value === "on"); }}
+                  options={(["on", "off"] as const).map((value) => ({ value, label: t(`up.covers.${value}`) }))}
+                />}
                 <Fold label={t("up.list.manage")} open={bulkOpen} onToggle={() => setBulkOpen(!bulkOpen)} />
                 <NavigationGroup flow-children="column" childFocusDisabled={!bulkOpen} aria-hidden={!bulkOpen} style={{ display: bulkOpen ? "flex" : "none", flexDirection: "column", gap: theme.space.xs }}>
-                  <BulkPanel games={games} overview={overview} compat={compat} onChanged={() => void refresh()} />
+                  <BulkPanel games={listed} overview={overview} compat={compat} onChanged={() => void refresh()} />
                 </NavigationGroup>
               </NavigationGroup>
               <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, fontSize: theme.font.caption, color: theme.color.textMuted, paddingBottom: 4 }}>
@@ -114,10 +132,10 @@ export const EscaladoresSection: FC = () => {
               </div>
             </>
           )}
-          {overview && games.length === 0 && (
+          {overview && listed.length === 0 && (
             <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("up.empty")}</span>
           )}
-          {overview && games.map((game) => {
+          {overview && listed.map((game) => {
             const install = overview.installs[String(game.liveAppid)];
             const build = install && overview.builds.find((b) => b.id === install.build);
             const busy = overview.job?.state === "running" && overview.job.appid === String(game.liveAppid);
@@ -126,7 +144,7 @@ export const EscaladoresSection: FC = () => {
             const frameGen = engines?.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
               : engines?.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
             const scaler = install ? badgeLabel(build, install.options?.model, install.build).full : engines?.mako?.spatial ? "Mako" : null;
-            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" · ");
+            const active = scaler === "Mako" && frameGen?.startsWith("Mako") ? frameGen : [scaler, frameGen].filter(Boolean).join(" - ");
             return (
               <FocusableCard key={game.instanceKey} onActivate={() => setSelected(game)}>
                 <GameCover urls={game.coverUrls} name={game.name} width={30} />

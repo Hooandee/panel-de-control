@@ -234,3 +234,36 @@ def test_thermal_policy_step_needs_the_node_and_the_board(tmp_path):
     assert _select(no_node).thermal_policy_reassert is False
     assert _select(no_node).reassert_thermal_policy()["ok"] is False
     assert _select(other, "rog_ally").thermal_policy_reassert is False
+
+
+def _rc73ya(root):
+    _mk_dmi(root, "ASUSTeK COMPUTER INC.", "ROG Xbox Ally RC73YA_RC73YA", "RC73YA")
+
+
+def test_xbox_ally_z2a_legacy_fallback_watches_real_power_without_inventing_floors(tmp_path):
+    root = str(tmp_path)
+    _rc73ya(root)
+    _mk_armoury_without_limits(root)
+    _mk_legacy(root)
+    _mk_thermal_policy(root, 1)
+
+    backend = _select(root, "rog_xbox_ally")
+    backend.set_tdp(7, ac=False)
+
+    assert backend.name == "asus-nb-wmi"
+    assert backend.hidden_overshoot_guard is True
+    assert backend.thermal_policy_reassert is True
+    assert backend.diagnostics()["overshoot_guard"] is True
+    assert _read_legacy(root) == {"pl1": 7, "pl2": 7, "pl3": 7}
+    assert "rail_floors" not in backend.diagnostics()
+
+
+def test_xbox_ally_z2a_with_armoury_limits_keeps_armoury(tmp_path):
+    root = str(tmp_path)
+    _rc73ya(root)
+    _mk_armoury_with_limits(root)
+    _mk_legacy(root)
+
+    backend = _select(root, "rog_xbox_ally")
+
+    assert backend.name == "firmware-attr:asus-armoury"

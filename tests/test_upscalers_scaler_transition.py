@@ -177,10 +177,10 @@ def test_partial_restore_failure_keeps_recoverable_checkpoint(steam, fake_catalo
 
 def test_unsupported_install_is_not_touched(steam, fake_catalog, proc):
     service = _service(steam, fake_catalog, proc)
-    service._game_state(APPID)['install'] = {'engine': 'helixsr', 'target': str(steam[1])}
+    service._game_state(APPID)['install'] = {'engine': 'proton', 'target': str(steam[1])}
     with pytest.raises(UpscalerError, match='transition_unsupported'):
         service.begin_scaler_transition(APPID)
-    assert service.state['games'][APPID]['install']['engine'] == 'helixsr'
+    assert service.state['games'][APPID]['install']['engine'] == 'proton'
 
 
 def test_recovery_preserves_original_mako_profile_and_waits_for_job(steam, fake_catalog, proc, monkeypatch):

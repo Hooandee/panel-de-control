@@ -17,6 +17,8 @@ from . import solution_plan, auto_recipes, prefix_dependencies, engine_updates, 
 from .assets import AssetCache, AssetError, sha256
 
 HISTORY_LIMIT = 20
+# The support report waits four seconds for this section; games stop being read past this point.
+REPORT_BUDGET_S = 2.0
 _JUNK = {"setup_linux.sh", "setup_windows.bat"}
 _ARCHIVE_DIRS = ("D3D12_Optiscaler",)
 _GENERATED = ("OptiScaler.log",)
@@ -233,6 +235,7 @@ class UpscalerService:
                 }
         return {
             "gpu": self.gpu,
+            "device": self.device,
             "display": panel_resolution(self.drm),
             "preferred": catalog.preferred_build(self.gpu),
             "builds": catalog.describe(self.gpu, self.device),
@@ -289,8 +292,11 @@ class UpscalerService:
         """What each game ships (or that it runs natively on Linux), cached by install folder mtime."""
         result = {}
         for appid in appids[:400]:
-            installed = self._find(str(appid))
+            installed = self._locate(str(appid))
             if installed is None:
+                continue
+            if installed.unavailable:
+                result[installed.appid] = {"native": False, "inputs": [], "unavailable": installed.unavailable}
                 continue
             try:
                 stamp = installed.root.stat().st_mtime
@@ -308,9 +314,13 @@ class UpscalerService:
             result[installed.appid] = {**cached[1], "preferred": catalog.preferred_build(self.gpu, automatic)}
         return result
 
-    def _find(self, appid: str) -> games.Installed | None:
+    def _locate(self, appid: str) -> games.Installed | None:
         hint = (self.state["games"].get(appid) or {}).get("shortcut_hint")
         return games.find_installed(self.home, appid) or games.from_hint(appid, hint, self.home)
+
+    def _find(self, appid: str) -> games.Installed | None:
+        installed = self._locate(appid)
+        return None if installed is None or installed.unavailable else installed
 
     def _identity(self, installed: games.Installed, entry: dict) -> dict | None:
         """Real game behind a non-Steam shortcut; worked out once, then remembered."""
@@ -548,21 +558,39 @@ class UpscalerService:
                 raise UpscalerError("updating")
             entry = self._game_state(appid)
             install = entry.get("install")
+            helix_removed = _is_helix(install)
+            if helix_removed:
+                # HelixSR comes out before the switch: a failed switch leaves the game's own FSR, not HelixSR.
+                entry["previous"] = diagnostics.snapshot(install)
+                try:
+                    self._drop(install, installed.root)
+                except OSError as error:
+                    if self.logger:
+                        self.logger.warning(f"HelixSR removal before a switch failed: {type(error).__name__}")
+                    raise UpscalerError("helixsr_failed", type(error).__name__) from None
+                entry["install"] = None
+                self._save()
+                install = None
             if install and install.get("engine", "optiscaler") not in ("optiscaler", "dll"):
                 raise UpscalerError("transition_unsupported")
-            if not install and not installed.native and self.game(appid)["analysis"]["foreign"]:
+            # What HelixSR leaves behind is not another tool's setup.
+            if not install and not helix_removed and not installed.native and self.game(appid)["analysis"]["foreign"]:
                 raise UpscalerError("foreign")
             restore = {"overrides": _overrides(install) if install.get("engine") != "dll" else [],
                        "args": list(install.get("args", [])), "env": {}} if install else None
             try:
-                return self.scaler_transitions.begin(appid, installed.root, entry, restore,
-                                                     install.get("target") if install else None,
-                                                     self.mako_status(appid).get("profiles", {}).get(appid),
-                                                     self._managed_configuration(install.get("target")) if install else {})
-            except scaler_transition.TransitionError as error:
-                raise UpscalerError(str(error)) from None
-            except (OSError, ValueError):
-                raise UpscalerError("transition_conflict") from None
+                checkpoint = self.scaler_transitions.begin(appid, installed.root, entry, restore,
+                                                           install.get("target") if install else None,
+                                                           self.mako_status(appid).get("profiles", {}).get(appid),
+                                                           self._managed_configuration(install.get("target")) if install else {})
+                return {**checkpoint, "helix_removed": helix_removed}
+            except (scaler_transition.TransitionError, OSError, ValueError) as error:
+                code = str(error) if isinstance(error, scaler_transition.TransitionError) else "transition_conflict"
+                if helix_removed:
+                    if self.logger:
+                        self.logger.warning(f"Switch could not start after HelixSR came out: {code}")
+                    code = "transition_failed_clean"
+                raise UpscalerError(code) from None
 
     def finish_scaler_transition(self, appid: str, token: str, rollback: bool = False) -> dict | None:
         with self._image_lock:
@@ -1130,16 +1158,43 @@ class UpscalerService:
             return []
         if not _is_helix(install):
             return self._remove(Path(install["target"]))
-        if self.helix.ready():
-            self._helix("remove", root)
+        old_target = Path(install.get("target", ""))
+        record = _relocated(Path(install.get("helix_file", "")), old_target, root)
+        if not record.is_file():
+            # No record: the bridge still decides; "not installed" means nothing of HelixSR is left.
+            if self.helix.ready():
+                try:
+                    self._helix("remove", root)
+                except UpscalerError as error:
+                    if not helixsr.not_installed(error.detail):
+                        raise
+            self._log_helix_gone("record_missing")
+        elif self.helix.ready():
+            try:
+                self._helix("remove", root)
+            except UpscalerError as error:
+                if not helixsr.not_installed(error.detail):
+                    raise
+                self._restore_helix_by_hand(record.parent, "bridge_not_installed")
         else:
-            helixsr.remove_by_hand(Path(install.get("helix_file", "")).parent)
-        log = Path(install.get("log", ""))
+            self._restore_helix_by_hand(record.parent, "release_missing")
+        log = _relocated(Path(install.get("log", "")), old_target, root)
         for generated in (log, log.with_name(helixsr.HLX_FSR_LOG)):
             if generated.name and generated.is_file():
                 generated.unlink()
-        shutil.rmtree(Path(install["target"]) / games.MANIFEST_DIR, ignore_errors=True)
+        shutil.rmtree(_relocated(old_target / games.MANIFEST_DIR, old_target, root), ignore_errors=True)
         return []
+
+    def _restore_helix_by_hand(self, folder: Path, reason: str) -> None:
+        if not helixsr.restore_by_hand(folder):
+            if self.logger:
+                self.logger.warning(f"HelixSR removal by hand left a HelixSR DLL with no backup ({reason})")
+            raise UpscalerError("helixsr_failed", "HelixSR's DLL has no backup of the game's file")
+        self._log_helix_gone(reason)
+
+    def _log_helix_gone(self, reason: str) -> None:
+        if self.logger:
+            self.logger.info(f"HelixSR taken out without its bridge ({reason}); Panel's record of it cleared")
 
     def _apply(self, target: Path, sources: dict[str, Path], ini_text: str | None, configuration=None) -> dict:
         names = [*sources, *(["OptiScaler.ini", *_GENERATED] if ini_text is not None else [])]
@@ -1848,18 +1903,32 @@ class UpscalerService:
         if installed is None or not installed.shortcut:
             return appid
         digest = self._shortcut_launch_identity(installed)
-        for previous, entry in self.state["games"].items():
-            if previous == appid or entry.get("launch_identity") != digest:
-                continue
-            other = self._find(previous)
-            if other is not None and other.shortcut and self._shortcut_launch_identity(other) == digest:
-                raise UpscalerError("mako_identity_ambiguous")
+        own = self.state["games"].get(appid) or {}
+        if own.get("launch_identity_shared") == digest:
+            return appid
+        if own.get("launch_identity") != digest and self._identity_held_elsewhere(appid, digest):
+            # Several shortcuts on one emulator or launcher: the first keeps the shared identity, the others are
+            # told apart by their own shortcut id from then on.
+            if claim:
+                self._game_state(appid)["launch_identity_shared"] = digest
+                self._save()
+            return appid
         if claim:
             entry = self._game_state(appid)
             if entry.get("launch_identity") != digest:
                 entry["launch_identity"] = digest
                 self._save()
         return str(int(digest[:16], 16)) if mako_profile else "ns:" + digest
+
+    def _identity_held_elsewhere(self, appid: str, digest: str) -> bool:
+        for previous, entry in self.state["games"].items():
+            if previous == appid or entry.get("launch_identity") != digest:
+                continue
+            # Only a shortcut still in shortcuts.vdf: a remembered hint of a removed one is the same game re-added.
+            other = games.find_installed(self.home, previous)
+            if other is not None and other.shortcut and not other.unavailable and self._shortcut_launch_identity(other) == digest:
+                return True
+        return False
 
     def mako_status(self, appid: str | None = None) -> dict:
         status = self.mako.status()
@@ -1991,6 +2060,7 @@ class UpscalerService:
             if not installed.native:
                 report["game_files"] = diagnostics.game_files(installed, analysis, owned)
                 report["proton_prefix"] = diagnostics.proton_prefix(self.home, appid)
+                report["game_crash"] = diagnostics.game_crash(self.home, appid)
         info = _recipe_info(recipe)
         report["recipe"] = diagnostics.fields(info, ("status", "broken", "linux", "optipatcher", "proxy"))
         if info:
@@ -2015,37 +2085,57 @@ class UpscalerService:
                     report["recipe"].update(blocked=True, error=error.code)
         return report
 
-    def report(self, context=None) -> dict:
+    def report(self, context=None, budget_s: float = REPORT_BUDGET_S, partial: dict | None = None) -> dict:
+        """Fills `partial` as it goes, so a caller that stops waiting still sends what was read."""
+        started = time.monotonic()
+        result = partial if partial is not None else {}
         context = diagnostics.frontend_context(context)
+        job = self.job()
+        result.update({
+            "gpu": self.gpu, "device": self.device, "frontend": context,
+            "job": diagnostics.with_job_reference(diagnostics.fields(job, ("id", "appid", "kind", "state", "phase", "done", "total", "error", "started")), "id"),
+            "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
+            "games": [],
+        })
         touched = [(appid, entry) for appid, entry in self.state["games"].items()
                    if isinstance(entry.get("install"), dict) or entry.get("history") or entry.get("exe")
                    or entry.get("actions") or entry.get("identity")]
         touched.sort(key=lambda item: max([h.get("at", 0) for h in
                      [*item[1].get("history", []), *item[1].get("actions", [])]] or [0]), reverse=True)
-        job = self.job()
         priority = [str(value) for value in ((context.get("running") or {}).get("live_appid"),
                     (job or {}).get("appid")) if value is not None]
         appids = list(dict.fromkeys([*priority, *(appid for appid, _ in touched)]))[:12]
-        reports = []
-        for appid in appids:
+        for index, appid in enumerate(appids):
+            if index and time.monotonic() - started > budget_s:
+                result["games_skipped"] = appids[index:]
+                break
+            game_started = time.monotonic()
+            result["reading"] = appid
             try:
-                reports.append(self.diagnose(appid))
+                report = self.diagnose(appid)
             except Exception as error:
-                reports.append({"appid": appid, "error": type(error).__name__})
-        return {
-            "gpu": self.gpu, "device": self.device, "frontend": context,
+                report = {"appid": appid, "error": type(error).__name__}
+            report["elapsed_ms"] = round((time.monotonic() - game_started) * 1000)
+            result["games"].append(report)
+        sections = (
             # What the user was offered on this GPU, so a "not supported" complaint shows what Panel showed.
-            "builds": [diagnostics.fields(row, ("id", "supported", "may_fallback"))
-                       for row in catalog.describe(self.gpu, self.device) if row.get("available")],
-            "global_actions": diagnostics.report_actions(self.state.get("global_actions")),
-            "environment": diagnostics.environment(),
-            "cached_assets": [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)],
-            "job": diagnostics.with_job_reference(diagnostics.fields(job, ("id", "appid", "kind", "state", "phase", "done", "total", "error", "started")), "id"),
-            "lsfg": self.lsfg.report(),
-            "mako": self.mako.report(),
-            "helixsr": {"downloaded": self.helix.ready(), "release": self.helix.release.name},
-            "games": reports,
-        }
+            ("builds", lambda: [diagnostics.fields(row, ("id", "supported", "may_fallback"))
+                                for row in catalog.describe(self.gpu, self.device) if row.get("available")]),
+            ("environment", diagnostics.environment),
+            ("cached_assets", lambda: [a.id for a in catalog.ASSETS.values() if self.cache.ready(a)]),
+            ("lsfg", self.lsfg.report),
+            ("mako", self.mako.report),
+            ("helixsr", lambda: {"downloaded": self.helix.ready(), "release": self.helix.release.name}),
+        )
+        for key, read in sections:
+            result["reading"] = key
+            try:
+                result[key] = read()
+            except Exception as error:
+                result[key] = {"error": type(error).__name__}
+        result.pop("reading", None)
+        result["elapsed_ms"] = round((time.monotonic() - started) * 1000)
+        return result
 
     def support_state(self) -> dict:
         mako_status = self.mako.status()
@@ -2126,6 +2216,17 @@ def _recipe_info(recipe) -> dict | None:
             "fps_counter": not (getattr(recipe, "reframework_upscaler", False)
                                 or str(recipe.ini.get("Menu.OverlayMenu", "")).lower() == "false"
                                 or str(recipe.wiki_settings.get("OverlayMenu", "")).lower() == "false")}
+
+
+def _relocated(path: Path, old_target: Path, root: Path) -> Path:
+    """`path` under the game's current folder when the game moved to another library."""
+    # The game folder, not a same-named subfolder (UE games: Foo/Foo/Binaries).
+    folders = [ancestor for ancestor in (old_target, *old_target.parents) if ancestor.name == root.name]
+    folder = next((ancestor for ancestor in folders if ancestor.parent.name == "common"), folders[-1] if folders else None)
+    if folder is None or not path.is_relative_to(folder):
+        return path
+    current = root / path.relative_to(folder)
+    return current if current.exists() or not path.exists() else path
 
 
 def _is_helix(install: dict | None) -> bool:

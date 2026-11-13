@@ -1359,3 +1359,61 @@ def test_lenovo_rejection_without_probe_keeps_previous_failure_kind(tmp_path):
 
     assert result.ok is False
     assert result.failure_kind is None
+
+
+def _gos_83l3_firmware_answering_eio(tmp_path, monkeypatch):
+    import builtins
+    import errno
+    import tdp.firmware_attr as firmware_attr
+
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 25, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 25, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 25, 5, 35)
+    _mk_profile(root, cur="custom")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(detect(product_name="83L3")),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        named_profile_owns_rails=True,
+        rearm_custom_on_ignored_writes=True,
+    )
+    attempts = []
+
+    def eio_open(path, mode="r", *args, **kwargs):
+        if "w" in mode and str(path).startswith(root + "/sys/"):
+            attempts.append(os.path.basename(os.path.dirname(path)) or path)
+            raise OSError(errno.EIO, "Input/output error")
+        return builtins.open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(firmware_attr, "open", eio_open, raising=False)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    return backend, attempts
+
+
+def test_gos_83l3_eio_rollback_skips_rails_that_never_changed(tmp_path, monkeypatch):
+    backend, attempts = _gos_83l3_firmware_answering_eio(tmp_path, monkeypatch)
+
+    result = backend.set_levels(33, 33, 35, ac=False)
+
+    assert result.ok is False
+    assert len(attempts) == 1
+    assert _rails(backend) == {"pl1": 25, "pl2": 25, "pl3": 25}
+    assert backend.read_profile() == "custom"
+
+
+def test_gos_83l3_eio_rollback_still_restores_a_rail_that_moved(tmp_path, monkeypatch):
+    backend, attempts = _gos_83l3_firmware_answering_eio(tmp_path, monkeypatch)
+    backend._firmware_io_error = True
+    pl1 = backend._attr("ppt_pl1_spl")
+    with open(pl1, "w") as fh:
+        fh.write("33")
+
+    surfaces = backend._transaction_surfaces({"pl1": 33, "pl2": 33, "pl3": 35})
+    restored, failures = backend._rollback_transaction(
+        surfaces, {path: 25 for _surface, _rail, path in surfaces}, "custom",
+    )
+
+    assert restored is False
+    assert attempts == ["ppt_pl1_spl"]

@@ -151,7 +151,7 @@ class IpBackend(ControllerBackend):
         return self._store.effective_overrides(appid)
 
     def apply_effective(self, appid) -> bool:
-        return ip.apply_effective(self._store, self._dbus, appid)
+        return ip.apply_effective(self._store, self._dbus, appid, device_key=self._device_key)
 
     def diagnostics(self) -> dict:
         dbus_diagnostics = getattr(self._dbus, "diagnostics", None)

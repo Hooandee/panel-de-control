@@ -2025,6 +2025,8 @@ def test_the_black_box_sees_the_last_lifecycle_events_and_the_eco_screen(Plugin)
     assert [entry["event"] for entry in p._lifecycle_recent] == ["ac_changed", "ac_stable", "resume_detected", "ac_changed"]
     p._screen_sleep.asleep = True
     assert p._pulse_context()["screen_asleep"] is True
+    p._tdp_reason = "steam_download_mode"
+    assert p._pulse_context()["tdp_reason"] == "steam_download_mode"
 
 
 def test_hooandee_theme_folders_coming_and_going_reach_the_diary(Plugin, tmp_path, monkeypatch):

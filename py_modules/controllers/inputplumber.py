@@ -23,6 +23,7 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
     `follows_global`/`has_game_profile` drive the per-game scope tab."""
     if caps is None:
         caps = dbus.capabilities()
+    _migrate_sources(store, device_key, caps)
     buttons = ip_profile.buttons_for(device_key, caps)
     overrides = store.effective_overrides(appid)
     return {
@@ -41,6 +42,12 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
         "follows_global": store.is_following_global(appid),
         "has_game_profile": store.has_game(appid),
     }
+
+
+def _migrate_sources(store, device_key, caps) -> None:
+    renames = ip_profile.source_renames(device_key, caps)
+    if renames:
+        store.rename_sources(renames)
 
 
 def _unmapped_dropped(dbus, device_key, buttons, overrides) -> dict:
@@ -86,6 +93,7 @@ def set_button(store, dbus, device_key, source: str, targets: list,
     took. The scope tab keeps follow_global in sync, so the edited scope IS the
     running game's effective profile — applying the scope's set applies live."""
     caps = dbus.capabilities()  # read once — reused for the guard and the returned config
+    _migrate_sources(store, device_key, caps)
     valid = {cap for (cap, _label) in ip_profile.buttons_for(device_key, caps)}
     if source not in valid:
         _journal_remap_refused("source_not_remappable", source, targets, None)
@@ -114,9 +122,11 @@ def _journal_remap_refused(reason, source, requested, kept) -> None:
                     requested=requested, kept=kept)
 
 
-def apply_effective(store, dbus, appid, merge=merge_profile) -> bool:
+def apply_effective(store, dbus, appid, merge=merge_profile, device_key=None) -> bool:
     """Load the effective profile for the running game (its own or global). Used to
     re-assert on game change. Returns whether the daemon took it."""
+    if ip_profile.DEVICE_BUTTON_VARIANTS.get(device_key or ""):
+        _migrate_sources(store, device_key, dbus.capabilities())
     return _apply_overrides(dbus, store.effective_overrides(appid), merge=merge)
 
 

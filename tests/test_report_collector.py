@@ -1,8 +1,8 @@
 import os
 import types
 
-from report import collector as report_collector
-from report.collector import (
+from pdc_report import collector as report_collector
+from pdc_report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
@@ -440,7 +440,7 @@ def test_frontend_exception_names_only_the_error_type_and_a_fixed_origin(tmp_pat
 
     assert diagnostics["signals"] == [
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
-         "error_type": "TypeError", "origin": "panel"},
+         "error_type": "TypeError", "origin": "panel", "line": 2},
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
          "error_type": "ReferenceError", "origin": "steamgriddb"},
         {"source": "cef_log.txt", "kind": "decky_frontend_exception",
@@ -520,7 +520,7 @@ def test_steam_ui_exceptions_leave_room_for_plugin_signals(tmp_path):
 
     assert sum(s["kind"] == "steam_ui_exception" for s in signals) == 8
     assert {"source": "cef_log.txt", "kind": "decky_frontend_exception",
-            "error_type": "TypeError", "origin": "panel"} in signals
+            "error_type": "TypeError", "origin": "panel", "line": 9} in signals
 
 
 def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
@@ -1527,3 +1527,22 @@ def test_sysfs_snapshot_measures_rapl_package_power(tmp_path, monkeypatch):
     surfaces = sysfs_snapshot(root=str(tmp_path))["cpu_gpu_power"]["rapl"]
 
     assert surfaces[0]["power_w"] == round(20 / report_collector._RAPL_SAMPLE_S, 1)
+
+
+def test_panel_exception_names_the_bundle_line_and_a_fixed_property(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '[1104/232900.000:INFO:CONSOLE(41237)] "Uncaught TypeError: Cannot read properties of undefined '
+        "(reading 'appid')\", source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js?v=0.84.0 (41237)\n"
+        '[1104/232901.000:INFO:CONSOLE(7)] "Uncaught TypeError: Cannot read properties of null '
+        "(reading 'MyPrivateKey')\", source: http://localhost:1337/plugins/Panel%20de%20Control/dist/index.js (7)\n",
+    )
+    signals = frontend_crash_diagnostics([str(current)])["signals"]
+    assert signals == [
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception", "error_type": "TypeError", "origin": "panel",
+         "line": 41237, "reading": "appid"},
+        {"source": "cef_log.txt", "kind": "decky_frontend_exception", "error_type": "TypeError", "origin": "panel",
+         "line": 7, "reading": "other"},
+    ]
+    assert "MyPrivateKey" not in str(signals)

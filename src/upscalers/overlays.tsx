@@ -19,6 +19,7 @@ export type InGameMode = "off" | "start" | "always";
 export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
 
 const IN_GAME_KEY = "pdc:upscalers:inGame";
+const COVERS_KEY = "pdc:upscalers:covers";
 const START_MS = 6000;
 const OVERVIEW_RETRY_MS = [2000, 5000, 15000, 30000, 60000];
 const STYLE_ID = "pdc-up-cover-style";
@@ -76,16 +77,19 @@ export function publishOverview(overview: UpscalersOverview): void {
   emit();
 }
 
+const NO_COVERS: Record<string, Badge> = {};
+
 function useCoverLabels(): Record<string, Badge> {
   const installed = useInstalls();
   const [engines, setEngines] = useState(engineCovers);
+  const [shown, setShown] = useState(readCoverBadges);
   useEffect(() => {
-    const update = () => setEngines(engineCovers);
+    const update = () => { setEngines(engineCovers); setShown(readCoverBadges()); };
     update();
     listeners.add(update);
     return () => { listeners.delete(update); };
   }, []);
-  return useMemo(() => ({ ...engines, ...installed }), [engines, installed]);
+  return useMemo(() => shown ? { ...engines, ...installed } : NO_COVERS, [engines, installed, shown]);
 }
 
 /** Games with a Panel upscaler or engine profile, for a report to describe. */
@@ -124,6 +128,15 @@ export function readInGameMode(): InGameMode {
 
 export function writeInGameMode(mode: InGameMode): void {
   writeString(IN_GAME_KEY, mode);
+  emit();
+}
+
+export function readCoverBadges(): boolean {
+  return readString(COVERS_KEY) !== "off";
+}
+
+export function writeCoverBadges(shown: boolean): void {
+  writeString(COVERS_KEY, shown ? "on" : "off");
   emit();
 }
 
@@ -279,6 +292,8 @@ function clearBadge(tile: Element): void {
 export const CoverBadges: FC = () => {
   const map = useCoverLabels();
   useEffect(() => {
+    // Nothing to mark: the previous run's cleanup already removed the pills.
+    if (!Object.keys(map).length) return;
     const view = mainWindow();
     const doc = view?.document;
     if (!view || !doc?.body) return;

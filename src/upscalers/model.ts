@@ -67,6 +67,34 @@ export function buildBlocker(
   return null;
 }
 
+/** What overloads the Steam Machine's 8 GB Navi 33 at 4K: HelixSR runs a heavier model there at under half the frame
+ * rate of OptiScaler and nearly fills video memory, and native quality FSR 4 leaves about half a gigabyte free. */
+export function steamMachineStrain(
+  device: string | undefined, outputHeight: number | undefined, build: Pick<BuildInfo, "engine" | "family" | "version"> | undefined,
+  quality: string | null | undefined,
+): "helix" | "native" | null {
+  if (device !== "steam_machine" || !outputHeight || outputHeight < 2160 || !build) return null;
+  if (build.engine === "helixsr") return "helix";
+  const optiscaler = (build.engine ?? "optiscaler") === "optiscaler";
+  return optiscaler && build.family === "fsr" && build.version.startsWith("4") && quality === "native" ? "native" : null;
+}
+
+/** The height the game draws at: its own last report, even from start-up, else the screen's. Steam can let a game
+ * draw at 4K on a 1440p monitor and gamescope scales it down, so the monitor alone undercounts. */
+export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[], display: [number, number] | null): number | undefined {
+  const outputs = history.map(({ facts }) => ({ facts: { resolution: facts?.resolution ?? facts?.initial_resolution } }));
+  return lastOutputHeight(outputs) ?? (display ? Math.min(...display) : undefined);
+}
+
+/** Games whose own update took away the input OptiScaler needs; the page says so instead of a silent failure. */
+const GAME_NOTICES: Record<string, string> = {
+  "3564740": "up.notice.dlssRemoved",
+};
+
+export function gameNotice(steamAppid: string | number | null | undefined): string | null {
+  return steamAppid == null ? null : GAME_NOTICES[String(steamAppid)] ?? null;
+}
+
 /** The FSR 4 switch the game's Proton understands on this GPU, or null. */
 export function protonFsr4Env(pills: { exclusiveGroup?: string; envName?: string }[], visible: (pill: never) => boolean): string | null {
   const pill = pills.find((p) => p.exclusiveGroup === "fsr4-upgrade" && visible(p as never));

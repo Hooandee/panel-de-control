@@ -189,3 +189,23 @@ def test_ffmpeg_storage_error_removes_partial_without_trying_another_encoder(tmp
     assert source.read_bytes() == b"ORIGINAL"
     assert list(cache.iterdir()) == []
     assert not fallback.exists()
+
+
+def test_vp9_copy_is_a_separate_software_webm_for_a_cef_without_h264(tmp_path, monkeypatch):
+    source = tmp_path / "in.mp4"
+    source.write_bytes(b"x")
+    calls = []
+
+    def fake_run(cmd, cancel):
+        calls.append(cmd)
+        open(cmd[-1], "wb").write(b"WEBM")
+        return 0
+
+    monkeypatch.setattr(opt, "_run", fake_run)
+    monkeypatch.setattr(opt, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
+    result = opt.optimize(str(source), str(tmp_path / "cache"), 720, codec="vp9")
+    assert result.encoder == "libvpx-vp9" and result.path.endswith(".webm")
+    assert len(calls) == 1 and "-an" in calls[0] and "scale=-2:720,fps=30" in calls[0]
+    assert opt.output_name(str(source), 720) != opt.output_name(str(source), 720, codec="vp9")
+    from ambient.adapters.generated_cache import _GENERATED
+    assert _GENERATED.fullmatch("optimized/" + opt.output_name(str(source), 720, codec="vp9"))

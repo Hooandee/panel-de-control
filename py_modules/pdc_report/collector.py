@@ -23,7 +23,7 @@ import time
 import urllib.parse
 
 import device_tree
-from report import connected_devices
+from pdc_report import connected_devices
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
@@ -175,6 +175,7 @@ _FRONTEND_EXCEPTION_TYPE = re.compile(
 # Steam's own UI scripts: an error there takes down the library or a menu, whoever triggered it.
 _STEAM_UI_ORIGIN = re.compile(r"source: https://steamloopback\.host/(?P<path>[^\s?#)\"']*)")
 _STEAM_UI_EXCEPTION = re.compile(r'"(?:Uncaught(?: \(in promise\))? )?(?P<error>TypeError|ReferenceError|RangeError)\b')
+_PANEL_BUNDLE_LINE = re.compile(r"/dist/index\.js(?:\?[^\s)]*)? \((?P<line>\d{1,7})\)")
 _STEAM_UI_READING = re.compile(r"\(reading '(?P<name>[^']{1,64})'\)")
 # A property name can be a user-derived key (obj[name]): only these fixed names leave the device.
 _STEAM_UI_READING_NAMES = frozenset({
@@ -403,10 +404,20 @@ def _frontend_exception_detail(line: str) -> dict:
         folder = urllib.parse.unquote(path[len("/plugins/"):].split("/", 1)[0])
         slug = re.sub(r"[^a-z0-9]", "", folder.lower())
         origin = _KNOWN_FRONTEND_ORIGINS.get(slug, "other_plugin")
-    return {
+    detail = {
         "error_type": error.group("error") if error else "unknown",
         "origin": origin,
     }
+    if origin == "panel":
+        # Panel's bundle isn't minified: with the version, the line is the exact spot.
+        line_number = _PANEL_BUNDLE_LINE.search(line)
+        if line_number:
+            detail["line"] = int(line_number.group("line"))
+        reading = _STEAM_UI_READING.search(line)
+        if reading:
+            name = reading.group("name")
+            detail["reading"] = name if name in _STEAM_UI_READING_NAMES else "other"
+    return detail
 
 
 def frontend_crash_diagnostics(

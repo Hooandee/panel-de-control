@@ -517,3 +517,34 @@ def test_go_s_83n6_failed_hand_back_never_locks_tdp_or_rewrites(tmp_path, monkey
 
     assert backend.set_levels(12, 15, 20, ac=False).ok is True
     assert _read_lenovo_rails(root) == (12, 15, 20)
+
+
+def test_msi_a8_steamos_exposes_the_boost_rails_through_its_firmware(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware(root, "msi-wmi-platform")
+    _mk_board(root, "MS-1T8K")
+
+    backend = select_backend(
+        _profile("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        os_id="steamos",
+    )
+
+    assert backend.name == "msi-claw-a8-firmware"
+    assert backend.supports_levels is True
+
+
+def test_msi_a8_steamos_without_readable_firmware_rails_keeps_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_board(root, "MS-1T8K")
+
+    backend = select_backend(
+        _profile("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        os_id="steamos",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["msi_a8", "ryzenadj"]

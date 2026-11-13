@@ -13,11 +13,13 @@ export function lockScalerSwitch(appid: string): () => void {
   return () => { switching.delete(appid); changed(); };
 }
 
-export interface ScalerTransition { finish: (success: boolean) => Promise<void> }
+/** `previousRemoved`: HelixSR came out when the switch began and a failed switch won't bring it back. */
+export interface ScalerTransition { finish: (success: boolean) => Promise<void>; previousRemoved: boolean }
 export async function prepareScalerTransition(game: JobGame, direction: "mako" | "installed", required = false): Promise<ScalerTransition | null> {
   const release = lockScalerSwitch(game.appid);
   let previous: MakoProfile | null = null;
   let token: string | null = null;
+  let previousRemoved = false;
   const rollback = async () => {
     const restore = await finishScalerTransition(game.appid, token!, true);
     if (restore) {
@@ -38,19 +40,20 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
     const checkpoint = await beginScalerTransition(game.appid);
     token = checkpoint.token;
     previous = checkpoint.previous_mako;
+    previousRemoved = !!checkpoint.helix_removed;
     if (checkpoint.recovery) {
       await rollback();
       token = null;
       throw new Error("transition_recovered");
     }
     if (direction === "installed" && previous?.scaling_enabled) await saveMakoProfile(game.appid, game.liveAppid, { scaling_enabled: false }, game.isNonSteam);
-    return { finish: async success => {
+    return { previousRemoved, finish: async success => {
       try {
         if (success) {
           try { await finishScalerTransition(game.appid, token!, false); }
           catch {
             try { await rollback(); } catch { throw new Error("transition_restore_failed"); }
-            throw new Error("transition_failed");
+            throw new Error(previousRemoved ? "transition_failed_clean" : "transition_failed");
           }
         } else await rollback();
       } catch (error) {
@@ -62,6 +65,6 @@ export async function prepareScalerTransition(game: JobGame, direction: "mako" |
     try { if (token) await rollback(); }
     catch { throw new Error("transition_restore_failed"); }
     finally { release(); }
-    throw error;
+    throw previousRemoved ? new Error("transition_failed_clean") : error;
   }
 }

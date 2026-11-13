@@ -6,6 +6,7 @@ export interface ThemeActivationAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
   setThemeState(name: string, enabled: boolean): Promise<CssLoaderSnapshot>;
   restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
+  reapplyThemeStates?(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
   hasPendingMutation(): boolean;
   waitForPendingMutation(): Promise<void>;
 }
@@ -138,9 +139,11 @@ interface ActivationRecovery {
   snapshot?: CssLoaderReadySnapshot;
   error?: unknown;
   failures: number;
+  reapplies?: number;
 }
 
 const MAX_RESTORATION_FAILURES = 3;
+const MAX_REAPPLIES = 2;
 
 export class ThemeActivator {
   private running = false;
@@ -311,13 +314,57 @@ export class ThemeActivator {
       recovery.status = "needed";
       recovery.snapshot = undefined;
     }
+    // After repeated failures, never queue another CSS Loader reload: one that outlasts the timeout
+    // would otherwise be relaunched forever. Once nothing is pending, put the previous states back
+    // without reloading (the timed-out reloads never got that far), else keep the current state.
+    if (recovery.failures >= MAX_RESTORATION_FAILURES) {
+      const stillRestoring = () => new ThemeActivationError(
+        "rollback_failed",
+        "The previous theme state is still being restored",
+        true,
+      );
+      if (this.adapter.hasPendingMutation()) throw stillRestoring();
+      // CSS Loader away (Steam restarting): wait for it rather than spend a reapply on nothing.
+      if ((await this.adapter.inspect()).status !== "ready") throw stillRestoring();
+      let current: CssLoaderReadySnapshot | null = null;
+      if ((recovery.reapplies ?? 0) < MAX_REAPPLIES && this.adapter.reapplyThemeStates) {
+        recovery.reapplies = (recovery.reapplies ?? 0) + 1;
+        try {
+          current = await this.adapter.reapplyThemeStates(recovery.initial);
+        } catch (error) {
+          console.warn("Theme recovery could not reapply the previous theme states", error);
+          if (this.adapter.hasPendingMutation() || recovery.reapplies < MAX_REAPPLIES) throw stillRestoring();
+        }
+      }
+      if (!current) {
+        const inspected = await this.adapter.inspect();
+        if (inspected.status === "ready") current = inspected as CssLoaderReadySnapshot;
+      }
+      if (current && this.isFullyRestored(recovery.initial, current)) {
+        try {
+          await recovery.journal.settle(recovery.transaction);
+          return await this.acknowledgeRecovery(recovery, current);
+        } catch (error) {
+          const detail = error instanceof Error ? `: ${error.message}` : "";
+          throw new ThemeActivationError("rollback_failed", `The restored theme state could not be recorded${detail}`, true);
+        }
+      }
+      try {
+        await recovery.journal.settle(recovery.transaction);
+      } catch (error) {
+        console.warn("Theme recovery could not settle before keeping the current state", error);
+      }
+      const kept = await this.abandonRecovery(recovery);
+      if (kept) return kept;
+      throw stillRestoring();
+    }
     try {
       const restored = await this.attemptRecovery(recovery);
       return await this.acknowledgeRecovery(recovery, restored);
     } catch (error) {
       recovery.failures += 1;
       if (this.adapter.hasPendingMutation()) {
-        this.beginDeferredRecovery(recovery);
+        if (recovery.failures < MAX_RESTORATION_FAILURES) this.beginDeferredRecovery(recovery);
       } else if (recovery.failures >= MAX_RESTORATION_FAILURES) {
         const kept = await this.abandonRecovery(recovery);
         if (kept) return kept;
@@ -369,7 +416,9 @@ export class ThemeActivator {
       await this.acknowledgeRecovery(recovery, recovery.snapshot!);
     } catch (error) {
       recovery.failures += 1;
-      if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
+      if (this.adapter.hasPendingMutation() && recovery.failures < MAX_RESTORATION_FAILURES) {
+        this.beginDeferredRecovery(recovery);
+      }
       recovery.error = error;
       throw new ThemeActivationError(
         "rollback_failed",
@@ -389,6 +438,9 @@ export class ThemeActivator {
           recovery.error = undefined;
         },
         (error: unknown) => {
+          // A background reload that timed out again counts towards giving up, so a stuck Steam tab
+          // does not cost twice as many reloads as the cap allows.
+          if (this.adapter.hasPendingMutation()) recovery.failures += 1;
           recovery.status = "needed";
           recovery.error = error;
         },

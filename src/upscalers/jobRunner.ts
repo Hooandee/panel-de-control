@@ -48,7 +48,7 @@ export async function startInstallJob(game: JobGame, choice: UpscalerChoice): Pr
     return job;
   } catch (error) {
     await transition?.finish(false);
-    throw error;
+    throw transition?.previousRemoved ? new Error("transition_failed_clean") : error;
   }
 }
 
@@ -76,7 +76,10 @@ export function trackJob(job: UpscalerJob, game: JobGame, request?: UpscalerChoi
       const success = next.state === "done" && !!next.result && !notice;
       try {
         await transition.finish(success);
-        if (!success && next.state === "done") next = { ...next, state: "error", error: "transition_failed" };
+        if (!success && transition.previousRemoved) {
+          next = { ...next, state: "error", error: "transition_failed_clean" };
+          notice = { key: "up.error.transition_failed_clean" };
+        } else if (!success && next.state === "done") next = { ...next, state: "error", error: "transition_failed" };
       } catch (error) {
         next = { ...next, state: "error", error: error instanceof Error ? error.message : "transition_restore_failed" };
         notice = { key: `up.error.${next.error}` };
@@ -154,7 +157,8 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
   if (!detail.install && detail.analysis.foreign) throw new Error("foreign");
   const transition = await prepareScalerTransition(game, "mako");
   try {
-    if (detail.install) {
+    // The transition already took HelixSR out.
+    if (detail.install && (await getUpscalersGame(game.appid)).install) {
       const job = await uninstallUpscaler(game.appid);
       const completed = waitForJobCompletion(job.id);
       trackJob(job, game);
@@ -165,7 +169,7 @@ export async function saveExclusiveMakoProfile(game: JobGame, config: Partial<Ma
     await saveMakoProfile(game.appid, game.liveAppid, config, game.isNonSteam);
   } catch (error) {
     await transition?.finish(false);
-    throw error;
+    throw transition?.previousRemoved ? new Error("transition_failed_clean") : error;
   }
   await transition?.finish(true);
 }

@@ -18,7 +18,7 @@ vi.mock("../components/GameCover", () => ({ GameCover: () => null }));
 vi.mock("../launch/steamApi", () => ({ listInstalledGames: () => games.map((game) => ({ ...game })) }));
 vi.mock("../upscalers/BulkPanel", () => ({ BulkPanel: () => null }));
 vi.mock("../upscalers/overlays", () => ({
-  IN_GAME_MODES: [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(),
+  IN_GAME_MODES: [], publishOverview: vi.fn(), readInGameMode: () => "start", setUpscalersSectionOpen: vi.fn(), writeInGameMode: vi.fn(), readCoverBadges: () => true, writeCoverBadges: vi.fn(),
 }));
 vi.mock("../upscalers/pageMemory", () => ({ showGame: vi.fn(), takeHeldPage: () => null }));
 vi.mock("../upscalers/GameView", () => ({
@@ -54,4 +54,39 @@ it("names Mako and Lossless in the list instead of the game's own techniques", a
   expect(screen.getByText("Mako ×2")).toBeTruthy();
   expect(screen.getByText("Lossless ×4")).toBeTruthy();
   expect(screen.queryByText("DLSS, XeSS")).toBeNull();
+});
+
+it("leaves out store shortcuts with no installed game behind them", async () => {
+  const api = await import("../api");
+  vi.mocked(api.getUpscalersCompat).mockResolvedValueOnce({
+    "1": { inputs: [], native: false, unavailable: "unifideck_not_installed" }, "2": { inputs: [], native: true },
+  } as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.queryByText("A")).toBeNull();
+  expect(screen.getByText("B")).toBeTruthy();
+  expect(screen.getByText("up.list.linux")).toBeTruthy();
+});
+
+it("holds shortcuts back until it knows whether a game is behind them", async () => {
+  const api = await import("../api");
+  games.push({ liveAppid: 3, instanceKey: "3", name: "Shortcut", coverUrls: [], lastPlayed: 0, isNonSteam: true });
+  let answer: (value: unknown) => void = () => undefined;
+  vi.mocked(api.getUpscalersCompat).mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }) as never);
+  await act(async () => { render(<EscaladoresSection />); });
+  expect(screen.queryByText("Shortcut")).toBeNull();
+  expect(screen.getByText("A")).toBeTruthy();
+  await act(async () => { answer({ "3": { inputs: ["DLSS"], native: false } }); });
+  expect(screen.getByText("Shortcut")).toBeTruthy();
+  games.pop();
+});
+
+it("asks for compatibility in batches the backend accepts", async () => {
+  const api = await import("../api");
+  const extra = Array.from({ length: 399 }, (_, i) => ({ liveAppid: 1000 + i, instanceKey: `x${i}`, name: `G${i}`, coverUrls: [], lastPlayed: 0, isNonSteam: false }));
+  games.push(...extra);
+  vi.mocked(api.getUpscalersCompat).mockClear();
+  await act(async () => { render(<EscaladoresSection />); });
+  const sizes = vi.mocked(api.getUpscalersCompat).mock.calls.map(([ids]) => ids.length);
+  expect(sizes).toEqual([400, 1]);
+  games.splice(2, extra.length);
 });

@@ -694,6 +694,7 @@ export interface BoardFanState {
   loaded?: string[];
   loaded_by_panel?: string[];
   channels?: number;
+  control_off?: boolean;
   last?: { action: string; ok: boolean; channels: number; detail: string } | null;
 }
 
@@ -1363,7 +1364,7 @@ export const getThemeArtwork = callable<[store: import("./themes/artwork").Theme
 export const setThemeArtwork = callable<[store: import("./themes/artwork").ThemeArtworkStore, appId: number, artwork: import("./themes/artwork").GameArtwork | null], { ok: boolean; error?: string }>("set_theme_artwork");
 
 export const getUpscalersOverview = callable<[], UpscalersOverview>("get_upscalers_overview");
-export interface GameCompat { native: boolean; inputs: string[]; preferred?: string }
+export interface GameCompat { native: boolean; inputs: string[]; preferred?: string; unavailable?: string }
 export const getUpscalersCompat = callable<[appids: string[]], Record<string, GameCompat>>("get_upscalers_compat");
 export const searchUpscalerGames = callable<[term: string], { id: number; name: string }[]>("search_upscaler_games");
 export const setUpscalerIdentity = callable<[appid: string, steamAppid: number | null, name: string | null], GameDetail>("set_upscaler_identity");
@@ -1374,7 +1375,7 @@ export const removeUpscalerUserFile = callable<[appid: string, dependencyId: str
 export const setUpscalersExe = callable<[appid: string, exe: string | null], GameDetail>("set_upscalers_exe");
 export const installUpscaler = callable<[appid: string, choice: UpscalerChoice], UpscalerJob>("install_upscaler");
 export const recordUpscalerArgs = callable<[appid: string, args: string[], overrides?: string[], env?: string[]], { added_args: string[] }>("record_upscaler_args");
-export const beginScalerTransition = callable<[appid: string], { token: string; restore: UpscalerJob["result"] | null; recovery: boolean; previous_mako: MakoProfile | null }>("begin_scaler_transition");
+export const beginScalerTransition = callable<[appid: string], { token: string; restore: UpscalerJob["result"] | null; recovery: boolean; previous_mako: MakoProfile | null; helix_removed?: boolean }>("begin_scaler_transition");
 export const finishScalerTransition = callable<[appid: string, token: string, rollback: boolean], UpscalerJob["result"] | null>("finish_scaler_transition");
 export const uninstallUpscaler = callable<[appid: string], UpscalerJob>("uninstall_upscaler");
 export const configureUpscaler = callable<[appid: string, choice: UpscalerChoice | { fg: "off" }], { options: UpscalerChoice; live?: boolean }>("configure_upscaler");

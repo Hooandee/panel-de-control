@@ -279,7 +279,8 @@ class LifecycleManager:
         elif suspend_evidence and not wakeup_changed:
             if self._suspend_evidence_since is None:
                 self._suspend_evidence_since = now
-        if wakeup_changed and suspend_evidence:
+        resumed_now = wakeup_changed and suspend_evidence
+        if resumed_now:
             self._resume_count += 1
             base = now + self._wakeup_delay
             self._pending.append(base)
@@ -314,7 +315,11 @@ class LifecycleManager:
             self._last_ac = ac
             self._ac_transition_count += 1
             flapping = self._record_ac_change(now, now if wall is None else wall)
-            if flapping:
+            if resumed_now:
+                # Charger plugged or pulled while asleep: the delayed resume re-apply
+                # reads AC live, so nothing is written the instant the machine wakes.
+                self._emit("ac_changed", on_ac=bool(ac), deferred_to_resume=True)
+            elif flapping:
                 self._ac_stable_at = now + self._AC_STABLE_S
                 self._pending_ac_light = []
                 self._emit("ac_changed", on_ac=bool(ac), deferred=True)
