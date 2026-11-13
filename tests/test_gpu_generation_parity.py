@@ -56,5 +56,12 @@ def test_fixture_matches_the_linux_backend():
     assert json.loads(FIXTURE.read_text(encoding="utf-8")) == snapshot()
 
 
+def test_missing_rules_leave_every_gpu_unknown_without_breaking_detection(tmp_path, monkeypatch):
+    monkeypatch.setattr(device_registry, "_GPU_RULES", device_registry._load_gpu_rules(tmp_path / "missing.json"))
+    _sysfs(tmp_path, [("0x1002", "0x163f")])
+    assert device_registry.gpu_generation("amd", "AMD Custom APU 0405") == "unknown"
+    assert device_registry.gpu_facts("intel", "Intel Core Ultra 7 258V", str(tmp_path))["generation"] == "unknown"
+
+
 if __name__ == "__main__" and "--write" in sys.argv:
     FIXTURE.write_text(json.dumps(snapshot(), indent=1) + "\n", encoding="utf-8")
