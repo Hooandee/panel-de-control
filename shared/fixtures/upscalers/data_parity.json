@@ -743,7 +743,7 @@
  },
  "recipes": {
   "schema_version": 2,
-  "catalog_version": 12,
+  "catalog_version": 13,
   "assets": {
    "luma-ff7-800": {
     "id": "luma-ff7-800",
@@ -797,6 +797,15 @@
     "sha256": "ceea6cd1eeee32d61fe508db8887e96f4dd7ff534b0f0faa33b4d401602dac3d",
     "size": 13293690,
     "filename": "DMC5.zip",
+    "format": "zip"
+   },
+   "luma-p5r-825": {
+    "id": "luma-p5r-825",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-825/Luma-Persona_5_Royal.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+    "sha256": "a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e",
+    "size": 37256003,
+    "filename": "Luma-Persona_5_Royal.zip",
     "format": "zip"
    }
   },
@@ -1106,6 +1115,77 @@
     "version": null,
     "avoid_versions": [],
     "download_url": null
+   },
+   "luma-p5r": {
+    "id": "luma-p5r",
+    "kind": "game_files",
+    "asset": "luma-p5r-825",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Persona 5 Royal.addon": "Luma-Persona 5 Royal.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Persona 5 Royal/HDR_0x0d85d1f6.ps_5_0.hlsl": "Luma/Persona 5 Royal/HDR_0x0d85d1f6.ps_5_0.hlsl",
+     "Luma/Persona 5 Royal/Luma_CopyDsrResult.hlsl": "Luma/Persona 5 Royal/Luma_CopyDsrResult.hlsl",
+     "Luma/Persona 5 Royal/Luma_Copy_RGB.hlsl": "Luma/Persona 5 Royal/Luma_Copy_RGB.hlsl",
+     "Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl": "Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl",
+     "Luma/Persona 5 Royal/Luma_UpdateShadowConstants.hlsl": "Luma/Persona 5 Royal/Luma_UpdateShadowConstants.hlsl",
+     "Luma/Persona 5 Royal/Includes/Common.hlsl": "Luma/Persona 5 Royal/Includes/Common.hlsl",
+     "Luma/Persona 5 Royal/Includes/GameCBuffers.hlsl": "Luma/Persona 5 Royal/Includes/GameCBuffers.hlsl",
+     "Luma/Persona 5 Royal/Includes/Settings.hlsl": "Luma/Persona 5 Royal/Includes/Settings.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40",
+     "vc-redist-x64"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
    }
   },
   "games": {
@@ -1118,6 +1198,13 @@
    },
    "1462040": {
     "name": "FINAL FANTASY VII REMAKE INTERGRADE",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "1687950": {
+    "name": "Persona 5 Royal",
     "statuses": {
      "linux": "tested",
      "windows": "untested"
@@ -1324,6 +1411,107 @@
     "ordered_dependencies": [
      "vc-redist-x64",
      "luma-ff7"
+    ]
+   },
+   "1687950|optiscaler|linux|x86_64": {
+    "appid": "1687950",
+    "name": "Persona 5 Royal",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-p5r",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+     "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-p5r"
+    ]
+   },
+   "1687950|optiscaler|windows|x86_64": {
+    "appid": "1687950",
+    "name": "Persona 5 Royal",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-p5r",
+     "vc-redist-x64"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+     "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": [
+     "vc-redist-x64",
+     "luma-p5r"
     ]
    },
    "2050650|optiscaler|linux|x86_64": {

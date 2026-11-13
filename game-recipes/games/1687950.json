@@ -1,0 +1,77 @@
+{
+  "name": "Persona 5 Royal",
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+      "Plugins.LoadReshade": "true",
+      "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+      "luma-p5r",
+      "vcrun2022",
+      "msvcrt40"
+    ],
+    "source_urls": [
+      "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+      "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal",
+      "https://github.com/Winetricks/winetricks"
+    ],
+    "configuration": {
+      "ReShade.ini": {
+        "Luma.SRUserType": "2",
+        "OVERLAY.TutorialProgress": "4"
+      }
+    },
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_input": "dlss",
+    "recommended_build": "fsr-4.1.2-beta"
+  },
+  "windows": {
+    "status": "untested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+      "Plugins.LoadReshade": "true",
+      "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+      "luma-p5r",
+      "vc-redist-x64"
+    ],
+    "source_urls": [
+      "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+      "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal"
+    ],
+    "configuration": {
+      "ReShade.ini": {
+        "Luma.SRUserType": "2",
+        "OVERLAY.TutorialProgress": "4"
+      }
+    },
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_input": "dlss",
+    "recommended_build": "fsr-4.1.2-beta"
+  }
+}

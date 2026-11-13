@@ -98,3 +98,17 @@ def test_game_info_preserves_requirement_and_adds_evidence_only_for_luma(steam, 
     monkeypatch.setattr(service, '_recipe', lambda *args: recipes.Recipe(APPID, needs=('mod',)))
     assert 'luma_detected' not in service.game(APPID)['recipe_info']
     assert len(calls) == 1
+
+
+def test_recognizes_persona_5_royal_next_to_the_executable(tmp_path, monkeypatch):
+    root = tmp_path / 'game'
+    _write(root / 'Luma-Persona 5 Royal.addon', image(b'Persona 5 Royal Luma mod'))
+    _write(root / 'ReShade64.dll', image(b'ReShadeRegisterAddon'))
+    _write(root / 'OptiScaler.ini', '[Plugins]\nLoadReshade=true\n')
+    _write(root / 'Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl', 'shader')
+    _write(root / 'Luma/d3dcompiler_47.dll', image())
+    monkeypatch.setattr(luma.pe, 'version_strings', lambda path: {'ProductName': 'ReShade', 'OriginalFilename': 'ReShade64.dll'})
+    assert luma.detected(root, root, '1687950') is True
+    assert luma.detected(root, root, '1462040') is False
+    (root / 'Luma-Persona 5 Royal.addon').write_bytes(image(b'Final Fantasy VII Remake Luma mod'))
+    assert luma.detected(root, root, '1687950') is False
