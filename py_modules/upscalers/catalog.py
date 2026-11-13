@@ -118,6 +118,8 @@ def _build(item) -> Build:
                    ("way", "channel", "available", "extra_dir", "assets", "injector", "replace", "legacy_replace",
                     "ini", "models", "note"))
     _check(type(item["image"]) is int and type(item["cost"]) is int and type(item.get("available", True)) is bool, "invalid_build")
+    _check(all(isinstance(item.get(key, ""), str) for key in ("channel", "extra_dir", "way"))
+           and isinstance(item.get("injector", ""), str), "invalid_build")
     models = item.get("models", [])
     _check(isinstance(models, list), "invalid_models")
     return Build(
@@ -125,7 +127,7 @@ def _build(item) -> Build:
         assets=_strings(item.get("assets", [])), replace=_mapping(item.get("replace", {})), ini=_mapping(item.get("ini", {})),
         injector=item.get("injector"), available=item.get("available", True), archive=_text(item["archive"]),
         channel=item.get("channel", "stable"), extra_dir=item.get("extra_dir", ""),
-        models=tuple((model["id"], _mapping(model["ini"])) for model in (_fields(m, ("id", "ini")) for m in models)),
+        models=tuple((_text(model["id"]), _mapping(model["ini"])) for model in (_fields(m, ("id", "ini")) for m in models)),
         engine=_text(item["engine"]), way=item.get("way", ""), legacy_replace=_mapping(item.get("legacy_replace", {})),
     )
 
