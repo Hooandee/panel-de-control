@@ -9,12 +9,20 @@
     "provider": "winetricks",
     "verb": "msvcrt40"
   },
+  "vc-redist-x64": {
+    "kind": "windows_redist",
+    "provider": "microsoft",
+    "component": "vc14_x64",
+    "min_version": "14.40.33810.0",
+    "page_url": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist"
+  },
   "luma-ff7": {
     "kind": "game_files",
     "asset": "luma-ff7-800",
     "requires": [
       "vcrun2022",
-      "msvcrt40"
+      "msvcrt40",
+      "vc-redist-x64"
     ],
     "files": {
       "amd_fidelityfx_loader_dx12.dll": "amd_fidelityfx_loader_dx12.dll",

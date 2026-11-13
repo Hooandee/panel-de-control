@@ -19,9 +19,11 @@ _PLATFORMS = ('linux', 'windows')
 _RECIPE_STATUSES = {'tested', 'untested'}
 _EMPTY_STATUSES = {'unknown', 'not_applicable'}
 # Dependency kinds that only exist on one OS.
-_PLATFORM_DEPENDENCIES = {'proton_dependency': 'linux'}
+_PLATFORM_DEPENDENCIES = {'proton_dependency': 'linux', 'windows_redist': 'windows'}
 _ARCHES = {'x86_64', 'aarch64'}
 _VERBS = {'vcrun2022', 'msvcrt40'}
+_REDISTRIBUTABLES = {'vc14_x64'}
+_REDIST_PAGE_HOSTS = {'learn.microsoft.com'}
 # Pages a user_files dependency may point the user to; Panel never downloads from them.
 _PAGE_HOSTS = {'www.nexusmods.com', 'nexusmods.com', 'github.com', 'www.patreon.com'}
 _VERSION = re.compile(r'[0-9]+(?:\.[0-9]+){0,3}\Z')
@@ -121,7 +123,7 @@ class Catalog:
         arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}.get(arch, arch)
         return entry if engine in entry.conditions['engine'] and arch in entry.conditions['arch'] else None
 
-    def dependency_order(self, ids) -> tuple[DependencySpec, ...]:
+    def dependency_order(self, ids, platform: str | None = None) -> tuple[DependencySpec, ...]:
         visited, active, ordered = set(), set(), []
         def visit(identifier):
             if identifier in active or identifier not in self.dependencies:
@@ -131,6 +133,8 @@ class Catalog:
             active.add(identifier)
             dependency = self.dependencies[identifier]
             for child in dependency.requires:
+                if platform is not None and _foreign(self.dependencies.get(child), platform):
+                    continue
                 visit(child)
             active.remove(identifier)
             visited.add(identifier)
@@ -195,14 +199,14 @@ def _url(value, asset=False):
     return value
 
 
-def _page_url(value):
+def _page_url(value, hosts=_PAGE_HOSTS):
     value = _text(value, 2048)
     try:
         parsed = urlsplit(value)
         port = parsed.port
     except ValueError:
         raise CatalogError('untrusted_origin') from None
-    if parsed.scheme != 'https' or parsed.hostname not in _PAGE_HOSTS or parsed.username or parsed.password or port is not None:
+    if parsed.scheme != 'https' or parsed.hostname not in hosts or parsed.username or parsed.password or port is not None:
         raise CatalogError('untrusted_origin')
     return value
 
@@ -240,14 +244,19 @@ def _read(path: Path):
         raise CatalogError('invalid_json') from None
 
 
-def _closure(ids, dependencies) -> list[DependencySpec]:
+def _foreign(dependency: DependencySpec | None, platform: str) -> bool:
+    return dependency is not None and _PLATFORM_DEPENDENCIES.get(dependency.kind, platform) != platform
+
+
+def _closure(ids, dependencies, platform: str) -> list[DependencySpec]:
+    # A shared dependency may require OS-specific runtimes; on another OS those edges do not apply.
     seen, pending = {}, list(ids)
     while pending:
         identifier = pending.pop()
         if identifier in seen or identifier not in dependencies:
             continue
         seen[identifier] = dependencies[identifier]
-        pending.extend(seen[identifier].requires)
+        pending.extend(child for child in seen[identifier].requires if not _foreign(dependencies.get(child), platform))
     return list(seen.values())
 
 
@@ -280,7 +289,8 @@ def _recipe(appid: str, name: str, platform: str, item, dependencies) -> GameRec
     ids = _strings(item['dependencies'], _identifier)
     if not set(ids) <= dependencies.keys():
         raise CatalogError('missing_dependency')
-    if any(_PLATFORM_DEPENDENCIES.get(dependency.kind, platform) != platform for dependency in _closure(ids, dependencies)):
+    if any(_foreign(dependencies[identifier], platform) for identifier in ids) or any(
+            _foreign(dependency, platform) for dependency in _closure(ids, dependencies, platform)):
         raise CatalogError('dependency_not_for_platform')
     sources = _strings(item['source_urls'], _url, 16)
     if not sources:
@@ -380,6 +390,14 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
                 raise CatalogError('unsupported_dependency')
             dependency = DependencySpec(identifier, kind, None, {}, 'winetricks', item['verb'],
                                         _strings(item.get('requires', []), _identifier))
+        elif kind == 'windows_redist':
+            item = _object(item, ('kind', 'provider', 'component', 'min_version', 'page_url'), ('requires',))
+            if item['provider'] != 'microsoft' or not isinstance(item['component'], str) or item['component'] not in _REDISTRIBUTABLES:
+                raise CatalogError('unsupported_dependency')
+            dependency = DependencySpec(identifier, kind, None, {}, 'microsoft', item['component'],
+                                        _strings(item.get('requires', []), _identifier),
+                                        version=_version(item['min_version']),
+                                        page_url=_page_url(item['page_url'], _REDIST_PAGE_HOSTS))
         elif kind == 'user_files':
             item = _object(item, ('kind', 'name', 'page_url', 'version', 'files'), ('avoid_versions', 'requires', 'download_url'))
             if not isinstance(item['files'], dict) or not 0 < len(item['files']) <= 32:

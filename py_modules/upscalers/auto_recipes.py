@@ -36,7 +36,7 @@ def unresolved(recipe, analysis: dict, selected) -> bool:
 
 
 def dependencies(selected):
-    return recipe_catalog.bundled().dependency_order(selected.dependencies) if selected else ()
+    return recipe_catalog.bundled().dependency_order(selected.dependencies, getattr(selected, "platform", None)) if selected else ()
 
 
 def assets(selected) -> list[Asset]:
