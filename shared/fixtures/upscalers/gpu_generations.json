@@ -1,0 +1,2270 @@
+{
+ "schema_version": 1,
+ "pci_sets": {
+  "none": [],
+  "van-gogh": [
+   [
+    "0x1002",
+    "0x163f"
+   ]
+  ],
+  "phoenix": [
+   [
+    "0x1002",
+    "0x15bf"
+   ]
+  ],
+  "strix": [
+   [
+    "0x1002",
+    "0x150e"
+   ]
+  ],
+  "rx9070": [
+   [
+    "0x1002",
+    "0x7550"
+   ]
+  ],
+  "rx7900": [
+   [
+    "0x1002",
+    "0x744c"
+   ]
+  ],
+  "new-amd": [
+   [
+    "0x1002",
+    "0x9999"
+   ]
+  ],
+  "arc": [
+   [
+    "0x8086",
+    "0x7d55"
+   ]
+  ],
+  "nvidia": [
+   [
+    "0x10de",
+    "0x2684"
+   ]
+  ],
+  "nvidia-then-amd": [
+   [
+    "0x10de",
+    "0x2684"
+   ],
+   [
+    "0x1002",
+    "0x7550"
+   ]
+  ],
+  "amd-igpu-and-dgpu": [
+   [
+    "0x1002",
+    "0x9999"
+   ],
+   [
+    "0x1002",
+    "0x7550"
+   ]
+  ],
+  "intel-then-amd": [
+   [
+    "0x8086",
+    "0x7d55"
+   ],
+   [
+    "0x1002",
+    "0x7550"
+   ]
+  ]
+ },
+ "cases": [
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0405",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Custom APU 0932",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Van Gogh",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Sephiroth",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "none",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "van-gogh",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "strix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "rx9070",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "arc",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "nvidia",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1 Extreme",
+   "pci": "intel-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "none",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "van-gogh",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "strix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "rx9070",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "arc",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "nvidia",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z1",
+   "pci": "intel-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "none",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "van-gogh",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "strix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "rx9070",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "arc",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "nvidia",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2",
+   "pci": "intel-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 A",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Go",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "none",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "van-gogh",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "phoenix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "rx9070",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "rx7900",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "new-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "arc",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "nvidia",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen Z2 Extreme",
+   "pci": "intel-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "none",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "van-gogh",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "phoenix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "rx9070",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "rx7900",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "new-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "arc",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "nvidia",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Z2 Extreme",
+   "pci": "intel-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "none",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "van-gogh",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "phoenix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "rx9070",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "rx7900",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "new-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "arc",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "nvidia",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+   "pci": "intel-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "none",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "van-gogh",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "phoenix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "rx9070",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "rx7900",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "new-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "arc",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "nvidia",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen AI Max+ 395",
+   "pci": "intel-then-amd",
+   "generation": "rdna35",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "none",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "van-gogh",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "strix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "rx9070",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "arc",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "nvidia",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7840U",
+   "pci": "intel-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "none",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "van-gogh",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "strix",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "rx9070",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "arc",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "nvidia",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics",
+   "pci": "intel-then-amd",
+   "generation": "rdna3",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 6800U",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 7535HS",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 7 7735U",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 6900HX",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "none",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "phoenix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "strix",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "rx9070",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "rx7900",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "new-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "arc",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "nvidia",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 5 6600U",
+   "pci": "intel-then-amd",
+   "generation": "rdna2",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "none",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "rx9070",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "nvidia",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "AMD Ryzen 9 9950X3D",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "none",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "van-gogh",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "phoenix",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "strix",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "rx9070",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "rx7900",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "new-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "nvidia",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "nvidia-then-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "intel",
+   "chip": "Intel Core Ultra 7 258V",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "none",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "van-gogh",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "phoenix",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "strix",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "rx9070",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "rx7900",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "new-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "nvidia",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "nvidia-then-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "Intel",
+   "chip": "Intel(R) Core(TM) i9-14900K",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "name"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "none",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "rx9070",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "nvidia",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "amd",
+   "chip": "",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "none",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "rx9070",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "nvidia",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "",
+   "chip": "",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "none",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "van-gogh",
+   "generation": "rdna2",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "phoenix",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "strix",
+   "generation": "rdna35",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "rx9070",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "rx7900",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "new-amd",
+   "generation": "rdna3",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "arc",
+   "generation": "intel",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "nvidia",
+   "generation": "unknown",
+   "source": "unknown"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "nvidia-then-amd",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "amd-igpu-and-dgpu",
+   "generation": "rdna4",
+   "source": "pci"
+  },
+  {
+   "vendor": "qualcomm",
+   "chip": "Snapdragon 8 Elite",
+   "pci": "intel-then-amd",
+   "generation": "intel",
+   "source": "pci"
+  }
+ ]
+}
