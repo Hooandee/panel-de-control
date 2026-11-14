@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.2...panel-de-control-v0.89.3) (2026-11-14)
+
+
+### Bug Fixes
+
+* **themes:** keep loading Duo's covers and keep theme diagnostics in reports ([#1360](https://github.com/Hooandee/panel-de-control/issues/1360)) ([9af58da](https://github.com/Hooandee/panel-de-control/commit/9af58da1f853f78c7bb671790e14df739208f058))
+
 ## [0.89.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.1...panel-de-control-v0.89.2) (2026-11-14)
 
 
