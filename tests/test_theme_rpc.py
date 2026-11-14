@@ -526,6 +526,42 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     }
 
 
+def test_remote_prepare_names_the_package_check_that_failed(theme_rpc):
+    """PDC-TM74: the log said only unsafe_archive; the validator's own sentence named the cause."""
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Remote theme manifest profile is invalid"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result == {
+        "ok": False,
+        "code": "unsafe_archive",
+        "theme_id": "example-theme",
+        "reason": "Remote theme manifest profile is invalid",
+    }
+
+
+def test_remote_prepare_reason_never_carries_a_file_name(theme_rpc):
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Unsupported theme file: secret-name.exe"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result["reason"] == "Unsupported theme file"
+
+
 def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rpc, monkeypatch):
     main, plugin, _ = theme_rpc
     monkeypatch.setattr(main.theme_health, "internal_panel_mode", lambda: {"width": 1280, "height": 800})

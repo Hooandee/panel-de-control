@@ -1,5 +1,6 @@
 import type { SteamOverlayDiagnostics } from "../mangohud/steamOverlay";
 import { steamPerformanceDiagnostics } from "../steam/performanceDiagnostics";
+import { steamClientLayoutReport } from "./steamClientLayout";
 
 export const REPORT_CATEGORIES = [
   "tdp",
@@ -78,6 +79,7 @@ export function buildReportContext(
       : {}),
     qam,
     ...(steamPerformance ? { steam_performance: steamPerformance } : {}),
+    steam_client_layout: steamClientLayoutReport(),
     report_kind: kind,
   };
 }
