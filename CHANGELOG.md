@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.1...panel-de-control-v0.89.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* **report:** name rejected theme packages and record Steam's layout settings ([#1346](https://github.com/Hooandee/panel-de-control/issues/1346)) ([2fd90b6](https://github.com/Hooandee/panel-de-control/commit/2fd90b69552d1af62c8aa493d8947033e87c3b10))
+
 ## [0.89.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.0...panel-de-control-v0.89.1) (2026-11-13)
 
 
