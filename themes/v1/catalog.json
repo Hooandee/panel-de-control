@@ -171,7 +171,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-terciopelo",
       "cssLoaderName": "Hooandee Terciopelo",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "displayName": {
         "es": "Terciopelo",
         "en": "Terciopelo",
@@ -185,9 +185,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.12/theme.zip",
-        "size": 183687,
-        "sha256": "3e36b7cdcd901b380b5a303e6d7506251d32b09e3da5dcef6ba8d72228338397"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.13/theme.zip",
+        "size": 183691,
+        "sha256": "06d4ca9ff3d77f9d3ec7187ad066961e767099011af898f3314682d3c910e0f5"
       },
       "minimumVersions": {
         "panel": "0.89.0",
@@ -196,9 +196,9 @@
       },
       "exclusiveGroup": "keyboard",
       "notes": {
-        "es": "Viste el teclado en pantalla de Steam y convive con tu tema de Inicio.",
-        "en": "Dresses Steam's on-screen keyboard and works alongside your Home theme.",
-        "it": "Veste la tastiera su schermo di Steam e convive con il tuo tema della Home."
+        "es": "Ya se instala: se corrige el error «unsafe_archive».",
+        "en": "It installs again: fixes the \"unsafe_archive\" error.",
+        "it": "Ora si installa: corretto l'errore «unsafe_archive»."
       }
     }
   ]
