@@ -386,6 +386,15 @@ _THEME_FOLDER_SCAN_LIMIT = 200
 _THEME_MANIFEST_SCAN_BYTES = 256 * 1024
 
 
+_THEME_PACKAGE_REASON = re.compile(r"[A-Za-z][A-Za-z ,'-]{2,79}")
+
+
+def _theme_package_reason(error: Exception) -> str:
+    """The package check's fixed sentence, cut before any detail such as a file name."""
+    text = str(error).split(":", 1)[0].strip()
+    return text if _THEME_PACKAGE_REASON.fullmatch(text) else ""
+
+
 @dataclass(frozen=True)
 class _TdpCommand:
     generation: int
@@ -2458,7 +2467,12 @@ class Plugin(AmbientRpc):
             result = await self._offload_theme_call(prepare)
             self._remember_prepared_theme(result, early=False)
             return result
-        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+        except theme_packages.ThemePackageError as error:
+            # The package checks' own sentence names the cause (PDC-TM74: a bare unsafe_archive did not).
+            reason = _theme_package_reason(error)
+            decky.logger.warning("Remote theme prepare rejected (%s: %s)", error.code, reason)
+            return {"ok": False, "code": error.code, "theme_id": theme_id, "reason": reason}
+        except theme_remote.ThemeRemoteError as error:
             decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
             return {"ok": False, "code": error.code, "theme_id": theme_id}
         except Exception as error:  # noqa: BLE001
@@ -2499,7 +2513,11 @@ class Plugin(AmbientRpc):
             decky.logger.info("Early theme prepared (%s %s)", result.get("catalogId"), result.get("version"))
             self._remember_prepared_theme(result, early=True)
             return result
-        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+        except theme_packages.ThemePackageError as error:
+            reason = _theme_package_reason(error)
+            decky.logger.warning("Early theme install rejected (%s: %s)", error.code, reason)
+            return {"ok": False, "code": error.code, "reason": reason}
+        except theme_remote.ThemeRemoteError as error:
             decky.logger.warning("Early theme install rejected (%s)", error.code)
             return {"ok": False, "code": error.code}
         except Exception as error:  # noqa: BLE001
@@ -3249,7 +3267,7 @@ class Plugin(AmbientRpc):
             categories=categories,
             text=text,
             kind=self._report_kind(context),
-            environment=self._report_environment(),
+            environment=self._report_environment(context),
             capabilities=report_collector.capabilities_from(states),
             state=states,
             stores=self._report_stores(),
@@ -3475,6 +3493,7 @@ class Plugin(AmbientRpc):
         frontend.pop("theme_display", None)
         frontend.pop("theme_surface", None)
         frontend.pop("upscalers", None)
+        frontend.pop("steam_client_layout", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
@@ -3493,7 +3512,43 @@ class Plugin(AmbientRpc):
         env (the frozen runtime's LD_LIBRARY_PATH breaks system binaries). Guarded."""
         return report_collector.capture_command(cmd, env=controller_detect.clean_env())
 
-    def _report_environment(self) -> dict:
+    # Steam client settings that change Big Picture's layout (a Home theme broke for
+    # many users with Home → «Fondo ampliado» = `library_home_big_art` on, and no
+    # bundle said so). Mirrors `src/report/steamClientLayout.ts`.
+    _STEAM_LAYOUT_SETTINGS = (
+        "library_home_big_art",
+        "library_display_size",
+        "library_low_perf_mode",
+        "library_low_bandwidth_mode",
+        "library_disable_community_content",
+        "show_store_content_on_home",
+    )
+
+    @classmethod
+    def _steam_client_layout(cls, context) -> dict:
+        """Allowlisted layout settings from the frontend, booleans/finite ints only;
+        anything else (text, NaN, unknown keys) is dropped or nulled."""
+        raw = context.get("steam_client_layout") if isinstance(context, dict) else None
+        if not isinstance(raw, dict):
+            return {"status": "not_provided", "settings": {}}
+        settings = raw.get("settings")
+        if raw.get("status") != "captured" or not isinstance(settings, dict):
+            return {"status": "unavailable", "settings": {}}
+        result = {}
+        for key in cls._STEAM_LAYOUT_SETTINGS:
+            if key not in settings:
+                continue
+            value = settings[key]
+            if isinstance(value, bool):
+                result[key] = value
+            elif isinstance(value, (int, float)) and math.isfinite(value) and float(value).is_integer() \
+                    and abs(value) < 1000:
+                result[key] = int(value)
+            else:
+                result[key] = None
+        return {"status": "captured", "settings": result}
+
+    def _report_environment(self, context=None) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
         serial-like field is scrubbed downstream)."""
         os_name = self._os_name
@@ -3525,6 +3580,7 @@ class Plugin(AmbientRpc):
             "platform": dict(self._platform),
             "kernel": kernel,
             "steam_client": steam_client,
+            "steam_client_layout": self._steam_client_layout(context),
             "decky_plugins": plugins,
         }
 

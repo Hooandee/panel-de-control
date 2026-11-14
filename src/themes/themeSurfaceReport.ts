@@ -21,6 +21,15 @@ export function themeSurfaceReport(view: Window | null | undefined): SurfaceRepo
   const report: SurfaceReport = { vw: Math.round(view.innerWidth), vh: Math.round(view.innerHeight) };
   const items = [...doc.querySelectorAll(HOME_ITEMS)];
   report.home_items = items.length;
+  // A Home host wider than the window (Steam's «Fondo ampliado» lays Home out sideways) breaks themes that size
+  // themselves from it: Loop 0.1.1 drew its shelf millions of pixels wide.
+  const main = doc.querySelector("#Main");
+  let widest = 0;
+  // From the list's own viewport up: the list inside it is meant to be wider than the screen.
+  for (let node = items[0]?.parentElement?.parentElement ?? null; node && node !== main; node = node.parentElement) {
+    widest = Math.max(widest, node.getBoundingClientRect().width);
+  }
+  if (widest > view.innerWidth + 1) report.home_host_w = Math.round(widest);
   const covers = items.filter((item) => item.getAttribute("data-id") !== LIBRARY_ITEM);
   const first = linkOf(covers[0]);
   const second = linkOf(covers[1]);
