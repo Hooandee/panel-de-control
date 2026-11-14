@@ -5,7 +5,7 @@ import { LuLightbulb, LuStore } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme, themed } from "../theme";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 import type { ColoresCardState } from "../system/colores";
 
 interface Props {

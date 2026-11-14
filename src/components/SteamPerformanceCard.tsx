@@ -14,7 +14,7 @@ import { reapplySteamPowerSettings, runSteamPerformanceTransaction } from "../st
 import { resetManagedGamePerformance } from "../steam/performanceReset";
 import { theme } from "../theme";
 import { Collapsible } from "./Collapsible";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 import { SteamPerformanceControls } from "./SteamPerformanceControls";
 
 const deps = createPerformanceSettingsDeps();

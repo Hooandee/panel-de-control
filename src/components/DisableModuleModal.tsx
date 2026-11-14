@@ -1,11 +1,11 @@
 import { FC, ReactNode } from "react";
-import { ModalRoot, Focusable, DialogButton } from "@decky/ui";
+import { DialogButton } from "@decky/ui";
 import { showModal } from "../navigation/showModal";
 import { LuPower, LuEyeOff } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { NoticeActions, NoticeDialog, NoticeHeader, NoticeIcon, NoticeTitle } from "./dialogs/NoticeDialog";
 
 interface Opts {
   moduleName: string;
@@ -14,19 +14,17 @@ interface Opts {
   onHideInstead?: () => void;
 }
 
-const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, body, onDisable, onHideInstead, closeModal }) => {
+const DisableModuleModal: FC<Opts & { closeModal?: () => void }> = ({ moduleName, body, onDisable, onHideInstead, closeModal }) => {
   const { t } = useI18n();
   const close = () => closeModal?.();
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, maxWidth: 420, margin: "0 auto", padding: theme.space.lg }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.xs }}>
-        <div style={{ width: 56, height: 56, borderRadius: theme.radius.md, background: theme.color.surfaceRaised, display: "grid", placeItems: "center", boxShadow: `inset 0 0 0 1px ${theme.color.warn}` }}>
+    <NoticeDialog closeModal={closeModal}>
+      <NoticeHeader>
+        <NoticeIcon background={theme.color.surfaceRaised} outline={theme.color.warn}>
           <LuPower size={26} color={theme.color.warn} />
-        </div>
-        <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary, textAlign: "center" }}>
-          {t("customize.disable.title", { name: moduleName })}
-        </div>
-      </div>
+        </NoticeIcon>
+        <NoticeTitle>{t("customize.disable.title", { name: moduleName })}</NoticeTitle>
+      </NoticeHeader>
 
       <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45, textAlign: "center" }}>
         {body ?? t("customize.disable.body")}
@@ -41,7 +39,7 @@ const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, body, onDisa
         </div>
       )}
 
-      <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      <NoticeActions>
         <DialogButton onClick={() => { onDisable(); close(); }}>
           {t("customize.disable")}
         </DialogButton>
@@ -53,19 +51,11 @@ const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, body, onDisa
         <DialogButton onClick={close}>
           {t("customize.disable.cancel")}
         </DialogButton>
-      </Focusable>
-    </div>
+      </NoticeActions>
+    </NoticeDialog>
   );
 };
 
-const DisableModuleModalRoot: FC<Opts & { closeModal?: () => void }> = (p) => (
-  <ModalRoot closeModal={p.closeModal} bAllowFullSize>
-    <FocusRoot>
-      <Body {...p} />
-    </FocusRoot>
-  </ModalRoot>
-);
-
 export function openDisableModuleModal(opts: Opts): void {
-  showModal(<DisableModuleModalRoot {...opts} />, window);
+  showModal(<DisableModuleModal {...opts} />, window);
 }

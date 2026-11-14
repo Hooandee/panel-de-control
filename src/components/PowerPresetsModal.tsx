@@ -6,7 +6,7 @@ import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuTrash2, LuPlus, LuCheck 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 import { IconAction } from "./IconAction";
 import { IconPickerGrid } from "./IconPickerGrid";
 import { Loading } from "./Loading";

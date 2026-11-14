@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { getGamePowerOwner, setGamePowerOwner, type GamePowerOwnerState, type TdpScope } from "../api";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { translate } from "../i18n";
 import { showModal } from "../navigation/showModal";
 import { readPerformanceSettings } from "../steam/performanceSettings";

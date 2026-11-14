@@ -129,7 +129,7 @@ vi.mock("../components/ColorPicker", () => ({
 
 vi.mock("../navigation/showModal", () => ({ showModal: mocks.showModal }));
 
-vi.mock("../components/ConfirmDialog", () => ({
+vi.mock("../components/dialogs/ConfirmDialog", () => ({
   ConfirmDialog: () => <div>confirm</div>,
 }));
 

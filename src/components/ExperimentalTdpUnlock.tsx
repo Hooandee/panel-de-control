@@ -5,7 +5,7 @@ import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 
 interface Props {
   enabled: boolean;

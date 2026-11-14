@@ -1,11 +1,11 @@
 import { FC, ReactNode } from "react";
-import { ModalRoot, Focusable, DialogButton } from "@decky/ui";
+import { DialogButton } from "@decky/ui";
 import { showModal } from "../navigation/showModal";
 import { LuGauge, LuShieldCheck, LuTarget, LuZap } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { NoticeActions, NoticeDialog, NoticeFootnote, NoticeHeader, NoticeIcon, NoticeTitle } from "./dialogs/NoticeDialog";
 
 interface Props {
   onConfirm: () => void;
@@ -36,36 +36,16 @@ const Point: FC<{ icon: ReactNode; color: string; text: string }> = ({ icon, col
   </div>
 );
 
-const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, levels, closeModal }) => {
+const AutoTdpNoticeModal: FC<Props> = ({ onConfirm, onCancel, levels, closeModal }) => {
   const { t } = useI18n();
   const unit = levels ? ".level" : "";
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: theme.space.md,
-        maxWidth: 420,
-        margin: "0 auto",
-        padding: theme.space.lg,
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.xs }}>
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: theme.radius.md,
-            background: theme.color.accent,
-            display: "grid",
-            placeItems: "center",
-          }}
-        >
+    <NoticeDialog closeModal={closeModal}>
+      <NoticeHeader>
+        <NoticeIcon background={theme.color.accent}>
           <LuZap size={28} color={theme.color.onAccent} />
-        </div>
-        <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
-          {t("tdp.autotdp.title")}
-        </div>
+        </NoticeIcon>
+        <NoticeTitle>{t("tdp.autotdp.title")}</NoticeTitle>
         <span
           style={{
             padding: "2px 8px",
@@ -78,7 +58,7 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, levels, closeModal 
         >
           {t("tdp.auto.experimental")}
         </span>
-      </div>
+      </NoticeHeader>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
         <Point icon={<LuTarget size={15} />} color={theme.color.accent} text={t("tdp.autotdp.p1")} />
@@ -86,7 +66,7 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, levels, closeModal 
         <Point icon={<LuShieldCheck size={15} />} color={theme.color.ok} text={t(`tdp.autotdp.p3${unit}`)} />
       </div>
 
-      <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      <NoticeActions>
         <DialogButton
           onClick={() => {
             onConfirm();
@@ -103,21 +83,11 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, levels, closeModal 
         >
           {t("tdp.autotdp.cancel")}
         </DialogButton>
-      </Focusable>
-      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, textAlign: "center" }}>
-        {t("tdp.autotdp.once")}
-      </div>
-    </div>
+      </NoticeActions>
+      <NoticeFootnote>{t("tdp.autotdp.once")}</NoticeFootnote>
+    </NoticeDialog>
   );
 };
-
-const AutoTdpNoticeModal: FC<Props> = ({ onConfirm, onCancel, levels, closeModal }) => (
-  <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
-      <AutoTdpNoticeBody onConfirm={onConfirm} onCancel={onCancel} levels={levels} closeModal={closeModal} />
-    </FocusRoot>
-  </ModalRoot>
-);
 
 export function openAutoTdpNoticeModal(opts: { onConfirm: () => void; onCancel: () => void; levels?: boolean }): void {
   showModal(<AutoTdpNoticeModal onConfirm={opts.onConfirm} onCancel={opts.onCancel} levels={opts.levels} />, window);

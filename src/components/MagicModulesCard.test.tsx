@@ -26,7 +26,7 @@ vi.mock("../i18n", () => ({
   }),
 }));
 
-vi.mock("./ConfirmDialog", () => ({
+vi.mock("./dialogs/ConfirmDialog", () => ({
   ConfirmDialog: ({ desc, onConfirm }: { desc: string; onConfirm: () => void }) => (
     <div><span>{desc}</span><button onClick={onConfirm}>confirm-action</button></div>
   ),

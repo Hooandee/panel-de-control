@@ -17,7 +17,7 @@ import { HudDisclosure } from "../components/HudDisclosure";
 import { HudSliderRow } from "../components/HudSliderRow";
 import { QamAction } from "../components/QamAction";
 import { ColorPicker } from "../components/ColorPicker";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";

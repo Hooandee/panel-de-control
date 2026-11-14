@@ -1,8 +1,8 @@
 import { FC, ReactNode } from "react";
 import { DialogButton, ModalRoot, Focusable } from "@decky/ui";
 
-import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { theme } from "../../theme";
+import { FocusRoot } from "../FocusRoot";
 
 interface Props {
   title: string;

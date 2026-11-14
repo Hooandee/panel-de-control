@@ -1,11 +1,11 @@
 import { FC } from "react";
-import { ModalRoot, Focusable, DialogButton } from "@decky/ui";
+import { DialogButton } from "@decky/ui";
 import { showModal } from "../navigation/showModal";
 import { LuZap } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { NoticeActions, NoticeDialog, NoticeFootnote, NoticeIcon, NoticeTitle } from "./dialogs/NoticeDialog";
 
 interface Props {
   onTakeAll: () => void;
@@ -14,40 +14,18 @@ interface Props {
 
 // Take-over modal: one gesture disables every rival. "Not now" closes; the
 // persistent card carries on while the conflict lasts.
-const TdpConflictBody: FC<Props> = ({ onTakeAll, closeModal }) => {
+const TdpConflictModal: FC<Props> = ({ onTakeAll, closeModal }) => {
   const { t } = useI18n();
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        textAlign: "center",
-        gap: theme.space.md,
-        maxWidth: 420,
-        margin: "0 auto",
-        padding: theme.space.lg,
-      }}
-    >
-      <div
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: theme.radius.md,
-          background: theme.color.warn,
-          display: "grid",
-          placeItems: "center",
-        }}
-      >
+    <NoticeDialog closeModal={closeModal} centered>
+      <NoticeIcon background={theme.color.warn}>
         <LuZap size={28} color={theme.color.onAccent} />
-      </div>
-      <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
-        {t("tdp.conflict.take.title")}
-      </div>
+      </NoticeIcon>
+      <NoticeTitle>{t("tdp.conflict.take.title")}</NoticeTitle>
       <div style={{ fontSize: theme.font.body, color: theme.color.textMuted, lineHeight: 1.45 }}>
         {t("tdp.conflict.take.body")}
       </div>
-      <Focusable style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, width: "100%", maxWidth: 300 }}>
+      <NoticeActions style={{ width: "100%", maxWidth: 300 }}>
         <DialogButton
           onClick={() => {
             onTakeAll();
@@ -57,21 +35,11 @@ const TdpConflictBody: FC<Props> = ({ onTakeAll, closeModal }) => {
           {t("tdp.conflict.take.confirm")}
         </DialogButton>
         <DialogButton onClick={() => closeModal?.()}>{t("tdp.conflict.take.later")}</DialogButton>
-      </Focusable>
-      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-        {t("tdp.conflict.take.fine")}
-      </div>
-    </div>
+      </NoticeActions>
+      <NoticeFootnote>{t("tdp.conflict.take.fine")}</NoticeFootnote>
+    </NoticeDialog>
   );
 };
-
-const TdpConflictModal: FC<Props> = ({ onTakeAll, closeModal }) => (
-  <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <FocusRoot>
-      <TdpConflictBody onTakeAll={onTakeAll} closeModal={closeModal} />
-    </FocusRoot>
-  </ModalRoot>
-);
 
 export function openTdpConflictModal(onTakeAll: () => void): void {
   showModal(<TdpConflictModal onTakeAll={onTakeAll} />, window);

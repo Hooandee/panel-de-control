@@ -11,7 +11,7 @@ import type {
 import { useI18n } from "../i18n";
 import { canEject, moduleStateKey, outcomeKey } from "../mandos/magicModules";
 import { theme } from "../theme";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 
 interface Props {
   modules: MagicModulesState;

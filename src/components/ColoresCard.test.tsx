@@ -11,7 +11,7 @@ vi.mock("@decky/ui", () => ({
   showModal: vi.fn(),
 }));
 
-vi.mock("./ConfirmDialog", () => ({ ConfirmDialog: () => <div /> }));
+vi.mock("./dialogs/ConfirmDialog", () => ({ ConfirmDialog: () => <div /> }));
 
 vi.mock("../i18n", () => ({
   useI18n: () => ({ t: (key: string) => ({
