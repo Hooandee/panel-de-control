@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-lobo-blanco",
+  "cssLoaderName": "Hooandee Lobo Blanco",
+  "version": "0.9.11",
+  "displayName": {
+    "es": "Lobo Blanco",
+    "en": "Lobo Blanco",
+    "it": "Lobo Blanco"
+  },
+  "description": {
+    "es": "Teclas plateadas de felpa, teclas especiales rojo sangre con su propia runa y un medallión de lobo. Cada pulsación suena a metal y las runas se encienden al tocarlas.",
+    "en": "Plush silver keys, blood-red special keys with their own rune and a wolf medallion. Every press rings like metal and the runes light up when touched.",
+    "it": "Tasti argentati in peluche, tasti speciali rosso sangue con la loro runa e un medaglione a forma di lupo. Ogni pressione suona come metallo e le rune si accendono al tocco."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.11/theme.zip",
+    "size": 359021,
+    "sha256": "6721031e7bc1c9ced5f72bf22dcbd3cc437b5884303f1dfe66e0b398a75a85be"
+  },
+  "minimumVersions": {
+    "panel": "0.89.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "exclusiveGroup": "keyboard",
+  "notes": {
+    "es": "Ya se instala: se corrige el error «unsafe_archive».",
+    "en": "It installs again: fixes the \"unsafe_archive\" error.",
+    "it": "Ora si installa: corretto l'errore «unsafe_archive»."
+  }
+}

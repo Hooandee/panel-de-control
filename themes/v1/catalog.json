@@ -71,7 +71,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-lobo-blanco",
       "cssLoaderName": "Hooandee Lobo Blanco",
-      "version": "0.9.10",
+      "version": "0.9.11",
       "displayName": {
         "es": "Lobo Blanco",
         "en": "Lobo Blanco",
@@ -85,9 +85,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.10/theme.zip",
-        "size": 359016,
-        "sha256": "1be09b1b1e7099546c278f6e79df781056d006e8114542ff94f3cb8a1d3f6543"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.11/theme.zip",
+        "size": 359021,
+        "sha256": "6721031e7bc1c9ced5f72bf22dcbd3cc437b5884303f1dfe66e0b398a75a85be"
       },
       "minimumVersions": {
         "panel": "0.89.0",
@@ -96,9 +96,9 @@
       },
       "exclusiveGroup": "keyboard",
       "notes": {
-        "es": "Viste el teclado en pantalla de Steam y convive con tu tema de Inicio.",
-        "en": "Dresses Steam's on-screen keyboard and works alongside your Home theme.",
-        "it": "Veste la tastiera su schermo di Steam e convive con il tuo tema della Home."
+        "es": "Ya se instala: se corrige el error «unsafe_archive».",
+        "en": "It installs again: fixes the \"unsafe_archive\" error.",
+        "it": "Ora si installa: corretto l'errore «unsafe_archive»."
       }
     },
     {
