@@ -1546,3 +1546,20 @@ def test_panel_exception_names_the_bundle_line_and_a_fixed_property(tmp_path):
          "line": 7, "reading": "other"},
     ]
     assert "MyPrivateKey" not in str(signals)
+
+
+def test_frontend_crash_diagnostics_keeps_theme_lines_without_private_text(tmp_path):
+    log = tmp_path / "cef_log.txt"
+    log.write_text(
+        "[1114/120000.1:INFO:CONSOLE(1)] \"[Duo] home-hidden detached path=/library/home window=1280x800 "
+        "sheets=3\", source: https://steamloopback.host/x (1)\n"
+        "[1114/120001.1:INFO:CONSOLE(1)] \"[Duo] covers-late 4 user@example.com été\"\n"
+        "[1114/120002.1:INFO:CONSOLE(1)] \"unrelated line\"\n",
+        encoding="utf-8",
+    )
+    diagnostics = frontend_crash_diagnostics([str(log)])
+    lines = diagnostics["theme_lines"]
+    assert [(line["theme"], line["event"]) for line in lines] == [("Duo", "home-hidden"), ("Duo", "covers-late")]
+    assert lines[0]["detail"].startswith("detached path=/library/home window=1280x800 sheets=3")
+    assert "example.com" not in lines[1]["detail"] and "é" not in lines[1]["detail"]
+    assert all(line["source"] == "cef_log.txt" for line in lines)

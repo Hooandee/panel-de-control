@@ -204,6 +204,11 @@ _MAX_PLUGIN_FIELD = 80
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
+# Hooandee themes write their own diagnostics as `[Duo] home-hidden reason path=/x` (PDC-VB97). Only the event name
+# and short, plain tokens leave the device; anything else on the line is dropped.
+_THEME_LINE = re.compile(r'\[(?P<theme>Duo|Vida)\] (?P<event>[a-z][a-z0-9-]{1,40})(?P<rest>[^"\n]*)')
+_THEME_TOKEN = re.compile(r"^[A-Za-z0-9_.:/#=>+-]{1,60}$")
+_MAX_THEME_LINES = 50
 
 
 def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
@@ -440,6 +445,7 @@ def frontend_crash_diagnostics(
     steam_ui_seen: dict[tuple, dict] = {}
     crash_detected = False
     plugin_load_error = False
+    theme_lines: list[dict] = []
 
     for path in paths:
         basename = os.path.basename(path) if isinstance(path, str) else ""
@@ -472,6 +478,15 @@ def frontend_crash_diagnostics(
         record.update({"status": "captured", "bytes_read": bytes_read})
 
         for raw_line in text.splitlines():
+            theme_match = _THEME_LINE.search(raw_line)
+            if theme_match:
+                tokens = [t for t in theme_match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
+                theme_lines.append({
+                    "source": source,
+                    "theme": theme_match.group("theme"),
+                    "event": theme_match.group("event"),
+                    "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
+                })
             kind, is_crash = _frontend_signal(raw_line)
             if not kind:
                 continue
@@ -525,6 +540,7 @@ def frontend_crash_diagnostics(
         "plugin_load_error": plugin_load_error,
         "plugin_load_errors": plugin_load_errors,
         "signals": signals,
+        "theme_lines": theme_lines[-_MAX_THEME_LINES:],
     }
 
 
