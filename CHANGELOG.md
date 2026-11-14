@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.89.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.2...panel-de-control-v0.89.3) (2026-11-14)
+
+
+### Español
+
+* **Las portadas personalizadas de Duo ya no desaparecen:** Al encender la consola o al volver del modo escritorio, Duo a veces mostraba las portadas normales en lugar de las tuyas hasta que abrías el editor de portadas. Panel de Control ahora las sigue pidiendo hasta que llegan y las vuelve a cargar si hace falta, así que siempre ves las que elegiste.
+* **Los reportes ayudan a arreglar antes los fallos de los temas:** Cuando un tema se quedaba en negro o tardaba en mostrar sus portadas, el reporte no lo reflejaba. Ahora incluye los avisos que deja el propio tema, sin datos personales.
+
+### English
+
+* **Duo's custom covers no longer disappear:** After turning the console on or coming back from Desktop Mode, Duo sometimes showed the standard covers instead of yours until you opened the cover editor. Panel de Control now keeps asking for them until they arrive and loads them again when needed, so you always see the ones you picked.
+* **Reports help fix theme problems sooner:** When a theme went black or was slow to show its covers, the report did not show it. It now includes the notes the theme itself leaves, with no personal data.
+
+### Italiano
+
+* **Le copertine personalizzate di Duo non scompaiono più:** All'accensione della console o al ritorno dalla modalità desktop, Duo a volte mostrava le copertine normali invece delle tue finché non aprivi l'editor delle copertine. Panel de Control ora continua a richiederle finché non arrivano e le ricarica quando serve, così vedi sempre quelle che hai scelto.
+* **I report aiutano a risolvere prima i problemi dei temi:** Quando un tema restava nero o tardava a mostrare le copertine, il report non lo indicava. Ora include le note lasciate dal tema stesso, senza dati personali.
+
+### Deutsch
+
+* **Duos eigene Cover verschwinden nicht mehr:** Nach dem Einschalten der Konsole oder der Rückkehr aus dem Desktopmodus zeigte Duo manchmal die normalen Cover statt deiner eigenen, bis du den Cover-Editor geöffnet hast. Panel de Control fragt sie jetzt so lange an, bis sie da sind, und lädt sie bei Bedarf neu, sodass du immer die siehst, die du ausgewählt hast.
+* **Berichte helfen, Probleme mit Themes schneller zu beheben:** Wenn ein Theme schwarz blieb oder seine Cover nur langsam zeigte, stand davon nichts im Bericht. Jetzt enthält er die Hinweise, die das Theme selbst hinterlässt, ohne persönliche Daten.
+
+### Português (Brasil)
+
+* **As capas personalizadas do Duo não somem mais:** Ao ligar o console ou voltar do modo desktop, o Duo às vezes mostrava as capas normais em vez das suas até você abrir o editor de capas. O Panel de Control agora continua pedindo as capas até elas chegarem e as carrega de novo quando precisa, então você sempre vê as que escolheu.
+* **Os relatórios ajudam a corrigir antes os problemas dos temas:** Quando um tema ficava preto ou demorava para mostrar as capas, o relatório não mostrava isso. Agora ele inclui os avisos que o próprio tema deixa, sem dados pessoais.
+
+### Français
+
+* **Les jaquettes personnalisées de Duo ne disparaissent plus :** Au démarrage de la console ou au retour du mode bureau, Duo affichait parfois les jaquettes normales au lieu des vôtres jusqu'à ce que vous ouvriez l'éditeur de jaquettes. Panel de Control continue maintenant à les demander jusqu'à ce qu'elles arrivent et les recharge si besoin, pour que vous voyiez toujours celles que vous avez choisies.
+* **Les rapports aident à corriger plus vite les problèmes de thèmes :** Quand un thème restait noir ou tardait à afficher ses jaquettes, le rapport ne le montrait pas. Il inclut maintenant les indications laissées par le thème lui-même, sans données personnelles.
+
 ## [0.89.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.1...panel-de-control-v0.89.2) (2026-11-14)
 
 
