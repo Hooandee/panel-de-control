@@ -3,71 +3,6 @@
   "themes": [
     {
       "schemaVersion": 1,
-      "catalogId": "hooandee-duo",
-      "cssLoaderName": "Hooandee Duo",
-      "displayName": {
-        "es": "Duo",
-        "en": "Duo",
-        "it": "Duo"
-      },
-      "description": {
-        "es": "Duo es un tema inspirado en una de las consolas más queridas, con acceso directo a tus juegos, sonidos propios y una experiencia de lo más divertida.",
-        "en": "Duo is a theme inspired by one of the most beloved consoles, with quick access to your games, its own sounds and a really fun experience.",
-        "it": "Duo è un tema ispirato a una delle console più amate, con accesso diretto ai tuoi giochi, suoni propri e un'esperienza davvero divertente."
-      },
-      "author": "Hooandee",
-      "tags": [],
-      "minimumVersions": {
-        "panel": "0.80.0"
-      },
-      "early": {
-        "version": "0.4.0",
-        "artifacts": [
-          {
-            "version": "0.4.0",
-            "size": 386669,
-            "sha256": "6e4f032f7477f2e38d7695d88f29c0fe410e339a7de4a0e52a7ea642faddd3d4"
-          },
-          {
-            "version": "0.3.2",
-            "size": 362634,
-            "sha256": "612ae831af0ae3fea4cb9379d60ab9ebc382ae4ac2fb0a7301cbf8cd449779a7"
-          },
-          {
-            "version": "0.3.1",
-            "size": 357737,
-            "sha256": "17e631ce72ff7a89bfa211993b853e4943b3311da81ed2e70ea77bb8ea9caefd"
-          },
-          {
-            "version": "0.3.0",
-            "size": 348662,
-            "sha256": "ab9f120ec43d010e7fda4628e45e53b373ac61b83644907565a73d6f2de4fc81"
-          },
-          {
-            "version": "0.2.0",
-            "size": 340958,
-            "sha256": "ab7a7293e24224dcfb4fd5d7dcb4bf4697fa53cd35f978a01c0f96f31f3684d0"
-          },
-          {
-            "version": "0.1.7",
-            "size": 311966,
-            "sha256": "7651d4acbfdda712dc0d0e10c3877b6a1a8ad1aa306b17f4cac1741887e87e15"
-          },
-          {
-            "version": "0.1.6",
-            "size": 270112,
-            "sha256": "e63d2a4e548fdff326c0f21e9a6c66ef629d7212b6ae9709dedbb4c3c3854fe6"
-          },
-          {
-            "version": "0.1.5",
-            "size": 252756,
-            "sha256": "53ec9d95a80d4b98110a97227fa2e66e1c815f9624c4a148af5aad1fd37e3ced"
-          }
-        ]
-      }
-    },
-    {
-      "schemaVersion": 1,
       "catalogId": "hooandee-vida",
       "cssLoaderName": "Hooandee Vida",
       "displayName": {
@@ -102,6 +37,71 @@
             "version": "0.1.720",
             "size": 2993772,
             "sha256": "74256a388559fd0b45d17e72cf99cc8fa625e35c4b0f54a44acba81a4351c2bd"
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "catalogId": "hooandee-duo",
+      "cssLoaderName": "Hooandee Duo",
+      "displayName": {
+        "es": "Duo",
+        "en": "Duo",
+        "it": "Duo"
+      },
+      "description": {
+        "es": "Duo es un tema inspirado en una de las consolas más queridas, con acceso directo a tus juegos, sonidos propios y una experiencia de lo más divertida.",
+        "en": "Duo is a theme inspired by one of the most beloved consoles, with quick access to your games, its own sounds and a really fun experience.",
+        "it": "Duo è un tema ispirato a una delle console più amate, con accesso diretto ai tuoi giochi, suoni propri e un'esperienza davvero divertente."
+      },
+      "author": "Hooandee",
+      "tags": [],
+      "minimumVersions": {
+        "panel": "0.80.0"
+      },
+      "early": {
+        "version": "0.5.0",
+        "artifacts": [
+          {
+            "version": "0.5.0",
+            "size": 441771,
+            "sha256": "eaa502269352e73a63a41aacdad66f32961819cc8df9ce996c638914442a7481"
+          },
+          {
+            "version": "0.4.0",
+            "size": 386669,
+            "sha256": "6e4f032f7477f2e38d7695d88f29c0fe410e339a7de4a0e52a7ea642faddd3d4"
+          },
+          {
+            "version": "0.3.2",
+            "size": 362634,
+            "sha256": "612ae831af0ae3fea4cb9379d60ab9ebc382ae4ac2fb0a7301cbf8cd449779a7"
+          },
+          {
+            "version": "0.3.1",
+            "size": 357737,
+            "sha256": "17e631ce72ff7a89bfa211993b853e4943b3311da81ed2e70ea77bb8ea9caefd"
+          },
+          {
+            "version": "0.3.0",
+            "size": 348662,
+            "sha256": "ab9f120ec43d010e7fda4628e45e53b373ac61b83644907565a73d6f2de4fc81"
+          },
+          {
+            "version": "0.2.0",
+            "size": 340958,
+            "sha256": "ab7a7293e24224dcfb4fd5d7dcb4bf4697fa53cd35f978a01c0f96f31f3684d0"
+          },
+          {
+            "version": "0.1.7",
+            "size": 311966,
+            "sha256": "7651d4acbfdda712dc0d0e10c3877b6a1a8ad1aa306b17f4cac1741887e87e15"
+          },
+          {
+            "version": "0.1.6",
+            "size": 270112,
+            "sha256": "e63d2a4e548fdff326c0f21e9a6c66ef629d7212b6ae9709dedbb4c3c3854fe6"
           }
         ]
       }
