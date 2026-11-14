@@ -105,7 +105,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-loop",
       "cssLoaderName": "Hooandee Loop",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "displayName": {
         "es": "Loop",
         "en": "Loop",
@@ -119,9 +119,9 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.1/theme.zip",
-        "size": 55523,
-        "sha256": "2377cd93fe01be575269406b91c5b98748716e09faa8c7caf54efc23d57c47be"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.2/theme.zip",
+        "size": 55870,
+        "sha256": "26aeaa11cb12918cfef73885940ba7732d0b267dd8b0aa407f9c59cea8a9c79f"
       },
       "minimumVersions": {
         "panel": "0.89.0",
@@ -129,9 +129,9 @@
         "cssLoaderBackend": 9
       },
       "notes": {
-        "es": "Loop sustituye el Inicio y el menú de Steam fuera de los juegos; con un juego delante, el botón Steam abre el menú de siempre.",
-        "en": "Loop replaces the Home screen and the Steam menu outside games; with a game in front, the Steam button opens the usual menu.",
-        "it": "Loop sostituisce la Home e il menu di Steam fuori dai giochi; con un gioco in primo piano, il tasto Steam apre il menu di sempre."
+        "es": "Ya se ven tus juegos con el «Fondo ampliado» de Steam activado, la tienda vuelve a abrirse desde el menú de Loop, las portadas que tardan en llegar muestran el nombre del juego y Proton ya no aparece entre tus juegos.",
+        "en": "Your games now show with Steam's \"Expanded background\" turned on, the store opens again from Loop's menu, covers that take too long show the game's name and Proton no longer appears among your games.",
+        "it": "I tuoi giochi ora si vedono anche con lo «Sfondo ampliato» di Steam attivo, il negozio si riapre dal menu di Loop, le copertine che tardano mostrano il nome del gioco e Proton non compare più tra i tuoi giochi."
       }
     },
     {
