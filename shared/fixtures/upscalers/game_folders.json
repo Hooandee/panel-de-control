@@ -1,0 +1,1379 @@
+{
+  "schema_version": 1,
+  "algorithm": "upscalers.games",
+  "trees": {
+    "witcher": {
+      "files": {
+        "REDprelauncher.exe": {
+          "image": "no_imports"
+        },
+        "bin/x64_dx12/witcher3.exe": {
+          "image": "d3d12_dxgi",
+          "size": 9437184
+        },
+        "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll": {},
+        "bin/x64_dx12/nvngx_dlss.dll": {}
+      }
+    },
+    "witcher_anti_cheat_foreign": {
+      "files": {
+        "REDprelauncher.exe": {
+          "image": "no_imports"
+        },
+        "bin/x64_dx12/witcher3.exe": {
+          "image": "d3d12_dxgi",
+          "size": 9437184
+        },
+        "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll": {},
+        "bin/x64_dx12/nvngx_dlss.dll": {},
+        "EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe": {},
+        "OptiScaler.ini": {
+          "text": "[Upscalers]\n"
+        }
+      }
+    },
+    "unreal": {
+      "files": {
+        "FSD.exe": {
+          "image": "no_imports"
+        },
+        "FSD/Binaries/Win64/FSD-Win64-Shipping.exe": {
+          "image": "embedded_fsr2",
+          "size": 20971520
+        },
+        "Engine/Binaries/Win64/CrashReportClient.exe": {
+          "image": "d3d11_dxgi"
+        },
+        "Engine/Binaries/Win64/EpicWebHelper.exe": {
+          "image": "d3d11_dxgi"
+        },
+        "Engine/Binaries/Win64/ShaderTool.exe": {
+          "image": "d3d11_dxgi"
+        },
+        "FSD/Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll": {},
+        "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64/sl.interposer.dll": {
+          "image": "streamline_v2"
+        },
+        "Deep/1/2/3/4/5/6/7/8/libxess_fg.dll": {},
+        "Deep/1/2/3/4/5/6/7/8/9/libxess.dll": {}
+      }
+    },
+    "re_engine": {
+      "files": {
+        "game.exe": {
+          "image": "d3d11_dxgi"
+        },
+        "D3D12/D3D12Core.dll": {},
+        "re_chunk_000.pak.patch_001.pak": {}
+      }
+    },
+    "re_engine_agility_only": {
+      "files": {
+        "game.exe": {
+          "image": "d3d11_dxgi"
+        },
+        "D3D12/D3D12Core.dll": {}
+      }
+    },
+    "panel_manifest": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll": {},
+        "libxess_fg.dll": {},
+        "amd_fidelityfx_upscaler_dx12.dll": {},
+        "OptiScaler.log": {
+          "text": "[I] started\n"
+        },
+        ".pdc-upscaler/manifest.json": {
+          "text": "{\"files\": {\"libxess_fg.dll\": \"\", \"amd_fidelityfx_upscaler_dx12.dll\": \"\", \"OptiScaler.log\": \"\"}, \"backups\": [\"amd_fidelityfx_upscaler_dx12.dll\"]}"
+        }
+      }
+    },
+    "unified_fsr31": {
+      "files": {
+        "Game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "amd_fidelityfx_dx12.dll": {}
+      },
+      "symlinks": {
+        "plugins/amd_fidelityfx_loader_dx12.dll": "amd_fidelityfx_dx12.dll"
+      }
+    },
+    "skipped_folders": {
+      "files": {
+        "Game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "_CommonRedist/vcredist_x64.exe": {
+          "image": "d3d12_dxgi",
+          "size": 41943040
+        },
+        "__Installer/Setup.exe": {
+          "image": "d3d12_dxgi"
+        },
+        ".hidden/Other.exe": {
+          "image": "d3d12_dxgi",
+          "size": 41943040
+        },
+        "unins000.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "Support/libxess.dll": {},
+        "Redist/nvngx_dlss.dll": {},
+        "BattlEye/BEService_x64.exe": {}
+      }
+    },
+    "recipe": {
+      "files": {
+        "Game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "Launcher/GameLauncherHelper.exe": {
+          "image": "d3d11_dxgi"
+        }
+      }
+    },
+    "many_exes": {
+      "files": {
+        "h.exe": {
+          "image": "no_imports"
+        },
+        "g.exe": {
+          "image": "no_imports"
+        },
+        "f.exe": {
+          "image": "no_imports"
+        },
+        "e.exe": {
+          "image": "no_imports"
+        },
+        "d.exe": {
+          "image": "no_imports"
+        },
+        "c.exe": {
+          "image": "no_imports"
+        },
+        "b.exe": {
+          "image": "no_imports"
+        },
+        "a.exe": {
+          "image": "no_imports"
+        }
+      }
+    },
+    "empty": {
+      "dirs": [
+        "Empty"
+      ]
+    },
+    "helix_logs": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "helixsr-install.json": {
+          "text": "{\"files\": [\"dxgi.dll\"]}"
+        },
+        "OptiScaler.log": {
+          "text": "[I] FFX upscaler:  HLX DLSS 3.1\n"
+        }
+      }
+    },
+    "helix_scaler": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "HelixSR-Scaler.files": {
+          "text": "# HelixSR Scaler, installed by HelixSR Desktop\n# layout=ngx\nname=dxgi.dll\ndxgi.dll\nOptiScaler.ini\nHelixSR/helixsr.dll\n"
+        },
+        "dxgi.dll": {
+          "image": "no_imports"
+        },
+        "HelixSR/helixsr.dll": {
+          "image": "no_imports"
+        },
+        "OptiScaler.ini": {
+          "text": "; HelixSR Scaler\n[HelixSR]\nEnabled=true\n"
+        }
+      }
+    },
+    "helix_scaler_wrong_layout": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "HelixSR-Scaler.files": {
+          "text": "# HelixSR Scaler, installed by HelixSR Desktop\n# layout=fsr\nname=dxgi.dll\ndxgi.dll\nOptiScaler.ini\nHelixSR/helixsr.dll\n"
+        },
+        "dxgi.dll": {
+          "image": "no_imports"
+        },
+        "HelixSR/helixsr.dll": {
+          "image": "no_imports"
+        },
+        "OptiScaler.ini": {
+          "text": "; HelixSR Scaler\n[HelixSR]\nEnabled=true\n"
+        }
+      }
+    },
+    "helix_scaler_escaping_path": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "HelixSR-Scaler.files": {
+          "text": "# HelixSR Scaler, installed by HelixSR Desktop\n# layout=ngx\nname=dxgi.dll\ndxgi.dll\nOptiScaler.ini\nHelixSR/helixsr.dll\n../outside.dll\n"
+        },
+        "dxgi.dll": {
+          "image": "no_imports"
+        },
+        "HelixSR/helixsr.dll": {
+          "image": "no_imports"
+        },
+        "OptiScaler.ini": {
+          "text": "; HelixSR Scaler\n[HelixSR]\nEnabled=true\n"
+        }
+      }
+    },
+    "helix_bad_record": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "helixsr-install.json": {
+          "text": "{\"files\": [1]}"
+        },
+        "HelixSR-fsrfg/helixsr.log": {
+          "text": "HLX-FSR-4 own runtime active: yes\n"
+        }
+      }
+    },
+    "helix_two_variants": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "helixsr-install.json": {
+          "text": "not json"
+        },
+        "helixsr.log": {
+          "text": "FFX upscaler: HLX DLSS\nHLX-FSR-4 own runtime active: 1\n"
+        }
+      }
+    },
+    "optiscaler_log_only": {
+      "files": {
+        "game.exe": {
+          "image": "d3d12_dxgi"
+        },
+        "OptiScaler.log": {
+          "text": "[I] OptiScaler v0.7\n"
+        }
+      }
+    },
+    "embedded_only": {
+      "files": {
+        "Game.exe": {
+          "image": "embedded_xess_fsr31"
+        },
+        "Tools/Small.exe": {
+          "image": "no_imports"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "analyze_witcher",
+      "operation": "analyze",
+      "input": {
+        "tree": "witcher"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "bin/x64_dx12/witcher3.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 9437184,
+            "score": 31
+          },
+          {
+            "exe": "REDprelauncher.exe",
+            "apis": [],
+            "size": 512,
+            "score": -25
+          }
+        ],
+        "exe": "bin/x64_dx12/witcher3.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": "bin/x64_dx12",
+        "inputs": {
+          "fsr31": [
+            "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+          ],
+          "dlss": [
+            "bin/x64_dx12/nvngx_dlss.dll"
+          ]
+        },
+        "dll_targets": [
+          "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_witcher_anti_cheat_foreign",
+      "operation": "analyze",
+      "input": {
+        "tree": "witcher_anti_cheat_foreign"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "bin/x64_dx12/witcher3.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 9437184,
+            "score": 31
+          },
+          {
+            "exe": "REDprelauncher.exe",
+            "apis": [],
+            "size": 512,
+            "score": -25
+          }
+        ],
+        "exe": "bin/x64_dx12/witcher3.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": "bin/x64_dx12",
+        "inputs": {
+          "fsr31": [
+            "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+          ],
+          "dlss": [
+            "bin/x64_dx12/nvngx_dlss.dll"
+          ]
+        },
+        "dll_targets": [
+          "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": true,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_unreal",
+      "operation": "analyze",
+      "input": {
+        "tree": "unreal"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "FSD/Binaries/Win64/FSD-Win64-Shipping.exe",
+            "apis": [
+              "d3d12"
+            ],
+            "size": 20971520,
+            "score": 102
+          },
+          {
+            "exe": "Engine/Binaries/Win64/ShaderTool.exe",
+            "apis": [
+              "d3d11",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 10
+          },
+          {
+            "exe": "FSD.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          }
+        ],
+        "exe": "FSD/Binaries/Win64/FSD-Win64-Shipping.exe",
+        "apis": [
+          "d3d12"
+        ],
+        "manual": false,
+        "target": "FSD/Binaries/Win64",
+        "inputs": {
+          "fsr2": [
+            "FSD/Binaries/Win64/FSD-Win64-Shipping.exe"
+          ],
+          "dlss": [
+            "FSD/Plugins/Nvidia/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll"
+          ],
+          "streamline": [
+            "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64/sl.interposer.dll"
+          ],
+          "xefg": [
+            "Deep/1/2/3/4/5/6/7/8/libxess_fg.dll"
+          ]
+        },
+        "dll_targets": [],
+        "streamline": 2,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_re_engine",
+      "operation": "analyze",
+      "input": {
+        "tree": "re_engine"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_re_engine_agility_only",
+      "operation": "analyze",
+      "input": {
+        "tree": "re_engine_agility_only"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d11",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d11",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_panel_manifest",
+      "operation": "analyze",
+      "input": {
+        "tree": "panel_manifest"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {
+          "fsr31": [
+            "amd_fidelityfx_upscaler_dx12.dll"
+          ]
+        },
+        "dll_targets": [
+          "amd_fidelityfx_upscaler_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_unified_fsr31",
+      "operation": "analyze",
+      "input": {
+        "tree": "unified_fsr31"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {
+          "fsr31": [
+            "amd_fidelityfx_dx12.dll",
+            "plugins/amd_fidelityfx_loader_dx12.dll"
+          ],
+          "fsrfg": [
+            "amd_fidelityfx_dx12.dll"
+          ]
+        },
+        "dll_targets": [
+          "amd_fidelityfx_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_skipped_folders",
+      "operation": "analyze",
+      "input": {
+        "tree": "skipped_folders"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          },
+          {
+            "exe": "BattlEye/BEService_x64.exe",
+            "apis": [],
+            "size": 1,
+            "score": 0
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": true,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_recipe",
+      "operation": "analyze",
+      "input": {
+        "tree": "recipe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_many_exes",
+      "operation": "analyze",
+      "input": {
+        "tree": "many_exes"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "a.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          },
+          {
+            "exe": "b.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          },
+          {
+            "exe": "c.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          },
+          {
+            "exe": "d.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          },
+          {
+            "exe": "e.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          },
+          {
+            "exe": "f.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          }
+        ],
+        "exe": "a.exe",
+        "apis": [],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_empty",
+      "operation": "analyze",
+      "input": {
+        "tree": "empty"
+      },
+      "expected": {
+        "candidates": [],
+        "exe": null,
+        "apis": [],
+        "manual": false,
+        "target": null,
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_helix_logs",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_logs"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "dlss",
+          "evidence": [
+            "helixsr-install.json",
+            "OptiScaler.log:HLX DLSS"
+          ],
+          "manifest_error": false
+        }
+      }
+    },
+    {
+      "id": "analyze_helix_scaler",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_scaler"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "dlss",
+          "evidence": [
+            "HelixSR-Scaler.files"
+          ],
+          "manifest_error": false
+        }
+      }
+    },
+    {
+      "id": "analyze_helix_scaler_wrong_layout",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_scaler_wrong_layout"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "unknown",
+          "evidence": [
+            "HelixSR-Scaler.files"
+          ],
+          "manifest_error": true
+        }
+      }
+    },
+    {
+      "id": "analyze_helix_scaler_escaping_path",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_scaler_escaping_path"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "unknown",
+          "evidence": [
+            "HelixSR-Scaler.files"
+          ],
+          "manifest_error": true
+        }
+      }
+    },
+    {
+      "id": "analyze_helix_bad_record",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_bad_record"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "unknown",
+          "evidence": [
+            "helixsr-install.json",
+            "HelixSR-fsrfg/helixsr.log:HLX FSR 4"
+          ],
+          "manifest_error": true
+        }
+      }
+    },
+    {
+      "id": "analyze_helix_two_variants",
+      "operation": "analyze",
+      "input": {
+        "tree": "helix_two_variants"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "helixsr",
+          "variant": "unknown",
+          "evidence": [
+            "helixsr-install.json",
+            "helixsr.log:HLX DLSS",
+            "helixsr.log:HLX FSR 4"
+          ],
+          "manifest_error": true
+        }
+      }
+    },
+    {
+      "id": "analyze_optiscaler_log_only",
+      "operation": "analyze",
+      "input": {
+        "tree": "optiscaler_log_only"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "optiscaler",
+          "variant": "unknown",
+          "evidence": [
+            "OptiScaler.log"
+          ],
+          "manifest_error": false
+        }
+      }
+    },
+    {
+      "id": "analyze_embedded_only",
+      "operation": "analyze",
+      "input": {
+        "tree": "embedded_only"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12"
+            ],
+            "size": 1076,
+            "score": 30
+          },
+          {
+            "exe": "Tools/Small.exe",
+            "apis": [],
+            "size": 512,
+            "score": 0
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {
+          "fsr31": [
+            "Game.exe"
+          ],
+          "xess": [
+            "Game.exe"
+          ]
+        },
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_manual_launcher",
+      "operation": "analyze",
+      "input": {
+        "tree": "witcher_anti_cheat_foreign",
+        "chosen_exe": "REDprelauncher.exe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "bin/x64_dx12/witcher3.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 9437184,
+            "score": 31
+          },
+          {
+            "exe": "REDprelauncher.exe",
+            "apis": [],
+            "size": 512,
+            "score": -25
+          }
+        ],
+        "exe": "REDprelauncher.exe",
+        "apis": [],
+        "manual": true,
+        "target": ".",
+        "inputs": {
+          "fsr31": [
+            "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+          ],
+          "dlss": [
+            "bin/x64_dx12/nvngx_dlss.dll"
+          ]
+        },
+        "dll_targets": [
+          "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": true,
+        "foreign": true,
+        "foreign_identity": {
+          "engine": "optiscaler",
+          "variant": "unknown",
+          "evidence": [
+            "OptiScaler.ini"
+          ],
+          "manifest_error": false
+        }
+      }
+    },
+    {
+      "id": "analyze_manual_missing_falls_back",
+      "operation": "analyze",
+      "input": {
+        "tree": "witcher",
+        "chosen_exe": "gone.exe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "bin/x64_dx12/witcher3.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 9437184,
+            "score": 31
+          },
+          {
+            "exe": "REDprelauncher.exe",
+            "apis": [],
+            "size": 512,
+            "score": -25
+          }
+        ],
+        "exe": "bin/x64_dx12/witcher3.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": "bin/x64_dx12",
+        "inputs": {
+          "fsr31": [
+            "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+          ],
+          "dlss": [
+            "bin/x64_dx12/nvngx_dlss.dll"
+          ]
+        },
+        "dll_targets": [
+          "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll"
+        ],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_recipe_exe_outside_candidates",
+      "operation": "analyze",
+      "input": {
+        "tree": "recipe",
+        "recipe_exe": "Launcher/GameLauncherHelper.exe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "Launcher/GameLauncherHelper.exe",
+        "apis": [
+          "d3d11",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": "Launcher",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_manual_beats_recipe",
+      "operation": "analyze",
+      "input": {
+        "tree": "recipe",
+        "chosen_exe": "Game.exe",
+        "recipe_exe": "Launcher/GameLauncherHelper.exe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": true,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "analyze_recipe_missing_falls_back",
+      "operation": "analyze",
+      "input": {
+        "tree": "recipe",
+        "recipe_exe": "Missing.exe"
+      },
+      "expected": {
+        "candidates": [
+          {
+            "exe": "Game.exe",
+            "apis": [
+              "d3d12",
+              "dxgi"
+            ],
+            "size": 1024,
+            "score": 30
+          }
+        ],
+        "exe": "Game.exe",
+        "apis": [
+          "d3d12",
+          "dxgi"
+        ],
+        "manual": false,
+        "target": ".",
+        "inputs": {},
+        "dll_targets": [],
+        "streamline": null,
+        "anti_cheat": false,
+        "foreign": false,
+        "foreign_identity": null
+      }
+    },
+    {
+      "id": "shipped_witcher",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "witcher"
+      },
+      "expected": [
+        "DLSS",
+        "FSR 3.1"
+      ]
+    },
+    {
+      "id": "shipped_unreal",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "unreal"
+      },
+      "expected": [
+        "DLSS"
+      ]
+    },
+    {
+      "id": "shipped_panel_manifest",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "panel_manifest"
+      },
+      "expected": [
+        "FSR 3.1"
+      ]
+    },
+    {
+      "id": "shipped_unified_fsr31",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "unified_fsr31"
+      },
+      "expected": [
+        "FSR 3.1"
+      ]
+    },
+    {
+      "id": "shipped_embedded_only",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "embedded_only"
+      },
+      "expected": [
+        "FSR 3.1",
+        "XeSS"
+      ]
+    },
+    {
+      "id": "shipped_skipped_folders",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "skipped_folders"
+      },
+      "expected": []
+    },
+    {
+      "id": "shipped_empty",
+      "operation": "shipped_upscalers",
+      "input": {
+        "tree": "empty"
+      },
+      "expected": []
+    },
+    {
+      "id": "graphics_apis_re_engine",
+      "operation": "graphics_apis",
+      "input": {
+        "tree": "re_engine",
+        "exe": "game.exe"
+      },
+      "expected": [
+        "d3d12",
+        "dxgi"
+      ]
+    },
+    {
+      "id": "graphics_apis_re_engine_agility_only",
+      "operation": "graphics_apis",
+      "input": {
+        "tree": "re_engine_agility_only",
+        "exe": "game.exe"
+      },
+      "expected": [
+        "d3d11",
+        "dxgi"
+      ]
+    },
+    {
+      "id": "graphics_apis_missing_exe",
+      "operation": "graphics_apis",
+      "input": {
+        "tree": "re_engine",
+        "exe": "absent.exe"
+      },
+      "expected": [
+        "d3d12"
+      ]
+    }
+  ]
+}

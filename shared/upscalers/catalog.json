@@ -1,0 +1,622 @@
+{
+  "schema_version": 1,
+  "archives": {
+    "optiscaler": "optiscaler-0.9.4",
+    "optiscaler_beta": "optiscaler-10-nightly",
+    "lsfg": "lsfg-vk-2.0.0",
+    "helixsr": "helixsr-3.2.0",
+    "optipatcher": "optipatcher-0.42"
+  },
+  "gpu_groups": {
+    "amd": [
+      "rdna2",
+      "rdna3",
+      "rdna35",
+      "rdna4"
+    ],
+    "every": [
+      "rdna2",
+      "rdna3",
+      "rdna35",
+      "rdna4",
+      "intel",
+      "unknown"
+    ]
+  },
+  "preferred": {
+    "rdna2": "fsr-4.1.2-beta",
+    "rdna3": "fsr-4.1.1",
+    "rdna35": "fsr-4.1.1",
+    "rdna4": "fsr-4.1.1",
+    "intel": "xess"
+  },
+  "quality_ratios": {
+    "native": 1.0,
+    "quality": 1.5,
+    "balanced": 1.7,
+    "performance": 2.0,
+    "ultra": 3.0
+  },
+  "easy_modes": {
+    "image": "quality",
+    "balanced": "balanced",
+    "fps": "performance"
+  },
+  "sharpness": {
+    "off": null,
+    "soft": 0.3,
+    "high": 0.6
+  },
+  "proxies": [
+    "dxgi.dll",
+    "winmm.dll",
+    "version.dll",
+    "dbghelp.dll",
+    "wininet.dll",
+    "winhttp.dll"
+  ],
+  "base_ini": {
+    "Log.LogToFile": "true",
+    "Log.LogLevel": "2",
+    "Menu.UseHQFont": "false"
+  },
+  "ffx_loader": "amd_fidelityfx_loader_dx12.dll",
+  "notes": {
+    "preferred": "OptiScaler 10 runs FSR 4.1.2 Lite on Van Gogh (rdna2), as AMD's driver picks for APUs.",
+    "base_ini": "Always set: the log is how the upscaler is proven to run, and the HQ font auto mode asserts under Proton when its TTF is missing."
+  },
+  "assets": [
+    {
+      "id": "lsfg-vk-2.0.0",
+      "filename": "lsfg-vk-2.0.0.tar.xz",
+      "sha256": "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74",
+      "size": 561348,
+      "urls": [
+        "https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz"
+      ],
+      "archive": true
+    },
+    {
+      "id": "helixsr-3.2.0",
+      "filename": "HelixSR-3.2.0.zip",
+      "sha256": "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7",
+      "size": 217396302,
+      "urls": [
+        "https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip"
+      ],
+      "archive": false,
+      "note": "Official release, unmodified (HelixSR Freeware License). Only HLX FSR 4 (prebuilt, from AMD's MIT FSR SDK) is offered: HLX DLSS needs NVIDIA's DLSS DLL taken apart for AMD, which NVIDIA's licence forbids."
+    },
+    {
+      "id": "optipatcher-0.42",
+      "filename": "OptiPatcher.asi",
+      "sha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
+      "size": 107520,
+      "urls": [
+        "https://github.com/optiscaler/OptiPatcher/releases/download/v0.42/OptiPatcher_v0.42.asi"
+      ],
+      "archive": false,
+      "note": "MIT; lets supported games offer DLSS/DLSS-FG to OptiScaler without spoofing (OptiScaler loads *.asi from plugins)."
+    },
+    {
+      "id": "optiscaler-0.9.4",
+      "filename": "Optiscaler_0.9.4-final.20260718._MM.7z",
+      "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+      "size": 55016448,
+      "urls": [
+        "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z"
+      ],
+      "archive": true
+    },
+    {
+      "id": "optiscaler-10-nightly",
+      "filename": "OptiScaler_v10.0.0-pre1_20261102.7z",
+      "sha256": "7465483deac95ccc93cf05efc9e883e00c03d3186ea79304c076c800bc399501",
+      "size": 72315137,
+      "urls": [
+        "https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261102/OptiScaler_v10.0.0-pre1_20261102.7z"
+      ],
+      "archive": true,
+      "generation": 10,
+      "note": "OptiScaler 10 nightly: bundled files move to an OptiScaler/ subfolder; FFX upscaler 4.1.2.4555."
+    },
+    {
+      "id": "reframework-nightly",
+      "filename": "REFramework.zip",
+      "sha256": "9ef584db4a37715f0a677a5d304a5048b850389875b5dae0e204d4abbe9366f5",
+      "size": 13269112,
+      "urls": [
+        "https://github.com/praydog/REFramework-nightly/releases/download/nightly-01436-1813bf34f720cfed51c0e8f40fc90ed1459a3c6b/REFramework.zip"
+      ],
+      "archive": false,
+      "member": "dinput8.dll"
+    },
+    {
+      "id": "optiscaler-0.10-pre1",
+      "filename": "OptiScaler.dll",
+      "sha256": "b374b19081cc066365d0c6da4808d768e16469b0cbdfc478b6e95999947d5364",
+      "size": 25691136,
+      "urls": [
+        "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/OptiScaler_0.10.0-pre1.20260622_135940.dll"
+      ],
+      "archive": false
+    },
+    {
+      "id": "fsr-4.0.2c-int8",
+      "filename": "amd_fidelityfx_upscaler_dx12.dll",
+      "sha256": "c7720bc16bede334f59a1a32cd22edbcbbb159685ed5240e61350a5fb0bc8a94",
+      "size": 41036800,
+      "urls": [
+        "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/opti-9-2-a/amd_fidelityfx_upscaler_dx12.dll"
+      ],
+      "archive": false
+    },
+    {
+      "id": "amdxcffx64-4.1.1",
+      "filename": "amdxcffx64.dll",
+      "sha256": "a2b136b6affd35a49b141a936be935f7d5ddc8d8f9b8c9afbe62ff9ddb2538a0",
+      "size": 66830768,
+      "urls": [
+        "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1/amdxcffx64.dll"
+      ],
+      "archive": false
+    },
+    {
+      "id": "amdxcffx64-4.1.1-valve",
+      "filename": "amdxcffx64.dll",
+      "sha256": "4e7dc37aebea3a90e3d3cc43e24cb2b54176b2535315f20dbe63b3b7cfc56b1e",
+      "size": 65657608,
+      "urls": [
+        "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/amdxcffx64.dll"
+      ],
+      "archive": false
+    },
+    {
+      "id": "fsr-4.1.2-dll-loader",
+      "filename": "FSR4_FP8_4.1.2.4555.7z",
+      "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+      "size": 18256621,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_loader_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.2-dll-upscaler",
+      "filename": "FSR4_FP8_4.1.2.4555.7z",
+      "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+      "size": 18256621,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_upscaler_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.2-dll-framegeneration",
+      "filename": "FSR4_FP8_4.1.2.4555.7z",
+      "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+      "size": 18256621,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_framegeneration_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.1-dll-loader",
+      "filename": "FSR4_FP8_4.1.1.2740.7z",
+      "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+      "size": 17068121,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_loader_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.1-dll-upscaler",
+      "filename": "FSR4_FP8_4.1.1.2740.7z",
+      "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+      "size": 17068121,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_upscaler_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.1-dll-framegeneration",
+      "filename": "FSR4_FP8_4.1.1.2740.7z",
+      "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+      "size": 17068121,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_framegeneration_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.2-lite-cyboman-dll",
+      "filename": "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",
+      "sha256": "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f",
+      "size": 9567439,
+      "urls": [
+        "https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z"
+      ],
+      "archive": false,
+      "member": "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.2-lite-igpu-cyboman-dll",
+      "filename": "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",
+      "sha256": "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f",
+      "size": 9553046,
+      "urls": [
+        "https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z"
+      ],
+      "archive": false,
+      "member": "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll"
+    },
+    {
+      "id": "fsr-4.1.1-lite-exact-dll",
+      "filename": "FSR4_INT8_4.1.1_Lite_Exact.zip",
+      "sha256": "dac25f79687f955d7651451c24e9a827e1989e61389565befce267b0b2fef68e",
+      "size": 22379952,
+      "urls": [
+        "https://github.com/Optiscaler-Client/Optiscaler-Extras/releases/download/FSR_4.1.1_Lite_Exact/FSR4_INT8_4.1.1_Lite_Exact.zip"
+      ],
+      "archive": false,
+      "member": "amd_fidelityfx_upscaler_dx12.dll"
+    },
+    {
+      "id": "amdxc64-rdna2",
+      "filename": "amdxc64.dll",
+      "sha256": "a0a0af61d475e30a70966b3459f3793df772faf8f26ae3261d10554ff592cbd5",
+      "size": 72656088,
+      "urls": [
+        "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/amdxc64.dll"
+      ],
+      "archive": false
+    }
+  ],
+  "builds": [
+    {
+      "id": "fsr-4.1.2-dll",
+      "family": "fsr",
+      "version": "4.1.2",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35",
+        "rdna4"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-dll-upscaler",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+      }
+    },
+    {
+      "id": "fsr-4.1.2-lite-dll",
+      "family": "fsr",
+      "version": "4.1.2",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna2"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-cyboman-dll"
+      },
+      "legacy_replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+      },
+      "models": [
+        {
+          "id": "lite",
+          "ini": {}
+        }
+      ]
+    },
+    {
+      "id": "fsr-4.1.2-lite-igpu-dll",
+      "family": "fsr",
+      "version": "4.1.2",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna3"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-igpu-cyboman-dll"
+      },
+      "legacy_replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+      },
+      "models": [
+        {
+          "id": "lite",
+          "ini": {}
+        }
+      ]
+    },
+    {
+      "id": "fsr-4.1.1-dll",
+      "family": "fsr",
+      "version": "4.1.1",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna3",
+        "rdna35",
+        "rdna4"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.1-dll-loader",
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.1-dll-upscaler",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.1-dll-framegeneration"
+      }
+    },
+    {
+      "id": "fsr-4.1.1-lite-dll",
+      "family": "fsr",
+      "version": "4.1.1",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.1-lite-exact-dll"
+      },
+      "legacy_replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+      },
+      "models": [
+        {
+          "id": "lite",
+          "ini": {}
+        }
+      ]
+    },
+    {
+      "id": "fsr-4.0.2c-dll",
+      "family": "fsr",
+      "version": "4.0.2c",
+      "engine": "dll",
+      "way": "fsr",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35"
+      ],
+      "image": 2,
+      "cost": 3,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"
+      },
+      "legacy_replace": {
+        "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+        "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+      }
+    },
+    {
+      "id": "fsr-4.1.2-beta",
+      "family": "fsr",
+      "version": "4.1.2",
+      "engine": "optiscaler",
+      "channel": "beta",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-10-nightly",
+      "extra_dir": "OptiScaler",
+      "assets": [
+        "amdxcffx64-4.1.1"
+      ],
+      "ini": {
+        "Upscalers.Dx12Upscaler": "fsr31",
+        "Upscalers.Dx11Upscaler": "fsr31_12",
+        "Upscalers.VulkanUpscaler": "fsr31_12",
+        "FSR.Fsr4GpuSupport": "4"
+      },
+      "models": [
+        {
+          "id": "lite",
+          "ini": {
+            "FSR.Fsr4GpuSupport": "4"
+          }
+        },
+        {
+          "id": "full",
+          "ini": {
+            "FSR.Fsr4GpuSupport": "2"
+          }
+        }
+      ],
+      "note": "v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8, 4 = INT8Lite). Lite is the default, as AMD's driver picks for APUs; full INT8 stays one tap away."
+    },
+    {
+      "id": "fsr-4.1.1-rdna2",
+      "family": "fsr",
+      "version": "4.1.1",
+      "engine": "optiscaler",
+      "gpus": [
+        "rdna2"
+      ],
+      "image": 3,
+      "cost": 3,
+      "archive": "optiscaler-10-nightly",
+      "extra_dir": "OptiScaler",
+      "assets": [
+        "amdxcffx64-4.1.1-valve",
+        "amdxc64-rdna2"
+      ],
+      "ini": {
+        "Upscalers.Dx12Upscaler": "ffx",
+        "Upscalers.Dx11Upscaler": "ffx_12",
+        "Upscalers.VulkanUpscaler": "ffx_12",
+        "FSR.Fsr4GpuSupport": "2",
+        "FSR.UpscalerIndex": "1",
+        "Plugins.LoadCustomAmdxc64OnRdna2": "true"
+      },
+      "note": "Valve's RDNA2 provider pair uses the v10 driver-provider path."
+    },
+    {
+      "id": "fsr-4.1.1",
+      "family": "fsr",
+      "version": "4.1.1",
+      "engine": "optiscaler",
+      "gpus": [
+        "rdna3",
+        "rdna35",
+        "rdna4"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "assets": [
+        "amdxcffx64-4.1.1"
+      ],
+      "ini": {
+        "Upscalers.Dx12Upscaler": "fsr31",
+        "Upscalers.Dx11Upscaler": "fsr31_12",
+        "Upscalers.VulkanUpscaler": "fsr31_12",
+        "FSR.Fsr4Update": "true",
+        "FSR.Fsr4ForceEnableInt8": "true"
+      },
+      "note": "FSR4 only runs through the FFX 3.1 path; Dx11 and Vulkan reach it via the D3D12 bridge."
+    },
+    {
+      "id": "fsr-4.0.2c",
+      "family": "fsr",
+      "version": "4.0.2c",
+      "engine": "optiscaler",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35"
+      ],
+      "image": 2,
+      "cost": 3,
+      "archive": "optiscaler-0.9.4",
+      "replace": {
+        "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"
+      },
+      "ini": {
+        "Upscalers.Dx12Upscaler": "fsr31",
+        "Upscalers.Dx11Upscaler": "fsr31_12",
+        "Upscalers.VulkanUpscaler": "fsr31_12",
+        "FSR.Fsr4Update": "true"
+      }
+    },
+    {
+      "id": "fsr-3.1",
+      "family": "fsr",
+      "version": "3.1.5",
+      "engine": "optiscaler",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35",
+        "rdna4",
+        "intel",
+        "unknown"
+      ],
+      "image": 1,
+      "cost": 1,
+      "archive": "optiscaler-0.9.4",
+      "ini": {
+        "Upscalers.Dx12Upscaler": "fsr31",
+        "Upscalers.Dx11Upscaler": "fsr31",
+        "Upscalers.VulkanUpscaler": "fsr31",
+        "FSR.Fsr4Update": "false",
+        "FSR.UpscalerIndex": "0"
+      }
+    },
+    {
+      "id": "xess",
+      "family": "xess",
+      "version": "2",
+      "engine": "optiscaler",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35",
+        "rdna4",
+        "intel",
+        "unknown"
+      ],
+      "image": 2,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "ini": {
+        "Upscalers.Dx12Upscaler": "xess",
+        "Upscalers.Dx11Upscaler": "xess_12",
+        "Upscalers.VulkanUpscaler": "xess"
+      },
+      "note": "Native XeSS on DX11 only runs on Arc; elsewhere it goes through the D3D12 bridge."
+    },
+    {
+      "id": "proton-fsr4",
+      "family": "proton",
+      "version": "FSR 4",
+      "engine": "proton",
+      "gpus": [
+        "rdna3",
+        "rdna4"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "optiscaler-0.9.4",
+      "note": "Proton-GE/EM and official Proton swap FSR 3.1 for FSR 4 themselves; the GPU and the game's Proton decide."
+    },
+    {
+      "id": "hlx-fsr4",
+      "family": "helixsr",
+      "version": "FSR 4",
+      "engine": "helixsr",
+      "way": "fsr",
+      "channel": "beta",
+      "gpus": [
+        "rdna2",
+        "rdna3",
+        "rdna35",
+        "rdna4",
+        "intel"
+      ],
+      "image": 3,
+      "cost": 2,
+      "archive": "helixsr-3.2.0"
+    }
+  ]
+}

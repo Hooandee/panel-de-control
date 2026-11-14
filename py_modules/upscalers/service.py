@@ -768,12 +768,7 @@ class UpscalerService:
         solution = solution_plan.resolve(self.gpu, analysis, recipe, archive_asset.generation, build.engine, choice.get("fg_route"), dependencies_ready=bool(automatic))
         fg_plan = _requested_fg(solution, choice)
         wiki_ini = wiki.resolve_settings(base_ini, recipe.wiki_settings) if recipe else {}
-        panel = {
-            **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
-            **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
-            **catalog.model_overrides(build, choice.get("model")),
-            **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
-        }
+        panel = panel_ini(build, recipe, choice, fg_plan)
         managed = sorted(panel)
         # The wiki's settings are a starting point the user may change in the editor; Panel's own keys win over them
         # and hand edits from the advanced editor survive a repair or a new version.
@@ -2338,6 +2333,16 @@ def _image_overrides(install: dict, text: str) -> dict:
     if not install.get("image_overrides"):
         return {}
     return {key: value for key in image_settings.MANAGED_SHARPNESS_KEYS if (value := ini.read(text, key)) is not None}
+
+
+def panel_ini(build, recipe, choice: dict, fg_plan) -> dict[str, str]:
+    """The OptiScaler.ini keys Panel owns for this install, in the order they are written."""
+    return {
+        **catalog.BASE_INI, **build.ini, **(recipe.ini if recipe else {}), **_option_overrides(choice),
+        **({"Plugins.LoadAsiPlugins": "true"} if recipe and recipe.optipatcher else {}),
+        **catalog.model_overrides(build, choice.get("model")),
+        **catalog.fg_overrides(fg_plan, choice.get("fg") == "on"),
+    }
 
 
 def _option_overrides(choice: dict, reset: bool = False) -> dict[str, str]:

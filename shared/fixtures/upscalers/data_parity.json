@@ -1,0 +1,2208 @@
+{
+ "schema_version": 1,
+ "catalog": {
+  "archives": {
+   "optiscaler": "optiscaler-0.9.4",
+   "optiscaler_beta": "optiscaler-10-nightly",
+   "lsfg": "lsfg-vk-2.0.0",
+   "helixsr": "helixsr-3.2.0",
+   "optipatcher": "optipatcher-0.42"
+  },
+  "amd": [
+   "rdna2",
+   "rdna3",
+   "rdna35",
+   "rdna4"
+  ],
+  "every_gpu": [
+   "rdna2",
+   "rdna3",
+   "rdna35",
+   "rdna4",
+   "intel",
+   "unknown"
+  ],
+  "preferred": {
+   "rdna2": "fsr-4.1.2-beta",
+   "rdna3": "fsr-4.1.1",
+   "rdna35": "fsr-4.1.1",
+   "rdna4": "fsr-4.1.1",
+   "intel": "xess"
+  },
+  "quality_ratios": {
+   "native": 1.0,
+   "quality": 1.5,
+   "balanced": 1.7,
+   "performance": 2.0,
+   "ultra": 3.0
+  },
+  "easy_modes": {
+   "image": "quality",
+   "balanced": "balanced",
+   "fps": "performance"
+  },
+  "sharpness": {
+   "off": null,
+   "soft": 0.3,
+   "high": 0.6
+  },
+  "proxies": [
+   "dxgi.dll",
+   "winmm.dll",
+   "version.dll",
+   "dbghelp.dll",
+   "wininet.dll",
+   "winhttp.dll"
+  ],
+  "base_ini": {
+   "Log.LogToFile": "true",
+   "Log.LogLevel": "2",
+   "Menu.UseHQFont": "false"
+  },
+  "ffx_loader": "amd_fidelityfx_loader_dx12.dll",
+  "assets": [
+   {
+    "id": "lsfg-vk-2.0.0",
+    "filename": "lsfg-vk-2.0.0.tar.xz",
+    "sha256": "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74",
+    "size": 561348,
+    "urls": [
+     "https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz"
+    ],
+    "archive": true,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "helixsr-3.2.0",
+    "filename": "HelixSR-3.2.0.zip",
+    "sha256": "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7",
+    "size": 217396302,
+    "urls": [
+     "https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "optipatcher-0.42",
+    "filename": "OptiPatcher.asi",
+    "sha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
+    "size": 107520,
+    "urls": [
+     "https://github.com/optiscaler/OptiPatcher/releases/download/v0.42/OptiPatcher_v0.42.asi"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "optiscaler-0.9.4",
+    "filename": "Optiscaler_0.9.4-final.20260718._MM.7z",
+    "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+    "size": 55016448,
+    "urls": [
+     "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z"
+    ],
+    "archive": true,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "optiscaler-10-nightly",
+    "filename": "OptiScaler_v10.0.0-pre1_20261102.7z",
+    "sha256": "7465483deac95ccc93cf05efc9e883e00c03d3186ea79304c076c800bc399501",
+    "size": 72315137,
+    "urls": [
+     "https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261102/OptiScaler_v10.0.0-pre1_20261102.7z"
+    ],
+    "archive": true,
+    "member": null,
+    "generation": 10
+   },
+   {
+    "id": "reframework-nightly",
+    "filename": "REFramework.zip",
+    "sha256": "9ef584db4a37715f0a677a5d304a5048b850389875b5dae0e204d4abbe9366f5",
+    "size": 13269112,
+    "urls": [
+     "https://github.com/praydog/REFramework-nightly/releases/download/nightly-01436-1813bf34f720cfed51c0e8f40fc90ed1459a3c6b/REFramework.zip"
+    ],
+    "archive": false,
+    "member": "dinput8.dll",
+    "generation": 9
+   },
+   {
+    "id": "optiscaler-0.10-pre1",
+    "filename": "OptiScaler.dll",
+    "sha256": "b374b19081cc066365d0c6da4808d768e16469b0cbdfc478b6e95999947d5364",
+    "size": 25691136,
+    "urls": [
+     "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/OptiScaler_0.10.0-pre1.20260622_135940.dll"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.0.2c-int8",
+    "filename": "amd_fidelityfx_upscaler_dx12.dll",
+    "sha256": "c7720bc16bede334f59a1a32cd22edbcbbb159685ed5240e61350a5fb0bc8a94",
+    "size": 41036800,
+    "urls": [
+     "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/opti-9-2-a/amd_fidelityfx_upscaler_dx12.dll"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "amdxcffx64-4.1.1",
+    "filename": "amdxcffx64.dll",
+    "sha256": "a2b136b6affd35a49b141a936be935f7d5ddc8d8f9b8c9afbe62ff9ddb2538a0",
+    "size": 66830768,
+    "urls": [
+     "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1/amdxcffx64.dll"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "amdxcffx64-4.1.1-valve",
+    "filename": "amdxcffx64.dll",
+    "sha256": "4e7dc37aebea3a90e3d3cc43e24cb2b54176b2535315f20dbe63b3b7cfc56b1e",
+    "size": 65657608,
+    "urls": [
+     "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/amdxcffx64.dll"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.2-dll-loader",
+    "filename": "FSR4_FP8_4.1.2.4555.7z",
+    "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+    "size": 18256621,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_loader_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.2-dll-upscaler",
+    "filename": "FSR4_FP8_4.1.2.4555.7z",
+    "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+    "size": 18256621,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_upscaler_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.2-dll-framegeneration",
+    "filename": "FSR4_FP8_4.1.2.4555.7z",
+    "sha256": "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff",
+    "size": 18256621,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_framegeneration_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.1-dll-loader",
+    "filename": "FSR4_FP8_4.1.1.2740.7z",
+    "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+    "size": 17068121,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_loader_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.1-dll-upscaler",
+    "filename": "FSR4_FP8_4.1.1.2740.7z",
+    "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+    "size": 17068121,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_upscaler_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.1-dll-framegeneration",
+    "filename": "FSR4_FP8_4.1.1.2740.7z",
+    "sha256": "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d",
+    "size": 17068121,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_framegeneration_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.2-lite-cyboman-dll",
+    "filename": "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",
+    "sha256": "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f",
+    "size": 9567439,
+    "urls": [
+     "https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z"
+    ],
+    "archive": false,
+    "member": "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.2-lite-igpu-cyboman-dll",
+    "filename": "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",
+    "sha256": "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f",
+    "size": 9553046,
+    "urls": [
+     "https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z"
+    ],
+    "archive": false,
+    "member": "4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "fsr-4.1.1-lite-exact-dll",
+    "filename": "FSR4_INT8_4.1.1_Lite_Exact.zip",
+    "sha256": "dac25f79687f955d7651451c24e9a827e1989e61389565befce267b0b2fef68e",
+    "size": 22379952,
+    "urls": [
+     "https://github.com/Optiscaler-Client/Optiscaler-Extras/releases/download/FSR_4.1.1_Lite_Exact/FSR4_INT8_4.1.1_Lite_Exact.zip"
+    ],
+    "archive": false,
+    "member": "amd_fidelityfx_upscaler_dx12.dll",
+    "generation": 9
+   },
+   {
+    "id": "amdxc64-rdna2",
+    "filename": "amdxc64.dll",
+    "sha256": "a0a0af61d475e30a70966b3459f3793df772faf8f26ae3261d10554ff592cbd5",
+    "size": 72656088,
+    "urls": [
+     "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download/fsr-4-1-1-rdna2/amdxc64.dll"
+    ],
+    "archive": false,
+    "member": null,
+    "generation": 9
+   }
+  ],
+  "builds": [
+   {
+    "id": "fsr-4.1.2-dll",
+    "family": "fsr",
+    "version": "4.1.2",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35",
+     "rdna4"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-dll-upscaler",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-4.1.2-lite-dll",
+    "family": "fsr",
+    "version": "4.1.2",
+    "gpus": [
+     "rdna2"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-cyboman-dll"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [
+     [
+      "lite",
+      {}
+     ]
+    ],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+    }
+   },
+   {
+    "id": "fsr-4.1.2-lite-igpu-dll",
+    "family": "fsr",
+    "version": "4.1.2",
+    "gpus": [
+     "rdna3"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-igpu-cyboman-dll"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [
+     [
+      "lite",
+      {}
+     ]
+    ],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+    }
+   },
+   {
+    "id": "fsr-4.1.1-dll",
+    "family": "fsr",
+    "version": "4.1.1",
+    "gpus": [
+     "rdna3",
+     "rdna35",
+     "rdna4"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.1-dll-loader",
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.1-dll-upscaler",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.1-dll-framegeneration"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-4.1.1-lite-dll",
+    "family": "fsr",
+    "version": "4.1.1",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.1-lite-exact-dll"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [
+     [
+      "lite",
+      {}
+     ]
+    ],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+    }
+   },
+   {
+    "id": "fsr-4.0.2c-dll",
+    "family": "fsr",
+    "version": "4.0.2c",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35"
+    ],
+    "image": 2,
+    "cost": 3,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"
+    },
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "dll",
+    "way": "fsr",
+    "legacy_replace": {
+     "amd_fidelityfx_loader_dx12.dll": "fsr-4.1.2-dll-loader",
+     "amd_fidelityfx_framegeneration_dx12.dll": "fsr-4.1.2-dll-framegeneration"
+    }
+   },
+   {
+    "id": "fsr-4.1.2-beta",
+    "family": "fsr",
+    "version": "4.1.2",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [
+     "amdxcffx64-4.1.1"
+    ],
+    "replace": {},
+    "ini": {
+     "Upscalers.Dx12Upscaler": "fsr31",
+     "Upscalers.Dx11Upscaler": "fsr31_12",
+     "Upscalers.VulkanUpscaler": "fsr31_12",
+     "FSR.Fsr4GpuSupport": "4"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-10-nightly",
+    "channel": "beta",
+    "extra_dir": "OptiScaler",
+    "models": [
+     [
+      "lite",
+      {
+       "FSR.Fsr4GpuSupport": "4"
+      }
+     ],
+     [
+      "full",
+      {
+       "FSR.Fsr4GpuSupport": "2"
+      }
+     ]
+    ],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-4.1.1-rdna2",
+    "family": "fsr",
+    "version": "4.1.1",
+    "gpus": [
+     "rdna2"
+    ],
+    "image": 3,
+    "cost": 3,
+    "assets": [
+     "amdxcffx64-4.1.1-valve",
+     "amdxc64-rdna2"
+    ],
+    "replace": {},
+    "ini": {
+     "Upscalers.Dx12Upscaler": "ffx",
+     "Upscalers.Dx11Upscaler": "ffx_12",
+     "Upscalers.VulkanUpscaler": "ffx_12",
+     "FSR.Fsr4GpuSupport": "2",
+     "FSR.UpscalerIndex": "1",
+     "Plugins.LoadCustomAmdxc64OnRdna2": "true"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-10-nightly",
+    "channel": "stable",
+    "extra_dir": "OptiScaler",
+    "models": [],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-4.1.1",
+    "family": "fsr",
+    "version": "4.1.1",
+    "gpus": [
+     "rdna3",
+     "rdna35",
+     "rdna4"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [
+     "amdxcffx64-4.1.1"
+    ],
+    "replace": {},
+    "ini": {
+     "Upscalers.Dx12Upscaler": "fsr31",
+     "Upscalers.Dx11Upscaler": "fsr31_12",
+     "Upscalers.VulkanUpscaler": "fsr31_12",
+     "FSR.Fsr4Update": "true",
+     "FSR.Fsr4ForceEnableInt8": "true"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-4.0.2c",
+    "family": "fsr",
+    "version": "4.0.2c",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35"
+    ],
+    "image": 2,
+    "cost": 3,
+    "assets": [],
+    "replace": {
+     "amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"
+    },
+    "ini": {
+     "Upscalers.Dx12Upscaler": "fsr31",
+     "Upscalers.Dx11Upscaler": "fsr31_12",
+     "Upscalers.VulkanUpscaler": "fsr31_12",
+     "FSR.Fsr4Update": "true"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "fsr-3.1",
+    "family": "fsr",
+    "version": "3.1.5",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35",
+     "rdna4",
+     "intel",
+     "unknown"
+    ],
+    "image": 1,
+    "cost": 1,
+    "assets": [],
+    "replace": {},
+    "ini": {
+     "Upscalers.Dx12Upscaler": "fsr31",
+     "Upscalers.Dx11Upscaler": "fsr31",
+     "Upscalers.VulkanUpscaler": "fsr31",
+     "FSR.Fsr4Update": "false",
+     "FSR.UpscalerIndex": "0"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "xess",
+    "family": "xess",
+    "version": "2",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35",
+     "rdna4",
+     "intel",
+     "unknown"
+    ],
+    "image": 2,
+    "cost": 2,
+    "assets": [],
+    "replace": {},
+    "ini": {
+     "Upscalers.Dx12Upscaler": "xess",
+     "Upscalers.Dx11Upscaler": "xess_12",
+     "Upscalers.VulkanUpscaler": "xess"
+    },
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "optiscaler",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "proton-fsr4",
+    "family": "proton",
+    "version": "FSR 4",
+    "gpus": [
+     "rdna3",
+     "rdna4"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {},
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "optiscaler-0.9.4",
+    "channel": "stable",
+    "extra_dir": "",
+    "models": [],
+    "engine": "proton",
+    "way": "",
+    "legacy_replace": {}
+   },
+   {
+    "id": "hlx-fsr4",
+    "family": "helixsr",
+    "version": "FSR 4",
+    "gpus": [
+     "rdna2",
+     "rdna3",
+     "rdna35",
+     "rdna4",
+     "intel"
+    ],
+    "image": 3,
+    "cost": 2,
+    "assets": [],
+    "replace": {},
+    "ini": {},
+    "injector": null,
+    "available": true,
+    "archive": "helixsr-3.2.0",
+    "channel": "beta",
+    "extra_dir": "",
+    "models": [],
+    "engine": "helixsr",
+    "way": "fsr",
+    "legacy_replace": {}
+   }
+  ]
+ },
+ "recipes": {
+  "schema_version": 2,
+  "catalog_version": 13,
+  "assets": {
+   "luma-ff7-800": {
+    "id": "luma-ff7-800",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-800/Luma-Final_Fantasy_VII_Remake.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+    "sha256": "eb5186525da7af03951a2fd681e857c7191c9f5d7dcb5e40bb4c8372be222cfd",
+    "size": 136693836,
+    "filename": "Luma-Final_Fantasy_VII_Remake.zip",
+    "format": "zip"
+   },
+   "refw-pdup-re4": {
+    "id": "refw-pdup-re4",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE4.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "395b9a183a1835ef93205467d9bd45b430b5f1a2bc3b7d481bab6da5efd47b5e",
+    "size": 13340466,
+    "filename": "RE4.zip",
+    "format": "zip"
+   },
+   "refw-pdup-re2": {
+    "id": "refw-pdup-re2",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE2.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "51b8ce585392c00ac8367bae4e8cf80e346ef2ded7d53c89a71fd8e10027f178",
+    "size": 13377627,
+    "filename": "RE2.zip",
+    "format": "zip"
+   },
+   "refw-pdup-re3": {
+    "id": "refw-pdup-re3",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE3.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "de88d403eaf3865388bbeeb9490d5465d77bc914334818ca350a1523c3acd9b4",
+    "size": 13376906,
+    "filename": "RE3.zip",
+    "format": "zip"
+   },
+   "refw-pdup-re7": {
+    "id": "refw-pdup-re7",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/RE7.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "ff1e62a2aa13b7fe67b6a51813e35d399ee1dc2e21fa69043caccbe7566f4cac",
+    "size": 13379798,
+    "filename": "RE7.zip",
+    "format": "zip"
+   },
+   "refw-pdup-dmc5": {
+    "id": "refw-pdup-dmc5",
+    "url": "https://github.com/TheRazerMD/REFramework/releases/download/pr-build-pdup-20260813-182913/DMC5.zip",
+    "source_url": "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+    "sha256": "ceea6cd1eeee32d61fe508db8887e96f4dd7ff534b0f0faa33b4d401602dac3d",
+    "size": 13293690,
+    "filename": "DMC5.zip",
+    "format": "zip"
+   },
+   "luma-p5r-825": {
+    "id": "luma-p5r-825",
+    "url": "https://github.com/Filoppi/Luma-Framework/releases/download/latest-825/Luma-Persona_5_Royal.zip",
+    "source_url": "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+    "sha256": "a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e",
+    "size": 37256003,
+    "filename": "Luma-Persona_5_Royal.zip",
+    "format": "zip"
+   }
+  },
+  "dependencies": {
+   "vcrun2022": {
+    "id": "vcrun2022",
+    "kind": "proton_dependency",
+    "asset": null,
+    "files": {},
+    "provider": "winetricks",
+    "verb": "vcrun2022",
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "msvcrt40": {
+    "id": "msvcrt40",
+    "kind": "proton_dependency",
+    "asset": null,
+    "files": {},
+    "provider": "winetricks",
+    "verb": "msvcrt40",
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "vc-redist-x64": {
+    "id": "vc-redist-x64",
+    "kind": "windows_redist",
+    "asset": null,
+    "files": {},
+    "provider": "microsoft",
+    "verb": "vc14_x64",
+    "requires": [],
+    "name": null,
+    "page_url": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
+    "version": "14.40.33810.0",
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-ff7": {
+    "id": "luma-ff7",
+    "kind": "game_files",
+    "asset": "luma-ff7-800",
+    "files": {
+     "amd_fidelityfx_loader_dx12.dll": "amd_fidelityfx_loader_dx12.dll",
+     "amd_fidelityfx_upscaler_dx12.dll": "amd_fidelityfx_upscaler_dx12.dll",
+     "ReShade64.dll": "dxgi.dll",
+     "libxess.dll": "libxess.dll",
+     "libxess_dx11.dll": "libxess_dx11.dll",
+     "Luma-Final Fantasy VII Remake.addon": "Luma-Final Fantasy VII Remake.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Licenses/FidelityFX_LICENSE.md": "Licenses/FidelityFX_LICENSE.md",
+     "Licenses/XeSS_LICENSE.txt": "Licenses/XeSS_LICENSE.txt",
+     "Licenses/XeSS_third-party-programs.txt": "Licenses/XeSS_third-party-programs.txt",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Final Fantasy VII Remake/Bloom_Downscale_PS_0x2174B927.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Bloom_Downscale_PS_0x2174B927.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Bloom_PS_0x4D6F937E.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Bloom_PS_0x4D6F937E.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Bloom_VS_0x6667BA2.vs_5_0.hlsl": "Luma/Final Fantasy VII Remake/Bloom_VS_0x6667BA2.vs_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/lights_0x654F1ACD.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/lights_0x654F1ACD.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/lights_0x883B4D40.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/lights_0x883B4D40.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/lights_0xC5CF313F.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/lights_0xC5CF313F.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/lights_0xEAF15117.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/lights_0xEAF15117.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_HDR_Tonemap.hlsl": "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_HDR_Tonemap.hlsl",
+     "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_HDR_UI_Composition.hlsl": "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_HDR_UI_Composition.hlsl",
+     "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_Tonemap.hlsl": "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_Tonemap.hlsl",
+     "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_UI_Composition.hlsl": "Luma/Final Fantasy VII Remake/Luma_FF7R_Output_SDR_UI_Composition.hlsl",
+     "Luma/Final Fantasy VII Remake/Luma_MotionVec_UE4_Decode.hlsl": "Luma/Final Fantasy VII Remake/Luma_MotionVec_UE4_Decode.hlsl",
+     "Luma/Final Fantasy VII Remake/Menu_Slowdown_VS_0x543327AC.vs_5_0.hlsl": "Luma/Final Fantasy VII Remake/Menu_Slowdown_VS_0x543327AC.vs_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Motion_Blur_PS_0xB0F56393.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Motion_Blur_PS_0xB0F56393.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Motion_Blur_PS_0xB400FAF6.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Motion_Blur_PS_0xB400FAF6.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Motion_Blur_VS_0xB3E3D245.vs_5_0.hlsl": "Luma/Final Fantasy VII Remake/Motion_Blur_VS_0xB3E3D245.vs_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Output_HDR_0x########.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Output_HDR_0x########.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/Output_SDR_0x########.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/Output_SDR_0x########.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/PostProcess_Chapter2_0xA9E72423.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/PostProcess_Chapter2_0xA9E72423.ps_5_0.hlsl",
+     "Luma/Final Fantasy VII Remake/SSAO_Temporal_0x04BFE575.ps_5_0.hlsl": "Luma/Final Fantasy VII Remake/SSAO_Temporal_0x04BFE575.ps_5_0.hlsl",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/Common.hlsl": "Luma/Final Fantasy VII Remake/includes/Common.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/GameCBuffers.hlsl": "Luma/Final Fantasy VII Remake/includes/GameCBuffers.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/Settings.hlsl": "Luma/Final Fantasy VII Remake/includes/Settings.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/SSAO.hlsli": "Luma/Final Fantasy VII Remake/includes/SSAO.hlsli",
+     "Luma/Final Fantasy VII Remake/includes/Tonemap.hlsl": "Luma/Final Fantasy VII Remake/includes/Tonemap.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/VBAO.hlsli": "Luma/Final Fantasy VII Remake/includes/VBAO.hlsli",
+     "Luma/Final Fantasy VII Remake/includes/renodx/effects.hlsl": "Luma/Final Fantasy VII Remake/includes/renodx/effects.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/renodx/hermite_spline.hlsl": "Luma/Final Fantasy VII Remake/includes/renodx/hermite_spline.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/renodx/neutwo.hlsl": "Luma/Final Fantasy VII Remake/includes/renodx/neutwo.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/renodx/random.hlsl": "Luma/Final Fantasy VII Remake/includes/renodx/random.hlsl",
+     "Luma/Final Fantasy VII Remake/includes/renodx/tonemap.hlsl": "Luma/Final Fantasy VII Remake/includes/renodx/tonemap.hlsl",
+     "Luma/Final Fantasy VII Remake/Recipes/PS/dithering_fix.recipe.yml": "Luma/Final Fantasy VII Remake/Recipes/PS/dithering_fix.recipe.yml",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_0.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_0.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_1.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_1.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_10.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_10.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_11.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_11.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_12.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_12.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_13.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_13.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_14.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_14.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_15.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_15.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_16.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_16.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_17.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_17.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_18.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_18.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_19.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_19.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_2.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_2.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_20.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_20.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_21.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_21.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_22.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_22.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_23.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_23.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_24.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_24.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_25.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_25.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_26.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_26.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_27.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_27.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_28.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_28.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_29.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_29.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_3.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_3.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_30.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_30.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_31.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_31.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_32.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_32.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_33.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_33.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_34.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_34.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_35.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_35.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_36.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_36.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_37.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_37.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_38.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_38.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_39.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_39.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_4.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_4.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_40.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_40.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_41.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_41.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_42.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_42.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_43.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_43.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_44.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_44.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_45.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_45.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_46.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_46.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_47.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_47.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_48.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_48.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_49.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_49.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_5.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_5.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_50.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_50.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_51.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_51.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_52.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_52.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_53.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_53.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_54.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_54.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_55.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_55.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_56.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_56.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_57.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_57.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_58.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_58.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_59.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_59.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_6.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_6.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_60.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_60.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_61.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_61.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_62.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_62.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_63.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_63.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_7.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_7.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_8.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_8.png",
+     "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_9.png": "Luma/Global/Textures/FAST/vector4_uniform_gauss1_0_Gauss10_separate05_9.png"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40",
+     "vc-redist-x64"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "refw-pdup-re4": {
+    "id": "refw-pdup-re4",
+    "kind": "game_files",
+    "asset": "refw-pdup-re4",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "puredark-upscaler-base": {
+    "id": "puredark-upscaler-base",
+    "kind": "user_files",
+    "asset": null,
+    "files": {
+     "PDPerfPlugin.dll": "PDPerfPlugin.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": "UpscalerBasePlugin",
+    "page_url": "https://www.nexusmods.com/site/mods/502",
+    "version": "1.1.2",
+    "avoid_versions": [
+     "1.2.0"
+    ],
+    "download_url": "https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293"
+   },
+   "refw-pdup-re2": {
+    "id": "refw-pdup-re2",
+    "kind": "game_files",
+    "asset": "refw-pdup-re2",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "refw-pdup-re3": {
+    "id": "refw-pdup-re3",
+    "kind": "game_files",
+    "asset": "refw-pdup-re3",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "refw-pdup-re7": {
+    "id": "refw-pdup-re7",
+    "kind": "game_files",
+    "asset": "refw-pdup-re7",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "refw-pdup-dmc5": {
+    "id": "refw-pdup-dmc5",
+    "kind": "game_files",
+    "asset": "refw-pdup-dmc5",
+    "files": {
+     "dinput8.dll": "dinput8.dll"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   },
+   "luma-p5r": {
+    "id": "luma-p5r",
+    "kind": "game_files",
+    "asset": "luma-p5r-825",
+    "files": {
+     "ReShade64.dll": "dxgi.dll",
+     "Luma-Persona 5 Royal.addon": "Luma-Persona 5 Royal.addon",
+     "nvngx_dlss.dll": "nvngx_dlss.dll",
+     "Luma/d3dcompiler_47.dll": "Luma/d3dcompiler_47.dll",
+     "Luma/Global/Luma_CopyDepth_CS.hlsl": "Luma/Global/Luma_CopyDepth_CS.hlsl",
+     "Luma/Global/Luma_Copy_PS.hlsl": "Luma/Global/Luma_Copy_PS.hlsl",
+     "Luma/Global/Luma_Copy_VS.hlsl": "Luma/Global/Luma_Copy_VS.hlsl",
+     "Luma/Global/Luma_DisplayComposition.hlsl": "Luma/Global/Luma_DisplayComposition.hlsl",
+     "Luma/Global/Luma_DrawColor_CS.hlsl": "Luma/Global/Luma_DrawColor_CS.hlsl",
+     "Luma/Global/Luma_DrawColor_PS.hlsl": "Luma/Global/Luma_DrawColor_PS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_CS.hlsl",
+     "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl": "Luma/Global/Luma_GenerateSanitizedMip_PS.hlsl",
+     "Luma/Global/Luma_KarisAverage.hlsl": "Luma/Global/Luma_KarisAverage.hlsl",
+     "Luma/Global/Luma_NormalizeLUT3D.hlsl": "Luma/Global/Luma_NormalizeLUT3D.hlsl",
+     "Luma/Global/Luma_RCAS_PS.hlsl": "Luma/Global/Luma_RCAS_PS.hlsl",
+     "Luma/Global/Luma_SanitizeAlpha.hlsl": "Luma/Global/Luma_SanitizeAlpha.hlsl",
+     "Luma/Global/Luma_SanitizeRGBA.hlsl": "Luma/Global/Luma_SanitizeRGBA.hlsl",
+     "Luma/Global/Luma_SanitizeRGBAMipped.hlsl": "Luma/Global/Luma_SanitizeRGBAMipped.hlsl",
+     "Luma/Global/Luma_Scale_PS.hlsl": "Luma/Global/Luma_Scale_PS.hlsl",
+     "Luma/Global/Luma_Scale_VS.hlsl": "Luma/Global/Luma_Scale_VS.hlsl",
+     "Luma/Includes/ACES.hlsl": "Luma/Includes/ACES.hlsl",
+     "Luma/Includes/Bloom.hlsl": "Luma/Includes/Bloom.hlsl",
+     "Luma/Includes/CInfinityRolloff.hlsl": "Luma/Includes/CInfinityRolloff.hlsl",
+     "Luma/Includes/Color.hlsl": "Luma/Includes/Color.hlsl",
+     "Luma/Includes/ColorGradingLUT.hlsl": "Luma/Includes/ColorGradingLUT.hlsl",
+     "Luma/Includes/Common.hlsl": "Luma/Includes/Common.hlsl",
+     "Luma/Includes/DarktableUCS.hlsl": "Luma/Includes/DarktableUCS.hlsl",
+     "Luma/Includes/DgVoodoo.hlsl": "Luma/Includes/DgVoodoo.hlsl",
+     "Luma/Includes/DICE.hlsl": "Luma/Includes/DICE.hlsl",
+     "Luma/Includes/FXAA.hlsl": "Luma/Includes/FXAA.hlsl",
+     "Luma/Includes/HardwareBlendsEmulation.hlsl": "Luma/Includes/HardwareBlendsEmulation.hlsl",
+     "Luma/Includes/JzAzBz.hlsl": "Luma/Includes/JzAzBz.hlsl",
+     "Luma/Includes/LensDistortion.hlsl": "Luma/Includes/LensDistortion.hlsl",
+     "Luma/Includes/MacLeodBoynton.hlsl": "Luma/Includes/MacLeodBoynton.hlsl",
+     "Luma/Includes/Math.hlsl": "Luma/Includes/Math.hlsl",
+     "Luma/Includes/Oklab.hlsl": "Luma/Includes/Oklab.hlsl",
+     "Luma/Includes/RCAS.hlsl": "Luma/Includes/RCAS.hlsl",
+     "Luma/Includes/Reinhard.hlsl": "Luma/Includes/Reinhard.hlsl",
+     "Luma/Includes/Settings.hlsl": "Luma/Includes/Settings.hlsl",
+     "Luma/Includes/SMAA.hlsl": "Luma/Includes/SMAA.hlsl",
+     "Luma/Includes/SMAA_Passes.hlsl": "Luma/Includes/SMAA_Passes.hlsl",
+     "Luma/Includes/Tonemap.hlsl": "Luma/Includes/Tonemap.hlsl",
+     "Luma/Includes/UI.hlsl": "Luma/Includes/UI.hlsl",
+     "Luma/Includes/XeGTAO.hlsl": "Luma/Includes/XeGTAO.hlsl",
+     "Luma/Persona 5 Royal/HDR_0x0d85d1f6.ps_5_0.hlsl": "Luma/Persona 5 Royal/HDR_0x0d85d1f6.ps_5_0.hlsl",
+     "Luma/Persona 5 Royal/Luma_CopyDsrResult.hlsl": "Luma/Persona 5 Royal/Luma_CopyDsrResult.hlsl",
+     "Luma/Persona 5 Royal/Luma_Copy_RGB.hlsl": "Luma/Persona 5 Royal/Luma_Copy_RGB.hlsl",
+     "Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl": "Luma/Persona 5 Royal/Luma_DecodeMotionVector.hlsl",
+     "Luma/Persona 5 Royal/Luma_UpdateShadowConstants.hlsl": "Luma/Persona 5 Royal/Luma_UpdateShadowConstants.hlsl",
+     "Luma/Persona 5 Royal/Includes/Common.hlsl": "Luma/Persona 5 Royal/Includes/Common.hlsl",
+     "Luma/Persona 5 Royal/Includes/GameCBuffers.hlsl": "Luma/Persona 5 Royal/Includes/GameCBuffers.hlsl",
+     "Luma/Persona 5 Royal/Includes/Settings.hlsl": "Luma/Persona 5 Royal/Includes/Settings.hlsl"
+    },
+    "provider": null,
+    "verb": null,
+    "requires": [
+     "vcrun2022",
+     "msvcrt40",
+     "vc-redist-x64"
+    ],
+    "name": null,
+    "page_url": null,
+    "version": null,
+    "avoid_versions": [],
+    "download_url": null
+   }
+  },
+  "games": {
+   "1086940": {
+    "name": "Baldur's Gate 3",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "1462040": {
+    "name": "FINAL FANTASY VII REMAKE INTERGRADE",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "1687950": {
+    "name": "Persona 5 Royal",
+    "statuses": {
+     "linux": "tested",
+     "windows": "untested"
+    }
+   },
+   "2050650": {
+    "name": "Resident Evil 4",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "292030": {
+    "name": "The Witcher 3: Wild Hunt",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "418370": {
+    "name": "Resident Evil 7 Biohazard",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "601150": {
+    "name": "Devil May Cry 5",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "883710": {
+    "name": "Resident Evil 2",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   },
+   "952060": {
+    "name": "Resident Evil 3",
+    "statuses": {
+     "linux": "tested",
+     "windows": "unknown"
+    }
+   }
+  },
+  "platforms": [
+   "linux",
+   "windows",
+   "darwin"
+  ],
+  "arches": [
+   "x86_64",
+   "aarch64"
+  ],
+  "engines": [
+   "dll",
+   "helixsr",
+   "mako",
+   "optiscaler",
+   "proton"
+  ],
+  "matches": {
+   "1086940|optiscaler|linux|x86_64": {
+    "appid": "1086940",
+    "name": "Baldur's Gate 3",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "bin/bg3_dx11.exe",
+    "args": [
+     "--skip-launcher"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "1462040|optiscaler|linux|x86_64": {
+    "appid": "1462040",
+    "name": "FINAL FANTASY VII REMAKE INTERGRADE",
+    "revision": 5,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "End/Binaries/Win64/ff7remake_.exe",
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ff7",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+     "https://github.com/optiscaler/OptiScaler/wiki/FINAL-FANTASY-VII-REMAKE-INTERGRADE",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [
+     "21888968"
+    ],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-ff7"
+    ]
+   },
+   "1462040|optiscaler|windows|x86_64": {
+    "appid": "1462040",
+    "name": "FINAL FANTASY VII REMAKE INTERGRADE",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "End/Binaries/Win64/ff7remake_.exe",
+    "args": [
+     "-dx11"
+    ],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-ff7",
+     "vc-redist-x64"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-800",
+     "https://github.com/optiscaler/OptiScaler/wiki/FINAL-FANTASY-VII-REMAKE-INTERGRADE"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": [
+     "vc-redist-x64",
+     "luma-ff7"
+    ]
+   },
+   "1687950|optiscaler|linux|x86_64": {
+    "appid": "1687950",
+    "name": "Persona 5 Royal",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-p5r",
+     "vcrun2022",
+     "msvcrt40"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+     "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal",
+     "https://github.com/Winetricks/winetricks"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "vcrun2022",
+     "msvcrt40",
+     "luma-p5r"
+    ]
+   },
+   "1687950|optiscaler|windows|x86_64": {
+    "appid": "1687950",
+    "name": "Persona 5 Royal",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "P5R.exe",
+    "args": [],
+    "ini": {
+     "Plugins.LoadReshade": "true",
+     "Hotfix.CreateD3D12DeviceForLuma": "false"
+    },
+    "dependencies": [
+     "luma-p5r",
+     "vc-redist-x64"
+    ],
+    "source_urls": [
+     "https://github.com/Filoppi/Luma-Framework/releases/tag/latest-825",
+     "https://github.com/optiscaler/OptiScaler/wiki/Persona-5-Royal"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {
+     "ReShade.ini": {
+      "Luma.SRUserType": "2",
+      "OVERLAY.TutorialProgress": "4"
+     }
+    },
+    "recommended_input": "dlss",
+    "effective_api": "d3d11",
+    "quality_owner": "game",
+    "recommended_build": "fsr-4.1.2-beta",
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "windows",
+    "status": "untested",
+    "ordered_dependencies": [
+     "vc-redist-x64",
+     "luma-p5r"
+    ]
+   },
+   "2050650|optiscaler|linux|x86_64": {
+    "appid": "2050650",
+    "name": "Resident Evil 4",
+    "revision": 4,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "re4.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-re4",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-4-(2023)"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [
+     [
+      "FidelityFX Super Resolution 2",
+      "No"
+     ]
+    ],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-re4",
+     "puredark-upscaler-base"
+    ]
+   },
+   "292030|optiscaler|linux|x86_64": {
+    "appid": "292030",
+    "name": "The Witcher 3: Wild Hunt",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+     "--launcher-skip",
+     "-dx12"
+    ],
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+     "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": "xess",
+    "effective_api": null,
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [],
+    "reframework_upscaler": false,
+    "optiscaler_fg": true,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": []
+   },
+   "418370|optiscaler|linux|x86_64": {
+    "appid": "418370",
+    "name": "Resident Evil 7 Biohazard",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "re7.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-re7",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-7-Biohazard"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-re7",
+     "puredark-upscaler-base"
+    ]
+   },
+   "601150|optiscaler|linux|x86_64": {
+    "appid": "601150",
+    "name": "Devil May Cry 5",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "DevilMayCry5.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-dmc5",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Devil-May-Cry-5"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-dmc5",
+     "puredark-upscaler-base"
+    ]
+   },
+   "883710|optiscaler|linux|x86_64": {
+    "appid": "883710",
+    "name": "Resident Evil 2",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "re2.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-re2",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-2-(2019)"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-re2",
+     "puredark-upscaler-base"
+    ]
+   },
+   "952060|optiscaler|linux|x86_64": {
+    "appid": "952060",
+    "name": "Resident Evil 3",
+    "revision": 1,
+    "conditions": {
+     "engine": [
+      "optiscaler"
+     ],
+     "arch": [
+      "x86_64"
+     ]
+    },
+    "exe": "re3.exe",
+    "args": [],
+    "ini": {
+     "Spoofing.Dxgi": "false",
+     "Menu.OverlayMenu": "true"
+    },
+    "dependencies": [
+     "refw-pdup-re3",
+     "puredark-upscaler-base"
+    ],
+    "source_urls": [
+     "https://github.com/TheRazerMD/REFramework/releases/tag/pr-build-pdup-20260813-182913",
+     "https://github.com/optiscaler/OptiScaler/wiki/Resident-Evil-3-(2020)"
+    ],
+    "tested_game_builds": [],
+    "tested_at": null,
+    "configuration": {},
+    "recommended_input": null,
+    "effective_api": "d3d12",
+    "quality_owner": "panel",
+    "recommended_build": null,
+    "optiscaler_root_files": [
+     "libxess.dll"
+    ],
+    "reframework_upscaler": true,
+    "optiscaler_fg": false,
+    "game_settings": [],
+    "platform": "linux",
+    "status": "tested",
+    "ordered_dependencies": [
+     "refw-pdup-re3",
+     "puredark-upscaler-base"
+    ]
+   }
+  }
+ },
+ "invalid_catalog": [
+  {
+   "id": "schema-version",
+   "op": "set",
+   "path": [
+    "schema_version"
+   ],
+   "value": 2,
+   "error": "unsupported_schema"
+  },
+  {
+   "id": "missing-ffx-loader",
+   "op": "delete",
+   "path": [
+    "ffx_loader"
+   ],
+   "error": "invalid_fields"
+  },
+  {
+   "id": "unknown-top-level-field",
+   "op": "set",
+   "path": [
+    "extra"
+   ],
+   "value": 1,
+   "error": "invalid_fields"
+  },
+  {
+   "id": "bad-sha256",
+   "op": "set",
+   "path": [
+    "assets",
+    0,
+    "sha256"
+   ],
+   "value": "XYZ",
+   "error": "invalid_sha256"
+  },
+  {
+   "id": "zero-size",
+   "op": "set",
+   "path": [
+    "assets",
+    0,
+    "size"
+   ],
+   "value": 0,
+   "error": "invalid_asset"
+  },
+  {
+   "id": "bool-generation",
+   "op": "set",
+   "path": [
+    "assets",
+    0,
+    "generation"
+   ],
+   "value": true,
+   "error": "invalid_asset"
+  },
+  {
+   "id": "null-member",
+   "op": "set",
+   "path": [
+    "assets",
+    0,
+    "member"
+   ],
+   "value": null,
+   "error": "invalid_asset"
+  },
+  {
+   "id": "empty-url",
+   "op": "set",
+   "path": [
+    "assets",
+    0,
+    "urls"
+   ],
+   "value": [
+    ""
+   ],
+   "error": "invalid_list"
+  },
+  {
+   "id": "image-as-text",
+   "op": "set",
+   "path": [
+    "builds",
+    0,
+    "image"
+   ],
+   "value": "3",
+   "error": "invalid_build"
+  },
+  {
+   "id": "channel-as-number",
+   "op": "set",
+   "path": [
+    "builds",
+    0,
+    "channel"
+   ],
+   "value": 5,
+   "error": "invalid_build"
+  },
+  {
+   "id": "null-injector",
+   "op": "set",
+   "path": [
+    "builds",
+    0,
+    "injector"
+   ],
+   "value": null,
+   "error": "invalid_build"
+  },
+  {
+   "id": "empty-model-id",
+   "op": "set",
+   "path": [
+    "builds",
+    1,
+    "models",
+    0,
+    "id"
+   ],
+   "value": "",
+   "error": "invalid_text"
+  },
+  {
+   "id": "models-not-list",
+   "op": "set",
+   "path": [
+    "builds",
+    0,
+    "models"
+   ],
+   "value": {},
+   "error": "invalid_models"
+  },
+  {
+   "id": "build-missing-asset",
+   "op": "set",
+   "path": [
+    "builds",
+    0,
+    "archive"
+   ],
+   "value": "no-such-asset",
+   "error": "missing_asset"
+  },
+  {
+   "id": "duplicate-build",
+   "op": "copy",
+   "path": [
+    "builds",
+    1,
+    "id"
+   ],
+   "from": [
+    "builds",
+    0,
+    "id"
+   ],
+   "error": "duplicate_id"
+  },
+  {
+   "id": "preferred-missing-build",
+   "op": "set",
+   "path": [
+    "preferred",
+    "rdna2"
+   ],
+   "value": "no-such-build",
+   "error": "missing_build"
+  },
+  {
+   "id": "ratio-as-bool",
+   "op": "set",
+   "path": [
+    "quality_ratios",
+    "native"
+   ],
+   "value": true,
+   "error": "invalid_mapping"
+  },
+  {
+   "id": "archive-role-missing",
+   "op": "delete",
+   "path": [
+    "archives",
+    "lsfg"
+   ],
+   "error": "invalid_fields"
+  },
+  {
+   "id": "duplicate-key",
+   "raw": "{\"schema_version\": 1, \"schema_version\": 1}",
+   "error": "duplicate_key"
+  },
+  {
+   "id": "not-json",
+   "raw": "{\"schema_version\": 1,",
+   "error": "invalid_json"
+  }
+ ],
+ "invalid_recipes": [
+  {
+   "id": "missing-windows-block",
+   "file": "games/1462040.json",
+   "op": "delete",
+   "path": [
+    "windows"
+   ],
+   "error": "invalid_fields"
+  },
+  {
+   "id": "unknown-status",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "status"
+   ],
+   "value": "works",
+   "error": "invalid_status"
+  },
+  {
+   "id": "unknown-block-with-fields",
+   "file": "games/292030.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "exe"
+   ],
+   "value": "x.exe",
+   "error": "invalid_fields"
+  },
+  {
+   "id": "proton-verb-on-windows",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "dependencies"
+   ],
+   "value": [
+    "luma-ff7",
+    "vcrun2022"
+   ],
+   "error": "dependency_not_for_platform"
+  },
+  {
+   "id": "windows-runtime-on-linux",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "linux",
+    "dependencies"
+   ],
+   "value": [
+    "luma-ff7",
+    "vcrun2022",
+    "msvcrt40",
+    "vc-redist-x64"
+   ],
+   "error": "dependency_not_for_platform"
+  },
+  {
+   "id": "exe-escapes-folder",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "exe"
+   ],
+   "value": "../x.exe",
+   "error": "unsafe_path"
+  },
+  {
+   "id": "shell-in-argument",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "args"
+   ],
+   "value": [
+    "-dx11;echo"
+   ],
+   "error": "invalid_game_argument"
+  },
+  {
+   "id": "unknown-engine",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "conditions",
+    "engine"
+   ],
+   "value": [
+    "warp"
+   ],
+   "error": "invalid_conditions"
+  },
+  {
+   "id": "zero-revision",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "revision"
+   ],
+   "value": 0,
+   "error": "invalid_number"
+  },
+  {
+   "id": "bad-effective-api",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "effective_api"
+   ],
+   "value": "d3d9",
+   "error": "invalid_effective_api"
+  },
+  {
+   "id": "missing-dependency",
+   "file": "games/1462040.json",
+   "op": "set",
+   "path": [
+    "windows",
+    "dependencies"
+   ],
+   "value": [
+    "nope"
+   ],
+   "error": "missing_dependency"
+  },
+  {
+   "id": "runtime-page-host",
+   "file": "dependencies.json",
+   "op": "set",
+   "path": [
+    "vc-redist-x64",
+    "page_url"
+   ],
+   "value": "https://example.com/vc_redist",
+   "error": "untrusted_origin"
+  },
+  {
+   "id": "runtime-version",
+   "file": "dependencies.json",
+   "op": "set",
+   "path": [
+    "vc-redist-x64",
+    "min_version"
+   ],
+   "value": "latest",
+   "error": "invalid_version"
+  },
+  {
+   "id": "runtime-component",
+   "file": "dependencies.json",
+   "op": "set",
+   "path": [
+    "vc-redist-x64",
+    "component"
+   ],
+   "value": "vc14_arm64",
+   "error": "unsupported_dependency"
+  },
+  {
+   "id": "dependency-cycle",
+   "file": "dependencies.json",
+   "op": "set",
+   "path": [
+    "luma-ff7",
+    "requires"
+   ],
+   "value": [
+    "luma-ff7"
+   ],
+   "error": "dependency_cycle_or_missing"
+  },
+  {
+   "id": "asset-off-github",
+   "file": "assets.json",
+   "op": "set",
+   "path": [
+    "luma-ff7-800",
+    "url"
+   ],
+   "value": "https://example.com/a.zip",
+   "error": "untrusted_origin"
+  },
+  {
+   "id": "schema-version",
+   "file": "catalog.json",
+   "op": "set",
+   "path": [
+    "schema_version"
+   ],
+   "value": 1,
+   "error": "unsupported_schema"
+  },
+  {
+   "id": "game-file-name",
+   "file": "games/ff7.json",
+   "op": "create",
+   "value": {},
+   "error": "invalid_game_files"
+  }
+ ]
+}

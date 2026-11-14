@@ -1,6 +1,9 @@
 import dataclasses
+import json
+import logging
 import os
 import re
+from pathlib import Path
 
 from cpu.info import read_cpu_model
 import device_tree
@@ -99,39 +102,45 @@ def _detect_arm(root: str) -> DeviceProfile:
     )
 
 
+_GPU_RULES_PATH = Path(__file__).resolve().parents[1] / "shared" / "upscalers" / "gpus.json"
+_NO_GPU_RULES = {"vendors": {}, "name_rules": [], "pci_vendors": {}, "amd_pci": {}, "unknown_amd": "unknown"}
+
+
+def _load_gpu_rules(path: Path = _GPU_RULES_PATH) -> dict:
+    """The GPU family rules Windows reads too. Without them every family is "unknown": upscaler suggestions get
+    vaguer, but device detection and everything else keep working."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        rules = {
+            "vendors": {str(key).lower(): str(value) for key, value in raw["vendors"].items()},
+            "name_rules": [(str(rule["generation"]), tuple(str(text) for text in rule.get("contains", ())),
+                            re.compile(rule["pattern"]) if rule.get("pattern") else None) for rule in raw["name_rules"]],
+            "pci_vendors": {str(key).lower(): str(value) for key, value in raw["pci_vendors"].items()},
+            "amd_pci": {str(key).lower(): str(value) for key, value in raw["amd_pci"].items()},
+            "unknown_amd": str(raw["unknown_amd"]),
+        }
+        if raw.get("schema_version") != 1:
+            raise ValueError("unsupported_schema")
+        return rules
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, re.error) as error:
+        logging.getLogger(__name__).warning("GPU family rules unavailable (%s): every GPU reads as unknown", error)
+        return dict(_NO_GPU_RULES)
+
+
+_GPU_RULES = _load_gpu_rules()
+
+
 def gpu_generation(vendor: str, chip: str, root: str = "") -> str:
     """AMD RDNA generation (or "intel"/"unknown") from the chip name, else from the GPU's PCI id when `root` is
     given. It only shapes suggestions: Panel never refuses an upscaler over it."""
-    if (vendor or "").lower() == "intel":
-        return "intel"
+    by_vendor = _GPU_RULES["vendors"].get((vendor or "").lower())
+    if by_vendor:
+        return by_vendor
     c = (chip or "").lower()
-    if "van gogh" in c or "sephiroth" in c or "custom apu 0405" in c or "custom apu 0932" in c:
-        return "rdna2"  # Steam Deck: family names, or Valve's APU codes as /proc/cpuinfo reports them
-    # Strix Point / Strix Halo, including the Z2 Extreme with or without "AI" in its name: RDNA 3.5
-    if "ryzen ai" in c or "ai max" in c or "hx 370" in c or "hx 365" in c or "z2 extreme" in c:
-        return "rdna35"
-    # Z2 A and Z2 Go are RDNA 2 class (no FSR4 Full).
-    if "z2 a" in c or "z2 go" in c:
-        return "rdna2"
-    # Rembrandt laptops and handhelds (6800U, 6600U, 7735U...): RDNA 2
-    if re.search(r"\b6[89]00(?:u|hs|hx|h)\b|\b6600u\b|\b7[3-7]35(?:u|hs|h)\b", c):
-        return "rdna2"
-    # Z1, Z1 Extreme and Z2 (Phoenix / Hawk Point) and their laptop siblings: RDNA 3
-    if re.search(r"\bz1\b|\bz2\b|7840|8840|8640|7640|8540|7540", c):
-        return "rdna3"
+    for generation, contains, pattern in _GPU_RULES["name_rules"]:
+        if any(text in c for text in contains) or (pattern is not None and pattern.search(c)):
+            return generation
     return pci_gpu_generation(root) if root else "unknown"
-
-
-# AMD integrated GPUs by PCI device id, for chips whose name says nothing (a custom APU, a new model).
-_AMD_PCI = {
-    "0x163f": "rdna2", "0x1435": "rdna2", "0x1681": "rdna2",            # Van Gogh, Sephiroth, Rembrandt (Z2 Go)
-    "0x15bf": "rdna3", "0x15c8": "rdna3", "0x1900": "rdna3", "0x1901": "rdna3",  # Phoenix, Phoenix 2, Hawk Point
-    "0x150e": "rdna35", "0x1586": "rdna35", "0x1114": "rdna35",          # Strix Point, Strix Halo, Krackan
-    # Discrete Radeon: RX 6000, RX 7000, RX 9000
-    "0x73bf": "rdna2", "0x73df": "rdna2", "0x73ef": "rdna2", "0x73ff": "rdna2", "0x743f": "rdna2",
-    "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
-    "0x7550": "rdna4", "0x7590": "rdna4",
-}
 
 
 def pci_gpu_generation(root: str = "/") -> str:
@@ -150,14 +159,15 @@ def pci_gpu_generation(root: str = "/") -> str:
                 identifier = f.read().strip().lower()
         except OSError:
             continue
-        if vendor == "0x8086":
+        kind = _GPU_RULES["pci_vendors"].get(vendor)
+        if kind == "intel":
             return "intel"
-        if vendor == "0x1002":
+        if kind == "amd":
             amd = True
-            if identifier in _AMD_PCI:
-                return _AMD_PCI[identifier]
-    # An AMD GPU this table doesn't know yet: newer than the table, so RDNA 3 class at least.
-    return "rdna3" if amd else "unknown"
+            if identifier in _GPU_RULES["amd_pci"]:
+                return _GPU_RULES["amd_pci"][identifier]
+    # An AMD GPU the table doesn't know yet: newer than the table, so RDNA 3 class at least.
+    return _GPU_RULES["unknown_amd"] if amd else "unknown"
 
 
 def gpu_pci(root: str = "/") -> list[dict]:

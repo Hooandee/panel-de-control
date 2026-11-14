@@ -26,7 +26,7 @@ def test_pinned_remake_and_dependency_order():
     assert game.exe == 'End/Binaries/Win64/ff7remake_.exe'
     assert game.args == ('-dx11',)
     assert game.ini == {'Plugins.LoadReshade': 'true', 'Hotfix.CreateD3D12DeviceForLuma': 'false'}
-    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-ff7']
+    assert [d.id for d in catalog.dependency_order(game.dependencies, 'linux')] == ['vcrun2022', 'msvcrt40', 'luma-ff7']
     asset = catalog.assets['luma-ff7-800']
     assert asset.sha256 == 'eb5186525da7af03951a2fd681e857c7191c9f5d7dcb5e40bb4c8372be222cfd'
     assert asset.size == 136693836
@@ -42,7 +42,10 @@ def test_pinned_persona_5_royal_uses_luma_dlss_through_optiscaler():
     assert game.exe == 'P5R.exe'
     assert game.args == ()
     assert game.ini == {'Plugins.LoadReshade': 'true', 'Hotfix.CreateD3D12DeviceForLuma': 'false'}
-    assert [d.id for d in catalog.dependency_order(game.dependencies)] == ['vcrun2022', 'msvcrt40', 'luma-p5r']
+    assert [d.id for d in catalog.dependency_order(game.dependencies, 'linux')] == ['vcrun2022', 'msvcrt40', 'luma-p5r']
+    windows = catalog.match('1687950', 'optiscaler', 'windows', 'x86_64')
+    assert windows.status == 'untested'
+    assert [d.id for d in catalog.dependency_order(windows.dependencies, 'windows')] == ['vc-redist-x64', 'luma-p5r']
     asset = catalog.assets['luma-p5r-825']
     assert asset.sha256 == 'a8b51b2f33b37e3a8a2fb424ae1b999cb28b00d1fd2f89a62a8092d87bbea16e'
     assert asset.size == 37256003
@@ -62,8 +65,9 @@ def test_conditions_use_actual_host(monkeypatch):
     monkeypatch.setattr(rc.host_platform, 'machine', lambda: 'AMD64')
     catalog = rc.load()
     assert catalog.match('1462040', 'optiscaler')
-    for engine, platform, arch in [('dll', 'linux', 'x86_64'), ('optiscaler', 'windows', 'x86_64'), ('optiscaler', 'linux', 'aarch64')]:
+    for engine, platform, arch in [('dll', 'linux', 'x86_64'), ('optiscaler', 'darwin', 'x86_64'), ('optiscaler', 'linux', 'aarch64')]:
         assert catalog.match('1462040', engine, platform, arch) is None
+    assert catalog.match('292030', 'optiscaler', 'windows', 'x86_64') is None
     assert catalog.match('99999', 'optiscaler') is None
 
 
@@ -72,7 +76,7 @@ def test_recipe_preserves_wiki_and_existing_rules():
     assert recipe.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
     assert 'luma' in recipe.needs
     assert recipe.catalog_revision == 5
-    assert recipe.catalog_version == 12
+    assert recipe.catalog_version == 13
     assert '-dx11' in recipe.args
     assert not recipes.recipe_for('1462040', engine='dll', platform='linux', arch='x86_64').dependencies
     assert recipes.recipe_for('292030').exe == 'bin/x64_dx12/witcher3.exe'
@@ -96,8 +100,8 @@ def test_recipe_preserves_wiki_and_existing_rules():
     ('assets.json', lambda d: d['luma-ff7-800'].update(url='http://localhost/a')),
     ('assets.json', lambda d: d['luma-ff7-800'].update(sha256='no')),
     ('assets.json', lambda d: d['luma-ff7-800'].update(size=True)),
-    ('games/1462040.json', lambda d: d.update(args=['-dx11;echo'])),
-    ('games/1462040.json', lambda d: d.update(dependencies=['luma-ff7','luma-ff7'])),
+    ('games/1462040.json', lambda d: d['linux'].update(args=['-dx11;echo'])),
+    ('games/1462040.json', lambda d: d['linux'].update(dependencies=['luma-ff7','luma-ff7'])),
 ])
 def test_invalid_catalog_rejected(catalog_dir, filename, change):
     edit(catalog_dir, filename, change)
@@ -106,7 +110,7 @@ def test_invalid_catalog_rejected(catalog_dir, filename, change):
 
 
 def test_duplicate_json_key_rejected(catalog_dir):
-    (catalog_dir / 'catalog.json').write_text('{"schema_version":1,"schema_version":1,"catalog_version":1}')
+    (catalog_dir / 'catalog.json').write_text('{"schema_version":2,"schema_version":2,"catalog_version":1}')
     with pytest.raises(rc.CatalogError, match='duplicate_key'):
         rc.load(catalog_dir)
 
@@ -145,7 +149,7 @@ def test_tested_builds_are_informational():
 
 
 def test_optional_build_condition_requires_observed_match(catalog_dir):
-    edit(catalog_dir, 'games/1462040.json', lambda d: d['conditions'].update(game_builds=['21888968']))
+    edit(catalog_dir, 'games/1462040.json', lambda d: d['linux']['conditions'].update(game_builds=['21888968']))
     catalog = rc.load(catalog_dir)
     assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64', game_build='21888968')
     assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64', game_build='999') is None
@@ -153,13 +157,13 @@ def test_optional_build_condition_requires_observed_match(catalog_dir):
 
 
 @pytest.mark.parametrize('change', [
-    lambda d: d.update(tested_game_builds=[21888968]),
-    lambda d: d.update(tested_game_builds=['21888968', '21888968']),
-    lambda d: d.update(tested_at='2026-02-30'),
-    lambda d: d.update(tested_at='20261107'),
-    lambda d: d.update(tested_at='2026-11-07', tested_game_builds=[]),
-    lambda d: d['conditions'].update(game_builds=[]),
-    lambda d: d['conditions'].update(game_builds=['../1']),
+    lambda d: d['linux'].update(tested_game_builds=[21888968]),
+    lambda d: d['linux'].update(tested_game_builds=['21888968', '21888968']),
+    lambda d: d['linux'].update(tested_at='2026-02-30'),
+    lambda d: d['linux'].update(tested_at='20261107'),
+    lambda d: d['linux'].update(tested_at='2026-11-07', tested_game_builds=[]),
+    lambda d: d['linux']['conditions'].update(game_builds=[]),
+    lambda d: d['linux']['conditions'].update(game_builds=['../1']),
 ])
 def test_invalid_build_evidence_rejected(catalog_dir, change):
     edit(catalog_dir, 'games/1462040.json', change)
@@ -168,7 +172,7 @@ def test_invalid_build_evidence_rejected(catalog_dir, change):
 
 
 def test_recipe_for_forwards_build_condition(catalog_dir, monkeypatch):
-    edit(catalog_dir, 'games/1462040.json', lambda d: d['conditions'].update(game_builds=['21888968']))
+    edit(catalog_dir, 'games/1462040.json', lambda d: d['linux']['conditions'].update(game_builds=['21888968']))
     catalog = rc.load(catalog_dir)
     monkeypatch.setattr(rc, 'bundled', lambda: catalog)
     assert recipes.recipe_for('1462040', platform='linux', arch='x86_64', game_build='21888968').dependencies
@@ -182,7 +186,7 @@ def test_recipe_for_forwards_build_condition(catalog_dir, monkeypatch):
     {'ReShade.ini': {'Luma.SRUserType': 2}},
 ])
 def test_configuration_allowlist(catalog_dir, configuration):
-    edit(catalog_dir, 'games/1462040.json', lambda d: d.update(configuration=configuration))
+    edit(catalog_dir, 'games/1462040.json', lambda d: d['linux'].update(configuration=configuration))
     with pytest.raises(rc.CatalogError, match='unsupported_configuration'):
         rc.load(catalog_dir)
 
@@ -203,20 +207,20 @@ def test_witcher_input_guidance_preserves_existing_rules_and_wiki():
 
 @pytest.mark.parametrize('value', ['fsr4', '', True, None, ['xess']])
 def test_invalid_recommended_input_rejected(catalog_dir, value):
-    edit(catalog_dir, 'games/292030.json', lambda data: data.update(recommended_input=value))
+    edit(catalog_dir, 'games/292030.json', lambda data: data['linux'].update(recommended_input=value))
     with pytest.raises(rc.CatalogError, match='invalid_recommended_input'):
         rc.load(catalog_dir)
 
 @pytest.mark.parametrize('key,value', [('effective_api', 'dx99'), ('effective_api', None), ('quality_owner', 'luma'), ('quality_owner', [])])
 def test_solution_metadata_rejects_unknown_values(catalog_dir, key, value):
-    edit(catalog_dir, 'games/1462040.json', lambda data: data.update({key: value}))
+    edit(catalog_dir, 'games/1462040.json', lambda data: data['linux'].update({key: value}))
     with pytest.raises(rc.CatalogError):
         rc.load(catalog_dir)
 
 
 @pytest.mark.parametrize('value', ['', True, None, [], '../fsr-4.1.2-beta'])
 def test_invalid_recommended_build_rejected(catalog_dir, value):
-    edit(catalog_dir, 'games/1462040.json', lambda data: data.update(recommended_build=value))
+    edit(catalog_dir, 'games/1462040.json', lambda data: data['linux'].update(recommended_build=value))
     with pytest.raises(rc.CatalogError, match='invalid_recommended_build'):
         rc.load(catalog_dir)
 
@@ -231,7 +235,7 @@ def test_remake_recommends_supported_build_without_changing_global_default():
     assert catalog.preferred_build('intel', recipe) == 'xess'
     assert catalog.preferred_build('rdna4', recipe) == 'fsr-4.1.1'
     assert catalog.preferred_build('rdna3') == 'fsr-4.1.1'
-    windows = recipes.recipe_for('1462040', platform='windows', arch='x86_64')
+    windows = recipes.recipe_for('1462040', platform='darwin', arch='x86_64')
     assert catalog.preferred_build('rdna3', windows) == 'fsr-4.1.1'
 
 
@@ -250,7 +254,7 @@ def test_luma_411_uses_new_engine_and_preserves_driver_provider():
         'Upscalers.VulkanUpscaler': 'ffx_12', 'FSR.Fsr4GpuSupport': '2', 'FSR.UpscalerIndex': '1',
     }
     assert catalog.for_game(original, {}, 'rdna3') is original
-    windows = recipes.recipe_for('1462040', platform='windows', arch='x86_64')
+    windows = recipes.recipe_for('1462040', platform='darwin', arch='x86_64')
     assert catalog.for_game(original, {}, 'rdna3', windows) is original
     other = catalog.BUILDS['fsr-4.1.2-beta']
     assert catalog.for_game(other, {}, 'rdna3', recipe) is other
@@ -337,7 +341,7 @@ def test_re4_keeps_optiscalers_libxess_beside_the_exe():
 
 @pytest.mark.parametrize('value', [['sub/libxess.dll'], ['libxess.exe'], 'libxess.dll'])
 def test_root_files_must_be_plain_dll_names(catalog_dir, value):
-    edit(catalog_dir, 'games/2050650.json', lambda d: d.update(optiscaler_root_files=value))
+    edit(catalog_dir, 'games/2050650.json', lambda d: d['linux'].update(optiscaler_root_files=value))
     with pytest.raises(rc.CatalogError):
         rc.load(catalog_dir)
 
@@ -369,3 +373,109 @@ def test_baldurs_gate_3_skips_its_launcher_into_d3d11_and_asks_for_dlss():
 def test_every_reframework_recipe_runs_optiscalers_overlay_menu():
     for appid in ('2050650', '883710', '952060', '418370', '601150'):
         assert recipes.recipe_for(appid, platform='linux', arch='x86_64').ini['Menu.OverlayMenu'] == 'true', appid
+
+
+def _windows_block(d, **changes):
+    block = {key: value for key, value in d['linux'].items() if key != 'dependencies'}
+    d['windows'] = {**block, 'dependencies': [], 'status': 'untested', 'exe': 'game.exe', **changes}
+
+
+def test_every_recipe_has_a_block_per_os_and_linux_keeps_its_recipe():
+    catalog = rc.load()
+    assert catalog.schema_version == 2
+    for appid, game in catalog.games.items():
+        assert set(game.statuses) == {'linux', 'windows'}, appid
+        assert game.recipes['linux'].platform == 'linux'
+        assert catalog.match(appid, 'optiscaler', 'linux', 'x86_64') is game.recipes['linux']
+        windows = catalog.match(appid, 'optiscaler', 'windows', 'x86_64')
+        assert (windows is not None) == (game.statuses['windows'] in ('tested', 'untested')), appid
+
+
+def test_each_os_gets_only_its_own_block(catalog_dir):
+    edit(catalog_dir, 'games/1462040.json', _windows_block)
+    catalog = rc.load(catalog_dir)
+    linux = catalog.match('1462040', 'optiscaler', 'linux', 'x86_64')
+    windows = catalog.match('1462040', 'optiscaler', 'windows', 'amd64')
+    assert linux.exe == 'End/Binaries/Win64/ff7remake_.exe' and linux.dependencies == ('luma-ff7', 'vcrun2022', 'msvcrt40')
+    assert (windows.exe, windows.dependencies, windows.status, windows.platform) == ('game.exe', (), 'untested', 'windows')
+    assert catalog.games['1462040'].statuses == {'linux': 'tested', 'windows': 'untested'}
+    assert catalog.match('1462040', 'optiscaler', 'darwin', 'x86_64') is None
+
+
+def test_not_applicable_block_matches_nothing(catalog_dir):
+    edit(catalog_dir, 'games/1462040.json', lambda d: d.update(linux={'status': 'not_applicable'}))
+    catalog = rc.load(catalog_dir)
+    assert catalog.match('1462040', 'optiscaler', 'linux', 'x86_64') is None
+    assert catalog.games['1462040'].statuses['linux'] == 'not_applicable'
+
+
+@pytest.mark.parametrize('change', [
+    lambda d: d.pop('windows'),
+    lambda d: d.update(android={'status': 'unknown'}),
+    lambda d: d.update(windows={'status': 'unknown', 'exe': 'game.exe'}),
+    lambda d: d.update(windows={'status': 'works'}),
+    lambda d: d.update(windows={}),
+    lambda d: d['linux'].pop('status'),
+    lambda d: d['linux']['conditions'].update(platform=['linux']),
+    lambda d: _windows_block(d, exe='../game.exe'),
+    lambda d: _windows_block(d, dependencies=['vcrun2022']),
+    lambda d: _windows_block(d, args=['-dx11;echo']),
+])
+def test_both_os_blocks_are_validated_strictly(catalog_dir, change):
+    edit(catalog_dir, 'games/1462040.json', change)
+    with pytest.raises(rc.CatalogError):
+        rc.load(catalog_dir)
+
+
+def test_shared_dependency_follows_only_its_own_systems_runtimes(catalog_dir):
+    edit(catalog_dir, 'games/1462040.json', lambda d: _windows_block(d, dependencies=['refw-pdup-re4']))
+    edit(catalog_dir, 'dependencies.json', lambda d: d['refw-pdup-re4'].update(requires=['vcrun2022', 'vc-redist-x64']))
+    catalog = rc.load(catalog_dir)
+    windows = catalog.match('1462040', 'optiscaler', 'windows', 'x86_64')
+    assert [d.id for d in catalog.dependency_order(windows.dependencies, 'windows')] == ['vc-redist-x64', 'refw-pdup-re4']
+    assert [d.id for d in catalog.dependency_order(('refw-pdup-re4',), 'linux')] == ['vcrun2022', 'refw-pdup-re4']
+
+
+def test_previous_schema_is_rejected(catalog_dir):
+    edit(catalog_dir, 'catalog.json', lambda d: d.update(schema_version=1))
+    with pytest.raises(rc.CatalogError, match='unsupported_schema'):
+        rc.load(catalog_dir)
+
+
+def test_remake_windows_block_needs_the_visual_cpp_runtime_not_proton_verbs():
+    catalog = rc.load()
+    game = catalog.match('1462040', 'optiscaler', 'windows', 'amd64')
+    assert game.status == 'untested'
+    assert game.exe == 'End/Binaries/Win64/ff7remake_.exe'
+    assert [d.id for d in catalog.dependency_order(game.dependencies, 'windows')] == ['vc-redist-x64', 'luma-ff7']
+    runtime = catalog.dependencies['vc-redist-x64']
+    assert (runtime.kind, runtime.verb, runtime.version) == ('windows_redist', 'vc14_x64', '14.40.33810.0')
+
+
+def test_linux_automatic_dependencies_skip_windows_runtimes():
+    from py_modules.upscalers import auto_recipes
+    game = rc.load().match('1462040', 'optiscaler', 'linux', 'amd64')
+    assert [d.id for d in auto_recipes.dependencies(game)] == ['vcrun2022', 'msvcrt40', 'luma-ff7']
+
+
+@pytest.mark.parametrize('platform, foreign', [('linux', 'vc-redist-x64'), ('windows', 'vcrun2022')])
+def test_block_cannot_list_another_systems_dependency(catalog_dir, platform, foreign):
+    def change(data):
+        if data[platform].get('status') == 'unknown':
+            data[platform] = dict(data['linux' if platform == 'windows' else 'windows'])
+        data[platform]['dependencies'] = ['luma-ff7', foreign]
+    edit(catalog_dir, 'games/1462040.json', change)
+    with pytest.raises(rc.CatalogError, match='dependency_not_for_platform'):
+        rc.load(catalog_dir)
+
+
+@pytest.mark.parametrize('field, value, error', [
+    ('page_url', 'https://example.com/vc_redist', 'untrusted_origin'),
+    ('component', 'vc14_arm64', 'unsupported_dependency'),
+    ('provider', 'winget', 'unsupported_dependency'),
+    ('min_version', 'latest', 'invalid_version'),
+])
+def test_windows_runtime_is_validated(catalog_dir, field, value, error):
+    edit(catalog_dir, 'dependencies.json', lambda data: data['vc-redist-x64'].__setitem__(field, value))
+    with pytest.raises(rc.CatalogError, match=error):
+        rc.load(catalog_dir)

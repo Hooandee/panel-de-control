@@ -5,14 +5,47 @@ identity is its SHA-256; URLs are interchangeable mirrors, so moving a download
 never invalidates an install.
 """
 
+import json
 from dataclasses import dataclass, field, replace
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
-OPTISCALER_ARCHIVE = "optiscaler-0.9.4"
-OPTISCALER_BETA = "optiscaler-10-nightly"
-LSFG_ARCHIVE = "lsfg-vk-2.0.0"
-HELIXSR_ARCHIVE = "helixsr-3.2.0"
-OPTIPATCHER = "optipatcher-0.42"
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "shared" / "upscalers" / "catalog.json"
+
+
+class CatalogError(ValueError):
+    pass
+
+
+def _fields(value, required, optional=()):
+    if not isinstance(value, dict) or not set(required) <= value.keys() or value.keys() - set(required) - set(optional):
+        raise CatalogError("invalid_fields")
+    return value
+
+
+def _unique_keys(pairs):
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise CatalogError("duplicate_key")
+    return dict(pairs)
+
+
+def _read(path: Path = CATALOG_PATH) -> dict:
+    """The neutral build catalog the Windows app reads too, straight from the same JSON file."""
+    raw = _fields(json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_keys),
+                  ("schema_version", "archives", "gpu_groups", "preferred", "quality_ratios", "easy_modes", "sharpness",
+                   "proxies", "base_ini", "ffx_loader", "assets", "builds"), ("notes",))
+    if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
+        raise CatalogError("unsupported_schema")
+    return raw
+
+
+_RAW = _read()
+_ARCHIVE_ROLES = ("optiscaler", "optiscaler_beta", "lsfg", "helixsr", "optipatcher")
+_ARCHIVES = _fields(_RAW["archives"], _ARCHIVE_ROLES)
+OPTISCALER_ARCHIVE = _ARCHIVES["optiscaler"]
+OPTISCALER_BETA = _ARCHIVES["optiscaler_beta"]
+LSFG_ARCHIVE = _ARCHIVES["lsfg"]
+HELIXSR_ARCHIVE = _ARCHIVES["helixsr"]
+OPTIPATCHER = _ARCHIVES["optipatcher"]
 
 
 @dataclass(frozen=True)
@@ -51,266 +84,90 @@ class Build:
     legacy_replace: dict[str, str] = field(default_factory=dict)
 
 
-_BLEEDING = "https://github.com/xXJSONDeruloXx/OptiScaler-Bleeding-Edge/releases/download"
+def _check(condition: bool, reason: str) -> None:
+    if not condition:
+        raise CatalogError(reason)
 
-ASSETS: dict[str, Asset] = {
-    asset.id: asset
-    for asset in (
-        Asset(
-            LSFG_ARCHIVE, "lsfg-vk-2.0.0.tar.xz",
-            "08bdbdf373a111022df87dac7aa87e3b564bb841f961552e3ca85fea12b5aa74", 561348,
-            ("https://builds.lsfg-vk.dev/lsfg-vk-2.0.0.tar.xz",), archive=True,
-        ),
-        # Official release, unmodified (HelixSR Freeware License). Only HLX FSR 4 (prebuilt, from AMD's MIT
-        # FSR SDK) is offered: HLX DLSS needs NVIDIA's DLSS DLL taken apart for AMD, which NVIDIA's licence forbids.
-        Asset(
-            HELIXSR_ARCHIVE, "HelixSR-3.2.0.zip",
-            "a4e83da8b4335a886197aef10e8f8a8947a2e32e5e1eebfdf060ff00724c17c7", 217396302,
-            ("https://github.com/lonewolf0622/HelixSR/releases/download/v3.2.0/HelixSR-3.2.0.zip",),
-        ),
-        # MIT; lets supported games offer DLSS/DLSS-FG to OptiScaler without spoofing (OptiScaler loads *.asi from plugins).
-        Asset(
-            OPTIPATCHER, "OptiPatcher.asi",
-            "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b", 107520,
-            ("https://github.com/optiscaler/OptiPatcher/releases/download/v0.42/OptiPatcher_v0.42.asi",),
-        ),
-        Asset(
-            OPTISCALER_ARCHIVE,
-            "Optiscaler_0.9.4-final.20260718._MM.7z",
-            "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
-            55016448,
-            ("https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/"
-             "Optiscaler_0.9.4-final.20260718._MM.7z",),
-            archive=True,
-        ),
-        # OptiScaler 10 nightly: bundled files move to an `OptiScaler/` subfolder; FFX upscaler 4.1.2.4555.
-        Asset(
-            OPTISCALER_BETA,
-            "OptiScaler_v10.0.0-pre1_20261102.7z",
-            "7465483deac95ccc93cf05efc9e883e00c03d3186ea79304c076c800bc399501",
-            72315137,
-            ("https://github.com/optiscaler/OptiScaler-nightly/releases/download/nightly-20261102/"
-             "OptiScaler_v10.0.0-pre1_20261102.7z",),
-            archive=True,
-            generation=10,
-        ),
-        Asset(
-            "reframework-nightly",
-            "REFramework.zip",
-            "9ef584db4a37715f0a677a5d304a5048b850389875b5dae0e204d4abbe9366f5",
-            13269112,
-            ("https://github.com/praydog/REFramework-nightly/releases/download/"
-             "nightly-01436-1813bf34f720cfed51c0e8f40fc90ed1459a3c6b/REFramework.zip",),
-            member="dinput8.dll",
-        ),
-        Asset(
-            "optiscaler-0.10-pre1",
-            "OptiScaler.dll",
-            "b374b19081cc066365d0c6da4808d768e16469b0cbdfc478b6e95999947d5364",
-            25691136,
-            (f"{_BLEEDING}/fsr-4-1-1-rdna2/OptiScaler_0.10.0-pre1.20260622_135940.dll",),
-        ),
-        Asset(
-            "fsr-4.0.2c-int8",
-            "amd_fidelityfx_upscaler_dx12.dll",
-            "c7720bc16bede334f59a1a32cd22edbcbbb159685ed5240e61350a5fb0bc8a94",
-            41036800,
-            (f"{_BLEEDING}/opti-9-2-a/amd_fidelityfx_upscaler_dx12.dll",),
-        ),
-        Asset(
-            "amdxcffx64-4.1.1",
-            "amdxcffx64.dll",
-            "a2b136b6affd35a49b141a936be935f7d5ddc8d8f9b8c9afbe62ff9ddb2538a0",
-            66830768,
-            (f"{_BLEEDING}/fsr-4-1-1/amdxcffx64.dll",),
-        ),
-        Asset(
-            "amdxcffx64-4.1.1-valve",
-            "amdxcffx64.dll",
-            "4e7dc37aebea3a90e3d3cc43e24cb2b54176b2535315f20dbe63b3b7cfc56b1e",
-            65657608,
-            (f"{_BLEEDING}/fsr-4-1-1-rdna2/amdxcffx64.dll",),
-        ),
-        Asset(
-            "fsr-4.1.2-dll-loader", "FSR4_FP8_4.1.2.4555.7z",
-            "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff", 18256621,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z",),
-            member="amd_fidelityfx_loader_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.2-dll-upscaler", "FSR4_FP8_4.1.2.4555.7z",
-            "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff", 18256621,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z",),
-            member="amd_fidelityfx_upscaler_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.2-dll-framegeneration", "FSR4_FP8_4.1.2.4555.7z",
-            "7b6300ccf19f91ce27b2729f53aa1e4a907e6ea46ae9e93d313a206e2aee68ff", 18256621,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.2.4555/FSR4_FP8_4.1.2.4555.7z",),
-            member="amd_fidelityfx_framegeneration_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.1-dll-loader", "FSR4_FP8_4.1.1.2740.7z",
-            "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d", 17068121,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z",),
-            member="amd_fidelityfx_loader_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.1-dll-upscaler", "FSR4_FP8_4.1.1.2740.7z",
-            "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d", 17068121,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z",),
-            member="amd_fidelityfx_upscaler_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.1-dll-framegeneration", "FSR4_FP8_4.1.1.2740.7z",
-            "e722e39893d4470e11e3993d8240cbec47c5ae3398fb7dfdc387ec8b0038698d", 17068121,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras-FP8/releases/download/FSR_4.1.1.2740/FSR4_FP8_4.1.1.2740.7z",),
-            member="amd_fidelityfx_framegeneration_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.2-lite-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",
-            "da7c7681bffe7ac60a01e859d5b107900d963557793ef67ddcfd03a832e1c03f", 9567439,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna2-2026-11-05.7z",),
-            member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.2-lite-igpu-cyboman-dll", "fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",
-            "6553cfeaa824fd1fa36985278e5ce835d27bbb758e99a1db5efaf331fe72dc4f", 9553046,
-            ("https://github.com/zgauthier2000/fsr4-shader-performance-overrides/releases/download/dll-2026-11-05/fsr4.1.2-igpu-cyboman-rdna3-2026-11-05.7z",),
-            member="4.1.2l-exact/amd_fidelityfx_upscaler_dx12.dll",
-        ),
-        Asset(
-            "fsr-4.1.1-lite-exact-dll", "FSR4_INT8_4.1.1_Lite_Exact.zip",
-            "dac25f79687f955d7651451c24e9a827e1989e61389565befce267b0b2fef68e", 22379952,
-            ("https://github.com/Optiscaler-Client/Optiscaler-Extras/releases/download/FSR_4.1.1_Lite_Exact/FSR4_INT8_4.1.1_Lite_Exact.zip",),
-            member="amd_fidelityfx_upscaler_dx12.dll",
-        ),
-        Asset(
-            "amdxc64-rdna2",
-            "amdxc64.dll",
-            "a0a0af61d475e30a70966b3459f3793df772faf8f26ae3261d10554ff592cbd5",
-            72656088,
-            (f"{_BLEEDING}/fsr-4-1-1-rdna2/amdxc64.dll",),
-        ),
+
+def _text(value) -> str:
+    _check(isinstance(value, str) and bool(value), "invalid_text")
+    return value
+
+
+def _strings(value) -> tuple[str, ...]:
+    _check(isinstance(value, list) and all(isinstance(item, str) and item for item in value), "invalid_list")
+    return tuple(value)
+
+
+def _mapping(value, kinds=(str,)) -> dict:
+    _check(isinstance(value, dict) and all(isinstance(item, kinds) and type(item) is not bool for item in value.values()), "invalid_mapping")
+    return dict(value)
+
+
+def _asset(item) -> Asset:
+    item = _fields(item, ("id", "filename", "sha256", "size", "urls"), ("archive", "member", "generation", "note"))
+    _check(type(item["size"]) is int and item["size"] > 0 and type(item.get("generation", 9)) is int, "invalid_asset")
+    _check(type(item.get("archive", False)) is bool and isinstance(item.get("member", ""), str), "invalid_asset")
+    _check(isinstance(item["sha256"], str) and len(item["sha256"]) == 64 and set(item["sha256"]) <= set("0123456789abcdef"), "invalid_sha256")
+    return Asset(_text(item["id"]), _text(item["filename"]), item["sha256"], item["size"], _strings(item["urls"]),
+                 item.get("archive", False), item.get("member"), item.get("generation", 9))
+
+
+def _build(item) -> Build:
+    item = _fields(item, ("id", "family", "version", "engine", "gpus", "image", "cost", "archive"),
+                   ("way", "channel", "available", "extra_dir", "assets", "injector", "replace", "legacy_replace",
+                    "ini", "models", "note"))
+    _check(type(item["image"]) is int and type(item["cost"]) is int and type(item.get("available", True)) is bool, "invalid_build")
+    _check(all(isinstance(item.get(key, ""), str) for key in ("channel", "extra_dir", "way"))
+           and isinstance(item.get("injector", ""), str), "invalid_build")
+    models = item.get("models", [])
+    _check(isinstance(models, list), "invalid_models")
+    return Build(
+        _text(item["id"]), _text(item["family"]), _text(item["version"]), _strings(item["gpus"]), item["image"], item["cost"],
+        assets=_strings(item.get("assets", [])), replace=_mapping(item.get("replace", {})), ini=_mapping(item.get("ini", {})),
+        injector=item.get("injector"), available=item.get("available", True), archive=_text(item["archive"]),
+        channel=item.get("channel", "stable"), extra_dir=item.get("extra_dir", ""),
+        models=tuple((_text(model["id"]), _mapping(model["ini"])) for model in (_fields(m, ("id", "ini")) for m in models)),
+        engine=_text(item["engine"]), way=item.get("way", ""), legacy_replace=_mapping(item.get("legacy_replace", {})),
     )
-}
-
-# FSR4 only runs through the FFX 3.1 path; Dx11 and Vulkan reach it via the D3D12 bridge.
-_FSR4_UPSCALERS = {
-    "Upscalers.Dx12Upscaler": "fsr31",
-    "Upscalers.Dx11Upscaler": "fsr31_12",
-    "Upscalers.VulkanUpscaler": "fsr31_12",
-}
-
-AMD = ("rdna2", "rdna3", "rdna35", "rdna4")
-EVERY_GPU = (*AMD, "intel", "unknown")
-
-BUILDS: dict[str, Build] = {
-    build.id: build
-    for build in (
-        Build(
-            "fsr-4.1.2-dll", "fsr", "4.1.2", AMD, image=3, cost=2, engine="dll", way="fsr",
-            replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "upscaler", "framegeneration")},
-        ),
-        Build(
-            "fsr-4.1.2-lite-dll", "fsr", "4.1.2", ("rdna2",), image=3, cost=2, engine="dll", way="fsr",
-            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-cyboman-dll"}, models=(("lite", {}),),
-            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
-        ),
-        Build(
-            "fsr-4.1.2-lite-igpu-dll", "fsr", "4.1.2", ("rdna3",), image=3, cost=2, engine="dll", way="fsr",
-            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.2-lite-igpu-cyboman-dll"}, models=(("lite", {}),),
-            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
-        ),
-        Build(
-            "fsr-4.1.1-dll", "fsr", "4.1.1", ("rdna3", "rdna35", "rdna4"), image=3, cost=2, engine="dll", way="fsr",
-            replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.1-dll-{part}" for part in ("loader", "upscaler", "framegeneration")},
-        ),
-        Build(
-            "fsr-4.1.1-lite-dll", "fsr", "4.1.1", ("rdna2", "rdna3", "rdna35"), image=3, cost=2, engine="dll", way="fsr",
-            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.1.1-lite-exact-dll"}, models=(("lite", {}),),
-            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
-        ),
-        Build(
-            "fsr-4.0.2c-dll", "fsr", "4.0.2c", ("rdna2", "rdna3", "rdna35"), image=2, cost=3, engine="dll", way="fsr",
-            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"},
-            legacy_replace={f"amd_fidelityfx_{part}_dx12.dll": f"fsr-4.1.2-dll-{part}" for part in ("loader", "framegeneration")},
-        ),
-        # v10 replaced Fsr4Update/Fsr4ForceEnableInt8 with Fsr4GpuSupport (2 = INT8, 4 = INT8Lite).
-        # Lite is the default, as AMD's driver picks for APUs; full INT8 stays one tap away.
-        Build(
-            "fsr-4.1.2-beta", "fsr", "4.1.2", ("rdna2", "rdna3", "rdna35"), image=3, cost=2,
-            assets=("amdxcffx64-4.1.1",), archive=OPTISCALER_BETA, channel="beta", extra_dir="OptiScaler",
-            ini={**_FSR4_UPSCALERS, "FSR.Fsr4GpuSupport": "4"},
-            models=(("lite", {"FSR.Fsr4GpuSupport": "4"}), ("full", {"FSR.Fsr4GpuSupport": "2"})),
-        ),
-        # Valve's RDNA2 provider pair uses the v10 driver-provider path.
-        Build(
-            "fsr-4.1.1-rdna2", "fsr", "4.1.1", ("rdna2",), image=3, cost=3,
-            assets=("amdxcffx64-4.1.1-valve", "amdxc64-rdna2"),
-            archive=OPTISCALER_BETA, extra_dir="OptiScaler",
-            ini={
-                "Upscalers.Dx12Upscaler": "ffx",
-                "Upscalers.Dx11Upscaler": "ffx_12",
-                "Upscalers.VulkanUpscaler": "ffx_12",
-                "FSR.Fsr4GpuSupport": "2",
-                "FSR.UpscalerIndex": "1",
-                "Plugins.LoadCustomAmdxc64OnRdna2": "true",
-            },
-        ),
-        Build(
-            "fsr-4.1.1", "fsr", "4.1.1", ("rdna3", "rdna35", "rdna4"), image=3, cost=2,
-            assets=("amdxcffx64-4.1.1",),
-            ini={**_FSR4_UPSCALERS, "FSR.Fsr4Update": "true", "FSR.Fsr4ForceEnableInt8": "true"},
-        ),
-        Build(
-            "fsr-4.0.2c", "fsr", "4.0.2c", ("rdna2", "rdna3", "rdna35"), image=2, cost=3,
-            replace={"amd_fidelityfx_upscaler_dx12.dll": "fsr-4.0.2c-int8"},
-            ini={**_FSR4_UPSCALERS, "FSR.Fsr4Update": "true"},
-        ),
-        Build(
-            "fsr-3.1", "fsr", "3.1.5", EVERY_GPU, image=1, cost=1,
-            ini={"Upscalers.Dx12Upscaler": "fsr31", "Upscalers.Dx11Upscaler": "fsr31",
-                 "Upscalers.VulkanUpscaler": "fsr31", "FSR.Fsr4Update": "false", "FSR.UpscalerIndex": "0"},
-        ),
-        Build(
-            "xess", "xess", "2", EVERY_GPU, image=2, cost=2,
-            # Native XeSS on DX11 only runs on Arc; elsewhere it goes through the D3D12 bridge.
-            ini={"Upscalers.Dx12Upscaler": "xess", "Upscalers.Dx11Upscaler": "xess_12", "Upscalers.VulkanUpscaler": "xess"},
-        ),
-        # Proton-GE/EM and official Proton swap FSR 3.1 for FSR 4 themselves; the GPU and the game's Proton decide.
-        Build("proton-fsr4", "proton", "FSR 4", ("rdna3", "rdna4"), image=3, cost=2, engine="proton"),
-        Build(
-            "hlx-fsr4", "helixsr", "FSR 4", (*AMD, "intel"), image=3, cost=2,
-            archive=HELIXSR_ARCHIVE, channel="beta", engine="helixsr", way="fsr",
-        ),
-    )
-}
-
-PREFERRED = {
-    # OptiScaler 10 runs FSR 4.1.2 Lite on Van Gogh, as AMD's driver picks for APUs.
-    "rdna2": "fsr-4.1.2-beta",
-    "rdna3": "fsr-4.1.1",
-    "rdna35": "fsr-4.1.1",
-    "rdna4": "fsr-4.1.1",
-    "intel": "xess",
-}
-
-QUALITY_RATIOS = {"native": 1.0, "quality": 1.5, "balanced": 1.7, "performance": 2.0, "ultra": 3.0}
-EASY_MODES = {"image": "quality", "balanced": "balanced", "fps": "performance"}
-SHARPNESS = {"off": None, "soft": 0.3, "high": 0.6}
-PROXIES = ("dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll")
-
-# Always set: the log is how Panel proves the upscaler ran, and the HQ font
-# auto mode asserts under Proton when its TTF is missing.
-BASE_INI = {
-    "Log.LogToFile": "true",
-    "Log.LogLevel": "2",
-    "Menu.UseHQFont": "false",
-}
 
 
-FFX_LOADER = "amd_fidelityfx_loader_dx12.dll"
+def _parse(raw: dict) -> dict:
+    groups = _fields(raw["gpu_groups"], ("amd", "every"))
+    archives = _fields(raw["archives"], _ARCHIVE_ROLES)
+    _check(all(isinstance(value, str) and value for value in archives.values()), "invalid_archives")
+    assets = {asset.id: asset for asset in map(_asset, raw["assets"])}
+    builds = {build.id: build for build in map(_build, raw["builds"])}
+    _check(len(assets) == len(raw["assets"]) and len(builds) == len(raw["builds"]), "duplicate_id")
+    for build in builds.values():
+        referenced = (*build.assets, *build.replace.values(), *build.legacy_replace.values(), build.archive,
+                      *((build.injector,) if build.injector else ()))
+        _check(all(asset_id in assets for asset_id in referenced), "missing_asset")
+    _check(set(archives.values()) <= assets.keys(), "missing_asset")
+    preferred = _mapping(raw["preferred"])
+    _check(set(preferred.values()) <= builds.keys(), "missing_build")
+    _check(isinstance(raw["ffx_loader"], str) and raw["ffx_loader"], "invalid_ffx_loader")
+    return {
+        "amd": _strings(groups["amd"]), "every_gpu": _strings(groups["every"]),
+        "assets": assets, "builds": builds, "preferred": preferred,
+        "quality_ratios": _mapping(raw["quality_ratios"], (int, float)), "easy_modes": _mapping(raw["easy_modes"]),
+        "sharpness": _mapping(raw["sharpness"], (int, float, type(None))), "proxies": _strings(raw["proxies"]),
+        "base_ini": _mapping(raw["base_ini"]), "ffx_loader": raw["ffx_loader"],
+    }
+
+
+_DATA = _parse(_RAW)
+ASSETS: dict[str, Asset] = _DATA["assets"]
+AMD = _DATA["amd"]
+EVERY_GPU = _DATA["every_gpu"]
+BUILDS: dict[str, Build] = _DATA["builds"]
+PREFERRED = _DATA["preferred"]
+QUALITY_RATIOS = _DATA["quality_ratios"]
+EASY_MODES = _DATA["easy_modes"]
+SHARPNESS = _DATA["sharpness"]
+PROXIES = _DATA["proxies"]
+BASE_INI = _DATA["base_ini"]
+FFX_LOADER = _DATA["ffx_loader"]
 
 
 def for_game(build: Build, inputs: dict, gpu: str, recipe=None) -> Build:

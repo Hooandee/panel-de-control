@@ -50,6 +50,8 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
     "LICENSE",
     "py_modules/module.py",
     "game-recipes/1462040.json",
+    "shared/upscalers/catalog.json",
+    "shared/fixtures/auto_tdp.json",
     "assets/icon.png",
     "bin/tool",
   ]) write(resolve(root, file));
@@ -60,6 +62,7 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
   write(resolve(root, "py_modules/module.pyo"), "compiled\n");
   write(resolve(root, "game-recipes/.DS_Store"), "finder metadata\n");
   write(resolve(root, "game-recipes/.drafts/1.json"), "{}\n");
+  write(resolve(root, "shared/upscalers/.DS_Store"), "finder metadata\n");
   if (symlink) symlinkSync("tool", resolve(root, "bin/tool-link"));
   return root;
 }
@@ -115,6 +118,16 @@ describe("plugin release payload", () => {
 
     expect(result).toMatchObject({ status: 0, stderr: "" });
     expect(files(output, "game-recipes")).toEqual(["game-recipes/1462040.json"]);
+  });
+
+  it("ships the shared upscaler catalog and nothing else from shared data", () => {
+    const source = fixture();
+    const output = resolve(workspace(), "Panel de Control");
+
+    const result = spawnSync(process.execPath, [copier, source, output], { encoding: "utf8" });
+
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(files(output, "shared")).toEqual(["shared/upscalers/catalog.json"]);
   });
 
   it("rejects symlinks instead of copying content from an unreviewed target", () => {

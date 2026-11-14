@@ -1,26 +1,29 @@
 {
   "name": "The Witcher 3: Wild Hunt",
-  "revision": 1,
-  "conditions": {
-    "engine": [
-      "optiscaler"
+  "linux": {
+    "status": "tested",
+    "revision": 1,
+    "conditions": {
+      "engine": [
+        "optiscaler"
+      ],
+      "arch": [
+        "x86_64"
+      ]
+    },
+    "exe": "bin/x64_dx12/witcher3.exe",
+    "args": [
+      "--launcher-skip",
+      "-dx12"
     ],
-    "platform": [
-      "linux"
+    "ini": {},
+    "dependencies": [],
+    "source_urls": [
+      "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
     ],
-    "arch": [
-      "x86_64"
-    ]
+    "recommended_input": "xess"
   },
-  "exe": "bin/x64_dx12/witcher3.exe",
-  "args": [
-    "--launcher-skip",
-    "-dx12"
-  ],
-  "ini": {},
-  "dependencies": [],
-  "source_urls": [
-    "https://github.com/optiscaler/OptiScaler/wiki/The-Witcher-3-Wild-Hunt"
-  ],
-  "recommended_input": "xess"
+  "windows": {
+    "status": "unknown"
+  }
 }

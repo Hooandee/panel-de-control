@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "notes": "GPU family Panel de Control uses to suggest upscalers; it never refuses one over it. Name rules run in order on the lower-cased chip name, then the display GPUs' PCI ids in card order.",
+  "vendors": {
+    "intel": "intel"
+  },
+  "name_rules": [
+    {"generation": "rdna2", "contains": ["van gogh", "sephiroth", "custom apu 0405", "custom apu 0932"], "note": "Steam Deck: family names, or Valve's APU codes"},
+    {"generation": "rdna35", "contains": ["ryzen ai", "ai max", "hx 370", "hx 365", "z2 extreme"], "note": "Strix Point / Strix Halo, including the Z2 Extreme with or without AI in its name"},
+    {"generation": "rdna2", "contains": ["z2 a", "z2 go"], "note": "Z2 A and Z2 Go are RDNA 2 class (no FSR 4 Full)"},
+    {"generation": "rdna2", "pattern": "\\b6[89]00(?:u|hs|hx|h)\\b|\\b6600u\\b|\\b7[3-7]35(?:u|hs|h)\\b", "note": "Rembrandt laptops and handhelds"},
+    {"generation": "rdna3", "pattern": "\\bz1\\b|\\bz2\\b|7840|8840|8640|7640|8540|7540", "note": "Z1, Z1 Extreme and Z2 (Phoenix / Hawk Point) and their laptop siblings"}
+  ],
+  "pci_vendors": {
+    "0x8086": "intel",
+    "0x1002": "amd"
+  },
+  "amd_pci": {
+    "0x163f": "rdna2", "0x1435": "rdna2", "0x1681": "rdna2",
+    "0x15bf": "rdna3", "0x15c8": "rdna3", "0x1900": "rdna3", "0x1901": "rdna3",
+    "0x150e": "rdna35", "0x1586": "rdna35", "0x1114": "rdna35",
+    "0x73bf": "rdna2", "0x73df": "rdna2", "0x73ef": "rdna2", "0x73ff": "rdna2", "0x743f": "rdna2",
+    "0x744c": "rdna3", "0x747e": "rdna3", "0x7480": "rdna3", "0x7483": "rdna3",
+    "0x7550": "rdna4", "0x7590": "rdna4"
+  },
+  "unknown_amd": "rdna3"
+}

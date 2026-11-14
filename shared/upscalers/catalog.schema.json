@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Panel de Control upscaler build catalog",
+  "description": "Builds the upscaler feature can install and the files they need. Read directly by every platform; arrays keep the order shown to the user.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "archives": {
+      "description": "Asset ids with a fixed role.",
+      "type": "object",
+      "properties": {
+        "optiscaler": {
+          "description": "OptiScaler release archive used by builds unless they name another.",
+          "$ref": "#/$defs/id"
+        },
+        "optiscaler_beta": {
+          "$ref": "#/$defs/id"
+        },
+        "lsfg": {
+          "$ref": "#/$defs/id"
+        },
+        "helixsr": {
+          "$ref": "#/$defs/id"
+        },
+        "optipatcher": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "optiscaler",
+        "optiscaler_beta",
+        "lsfg",
+        "helixsr",
+        "optipatcher"
+      ],
+      "additionalProperties": false
+    },
+    "gpu_groups": {
+      "type": "object",
+      "properties": {
+        "amd": {
+          "$ref": "#/$defs/gpus"
+        },
+        "every": {
+          "$ref": "#/$defs/gpus"
+        }
+      },
+      "required": [
+        "amd",
+        "every"
+      ],
+      "additionalProperties": false
+    },
+    "preferred": {
+      "description": "Default build id per GPU family; a GPU missing here falls back to fsr-3.1.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/gpu"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "quality_ratios": {
+      "description": "Render scale divisor per quality mode.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 1
+      }
+    },
+    "easy_modes": {
+      "description": "Simple mode to quality mode.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "sharpness": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "proxies": {
+      "description": "DLL names OptiScaler can be loaded as, in order of preference.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "base_ini": {
+      "description": "OptiScaler INI values every install sets.",
+      "$ref": "#/$defs/ini"
+    },
+    "ffx_loader": {
+      "description": "File name of the FidelityFX SDK loader DLL.",
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "description": "Maintainer notes; not read by the apps.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "builds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/build"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "archives",
+    "gpu_groups",
+    "preferred",
+    "quality_ratios",
+    "easy_modes",
+    "sharpness",
+    "proxies",
+    "base_ini",
+    "ffx_loader",
+    "assets",
+    "builds"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "gpu": {
+      "type": "string",
+      "enum": [
+        "rdna2",
+        "rdna3",
+        "rdna35",
+        "rdna4",
+        "intel",
+        "unknown"
+      ]
+    },
+    "gpus": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gpu"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "ini": {
+      "description": "OptiScaler INI values as Section.Key to value.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_]+\\.[A-Za-z0-9_]+$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "description": "File name in the game folder to asset id.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "asset": {
+      "description": "A downloadable file identified by its SHA-256; urls are interchangeable mirrors.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "urls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "minItems": 1
+        },
+        "archive": {
+          "description": "The download is an archive installed as a whole.",
+          "type": "boolean",
+          "default": false
+        },
+        "member": {
+          "description": "Path inside the downloaded archive of the single file this asset provides.",
+          "type": "string",
+          "minLength": 1
+        },
+        "generation": {
+          "description": "OptiScaler major generation of an OptiScaler archive.",
+          "type": "integer",
+          "default": 9
+        },
+        "note": {
+          "description": "Maintainer note, such as the licence; not read by the apps.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "filename",
+        "sha256",
+        "size",
+        "urls"
+      ],
+      "additionalProperties": false
+    },
+    "build": {
+      "description": "A version the user can choose.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "family": {
+          "type": "string",
+          "enum": [
+            "fsr",
+            "xess",
+            "proton",
+            "helixsr"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine": {
+          "description": "How the build reaches the game.",
+          "type": "string",
+          "enum": [
+            "optiscaler",
+            "dll",
+            "proton",
+            "helixsr"
+          ]
+        },
+        "way": {
+          "description": "Route inside the engine; only the FSR drop-in exists.",
+          "type": "string",
+          "enum": [
+            "",
+            "fsr"
+          ],
+          "default": ""
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "stable",
+            "beta"
+          ],
+          "default": "stable"
+        },
+        "available": {
+          "type": "boolean",
+          "default": true
+        },
+        "gpus": {
+          "$ref": "#/$defs/gpus"
+        },
+        "image": {
+          "description": "Relative image quality, higher is better.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "cost": {
+          "description": "Relative GPU cost, higher is heavier.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "archive": {
+          "description": "Asset id of the OptiScaler or HelixSR archive the build runs on.",
+          "$ref": "#/$defs/id"
+        },
+        "extra_dir": {
+          "description": "Subfolder of the game folder that receives the archive's bundled files.",
+          "type": "string",
+          "default": ""
+        },
+        "assets": {
+          "description": "Extra asset ids copied beside OptiScaler.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "default": []
+        },
+        "injector": {
+          "$ref": "#/$defs/id"
+        },
+        "replace": {
+          "$ref": "#/$defs/files",
+          "default": {}
+        },
+        "legacy_replace": {
+          "description": "DLL-mode files older installs placed; kept so they can be restored.",
+          "$ref": "#/$defs/files",
+          "default": {}
+        },
+        "ini": {
+          "$ref": "#/$defs/ini",
+          "default": {}
+        },
+        "models": {
+          "description": "Selectable models with their INI overrides; the first one is the default.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ini": {
+                "$ref": "#/$defs/ini"
+              }
+            },
+            "required": [
+              "id",
+              "ini"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "note": {
+          "description": "Maintainer note; not read by the apps.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "family",
+        "version",
+        "engine",
+        "gpus",
+        "image",
+        "cost",
+        "archive"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
