@@ -204,6 +204,14 @@ _MAX_PLUGIN_FIELD = 80
 _MAX_FRONTEND_SIGNALS = 24
 _MAX_FRONTEND_LOG_BYTES = 64 * 1024
 _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
+# Hooandee themes write their own diagnostics as `[Duo] home-hidden reason path=/x` (PDC-VB97). Only the event name
+# and short, plain tokens leave the device; anything else on the line is dropped.
+_THEME_LINE = re.compile(r'\[(?P<theme>Duo|Vida)\] (?P<event>[a-z][a-z0-9-]{1,40})(?P<rest>[^"\n]*)')
+_THEME_TOKEN = re.compile(r"^[A-Za-z0-9_.:/#=>+-]{1,60}$")
+_MAX_THEME_LINES = 50
+# Steam writes Big Picture's console (where themes log) to webhelper_js, not cef_log.
+_THEME_LOG_NAMES = ("webhelper_js.previous.txt", "webhelper_js.txt")
+_MAX_THEME_LOG_BYTES = 1024 * 1024
 
 
 def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
@@ -420,6 +428,63 @@ def _frontend_exception_detail(line: str) -> dict:
     return detail
 
 
+def _capture_log_tail(path, name: str, quota: int) -> tuple[dict, str | None]:
+    """Read a log's tail without following links; the record says why nothing was read."""
+    record = {"name": name, "status": "unreadable"}
+    if not isinstance(path, str) or not path or quota <= 0:
+        record["status"] = "rejected"
+        return record, None
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except OSError:
+        return record, None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        record["status"] = "rejected"
+        return record, None
+    try:
+        text, bytes_read = _tail_regular_file(path, quota)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except ValueError:
+        record["status"] = "rejected"
+        return record, None
+    except OSError:
+        return record, None
+    record.update({"status": "captured", "bytes_read": bytes_read})
+    return record, text
+
+
+def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) -> dict:
+    """The last `[Duo]`/`[Vida]` lines from Steam's webhelper_js logs, oldest first.
+
+    Only the theme, the event name and short plain tokens leave the device (PDC-VB97).
+    """
+    files, lines = [], []
+    quota = max_bytes // len(_THEME_LOG_NAMES)
+    for name in _THEME_LOG_NAMES:
+        path = os.path.join(log_dir, name) if isinstance(log_dir, str) and log_dir else ""
+        record, text = _capture_log_tail(path, name, quota)
+        files.append(record)
+        if text is None:
+            continue
+        for raw_line in text.splitlines():
+            match = _THEME_LINE.search(raw_line)
+            if not match:
+                continue
+            tokens = [t for t in match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
+            lines.append({
+                "source": name,
+                "theme": match.group("theme"),
+                "event": match.group("event"),
+                "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
+            })
+    return {"schema": 1, "files": files, "lines": lines[-_MAX_THEME_LINES:]}
+
+
 def frontend_crash_diagnostics(
     paths,
     *,
@@ -444,32 +509,10 @@ def frontend_crash_diagnostics(
     for path in paths:
         basename = os.path.basename(path) if isinstance(path, str) else ""
         source = basename if basename in _CEF_LOG_NAMES else "invalid"
-        record = {"name": source, "status": "unreadable"}
+        record, text = _capture_log_tail(path if source != "invalid" else None, source, quota)
         files.append(record)
-        if not isinstance(path, str) or source == "invalid" or quota <= 0:
-            record["status"] = "rejected"
+        if text is None:
             continue
-        try:
-            info = os.lstat(path)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except OSError:
-            continue
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            record["status"] = "rejected"
-            continue
-        try:
-            text, bytes_read = _tail_regular_file(path, quota)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except ValueError:
-            record["status"] = "rejected"
-            continue
-        except OSError:
-            continue
-        record.update({"status": "captured", "bytes_read": bytes_read})
 
         for raw_line in text.splitlines():
             kind, is_crash = _frontend_signal(raw_line)

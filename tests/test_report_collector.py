@@ -8,6 +8,7 @@ from pdc_report.collector import (
     controller_daemon_cmds,
     decky_plugins,
     frontend_crash_diagnostics,
+    theme_diagnostic_lines,
     kernel_logs,
     redact_obj,
     redact_text,
@@ -1546,3 +1547,21 @@ def test_panel_exception_names_the_bundle_line_and_a_fixed_property(tmp_path):
          "line": 7, "reading": "other"},
     ]
     assert "MyPrivateKey" not in str(signals)
+
+
+def test_theme_diagnostic_lines_read_webhelper_js_without_private_text(tmp_path):
+    (tmp_path / "webhelper_js.previous.txt").write_text(
+        "[2026-11-14 17:00:00] SteamUI: WARNING: [Duo] login waiting for account\n", encoding="utf-8")
+    (tmp_path / "webhelper_js.txt").write_text(
+        "[2026-11-14 18:00:00] SteamUI: WARNING: [Duo] home-hidden detached path=/library/home window=1280x800 sheets=3\n"
+        "[2026-11-14 18:00:01] SteamUI: WARNING: [Duo] covers-late 4 user@example.com \u00e9t\u00e9\n"
+        "[2026-11-14 18:00:02] SteamUI: unrelated line\n",
+        encoding="utf-8",
+    )
+    result = theme_diagnostic_lines(str(tmp_path))
+    lines = result["lines"]
+    assert [(line["source"], line["event"]) for line in lines] == [
+        ("webhelper_js.previous.txt", "login"), ("webhelper_js.txt", "home-hidden"), ("webhelper_js.txt", "covers-late")]
+    assert lines[1]["detail"] == "detached path=/library/home window=1280x800 sheets=3"
+    assert "example.com" not in lines[2]["detail"] and "\u00e9" not in lines[2]["detail"]
+    assert theme_diagnostic_lines(str(tmp_path / "missing"))["lines"] == []
