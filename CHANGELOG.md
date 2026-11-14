@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.89.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.1...panel-de-control-v0.89.2) (2026-11-14)
+
+
+### Español
+
+* **Los reportes de temas dicen por qué falla la instalación:** Cuando un tema no se podía instalar, el reporte solo decía unsafe_archive. Ahora incluye el motivo exacto y si tienes activado Fondo ampliado en la página de inicio de Steam, para poder arreglar antes los problemas de los temas.
+
+### English
+
+* **Theme reports now say why an install failed:** When a theme could not be installed, the report only said unsafe_archive. It now includes the exact reason and whether Steam's Expanded background is turned on for the Home page, so theme problems can be fixed sooner.
+
+### Italiano
+
+* **I report dei temi dicono perché l'installazione non riesce:** Quando un tema non si poteva installare, il report diceva solo unsafe_archive. Ora include il motivo esatto e se hai attivato lo Sfondo ampliato nella pagina iniziale di Steam, così i problemi dei temi si risolvono prima.
+
+### Deutsch
+
+* **Theme-Berichte nennen den Grund für eine fehlgeschlagene Installation:** Wenn sich ein Theme nicht installieren ließ, stand im Bericht nur unsafe_archive. Jetzt enthält er den genauen Grund und ob in Steam auf der Startseite der erweiterte Hintergrund aktiv ist, damit Probleme mit Themes schneller behoben werden.
+
+### Português (Brasil)
+
+* **Os relatórios de temas dizem por que a instalação falhou:** Quando um tema não podia ser instalado, o relatório só dizia unsafe_archive. Agora ele inclui o motivo exato e se o Fundo ampliado está ativado na página inicial do Steam, para que os problemas dos temas sejam resolvidos mais rápido.
+
+### Français
+
+* **Les rapports de thèmes indiquent pourquoi l'installation a échoué :** Quand un thème ne pouvait pas être installé, le rapport indiquait seulement unsafe_archive. Il inclut maintenant la raison exacte et si l'arrière-plan étendu est activé sur la page d'accueil de Steam, pour que les problèmes de thèmes soient corrigés plus vite.
+
 ## [0.89.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.0...panel-de-control-v0.89.1) (2026-11-13)
 
 
