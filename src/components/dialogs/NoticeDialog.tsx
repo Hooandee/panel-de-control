@@ -47,8 +47,8 @@ export const NoticeIcon: FC<{ background: string; outline?: string; children: Re
   </div>
 );
 
-export const NoticeTitle: FC<{ children: ReactNode }> = ({ children }) => (
-  <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary, textAlign: "center" }}>{children}</div>
+export const NoticeTitle: FC<{ centered?: boolean; children: ReactNode }> = ({ centered, children }) => (
+  <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary, ...(centered && { textAlign: "center" }) }}>{children}</div>
 );
 
 export const NoticeActions: FC<{ style?: CSSProperties; children: ReactNode }> = ({ style, children }) => (

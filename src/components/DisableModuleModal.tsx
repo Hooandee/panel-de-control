@@ -23,7 +23,7 @@ const DisableModuleModal: FC<Opts & { closeModal?: () => void }> = ({ moduleName
         <NoticeIcon background={theme.color.surfaceRaised} outline={theme.color.warn}>
           <LuPower size={26} color={theme.color.warn} />
         </NoticeIcon>
-        <NoticeTitle>{t("customize.disable.title", { name: moduleName })}</NoticeTitle>
+        <NoticeTitle centered>{t("customize.disable.title", { name: moduleName })}</NoticeTitle>
       </NoticeHeader>
 
       <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45, textAlign: "center" }}>
