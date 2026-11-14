@@ -428,6 +428,36 @@ def _frontend_exception_detail(line: str) -> dict:
     return detail
 
 
+def _capture_log_tail(path, name: str, quota: int) -> tuple[dict, str | None]:
+    """Read a log's tail without following links; the record says why nothing was read."""
+    record = {"name": name, "status": "unreadable"}
+    if not isinstance(path, str) or not path or quota <= 0:
+        record["status"] = "rejected"
+        return record, None
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except OSError:
+        return record, None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        record["status"] = "rejected"
+        return record, None
+    try:
+        text, bytes_read = _tail_regular_file(path, quota)
+    except FileNotFoundError:
+        record["status"] = "missing"
+        return record, None
+    except ValueError:
+        record["status"] = "rejected"
+        return record, None
+    except OSError:
+        return record, None
+    record.update({"status": "captured", "bytes_read": bytes_read})
+    return record, text
+
+
 def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) -> dict:
     """The last `[Duo]`/`[Vida]` lines from Steam's webhelper_js logs, oldest first.
 
@@ -436,24 +466,11 @@ def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) ->
     files, lines = [], []
     quota = max_bytes // len(_THEME_LOG_NAMES)
     for name in _THEME_LOG_NAMES:
-        record = {"name": name, "status": "unreadable"}
-        files.append(record)
         path = os.path.join(log_dir, name) if isinstance(log_dir, str) and log_dir else ""
-        if not path:
-            record["status"] = "rejected"
+        record, text = _capture_log_tail(path, name, quota)
+        files.append(record)
+        if text is None:
             continue
-        try:
-            info = os.lstat(path)
-            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-                record["status"] = "rejected"
-                continue
-            text, bytes_read = _tail_regular_file(path, quota)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except (OSError, ValueError):
-            continue
-        record.update({"status": "captured", "bytes_read": bytes_read})
         for raw_line in text.splitlines():
             match = _THEME_LINE.search(raw_line)
             if not match:
@@ -492,32 +509,10 @@ def frontend_crash_diagnostics(
     for path in paths:
         basename = os.path.basename(path) if isinstance(path, str) else ""
         source = basename if basename in _CEF_LOG_NAMES else "invalid"
-        record = {"name": source, "status": "unreadable"}
+        record, text = _capture_log_tail(path if source != "invalid" else None, source, quota)
         files.append(record)
-        if not isinstance(path, str) or source == "invalid" or quota <= 0:
-            record["status"] = "rejected"
+        if text is None:
             continue
-        try:
-            info = os.lstat(path)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except OSError:
-            continue
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            record["status"] = "rejected"
-            continue
-        try:
-            text, bytes_read = _tail_regular_file(path, quota)
-        except FileNotFoundError:
-            record["status"] = "missing"
-            continue
-        except ValueError:
-            record["status"] = "rejected"
-            continue
-        except OSError:
-            continue
-        record.update({"status": "captured", "bytes_read": bytes_read})
 
         for raw_line in text.splitlines():
             kind, is_crash = _frontend_signal(raw_line)
