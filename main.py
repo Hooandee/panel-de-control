@@ -3228,6 +3228,14 @@ class Plugin(AmbientRpc):
                 os.path.join(steam_home, ".local", "share", "Steam", "logs", name)
                 for name in ("cef_log.txt", "cef_log.previous.txt")
             ] if steam_home else []
+            if steam_home:
+                theme_log_dir = os.path.join(steam_home, ".local", "share", "Steam", "logs")
+                try:
+                    states["theme_lines"] = await loop.run_in_executor(
+                        None, lambda: report_collector.theme_diagnostic_lines(theme_log_dir)
+                    )
+                except Exception:  # noqa: BLE001
+                    states["theme_lines"] = {"schema": 1, "files": [], "lines": []}
             try:
                 states["frontend_crash"] = await loop.run_in_executor(
                     None,

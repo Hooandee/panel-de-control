@@ -209,6 +209,9 @@ _CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
 _THEME_LINE = re.compile(r'\[(?P<theme>Duo|Vida)\] (?P<event>[a-z][a-z0-9-]{1,40})(?P<rest>[^"\n]*)')
 _THEME_TOKEN = re.compile(r"^[A-Za-z0-9_.:/#=>+-]{1,60}$")
 _MAX_THEME_LINES = 50
+# Steam writes Big Picture's console (where themes log) to webhelper_js, not cef_log.
+_THEME_LOG_NAMES = ("webhelper_js.previous.txt", "webhelper_js.txt")
+_MAX_THEME_LOG_BYTES = 1024 * 1024
 
 
 def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
@@ -425,6 +428,46 @@ def _frontend_exception_detail(line: str) -> dict:
     return detail
 
 
+def theme_diagnostic_lines(log_dir, *, max_bytes: int = _MAX_THEME_LOG_BYTES) -> dict:
+    """The last `[Duo]`/`[Vida]` lines from Steam's webhelper_js logs, oldest first.
+
+    Only the theme, the event name and short plain tokens leave the device (PDC-VB97).
+    """
+    files, lines = [], []
+    quota = max_bytes // len(_THEME_LOG_NAMES)
+    for name in _THEME_LOG_NAMES:
+        record = {"name": name, "status": "unreadable"}
+        files.append(record)
+        path = os.path.join(log_dir, name) if isinstance(log_dir, str) and log_dir else ""
+        if not path:
+            record["status"] = "rejected"
+            continue
+        try:
+            info = os.lstat(path)
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+                record["status"] = "rejected"
+                continue
+            text, bytes_read = _tail_regular_file(path, quota)
+        except FileNotFoundError:
+            record["status"] = "missing"
+            continue
+        except (OSError, ValueError):
+            continue
+        record.update({"status": "captured", "bytes_read": bytes_read})
+        for raw_line in text.splitlines():
+            match = _THEME_LINE.search(raw_line)
+            if not match:
+                continue
+            tokens = [t for t in match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
+            lines.append({
+                "source": name,
+                "theme": match.group("theme"),
+                "event": match.group("event"),
+                "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
+            })
+    return {"schema": 1, "files": files, "lines": lines[-_MAX_THEME_LINES:]}
+
+
 def frontend_crash_diagnostics(
     paths,
     *,
@@ -445,7 +488,6 @@ def frontend_crash_diagnostics(
     steam_ui_seen: dict[tuple, dict] = {}
     crash_detected = False
     plugin_load_error = False
-    theme_lines: list[dict] = []
 
     for path in paths:
         basename = os.path.basename(path) if isinstance(path, str) else ""
@@ -478,15 +520,6 @@ def frontend_crash_diagnostics(
         record.update({"status": "captured", "bytes_read": bytes_read})
 
         for raw_line in text.splitlines():
-            theme_match = _THEME_LINE.search(raw_line)
-            if theme_match:
-                tokens = [t for t in theme_match.group("rest").split() if _THEME_TOKEN.match(t)][:8]
-                theme_lines.append({
-                    "source": source,
-                    "theme": theme_match.group("theme"),
-                    "event": theme_match.group("event"),
-                    "detail": redact_text(" ".join(tokens), keep_serial_runs=True),
-                })
             kind, is_crash = _frontend_signal(raw_line)
             if not kind:
                 continue
@@ -540,7 +573,6 @@ def frontend_crash_diagnostics(
         "plugin_load_error": plugin_load_error,
         "plugin_load_errors": plugin_load_errors,
         "signals": signals,
-        "theme_lines": theme_lines[-_MAX_THEME_LINES:],
     }
 
 
