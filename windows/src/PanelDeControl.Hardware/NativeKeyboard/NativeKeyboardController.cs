@@ -33,7 +33,6 @@ public sealed class NativeKeyboardController(
             lock (sync)
             {
                 if (running is { IsCompleted: false }) return Status;
-                if (Status.Status == "restore_unconfirmed") return Status;
                 if (!host.Available) return Publish(Failure(true, "runtime_missing", "runtime_missing"));
                 lifetime?.Dispose();
                 lifetime = new CancellationTokenSource(receiptTimeout ?? TimeSpan.FromSeconds(15));

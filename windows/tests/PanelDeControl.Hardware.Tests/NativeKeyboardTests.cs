@@ -24,6 +24,7 @@ public sealed class NativeKeyboardTests
         host.Finish();
         Assert.Equal("disabled", (await stopping).Status);
         Assert.Equal(7, controller.Status.RestoredKeys);
+        Assert.False(controller.Status.Connected);
     }
 
     [Fact]
@@ -126,6 +127,27 @@ public sealed class NativeKeyboardTests
         host.Finish();
     }
 
+    [Fact]
+    public async Task ExplicitRetryAfterLostHostRequiresFreshAppliedReceipt()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 3));
+        host.Finish();
+        await Eventually(() => controller.Status.Status == "connection_failed");
+        Assert.Equal("restore_unconfirmed", (await controller.SetEnabledAsync(false, CancellationToken.None)).Status);
+        host.Reset();
+        Assert.Equal("applying", (await controller.SetEnabledAsync(true, CancellationToken.None)).Status);
+        await Eventually(() => host.Starts == 2);
+        Assert.False(controller.Status.Connected);
+        host.Emit(Receipt("applied", styled: 4, pid: 99));
+        Assert.Equal("applied", controller.Status.Status);
+        Assert.Equal(99, controller.Status.ProcessId);
+        host.Finish();
+    }
+
     private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300) => JsonSerializer.Serialize(new
     {
         status, errorCode = status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running", windowsBuild = build, architecture = "x64", processId = pid,
@@ -142,7 +164,7 @@ public sealed class NativeKeyboardTests
     private sealed class Host(bool available = true, bool ignoreCancellation = false) : INativeKeyboardHost
     {
         private Action<string>? receive;
-        private readonly TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StopRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Starts { get; private set; }
@@ -151,12 +173,13 @@ public sealed class NativeKeyboardTests
         {
             Starts++;
             receive = onReceipt;
-            Started.SetResult();
+            Started.TrySetResult();
             if (ignoreCancellation) await finished.Task;
             else await finished.Task.WaitAsync(token);
         }
         public Task RequestStopAsync(CancellationToken token) { StopRequested.TrySetResult(); return Task.CompletedTask; }
         public void Emit(string json) => receive!(json);
         public void Finish() => finished.TrySetResult();
+        public void Reset() => finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

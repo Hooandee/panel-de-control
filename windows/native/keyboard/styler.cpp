@@ -87,6 +87,10 @@ struct Property {
         if (binding) { element.ClearValue(property); element.SetBinding(property, binding); }
         else if (original == DependencyProperty::UnsetValue()) element.ClearValue(property);
         else element.SetValue(property, original);
+        if (binding) {
+            auto expression = element.GetBindingExpression(property);
+            if (!expression || expression.ParentBinding() != binding) throw hresult_error(E_FAIL);
+        } else if (element.ReadLocalValue(property) != original) throw hresult_error(E_FAIL);
         restored = true;
     }
 
@@ -156,12 +160,19 @@ struct Cell {
         }
         for (auto const& text : found) {
             bool known = false;
-            for (auto const& label : labels) if (label.element == text) known = true;
-            if (known) continue;
             auto family = text.FontFamily().Source();
             const bool icon = std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"Symbol") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"MDL2") != std::wstring_view::npos;
+            for (auto& label : labels) if (label.element == text) {
+                known = true;
+                if (label.icon != icon) {
+                    if (icon && label.font) { label.font->Restore(); label.font.reset(); }
+                    else if (!icon) label.font = std::make_unique<Property>(text, TextBlock::FontFamilyProperty());
+                    label.icon = icon;
+                }
+            }
+            if (known) continue;
             labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()),
                 icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon, false});
         }

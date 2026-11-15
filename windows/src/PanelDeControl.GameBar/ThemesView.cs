@@ -220,7 +220,7 @@ public sealed class ThemesView : UserControl
         nativeStatus.Text = Localized(key);
         if (state is not null && state.WindowsBuild > 0)
             nativeStatus.Text += "\n" + string.Format(Localized("NativeKeyboardSummary"), state.WindowsBuild, state.Architecture, state.StyledKeys, state.KeyCount, state.RestoredKeys);
-        nativeEnable.IsEnabled = state is not null && !operationPending && !state.Requested && state.Status == "disabled";
+        nativeEnable.IsEnabled = state is not null && !operationPending && state.Status is ("disabled" or "connection_failed" or "restore_unconfirmed");
         nativeDisable.IsEnabled = state?.Requested == true && !operationPending;
         nativeDiagnostics.IsEnabled = state?.Diagnostics is not null && !operationPending;
     }
