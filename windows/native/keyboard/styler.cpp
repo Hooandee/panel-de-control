@@ -94,6 +94,7 @@ struct Cell {
     SpriteVisual visual{nullptr};
     CompositionNineGridBrush brush{nullptr};
     std::vector<Label> labels;
+    bool retiring = false;
     bool inserted = false, unloaded = false, hover = false, pressed = false, focused = false;
     std::vector<std::pair<RoutedEvent, IInspectable>> handlers;
     event_token size{}, removed{}, gotFocus{}, lostFocus{};
@@ -101,14 +102,14 @@ struct Cell {
     std::array<CompositionSurfaceBrush, 5> sources{nullptr, nullptr, nullptr, nullptr, nullptr};
 
     void Paint() {
-        if (!inserted) return;
+        if (retiring || !inserted) return;
         const unsigned index = pressed ? (focused ? 4 : 3) : focused ? 2 : hover ? 1 : 0;
         brush.Source(sources[index]);
         for (auto& label : labels)
             label.element.Foreground(SolidColorBrush(pressed ? terciopelo::Pressed : label.icon ? terciopelo::Accent : terciopelo::Ink));
     }
     void Geometry() {
-        if (!visual || !parent || face.ActualWidth() <= 0 || face.ActualHeight() <= 0) return;
+        if (retiring || !visual || !parent || face.ActualWidth() <= 0 || face.ActualHeight() <= 0) return;
         const auto origin = face.TransformToVisual(parent).TransformPoint({0, 0});
         visual.Offset({origin.X - terciopelo::Outset, origin.Y - terciopelo::Outset, 0});
         visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
@@ -173,6 +174,7 @@ struct Cell {
         Paint();
     }
     bool Restore() noexcept {
+        retiring = true;
         bool clean = true;
         auto attempt = [&](auto action) { try { action(); } catch (...) { clean = false; Fail(to_hresult()); } };
         attempt([&] {
