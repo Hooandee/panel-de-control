@@ -46,6 +46,26 @@ int main() {
     }
     keyboard::Report report{};
     assert(report.version == 6 && report.appliedTheme == ThemeId::None);
+    assert(keyboard::RestorationConfirmed(report));
+    for (auto phase : {keyboard::StylePhase::Applying, keyboard::StylePhase::Applied,
+                       keyboard::StylePhase::Waiting, keyboard::StylePhase::Restoring, keyboard::StylePhase::Failed}) {
+        report.phase = phase;
+        assert(!keyboard::RestorationConfirmed(report));
+    }
+    report = {};
+    report.styleResult = -1;
+    assert(!keyboard::RestorationConfirmed(report));
+    report = {};
+    report.subscribeResult = -1;
+    assert(!keyboard::RestorationConfirmed(report));
+    report = {};
+    report.unsubscribeResult = -1;
+    assert(!keyboard::RestorationConfirmed(report));
+    report = {};
+    report.appliedTheme = ThemeId::Terciopelo;
+    assert(!keyboard::RestorationConfirmed(report));
+    report = {};
+
     assert(keyboard::Valid(report));
     report.count = keyboard::MaxNodes + 1;
     assert(!keyboard::Valid(report));

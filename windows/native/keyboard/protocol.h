@@ -118,4 +118,9 @@ inline bool Valid(const Report& report) {
     }
     return true;
 }
+inline bool RestorationConfirmed(const Report& report) {
+    return Valid(report) && report.phase == StylePhase::Idle && report.styleResult >= 0 &&
+           report.subscribeResult >= 0 && report.unsubscribeResult >= 0;
+}
+
 }

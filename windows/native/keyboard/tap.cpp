@@ -20,7 +20,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     keyboard::Report report;
     HMODULE pin = nullptr;
     bool faceProbe = false;
-    bool styling = false, effectProbe = false;
+    bool styling = false, effectProbe = false, restoring = false;
     keyboard::ThemeId theme = keyboard::ThemeId::None;
     std::wstring session;
     ULONGLONG observeUntil = 0;
@@ -33,7 +33,12 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
         keyboard::Report snapshot;
         { std::lock_guard lock(gate); snapshot = report; }
         if (faceProbe) keyboard::ReadFaceProbe(snapshot);
-        if (styling) keyboard::ReadStyleSession(snapshot);
+        if (styling || restoring) keyboard::ReadStyleSession(snapshot);
+        if (restoring && snapshot.phase != keyboard::StylePhase::Idle) {
+            snapshot.phase = keyboard::StylePhase::Failed;
+            snapshot.appliedTheme = keyboard::ThemeId::None;
+            if (SUCCEEDED(snapshot.styleResult)) snapshot.styleResult = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+        }
         if (WriteFile(pipe, &snapshot, sizeof(snapshot), &written, &operation)) return written == sizeof(snapshot);
         if (GetLastError() != ERROR_IO_PENDING) return false;
         const bool completed = WaitForSingleObject(done.value, 1000) == WAIT_OBJECT_0;
@@ -54,8 +59,19 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
         auto self = static_cast<Tap*>(context);
         const auto com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         self->observeUntil = GetTickCount64() + 2000;
-        self->report.subscribeResult = self->tree->AdviseVisualTreeChange(self);
-        if (self->styling) {
+        if (!self->restoring) self->report.subscribeResult = self->tree->AdviseVisualTreeChange(self);
+        if (self->restoring) {
+            Handle pipe(CreateFileW(PipeName(GetCurrentProcessId(), self->session).c_str(), GENERIC_WRITE, 0,
+                nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr));
+            const auto deadline = GetTickCount64() + 4000;
+            keyboard::Report state;
+            do {
+                keyboard::ReadStyleSession(state);
+                if (state.phase == keyboard::StylePhase::Idle) break;
+                Sleep(100);
+            } while (GetTickCount64() < deadline);
+            if (pipe) self->Send(pipe.value);
+        } else if (self->styling) {
             Handle pipe(CreateFileW(PipeName(GetCurrentProcessId(), self->session).c_str(), GENERIC_READ | GENERIC_WRITE,
                 0, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr));
             bool connected = static_cast<bool>(pipe);
@@ -100,7 +116,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     }
 
 public:
-    explicit Tap(bool probe, bool style, bool effects) : faceProbe(probe), styling(style), effectProbe(effects) { ++objects; }
+    explicit Tap(bool probe, bool style, bool effects, bool restore) : faceProbe(probe), styling(style), effectProbe(effects), restoring(restore) { ++objects; }
     ~Tap() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -129,7 +145,7 @@ public:
         hr = diagnostics->GetInitializationData(&data);
         keyboard::Initialization initialization;
         const bool validInitialization = SUCCEEDED(hr) && data &&
-            keyboard::ParseInitialization(std::wstring_view(data, SysStringLen(data)), styling, initialization);
+            keyboard::ParseInitialization(std::wstring_view(data, SysStringLen(data)), styling || restoring, initialization);
         if (validInitialization) {
             session.assign(initialization.session);
             theme = initialization.theme;
@@ -138,6 +154,7 @@ public:
         if (!validInitialization) { discovering = false; return E_INVALIDARG; }
         if (faceProbe && !keyboard::BeginFaceProbe()) { discovering = false; return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS); }
         if (styling && !keyboard::BeginStyleSession(theme, effectProbe)) { discovering = false; return HRESULT_FROM_WIN32(ERROR_BUSY); }
+        if (restoring) keyboard::StopStyleSession();
         site = value;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                reinterpret_cast<LPCWSTR>(&KeyboardTapId), &pin)) {
@@ -188,9 +205,9 @@ public:
 };
 class Factory final : public IClassFactory {
     std::atomic<ULONG> refs{1};
-    bool faceProbe, styling, effectProbe;
+    bool faceProbe, styling, effectProbe, restoring;
 public:
-    explicit Factory(bool probe, bool style, bool effects) : faceProbe(probe), styling(style), effectProbe(effects) { ++objects; }
+    explicit Factory(bool probe, bool style, bool effects, bool restore) : faceProbe(probe), styling(style), effectProbe(effects), restoring(restore) { ++objects; }
     ~Factory() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -204,7 +221,7 @@ public:
         if (!out) return E_POINTER;
         *out = nullptr;
         if (outer) return CLASS_E_NOAGGREGATION;
-        auto tap = new(std::nothrow) Tap(faceProbe, styling, effectProbe);
+        auto tap = new(std::nothrow) Tap(faceProbe, styling, effectProbe, restoring);
         if (!tap) return E_OUTOFMEMORY;
         auto hr = tap->QueryInterface(iid, out); tap->Release(); return hr;
     }
@@ -214,8 +231,8 @@ public:
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
-    if (clsid != KeyboardTapId && clsid != KeyboardFaceProbeId && clsid != KeyboardStyleId && clsid != KeyboardEffectsProbeId) return CLASS_E_CLASSNOTAVAILABLE;
-    auto factory = new(std::nothrow) Factory(clsid == KeyboardFaceProbeId, clsid == KeyboardStyleId || clsid == KeyboardEffectsProbeId, clsid == KeyboardEffectsProbeId);
+    if (clsid != KeyboardTapId && clsid != KeyboardFaceProbeId && clsid != KeyboardStyleId && clsid != KeyboardEffectsProbeId && clsid != KeyboardRestoreId) return CLASS_E_CLASSNOTAVAILABLE;
+    auto factory = new(std::nothrow) Factory(clsid == KeyboardFaceProbeId, clsid == KeyboardStyleId || clsid == KeyboardEffectsProbeId, clsid == KeyboardEffectsProbeId, clsid == KeyboardRestoreId);
     if (!factory) return E_OUTOFMEMORY;
     auto hr = factory->QueryInterface(iid, out); factory->Release(); return hr;
 }
