@@ -14,9 +14,14 @@
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include "terciopelo.h"
+#include "theme_style.h"
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
+#include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include "font_resource.h"
 #include <array>
+#include <algorithm>
+#include <cwctype>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -41,6 +46,7 @@ constexpr wchar_t GridType[] = L"WindowsInternal.ComposableShell.Experiences.Tex
 std::atomic<bool> requested{false}, effectProbe{false};
 std::atomic<ULONGLONG> lease{0}, generation{0};
 std::atomic<DWORD> owner{0};
+std::atomic<ThemeId> sessionTheme{ThemeId::None};
 std::mutex receiptGate;
 Report receipt;
 
@@ -160,6 +166,34 @@ void FollowNativeOpacity(UIElement const& source, UIElement const& target) {
     opacity.SetReferenceParameter(L"native", native);
     overlay.StartAnimation(L"Opacity", opacity);
 }
+KeyRole IdentifyRole(FrameworkElement const& key) {
+    using namespace Automation::Peers;
+    auto peer = FrameworkElementAutomationPeer::FromElement(key);
+    if (!peer) peer = FrameworkElementAutomationPeer::CreatePeerForElement(key);
+    auto identify = [](hstring const& value) {
+        auto name = std::wstring(value);
+        std::transform(name.begin(), name.end(), name.begin(), towlower);
+        if (name == L"enter" || name == L"enterkey" || name == L"intro" || name == L"entrar" || name == L"return") return KeyRole::Enter;
+        if (name == L"backspace" || name == L"backspacekey" || name == L"retroceso" || name == L"borrar") return KeyRole::Backspace;
+        if (name == L"shift" || name == L"shiftkey" || name == L"leftshift" || name == L"rightshift" || name == L"mayús" || name == L"mayúsculas") return KeyRole::Shift;
+        if (name == L"capslock" || name == L"capslockkey" || name == L"caps lock" || name == L"bloq mayús") return KeyRole::CapsLock;
+        if (name == L"tab" || name == L"tabkey" || name == L"tabulador") return KeyRole::Tab;
+        if (name == L"altgr" || name == L"alt gr") return KeyRole::AltGr;
+        return KeyRole::Normal;
+    };
+    auto role = identify(Automation::AutomationProperties::GetAutomationId(key));
+    if (role == KeyRole::Normal) role = identify(key.Name());
+    if (role == KeyRole::Normal && peer) role = identify(peer.GetAutomationId());
+    if (role == KeyRole::Normal && peer) role = identify(peer.GetName());
+    return role;
+}
+bool IsLatched(FrameworkElement const& key) {
+    using namespace Automation::Peers;
+    auto peer = FrameworkElementAutomationPeer::FromElement(key);
+    if (!peer) return false;
+    auto toggle = peer.GetPattern(PatternInterface::Toggle).try_as<Automation::Provider::IToggleProvider>();
+    return toggle && toggle.ToggleState() != Automation::ToggleState::Off;
+}
 struct Cell {
     Border face{nullptr};
     Grid parent{nullptr};
@@ -168,10 +202,14 @@ struct Cell {
     ContentControl content{nullptr};
     std::unique_ptr<Property> contentTransform;
     TranslateTransform pressedTransform;
+    ThemeStyle const* style = &VelvetStyle;
+    KeyRole role = KeyRole::Normal;
+    bool latched = false;
     FontFamily font{nullptr};
-    SolidColorBrush ink{terciopelo::Ink}, soft{terciopelo::SoftInk}, accent{terciopelo::Accent}, pressedInk{terciopelo::Pressed};
+    SolidColorBrush ink{nullptr}, soft{nullptr}, accent{nullptr}, pressedInk{nullptr}, enamel{nullptr}, focusedSoft{nullptr};
     Canvas canvas{nullptr};
-    SpriteVisual visual{nullptr};
+    SpriteVisual visual{nullptr}, rune{nullptr}, glow{nullptr};
+    ContainerVisual decoration{nullptr}, effects{nullptr};
     CompositionNineGridBrush brush{nullptr};
     Canvas dustCanvas{nullptr};
     ContainerVisual dust{nullptr};
@@ -184,10 +222,16 @@ struct Cell {
     std::vector<std::pair<RoutedEvent, IInspectable>> handlers;
     event_token size{}, removed{}, gotFocus{}, lostFocus{};
     std::vector<std::pair<VisualStateGroup, event_token>> groups;
-    std::array<CompositionSurfaceBrush, 5> sources{nullptr, nullptr, nullptr, nullptr, nullptr};
+    std::array<CompositionSurfaceBrush, 15> sources{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    ScalarKeyFrameAnimation glowFade{nullptr};
+    Vector3KeyFrameAnimation glowScale{nullptr};
 
     Brush LabelBrush(Label const& label) const {
-        return label.secondary ? soft : (pressed || focused) ? pressedInk : label.icon ? accent : ink;
+        if (style->id == ThemeId::Terciopelo)
+            return label.secondary ? soft : (pressed || focused) ? pressedInk : label.icon ? accent : ink;
+        if (focused) return label.secondary ? focusedSoft : pressedInk;
+        if (SignKey(role) || latched) return enamel;
+        return label.secondary ? soft : ink;
     }
     void ReadFocus() {
         focused = false;
@@ -201,7 +245,8 @@ struct Cell {
     }
     void Paint() {
         if (retiring || !inserted) return;
-        const unsigned index = pressed ? (focused ? 4 : 3) : focused ? 2 : hover ? 1 : 0;
+        if (style->id == ThemeId::LoboBlanco) latched = IsLatched(key);
+        const unsigned index = FaceIndex(style->id, role, focused, pressed, hover, latched);
         brush.Source(sources[index]);
         if (contentTransform) {
             if (pressed && content.RenderTransform() != pressedTransform && !IdentityTransform(content.RenderTransform())) {
@@ -217,26 +262,41 @@ struct Cell {
     void ShowEffectFrame() {
         if (retiring || !dust) return;
         dustStrip.StopAnimation(L"Offset"); dust.StopAnimation(L"Opacity");
-        dustStrip.Offset({-504, 0, 0}); dust.Opacity(1);
+        dustStrip.Offset({-4 * EffectWidth(), 0, 0}); dust.Opacity(1);
+        if (glow) glow.Opacity(1);
     }
     void Strike() {
         if (retiring || !dust) return;
         dustStrip.StartAnimation(L"Offset", dustFrames);
         dust.StartAnimation(L"Opacity", dustFade);
+        if (glow) { glow.StartAnimation(L"Opacity", glowFade); glow.StartAnimation(L"Scale", glowScale); }
     }
     void Geometry() {
         if (retiring || !visual || !parent) return;
         const bool visible = face.Visibility() == Visibility::Visible && face.ActualWidth() > 0 && face.ActualHeight() > 0;
         visual.Opacity(visible ? 1 : 0);
+        if (canvas) canvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
         if (dustCanvas) dustCanvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
         if (!visible) return;
         const auto origin = face.TransformToVisual(parent).TransformPoint({0, 0});
-        visual.Offset({origin.X - terciopelo::Outset, origin.Y - terciopelo::Outset, 0});
-        visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
-                     static_cast<float>(face.ActualHeight()) + 2 * terciopelo::Outset});
-        if (dust) dust.Offset({origin.X + static_cast<float>(face.ActualWidth()) / 2 - 63,
-            origin.Y + static_cast<float>(face.ActualHeight()) / 2 - 66, 0});
+        visual.Offset({origin.X - style->outset, origin.Y - style->outset, 0});
+        visual.Size({static_cast<float>(face.ActualWidth()) + 2 * style->outset,
+                     static_cast<float>(face.ActualHeight()) + 2 * style->outset});
+        if (dust) {
+            const float bottom = style->id == ThemeId::Terciopelo ? .5f : role == KeyRole::Enter ? .3f : .42f;
+            const float y = style->id == ThemeId::Terciopelo ? static_cast<float>(face.ActualHeight()) / 2 - 66 :
+                static_cast<float>(face.ActualHeight()) * (1 - bottom) - EffectHeight();
+            dust.Offset({origin.X + static_cast<float>(face.ActualWidth()) / 2 - EffectWidth()/2, origin.Y + y, 0});
+        }
+        if (rune) rune.Offset({origin.X + static_cast<float>(face.ActualWidth()) - 25, origin.Y + 9, 0});
+        if (glow) {
+            glow.Offset({origin.X - 6, origin.Y - 6, 0});
+            glow.Size({static_cast<float>(face.ActualWidth()) + 12, static_cast<float>(face.ActualHeight()) + 12});
+            glow.CenterPoint({glow.Size().x/2, glow.Size().y/2, 0});
+        }
     }
+    float EffectWidth() const { return role == KeyRole::Enter ? style->enterWidth : style->effectWidth; }
+    float EffectHeight() const { return role == KeyRole::Enter ? style->enterHeight : style->effectHeight; }
     void FindLabels(DependencyObject const& root, std::vector<TextBlock>& found, unsigned depth = 0) {
         if (depth > 6 || found.size() >= 12) return;
         if (auto text = root.try_as<TextBlock>()) found.push_back(text);
@@ -246,7 +306,7 @@ struct Cell {
     bool ReconcileLabels() {
         auto children = parent.Children();
         if (children.Size() != 4 || children.GetAt(0) != face || children.GetAt(1) != canvas || children.GetAt(3) != dustCanvas ||
-            Hosting::ElementCompositionPreview::GetElementChildVisual(dustCanvas) != dust) return false;
+            Hosting::ElementCompositionPreview::GetElementChildVisual(dustCanvas) != effects) return false;
         auto current = children.GetAt(2).try_as<ContentControl>();
         if (!current) return false;
         if (current != content) {
@@ -255,7 +315,7 @@ struct Cell {
         }
         if (!contentTransform) {
             if (IdentityTransform(content.RenderTransform())) {
-                contentTransform = std::make_unique<Property>(content, UIElement::RenderTransformProperty()); pressedTransform.Y(3);
+                contentTransform = std::make_unique<Property>(content, UIElement::RenderTransformProperty()); pressedTransform.Y(style->pressedOffset);
             }
         }
         std::vector<TextBlock> found;
@@ -318,39 +378,64 @@ struct Cell {
         key.AddHandler(event, boxed, true);
         handlers.emplace_back(event, boxed);
     }
-    void Insert(std::array<LoadedImageSurface, 7> const& surfaces, FontFamily const& desiredFont) {
+    void Insert(std::array<LoadedImageSurface, 15> const& surfaces, FontFamily const& desiredFont) {
         auto children = parent.Children();
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
         }
+        if (style->id == ThemeId::LoboBlanco) role = IdentifyRole(key);
         canvas = Canvas(); canvas.Width(0); canvas.Height(0);
         canvas.HorizontalAlignment(HorizontalAlignment::Left); canvas.VerticalAlignment(VerticalAlignment::Top);
         canvas.IsHitTestVisible(false);
         auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(parent).Compositor();
-        for (unsigned i = 0; i < sources.size(); ++i) {
+        for (unsigned i = 0; i < style->imageCount; ++i) {
             sources[i] = compositor.CreateSurfaceBrush(surfaces[i]); sources[i].Stretch(CompositionStretch::Fill);
         }
         brush = compositor.CreateNineGridBrush();
-        brush.SetInsets(terciopelo::Slice); brush.SetInsetScales(terciopelo::Border / terciopelo::Slice);
+        brush.SetInsets(style->slice); brush.SetInsetScales(style->border / style->slice);
         brush.IsCenterHollow(false); brush.Source(sources[0]);
         visual = compositor.CreateSpriteVisual(); visual.Brush(brush);
+        decoration = compositor.CreateContainerVisual(); decoration.Children().InsertAtBottom(visual);
+        if (style->id == ThemeId::LoboBlanco && SignKey(role)) {
+            rune = compositor.CreateSpriteVisual(); rune.Size({13,13});
+            auto runeBrush = compositor.CreateSurfaceBrush(surfaces[9 + static_cast<unsigned>(role)]);
+            runeBrush.Stretch(CompositionStretch::Uniform); rune.Brush(runeBrush);
+            decoration.Children().InsertAtTop(rune);
+        }
         dustCanvas = Canvas(); dustCanvas.Width(0); dustCanvas.Height(0);
         dustCanvas.HorizontalAlignment(HorizontalAlignment::Left); dustCanvas.VerticalAlignment(VerticalAlignment::Top); dustCanvas.IsHitTestVisible(false);
-        dust = compositor.CreateContainerVisual(); dust.Size({126, 98}); dust.Opacity(0); dust.Clip(compositor.CreateInsetClip());
-        dustStrip = compositor.CreateSpriteVisual(); dustStrip.Size({2268, 98});
+        effects = compositor.CreateContainerVisual();
+        dust = compositor.CreateContainerVisual(); dust.Size({EffectWidth(), EffectHeight()}); dust.Opacity(0); dust.Clip(compositor.CreateInsetClip());
+        dustStrip = compositor.CreateSpriteVisual(); dustStrip.Size({EffectWidth()*style->frames, EffectHeight()});
         auto dustBrush = compositor.CreateSurfaceBrush(surfaces[6]); dustBrush.Stretch(CompositionStretch::Fill);
         dustStrip.Brush(dustBrush); dust.Children().InsertAtTop(dustStrip);
-        Hosting::ElementCompositionPreview::SetElementChildVisual(dustCanvas, dust);
-        auto steps = compositor.CreateStepEasingFunction(17);
+        Hosting::ElementCompositionPreview::SetElementChildVisual(dustCanvas, effects);
+        effects.Children().InsertAtTop(dust);
+        if (style->id == ThemeId::LoboBlanco && SignKey(role)) {
+            glow = compositor.CreateSpriteVisual(); glow.Opacity(0);
+            auto gradient = compositor.CreateRadialGradientBrush();
+            constexpr std::array<Color, 5> colors{{{191,255,140,60},{179,150,210,255},{179,255,214,110},{179,200,160,255},{179,160,235,130}}};
+            gradient.ColorStops().Append(compositor.CreateColorGradientStop(0, colors[static_cast<unsigned>(role)-1]));
+            gradient.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{0,0,0,0}));
+            glow.Brush(gradient); effects.Children().InsertAtBottom(glow);
+            glowFade = compositor.CreateScalarKeyFrameAnimation();
+            glowFade.InsertKeyFrame(0,0); glowFade.InsertKeyFrame(.25f,1); glowFade.InsertKeyFrame(1,0);
+            glowFade.Duration(std::chrono::milliseconds(420));
+            glowScale = compositor.CreateVector3KeyFrameAnimation();
+            auto ease = compositor.CreateCubicBezierEasingFunction({.2f,.7f},{.2f,1});
+            glowScale.InsertKeyFrame(0,{.9f,.9f,1}); glowScale.InsertKeyFrame(.25f,{1,1,1},ease);
+            glowScale.InsertKeyFrame(1,{1.08f,1.08f,1},ease); glowScale.Duration(std::chrono::milliseconds(420));
+        }
+        auto steps = compositor.CreateStepEasingFunction(style->frames - 1);
         steps.IsInitialStepSingleFrame(false); steps.IsFinalStepSingleFrame(true);
         dustFrames = compositor.CreateVector3KeyFrameAnimation();
-        dustFrames.InsertKeyFrame(0, {0, 0, 0}); dustFrames.InsertKeyFrame(1, {-2142, 0, 0}, steps);
-        dustFrames.Duration(std::chrono::milliseconds(720));
+        dustFrames.InsertKeyFrame(0, {0, 0, 0}); dustFrames.InsertKeyFrame(1, {-EffectWidth() * (style->frames - 1), 0, 0}, steps);
+        dustFrames.Duration(std::chrono::milliseconds(role == KeyRole::Enter ? style->enterDuration : style->duration));
         dustFade = compositor.CreateScalarKeyFrameAnimation();
         auto linear = compositor.CreateLinearEasingFunction();
-        dustFade.InsertKeyFrame(0, 1); dustFade.InsertKeyFrame(0.8f, 1, linear); dustFade.InsertKeyFrame(1, 0, linear);
-        dustFade.Duration(std::chrono::milliseconds(720)); Geometry();
-        Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
+        dustFade.InsertKeyFrame(0, 1); dustFade.InsertKeyFrame(style->fadeStart, 1, linear); dustFade.InsertKeyFrame(1, 0, linear);
+        dustFade.Duration(std::chrono::milliseconds(role == KeyRole::Enter ? style->enterDuration : style->duration)); Geometry();
+        Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, decoration);
         content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
         RecordFonts(face, 0); RecordFonts(content, 1);
         children.InsertAt(1, canvas); inserted = true; children.Append(dustCanvas);
@@ -451,7 +536,7 @@ struct Chrome {
     FrameworkElement bar{nullptr};
     Plate plate;
     bool confirmed = false;
-    SolidColorBrush clear{Color{0, 0, 0, 0}}, accent{terciopelo::Accent};
+    SolidColorBrush clear{Color{0, 0, 0, 0}}, accent{nullptr};
     struct Entry { std::unique_ptr<Property> property; IInspectable value; };
     std::vector<Entry> properties;
     static Border FindFrame(Grid const& root) {
@@ -550,13 +635,15 @@ struct Chrome {
 struct Engine {
     ULONGLONG epoch = 0, loadingStarted = 0, probeStarted = 0;
     bool probeAnimated = false, labelsQueued = false;
-    FontResource font;
+    std::array<FontResource, 3> fonts;
+    FontFamily activeFont{nullptr};
+    ThemeStyle const* style = &VelvetStyle;
     bool fontReady = false;
     unsigned fontChecks = 0;
     DispatcherTimer timer{nullptr}; event_token tick{};
-    std::array<LoadedImageSurface, 7> surfaces{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    std::array<event_token, 7> completions{};
-    std::array<bool, 7> ready{};
+    std::array<LoadedImageSurface, 15> surfaces{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    std::array<event_token, 15> completions{};
+    std::array<bool, 15> ready{};
     std::vector<std::unique_ptr<Cell>> cells;
     std::vector<weak_ref<FrameworkElement>> candidates;
     std::vector<std::unique_ptr<Plate>> plates;
@@ -572,10 +659,20 @@ struct Engine {
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
         timer = DispatcherTimer(); timer.Interval(std::chrono::milliseconds(250));
         tick = timer.Tick([this](auto const&, auto const&) noexcept { Update(); }); timer.Start(); started = true;
-        font.Load(module);
+        style = &StyleFor(sessionTheme.load());
+        auto& primary = fonts[style->id == ThemeId::LoboBlanco ? 1 : 0];
+        primary.Load(module, style->fontResource, style->fontFamily);
+        activeFont = primary.family;
+        if (style->fallbackFontResource) {
+            fonts[2].Load(module, style->fallbackFontResource, style->fallbackFontFamily);
+            auto source = std::wstring(primary.family.Source());
+            source.erase(source.rfind(L", Segoe UI"));
+            activeFont = FontFamily(source + L", " + std::wstring(fonts[2].family.Source()));
+        }
+        for (unsigned i = style->imageCount; i < ready.size(); ++i) ready[i] = true;
         auto dispatcher = anchor.Dispatcher();
-        for (unsigned i = 0; i < surfaces.size(); ++i) {
-            auto resource = FindResourceW(module, MAKEINTRESOURCEW(i == 6 ? 108 : 101 + i), RT_RCDATA);
+        for (unsigned i = 0; i < style->imageCount; ++i) {
+            auto resource = FindResourceW(module, MAKEINTRESOURCEW(style->images[i]), RT_RCDATA);
             if (!resource) throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
             auto bytes = static_cast<const BYTE*>(LockResource(LoadResource(module, resource)));
             auto count = SizeofResource(module, resource);
@@ -613,7 +710,11 @@ struct Engine {
             if (!key || get_class_name(key) != KeyType) return;
         }
         if (cells.size() >= 256) { Fail(E_BOUNDS); requested = false; return; }
-        auto cell = std::make_unique<Cell>(); cell->face = face; cell->parent = parent; cell->key = key; cell->outer = outer;
+        auto cell = std::make_unique<Cell>(); cell->style = style;
+        cell->ink = SolidColorBrush(style->ink); cell->soft = SolidColorBrush(style->soft);
+        cell->accent = SolidColorBrush(style->accent); cell->pressedInk = SolidColorBrush(style->pressed);
+        cell->enamel = SolidColorBrush(style->enamel); cell->focusedSoft = SolidColorBrush(style->focusedSoft);
+        cell->face = face; cell->parent = parent; cell->key = key; cell->outer = outer;
         cells.push_back(std::move(cell));
     }
     void RefreshLabels(FrameworkElement const& key, ULONGLONG value) {
@@ -659,13 +760,14 @@ struct Engine {
         if (!bar || chromes.size() >= 8) return false;
         auto frame = Chrome::FindFrame(root);
         if (!frame) return false;
-        auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar; chrome->plate.frame = frame;
+        auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar; chrome->plate.frame = frame; chrome->accent = SolidColorBrush(style->accent);
         auto pointer = chrome.get(); chromes.push_back(std::move(chrome));
         pointer->Measure();
         pointer->plate.Insert(root, surfaces[5]);
         return pointer->confirmed = pointer->Update();
     }
     void EnsurePlate(Cell const& cell) {
+        if (style->id == ThemeId::LoboBlanco) return;
         auto parent = VisualTreeHelper::GetParent(cell.key).try_as<Grid>();
         if (!parent) return;
         for (auto const& plate : plates) if (plate->parent == parent) return;
@@ -679,7 +781,7 @@ struct Engine {
         try {
             if (GetTickCount64() >= lease.load()) requested = false;
             bool stopping = !requested || epoch != generation;
-            if (!stopping && !fontReady && ++fontChecks <= 12) fontReady = font.Resolved();
+            if (!stopping && !fontReady && ++fontChecks <= 12) fontReady = fonts[style->id == ThemeId::LoboBlanco ? 1 : 0].Resolved() && (!style->fallbackFontResource || fonts[2].Resolved());
             if (!stopping && !fontReady && fontChecks > 12) { Fail(E_FAIL); requested = false; stopping = true; }
             bool loaded = fontReady; for (bool value : ready) loaded &= value;
             if (!stopping && !loaded && GetTickCount64() - loadingStarted > 10000) {
@@ -708,10 +810,10 @@ struct Engine {
                     if (cell.inserted) cell.Geometry();
                     if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&
                            cell.face.ActualWidth() > 0 && cell.face.ActualHeight() > 0) {
-                        if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
+                        if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, activeFont); }
                         unsigned childIndex = 0;
                         if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
-                            Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) {
+                            Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.decoration && cell.ReconcileLabels() && EnsureChrome(cell)) {
                             ++styled; if (!probeCell) probeCell = &cell;
                         }
                         else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
@@ -756,7 +858,7 @@ struct Engine {
                 for (unsigned i = 0; i < surfaces.size(); ++i) {
                     if (surfaces[i]) surfaces[i].LoadCompleted(completions[i]); surfaces[i] = nullptr;
                 }
-                font.Clear(); candidates.clear(); started = false; owner = 0;
+                activeFont = nullptr; for (auto& font : fonts) font.Clear(); candidates.clear(); started = false; owner = 0;
             }
         } catch (...) { Fail(to_hresult()); requested = false; }
     }
@@ -789,10 +891,11 @@ void QueueObservedElement(FrameworkElement const& element) noexcept {
 }
 }
 
-bool BeginStyleSession(bool probe) noexcept {
+bool BeginStyleSession(ThemeId theme, bool probe) noexcept {
+    if (!KnownTheme(theme)) return false;
     if (requested.exchange(true)) return false;
     if (owner.load()) { requested = false; return false; }
-    effectProbe = probe;
+    sessionTheme = theme; effectProbe = probe;
     ++generation; lease = GetTickCount64() + 4000;
     std::lock_guard lock(receiptGate); receipt = {}; receipt.phase = StylePhase::Waiting;
     return true;
@@ -813,6 +916,7 @@ void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept
 
 void ReadStyleSession(Report& report) noexcept {
     std::lock_guard lock(receiptGate);
+    report.appliedTheme = receipt.phase == StylePhase::Applied ? sessionTheme.load() : ThemeId::None;
     report.phase = receipt.phase; report.keyCount = receipt.keyCount; report.styledKeys = receipt.styledKeys;
     report.restoredKeys = receipt.restoredKeys; report.pendingKeys = receipt.pendingKeys;
     report.styleResult = receipt.styleResult; report.stateCount = receipt.stateCount;

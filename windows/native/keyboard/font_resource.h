@@ -11,9 +11,9 @@ class FontResource {
     std::wstring path, name;
 public:
     winrt::Windows::UI::Xaml::Media::FontFamily family{nullptr};
-    void Load(HMODULE module) {
+    void Load(HMODULE module, unsigned resourceId, const wchar_t* familyName) {
         using namespace winrt;
-        auto resource = FindResourceW(module, MAKEINTRESOURCEW(107), RT_RCDATA);
+        auto resource = FindResourceW(module, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
         if (!resource) throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
         auto bytes = LockResource(LoadResource(module, resource));
         const auto size = SizeofResource(module, resource);
@@ -43,7 +43,7 @@ public:
             DWORD written = 0;
             if (!WriteFile(file.value, bytes, size, &written, nullptr) || written != size) throw hresult_error(E_FAIL);
         }
-        family = Windows::UI::Xaml::Media::FontFamily(L"ms-appdata:///temp/" + name + L"#Josefin Sans, Segoe UI");
+        family = Windows::UI::Xaml::Media::FontFamily(L"ms-appdata:///temp/" + name + L"#" + familyName + L", Segoe UI");
     }
     bool Resolved() const {
         using namespace winrt::Windows;

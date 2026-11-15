@@ -113,3 +113,10 @@ def test_letter_font_exposes_only_original_css_ranges_for_native_fallback():
     assert letters == wanted.intersection(full)
     assert not letters.intersection(map(ord, " 0123456789.,!?"))
     assert set(map(ord, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzñÑéÉ×÷")) <= letters
+
+
+if __name__ == "__main__":
+    tests = [test for name, test in globals().copy().items() if name.startswith("test_")]
+    for test in tests:
+        test()
+    print(f"{len(tests)} Lobo Blanco package checks passed")
