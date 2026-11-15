@@ -11,11 +11,12 @@
 namespace {
 DWORD build = 0;
 DWORD targetPid = 0;
+const char* architecture = "unknown";
 void Result(const char* status, const char* error, HRESULT hr = S_OK,
             const keyboard::Report* report = nullptr) {
     const bool connected = report && SUCCEEDED(report->subscribeResult);
     std::cout << "{\"status\":\"" << status << "\",\"errorCode\":\"" << error
-              << "\",\"windowsBuild\":" << build << ",\"architecture\":\"x64\",\"processId\":"
+              << "\",\"windowsBuild\":" << build << ",\"architecture\":\"" << architecture << "\",\"processId\":"
               << targetPid << ",\"connected\":" << (connected ? "true" : "false")
               << ",\"hresult\":" << static_cast<long>(hr)
               << ",\"observedElements\":" << (report ? report->count : 0)
@@ -117,7 +118,12 @@ int wmain(int argc, wchar_t** argv) {
     using GetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
     auto getVersion = reinterpret_cast<GetVersion>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
     SYSTEM_INFO system{}; GetNativeSystemInfo(&system);
-    if (!getVersion || getVersion(&version) != 0 || version.dwMajorVersion != 10 ||
+    const bool versionKnown = getVersion && getVersion(&version) == 0;
+    if (versionKnown) build = version.dwBuildNumber;
+    architecture = system.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? "x64" :
+        system.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64 ? "arm64" :
+        system.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL ? "x86" : "unknown";
+    if (!versionKnown || version.dwMajorVersion != 10 ||
         version.dwBuildNumber < 22000 || system.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64) {
         Result("unsupported", "unsupported_windows_or_architecture"); return 0;
     }
@@ -196,12 +202,24 @@ int wmain(int argc, wchar_t** argv) {
         Result("connection_failed", "receipt_sender_invalid"); return 0;
     }
     keyboard::Report report;
-    ResetEvent(event.value); operation = {}; operation.hEvent = event.value;
-    const bool read = ReadFile(pipe.value, &report, sizeof(report), &transferred, &operation) != FALSE;
-    if ((!read && (GetLastError() != ERROR_IO_PENDING || !FinishIo(pipe.value, operation, transferred, 2000))) ||
-        transferred != sizeof(report) || !keyboard::Valid(report)) {
-        Result("connection_failed", "receipt_invalid"); return 0;
+    DWORD received = 0;
+    const auto deadline = GetTickCount64() + 2000;
+    while (received < sizeof(report)) {
+        ResetEvent(event.value); operation = {}; operation.hEvent = event.value;
+        const bool read = ReadFile(pipe.value, reinterpret_cast<BYTE*>(&report) + received,
+                                   sizeof(report) - received, &transferred, &operation) != FALSE;
+        if (!read) {
+            const auto now = GetTickCount64();
+            if (GetLastError() != ERROR_IO_PENDING || now >= deadline ||
+                !FinishIo(pipe.value, operation, transferred, static_cast<DWORD>(deadline - now))) {
+                CancelIoEx(pipe.value, nullptr);
+                Result("connection_failed", "receipt_invalid"); return 0;
+            }
+        }
+        if (!transferred) { Result("connection_failed", "receipt_incomplete"); return 0; }
+        received += transferred;
     }
+    if (!keyboard::Valid(report)) { Result("connection_failed", "receipt_invalid"); return 0; }
     if (FAILED(report.subscribeResult)) Result("connection_failed", "xaml_subscribe_failed", report.subscribeResult, &report);
     else if (FAILED(report.unsubscribeResult)) Result("connection_failed", "xaml_unsubscribe_failed", report.unsubscribeResult, &report);
     else Result("discovery_required", "selectors_unverified", S_OK, &report);
