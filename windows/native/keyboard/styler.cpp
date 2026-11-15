@@ -699,21 +699,24 @@ void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept
     try {
         IInspectable object{nullptr};
         check_hresult(diagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(put_abi(object))));
-        auto key = object.try_as<FrameworkElement>();
-        if (!key || !key.Dispatcher().HasThreadAccess()) return;
-        const bool label = get_class_name(key) == L"Windows.UI.Xaml.Controls.TextBlock";
-        if (label) {
-            for (unsigned depth = 0; key && get_class_name(key) != KeyType && depth < 12; ++depth)
-                key = VisualTreeHelper::GetParent(key).try_as<FrameworkElement>();
-        }
-        if (!key || get_class_name(key) != KeyType) return;
-        const auto thread = owner.load();
-        if (thread && thread != GetCurrentThreadId()) return;
+        auto element = object.try_as<FrameworkElement>();
+        if (!element) return;
         const auto value = generation.load();
-        if (label) { Current().RefreshLabels(key, value); return; }
-        key.Dispatcher().RunAsync(Core::CoreDispatcherPriority::Normal, [key, value]() noexcept {
-            try { Current().AddCandidate(key, value); }
-            catch (...) {
+        element.Dispatcher().RunAsync(Core::CoreDispatcherPriority::High, [element, value]() noexcept {
+            try {
+                if (!requested || generation != value) return;
+                const auto thread = owner.load();
+                if (thread && thread != GetCurrentThreadId()) return;
+                auto key = element;
+                const bool label = get_class_name(key) == L"Windows.UI.Xaml.Controls.TextBlock";
+                if (label) {
+                    for (unsigned depth = 0; key && get_class_name(key) != KeyType && depth < 12; ++depth)
+                        key = VisualTreeHelper::GetParent(key).try_as<FrameworkElement>();
+                }
+                if (!key || get_class_name(key) != KeyType) return;
+                if (label) Current().RefreshLabels(key, value);
+                else Current().AddCandidate(key, value);
+            } catch (...) {
                 Fail(to_hresult()); requested = false;
                 if (Current().started) Current().Update(); else owner = 0;
             }
