@@ -21,6 +21,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -119,11 +120,31 @@ struct Property {
     }
 
 };
+void QueueObservedElement(FrameworkElement const& element) noexcept;
 struct Label {
     TextBlock element{nullptr};
     std::unique_ptr<Property> foreground;
     std::unique_ptr<Property> font;
     bool icon = false, secondary = false;
+    std::optional<std::int64_t> foregroundChanged, fontChanged;
+    void Watch() {
+        DependencyPropertyChangedCallback changed([](DependencyObject const& sender, DependencyProperty const&) noexcept {
+            try { QueueObservedElement(sender.try_as<FrameworkElement>()); }
+            catch (...) { Fail(to_hresult()); requested = false; }
+        });
+        foregroundChanged = element.RegisterPropertyChangedCallback(TextBlock::ForegroundProperty(), changed);
+        fontChanged = element.RegisterPropertyChangedCallback(TextBlock::FontFamilyProperty(), changed);
+    }
+    void Unwatch() {
+        if (foregroundChanged) {
+            element.UnregisterPropertyChangedCallback(TextBlock::ForegroundProperty(), *foregroundChanged);
+            foregroundChanged.reset();
+        }
+        if (fontChanged) {
+            element.UnregisterPropertyChangedCallback(TextBlock::FontFamilyProperty(), *fontChanged);
+            fontChanged.reset();
+        }
+    }
 };
 bool IdentityTransform(Transform const& value) {
     if (!value) return true;
@@ -243,6 +264,7 @@ struct Cell {
             bool present = false;
             for (auto const& text : found) if (text == it->element) present = true;
             if (!present) {
+                it->Unwatch();
                 it->foreground->Restore(); if (it->font) it->font->Restore();
                 it = labels.erase(it);
             } else ++it;
@@ -269,6 +291,7 @@ struct Cell {
             RecordFont(text, text.FontFamily(), text.FontSize(), 1, 0);
             labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()),
                 icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon, false});
+            labels.back().Watch();
         }
         double primarySize = 0;
         for (auto const& label : labels) if (!label.icon) primarySize = std::max(primarySize, label.element.FontSize());
@@ -369,6 +392,7 @@ struct Cell {
         });
         if (contentTransform) attempt([&] { contentTransform->Restore(); });
         for (auto& label : labels) {
+            attempt([&] { label.Unwatch(); });
             attempt([&] { label.foreground->Restore(); });
             if (label.font) attempt([&] { label.font->Restore(); });
         }
@@ -738,28 +762,9 @@ struct Engine {
     }
 };
 Engine& Current() { static auto engine = new Engine; return *engine; }
-}
-
-bool BeginStyleSession(bool probe) noexcept {
-    if (requested.exchange(true)) return false;
-    if (owner.load()) { requested = false; return false; }
-    effectProbe = probe;
-    ++generation; lease = GetTickCount64() + 4000;
-    std::lock_guard lock(receiptGate); receipt = {}; receipt.phase = StylePhase::Waiting;
-    return true;
-}
-void RenewStyleLease() noexcept { if (requested) lease = GetTickCount64() + 4000; }
-void StopStyleSession() noexcept {
-    requested = false;
-    if (!owner.load()) { std::lock_guard lock(receiptGate); receipt.phase = StylePhase::Idle; }
-}
-void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept {
-    if (!requested || !diagnostics) return;
+void QueueObservedElement(FrameworkElement const& element) noexcept {
+    if (!requested || !element) return;
     try {
-        IInspectable object{nullptr};
-        check_hresult(diagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(put_abi(object))));
-        auto element = object.try_as<FrameworkElement>();
-        if (!element) return;
         const auto value = generation.load();
         element.Dispatcher().RunAsync(Core::CoreDispatcherPriority::High, [element, value]() noexcept {
             try {
@@ -780,6 +785,29 @@ void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept
                 if (Current().started) Current().Update(); else owner = 0;
             }
         });
+    } catch (...) { Fail(to_hresult()); requested = false; }
+}
+}
+
+bool BeginStyleSession(bool probe) noexcept {
+    if (requested.exchange(true)) return false;
+    if (owner.load()) { requested = false; return false; }
+    effectProbe = probe;
+    ++generation; lease = GetTickCount64() + 4000;
+    std::lock_guard lock(receiptGate); receipt = {}; receipt.phase = StylePhase::Waiting;
+    return true;
+}
+void RenewStyleLease() noexcept { if (requested) lease = GetTickCount64() + 4000; }
+void StopStyleSession() noexcept {
+    requested = false;
+    if (!owner.load()) { std::lock_guard lock(receiptGate); receipt.phase = StylePhase::Idle; }
+}
+void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept {
+    if (!requested || !diagnostics) return;
+    try {
+        IInspectable object{nullptr};
+        check_hresult(diagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(put_abi(object))));
+        QueueObservedElement(object.try_as<FrameworkElement>());
     } catch (...) { Fail(to_hresult()); requested = false; }
 }
 

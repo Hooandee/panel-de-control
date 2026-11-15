@@ -31,7 +31,9 @@ la versión incompatible. Las teclas nuevas llegan por el árbol
 visual; una reconciliación de 250 ms verifica identidad, disposición de los
 nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resuelven
 en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
-conservar fuente y colores al cambiar Mayús sin esperar al temporizador. No lee ni registra texto,
+conservar fuente y colores al cambiar Mayús sin esperar al temporizador.
+Las etiquetas reutilizadas observan también cambios de FontFamily y Foreground;
+se retiran esos callbacks antes de restaurarlas. No lee ni registra texto,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
 capturan el puntero. Las capas propias siguen la opacidad de composición de la
