@@ -198,6 +198,7 @@ public sealed class NativeKeyboardController(
             (value.Status == "applied" && (!value.Connected || value.WindowsBuild != 26300 || value.Architecture != "x64" || value.StyledKeys == 0 || value.StyledKeys != value.KeyCount || value.PendingKeys != 0 || value.HResult != 0 || value.ErrorCode != "styles_active")) ||
             (value.Status == "disabled" && (value.StyledKeys != 0 || value.PendingKeys != 0 || value.KeyCount != 0 || value.HResult != 0 || value.ErrorCode != "styles_restored")))
             throw new InvalidDataException();
+        if (value.Status == "disabled") value.Connected = false;
         var nodes = new List<object>();
         var elements = root.GetProperty("nodes");
         {

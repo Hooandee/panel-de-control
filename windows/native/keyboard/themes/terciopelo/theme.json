@@ -4,13 +4,7 @@
   "sourceVersion": "0.2.13",
   "target": "TextInputHost.exe",
   "experimental": true,
-  "applicationEnabled": false,
-  "blockedBy": [
-    "keyboard_elements_unverified",
-    "visual_states_unverified",
-    "texture_transport_unverified",
-    "font_license_and_format_unverified"
-  ],
+  "applicationEnabled": true,
   "assets": [
     {
       "path": "assets/velvet-dust.webp",
@@ -92,5 +86,29 @@
       "focusPressed": "assets/velvet-focus-press-v3.png"
     }
   },
-  "bindings": []
+  "bindings": [
+    {
+      "kind": "key",
+      "type": "WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey",
+      "template": [
+        "Grid",
+        "Grid",
+        "Border",
+        "ContentControl"
+      ]
+    },
+    {
+      "kind": "plate",
+      "parentType": "WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardGrid"
+    }
+  ],
+  "supportedBuilds": [
+    26300
+  ],
+  "limitations": [
+    "native_modifier_indicators",
+    "native_label_sizes",
+    "native_suggestions_bar",
+    "dust_animation_not_applied"
+  ]
 }

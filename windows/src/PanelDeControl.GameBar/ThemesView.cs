@@ -177,12 +177,19 @@ public sealed class ThemesView : UserControl
         {
             PlaceholderText = Localized("NativeKeyboardTest"),
             MaxLength = 256,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 72,
             IsSpellCheckEnabled = false,
             IsTextPredictionEnabled = false,
         };
         AutomationProperties.SetName(keyboardTest, Localized("NativeKeyboardTest"));
         AutomationProperties.SetAutomationId(keyboardTest, "NativeKeyboardTestInput");
-        keyboardTest.GotFocus += (_, _) => Windows.UI.ViewManagement.InputPane.GetForCurrentView().TryShow();
+        keyboardTest.GotFocus += async (_, _) =>
+        {
+            Windows.UI.ViewManagement.InputPane.GetForCurrentView().TryShow();
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () => keyboardTest.StartBringIntoView());
+        };
         keyboardTest.Unloaded += (_, _) => keyboardTest.Text = string.Empty;
         return new Border
         {

@@ -68,30 +68,43 @@ struct Property {
     DependencyProperty property{nullptr};
     IInspectable original{nullptr};
     Data::Binding binding{nullptr};
-    bool restored = false;
-    Property(FrameworkElement const& value, DependencyProperty const& dp) : element(value), property(dp) {
-        original = element.ReadLocalValue(dp);
-        if (auto expression = element.GetBindingExpression(dp)) binding = expression.ParentBinding();
+    IInspectable owned{nullptr};
+    bool assigned = false, restored = false;
+    Property(FrameworkElement const& value, DependencyProperty const& dp) : element(value), property(dp) { Capture(); }
+    void Capture() {
+        original = element.ReadLocalValue(property);
+        binding = nullptr;
+        if (auto expression = element.GetBindingExpression(property)) binding = expression.ParentBinding();
+    }
+    void Assign(IInspectable const& value) {
+        if (element.GetValue(property) == value) return;
+        if (assigned && element.ReadLocalValue(property) != owned) Capture();
+        element.SetValue(property, value); owned = value; assigned = true; restored = false;
     }
     void Restore() {
-        if (restored) return;
+        if (restored || !assigned) return;
+        if (element.ReadLocalValue(property) != owned) { restored = true; return; }
         if (binding) { element.ClearValue(property); element.SetBinding(property, binding); }
         else if (original == DependencyProperty::UnsetValue()) element.ClearValue(property);
         else element.SetValue(property, original);
         restored = true;
     }
+
 };
 struct Label {
     TextBlock element{nullptr};
     std::unique_ptr<Property> foreground;
     std::unique_ptr<Property> font;
-    bool icon = false;
+    bool icon = false, secondary = false;
 };
 struct Cell {
     Border face{nullptr};
     Grid parent{nullptr};
     FrameworkElement key{nullptr};
     Grid outer{nullptr};
+    ContentControl content{nullptr};
+    FontFamily font{nullptr};
+    SolidColorBrush ink{terciopelo::Ink}, soft{terciopelo::SoftInk}, accent{terciopelo::Accent}, pressedInk{terciopelo::Pressed};
     Canvas canvas{nullptr};
     SpriteVisual visual{nullptr};
     CompositionNineGridBrush brush{nullptr};
@@ -107,8 +120,10 @@ struct Cell {
         if (retiring || !inserted) return;
         const unsigned index = pressed ? (focused ? 4 : 3) : focused ? 2 : hover ? 1 : 0;
         brush.Source(sources[index]);
-        for (auto& label : labels)
-            label.element.Foreground(SolidColorBrush(pressed ? terciopelo::Pressed : label.icon ? terciopelo::Accent : terciopelo::Ink));
+        for (auto& label : labels) {
+            label.foreground->Assign(label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink);
+            if (label.font) label.font->Assign(font);
+        }
     }
     void Geometry() {
         if (retiring || !visual || !parent || face.ActualWidth() <= 0 || face.ActualHeight() <= 0) return;
@@ -117,18 +132,48 @@ struct Cell {
         visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
                      static_cast<float>(face.ActualHeight()) + 2 * terciopelo::Outset});
     }
-    void ReadLabels(DependencyObject const& root, unsigned depth = 0) {
-        if (depth > 6 || labels.size() >= 12) return;
-        if (auto text = root.try_as<TextBlock>()) {
+    void FindLabels(DependencyObject const& root, std::vector<TextBlock>& found, unsigned depth = 0) {
+        if (depth > 6 || found.size() >= 12) return;
+        if (auto text = root.try_as<TextBlock>()) found.push_back(text);
+        for (int i = 0, n = VisualTreeHelper::GetChildrenCount(root); i < n; ++i)
+            FindLabels(VisualTreeHelper::GetChild(root, i), found, depth + 1);
+    }
+    bool ReconcileLabels() {
+        auto children = parent.Children();
+        if (children.Size() != 3 || children.GetAt(0) != face || children.GetAt(1) != canvas) return false;
+        auto current = children.GetAt(2).try_as<ContentControl>();
+        if (!current) return false;
+        content = current;
+        std::vector<TextBlock> found;
+        FindLabels(content, found);
+        for (auto it = labels.begin(); it != labels.end();) {
+            bool present = false;
+            for (auto const& text : found) if (text == it->element) present = true;
+            if (!present) {
+                it->foreground->Restore(); if (it->font) it->font->Restore();
+                it = labels.erase(it);
+            } else ++it;
+        }
+        for (auto const& text : found) {
+            bool known = false;
+            for (auto const& label : labels) if (label.element == text) known = true;
+            if (known) continue;
             auto family = text.FontFamily().Source();
             const bool icon = std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"Symbol") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"MDL2") != std::wstring_view::npos;
             labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()),
-                icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon});
+                icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon, false});
         }
-        for (int i = 0, n = VisualTreeHelper::GetChildrenCount(root); i < n; ++i)
-            ReadLabels(VisualTreeHelper::GetChild(root, i), depth + 1);
+        double primarySize = 0;
+        for (auto const& label : labels) if (!label.icon) primarySize = std::max(primarySize, label.element.FontSize());
+        for (auto& label : labels) label.secondary = !label.icon && label.element.FontSize() + 1 < primarySize;
+        Paint();
+        for (auto const& label : labels) {
+            Brush expected = label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink;
+            if (label.element.Foreground() != expected || (label.font && label.element.FontFamily() != font)) return false;
+        }
+        return true;
     }
     void Pointer(RoutedEvent const& event, int action) {
         Windows::UI::Xaml::Input::PointerEventHandler handler([this, action](IInspectable const&, Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) noexcept {
@@ -144,7 +189,7 @@ struct Cell {
         key.AddHandler(event, boxed, true);
         handlers.emplace_back(event, boxed);
     }
-    void Insert(std::array<LoadedImageSurface, 6> const& surfaces, FontFamily const& font) {
+    void Insert(std::array<LoadedImageSurface, 6> const& surfaces, FontFamily const& desiredFont) {
         auto children = parent.Children();
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
@@ -161,8 +206,7 @@ struct Cell {
         brush.IsCenterHollow(false); brush.Source(sources[0]);
         visual = compositor.CreateSpriteVisual(); visual.Brush(brush); Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
-        ReadLabels(children.GetAt(1));
-        for (auto& label : labels) if (!label.icon) label.element.FontFamily(font);
+        content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
         children.InsertAt(1, canvas); inserted = true;
         size = face.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { unloaded = true; } });
         removed = key.Unloaded([this](auto const&, auto const&) noexcept { unloaded = true; });
@@ -175,7 +219,7 @@ struct Cell {
         lostFocus = key.LostFocus(lost);
         Catalog(key); Catalog(parent);
         if (auto outer = VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>()) Catalog(outer);
-        Paint();
+        ReconcileLabels();
     }
     bool Restore() noexcept {
         retiring = true;
@@ -348,8 +392,8 @@ struct Engine {
                     if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
                     unsigned childIndex = 0;
                     if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
-                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual) ++styled;
-                    else if (cell.inserted) cell.unloaded = true;
+                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels()) ++styled;
+                    else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
                 }
                 ++it;
             }

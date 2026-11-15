@@ -18,11 +18,14 @@ class ThemePackageTests(unittest.TestCase):
         files = {item['path'] for item in manifest['assets']}
         self.assertTrue(set(manifest['keyFaces']['states'].values()).issubset(files))
 
-    def test_unobserved_keyboard_bindings_cannot_enable_application(self):
+    def test_enabled_theme_has_explicit_experimental_scope(self):
         manifest = json.loads((PACKAGE / 'theme.json').read_text())
-        self.assertFalse(manifest['applicationEnabled'])
-        self.assertEqual([], manifest['bindings'])
-        self.assertIn('keyboard_elements_unverified', manifest['blockedBy'])
+        self.assertTrue(manifest['experimental'])
+        self.assertTrue(manifest['applicationEnabled'])
+        self.assertEqual('TextInputHost.exe', manifest['target'])
+        self.assertTrue(manifest['supportedBuilds'])
+        self.assertTrue(all(isinstance(build, int) and build >= 22000 for build in manifest['supportedBuilds']))
+        self.assertEqual({'key', 'plate'}, {binding['kind'] for binding in manifest['bindings']})
 
 
 if __name__ == '__main__':
