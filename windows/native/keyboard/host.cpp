@@ -7,13 +7,21 @@
 #include <vector>
 #include <algorithm>
 #include <cwctype>
+#include <atomic>
+#include <thread>
 
 namespace {
 DWORD build = 0;
 DWORD targetPid = 0;
+DWORD previousPid = 0;
+ULONGLONG previousCreation = 0;
+unsigned attempts = 0;
+std::atomic<bool> stopRequested{false};
+std::string lastStatus = "waiting_for_keyboard", lastError = "keyboard_not_running";
 const char* architecture = "unknown";
 void Result(const char* status, const char* error, HRESULT hr = S_OK,
             const keyboard::Report* report = nullptr) {
+    lastStatus = status; lastError = error;
     const bool connected = report && SUCCEEDED(report->subscribeResult);
     std::cout << "{\"status\":\"" << status << "\",\"errorCode\":\"" << error
               << "\",\"windowsBuild\":" << build << ",\"architecture\":\"" << architecture << "\",\"processId\":"
@@ -23,7 +31,16 @@ void Result(const char* status, const char* error, HRESULT hr = S_OK,
               << ",\"truncated\":" << (report && report->truncated ? "true" : "false")
               << ",\"probeFlags\":" << (report ? report->probeFlags : 0)
               << ",\"probeHresult\":" << (report ? report->probeResult : 0)
-              << ",\"nodes\":[";
+              << ",\"keyCount\":" << (report ? report->keyCount : 0)
+              << ",\"styledKeys\":" << (report ? report->styledKeys : 0)
+              << ",\"restoredKeys\":" << (report ? report->restoredKeys : 0)
+              << ",\"pendingKeys\":" << (report ? report->pendingKeys : 0)
+              << ",\"stateCatalog\":[";
+    if (report) for (unsigned i = 0; i < report->stateCount; ++i) {
+        if (i) std::cout << ',';
+        std::cout << '\"' << report->states[i] << '\"';
+    }
+    std::cout << "],\"nodes\":[";
     if (report) for (std::uint32_t i = 0; i < report->count; ++i) {
         if (i) std::cout << ',';
         const auto& node = report->nodes[i];
@@ -96,7 +113,7 @@ struct Security {
         LPWSTR sid = nullptr;
         if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(token.data())->User.Sid, &sid)) return false;
         const std::wstring sddl = L"D:P(A;;GA;;;" + std::wstring(sid) + L")" +
-            (containerSid.empty() ? L"" : L"(A;;GW;;;" + containerSid + L")") +
+            (containerSid.empty() ? L"" : L"(A;;GRGW;;;" + containerSid + L")") +
             L"S:(ML;;NW;;;LW)";
         LocalFree(sid);
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1,
@@ -111,12 +128,46 @@ bool FinishIo(HANDLE pipe, OVERLAPPED& operation, DWORD& transferred, DWORD time
     GetOverlappedResult(pipe, &operation, &transferred, TRUE);
     return false;
 }
-}
-int wmain(int argc, wchar_t** argv) {
-    const bool faceProbe = argc == 2 && wcscmp(argv[1], L"probe-key-face") == 0;
-    if (argc != 2 || (!faceProbe && wcscmp(argv[1], L"discover") != 0)) {
-        Result("connection_failed", "invalid_command"); return 2;
+bool ReadReport(HANDLE pipe, HANDLE event, keyboard::Report& report) {
+    DWORD received = 0;
+    const auto deadline = GetTickCount64() + 4500;
+    while (received < sizeof(report)) {
+        ResetEvent(event); OVERLAPPED operation{}; operation.hEvent = event;
+        DWORD transferred = 0;
+        const bool read = ReadFile(pipe, reinterpret_cast<BYTE*>(&report) + received,
+            static_cast<DWORD>(sizeof(report) - received), &transferred, &operation) != FALSE;
+        if (!read) {
+            const auto now = GetTickCount64();
+            if (GetLastError() != ERROR_IO_PENDING || now >= deadline ||
+                !FinishIo(pipe, operation, transferred, static_cast<DWORD>(deadline - now))) return false;
+        }
+        if (!transferred) return false;
+        received += transferred;
     }
+    return keyboard::Valid(report);
+}
+bool WriteCommand(HANDLE pipe, HANDLE event, BYTE value) {
+    ResetEvent(event); OVERLAPPED operation{}; operation.hEvent = event;
+    DWORD written = 0;
+    if (WriteFile(pipe, &value, 1, &written, &operation)) return written == 1;
+    return GetLastError() == ERROR_IO_PENDING && FinishIo(pipe, operation, written, 1000) && written == 1;
+}
+void StyleResult(const keyboard::Report& report) {
+    if (FAILED(report.subscribeResult)) Result("connection_failed", "xaml_subscribe_failed", report.subscribeResult, &report);
+    else if (FAILED(report.unsubscribeResult)) Result("connection_failed", "xaml_unsubscribe_failed", report.unsubscribeResult, &report);
+    else if (FAILED(report.styleResult)) Result("connection_failed", "style_failed", report.styleResult, &report);
+    else switch (report.phase) {
+    case keyboard::StylePhase::Applied: Result("applied", "styles_active", S_OK, &report); break;
+    case keyboard::StylePhase::Applying: Result("applying", "styles_pending", S_OK, &report); break;
+    case keyboard::StylePhase::Waiting: Result("waiting_for_keyboard", "keyboard_not_visible", S_OK, &report); break;
+    case keyboard::StylePhase::Restoring: Result("restoring", "styles_restoring", S_OK, &report); break;
+    case keyboard::StylePhase::Idle: Result("disabled", "styles_restored", S_OK, &report); break;
+    default: Result("connection_failed", "style_failed", E_FAIL, &report); break;
+    }
+}
+}
+int Run(bool faceProbe, bool styling) {
+    targetPid = 0;
     RTL_OSVERSIONINFOW version{}; version.dwOSVersionInfoSize = sizeof(version);
     using GetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
     auto getVersion = reinterpret_cast<GetVersion>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
@@ -131,7 +182,7 @@ int wmain(int argc, wchar_t** argv) {
         Result("unsupported", "unsupported_windows_or_architecture"); return 0;
     }
     build = version.dwBuildNumber;
-    if (faceProbe && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
+    if ((faceProbe || styling) && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
     DWORD session = 0; ProcessIdToSessionId(GetCurrentProcessId(), &session);
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
@@ -143,13 +194,24 @@ int wmain(int argc, wchar_t** argv) {
             targetPid = entry.th32ProcessID;
         }
     } while (Process32NextW(snapshot.value, &entry));
-    if (!targetPid) { Result("connection_failed", "keyboard_not_running"); return 0; }
+    if (!targetPid) { previousPid = 0; Result(styling ? "waiting_for_keyboard" : "connection_failed", "keyboard_not_running"); return 0; }
+
     Handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, targetPid));
     USHORT machine = 0, nativeMachine = 0;
     if (!process || !SameUser(process.value) || !IsSystemKeyboard(process.value) ||
         !IsWow64Process2(process.value, &machine, &nativeMachine) || machine != IMAGE_FILE_MACHINE_UNKNOWN ||
         nativeMachine != IMAGE_FILE_MACHINE_AMD64) {
         Result("connection_failed", "target_not_authorized"); return 0;
+    }
+    FILETIME creation{}, exited{}, kernelTime{}, userTime{};
+    if (!GetProcessTimes(process.value, &creation, &exited, &kernelTime, &userTime)) {
+        Result("connection_failed", "target_not_authorized"); return 0;
+    }
+    const ULONGLONG created = (static_cast<ULONGLONG>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
+    if (styling) {
+        if (previousPid != targetPid || previousCreation != created) { attempts = 0; previousPid = targetPid; previousCreation = created; }
+        if (attempts >= 3 || (attempts && lastError != "xaml_attach_failed")) { Result(lastStatus.c_str(), lastError.c_str()); return 0; }
+        ++attempts;
     }
     if (!UsesWindowsXaml(targetPid)) { Result("unsupported", "xaml_framework_not_observed"); return 0; }
     const auto mutexName = L"Local\\PanelDeControl.KeyboardDiscovery." + std::to_wstring(targetPid);
@@ -166,12 +228,17 @@ int wmain(int argc, wchar_t** argv) {
     if (!TargetContainerSid(process.value, containerSid)) {
         Result("connection_failed", "target_token_unavailable"); return 0;
     }
-    const auto serverPipe = containerSid.empty() ? PipeName(targetPid) :
+    GUID nonce{}; wchar_t nonceText[40]{};
+    if (FAILED(CoCreateGuid(&nonce)) || !StringFromGUID2(nonce, nonceText, 40)) {
+        Result("connection_failed", "ipc_create_failed"); return 0;
+    }
+    const std::wstring sessionToken = L"." + std::wstring(nonceText + 1, 36);
+    const auto serverPipe = containerSid.empty() ? PipeName(targetPid, sessionToken) :
         L"\\\\.\\pipe\\Sessions\\" + std::to_wstring(session) + L"\\AppContainerNamedObjects\\" +
-        containerSid + L"\\PanelDeControl.KeyboardDiscovery." + std::to_wstring(targetPid);
+        containerSid + L"\\PanelDeControl.KeyboardDiscovery." + std::to_wstring(targetPid) + sessionToken;
     Security security;
     if (!security.Initialize(containerSid)) { Result("connection_failed", "ipc_security_failed"); return 0; }
-    Handle pipe(CreateNamedPipeW(serverPipe.c_str(), PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED |
+    Handle pipe(CreateNamedPipeW(serverPipe.c_str(), (styling ? PIPE_ACCESS_DUPLEX : PIPE_ACCESS_INBOUND) | FILE_FLAG_OVERLAPPED |
                                 FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE |
                                 PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS, 1, 0, sizeof(keyboard::Report),
                                 0, &security.attributes));
@@ -191,7 +258,7 @@ int wmain(int argc, wchar_t** argv) {
     // Connection names are an implementation detail, not a documented keyboard contract.
     for (int i = 1; i <= 4 && hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND); ++i) {
         const auto name = L"VisualDiagConnection" + std::to_wstring(i);
-        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), faceProbe ? KeyboardFaceProbeId : KeyboardTapId, nullptr);
+        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), styling ? KeyboardStyleId : faceProbe ? KeyboardFaceProbeId : KeyboardTapId, sessionToken.c_str());
     }
     DWORD transferred = 0;
     if (FAILED(hr)) {
@@ -206,24 +273,21 @@ int wmain(int argc, wchar_t** argv) {
         Result("connection_failed", "receipt_sender_invalid"); return 0;
     }
     keyboard::Report report;
-    DWORD received = 0;
-    const auto deadline = GetTickCount64() + 2000;
-    while (received < sizeof(report)) {
-        ResetEvent(event.value); operation = {}; operation.hEvent = event.value;
-        const bool read = ReadFile(pipe.value, reinterpret_cast<BYTE*>(&report) + received,
-                                   sizeof(report) - received, &transferred, &operation) != FALSE;
-        if (!read) {
-            const auto now = GetTickCount64();
-            if (GetLastError() != ERROR_IO_PENDING || now >= deadline ||
-                !FinishIo(pipe.value, operation, transferred, static_cast<DWORD>(deadline - now))) {
-                CancelIoEx(pipe.value, nullptr);
-                Result("connection_failed", "receipt_invalid"); return 0;
+    if (styling) {
+        while (true) {
+            const bool stopping = stopRequested.load();
+            if (!WriteCommand(pipe.value, event.value, stopping ? 2 : 1) || !ReadReport(pipe.value, event.value, report)) {
+                Result("connection_failed", stopping ? "restore_unconfirmed" : "receipt_invalid"); return 0;
             }
+            if (WaitForSingleObject(process.value, 0) != WAIT_TIMEOUT) {
+                Result("waiting_for_keyboard", "keyboard_not_running"); return 0;
+            }
+            StyleResult(report);
+            if (stopping || report.phase == keyboard::StylePhase::Idle || FAILED(report.styleResult)) return 0;
+            for (int i = 0; i < 10 && !stopRequested; ++i) Sleep(100);
         }
-        if (!transferred) { Result("connection_failed", "receipt_incomplete"); return 0; }
-        received += transferred;
     }
-    if (!keyboard::Valid(report)) { Result("connection_failed", "receipt_invalid"); return 0; }
+    if (!ReadReport(pipe.value, event.value, report)) { Result("connection_failed", "receipt_invalid"); return 0; }
     if (FAILED(report.subscribeResult)) Result("connection_failed", "xaml_subscribe_failed", report.subscribeResult, &report);
     else if (FAILED(report.unsubscribeResult)) Result("connection_failed", "xaml_unsubscribe_failed", report.unsubscribeResult, &report);
     else if (faceProbe) Result("experimental_probe",
@@ -232,5 +296,26 @@ int wmain(int argc, wchar_t** argv) {
         (report.probeFlags & keyboard::ProbeStarted) ? "probe_incomplete" : "probe_target_not_observed",
         report.probeResult, &report);
     else Result("discovery_required", "selectors_unverified", S_OK, &report);
+    return 0;
+}
+
+int wmain(int argc, wchar_t** argv) {
+    const bool faceProbe = argc == 2 && wcscmp(argv[1], L"probe-key-face") == 0;
+    const bool styling = argc == 2 && wcscmp(argv[1], L"serve") == 0;
+    if (argc != 2 || (!faceProbe && !styling && wcscmp(argv[1], L"discover") != 0)) {
+        Result("connection_failed", "invalid_command"); return 2;
+    }
+    if (!styling) return Run(faceProbe, false);
+    std::thread([] {
+        std::string line;
+        while (std::getline(std::cin, line)) if (line == "stop") break;
+        stopRequested = true;
+    }).detach();
+    do {
+        Run(false, true);
+        if (lastStatus == "unsupported" || lastStatus == "runtime_missing") break;
+        for (int i = 0; i < 20 && !stopRequested; ++i) Sleep(100);
+    } while (!stopRequested);
+    if (lastStatus == "waiting_for_keyboard" || lastStatus == "applying") Result("disabled", "styles_restored");
     return 0;
 }

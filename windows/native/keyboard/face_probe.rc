@@ -1,2 +1,7 @@
 #include <windows.h>
 101 RCDATA "themes/terciopelo/assets/velvet-idle.png"
+102 RCDATA "themes/terciopelo/assets/velvet-hover.png"
+103 RCDATA "themes/terciopelo/assets/velvet-focus.png"
+104 RCDATA "themes/terciopelo/assets/velvet-press-v3.png"
+105 RCDATA "themes/terciopelo/assets/velvet-focus-press-v3.png"
+106 RCDATA "themes/terciopelo/assets/velvet-plate.webp"
