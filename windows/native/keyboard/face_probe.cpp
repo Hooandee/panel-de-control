@@ -1,7 +1,9 @@
 #include "face_probe.h"
 #include <shcore.h>
 #include <shlwapi.h>
+#undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
@@ -118,11 +120,17 @@ struct FaceProbe {
         auto expectedContent = parent.Children().GetAt(1);
         auto expectedOuter = VisualTreeHelper::GetParent(parent);
         auto expectedKey = VisualTreeHelper::GetParent(expectedOuter);
-        const auto expectedSize = visual.Size();
-        loaded = surface.LoadCompleted([this, face, borderIndex, expectedContent, expectedOuter, expectedKey, expectedSize](auto const&, LoadedImageSourceLoadCompletedEventArgs const& args) noexcept {
-            if (stopping || finished || (flags.load() & ProbeInserted)) return;
+        const auto expectedWidth = face.ActualWidth();
+        const auto expectedHeight = face.ActualHeight();
+        auto dispatcher = parent.Dispatcher();
+        loaded = surface.LoadCompleted([this, face, borderIndex, expectedContent, expectedOuter, expectedKey, expectedWidth, expectedHeight, dispatcher](auto const&, LoadedImageSourceLoadCompletedEventArgs const& args) noexcept {
             try {
-                if (args.Status() != LoadedImageSourceLoadStatus::Success) throw hresult_error(E_FAIL);
+                const auto status = args.Status();
+                dispatcher.RunAsync(Core::CoreDispatcherPriority::Normal,
+                    [this, face, borderIndex, expectedContent, expectedOuter, expectedKey, expectedWidth, expectedHeight, status]() noexcept {
+                    if (stopping || finished || (flags.load() & ProbeInserted)) return;
+                    try {
+                if (status != LoadedImageSourceLoadStatus::Success) throw hresult_error(E_FAIL);
                 flags.fetch_or(ProbeImageLoaded);
                 // The probe owns only this noninteractive decoration, below the native labels.
                 auto children = parent.Children();
@@ -132,11 +140,13 @@ struct FaceProbe {
                     VisualTreeHelper::GetParent(parent) != expectedOuter ||
                     VisualTreeHelper::GetParent(expectedOuter) != expectedKey ||
                     !face.XamlRoot() || !face.XamlRoot().IsHostVisible() ||
-                    face.ActualWidth() != expectedSize.x || face.ActualHeight() != expectedSize.y)
+                    face.ActualWidth() != expectedWidth || face.ActualHeight() != expectedHeight)
                     throw hresult_error(E_CHANGED_STATE);
                 children.InsertAt(borderIndex + 1, decoration);
                 flags.fetch_or(ProbeInserted);
-            } catch (...) { result = to_hresult(); flags.fetch_or(ProbeFailed); Remove(); }
+                    } catch (...) { result = to_hresult(); flags.fetch_or(ProbeFailed); Remove(); }
+                });
+            } catch (...) { result = to_hresult(); flags.fetch_or(ProbeFailed); }
         });
     }
 };
