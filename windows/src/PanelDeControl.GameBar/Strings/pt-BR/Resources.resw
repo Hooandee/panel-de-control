@@ -465,17 +465,21 @@
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Remover</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Cancelar</value></data>
   <data name="NativeKeyboardTitle" xml:space="preserve"><value>Terciopelo — Teclado do Windows</value></data>
-  <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Experimental. Esta versão verifica a conexão com o teclado nativo, mas ainda não muda sua aparência. A solicitação vale apenas para esta sessão.</value></data>
-  <data name="NativeKeyboardTry" xml:space="preserve"><value>Testar Terciopelo</value></data>
-  <data name="NativeKeyboardDisable" xml:space="preserve"><value>Desativar solicitação</value></data>
+  <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Experimental. Permanece ativo enquanto o Panel de Control estiver em execução. Somente nesta sessão.</value></data>
+  <data name="NativeKeyboardTry" xml:space="preserve"><value>Ativar Terciopelo</value></data>
+  <data name="NativeKeyboardDisable" xml:space="preserve"><value>Desativar e restaurar</value></data>
   <data name="NativeKeyboardDiagnostics" xml:space="preserve"><value>Copiar diagnóstico</value></data>
   <data name="NativeKeyboardCopyFailed" xml:space="preserve"><value>Não foi possível copiar o diagnóstico.</value></data>
-  <data name="NativeKeyboardDisabled" xml:space="preserve"><value>Desativado. A aparência original é preservada.</value></data>
-  <data name="NativeKeyboardDiscovering" xml:space="preserve"><value>Explorando o teclado…</value></data>
+  <data name="NativeKeyboardDisabled" xml:space="preserve"><value>Desativado. Nenhum tema ativo.</value></data>
   <data name="NativeKeyboardMissing" xml:space="preserve"><value>Runtime ausente. Instale o pacote experimental completo.</value></data>
   <data name="NativeKeyboardUnsupported" xml:space="preserve"><value>Esta versão do Windows, arquitetura ou interface XAML não é compatível.</value></data>
-  <data name="NativeKeyboardPending" xml:space="preserve"><value>Exploração concluída. O tema não foi aplicado: as teclas e seus estados ainda precisam de validação.</value></data>
-  <data name="NativeKeyboardFailed" xml:space="preserve"><value>Não foi possível concluir a exploração. Abra o teclado touch e tente novamente; consulte o diagnóstico.</value></data>
+  <data name="NativeKeyboardFailed" xml:space="preserve"><value>Falha na conexão com o runtime. Desative para verificar a restauração; consulte o diagnóstico.</value></data>
   <data name="NativeKeyboardUnavailable" xml:space="preserve"><value>Atualize ou inicie o companion para verificar o teclado do Windows.</value></data>
-  <data name="NativeKeyboardSummary" xml:space="preserve"><value>Última exploração: Windows {0}, {1}, {2} elementos.</value></data>
+  <data name="NativeKeyboardSummary" xml:space="preserve"><value>Windows {0}, {1}. Teclas: {2}/{3} com tema, {4} restauradas.</value></data>
+  <data name="NativeKeyboardApplying" xml:space="preserve"><value>Conectando e aplicando Terciopelo…</value></data>
+  <data name="NativeKeyboardApplied" xml:space="preserve"><value>Terciopelo aplicado às teclas confirmadas pelo runtime.</value></data>
+  <data name="NativeKeyboardWaiting" xml:space="preserve"><value>Aguardando o teclado virtual. Abra-o para aplicar Terciopelo.</value></data>
+  <data name="NativeKeyboardRestoring" xml:space="preserve"><value>Restaurando a aparência original…</value></data>
+  <data name="NativeKeyboardRestoreUnconfirmed" xml:space="preserve"><value>Restauração não confirmada. Feche e abra o teclado virtual; se necessário, saia do Windows. Consulte o diagnóstico.</value></data>
+  <data name="NativeKeyboardTest" xml:space="preserve"><value>Teste o teclado aqui</value></data>
 </root>

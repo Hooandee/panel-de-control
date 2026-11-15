@@ -21,6 +21,16 @@ public sealed class NativeKeyboardStatus
     public int ProcessId { get; set; }
     [DataMember(Name = "observed_elements", Order = 8)]
     public int ObservedElements { get; set; }
+    [DataMember(Name = "styled_keys", Order = 10)]
+    public int StyledKeys { get; set; }
+    [DataMember(Name = "restored_keys", Order = 11)]
+    public int RestoredKeys { get; set; }
+    [DataMember(Name = "key_count", Order = 12)]
+    public int KeyCount { get; set; }
+    [DataMember(Name = "pending_keys", Order = 14)]
+    public int PendingKeys { get; set; }
+    [DataMember(Name = "hresult", Order = 13)]
+    public int HResult { get; set; }
     [DataMember(Name = "diagnostics", Order = 9, EmitDefaultValue = false)]
     public string? Diagnostics { get; set; }
 }

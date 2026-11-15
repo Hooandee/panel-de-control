@@ -5,45 +5,89 @@ namespace PanelDeControl.Hardware.NativeKeyboard;
 
 public sealed class NativeKeyboardHost : INativeKeyboardHost
 {
+    private const int MaximumLineLength = 256 * 1024;
     private readonly string executable = Path.Combine(AppContext.BaseDirectory, "NativeKeyboard", "PanelDeControl.KeyboardHost.exe");
+    private Process? active;
+    private TaskCompletionSource<Process> ready = NewReady();
+    private static TaskCompletionSource<Process> NewReady() => new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool Available => File.Exists(executable) && File.Exists(Path.Combine(Path.GetDirectoryName(executable)!, "PanelDeControl.KeyboardTap.dll"));
 
-    public async Task<string> DiscoverAsync(CancellationToken token)
+    public async Task RunAsync(Action<string> onReceipt, CancellationToken token)
     {
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo(executable, "discover")
+            StartInfo = new ProcessStartInfo(executable, "serve")
             {
                 UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
+                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 WorkingDirectory = Path.GetDirectoryName(executable)!,
             },
         };
-        if (!process.Start()) throw new IOException("Runtime did not start.");
+        var started = Volatile.Read(ref ready);
+        var launched = false;
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
+        Task stdout = Task.CompletedTask, stderr = Task.CompletedTask;
         try
         {
-            var stdout = ReadBoundedAsync(process.StandardOutput, token);
-            var stderr = ReadBoundedAsync(process.StandardError, token);
-            await Task.WhenAll(stdout, stderr, process.WaitForExitAsync(token)).ConfigureAwait(false);
+            if (!process.Start()) throw new IOException("Runtime did not start.");
+            launched = true;
+            Volatile.Write(ref active, process);
+            started.TrySetResult(process);
+            stdout = ReadLinesAsync(process.StandardOutput, onReceipt, lifetime);
+            stderr = ReadLinesAsync(process.StandardError, _ => { }, lifetime);
+            await Task.WhenAll(stdout, stderr, process.WaitForExitAsync(lifetime.Token)).ConfigureAwait(false);
             if (process.ExitCode != 0) throw new IOException("Runtime exited unsuccessfully.");
-            return await stdout.ConfigureAwait(false);
         }
         finally
         {
-            if (!process.HasExited) process.Kill();
+            started.TrySetCanceled();
+            Interlocked.CompareExchange(ref active, null, process);
+            lifetime.Cancel();
+            if (launched && !process.HasExited) process.Kill();
+            try { await Task.WhenAll(stdout, stderr).ConfigureAwait(false); }
+            catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidDataException) { }
+            Interlocked.CompareExchange(ref ready, NewReady(), started);
         }
     }
 
-    private static async Task<string> ReadBoundedAsync(StreamReader reader, CancellationToken token)
+    public async Task RequestStopAsync(CancellationToken token)
     {
-        var output = new StringBuilder();
-        var buffer = new char[4096];
-        int count;
-        while ((count = await reader.ReadAsync(buffer.AsMemory(), token).ConfigureAwait(false)) != 0)
+        var process = Volatile.Read(ref active) ?? await Volatile.Read(ref ready).Task.WaitAsync(token).ConfigureAwait(false);
+        await process.StandardInput.WriteLineAsync("stop".AsMemory(), token).ConfigureAwait(false);
+        await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+    }
+
+    private static async Task ReadLinesAsync(StreamReader reader, Action<string> receive, CancellationTokenSource lifetime)
+    {
+        try
         {
-            if (output.Length + count > 256 * 1024) throw new InvalidDataException("Runtime output exceeded its budget.");
-            output.Append(buffer, 0, count);
+            var line = new StringBuilder();
+            var buffer = new char[4096];
+            int count;
+            while ((count = await reader.ReadAsync(buffer.AsMemory(), lifetime.Token).ConfigureAwait(false)) != 0)
+            {
+                for (var index = 0; index < count; index++)
+                {
+                    var character = buffer[index];
+                    if (character == '\n')
+                    {
+                        if (line.Length == 0) throw new InvalidDataException("Empty runtime receipt.");
+                        receive(line.ToString());
+                        line.Clear();
+                    }
+                    else if (character != '\r')
+                    {
+                        if (line.Length == MaximumLineLength) throw new InvalidDataException("Runtime line exceeded its budget.");
+                        line.Append(character);
+                    }
+                }
+            }
+            if (line.Length != 0) throw new InvalidDataException("Incomplete runtime receipt.");
         }
-        return output.ToString();
+        catch
+        {
+            lifetime.Cancel();
+            throw;
+        }
     }
 }

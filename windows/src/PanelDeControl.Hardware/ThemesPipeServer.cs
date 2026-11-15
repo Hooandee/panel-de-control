@@ -10,7 +10,7 @@ public interface IThemesController
     Task<ThemesResponse> HandleAsync(ThemesRequest request, CancellationToken cancellationToken);
 }
 
-public sealed class ThemesController : IThemesController
+public sealed class ThemesController : IThemesController, IAsyncDisposable
 {
     private static readonly TimeSpan ReadbackTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan LongOperationTimeout = TimeSpan.FromSeconds(90);
@@ -24,6 +24,8 @@ public sealed class ThemesController : IThemesController
         this.service = service;
         this.engine = engine;
     }
+
+    public ValueTask DisposeAsync() => nativeKeyboard.DisposeAsync();
 
     public async Task<ThemesResponse> HandleAsync(ThemesRequest request, CancellationToken cancellationToken)
     {

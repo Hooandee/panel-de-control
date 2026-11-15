@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PanelDeControl.Hardware.NativeKeyboard;
 using Xunit;
 
@@ -5,100 +6,157 @@ namespace PanelDeControl.Hardware.Tests;
 
 public sealed class NativeKeyboardTests
 {
-    private const string Discovery = "{\"status\":\"discovery_required\",\"errorCode\":\"selectors_unverified\",\"windowsBuild\":26200,\"architecture\":\"x64\",\"processId\":41,\"connected\":true,\"observedElements\":1,\"nodes\":[{\"id\":1,\"parent\":0,\"type\":\"Windows.UI.Xaml.Controls.Grid\"}]}";
+    [Fact]
+    public async Task ActivationNeedsLiveReadbackAndDisableNeedsRestorationReceipt()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        Assert.Equal("applying", (await controller.SetEnabledAsync(true, CancellationToken.None)).Status);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 7));
+        Assert.Equal("applied", controller.Status.Status);
+        Assert.Equal(7, controller.Status.StyledKeys);
+        var stopping = controller.SetEnabledAsync(false, CancellationToken.None);
+        await host.StopRequested.Task;
+        Assert.Equal("restoring", controller.Status.Status);
+        Assert.False(controller.Status.Requested);
+        host.Emit(Receipt("disabled", restored: 7));
+        host.Finish();
+        Assert.Equal("disabled", (await stopping).Status);
+        Assert.Equal(7, controller.Status.RestoredKeys);
+    }
 
     [Fact]
-    public async Task DiscoveryNeverBecomesAppliedAndDisableClearsSessionRequest()
+    public async Task ProcessExitWithoutRestoreReceiptDoesNotClaimOriginalAppearance()
     {
-        var controller = new NativeKeyboardController(new Host(_ => Task.FromResult(Discovery)));
-        Assert.False(controller.Status.Requested);
-        var result = await controller.SetEnabledAsync(true, CancellationToken.None);
-        Assert.True(result.Requested);
-        Assert.Equal("discovery_required", result.Status);
-        Assert.True(result.Connected);
-        Assert.Equal(1, result.ObservedElements);
-        var disabled = await controller.SetEnabledAsync(false, CancellationToken.None);
-        Assert.False(disabled.Requested);
-        Assert.Equal("disabled", disabled.Status);
-        Assert.False(disabled.Connected);
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 3));
+        var stopping = controller.SetEnabledAsync(false, CancellationToken.None);
+        await host.StopRequested.Task;
+        host.Finish();
+        Assert.Equal("restore_unconfirmed", (await stopping).Status);
+    }
+
+    [Fact]
+    public async Task DisableTimeoutCancelsOnlyHostAndLateReceiptCannotOverwriteState()
+    {
+        var host = new Host(ignoreCancellation: true);
+        await using var controller = new NativeKeyboardController(host, stopTimeout: TimeSpan.FromMilliseconds(30));
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        var result = await controller.SetEnabledAsync(false, CancellationToken.None);
+        Assert.Equal("restore_unconfirmed", result.Status);
+        host.Emit(Receipt("applied", styled: 4));
+        Assert.Equal("restore_unconfirmed", controller.Status.Status);
+        host.Finish();
     }
 
     [Theory]
     [InlineData("{\"status\":\"applied\"}")]
-    [InlineData("{\"status\":\"discovery_required\",\"connected\":true}")]
     [InlineData("not json")]
-    [InlineData("{\"status\":\"connection_failed\",\"errorCode\":\"a password could be here\",\"windowsBuild\":26200,\"architecture\":\"x64\",\"processId\":41,\"connected\":false,\"observedElements\":0}")]
-    public async Task UntrustedOutputCannotClaimSuccessOrLeakContent(string output)
+    public async Task MalformedReceiptStopsSessionWithoutLeakingOutput(string output)
     {
-        var result = await new NativeKeyboardController(new Host(_ => Task.FromResult(output)))
-            .SetEnabledAsync(true, CancellationToken.None);
-        Assert.Equal("connection_failed", result.Status);
-        Assert.Equal("invalid_runtime_response", result.ErrorCode);
-        Assert.False(result.Connected);
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(output);
+        await Eventually(() => controller.Status.ErrorCode == "invalid_runtime_response");
+        Assert.NotEqual("applied", controller.Status.Status);
     }
 
     [Fact]
-    public async Task MissingRuntimeDoesNotExecute()
+    public async Task AppliedWithoutKeysAndWrongBuildAreRejected()
     {
-        var result = await new NativeKeyboardController(new Host(_ => throw new Exception("must not run"), false))
-            .SetEnabledAsync(true, CancellationToken.None);
-        Assert.True(result.Requested);
-        Assert.Equal("runtime_missing", result.Status);
+        foreach (var receipt in new[] { Receipt("applied"), Receipt("applied", styled: 1, build: 26200) })
+        {
+            var host = new Host();
+            await using var controller = new NativeKeyboardController(host);
+            await controller.SetEnabledAsync(true, CancellationToken.None);
+            await host.Started.Task;
+            host.Emit(receipt);
+            await Eventually(() => controller.Status.ErrorCode == "invalid_runtime_response");
+        }
     }
 
     [Fact]
-    public async Task HungRuntimeTimesOutWithoutRetryAndCanBeDisabled()
+    public async Task WaitingIsNotAppliedAndReceiptsCanFollowAReplacementKeyboard()
     {
-        var started = 0;
-        var pending = new TaskCompletionSource<string>();
-        var controller = new NativeKeyboardController(new Host(_ => { started++; return pending.Task; }), TimeSpan.FromMilliseconds(30));
-        var result = await controller.SetEnabledAsync(true, CancellationToken.None);
-        Assert.Equal("runtime_timeout", result.ErrorCode);
-        Assert.Contains("runtime_timeout", result.Diagnostics);
-        Assert.Equal(1, started);
-        Assert.Equal("disabled", (await controller.SetEnabledAsync(false, CancellationToken.None)).Status);
-        pending.SetResult(Discovery);
-        Assert.False(controller.Status.Requested);
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("waiting_for_keyboard", pid: 0));
+        Assert.True(controller.Status.Requested);
+        Assert.False(controller.Status.Connected);
+        host.Emit(Receipt("applied", styled: 12, pid: 99));
+        Assert.Equal(99, controller.Status.ProcessId);
+        Assert.Equal("applied", controller.Status.Status);
+        host.Finish();
     }
 
     [Fact]
-    public async Task IncompleteNodeReceiptIsRejected()
+    public async Task MissingRuntimeAndSilenceNeverRestartAutomatically()
     {
-        var incomplete = Discovery.Replace("\"nodes\"", "\"missingNodes\"");
-        var result = await new NativeKeyboardController(new Host(_ => Task.FromResult(incomplete)))
-            .SetEnabledAsync(true, CancellationToken.None);
-        Assert.Equal("invalid_runtime_response", result.ErrorCode);
-        Assert.NotNull(result.Diagnostics);
+        var absent = new Host(available: false);
+        await using var missing = new NativeKeyboardController(absent);
+        Assert.Equal("runtime_missing", (await missing.SetEnabledAsync(true, CancellationToken.None)).Status);
+        Assert.False(absent.Started.Task.IsCompleted);
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host, receiptTimeout: TimeSpan.FromMilliseconds(30));
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await Eventually(() => controller.Status.ErrorCode == "runtime_timeout");
+        Assert.True(controller.Status.Requested);
+        Assert.Equal(1, host.Starts);
     }
 
     [Fact]
-    public async Task DiagnosticExportDropsUnrecognizedFields()
+    public async Task DiagnosticsDiscardUnknownProperties()
     {
-        var output = Discovery.Insert(1, "\"Text\":\"private input\",");
-        var result = await new NativeKeyboardController(new Host(_ => Task.FromResult(output)))
-            .SetEnabledAsync(true, CancellationToken.None);
-        Assert.Equal("discovery_required", result.Status);
-        Assert.DoesNotContain("private input", result.Diagnostics);
-        Assert.Contains("Windows.UI.Xaml.Controls.Grid", result.Diagnostics);
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 1).Insert(1, "\"Text\":\"private input\","));
+        Assert.DoesNotContain("private input", controller.Status.Diagnostics);
+        Assert.Contains("styledKeys", controller.Status.Diagnostics);
+        host.Finish();
     }
 
-    [Fact]
-    public void WireOperationPreservesDisabledRequestAndOptionalStatus()
+    private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300) => JsonSerializer.Serialize(new
     {
-        var request = PanelDeControl.Core.Themes.ThemesRequest.SetNativeKeyboard(false);
-        var encoded = PanelDeControl.Core.Themes.ThemesWireCodec.SerializeRequest(request);
-        var decoded = PanelDeControl.Core.Themes.ThemesWireCodec.DeserializeRequest(encoded);
-        Assert.Equal(false, decoded.Enabled);
-        Assert.Equal(PanelDeControl.Core.Themes.ThemesOperation.SetNativeKeyboard, decoded.Operation);
-        var response = new PanelDeControl.Core.Themes.ThemesResponse();
-        var result = PanelDeControl.Core.Themes.ThemesWireCodec.DeserializeResponse(
-            PanelDeControl.Core.Themes.ThemesWireCodec.SerializeResponse(response));
-        Assert.Null(result.NativeKeyboard);
+        status, errorCode = status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running", windowsBuild = build, architecture = "x64", processId = pid,
+        connected = pid != 0, observedElements = 0, nodes = Array.Empty<object>(), hresult = 0,
+        styledKeys = styled, restoredKeys = restored, keyCount = styled, pendingKeys = 0, stateCatalog = Array.Empty<string>(),
+    });
+
+    private static async Task Eventually(Func<bool> condition)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        while (!condition()) await Task.Delay(10, deadline.Token);
     }
 
-    private sealed class Host(Func<CancellationToken, Task<string>> discover, bool available = true) : INativeKeyboardHost
+    private sealed class Host(bool available = true, bool ignoreCancellation = false) : INativeKeyboardHost
     {
+        private Action<string>? receive;
+        private readonly TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StopRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Starts { get; private set; }
         public bool Available => available;
-        public Task<string> DiscoverAsync(CancellationToken token) => discover(token);
+        public async Task RunAsync(Action<string> onReceipt, CancellationToken token)
+        {
+            Starts++;
+            receive = onReceipt;
+            Started.SetResult();
+            if (ignoreCancellation) await finished.Task;
+            else await finished.Task.WaitAsync(token);
+        }
+        public Task RequestStopAsync(CancellationToken token) { StopRequested.TrySetResult(); return Task.CompletedTask; }
+        public void Emit(string json) => receive!(json);
+        public void Finish() => finished.TrySetResult();
     }
 }

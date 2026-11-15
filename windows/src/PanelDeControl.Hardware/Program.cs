@@ -82,9 +82,10 @@ public static class Program
                 SteamThemeHostBundle.Read,
                 classTable,
                 new ThemeStorageStore(ThemeLibrary.DefaultRoot));
+            await using var themesController = new ThemesController(themeService, themeEngine);
             var themesServer = new ThemesPipeServer(
                 ThemesPipeServer.PackagedPipeName,
-                new ThemesController(themeService, themeEngine),
+                themesController,
                 PackageNamedPipeServerFactory.CreateControl);
 
             using var reportHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
