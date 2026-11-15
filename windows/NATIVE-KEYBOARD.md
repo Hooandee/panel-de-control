@@ -1,10 +1,11 @@
 # Teclado táctil nativo: Terciopelo experimental
 
-Esta implementación prepara la integración y el descubrimiento del teclado de
-Windows 11. **Todavía no aplica Terciopelo.** El bloqueo concreto es identificar
-las teclas y sus estados en el árbol real de `TextInputHost.exe`, comprobar si
-son elementos XAML modificables y validar el transporte de sus texturas. No se
-han sustituido esos requisitos por cambios de color del registro.
+Esta implementación integra el descubrimiento del teclado de Windows 11 en
+Panel y una prueba visual temporal por CLI. **Todavía no activa el tema completo
+desde Panel.** En Windows x64 build 26300 se han observado las teclas XAML y
+mostrado la textura idle original en una tecla, con retirada automática. Quedan
+por descubrir los estados reales y adaptar todas las propiedades y recursos.
+No se han sustituido esos requisitos por cambios de color del registro.
 
 ## Arquitectura y alcance
 
@@ -32,7 +33,7 @@ propiedades, contraseñas, contexto de error XAML ni eventos de entrada.
 El pipe es local, de una instancia, con acceso del usuario y escritura para
 el SID AppContainer del destino, si lo tiene; el receptor exige el PID del proceso previamente autorizado.
 El host deriva el namespace de la tubería del token real de TextInputHost.
-El acceso desde ese AppContainer está pendiente de comprobar. La conexión
+El recibo desde ese AppContainer funciona en build 26300. La conexión
 a una sesión de diagnóstico ya ocupada también puede ser rechazada. No se
 instala Windhawk, no se alteran binarios de Windows, servicios, ACL de Windows,
 registro de personalización ni preferencias anteriores del teclado.
@@ -40,8 +41,8 @@ registro de personalización ni preferencias anteriores del teclado.
 La DLL desuscribe al terminar. Si falla la desuscripción mantiene su objeto y
 referencia de módulo para no dejar callbacks colgantes; no reintenta sin límite.
 Windows puede mantener la DLL cargada hasta cerrar TextInputHost. No se fuerza
-su descarga ni se termina el teclado desde Panel. Una caída del helper no deja
-estilos porque esta versión no escribe propiedades. El timeout del companion
+su descarga ni se termina el teclado desde Panel. El comando `discover` no modifica el aspecto; la prueba `probe-key-face`
+retira su propia decoración mediante un temporizador en el proceso del teclado. El timeout del companion
 termina únicamente su helper. El API externo de conexión puede bloquear; por
 eso está aislado del companion y del event loop.
 
@@ -75,13 +76,14 @@ Windhawk escondido.
 Origen: Terciopelo 0.2.13, `keyboard.css`, `theme.json` y recursos del tema
 original. `themes/terciopelo/theme.json` conserva tokens, hashes SHA-256 y los
 nombres de sus cinco estados. Las imágenes se copian sin transformar. El
-manifiesto declara `applicationEnabled: false` y no inventa bindings XAML.
+manifiesto declara `applicationEnabled: false` y no inventa bindings XAML. Sus
+bloqueos corresponden al tema completo, no al ensayo CLI de una sola cara idle.
 
 | Recurso/propiedad | Original | Estado aquí |
 |---|---|---|
 | Placa | velvet-plate.webp, 1708×478; fondo #0b0b0c | Empaquetada, integridad comprobable; no aplicada |
-| Caras | idle, hover, focus, press-v3, focus-press-v3; PNG RGBA 216×168 | Cinco originales empaquetados; no aplicados |
-| Geometría | border-image 54 fill / 18px / 6px stretch; margen 3px 3px 4px | Inventariada; nine-slice con outset pendiente |
+| Caras | idle, hover, focus, press-v3, focus-press-v3; PNG RGBA 216×168 | Idle visible y retirado en la prueba de una tecla/build 26300; otros estados empaquetados, no aplicados |
+| Geometría | border-image 54 fill / 18px / 6px stretch; margen 3px 3px 4px | Nine-grid 54/18 implementado; outset, márgenes y comparación multiescala pendientes |
 | Tinta | #f0dcb2; secundaria al 60%; especiales #d9c197 | Tokens inventariados; no aplicados |
 | Pulsación | tinta #fff3da; texto baja 3px | Necesita estados reales; no se capturan pulsaciones |
 | Modificadores | #f6d68c y halo dorado, capa radial | Necesita estado latched/dead-key real |
@@ -95,20 +97,22 @@ Los tamaños de las imágenes y los hashes quedan separados de cualquier regla
 por distribución. No se fijan posiciones ni se dibujan letras sobre el teclado.
 El sonido sintetizado del tema Steam no se migra en esta fase visual.
 
-### Transporte de texturas pendiente
+### Transporte de texturas
 
-Una ruta `ms-appx` se resuelve en el contexto del paquete de TextInputHost, no
-necesariamente en el de Panel. Tampoco se asume que el AppContainer pueda abrir
-una ruta local de nuestro MSIX o que WebP/WOFF2 se decodifiquen allí. La primera
-prueba debe verificar acceso, decodificación y `ImageOpened` en el proceso real.
-Si el acceso directo falla, evaluar enviar bytes verificados desde el companion
-y cargar un stream en memoria; no conceder acceso amplio al disco ni usar una
-URL remota. No se ha implementado esa alternativa sin evidencia del control
-destino. Antes de escribir una propiedad habrá que conservar su valor local,
-restaurar con ClearValue si originalmente no existía, respetar bindings/animaciones
-y comprobar el readback en el hilo propietario de cada control. La recuperación
-por pérdida del companion debe residir en la DLL, porque instalador y
-actualizador pueden terminar el companion forzosamente.
+La prueba incrusta el PNG idle original en la DLL y lo entrega mediante
+`SHCreateMemStream` y `CreateRandomAccessStreamOverStream` a `LoadedImageSurface`.
+LoadCompleted/Success y la captura del teclado confirman decodificación y
+renderizado en build 26300. No necesita abrir rutas del paquete de Panel desde
+el AppContainer. `CompositionNineGridBrush` conserva los cortes originales.
+Esto no verifica WebP, WOFF2 ni acceso directo a archivos/URI: `ms-appx` se
+resuelve en el paquete del proceso destino. No se conceden permisos amplios
+sobre disco ni se usan URL remotas.
+
+Antes de sustituir propiedades nativas habrá que conservar sus valores locales,
+restaurar con ClearValue si originalmente no existían y respetar bindings y
+animaciones. La prueba evita esa sustitución: solo añade y retira su propio nodo.
+La recuperación debe permanecer dentro de la DLL para sobrevivir a la pérdida
+del companion, instalador o actualizador.
 
 ## Compilar
 
@@ -166,10 +170,9 @@ Compilar correctamente no prueba la inyección ni la apariencia del teclado.
    desinstalación elimina los archivos de Panel; el módulo ya cargado puede
    persistir hasta que Windows cierre ese proceso.
 
-Para desbloquear la adaptación visual hacen falta una captura estructural del
-teclado (sin texto de usuario), tipos/control templates y grupos de estados
-observados por build; luego una prueba aislada de color, borde, radio, tipografía
-y textura con rollback. La versión que escriba estilos necesitará pruebas
+La estructura observada y la prueba de textura desbloquean el primer paso visual.
+Todavía faltan grupos de estados observados por build y pruebas aisladas de
+color, borde, radio, tipografía, teclas especiales y distintas distribuciones. La versión que escriba estilos necesitará pruebas
 adicionales de pérdida del companion, actualización y desinstalación. Esta
 entrega no acredita esos recorridos ni una migración visual terminada.
 
@@ -206,3 +209,30 @@ y volver a abrir TextInputHost. No se termina automáticamente el teclado. Esta
 prueba no depende del helper para retirarse y no modifica preferencias de Windows.
 Debe comprobarse visualmente durante y después; compilarla no verifica textura,
 escalado, restauración ni funciones del teclado.
+
+## Validación disponible y límites
+
+En Windows 11 x64 build 26300 (ROG Xbox Ally X RC73XA), el paquete de desarrollo
+permite solicitar descubrimiento desde la UI de Panel, copiar un diagnóstico
+válido y desactivar la solicitud. El descubrimiento observa controles
+`KeyboardKey` al abrir el teclado, incluidos los creados durante la observación,
+y se conecta de nuevo tras reiniciar TextInputHost por una nueva solicitud.
+No hay reconexión permanente ni activación visual persistente.
+
+La prueba CLI muestra la textura original idle en una tecla, conserva su texto
+nativo y la retira automáticamente. Las capturas durante/después concuerdan
+con `probeFlags=15` y `probeHresult=0`. Al terminar forzosamente el helper
+con la textura visible, esta también desaparece y TextInputHost sigue vivo;
+en ese caso la comprobación es visual, sin recibo del helper terminado.
+No se ha validado aún la escritura en
+un campo enfocado: el ensayo automatizado no consiguió mantener en primer
+plano su ventana de prueba. Tampoco están verificados los estados pulsado,
+foco o modificadores, otras distribuciones, cambios de tamaño/DPI, la tipografía,
+la placa, el polvo, la actualización con estilos activos ni la desinstalación
+durante una aplicación persistente. El widget de Game Bar necesita su propio
+recorrido visual; la UI ejercitada es Panel abierto como aplicación.
+
+El runtime y el paquete completo compilan en Windows CI; pasan el test de
+protocolo nativo, la integridad de recursos y los tests de lógica de integración.
+Ninguna de esas comprobaciones convierte esta prueba limitada en una migración
+visual terminada o en soporte general de Windows 11.
