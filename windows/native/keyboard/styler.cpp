@@ -124,9 +124,10 @@ struct Cell {
     Canvas canvas{nullptr};
     SpriteVisual visual{nullptr};
     CompositionNineGridBrush brush{nullptr};
-    SpriteVisual dust{nullptr};
-    CompositionSurfaceBrush dustBrush{nullptr};
-    Vector2KeyFrameAnimation dustFrames{nullptr};
+    Canvas dustCanvas{nullptr};
+    ContainerVisual dust{nullptr};
+    SpriteVisual dustStrip{nullptr};
+    Vector3KeyFrameAnimation dustFrames{nullptr};
     ScalarKeyFrameAnimation dustFade{nullptr};
     std::vector<Label> labels;
     bool retiring = false;
@@ -153,7 +154,7 @@ struct Cell {
     }
     void Strike() {
         if (retiring || !dust) return;
-        dustBrush.StartAnimation(L"Offset", dustFrames);
+        dustStrip.StartAnimation(L"Offset", dustFrames);
         dust.StartAnimation(L"Opacity", dustFade);
     }
     void Geometry() {
@@ -162,8 +163,8 @@ struct Cell {
         visual.Offset({origin.X - terciopelo::Outset, origin.Y - terciopelo::Outset, 0});
         visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
                      static_cast<float>(face.ActualHeight()) + 2 * terciopelo::Outset});
-        if (dust) dust.Offset({static_cast<float>(face.ActualWidth()) / 2 - 63 + terciopelo::Outset,
-            static_cast<float>(face.ActualHeight()) / 2 - 66 + terciopelo::Outset, 0});
+        if (dust) dust.Offset({origin.X + static_cast<float>(face.ActualWidth()) / 2 - 63,
+            origin.Y + static_cast<float>(face.ActualHeight()) / 2 - 66, 0});
     }
     void FindLabels(DependencyObject const& root, std::vector<TextBlock>& found, unsigned depth = 0) {
         if (depth > 6 || found.size() >= 12) return;
@@ -173,7 +174,8 @@ struct Cell {
     }
     bool ReconcileLabels() {
         auto children = parent.Children();
-        if (children.Size() != 3 || children.GetAt(0) != face || children.GetAt(1) != canvas) return false;
+        if (children.Size() != 4 || children.GetAt(0) != face || children.GetAt(1) != canvas || children.GetAt(3) != dustCanvas ||
+            Hosting::ElementCompositionPreview::GetElementChildVisual(dustCanvas) != dust) return false;
         auto current = children.GetAt(2).try_as<ContentControl>();
         if (!current) return false;
         if (current != content) {
@@ -254,14 +256,17 @@ struct Cell {
         brush.SetInsets(terciopelo::Slice); brush.SetInsetScales(terciopelo::Border / terciopelo::Slice);
         brush.IsCenterHollow(false); brush.Source(sources[0]);
         visual = compositor.CreateSpriteVisual(); visual.Brush(brush);
-        dust = compositor.CreateSpriteVisual(); dust.Size({126, 98}); dust.Opacity(0);
-        dustBrush = compositor.CreateSurfaceBrush(surfaces[6]); dustBrush.Stretch(CompositionStretch::None);
-        dustBrush.HorizontalAlignmentRatio(0); dustBrush.VerticalAlignmentRatio(0); dustBrush.Scale({0.7f, 0.7f});
-        dust.Brush(dustBrush); visual.Children().InsertAtTop(dust);
+        dustCanvas = Canvas(); dustCanvas.Width(0); dustCanvas.Height(0);
+        dustCanvas.HorizontalAlignment(HorizontalAlignment::Left); dustCanvas.VerticalAlignment(VerticalAlignment::Top); dustCanvas.IsHitTestVisible(false);
+        dust = compositor.CreateContainerVisual(); dust.Size({126, 98}); dust.Opacity(0); dust.Clip(compositor.CreateInsetClip());
+        dustStrip = compositor.CreateSpriteVisual(); dustStrip.Size({2268, 98});
+        auto dustBrush = compositor.CreateSurfaceBrush(surfaces[6]); dustBrush.Stretch(CompositionStretch::Fill);
+        dustStrip.Brush(dustBrush); dust.Children().InsertAtTop(dustStrip);
+        Hosting::ElementCompositionPreview::SetElementChildVisual(dustCanvas, dust);
         auto steps = compositor.CreateStepEasingFunction(17);
         steps.IsInitialStepSingleFrame(false); steps.IsFinalStepSingleFrame(true);
-        dustFrames = compositor.CreateVector2KeyFrameAnimation();
-        dustFrames.InsertKeyFrame(0, {0, 0}); dustFrames.InsertKeyFrame(1, {-2142, 0}, steps);
+        dustFrames = compositor.CreateVector3KeyFrameAnimation();
+        dustFrames.InsertKeyFrame(0, {0, 0, 0}); dustFrames.InsertKeyFrame(1, {-2142, 0, 0}, steps);
         dustFrames.Duration(std::chrono::milliseconds(720));
         dustFade = compositor.CreateScalarKeyFrameAnimation();
         auto linear = compositor.CreateLinearEasingFunction();
@@ -269,7 +274,7 @@ struct Cell {
         dustFade.Duration(std::chrono::milliseconds(720)); Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
-        children.InsertAt(1, canvas); inserted = true;
+        children.InsertAt(1, canvas); inserted = true; children.Append(dustCanvas);
         size = face.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { unloaded = true; } });
         removed = key.Unloaded([this](auto const&, auto const&) noexcept { unloaded = true; });
         Pointer(UIElement::PointerPressedEvent(), 0); Pointer(UIElement::PointerReleasedEvent(), 1);
@@ -293,6 +298,14 @@ struct Cell {
                 if (parent.Children().IndexOf(canvas, index)) parent.Children().RemoveAt(index);
                 if (parent.Children().IndexOf(canvas, index)) throw hresult_error(E_FAIL);
                 Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, nullptr);
+            }
+        });
+        attempt([&] {
+            if (dustCanvas) {
+                unsigned index = 0;
+                if (parent.Children().IndexOf(dustCanvas, index)) parent.Children().RemoveAt(index);
+                if (parent.Children().IndexOf(dustCanvas, index)) throw hresult_error(E_FAIL);
+                Hosting::ElementCompositionPreview::SetElementChildVisual(dustCanvas, nullptr);
             }
         });
         if (contentTransform) attempt([&] { contentTransform->Restore(); });
