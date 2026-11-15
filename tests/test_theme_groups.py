@@ -61,28 +61,20 @@ def test_tab_master_tabs_for_one_account(tmp_path):
     assert theme_groups.read_tab_master(tmp_path, "111") == []
 
 
-def test_rpc_store_per_account_and_failed_save_rolls_back():
-    import ast
+def test_rpc_store_per_account_and_failed_save_rolls_back(plugin, monkeypatch):
     import asyncio
-    import pathlib
-    import types
 
-    tree = ast.parse((pathlib.Path(__file__).parents[1] / "main.py").read_text())
-    plugin = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Plugin")
-    selected = [node for node in plugin.body if getattr(node, "name", "") in ("get_theme_groups", "set_theme_groups")]
-    scope = {"theme_groups": theme_groups, "decky": types.SimpleNamespace(logger=types.SimpleNamespace(exception=lambda _: None))}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "main.py", "exec"), scope)
-    state = types.SimpleNamespace(_init=lambda: None, _settings={}, _save=lambda: None)
-    assert asyncio.run(scope["set_theme_groups"](state, "111", [MANUAL, {"bad": 1}]))["ok"]
-    assert [g["id"] for g in asyncio.run(scope["get_theme_groups"](state, "111"))] == ["grp:m"]
-    assert asyncio.run(scope["get_theme_groups"](state, "222")) == []
-    assert asyncio.run(scope["set_theme_groups"](state, "x", []))["ok"] is False
+    monkeypatch.setattr(plugin, "_save", lambda: None)
+    assert asyncio.run(plugin.set_theme_groups("111", [MANUAL, {"bad": 1}]))["ok"]
+    assert [g["id"] for g in asyncio.run(plugin.get_theme_groups("111"))] == ["grp:m"]
+    assert asyncio.run(plugin.get_theme_groups("222")) == []
+    assert asyncio.run(plugin.set_theme_groups("x", []))["ok"] is False
 
     def fail():
         raise OSError("disk")
-    state._save = fail
-    assert asyncio.run(scope["set_theme_groups"](state, "111", [RULES])) == {"ok": False, "error": "save_failed"}
-    assert [g["id"] for g in asyncio.run(scope["get_theme_groups"](state, "111"))] == ["grp:m"]
+    monkeypatch.setattr(plugin, "_save", fail)
+    assert asyncio.run(plugin.set_theme_groups("111", [RULES])) == {"ok": False, "error": "save_failed"}
+    assert [g["id"] for g in asyncio.run(plugin.get_theme_groups("111"))] == ["grp:m"]
 
 
 def test_params_are_measured_compactly_like_the_frontend():

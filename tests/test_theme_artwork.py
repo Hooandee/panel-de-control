@@ -42,36 +42,20 @@ def test_general_settings_reject_game_image_without_losing_game_records():
     assert records({"0": VALUE, "12": VALUE}) == {"12": VALUE}
 
 
-ARTWORK_RPCS = (
-    "_artwork_support", "_support_duo_artwork", "_support_vida_artwork", "get_duo_artwork", "set_duo_artwork",
-    "get_theme_artwork", "set_theme_artwork",
-)
+@pytest.fixture
+def artwork_plugin(plugin, monkeypatch):
+    def build(settings):
+        plugin._settings.clear()
+        plugin._settings.update(settings)
+        monkeypatch.setattr(plugin, "_save", lambda: None)
+        return plugin
+    return build
 
 
-def _artwork_plugin(settings):
-    import ast
-    import pathlib
-    import types
-    import theme_artwork
-
-    tree = ast.parse((pathlib.Path(__file__).parents[1] / "main.py").read_text())
-    plugin = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Plugin")
-    selected = [node for node in plugin.body if getattr(node, "name", "") in ARTWORK_RPCS]
-    assert {node.name for node in selected} == set(ARTWORK_RPCS)
-    scope = {"theme_artwork": theme_artwork, "decky": types.SimpleNamespace(logger=types.SimpleNamespace(exception=lambda *_: None))}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "main.py", "exec"), scope)
-    cls = type("ArtworkPlugin", (), {name: scope[name] for name in ARTWORK_RPCS})
-    state = cls()
-    state._init = lambda: None
-    state._settings = settings
-    state._save = lambda: None
-    return state
-
-
-def test_rpc_general_settings_and_failed_save_rollback():
+def test_rpc_general_settings_and_failed_save_rollback(artwork_plugin):
     import asyncio
 
-    state = _artwork_plugin({"duo_artwork": {"12": VALUE}})
+    state = artwork_plugin({"duo_artwork": {"12": VALUE}})
     general = {**VALUE, "image": None}
     assert asyncio.run(state.set_duo_artwork(0, general)) == {"ok": True}
     assert state._support_duo_artwork() == {"configured_games": 1, "general_configured": True}
@@ -88,31 +72,31 @@ def test_rpc_general_settings_and_failed_save_rollback():
     assert state._support_duo_artwork() == {"configured_games": 1, "general_configured": False}
 
 
-def test_vida_covers_live_in_their_own_store_and_never_touch_duo():
+def test_vida_covers_live_in_their_own_store_and_never_touch_duo(artwork_plugin):
     import asyncio
 
     settings = {"duo_artwork": {"12": VALUE}, "vida_artwork": {}}
-    state = _artwork_plugin(settings)
+    state = artwork_plugin(settings)
     vida = {**VALUE, "positionX": 10, "scale": 180}
     assert asyncio.run(state.set_theme_artwork("vida", 12, vida)) == {"ok": True}
     assert asyncio.run(state.get_theme_artwork("vida")) == {"12": vida}
     assert asyncio.run(state.get_duo_artwork()) == {"12": VALUE}
-    assert settings["duo_artwork"] == {"12": VALUE}
+    assert state._settings["duo_artwork"] == {"12": VALUE}
     assert asyncio.run(state.get_theme_artwork("duo")) == {"12": VALUE}
     assert state._support_vida_artwork() == {"configured_games": 1, "general_configured": False}
     assert asyncio.run(state.set_theme_artwork("vida", 12, None)) == {"ok": True}
-    assert settings["vida_artwork"] == {} and settings["duo_artwork"] == {"12": VALUE}
+    assert state._settings["vida_artwork"] == {} and state._settings["duo_artwork"] == {"12": VALUE}
 
 
-def test_unknown_artwork_store_is_rejected_without_writing():
+def test_unknown_artwork_store_is_rejected_without_writing(artwork_plugin):
     import asyncio
 
     settings = {"duo_artwork": {}, "vida_artwork": {}}
-    state = _artwork_plugin(settings)
+    state = artwork_plugin(settings)
     assert asyncio.run(state.set_theme_artwork("duo_artwork", 12, VALUE)) == {"ok": False, "error": "invalid_store"}
     assert asyncio.run(state.set_theme_artwork("other", 12, VALUE)) == {"ok": False, "error": "invalid_store"}
     assert asyncio.run(state.get_theme_artwork("other")) == {}
-    assert settings == {"duo_artwork": {}, "vida_artwork": {}}
+    assert state._settings == {"duo_artwork": {}, "vida_artwork": {}}
 
 
 def test_vida_store_persists_beside_duo_across_restart(tmp_path):

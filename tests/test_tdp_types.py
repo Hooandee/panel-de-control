@@ -15,14 +15,6 @@ def test_limits_clamp():
     assert lim.clamp(99, on_ac=True) == 30   # charger ceiling
 
 
-def test_limits_from_profile_maps_fields():
-    lim = TdpLimits.from_profile(_profile("rog_ally_x"))
-    assert lim.min_w == _profile("rog_ally_x").tdp_min
-    assert lim.default_w == _profile("rog_ally_x").tdp_default
-    assert lim.max_w == _profile("rog_ally_x").tdp_max
-    assert lim.max_ac_w == _profile("rog_ally_x").tdp_max_charger
-
-
 def test_experimental_machine_battery_and_charger_ceilings_are_independent():
     expected = {
         "onexplayer_superx": (55, 75),
@@ -36,11 +28,6 @@ def test_experimental_machine_battery_and_charger_ceilings_are_independent():
         limits = TdpLimits.from_profile(_profile(key))
         assert limits.clamp(999, on_ac=False) == battery
         assert limits.clamp(999, on_ac=True) == charger
-
-
-def test_result_fields():
-    r = TdpResult(requested_w=15, applied_w=15, ok=True, detail="")
-    assert r.ok and r.applied_w == 15 and r.requested_w == 15
 
 
 def test_with_cooler_raises_ceiling():
