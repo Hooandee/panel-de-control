@@ -33,7 +33,8 @@ capturan el puntero.
 
 Se conservan los valores locales y bindings de las propiedades modificadas.
 Restaurar un valor heredado usa ClearValue; un binding se repone tras limpiar el
-override. Los callbacks quedan inertes al comenzar la restauración. Una limpieza
+override. Los fondos nulos se conservan: un brush transparente cambia el hit-testing de XAML
+y puede interceptar los botones nativos. Los callbacks quedan inertes al comenzar la restauración. Una limpieza
 parcial conserva su seguimiento, informa del fallo y limita sus reintentos.
 El módulo permanece fijado para que ningún delegado pueda apuntar a código
 liberado; puede seguir cargado hasta que Windows cierre TextInputHost.
@@ -139,6 +140,14 @@ El runtime queda en `windows/native/keyboard/dist`. Windows CI lo integra en
 seguir [Windows](README.md), generando primero `pnpm build:windows-theme-host`
 y ejecutando el script nativo. `probe-key-face` se conserva únicamente como
 ensayo CLI de una tecla durante ocho segundos; Panel usa `serve`.
+
+`PanelDeControl.KeyboardHost.exe probe-effects` es una prueba visual separada:
+muestra un fotograma fijo del polvo durante dos segundos en la primera tecla
+compatible y después ejecuta la animación, sin simular entrada. Solicita la
+desactivación a los doce segundos y confirma después la restauración. Mantener
+stdin abierto durante la prueba; EOF también solicita terminar. Permite distinguir un fallo de dibujo de un evento
+nativo que no llegue al callback, sin registrar pulsaciones. Desactivar antes la
+sesión de Panel para no competir por la conexión.
 
 Comprobaciones locales:
 

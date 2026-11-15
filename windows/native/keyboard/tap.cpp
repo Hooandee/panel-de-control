@@ -20,7 +20,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     keyboard::Report report;
     HMODULE pin = nullptr;
     bool faceProbe = false;
-    bool styling = false;
+    bool styling = false, effectProbe = false;
     std::wstring session;
     ULONGLONG observeUntil = 0;
     ComPtr<IXamlDiagnostics> diagnostics;
@@ -99,7 +99,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     }
 
 public:
-    explicit Tap(bool probe, bool style) : faceProbe(probe), styling(style) { ++objects; }
+    explicit Tap(bool probe, bool style, bool effects) : faceProbe(probe), styling(style), effectProbe(effects) { ++objects; }
     ~Tap() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -136,7 +136,7 @@ public:
         }
         SysFreeString(data);
         if (FAILED(hr) || session.empty()) { discovering = false; return E_INVALIDARG; }
-        if (styling && !keyboard::BeginStyleSession()) { discovering = false; return HRESULT_FROM_WIN32(ERROR_BUSY); }
+        if (styling && !keyboard::BeginStyleSession(effectProbe)) { discovering = false; return HRESULT_FROM_WIN32(ERROR_BUSY); }
         site = value;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                reinterpret_cast<LPCWSTR>(&KeyboardTapId), &pin)) {
@@ -186,9 +186,9 @@ public:
 };
 class Factory final : public IClassFactory {
     std::atomic<ULONG> refs{1};
-    bool faceProbe, styling;
+    bool faceProbe, styling, effectProbe;
 public:
-    explicit Factory(bool probe, bool style) : faceProbe(probe), styling(style) { ++objects; }
+    explicit Factory(bool probe, bool style, bool effects) : faceProbe(probe), styling(style), effectProbe(effects) { ++objects; }
     ~Factory() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -202,7 +202,7 @@ public:
         if (!out) return E_POINTER;
         *out = nullptr;
         if (outer) return CLASS_E_NOAGGREGATION;
-        auto tap = new(std::nothrow) Tap(faceProbe, styling);
+        auto tap = new(std::nothrow) Tap(faceProbe, styling, effectProbe);
         if (!tap) return E_OUTOFMEMORY;
         auto hr = tap->QueryInterface(iid, out); tap->Release(); return hr;
     }
@@ -212,8 +212,8 @@ public:
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
-    if (clsid != KeyboardTapId && clsid != KeyboardFaceProbeId && clsid != KeyboardStyleId) return CLASS_E_CLASSNOTAVAILABLE;
-    auto factory = new(std::nothrow) Factory(clsid == KeyboardFaceProbeId, clsid == KeyboardStyleId);
+    if (clsid != KeyboardTapId && clsid != KeyboardFaceProbeId && clsid != KeyboardStyleId && clsid != KeyboardEffectsProbeId) return CLASS_E_CLASSNOTAVAILABLE;
+    auto factory = new(std::nothrow) Factory(clsid == KeyboardFaceProbeId, clsid == KeyboardStyleId || clsid == KeyboardEffectsProbeId, clsid == KeyboardEffectsProbeId);
     if (!factory) return E_OUTOFMEMORY;
     auto hr = factory->QueryInterface(iid, out); factory->Release(); return hr;
 }

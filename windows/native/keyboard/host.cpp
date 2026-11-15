@@ -166,7 +166,7 @@ void StyleResult(const keyboard::Report& report) {
     }
 }
 }
-int Run(bool faceProbe, bool styling) {
+int Run(bool faceProbe, bool styling, bool effectProbe = false) {
     targetPid = 0;
     RTL_OSVERSIONINFOW version{}; version.dwOSVersionInfoSize = sizeof(version);
     using GetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
@@ -258,7 +258,7 @@ int Run(bool faceProbe, bool styling) {
     // Connection names are an implementation detail, not a documented keyboard contract.
     for (int i = 1; i <= 4 && hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND); ++i) {
         const auto name = L"VisualDiagConnection" + std::to_wstring(i);
-        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), styling ? KeyboardStyleId : faceProbe ? KeyboardFaceProbeId : KeyboardTapId, sessionToken.c_str());
+        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), effectProbe ? KeyboardEffectsProbeId : styling ? KeyboardStyleId : faceProbe ? KeyboardFaceProbeId : KeyboardTapId, sessionToken.c_str());
     }
     DWORD transferred = 0;
     if (FAILED(hr)) {
@@ -301,7 +301,8 @@ int Run(bool faceProbe, bool styling) {
 
 int wmain(int argc, wchar_t** argv) {
     const bool faceProbe = argc == 2 && wcscmp(argv[1], L"probe-key-face") == 0;
-    const bool styling = argc == 2 && wcscmp(argv[1], L"serve") == 0;
+    const bool effectProbe = argc == 2 && wcscmp(argv[1], L"probe-effects") == 0;
+    const bool styling = effectProbe || (argc == 2 && wcscmp(argv[1], L"serve") == 0);
     if (argc != 2 || (!faceProbe && !styling && wcscmp(argv[1], L"discover") != 0)) {
         Result("connection_failed", "invalid_command"); return 2;
     }
@@ -311,8 +312,9 @@ int wmain(int argc, wchar_t** argv) {
         while (std::getline(std::cin, line)) if (line == "stop") break;
         stopRequested = true;
     }).detach();
+    if (effectProbe) std::thread([] { Sleep(12000); stopRequested = true; }).detach();
     do {
-        Run(false, true);
+        Run(false, true, effectProbe);
         if (lastStatus == "unsupported" || lastStatus == "runtime_missing") break;
         for (int i = 0; i < 20 && !stopRequested; ++i) Sleep(100);
     } while (!stopRequested);

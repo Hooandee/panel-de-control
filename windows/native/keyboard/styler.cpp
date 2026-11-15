@@ -37,7 +37,7 @@ constexpr wchar_t KeyType[] = L"WindowsInternal.ComposableShell.Experiences.Text
 constexpr wchar_t SuggestionsType[] = L"WindowsInternal.ComposableShell.Experiences.SuggestionUIUndocked.SuggestionUIContainer";
 constexpr wchar_t BarType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.GripperBar";
 constexpr wchar_t GridType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardGrid";
-std::atomic<bool> requested{false};
+std::atomic<bool> requested{false}, effectProbe{false};
 std::atomic<ULONGLONG> lease{0}, generation{0};
 std::atomic<DWORD> owner{0};
 std::mutex receiptGate;
@@ -151,6 +151,11 @@ struct Cell {
             label.foreground->Assign(label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink);
             if (label.font) label.font->Assign(font);
         }
+    }
+    void ShowEffectFrame() {
+        if (retiring || !dust) return;
+        dustStrip.StopAnimation(L"Offset"); dust.StopAnimation(L"Opacity");
+        dustStrip.Offset({-504, 0, 0}); dust.Opacity(1);
     }
     void Strike() {
         if (retiring || !dust) return;
@@ -417,7 +422,8 @@ struct Chrome {
     }
 };
 struct Engine {
-    ULONGLONG epoch = 0, loadingStarted = 0;
+    ULONGLONG epoch = 0, loadingStarted = 0, probeStarted = 0;
+    bool probeAnimated = false;
     FontResource font;
     bool fontReady = false;
     unsigned fontChecks = 0;
@@ -434,7 +440,7 @@ struct Engine {
 
     void Start(FrameworkElement const& anchor, ULONGLONG value) {
         if (started) return;
-        epoch = value; loadingStarted = GetTickCount64(); ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
+        epoch = value; loadingStarted = GetTickCount64(); probeStarted = 0; probeAnimated = false; ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
         HMODULE module = nullptr;
         check_bool(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
@@ -538,6 +544,7 @@ struct Engine {
                 Fail(HRESULT_FROM_WIN32(ERROR_TIMEOUT)); requested = false; stopping = true;
             }
             unsigned visible = 0, styled = 0, pending = 0;
+            Cell* probeCell = nullptr;
             if (!stopping) for (auto const& chrome : chromes) chrome->confirmed = chrome->Update();
             if (!stopping) for (auto it = candidates.begin(); it != candidates.end();) {
                 auto key = it->get();
@@ -560,7 +567,9 @@ struct Engine {
                     if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
                     unsigned childIndex = 0;
                     if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
-                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) ++styled;
+                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) {
+                        ++styled; if (!probeCell) probeCell = &cell;
+                    }
                     else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
                 }
                 ++it;
@@ -576,6 +585,10 @@ struct Engine {
                     if ((*it)->Restore()) { it = chromes.erase(it); continue; }
                 }
                 ++it;
+            }
+            if (!stopping && effectProbe && probeCell) {
+                if (!probeStarted) { probeStarted = GetTickCount64(); probeCell->ShowEffectFrame(); }
+                else if (!probeAnimated && GetTickCount64() - probeStarted >= 2000) { probeCell->Strike(); probeAnimated = true; }
             }
             pending = visible > styled ? visible - styled : 0;
             const bool clean = stopping && cells.empty() && plates.empty() && chromes.empty();
@@ -606,9 +619,10 @@ struct Engine {
 Engine& Current() { static auto engine = new Engine; return *engine; }
 }
 
-bool BeginStyleSession() noexcept {
+bool BeginStyleSession(bool probe) noexcept {
     if (requested.exchange(true)) return false;
     if (owner.load()) { requested = false; return false; }
+    effectProbe = probe;
     ++generation; lease = GetTickCount64() + 4000;
     std::lock_guard lock(receiptGate); receipt = {}; receipt.phase = StylePhase::Waiting;
     return true;
