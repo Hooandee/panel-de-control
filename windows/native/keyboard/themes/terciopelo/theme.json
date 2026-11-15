@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "terciopelo",
+  "sourceVersion": "0.2.13",
+  "target": "TextInputHost.exe",
+  "experimental": true,
+  "applicationEnabled": false,
+  "blockedBy": [
+    "keyboard_elements_unverified",
+    "visual_states_unverified",
+    "texture_transport_unverified",
+    "font_license_and_format_unverified"
+  ],
+  "assets": [
+    {
+      "path": "assets/velvet-dust.webp",
+      "bytes": 52804,
+      "sha256": "9d2f533cde3b172ee1413f153d079d4b888c9095a83303a0e7b2d0100b544ddf"
+    },
+    {
+      "path": "assets/velvet-focus-press-v3.png",
+      "bytes": 18181,
+      "sha256": "354e270d318c01c2d2541a9cf400cdec15fceed693473afcb284d76919f3811a"
+    },
+    {
+      "path": "assets/velvet-focus.png",
+      "bytes": 26197,
+      "sha256": "306c600d0de8b6c27f9bea1e8df1fd6f2bc9bcfc664ba61becabfa0e1e0f94ab"
+    },
+    {
+      "path": "assets/velvet-hover.png",
+      "bytes": 19085,
+      "sha256": "d9bd886041ddc62305f3dec95740846762c876e6945a76bbd0514d51d9856c43"
+    },
+    {
+      "path": "assets/velvet-idle.png",
+      "bytes": 16537,
+      "sha256": "0c1d84786d0e11089413b78b0e9b70f8882719b03bffa17488fa2c128ea5fc73"
+    },
+    {
+      "path": "assets/velvet-plate.webp",
+      "bytes": 3604,
+      "sha256": "b89fd0eac1ecc1d9a5992068bb7dbffa9b3375e548021bf9a1dd69f7ffeeb365"
+    },
+    {
+      "path": "assets/velvet-press-v3.png",
+      "bytes": 14200,
+      "sha256": "791b8d5cb78f5f1ad4dd68a03975616defd97644f17297b081aa564be5abc36f"
+    }
+  ],
+  "tokens": {
+    "background": "#0b0b0c",
+    "foreground": "#f0dcb2",
+    "accent": "#d9c197",
+    "pressedForeground": "#fff3da",
+    "latchedForeground": "#f6d68c",
+    "letterSizeCssPx": 19,
+    "numberSizeCssPx": 16,
+    "secondarySizeCssPx": [
+      10,
+      9
+    ],
+    "specialSizeCssPx": 9.5,
+    "fontFamily": "Josefin Sans",
+    "fontWeights": [
+      400,
+      600
+    ],
+    "keyMarginCssPx": [
+      3,
+      3,
+      4,
+      3
+    ],
+    "pressedTextOffsetCssPx": 3
+  },
+  "keyFaces": {
+    "sliceSourcePixels": 54,
+    "borderWidthCssPx": 18,
+    "outsetCssPx": 6,
+    "fillCenter": true,
+    "states": {
+      "idle": "assets/velvet-idle.png",
+      "hover": "assets/velvet-hover.png",
+      "focus": "assets/velvet-focus.png",
+      "pressed": "assets/velvet-press-v3.png",
+      "focusPressed": "assets/velvet-focus-press-v3.png"
+    }
+  },
+  "bindings": []
+}

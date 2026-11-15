@@ -154,6 +154,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+      - name: Build experimental native keyboard runtime
+        shell: pwsh
+        run: ./windows/native/keyboard/build.ps1
       - name: Stamp the release version on the package
         if: ${{ inputs.release_tag != '' }}
         shell: pwsh
