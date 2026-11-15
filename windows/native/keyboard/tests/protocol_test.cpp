@@ -15,6 +15,9 @@ int main() {
     std::memset(report.nodes[0].type, 'a', keyboard::TypeLength);
     assert(!keyboard::Valid(report));
     report = {};
+    report.probeFlags = 64;
+    assert(!keyboard::Valid(report));
+    report = {};
     report.version = 9;
     assert(!keyboard::Valid(report));
 }

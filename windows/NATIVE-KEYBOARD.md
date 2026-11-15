@@ -172,3 +172,37 @@ observados por build; luego una prueba aislada de color, borde, radio, tipograf�
 y textura con rollback. La versión que escriba estilos necesitará pruebas
 adicionales de pérdida del companion, actualización y desinstalación. Esta
 entrega no acredita esos recorridos ni una migración visual terminada.
+
+## Prueba temporal de textura por CLI
+
+`probe-key-face` es una prueba separada del descubrimiento de Panel, limitada a
+Windows x64 build 26300. Busca únicamente la estructura observada
+`KeyboardKey > Grid > Grid > Border + ContentControl`. No identifica letras ni
+lee nombres, texto o pulsaciones. Requiere una tecla visible de al menos 36 DIP.
+
+```powershell
+./windows/native/keyboard/dist/PanelDeControl.KeyboardHost.exe probe-key-face
+```
+
+Con el teclado táctil ya abierto, coloca una decoración no interactiva entre el
+borde y el contenido nativos de una sola tecla. Un Canvas sin tamaño deseado aloja
+el SpriteVisual; no se cambian propiedades ni recursos de los elementos nativos.
+La textura idle original se incorpora como RCDATA y se decodifica desde un stream
+en memoria, sin asumir acceso a rutas o URI desde AppContainer. El nine-grid
+usa cortes de 54 píxeles fuente y escala 18/54; el outset CSS de 6 píxeles, las
+fuentes y los estados de interacción todavía no se adaptan.
+
+La decoración solo se inserta después de LoadCompleted/Success, se retira tras
+ocho segundos o un cambio de tamaño del padre, y se comprueba su ausencia por
+identidad. El recibo sale tras once segundos. `probeFlags` combina inicio=1,
+imagen cargada=2, inserción=4, retirada=8, fallo=16 y geometría cambiada=32.
+`probe_restored` requiere inserción y retirada confirmadas sin fallo; no significa
+que el tema esté aplicado. Un timeout no acredita restauración.
+
+Es una prueba por proceso: el módulo queda fijado y conserva un pequeño estado
+de control para que ningún callback apunte a código descargado. Los eventos se
+retiran al limpiar. Para repetir o recuperarse de un fallo de limpieza, cerrar
+y volver a abrir TextInputHost. No se termina automáticamente el teclado. Esta
+prueba no depende del helper para retirarse y no modifica preferencias de Windows.
+Debe comprobarse visualmente durante y después; compilarla no verifica textura,
+escalado, restauración ni funciones del teclado.

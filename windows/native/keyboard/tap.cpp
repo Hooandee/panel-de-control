@@ -1,4 +1,5 @@
 #include "common.h"
+#include "face_probe.h"
 #include <ocidl.h>
 #include <wrl/client.h>
 #include <atomic>
@@ -17,13 +18,17 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     std::mutex gate;
     keyboard::Report report;
     HMODULE pin = nullptr;
+    bool faceProbe = false;
+    ULONGLONG observeUntil = 0;
+    ComPtr<IXamlDiagnostics> diagnostics;
 
     static DWORD WINAPI Collect(void* context) noexcept {
         auto self = static_cast<Tap*>(context);
         const auto com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        self->observeUntil = GetTickCount64() + 2000;
         self->report.subscribeResult = self->tree->AdviseVisualTreeChange(self);
         if (SUCCEEDED(self->report.subscribeResult)) {
-            Sleep(3000);
+            Sleep(self->faceProbe ? 11000 : 3000);
             self->report.unsubscribeResult = self->tree->UnadviseVisualTreeChange(self);
         }
         // Never wait for the owner on a XAML callback thread.
@@ -36,6 +41,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
             DWORD written = 0;
             keyboard::Report snapshot;
             { std::lock_guard lock(self->gate); snapshot = self->report; }
+            if (self->faceProbe) keyboard::ReadFaceProbe(snapshot);
             if (!WriteFile(pipe.value, &snapshot, sizeof(snapshot), &written, &operation) &&
                 GetLastError() == ERROR_IO_PENDING) {
                 if (WaitForSingleObject(done.value, 1000) != WAIT_OBJECT_0) {
@@ -47,6 +53,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
         const bool detached = SUCCEEDED(self->report.unsubscribeResult);
         HMODULE pin = self->pin;
         if (detached) {
+            self->diagnostics.Reset();
             self->tree.Reset();
             self->site.Reset();
             discovering = false;
@@ -58,7 +65,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
         return 0;
     }
 public:
-    Tap() { ++objects; }
+    explicit Tap(bool probe) : faceProbe(probe) { ++objects; }
     ~Tap() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -76,9 +83,14 @@ public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* value) override {
         if (!value) return S_OK;
         if (discovering.exchange(true)) return HRESULT_FROM_WIN32(ERROR_BUSY);
+        if (faceProbe && !keyboard::BeginFaceProbe()) { discovering = false; return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS); }
         { std::lock_guard lock(gate); report = {}; }
         auto hr = value->QueryInterface(IID_PPV_ARGS(&tree));
         if (FAILED(hr)) { discovering = false; return hr; }
+        if (faceProbe) {
+            hr = value->QueryInterface(IID_PPV_ARGS(&diagnostics));
+            if (FAILED(hr)) { discovering = false; return hr; }
+        }
         site = value;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                reinterpret_cast<LPCWSTR>(&KeyboardTapId), &pin)) {
@@ -100,6 +112,9 @@ public:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element,
                                                   VisualMutationType mutation) override {
         if (mutation != Add || !element.Type) return S_OK;
+        if (faceProbe && GetTickCount64() < observeUntil &&
+            wcscmp(element.Type, L"Windows.UI.Xaml.Controls.Border") == 0)
+            keyboard::ObserveFace(diagnostics.Get(), element.Handle);
         keyboard::Node node{};
         node.id = element.Handle;
         node.parent = relation.Parent;
@@ -121,8 +136,9 @@ public:
 };
 class Factory final : public IClassFactory {
     std::atomic<ULONG> refs{1};
+    bool faceProbe;
 public:
-    Factory() { ++objects; }
+    explicit Factory(bool probe) : faceProbe(probe) { ++objects; }
     ~Factory() { --objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -136,7 +152,7 @@ public:
         if (!out) return E_POINTER;
         *out = nullptr;
         if (outer) return CLASS_E_NOAGGREGATION;
-        auto tap = new(std::nothrow) Tap;
+        auto tap = new(std::nothrow) Tap(faceProbe);
         if (!tap) return E_OUTOFMEMORY;
         auto hr = tap->QueryInterface(iid, out); tap->Release(); return hr;
     }
@@ -146,8 +162,8 @@ public:
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
-    if (clsid != KeyboardTapId) return CLASS_E_CLASSNOTAVAILABLE;
-    auto factory = new(std::nothrow) Factory;
+    if (clsid != KeyboardTapId && clsid != KeyboardFaceProbeId) return CLASS_E_CLASSNOTAVAILABLE;
+    auto factory = new(std::nothrow) Factory(clsid == KeyboardFaceProbeId);
     if (!factory) return E_OUTOFMEMORY;
     auto hr = factory->QueryInterface(iid, out); factory->Release(); return hr;
 }

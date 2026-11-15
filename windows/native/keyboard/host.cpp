@@ -21,6 +21,8 @@ void Result(const char* status, const char* error, HRESULT hr = S_OK,
               << ",\"hresult\":" << static_cast<long>(hr)
               << ",\"observedElements\":" << (report ? report->count : 0)
               << ",\"truncated\":" << (report && report->truncated ? "true" : "false")
+              << ",\"probeFlags\":" << (report ? report->probeFlags : 0)
+              << ",\"probeHresult\":" << (report ? report->probeResult : 0)
               << ",\"nodes\":[";
     if (report) for (std::uint32_t i = 0; i < report->count; ++i) {
         if (i) std::cout << ',';
@@ -111,7 +113,8 @@ bool FinishIo(HANDLE pipe, OVERLAPPED& operation, DWORD& transferred, DWORD time
 }
 }
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2 || wcscmp(argv[1], L"discover") != 0) {
+    const bool faceProbe = argc == 2 && wcscmp(argv[1], L"probe-key-face") == 0;
+    if (argc != 2 || (!faceProbe && wcscmp(argv[1], L"discover") != 0)) {
         Result("connection_failed", "invalid_command"); return 2;
     }
     RTL_OSVERSIONINFOW version{}; version.dwOSVersionInfoSize = sizeof(version);
@@ -128,6 +131,7 @@ int wmain(int argc, wchar_t** argv) {
         Result("unsupported", "unsupported_windows_or_architecture"); return 0;
     }
     build = version.dwBuildNumber;
+    if (faceProbe && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
     DWORD session = 0; ProcessIdToSessionId(GetCurrentProcessId(), &session);
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
@@ -187,13 +191,13 @@ int wmain(int argc, wchar_t** argv) {
     // Connection names are an implementation detail, not a documented keyboard contract.
     for (int i = 1; i <= 4 && hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND); ++i) {
         const auto name = L"VisualDiagConnection" + std::to_wstring(i);
-        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), KeyboardTapId, nullptr);
+        hr = initialize(name.c_str(), targetPid, L"", tap.c_str(), faceProbe ? KeyboardFaceProbeId : KeyboardTapId, nullptr);
     }
     DWORD transferred = 0;
     if (FAILED(hr)) {
         CancelIoEx(pipe.value, nullptr); Result("connection_failed", "xaml_attach_failed", hr); return 0;
     }
-    if (!immediate && connectError == ERROR_IO_PENDING && !FinishIo(pipe.value, operation, transferred, 8000)) {
+    if (!immediate && connectError == ERROR_IO_PENDING && !FinishIo(pipe.value, operation, transferred, faceProbe ? 14000 : 8000)) {
         Result("connection_failed", "tap_receipt_timeout"); return 0;
     }
     ULONG clientPid = 0;
@@ -222,6 +226,11 @@ int wmain(int argc, wchar_t** argv) {
     if (!keyboard::Valid(report)) { Result("connection_failed", "receipt_invalid"); return 0; }
     if (FAILED(report.subscribeResult)) Result("connection_failed", "xaml_subscribe_failed", report.subscribeResult, &report);
     else if (FAILED(report.unsubscribeResult)) Result("connection_failed", "xaml_unsubscribe_failed", report.unsubscribeResult, &report);
+    else if (faceProbe) Result("experimental_probe",
+        (report.probeFlags & keyboard::ProbeFailed) ? "probe_failed" :
+        (report.probeFlags & keyboard::ProbeRestored) && (report.probeFlags & keyboard::ProbeInserted) ? "probe_restored" :
+        (report.probeFlags & keyboard::ProbeStarted) ? "probe_incomplete" : "probe_target_not_observed",
+        report.probeResult, &report);
     else Result("discovery_required", "selectors_unverified", S_OK, &report);
     return 0;
 }
