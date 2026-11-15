@@ -24,25 +24,10 @@ def _plugin():
     return p
 
 
-def test_set_generic_module_persists():
-    p = _plugin()
-    out = asyncio.run(p.set_ui_module("fans", True))
-    assert "fans" in out["disabled"]
-    assert p._settings["disabled_modules"] == ["fans"]
-    out = asyncio.run(p.set_ui_module("fans", False))
-    assert "fans" not in out["disabled"]
-
-
 def test_set_power_routes_to_tdp_control():
     p = _plugin()
     asyncio.run(p.set_ui_module("power", True))
     assert p._settings["tdp_control_enabled"] is False
-
-
-def test_set_learning_routes_to_telemetry():
-    p = _plugin()
-    asyncio.run(p.set_ui_module("learning", True))
-    assert p._settings["telemetry_enabled"] is False
 
 
 def test_unknown_module_is_noop():

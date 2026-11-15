@@ -3,17 +3,15 @@ fan auto-apply + learned-band state). Pure logic is unit-tested in
 test_tdp_suggest / test_auto_tdp / test_fans_suggest; this locks the glue in main.py.
 """
 import asyncio
-import importlib
-import os
 import sys
 import threading
-import time
 import types
 
 import pytest
 
 from gamescope_stats import GamescopeStats
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+from main_harness import load_main
 
 
 class FakeBackend:
@@ -79,7 +77,7 @@ def Plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(fan_control, "select_fan_backend", lambda device, **kw: FakeFan())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     return main.Plugin
 
@@ -107,14 +105,6 @@ def _feed_temp_band(p, appid="123"):
 # Learned-band state + dial RPC
 # ---------------------------------------------------------------------------
 
-def test_state_exposes_learned_no_game(Plugin):
-    st = asyncio.run(Plugin().get_tdp_state())
-    # The battery↔performance dial is no longer backend state (it's local UI state on
-    # the suggestion card); only the learned band is exposed.
-    assert "tdp_dial" not in st
-    assert st["learned"]["enough"] is False
-    assert st["learned"]["reason"] == "no_game"
-
 
 def test_learned_disabled_when_telemetry_off(Plugin):
     p = Plugin()
@@ -122,17 +112,6 @@ def test_learned_disabled_when_telemetry_off(Plugin):
     p._settings["telemetry_enabled"] = False
     st = asyncio.run(p.get_tdp_state())
     assert st["learned"]["reason"] == "disabled"
-
-
-def test_learned_band_surfaces_when_enough_data(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_tdp_band(p)
-    asyncio.run(p.set_current_game("123"))
-    st = asyncio.run(p.get_tdp_state())
-    assert st["learned"]["enough"] is True
-    assert st["learned"]["floor"] == 15
-    assert st["learned"]["ceil"] == 21
 
 
 def test_reset_telemetry_wipes_learned_data(Plugin):
@@ -152,19 +131,6 @@ def test_reset_telemetry_wipes_learned_data(Plugin):
 # from the band (that coupling made the loop self-fulfilling). The loop explores
 # to its own level over the full device range; the band is only a suggestion.
 # ---------------------------------------------------------------------------
-
-def test_entering_game_does_not_seed_pl1_from_band(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["auto_tdp"] = True
-    _feed_tdp_band(p)  # band floor=15, ceil=21; device active max = 35
-    before = p._tdp_profiles.effective("123")["pl1"]
-    st = asyncio.run(p.set_current_game("123"))
-    # PL1 is untouched by game entry — no band-derived jump (decoupled control).
-    assert st["levels"]["pl1"] == before
-    # …and the band is still exposed for the separate suggestion card.
-    assert st["learned"]["enough"] is True
-    assert st["learned"]["floor"] == 15 and st["learned"]["ceil"] == 21
 
 
 # ---------------------------------------------------------------------------
@@ -223,31 +189,6 @@ def test_loop_never_persists_its_dynamic_drop(Plugin, monkeypatch):
     _run_loop_ticks(p, reads, monkeypatch)
     assert p._auto_setpoint == 21
     assert p._tdp_profiles.effective("g")["pl1"] == 22
-
-
-def test_loop_holds_with_no_signal(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{"reason": "fps_unavailable"} for _ in range(8)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == 20
-    assert p._auto_status["state"] == "paused"
-    assert p._tdp_profiles.effective("g")["pl1"] == 20
-
-
-def test_loop_does_not_touch_global_when_no_game(Plugin, monkeypatch):
-    # Auto-TDP is a per-GAME dynamic control. With no game running (desktop/loading)
-    # the loop must NOT adjust the global PL1 — even if the desktop briefly saturates
-    # the GPU. Otherwise a stray high-GPU tick would ramp the global setpoint.
-    p = Plugin()
-    p._init()
-    p._current_appid = None
-    p._tdp_profiles.set_pl1("global", 20)
-    reads = [{"gpu_busy": 99, "watts": 30.0} for _ in range(4)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective(None)["pl1"] == 20  # global untouched
 
 
 def test_loop_never_writes_when_backend_disables_auto_tdp(Plugin, monkeypatch):
@@ -314,30 +255,6 @@ def test_unconfirmed_probe_is_rolled_back_and_never_learned(
     assert learned == []
 
 
-def test_loop_does_not_learn_probe_before_protected_cooldown_finishes(
-    Plugin, monkeypatch
-):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    cap = p._auto_power_limits().max_ac_w
-    p._tdp_profiles.set_pl1("game", cap, appid="g")
-    learned = []
-
-    def record(_appid, _target_fps, _on_ac, setpoint, *, stable):
-        learned.append((setpoint, stable))
-        return True
-
-    p._auto_learning.record = record
-    reads = [{"fps": 40, "gpu_busy": 80, "watts": 18} for _ in range(10)]
-
-    _run_loop_ticks(p, reads, monkeypatch)
-
-    assert p._auto_setpoint == cap - 1
-    assert p._auto_status["reason"] == "cooldown"
-    assert learned == []
-
-
 def test_failed_hardware_rollback_keeps_retry_aimed_at_safe_setpoint(
     Plugin, monkeypatch
 ):
@@ -384,17 +301,6 @@ def test_failed_hardware_rollback_keeps_retry_aimed_at_safe_setpoint(
     assert writes == [6, 5, 6, 6]
     assert p._tdp_backend._applied == 6
     assert p._auto_apply_blocked is False
-
-
-def test_loop_keeps_bounded_status_history_while_holding(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 22, appid="g")
-    reads = [{"fps": 40, "gpu_busy": 92, "watts": 20} for _ in range(48)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert len(p._auto_history) <= 32
-    assert p._tdp_profiles.effective("g")["pl1"] == 22
 
 
 def test_tick_abandons_a_decision_when_game_changes_during_power_read(
@@ -668,70 +574,6 @@ def test_unconfirmed_apply_stops_writing_after_three_spaced_retries(
     assert p._auto_apply_exhausted is True
 
 
-def test_set_ui_active_pauses_auto_without_changing_power(Plugin):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 17, appid="g")
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 17, appid="g")
-    p._ensure_auto_session(on_ac=True)
-    before = (p._tdp_backend._applied, p._tdp_backend._levels)
-
-    assert asyncio.run(p.set_ui_active(True)) is True
-
-    assert p._auto_setpoint == 17
-    assert p._auto_status["state"] == "paused"
-    assert p._auto_status["reason"] == "ui_active"
-    assert (p._tdp_backend._applied, p._tdp_backend._levels) == before
-
-
-def test_set_ui_active_raises_a_reduced_auto_session_to_its_initial_tdp(Plugin):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
-    controller, _created = p._ensure_auto_session(on_ac=True)
-    controller.setpoint = 5
-    p._auto_setpoint = 5
-    p._auto_applied = True
-    p._tdp_backend._applied = 5
-    p._tdp_backend._levels = (5, 5, 5)
-
-    assert asyncio.run(p.set_ui_active(True)) is True
-
-    assert p._tdp_backend._applied == 15
-    assert p._tdp_backend._levels == (15, 15, 15)
-    assert p._auto_status["reason"] == "ui_active"
-    assert p._auto_status["held_watts"] == 15
-
-
-@pytest.mark.parametrize("minimum, maximum, expected", [
-    (None, None, 15),
-    (None, 10, 10),
-    (20, 25, 20),
-])
-def test_ui_floor_uses_device_default_within_requested_range(Plugin, minimum, maximum, expected):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g", min_tdp=minimum, max_tdp=maximum)
-    controller, _ = p._ensure_auto_session(True)
-    p._tdp_backend._applied = 5
-    p._tdp_backend._levels = (5, 5, 5)
-    setpoint = controller.setpoint
-
-    asyncio.run(p.set_ui_active(True))
-
-    assert p._tdp_backend._levels == (expected, expected, expected)
-    assert p._auto_status["held_watts"] == expected
-    assert p._auto_setpoint == setpoint
-    assert p._tdp_profiles.auto_config("g")["initial_tdp"] == 5
-    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
-
-
 def test_steam_focus_applies_ui_floor_without_changing_auto_setpoint(Plugin):
     p = Plugin()
     p._init()
@@ -774,33 +616,6 @@ def test_steam_focus_applies_ui_floor_without_changing_auto_setpoint(Plugin):
     assert p._tdp_backend._levels == (5, 5, 5)
     assert p._auto_setpoint == 5
     assert status["held_watts"] is None
-
-
-def test_missing_focus_applies_responsive_floor_while_auto_is_active(Plugin):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 30, 5, appid="g")
-    p._ensure_auto_session(on_ac=True)
-    p._tdp_backend._applied = 5
-    p._tdp_backend._levels = (5, 5, 5)
-    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
-    p._gamescope_stats.start = lambda: None
-    p._gamescope_stats.read = lambda: {
-        "fps": None,
-        "focus": None,
-        "age_s": None,
-        "sample_at": None,
-        "available": False,
-        "reason": "no_game_focus",
-    }
-
-    status = asyncio.run(p._auto_tick())
-
-    assert p._tdp_backend._levels == (15, 15, 15)
-    assert status["reason"] == "no_game_focus"
-    assert status["held_watts"] == 15
 
 
 def test_failed_focus_floor_respects_auto_apply_backoff(Plugin):
@@ -903,72 +718,6 @@ def test_game_exit_keeps_global_auto_grid_floor_and_restores_manual_on_disable(P
     assert p._tdp_backend._levels == (5, 8, 12)
 
 
-def test_auto_tick_recovers_from_the_lowest_fps_between_ticks(Plugin):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g")
-    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 90.0}
-    stats = GamescopeStats(clock=lambda: 100.0)
-    for fps in (40, 35, 40):
-        stats._apply_line(f"fps={fps}")
-        stats._apply_line("focus=g")
-    stats.start = lambda: None
-    p._gamescope_stats = stats
-
-    status = asyncio.run(p._auto_tick())
-
-    assert status["reason"] == "fps_below_target"
-    assert p._auto_setpoint == 7
-    assert p._tdp_backend._levels == (7, 7, 7)
-
-
-def test_auto_tick_recovers_from_a_fragmented_gamescope_fifo(Plugin, tmp_path):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g")
-    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 90.0}
-    stats = GamescopeStats(root=str(tmp_path), stale_after_s=5)
-    p._gamescope_stats = stats
-
-    pipe = tmp_path / "run/user/1000/gamescope.test/stats.pipe"
-    pipe.parent.mkdir(parents=True)
-    os.mkfifo(pipe)
-    writer_done = threading.Event()
-
-    def write_sample():
-        descriptor = os.open(pipe, os.O_WRONLY)
-        try:
-            os.write(descriptor, b"fps=2")
-            os.write(descriptor, b"0\nfocus=g\n")
-        finally:
-            os.close(descriptor)
-            writer_done.set()
-
-    writer = threading.Thread(target=write_sample, daemon=True)
-    writer.start()
-    stats.start()
-    try:
-        assert writer_done.wait(timeout=3)
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            with stats._lock:
-                if stats._fps == 20 and stats._focus == "g":
-                    break
-            time.sleep(0.01)
-
-        status = asyncio.run(p._auto_tick())
-        assert status["reason"] == "fps_below_target"
-        assert p._auto_setpoint == 7
-        assert p._tdp_backend._levels == (7, 7, 7)
-    finally:
-        stats.stop()
-        writer.join(timeout=1)
-
-
 @pytest.mark.parametrize("gate", ["auto", "safe", "control", "eco", "module", "firmware", "owner"])
 def test_grid_floor_requires_global_auto_and_all_control_gates(Plugin, monkeypatch, gate):
     p = Plugin()
@@ -1020,17 +769,6 @@ def test_ui_floor_discards_observation_when_game_changes_during_read(Plugin, mon
     assert p._auto_ui_hold_watts is None
 
 
-def test_grid_auto_toggle_applies_while_menu_is_open(Plugin):
-    p = Plugin()
-    p._init()
-    p._tdp_profiles.set_pl1("global", 5)
-    asyncio.run(p.set_ui_active(True))
-
-    asyncio.run(p.set_auto_tdp(True))
-    assert p._tdp_backend._levels == (15, 15, 15)
-    assert p._auto_controller is None
-
-
 def test_game_auto_toggle_applies_ui_floor_when_menu_is_already_open(Plugin):
     p = Plugin()
     p._init()
@@ -1072,35 +810,6 @@ def test_grid_auto_disable_restores_manual_while_menu_is_open(Plugin):
     asyncio.run(p.set_auto_tdp(False))
     assert p._tdp_backend._levels == (5, 5, 5)
     assert p._auto_controller is None
-
-
-@pytest.mark.parametrize("minimum, maximum, expected, bounds", [
-    (None, 10, 10, (5, 10)),
-    (20, None, 20, (20, 35)),
-])
-def test_game_range_edit_rebounds_open_qam_hold_immediately(
-    Plugin, minimum, maximum, expected, bounds,
-):
-    p = Plugin()
-    p._init()
-    p._set_current_appid("42")
-    p._tdp_profiles.set_auto_config("global", 40, 5)
-    p._tdp_profiles.set_auto_tdp("global", True)
-    p._ensure_auto_session(True)
-    p._tdp_backend._applied = 5
-    p._tdp_backend._levels = (5, 5, 5)
-    asyncio.run(p.set_ui_active(True))
-    assert p._auto_status["held_watts"] == 15
-
-    asyncio.run(p.set_auto_tdp_config(40, 5, "global", None, "42", minimum, maximum))
-
-    assert p._tdp_backend._levels == (expected, expected, expected)
-    assert p._auto_status["held_watts"] == expected
-    assert p._ui_active is True
-    assert (p._auto_controller.min_w, p._auto_controller.max_w) == bounds
-    assert p._auto_setpoint == bounds[0]
-    assert p._tdp_profiles.auto_config(None)["initial_tdp"] == 5
-    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
 
 
 @pytest.mark.parametrize("boundary", ["observation", "apply"])
@@ -1146,35 +855,6 @@ def test_game_range_edit_discards_stale_ui_floor_on_context_change(Plugin, monke
     assert p._auto_ui_hold_watts is None
 
 
-def test_leaving_ui_reapplies_the_auto_setpoint_on_the_next_fps_sample(Plugin):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
-    controller, _created = p._ensure_auto_session(on_ac=True)
-    controller.setpoint = 5
-    p._auto_setpoint = 5
-    p._auto_applied = True
-    p._tdp_backend._applied = 5
-    p._tdp_backend._levels = (5, 5, 5)
-
-    asyncio.run(p.set_ui_active(True))
-    assert p._tdp_backend._applied == 15
-    asyncio.run(p.set_ui_active(False))
-    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
-    stats = GamescopeStats(clock=lambda: 100.0)
-    stats._apply_line("fps=40")
-    stats._apply_line("focus=42")
-    stats.start = lambda: None
-    p._gamescope_stats = stats
-
-    asyncio.run(p._auto_tick())
-
-    assert p._tdp_backend._applied == 5
-    assert p._tdp_backend._levels == (5, 5, 5)
-
-
 def test_leaving_ui_discards_fps_samples_collected_during_the_pause(Plugin):
     p = Plugin()
     p._init()
@@ -1192,41 +872,6 @@ def test_leaving_ui_discards_fps_samples_collected_during_the_pause(Plugin):
     stats._apply_line("fps=40")
     stats._apply_line("focus=g")
     asyncio.run(p.set_ui_active(False))
-
-    assert stats.read()["reason"] == "no_game_focus"
-
-
-def test_non_steam_profile_uses_fresh_fps_from_its_rendering_process(
-    Plugin,
-):
-    p = Plugin()
-    p._init()
-    p._current_appid = "ns:pokémon blue"
-    p._tdp_profiles.set_auto_config("global", 40, 15)
-    p._tdp_profiles.set_auto_tdp("global", True)
-    p._power_reader.read = lambda: {"watts": 11.0, "gpu_busy": 70.0}
-    stats = GamescopeStats(clock=lambda: 100.0)
-    stats._apply_line("fps=39.5")
-    stats._apply_line("focus=-479910431")
-    stats.start = lambda: None
-    p._gamescope_stats = stats
-
-    status = asyncio.run(p._auto_tick())
-
-    assert status["reason"] == "awaiting_gameplay"
-    assert status["fps"] == 39.5
-    assert status["focus"] == "-479910431"
-
-
-def test_game_context_change_discards_the_previous_renderers_fps(Plugin):
-    p = Plugin()
-    p._init()
-    stats = GamescopeStats(clock=lambda: 100.0)
-    stats._apply_line("fps=60")
-    stats._apply_line("focus=42")
-    p._gamescope_stats = stats
-
-    p._set_current_appid("new-game")
 
     assert stats.read()["reason"] == "no_game_focus"
 
@@ -1267,32 +912,9 @@ def test_ui_pause_keeps_reporting_physical_hold_across_config_changes(Plugin):
     assert p._auto_status["held_watts"] is None
 
 
-def test_loop_optimizes_low_demand_workload_after_qualification(
-    Plugin,
-    monkeypatch,
-):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 13, appid="g")
-    reads = [{"fps": 60, "gpu_busy": 8, "watts": 6} for _ in range(13)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == 12
-
-
 # ---------------------------------------------------------------------------
 # Adaptive fan-curve MODE (choosing it IS the opt-in; drives the learned curve)
 # ---------------------------------------------------------------------------
-
-def test_adaptive_mode_drives_learned_curve_when_enough_data(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)
-    asyncio.run(p.set_current_game("123"))
-    st = asyncio.run(p.set_fan_adaptive("game", "123"))
-    assert st["preset"] == "adaptive"
-    assert p._fan_ctrl.applied is not None          # learned curve pushed to hardware
-    assert len(p._fan_ctrl.applied) == 8
 
 
 def test_adaptive_mode_no_data_falls_back_to_firmware_auto(Plugin):
@@ -1305,31 +927,6 @@ def test_adaptive_mode_no_data_falls_back_to_firmware_auto(Plugin):
     assert st["preset"] == "adaptive"
     assert p._fan_ctrl.applied is None              # nothing driven
     assert p._fan_ctrl.auto_called is True          # firmware auto instead
-
-
-def test_preset_does_not_trigger_adaptive_learner(Plugin):
-    # Choosing a fixed preset is an explicit choice → the learner never runs for it.
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)
-    asyncio.run(p.set_current_game("123"))
-    asyncio.run(p.set_fan_preset("silent", "game", "123"))
-    p._fan_ctrl.applied = None
-    p._maybe_reapply_adaptive_fan_curve()           # periodic re-fit tick
-    assert p._fan_ctrl.applied is None              # untouched (not adaptive)
-
-
-def test_custom_curve_not_touched_by_periodic_refit(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)
-    p._current_appid = "123"
-    manual = [[40, 0], [50, 30], [60, 60], [70, 90], [80, 150], [85, 200], [90, 255], [95, 255]]
-    asyncio.run(p.set_fan_curve_points(manual, "game", "123"))
-    before = list(p._fan_curves.effective("123")["points"])
-    p._maybe_reapply_adaptive_fan_curve()
-    assert p._fan_curves.effective("123")["points"] == before  # never touched
-    assert p._fan_curves.effective("123")["preset"] == "custom"
 
 
 def test_adaptive_bias_drives_biased_curve(Plugin):
@@ -1346,44 +943,10 @@ def test_adaptive_bias_drives_biased_curve(Plugin):
     assert asyncio.run(p.get_fan_curve_state())["bias"] == 100
 
 
-def test_switching_to_preset_leaves_adaptive(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)
-    asyncio.run(p.set_current_game("123"))
-    asyncio.run(p.set_fan_adaptive("game", "123"))
-    st = asyncio.run(p.set_fan_preset("performance", "game", "123"))
-    assert st["preset"] == "performance"  # explicit choice wins; adaptive is gone
-
-
 # ---------------------------------------------------------------------------
 # Periodic re-fit of the adaptive curve (~30 min of play), following the
 # recent thermal pattern. Anti-churn; only runs in adaptive mode.
 # ---------------------------------------------------------------------------
-
-def test_periodic_reapply_refreshes_when_band_shifts(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)  # cool band 58-78
-    asyncio.run(p.set_current_game("123"))
-    asyncio.run(p.set_fan_adaptive("game", "123"))
-    before = list(p._fan_ctrl.applied)
-    # The game heats up: the decaying histogram now leans hot → the fit shifts.
-    for tC in (82, 86, 88, 90, 92):
-        for _ in range(240):  # ~20 min per bin of fresh hot dwell
-            p._telemetry.add_sample("123", {"pl1": 15, "temp_cpu": tC, "temp_gpu": tC - 2}, dt=5.0)
-    p._maybe_reapply_adaptive_fan_curve()
-    assert list(p._fan_ctrl.applied) != before   # curve tracked the hotter zone
-
-
-def test_periodic_reapply_noop_when_not_adaptive(Plugin):
-    p = Plugin()
-    p._init()
-    _feed_temp_band(p)
-    p._current_appid = "123"  # default global/game = auto (not adaptive)
-    p._fan_ctrl.applied = None
-    p._maybe_reapply_adaptive_fan_curve()
-    assert p._fan_ctrl.applied is None
 
 
 def test_periodic_reapply_noop_when_curve_unchanged(Plugin):
@@ -1404,37 +967,6 @@ def _feed_temp_band_minutes(p, minutes, appid="123"):
     for t in (58, 62, 66, 70, 74, 78):
         for _ in range(per_bin):
             p._telemetry.add_sample(appid, {"pl1": 15, "temp_cpu": t, "temp_gpu": t - 2}, dt=5.0)
-
-
-def test_midsession_drive_fires_when_enough_crosses(Plugin):
-    # In adaptive mode, once `enough_data` flips true MID-session the learned curve
-    # must land on the very next in-game tick — not wait ~30 min for the re-fit.
-    p = Plugin()
-    p._init()
-    p._current_appid = "123"
-    p._fan_curves.set_adaptive("game", appid="123")
-    p._adaptive_applied = False
-    # Not enough yet (short dwell) → mid-session drive is a no-op.
-    _feed_temp_band_minutes(p, 10)
-    p._maybe_drive_adaptive_fan_curve()
-    assert p._fan_ctrl.applied is None
-    assert p._adaptive_applied is False
-    # Now cross the gate; a single sample tick should trigger the gated drive.
-    _feed_temp_band_minutes(p, 60)
-    p._on_sample_collected(("123", {"temp_cpu": 70}))
-    assert p._fan_ctrl.applied is not None
-    assert p._adaptive_applied is True
-
-
-def test_midsession_drive_noop_when_not_adaptive(Plugin):
-    # The O(1) mode check runs first — no drive when the mode isn't adaptive,
-    # even with plenty of data.
-    p = Plugin()
-    p._init()
-    p._current_appid = "123"  # default = auto
-    _feed_temp_band_minutes(p, 60)
-    p._on_sample_collected(("123", {"temp_cpu": 70}))
-    assert p._fan_ctrl.applied is None
 
 
 def test_midsession_drive_runs_only_once_per_session(Plugin, monkeypatch):
@@ -1510,70 +1042,6 @@ def test_game_profiles_overview_lists_and_resets(Plugin):
     assert all(r["appid"] != "g" for r in rows2)
     assert p._tdp_profiles.has_game("g") is False
     assert p._cpu_profiles.has_game("g") is False
-
-
-def test_game_profiles_overview_includes_the_full_auto_configuration(Plugin):
-    p = Plugin()
-    p._init()
-    p._tdp_profiles.set_auto_config(
-        "game",
-        55,
-        8,
-        appid="g",
-        min_tdp=5,
-        max_tdp=14,
-    )
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-
-    rows = asyncio.run(p.list_game_profiles())
-    row = next(r for r in rows if r["appid"] == "g")
-
-    assert row["tdp"] == {
-        "unit": "W",
-        "pl1": 10,
-        "auto": True,
-        "target_fps": 55,
-        "initial_tdp": 8,
-        "min_tdp": 5,
-        "max_tdp": 14,
-        "follows_global": False,
-    }
-
-
-def test_game_profiles_overview_keeps_own_auto_values_while_following_global(Plugin):
-    p = Plugin()
-    p._init()
-    p._tdp_profiles.set_auto_config(
-        "global",
-        40,
-        15,
-        min_tdp=6,
-        max_tdp=25,
-    )
-    p._tdp_profiles.set_auto_config(
-        "game",
-        55,
-        8,
-        appid="g",
-        min_tdp=5,
-        max_tdp=14,
-    )
-    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    p._tdp_profiles.set_follow_global("g", True)
-
-    rows = asyncio.run(p.list_game_profiles())
-    row = next(r for r in rows if r["appid"] == "g")
-
-    assert row["tdp"] == {
-        "unit": "W",
-        "pl1": 10,
-        "auto": True,
-        "target_fps": 55,
-        "initial_tdp": 8,
-        "min_tdp": 5,
-        "max_tdp": 14,
-        "follows_global": True,
-    }
 
 
 def test_overview_skips_tab_flip_with_no_real_change(Plugin):

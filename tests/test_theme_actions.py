@@ -7,8 +7,7 @@ import pathlib
 import pytest
 
 import theme_packages
-from test_theme_extensions import THEME_ID, THEME_NAME, package, paths
-from test_theme_rpc import theme_rpc  # noqa: F401
+from theme_support import THEME_ID, THEME_NAME, package, paths
 
 
 RESET_HOME = {

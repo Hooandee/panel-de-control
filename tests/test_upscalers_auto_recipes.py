@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from test_upscalers import steam as steam, fake_catalog as fake_catalog, dll_catalog as dll_catalog, proc as proc, _service, APPID
+from upscalers_support import APPID, _service
 from upscalers import auto_recipes, prefix_dependencies, recipes
 from upscalers.service import UpscalerError
 
@@ -117,7 +117,7 @@ def configured(automatic, monkeypatch):
 
 def test_runtime_config_survives_legacy_upgrade_and_rollback(configured, monkeypatch):
     import json
-    from test_upscalers_scaler_transition import files
+    from upscalers_support import files
     service, target = configured
     manifest = target / '.pdc-upscaler' / 'manifest.json'
     data = json.loads(manifest.read_text())
@@ -181,9 +181,8 @@ def test_user_owned_value_is_not_reset_on_removal(configured):
     service.finish_scaler_transition(APPID, checkpoint['token'])
 
 
-
 def test_switch_to_dll_preserves_runtime_keys_and_rollback(configured, dll_catalog):
-    from test_upscalers_scaler_transition import files
+    from upscalers_support import files
     service, target = configured
     runtime = '[Luma]\nSRUserType=2\n[Luma Advanced]\nShader#ABC=1\n'
     (target / 'ReShade.ini').write_text(runtime)
@@ -195,7 +194,6 @@ def test_switch_to_dll_preserves_runtime_keys_and_rollback(configured, dll_catal
     service.finish_scaler_transition(APPID, checkpoint['token'], True)
     assert files(root) == before
     service.finish_scaler_transition(APPID, checkpoint['token'])
-
 
 
 def test_remake_marks_reshade_tutorial_done_and_takes_it_back(tmp_path):

@@ -1,5 +1,4 @@
 import json
-import os
 
 from pdc_report.client import parse_response, save_local
 

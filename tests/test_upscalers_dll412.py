@@ -3,10 +3,7 @@ from pathlib import Path
 import pytest
 
 from upscalers import catalog
-from upscalers.service import UpscalerError
-from test_upscalers import APPID, _service, _write, proc, steam
-
-
+from upscalers_support import APPID, _service, _write
 BUILD = "fsr-4.1.2-lite-dll"
 PROVIDER = "amd_fidelityfx_upscaler_dx12.dll"
 

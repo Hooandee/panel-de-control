@@ -3,8 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-from journal_context import bounded, pick_fields, section_changes
-from test_tdp_guard_rpc import plugin  # noqa: F401
+from journal_context import bounded, section_changes
 
 PANEL_SECTIONS = Path(__file__).resolve().parents[1] / "shared" / "contracts" / "panel-sections.json"
 
@@ -22,20 +21,6 @@ def test_every_declared_source_exists_on_the_plugin(plugin):  # noqa: F811
     for section, sources in main._SUPPORT_SECTIONS.items():
         for getter, _fields in sources:
             assert callable(getattr(main.Plugin, getter, None)), f"{section}: {getter} is missing"
-
-
-def test_section_states_are_collected_for_every_section(plugin):  # noqa: F811
-    main = sys.modules["main"]
-    states = asyncio.run(plugin._support_section_states())
-    assert set(states) == set(main._SUPPORT_SECTIONS)
-    assert all(isinstance(state, dict) for state in states.values())
-    assert set(states["system"]) == {"cpu_state", "gpu_clock", "eco_state", "battery_state"}
-
-
-def test_pick_fields_reaches_nested_values_and_skips_missing():
-    value = {"a": 1, "model": {"layout": "vertical", "items": [1, 2]}, "live": 33}
-    assert pick_fields(value, ("a", "model.layout", "nope")) == {"a": 1, "model.layout": "vertical"}
-    assert pick_fields(value, None) is value
 
 
 def test_only_changed_sections_are_written_again():

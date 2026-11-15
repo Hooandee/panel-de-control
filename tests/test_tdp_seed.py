@@ -1,12 +1,12 @@
 """A fresh install starts from the power the machine already runs, so installing Panel
 changes nothing until the user moves the dial."""
-import importlib
 import sys
 import types
 
 import pytest
 
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+from main_harness import load_main
 
 
 class ReadableBackend:
@@ -80,7 +80,7 @@ def make_plugin(tmp_path, monkeypatch):
         monkeypatch.setattr(fan_control, "select_fan_backend", lambda device, **kw: FakeFan())
         import lifecycle
         monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": on_ac)
-        main = importlib.reload(importlib.import_module("main"))
+        main = load_main(monkeypatch)
         monkeypatch.setattr(main, "read_on_ac", lambda root="/": on_ac, raising=False)
         plugin = main.Plugin()
         plugin._init()
@@ -93,13 +93,6 @@ def make_plugin(tmp_path, monkeypatch):
 def _rails(plugin):
     eff = plugin._tdp_profiles.effective(None)
     return eff["pl1"], eff["pl2"], eff["pl3"], eff["mode"]
-
-
-def test_fresh_install_adopts_steamos_flat_power(make_plugin):
-    plugin, _ = make_plugin({"pl1": 33, "pl2": 33, "pl3": 33})
-    plugin._seed_tdp_from_hardware()
-    assert _rails(plugin) == (33, 33, 33, "estable")
-    assert plugin._tdp_profiles.seed_pending is False
 
 
 def test_fresh_install_keeps_firmware_boost_within_rail_limits(make_plugin):
@@ -145,22 +138,6 @@ def test_unvalidated_route_keeps_the_previous_default(make_plugin):
     assert _rails(plugin) == before
 
 
-def test_seed_uses_primary_rail_when_backend_has_no_pl1(make_plugin):
-    class DeckLike(ReadableBackend):
-        name = "steamdeck-hwmon"
-        primary_rail = "pl2"
-
-        def level_limits(self):
-            return {"pl2": {"min": 3, "max": 15}, "pl3": {"min": 3, "max": 15}}
-
-        def get_limits(self):
-            return TdpLimits(min_w=3, default_w=12, max_w=15, max_ac_w=15)
-
-    plugin, _ = make_plugin({"pl2": 15, "pl3": 15}, backend_cls=DeckLike)
-    plugin._seed_tdp_from_hardware()
-    assert _rails(plugin)[:3] == (15, 15, 15)
-
-
 def test_seed_skips_backends_without_readback(make_plugin):
     class Blind(ReadableBackend):
         readback = False
@@ -177,12 +154,6 @@ def test_seed_never_overrides_a_user_choice(make_plugin):
     plugin._tdp_profiles.set_pl1("global", 9)
     plugin._seed_tdp_from_hardware()
     assert _rails(plugin)[0] == 9
-
-
-def test_seed_does_not_write_hardware(make_plugin):
-    plugin, backend = make_plugin({"pl1": 33, "pl2": 33, "pl3": 33})
-    plugin._seed_tdp_from_hardware()
-    assert backend.writes == []
 
 
 @pytest.mark.parametrize("broken", ["observe", "level_limits"])

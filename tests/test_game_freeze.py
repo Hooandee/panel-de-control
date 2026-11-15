@@ -5,8 +5,7 @@ import sys
 import pytest
 
 from game_freeze import MAX_MS, GameFreezer, game_processes
-from test_game_force_close import FakeProc
-from test_tdp_guard_rpc import plugin  # noqa: F401
+from process_fakes import FakeProc
 
 
 @pytest.fixture
@@ -106,7 +105,6 @@ def test_nothing_to_freeze_reports_false_and_schedules_nothing(proc):
     assert h.timers == []
     h.freezer.resume()
     assert h.events == []
-
 
 
 def test_arm_handhelds_are_not_frozen_until_validated(plugin, monkeypatch):  # noqa: F811

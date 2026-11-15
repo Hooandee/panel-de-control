@@ -1,5 +1,4 @@
 
-from fans import suggest as fan_suggest
 from fans.suggest import band, biased_curve, curve_changed, enough_data, suggest_curves
 
 _SAFE_FLOOR = 76  # must match fans.control._SAFE_MAX_TEMP_FLOOR

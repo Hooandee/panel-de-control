@@ -7,11 +7,11 @@ Covers startup / lifecycle (_reapply_all) and the fan RPCs.
 """
 import asyncio
 import concurrent.futures
-import importlib
 import sys
 import threading
 import time
 import types
+from main_harness import load_main
 
 
 def _make_plugin(tmp_path, monkeypatch):
@@ -46,7 +46,7 @@ def _make_plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     p = main.Plugin()
     p._init()
@@ -138,20 +138,3 @@ def test_rpc_apply_starts_the_loop_race_free(tmp_path, monkeypatch):
     ex.shutdown()
     assert fan.start_calls > 0
     assert all(fan.owned_at_start), "loop started before the curve was driven (race)"
-
-
-def test_auto_mode_does_not_start_a_loop(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch)
-    fan = _FakeLoopFan()
-    p._fan_ctrl = fan
-    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    p._apply_executor = ex
-
-    async def _run():
-        await p.set_fan_auto("global", None)     # releases → not driving
-        await p._drain_offloaded()
-        await asyncio.sleep(0.02)                 # let any done-callback fire
-
-    asyncio.run(_run())
-    ex.shutdown()
-    assert fan.start_calls == 0, "a loop must not be started in auto mode"

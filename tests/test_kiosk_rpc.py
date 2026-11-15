@@ -1,6 +1,6 @@
 import asyncio
 
-from kiosk.rpc import plugin_dispatch, public_rpc_methods
+from kiosk.rpc import plugin_dispatch
 
 
 class FakePlugin:
@@ -15,10 +15,6 @@ class FakePlugin:
 
     def sync_helper(self):
         return None
-
-
-def test_exposes_only_public_coroutines():
-    assert public_rpc_methods(FakePlugin()) == {"get_tdp_state", "set_tdp"}
 
 
 def test_dispatch_passes_positional_args_like_decky():

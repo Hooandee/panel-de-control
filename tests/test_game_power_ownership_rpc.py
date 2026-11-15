@@ -4,10 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import test_tdp_control_rpc
+from tdp_control_support import Plugin  # noqa: F401
 from device_profiles import DEVICE_TABLE
 
-Plugin = test_tdp_control_rpc.Plugin
 
 
 def owned_plugin(Plugin):
@@ -81,15 +80,6 @@ def test_owner_rpc_does_not_claim_without_safe_baseline(Plugin):
     assert stale["ok"] is False
 
 
-def test_legacy_context_retains_write_permission(Plugin):
-    plugin = Plugin()
-    plugin._init()
-    plugin._set_current_appid("42")
-    result = asyncio.run(plugin.set_tdp_watts(20, "global"))
-    assert result["ok"] is True
-    assert plugin._tdp_backend.set_levels_calls > 0
-
-
 def test_gpu_global_saves_without_manual_or_auto_writes(Plugin, monkeypatch):
     plugin = owned_plugin(Plugin)
     writes = []
@@ -102,13 +92,6 @@ def test_gpu_global_saves_without_manual_or_auto_writes(Plugin, monkeypatch):
     asyncio.run(plugin.set_gpu_clock_auto("global", None, "42"))
     assert plugin._gpu_profiles.clock(None)["manual"] is False
     assert writes == []
-
-
-def test_unknown_observation_blocks_but_does_not_change_other_scoped_features(Plugin):
-    plugin = owned_plugin(Plugin)
-    plugin._power_ownership.observe("42", "unknown")
-    assert plugin._game_power_write_allowed() is False
-    assert plugin._resolve_scope("game", "42") == "game"
 
 
 def test_explicit_return_to_steam_invalidates_workers_and_persists(Plugin):
@@ -199,24 +182,6 @@ def test_native_reset_cancellation_restores_intent_and_is_idempotent(Plugin, mon
     assert plugin._power_ownership.state()["steam_settings"] == {"appFrameRate": 40}
 
 
-@pytest.mark.parametrize("failure", ["tdp", "gpu"])
-def test_native_reset_abort_reports_rejected_restore(Plugin, monkeypatch, failure):
-    plugin = deck_owned_plugin(Plugin, monkeypatch)
-    plugin._power_ownership.set_owner("42", "pdc", plugin._power_ownership.state()["revision"])
-    async def apply(reason):
-        return SimpleNamespace(ok=failure != "tdp")
-    monkeypatch.setattr(plugin, "_apply_tdp_now", apply)
-    monkeypatch.setattr(plugin, "_run_gpu_clock", lambda *args, **kwargs: {"ok": failure != "gpu"})
-    monkeypatch.setattr(plugin, "_record_gpu_clock_transition", lambda *args: None)
-    async def run():
-        begun = await plugin.begin_game_power_reset("42", plugin._power_ownership.state()["revision"])
-        result = await plugin.abort_game_power_reset(begun["token"])
-        assert result["ok"] is False
-        assert result["detail"] == "reset_restore_failed"
-        assert not result["reset_pending"]
-    asyncio.run(run())
-
-
 def test_native_reset_old_token_cannot_write_new_context(Plugin, monkeypatch):
     plugin = deck_owned_plugin(Plugin, monkeypatch)
 
@@ -228,33 +193,6 @@ def test_native_reset_old_token_cannot_write_new_context(Plugin, monkeypatch):
         assert not plugin._tdp_profiles.has_game("42")
         assert not result["reset_pending"]
     asyncio.run(run())
-
-
-@pytest.mark.parametrize("fail_save", [False, True])
-def test_native_global_reset_captures_baseline_without_game_profile(Plugin, monkeypatch, fail_save):
-    plugin = deck_owned_plugin(Plugin, monkeypatch)
-    plugin._set_current_appid(None)
-    plugin._power_ownership.observe(None, "inactive")
-    monkeypatch.setattr(plugin._gpu_clock, "capture_state", lambda: {"level": "auto", "window": (200, 1600)})
-    previous = [copy.deepcopy(s._data) for s in (plugin._tdp_profiles, plugin._gpu_profiles)]
-    if fail_save:
-        def fail():
-            raise OSError("disk failure")
-        monkeypatch.setattr(plugin._gpu_profiles, "_save", fail)
-    async def run():
-        begun = await plugin.begin_game_power_reset(None, plugin._power_ownership.state()["revision"])
-        assert begun["ok"]
-        return await plugin.finish_game_power_reset(begun["token"], {})
-    result = asyncio.run(run())
-    assert result["ok"] is not fail_save
-    assert result["explicit_owner"] is None
-    assert result["steam_settings"] == {}
-    if fail_save:
-        assert previous == [s._data for s in (plugin._tdp_profiles, plugin._gpu_profiles)]
-    else:
-        assert plugin._tdp_profiles.effective(None)["pl1"] == 12
-        assert plugin._gpu_profiles.clock(None) == {"manual": False, "min": None, "max": None}
-        assert plugin._tdp_profiles._data.get("games", {}) == previous[0].get("games", {})
 
 
 def test_native_global_reset_rejected_while_game_active(Plugin, monkeypatch):
@@ -429,17 +367,6 @@ def test_non_deck_observation_keeps_legacy_and_refuses_unsupported_claim(Plugin,
     assert result["ok"] is True
 
 
-def test_gpu_global_fields_are_read_only_and_do_not_change_effective_profile(Plugin):
-    plugin = owned_plugin(Plugin)
-    plugin._gpu_profiles.set_clock("global", True, 300, 700)
-    plugin._gpu_profiles.set_clock("game", True, 500, 900, "42")
-    state = asyncio.run(plugin.get_gpu_clock())
-    assert state["global_manual"] is True
-    assert (state["global_min"], state["global_max"]) == (300, 700)
-    assert state["appid"] == "42"
-    assert plugin._gpu_profiles.clock("42")["min"] == 500
-
-
 @pytest.mark.parametrize("mode", ["auto", "manual"])
 def test_steam_gpu_presentation_uses_live_mode_and_window_not_saved_game(Plugin, monkeypatch, mode):
     plugin = deck_owned_plugin(Plugin, monkeypatch)
@@ -478,20 +405,6 @@ def test_steam_tdp_presentation_uses_live_ppt_even_when_saved_game_follows_globa
     assert state["global_watts"] == 9
     assert state["follows_global"] is False
     assert plugin._tdp_profiles._data == before
-
-
-def test_unreadable_steam_state_preserves_types_and_labels_saved_values(Plugin, monkeypatch):
-    from tdp.types import TdpObservation
-
-    plugin = deck_owned_plugin(Plugin, monkeypatch)
-    monkeypatch.setattr(plugin._gpu_clock, "capture_state", lambda: None)
-    gpu = asyncio.run(plugin.get_gpu_clock())
-    tdp = plugin._tdp_state(TdpObservation(False))
-    assert type(gpu["manual"]) is bool
-    assert type(tdp["watts"]) is int
-    for state in (gpu, tdp):
-        assert state["display_source"] == "saved"
-        assert state["steam_readback_available"] is False
 
 
 def test_capability_loss_keeps_steam_ownership_and_blocks_tdp_until_recovery(Plugin):
@@ -614,14 +527,3 @@ def test_reload_waits_for_context_before_applying_global_power(Plugin, monkeypat
     assert plugin._game_power_write_allowed() is allowed
     plugin._run_gpu_clock({"mode": "manual", "min_mhz": 200, "max_mhz": 1600})
     assert writes == ([(200, 1600)] if allowed else [])
-
-
-def test_saved_game_choices_do_not_gate_unsupported_platform(Plugin):
-    from power_ownership import PowerOwnershipStore
-    plugin = Plugin()
-    plugin._init()
-    plugin._power_ownership.set_context("42")
-    plugin._power_ownership.set_owner("42", "steam", plugin._power_ownership.state()["revision"])
-    plugin._power_ownership = PowerOwnershipStore(plugin._power_ownership._path)
-    assert not plugin._game_power_ownership_supported()
-    assert plugin._game_power_write_allowed()

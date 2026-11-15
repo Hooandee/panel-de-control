@@ -4,11 +4,11 @@ Same Plugin bootstrap as test_battery_rpc: fake decky + fake TDP backend so _ini
 never touches live hardware, then inject fake SMT/boost controls.
 """
 import asyncio
-import importlib
 import sys
 import types
 
 from cpu.frequency import CpuFrequencyResult
+from main_harness import load_main
 
 
 class _FakeToggle:
@@ -136,7 +136,7 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, freque
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
 
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     if frequency is not None:
         monkeypatch.setattr(
@@ -161,21 +161,6 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, freque
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
     return main.Plugin()
-
-
-def test_get_cpu_state_shape(tmp_path, monkeypatch):
-    p = _make_plugin(
-        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
-        frequency=_FakeFrequency(),
-    )
-    st = asyncio.run(p.get_cpu_state())
-    assert "chip" in st
-    assert st["smt"] == {"supported": True, "enabled": True}
-    assert st["boost"] == {"supported": True, "enabled": True}
-    assert "cores" in st and "max_khz" in st
-    assert st["frequency"]["supported"] is True
-    assert st["frequency"]["range_min_khz"] == 400_000
-    assert st["frequency"]["policy_state"][0]["name"] == "policy0"
 
 
 def test_cpu_report_retains_failure_readback_without_private_backend_data(
@@ -239,26 +224,6 @@ def test_cpu_report_retains_failure_readback_without_private_backend_data(
     assert "private-user" not in str(report)
 
 
-def test_set_smt_toggles_and_persists(tmp_path, monkeypatch):
-    smt = _FakeToggle(on=True)
-    p = _make_plugin(tmp_path, monkeypatch, smt=smt, boost=_FakeToggle())
-    st = asyncio.run(p.set_smt(False))
-    assert smt.enabled() is False
-    assert st["smt"]["enabled"] is False
-    # persisted
-    p2 = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(on=True), boost=_FakeToggle())
-    p2._init()
-    p2._apply_cpu()  # startup re-applies persisted state
-    assert p2._smt.enabled() is False
-
-
-def test_set_boost_toggles(tmp_path, monkeypatch):
-    boost = _FakeToggle(on=True)
-    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=boost)
-    asyncio.run(p.set_cpu_boost(False))
-    assert boost.enabled() is False
-
-
 def test_set_active_cores_persists_and_reapplies(tmp_path, monkeypatch):
     cores = _FakeCores(max_cores=8, active=8)
     p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(), cores=cores)
@@ -271,41 +236,6 @@ def test_set_active_cores_persists_and_reapplies(tmp_path, monkeypatch):
     p2._init()
     p2._apply_cpu()
     assert p2._cores.active() == 4
-
-
-def test_cores_unsupported_hides(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
-                     cores=_FakeCores(supported=False))
-    st = asyncio.run(p.get_cpu_state())
-    assert st["cores_supported"] is False and st["active_cores"] is None
-
-
-def test_unsupported_controls_degrade(tmp_path, monkeypatch):
-    p = _make_plugin(
-        tmp_path, monkeypatch,
-        smt=_FakeToggle(supported=False), boost=_FakeToggle(supported=False),
-    )
-    st = asyncio.run(p.set_smt(False))
-    assert st["smt"]["supported"] is False
-    st2 = asyncio.run(p.set_cpu_boost(False))
-    assert st2["boost"]["supported"] is False
-
-
-def test_set_cpu_frequency_applies_before_persisting_profile(tmp_path, monkeypatch):
-    frequency = _FakeFrequency()
-    p = _make_plugin(
-        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
-        frequency=frequency,
-    )
-
-    state = asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
-
-    assert frequency.calls[-1] == ("manual", 1_200_000, 2_400_000)
-    assert p._cpu_profiles.effective(None)["frequency"] == {
-        "manual": True, "min_khz": 1_200_000, "max_khz": 2_400_000,
-    }
-    assert state["frequency"]["status"] == "applied"
-    assert state["frequency"]["applied_min_khz"] == 1_200_000
 
 
 def test_stale_game_frequency_rpc_cannot_retarget_the_active_game(

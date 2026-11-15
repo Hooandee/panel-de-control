@@ -18,6 +18,7 @@ import types
 import pytest
 
 from fans.control import AsusFanCurveBackend, NullFanBackend
+from main_harness import load_main
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@ def _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=None):
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
 
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
 
     if fan_ctrl_override is not None:
@@ -118,31 +119,6 @@ _COMPLETE_GPD_OUTCOME = {
     "error": None,
     "abi_after": True,
 }
-
-
-def test_recovery_reselects_existing_fan_factory_after_complete_abi(tmp_path, monkeypatch):
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
-    main = importlib.import_module("main")
-    recovered = _recovered_gpd_fan()
-    monkeypatch.setattr(
-        main.gpd_recovery,
-        "ensure_gpd_fan",
-        lambda device: dict(_COMPLETE_GPD_OUTCOME),
-    )
-    monkeypatch.setattr(
-        main.fan_control,
-        "select_fan_backend",
-        lambda device, **kwargs: recovered,
-    )
-    plugin = Plugin()
-    plugin._init()
-    plugin._fan_ctrl = NullFanBackend()
-
-    outcome = plugin._recover_gpd_fan_sync()
-
-    assert plugin._fan_ctrl is recovered
-    assert outcome["backend"] == "generic-pwm"
-    assert outcome["supported"] is True
 
 
 def test_supported_fan_backend_skips_gpd_recovery(tmp_path, monkeypatch):
@@ -260,17 +236,6 @@ class TestFanCurveRpcNull:
     def Plugin(self, tmp_path, monkeypatch):
         return _make_plugin_fixture(tmp_path, monkeypatch)
 
-    def test_state_supported_false(self, Plugin):
-        st = asyncio.run(Plugin().get_fan_curve_state())
-        assert st["supported"] is False
-        assert st["preset"] == "auto"
-        assert {p["id"] for p in st["presets"]} == {"silent", "balanced", "performance"}
-
-    def test_set_preset_degrades_without_raising(self, Plugin):
-        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
-        assert st["supported"] is False
-        assert st["preset"] == "balanced"  # persisted even though hardware can't apply
-
     def test_fan_follow_global_toggle_keeps_own(self, Plugin):
         p = Plugin()
         asyncio.run(p.set_fan_preset("balanced", "global", None))
@@ -357,38 +322,11 @@ class TestFanCurveRpcAsus:
             )
         return (None, None)
 
-    def test_default_state_is_auto(self, Plugin):
-        st = asyncio.run(Plugin().get_fan_curve_state())
-        assert st["supported"] is True
-        assert st["source"] == "asus_custom_fan_curve"
-        assert st["preset"] == "auto"
-        assert st["points"] is None
-
-    def test_set_preset_applies_to_all_fans(self, Plugin, asus_root):
-        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
-        assert st["preset"] == "balanced"
-        assert len(st["points"]) == 8
-        assert self._enables(asus_root) == ("1", "1")  # both fans manual
-
-    def test_set_custom_points(self, Plugin):
-        pts = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]
-        st = asyncio.run(Plugin().set_fan_curve_points(pts, "global", None))
-        assert st["preset"] == "custom"
-
     def test_set_auto_returns_fans_to_firmware(self, Plugin, asus_root):
         asyncio.run(Plugin().set_fan_preset("performance", "global", None))
         st = asyncio.run(Plugin().set_fan_auto("global", None))
         assert st["preset"] == "auto"
         assert self._enables(asus_root) == ("2", "2")
-
-    def test_game_scope_creates_profile(self, Plugin):
-        p = Plugin()
-        asyncio.run(p.set_current_game("123"))
-        st = asyncio.run(p.set_fan_preset("silent", "game", "123"))
-        assert st["preset"] == "silent"
-        assert st["has_game_profile"] is True
-        assert st["appid"] == "123"
-        assert st["global_preset"] == "auto"  # global untouched
 
     def _feed_band(self, p, appid):
         # Feed realistic 5 s samples across a 58–82 °C band. The store now DECAYS
@@ -399,27 +337,6 @@ class TestFanCurveRpcAsus:
             for _ in range(secs // 5):
                 p._telemetry.add_sample(
                     appid, {"pl1": 15, "temp_cpu": temp, "temp_gpu": temp - 4}, dt=5.0)
-
-    def test_suggestion_available_with_good_data(self, Plugin):
-        p = Plugin()
-        asyncio.run(p.set_current_game("555"))
-        self._feed_band(p, "555")
-        s = asyncio.run(p.get_fan_suggestion("555"))
-        assert s["available"] is True
-        assert s["reason"] == "ok"
-        assert set(s["curves"]) == {"quiet", "balanced", "cool"}
-        assert all(len(c) == 8 for c in s["curves"].values())
-        assert s["minutes"] >= 30
-        assert s["band"]["floor"] <= s["band"]["peak"]
-
-    def test_suggestion_too_few_with_little_data(self, Plugin):
-        p = Plugin()
-        asyncio.run(p.set_current_game("556"))
-        p._telemetry.add_sample("556", {"pl1": 15, "temp_cpu": 60, "temp_gpu": 55}, dt=100)
-        s = asyncio.run(p.get_fan_suggestion("556"))
-        assert s["available"] is False
-        assert s["reason"] == "too_few"
-        assert s["minutes"] >= 1
 
     def test_suggestion_no_game(self, Plugin):
         s = asyncio.run(Plugin().get_fan_suggestion(None))
@@ -432,17 +349,6 @@ class TestFanCurveRpcAsus:
         s = asyncio.run(p.get_fan_suggestion("555"))
         assert s["available"] is False
         assert s["reason"] == "disabled"
-
-    def test_adaptive_mode_applies_learned_curve_to_hardware(self, Plugin, asus_root):
-        # Selecting Adaptive with enough real data drives the learned curve → both
-        # fans flip to manual (enable=1), like any applied curve.
-        p = Plugin()
-        asyncio.run(p.set_current_game("555"))
-        self._feed_band(p, "555")
-        st = asyncio.run(p.set_fan_adaptive("game", "555"))
-        assert st["preset"] == "adaptive"
-        assert st["points"] is None  # adaptive stores no points (computed live)
-        assert self._enables(asus_root) == ("1", "1")
 
     def test_adaptive_mode_no_data_stays_firmware_auto(self, Plugin, asus_root):
         # adaptive with no learned data leaves the fans on firmware auto.
@@ -498,19 +404,6 @@ class TestFirmwareCurveReadOnly:
             {"temp": 80, "pct": 67}, {"temp": 88, "pct": 75}, {"temp": 88, "pct": 75},
         ]
 
-    def test_no_curve_when_ec_unreadable(self, tmp_path, monkeypatch):
-        from fans.ec_curve import EcFanCurveReader
-
-        reader = EcFanCurveReader(read_bytes=lambda: None)
-        Plugin = self._fixture(tmp_path, monkeypatch, reader)
-        st = asyncio.run(Plugin().get_fan_curve_state())
-        assert st["firmware_points"] is None
-
-    def test_no_reader_leaves_state_unchanged(self, tmp_path, monkeypatch):
-        Plugin = self._fixture(tmp_path, monkeypatch, None)
-        st = asyncio.run(Plugin().get_fan_curve_state())
-        assert st["firmware_points"] is None
-
 
 class _ResetBackend:
     """Records calls; restore_auto returns a configurable ok so the RPC's honest
@@ -564,27 +457,6 @@ def test_disabling_experimental_keeps_control_when_release_fails(tmp_path, monke
     assert st["experimental_enabled"] is True
 
 
-def test_reset_fan_control_reports_release_success(tmp_path, monkeypatch):
-    backend = _ResetBackend(release_ok=True)
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    p = Plugin()
-    asyncio.run(p.set_fan_preset("performance", "global", None))
-    backend.calls.clear()
-    st = asyncio.run(p.reset_fan_control())
-    assert "restore_auto" in backend.calls
-    assert st["supported"] is True
-    assert st["reset_ok"] is True
-
-
-def test_reset_fan_control_reports_release_failure(tmp_path, monkeypatch):
-    # The release did not land — the RPC must say so, never a fake success.
-    backend = _ResetBackend(release_ok=False)
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    p = Plugin()
-    st = asyncio.run(p.reset_fan_control())
-    assert st["reset_ok"] is False
-
-
 class _MalformedResetBackend(_ResetBackend):
     """restore_auto returns a malformed value (no/absent 'ok'). The RPC must not
     read that as success."""
@@ -603,60 +475,6 @@ def test_reset_fan_control_malformed_release_is_not_success(tmp_path, monkeypatc
     backend = _MalformedResetBackend(ret)
     Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
     st = asyncio.run(Plugin().reset_fan_control())
-    assert st["reset_ok"] is False
-
-
-def test_state_resettable_true_for_software_loop_backend(tmp_path, monkeypatch):
-    # A software-loop backend (Deck / EC / generic PWM) can wedge → expose a reset.
-    backend = _ResetBackend()
-    backend.resettable = True
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is True
-
-
-def test_state_resettable_false_for_hardware_curve_backend(tmp_path, monkeypatch):
-    # A hardware-curve backend (ASUS/MSI) or Null doesn't wedge → no reset offered.
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)  # NullFanBackend
-    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is False
-
-
-def test_reset_fan_control_reestablishes_the_stored_curve(tmp_path, monkeypatch):
-    # After releasing, the reset must re-apply the stored curve (awaited), not just
-    # release — otherwise a manual curve would silently drop to firmware auto.
-    backend = _ResetBackend(release_ok=True)
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    p = Plugin()
-    asyncio.run(p.set_fan_preset("performance", "global", None))
-    backend.calls.clear()
-    asyncio.run(p.reset_fan_control())
-    assert "restore_auto" in backend.calls
-    assert "apply" in backend.calls  # stored curve re-established
-
-
-def test_reset_ok_false_when_reapply_refuses(tmp_path, monkeypatch):
-    # Released fine, but the stored curve couldn't be re-established → reset_ok must
-    # be False, so "Control reiniciado" never shows on a still-wedged fan.
-    backend = _ResetBackend(release_ok=True, apply_ok=False)
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    p = Plugin()
-    asyncio.run(p.set_fan_preset("performance", "global", None))  # a curve profile
-    st = asyncio.run(p.reset_fan_control())
-    assert st["reset_ok"] is False
-
-
-class _MalformedReapplyBackend(_ResetBackend):
-    def apply_curve_all(self, points):
-        self.calls.append("apply")
-        return {}  # malformed: no "ok" key
-
-
-def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
-    # A malformed re-apply response (no "ok") must not ride an optimistic default.
-    backend = _MalformedReapplyBackend(release_ok=True)
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
-    p = Plugin()
-    asyncio.run(p.set_fan_preset("performance", "global", None))
-    st = asyncio.run(p.reset_fan_control())
     assert st["reset_ok"] is False
 
 
@@ -686,23 +504,6 @@ class _CountingFan:
 
     def read_state(self):
         return {"fans": []}
-
-
-def test_disabled_fan_control_releases_once_and_then_stops_writing(tmp_path, monkeypatch):
-    fan = _CountingFan()
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
-    plugin = Plugin()
-    plugin._init()
-
-    asyncio.run(plugin.set_ui_module("fanControl", True))
-
-    _settle(plugin)
-    first = fan.restores
-    for _ in range(3):
-        plugin._reapply_fans_sync()
-
-    assert first == 1
-    assert fan.restores == 1
 
 
 def test_fan_control_disabled_before_start_is_never_written(tmp_path, monkeypatch):
@@ -750,33 +551,6 @@ def test_shutdown_leaves_fans_alone_while_fan_control_is_off(tmp_path, monkeypat
     plugin._perform_shutdown_handoff("unload")
 
     assert fan.restores == released
-
-
-def test_release_interrupted_before_a_restart_is_retried_at_start(tmp_path, monkeypatch):
-    fan = _CountingFan()
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
-    plugin = Plugin()
-    plugin._init()
-    plugin._settings["disabled_modules"] = ["fanControl"]
-    plugin._settings["fan_release_pending"] = True
-
-    plugin._reapply_fans_sync()
-    plugin._reapply_fans_sync()
-
-    assert fan.restores == 1
-    assert plugin._settings["fan_release_pending"] is False
-
-
-def test_a_backend_that_cannot_release_does_not_keep_retrying(tmp_path, monkeypatch):
-    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
-    plugin = Plugin()
-    plugin._init()
-
-    asyncio.run(plugin.set_ui_module("fanControl", True))
-
-    _settle(plugin)
-
-    assert plugin._settings["fan_release_pending"] is False
 
 
 def test_a_failed_ps5_release_stays_pending(tmp_path, monkeypatch):

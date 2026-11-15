@@ -1,17 +1,9 @@
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from upscalers import lsfg
-
-
-def payload(root, content):
-    for name in lsfg.LAYER_FILES:
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content + name.encode())
-    return root
+from upscalers_support import payload  # noqa: F401
 
 
 @pytest.fixture

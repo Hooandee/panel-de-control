@@ -4,9 +4,7 @@ import pytest
 
 from upscalers import catalog, diagnostics
 from upscalers.service import UpscalerService
-from test_upscalers import APPID, _service, _write, proc, steam
-
-
+from upscalers_support import APPID, _service, _write
 BUILD = "fsr-4.1.2-lite-igpu-dll"
 PROVIDER = "amd_fidelityfx_upscaler_dx12.dll"
 

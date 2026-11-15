@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers import APPID, _service, _write, fake_catalog, proc, steam  # noqa: F401
+from upscalers_support import APPID, _service, _write
 from upscalers import assets as assets_mod
 from upscalers import catalog, games, latest, prefix_dependencies
 from upscalers import service as service_mod
@@ -255,9 +255,8 @@ def test_a_cancelled_install_reports_cancelled_and_keeps_the_game(steam, fake_ca
     assert service.state["games"][APPID]["install"]["build"] == "fsr-test"
 
 
-
 def _log(target, render, output="1920x1080", started=None):
-    from datetime import datetime, timedelta
+    from datetime import datetime
     clock = (started or datetime.now()).strftime("%H:%M:%S.000000")
     _write(target / "OptiScaler.log", (f"[{clock}] [I] Creating new FSR 4 upscaler\n"
                                         f"[{clock}] [I] IFeature::SetInitParameters Render Resolution: {render}, Display Resolution {output}, Quality: 0\n").encode())

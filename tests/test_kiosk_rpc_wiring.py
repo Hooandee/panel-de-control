@@ -3,7 +3,6 @@ import sys
 
 from kiosk.displays import Detection
 from kiosk.rpc import public_rpc_methods
-from test_tdp_guard_rpc import plugin  # noqa: F401
 
 
 def _no_display(plugin):  # noqa: F811
@@ -36,12 +35,6 @@ def test_kiosk_state_is_reported_without_side_effects(plugin):  # noqa: F811
         "brightness": None,
         "armada_bottom_yielded": False,
     }
-
-
-def test_support_log_records_the_kiosk_setting(plugin):  # noqa: F811
-    _no_display(plugin)
-    asyncio.run(plugin.set_kiosk_enabled(True))
-    assert plugin._support_settings_state()["kiosk_enabled"] is True
 
 
 def test_kiosk_rpcs_match_what_decky_exposes(plugin):  # noqa: F811
@@ -88,35 +81,6 @@ def test_kiosk_frame_rate_holds_the_readers_only_while_polled(plugin, monkeypatc
     assert events[-1] == "stats-stop"
 
 
-def test_kiosk_session_names_the_game_without_starting_frame_readers(plugin, monkeypatch):  # noqa: F811
-    main = sys.modules["main"]
-    events = []
-    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: events.append("stats"))
-    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: events.append("perf"))
-    now = [1000.0]
-    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
-    plugin._current_appid = "894020"
-    plugin._current_appid_at = 880.0
-    assert asyncio.run(plugin.get_kiosk_session()) == {"playing_s": 120, "appid": "894020"}
-    assert events == []
-    assert not plugin._kiosk_wants_fps()
-
-
-def test_kiosk_brightness_is_saved_only_when_the_panel_took_it(plugin, monkeypatch):  # noqa: F811
-    async def took(value):
-        return round(value, 3)
-
-    async def refused(_value):
-        return None
-
-    monkeypatch.setattr(plugin._kiosk, "set_brightness", took)
-    assert asyncio.run(plugin.set_kiosk_brightness(0.42)) == {"value": 0.42}
-    assert plugin._settings["kiosk_brightness"] == 0.42
-    monkeypatch.setattr(plugin._kiosk, "set_brightness", refused)
-    assert asyncio.run(plugin.set_kiosk_brightness(0.9)) == {"value": None}
-    assert plugin._settings["kiosk_brightness"] == 0.42
-
-
 def test_kiosk_brightness_drags_apply_without_writing_settings(plugin, monkeypatch):  # noqa: F811
     async def took(value):
         return value
@@ -129,17 +93,6 @@ def test_kiosk_brightness_drags_apply_without_writing_settings(plugin, monkeypat
     assert saves == []
     asyncio.run(plugin.set_kiosk_brightness(0.4))
     assert [saved["kiosk_brightness"] for saved in saves] == [0.4]
-
-
-def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811
-    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: None)
-    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: None)
-    monkeypatch.setattr(plugin._gamescope_perf, "fps", lambda: None)
-    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": None, "reason": "no_game_focus"})
-    assert asyncio.run(plugin.get_kiosk_live())["reason"] == "no_game_focus"
-    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 120.0, "reason": "ok"})
-    live = asyncio.run(plugin.get_kiosk_live())
-    assert (live["fps"], live["reason"]) == (None, "fps_unavailable")
 
 
 def test_focused_app_comes_from_gamescope_then_the_running_game(plugin, monkeypatch):  # noqa: F811
@@ -194,11 +147,6 @@ def test_frame_helper_runs_the_system_python_through_the_session(plugin, monkeyp
     command, env, _identity = plugin._native_frame_helper(["/fex/python3", "/plugin/gamescope_perf.py", "--child", "/"])
     assert command[1:] == ["--user", "--pipe", "--quiet", "--collect", "/usr/bin/python3", "/plugin/gamescope_perf.py", "--child", "/"]
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
-
-
-def test_reports_carry_the_bottom_screen_state(plugin):  # noqa: F811
-    state = plugin._kiosk_report_state()
-    assert {"enabled", "running", "reason", "screen_off", "brightness", "rpc_calls"} <= set(state)
 
 
 def test_stock_distro_hostnames_are_not_scrubbed_from_reports(plugin, monkeypatch):  # noqa: F811

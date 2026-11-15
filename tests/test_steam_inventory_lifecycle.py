@@ -3,8 +3,6 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock
 
-from test_tdp_guard_rpc import plugin  # noqa: F401
-
 
 def test_start_is_idempotent_and_shutdown_cannot_restart(plugin, monkeypatch):  # noqa: F811
     main = sys.modules['main']

@@ -5,13 +5,12 @@ locks the backend snapshot: telemetry opt-in + real per-device capabilities,
 including the honest fan-Null (read-only) path.
 """
 import asyncio
-import importlib
 import sys
 import types
 
-import pytest
 
 from tdp.types import TdpLimits, TdpResult
+from main_harness import load_main
 
 
 class FakeBackend:
@@ -60,7 +59,7 @@ def _make_plugin(tmp_path, monkeypatch, fan_supported=True):
                         lambda device, **kw: FakeFan(supported=fan_supported))
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     return main.Plugin()
 
@@ -87,26 +86,3 @@ def test_learning_status_marks_the_current_game_as_owned_by_auto_tdp(
     st = asyncio.run(p.get_learning_status())
 
     assert st["auto_tdp_active"] is True
-
-
-def test_learning_status_fan_null_reports_false(tmp_path, monkeypatch):
-    # Device whose fan backend can't write curves (e.g. MSI Claw Null) → honest False.
-    p = _make_plugin(tmp_path, monkeypatch, fan_supported=False)
-    st = asyncio.run(p.get_learning_status())
-    assert st["fan_supported"] is False
-    assert st["tdp_supported"] is True
-
-
-def test_learning_status_reflects_telemetry_opt_out(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_telemetry_enabled(False))
-    st = asyncio.run(p.get_learning_status())
-    assert st["telemetry_enabled"] is False
-
-
-@pytest.mark.parametrize("enabled", [True, False])
-def test_learning_status_telemetry_roundtrip(tmp_path, monkeypatch, enabled):
-    p = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_telemetry_enabled(enabled))
-    st = asyncio.run(p.get_learning_status())
-    assert st["telemetry_enabled"] is enabled

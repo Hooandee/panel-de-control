@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers_mako import setup, write
-from test_upscalers_mako_update import release
+from upscalers_mako_support import write
+from upscalers_mako_support import release
 from upscalers import mako
 
 

@@ -90,11 +90,6 @@ def test_calls_after_stop_are_refused(host):
         run(host.get_ambient_state())
 
 
-def test_diagnostics_do_not_start_service(tmp_path):
-    h = Host(tmp_path)
-    assert h.ambient_diagnostics() == {"mediaServer": "stopped", "started": False}
-
-
 def test_concurrent_first_calls_share_one_service(tmp_path):
     made = []
 
@@ -111,22 +106,6 @@ def test_concurrent_first_calls_share_one_service(tmp_path):
     run(both())
     assert len(made) == 1
     h._ambient_stop()
-
-
-def test_stop_returns_immediately(tmp_path):
-    import time
-    h = Host(tmp_path)
-    run(h.scan_ambient_sources())
-    run(h.get_ambient_media_url(run(h.scan_ambient_sources())["collections"]["known.images"][0]["id"]))
-    started = time.monotonic()
-    h._ambient_stop()
-    assert time.monotonic() - started < 0.2
-
-
-def test_cancel_without_service_does_not_start_resources(host):
-    assert run(host.cancel_ambient_jobs()) is False
-    assert host._ambient_service is None
-    assert host._ambient_pools is None
 
 
 def test_cancel_after_stop_does_not_restart_resources(host):

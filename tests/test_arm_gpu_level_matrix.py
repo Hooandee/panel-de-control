@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from test_arm_gpu_level import _arm_plugin
-from test_tdp_arm_levels import _caps
+from arm_support import _arm_plugin
+from arm_support import _caps
 
 
 def _expected(p, cpu, gpu):

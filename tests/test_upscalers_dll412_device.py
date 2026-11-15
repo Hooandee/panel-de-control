@@ -1,6 +1,6 @@
 import pytest
 
-from upscalers.service import UpscalerError, UpscalerService
+from upscalers.service import UpscalerService
 
 
 @pytest.mark.parametrize("device", ["steam_deck_lcd", "steam_deck_oled"])

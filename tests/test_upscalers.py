@@ -7,78 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from upscalers import catalog, games, helixsr, ini, launchers, logread, lsfg, recipe_catalog, recipes
+from upscalers import catalog, games, helixsr, ini, launchers, logread, lsfg, recipes
 from upscalers.catalog import Asset, Build
-from upscalers.service import UpscalerError, UpscalerService
-
-APPID = "292030"
-
-
-def _write(path: Path, data: bytes | str = b"x") -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data.encode() if isinstance(data, str) else data)
-    return path
-
-
-@pytest.fixture
-def steam(tmp_path):
-    home = tmp_path / "home"
-    root = home / ".local/share/Steam"
-    _write(root / "steamapps/libraryfolders.vdf", '"libraryfolders"\n{\n "0"\n {\n  "path" "%s"\n }\n}\n' % root)
-    _write(root / f"steamapps/appmanifest_{APPID}.acf",
-           '"AppState"\n{\n "appid" "%s"\n "name" "Witcher"\n "installdir" "Witcher"\n "StateFlags" "4"\n}\n' % APPID)
-    game = root / "steamapps/common/Witcher"
-    _write(game / "REDprelauncher.exe", b"MZ" + b"\0" * 64)
-    _write(game / "bin/x64_dx12/witcher3.exe", b"MZ" + b"\0" * 4096)
-    _write(game / "bin/x64_dx12/amd_fidelityfx_upscaler_dx12.dll")
-    _write(game / "bin/x64_dx12/nvngx_dlss.dll")
-    return home, game
-
-
-@pytest.fixture
-def fake_catalog(monkeypatch, tmp_path):
-    def asset(asset_id, filename, content, archive=False):
-        return Asset(asset_id, filename, hashlib.sha256(content).hexdigest(), len(content), ("http://invalid",), archive)
-
-    archive = asset(catalog.OPTISCALER_ARCHIVE, "opti.7z", b"archive", archive=True)
-    extra = asset("extra", "amdxcffx64.dll", b"provider")
-    assets = {a.id: a for a in (archive, extra)}
-    builds = {
-        "fsr-test": Build("fsr-test", "fsr", "4.1.1", ("rdna2",), 3, 3, assets=("extra",),
-                          ini={"FSR.Fsr4Update": "true"}),
-        "fsr-later": Build("fsr-later", "fsr", "4.1.2", ("rdna2",), 3, 3, available=False),
-    }
-    monkeypatch.setattr(catalog, "ASSETS", assets)
-    monkeypatch.setattr(catalog, "BUILDS", builds)
-
-    state = tmp_path / "state"
-    unpacked = state / "cache" / archive.sha256 / "unpacked"
-    _write(unpacked / "OptiScaler.dll", b"injector")
-    _write(unpacked / "OptiScaler.ini", "[FSR]\nFsr4Update=auto\n[Log]\nLogToFile=auto\n[Spoofing]\n; true or false - Default (auto) is true\nDxgi=auto\n")
-    _write(unpacked / "amd_fidelityfx_upscaler_dx12.dll", b"sdk")
-    _write(unpacked / "D3D12_Optiscaler/D3D12Core.dll", b"core")
-    _write(unpacked / "setup_linux.sh", b"junk")
-    _write(unpacked / ".complete", archive.sha256)
-    _write(state / "cache" / extra.sha256 / extra.filename, b"provider")
-    return state
-
-
-def _service(steam, state, proc, search=lambda term: []):
-    home, _ = steam
-    service = UpscalerService(str(home), str(state), "rdna2", proc=str(proc))
-    service.search = search
-    return service
-
-
-@pytest.fixture
-def dll_catalog(fake_catalog, monkeypatch):
-    payload = b"standalone upscaler"
-    asset = Asset("dll-test", "amd_fidelityfx_upscaler_dx12.dll", hashlib.sha256(payload).hexdigest(), len(payload), ("http://invalid",))
-    monkeypatch.setitem(catalog.ASSETS, asset.id, asset)
-    monkeypatch.setitem(catalog.BUILDS, "dll-test", Build("dll-test", "fsr", "4.0.2c", ("rdna2",), 2, 3,
-                        replace={asset.filename: asset.id}, engine="dll", way="fsr"))
-    _write(Path(fake_catalog) / "cache" / asset.sha256 / asset.filename, payload)
-    return fake_catalog
+from upscalers.service import UpscalerError
+from upscalers_support import APPID, FakeHelix, _service, _write, without_bundled_recipes
 
 
 def test_dll_install_preserves_exact_paths_names_and_original_bytes(steam, dll_catalog, proc):
@@ -248,13 +180,6 @@ def test_dll_mode_can_replace_optiscaler_when_native_provider_is_backed_up(steam
     assert not (folder / "dxgi.dll").exists()
     service.uninstall(APPID)
     assert (folder / "amd_fidelityfx_upscaler_dx12.dll").read_bytes() == b"x"
-
-
-@pytest.fixture
-def proc(tmp_path):
-    path = tmp_path / "proc"
-    path.mkdir()
-    return path
 
 
 def test_ini_apply_replaces_adds_and_creates_sections_keeping_crlf():
@@ -471,11 +396,6 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["resolution_source"] == "initialization_only"
     assert facts["errors"] == 1
     assert logread.verdict(facts) == "active"
-
-
-def without_bundled_recipes(monkeypatch):
-    """APPID is Witcher 3, which has a curated recipe on Linux hosts; these tests describe hand-made recipes only."""
-    monkeypatch.setattr(recipe_catalog, "bundled", lambda: recipe_catalog.Catalog(1, 0, {}, {}, {}))
 
 
 def test_recipe_adds_files_dlls_and_args_then_undoes_them(steam, fake_catalog, proc, monkeypatch):
@@ -846,7 +766,6 @@ def test_unified_fsr31_dll_counts_as_the_games_frame_generation(tmp_path):
 # ---- Heroic and Lutris shortcuts ------------------------------------------------------------
 
 
-
 def test_launcher_shortcuts_are_recognised():
     assert launchers.identify('"flatpak"', 'run com.heroicgameslauncher.hgl --no-gui "heroic://launch?appName=Fortnite&runner=legendary"') == ("heroic", "Fortnite", "legendary")
     assert launchers.identify("/usr/bin/heroic", '"heroic://launch/gog/1207658924"') == ("heroic", "1207658924", "gog")
@@ -920,7 +839,6 @@ def test_heroic_shortcut_installs_with_overrides_in_heroic(steam, fake_catalog, 
 # ---- lsfg-vk ----------------------------------------------------------------------------------
 
 
-
 def _lsfg_bundle(root):
     for relative in lsfg.LAYER_FILES:
         _write(root / relative, relative.encode())
@@ -966,46 +884,6 @@ def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
     assert (home / lsfg.CONFIG).read_text().startswith("version = 2")
     with pytest.raises(lsfg.LsfgError, match="lsfg_missing"):
         tool.set_game("123", "Game", {"multiplier": 2})
-
-
-class FakeHelix:
-    """HelixSR's bridge as the service sees it: install/remove write what the real one writes."""
-
-    def __init__(self, ready=True):
-        self._ready = ready
-        self.calls = []
-        self.release = Path("HelixSR-3.2.0")
-
-    def ready(self):
-        return self._ready
-
-    def digest(self):
-        return None
-
-    def install(self, game):
-        self.calls.append(("install",))
-        exe = game / "bin/x64_dx12"
-        _write(exe / "amd_fidelityfx_upscaler_dx12.original.dll", b"game fsr")
-        _write(exe / "helixsr-install.json", "{}")
-        return {"installed": "fsr", "exe_folder": str(exe), "log_path": str(exe / "helixsr.log")}
-
-    def remove(self, game):
-        self.calls.append(("remove",))
-        exe = game / "bin/x64_dx12"
-        for name in ("helixsr-install.json", "amd_fidelityfx_upscaler_dx12.original.dll"):
-            (exe / name).unlink(missing_ok=True)
-        return {"installed": None}
-
-
-@pytest.fixture
-def helix_catalog(monkeypatch, fake_catalog):
-    zipped = Asset(catalog.HELIXSR_ARCHIVE, "HelixSR.zip", "0" * 64, 10, ("http://invalid",), )
-    monkeypatch.setitem(catalog.ASSETS, zipped.id, zipped)
-    for build in (
-        Build("hlx-fsr4", "helixsr", "FSR 4", ("rdna2",), 3, 2, archive=zipped.id, engine="helixsr", way="fsr"),
-    ):
-        monkeypatch.setitem(catalog.BUILDS, build.id, build)
-    return fake_catalog
 
 
 def test_helixsr_fsr_drop_in_installs_verifies_and_removes(steam, helix_catalog, proc):

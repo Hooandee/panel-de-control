@@ -1,4 +1,3 @@
-from tdp import suggest as tdp_suggest
 from tdp.suggest import learned_band
 
 

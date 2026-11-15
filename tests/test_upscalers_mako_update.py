@@ -1,26 +1,9 @@
-import hashlib
-import io
-import tarfile
-from types import SimpleNamespace
 
-import json
 from pathlib import Path
 
 import pytest
-from test_upscalers_mako import setup
 from upscalers import mako
-
-
-
-def release(manager):
-    archive = manager.home.parent / "mako-next.tar.xz"
-    with tarfile.open(archive, "w:xz") as handle:
-        for name in mako.PAYLOAD:
-            content = b"new renderer content " + name.encode()
-            info = tarfile.TarInfo(name)
-            info.size = len(content)
-            handle.addfile(info, io.BytesIO(content))
-    return SimpleNamespace(ensure=lambda *args: archive), SimpleNamespace(sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+from upscalers_mako_support import release
 
 
 def test_future_base_version_keeps_the_existing_launch_path(setup, monkeypatch):

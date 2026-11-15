@@ -2,7 +2,7 @@ import struct
 
 import pytest
 
-from test_upscalers import APPID, _service, _write, fake_catalog as fake_catalog, proc as proc, steam as steam
+from upscalers_support import APPID, _service, _write
 from upscalers import luma, recipes
 
 

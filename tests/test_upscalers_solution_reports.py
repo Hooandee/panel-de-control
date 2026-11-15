@@ -37,7 +37,7 @@ def test_report_solution_handles_old_and_malformed_state():
 
 
 from copy import deepcopy  # noqa: E402
-from test_upscalers import steam, fake_catalog, proc, _service, APPID  # noqa: E402
+from upscalers_support import APPID, _service  # noqa: E402
 
 
 def test_diagnose_separates_applied_from_current_without_mutation(steam, fake_catalog, proc, monkeypatch):

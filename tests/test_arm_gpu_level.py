@@ -2,20 +2,9 @@ import asyncio
 import os
 
 from tdp.arm_levels import ArmPerformanceLevels
-from test_gpu_clock_rpc import _make_plugin
-from test_tdp_arm_levels import _caps, _thor
-
-
-def _arm_plugin(tmp_path, monkeypatch):
-    import tdp.factory as factory
-
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    root = _thor(tmp_path / "sys-root")
-    monkeypatch.setattr(
-        factory, "select_backend", lambda device, **kw: ArmPerformanceLevels(root=root)
-    )
-    p._init()
-    return p, root
+from gpu_support import _make_plugin
+from arm_support import _caps, _thor
+from arm_support import _arm_plugin  # noqa: F401
 
 
 def test_backend_split_keeps_the_gpu_high_while_the_cpu_drops(tmp_path):
