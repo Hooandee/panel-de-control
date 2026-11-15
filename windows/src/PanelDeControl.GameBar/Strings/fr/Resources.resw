@@ -464,4 +464,18 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Ses fichiers et ses réglages seront supprimés. Vous pourrez le réinstaller plus tard.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Supprimer</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="NativeKeyboardTitle" xml:space="preserve"><value>Terciopelo — Clavier Windows</value></data>
+  <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Expérimental. Cette version vérifie la connexion au clavier natif sans encore modifier son apparence. La demande vaut uniquement pour cette session.</value></data>
+  <data name="NativeKeyboardTry" xml:space="preserve"><value>Essayer Terciopelo</value></data>
+  <data name="NativeKeyboardDisable" xml:space="preserve"><value>Désactiver la demande</value></data>
+  <data name="NativeKeyboardDiagnostics" xml:space="preserve"><value>Copier le diagnostic</value></data>
+  <data name="NativeKeyboardCopyFailed" xml:space="preserve"><value>Impossible de copier le diagnostic.</value></data>
+  <data name="NativeKeyboardDisabled" xml:space="preserve"><value>Désactivé. L’apparence d’origine est conservée.</value></data>
+  <data name="NativeKeyboardDiscovering" xml:space="preserve"><value>Exploration du clavier…</value></data>
+  <data name="NativeKeyboardMissing" xml:space="preserve"><value>Runtime manquant. Installez le paquet expérimental complet.</value></data>
+  <data name="NativeKeyboardUnsupported" xml:space="preserve"><value>Cette version de Windows, architecture ou interface XAML n’est pas compatible.</value></data>
+  <data name="NativeKeyboardPending" xml:space="preserve"><value>Exploration terminée. Le thème n’est pas appliqué : les touches et leurs états restent à valider.</value></data>
+  <data name="NativeKeyboardFailed" xml:space="preserve"><value>Exploration impossible. Ouvrez le clavier tactile et réessayez ; consultez le diagnostic.</value></data>
+  <data name="NativeKeyboardUnavailable" xml:space="preserve"><value>Mettez à jour ou démarrez le companion pour vérifier le clavier Windows.</value></data>
+  <data name="NativeKeyboardSummary" xml:space="preserve"><value>Dernière exploration : Windows {0}, {1}, {2} éléments.</value></data>
 </root>

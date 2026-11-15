@@ -8,7 +8,12 @@ han sustituido esos requisitos por cambios de color del registro.
 
 ## Arquitectura y alcance
 
-El widget usa el companion existente para solicitar una exploración. El companion
+El widget usa el companion existente para solicitar una exploración. El contrato
+se añade como operación y campo opcional del pipe de Temas, conservando el estado
+de Steam separado. La intención dura solo la sesión del companion y arranca
+desactivada. `connected` describe la última exploración, no una conexión vigente:
+la DLL se desuscribe antes de entregar su recibo. Los errores locales también
+ofrecen un diagnóstico sanitizado copiable. El companion
 lanza `NativeKeyboard/PanelDeControl.KeyboardHost.exe discover` como el usuario
 interactivo, sin elevación. El host solo acepta un `TextInputHost.exe` de la misma
 sesión y usuario, bajo `Windows/SystemApps`, x64 y con `Windows.UI.Xaml.dll`

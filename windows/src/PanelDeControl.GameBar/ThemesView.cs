@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using PanelDeControl.Core.Themes;
 using Windows.ApplicationModel.Resources;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.Resources.Core;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -32,6 +33,10 @@ public sealed class ThemesView : UserControl
     private readonly Border connectionCard;
     private readonly StackPanel themeList = new() { Spacing = 10 };
     private readonly TextBlock emptyText = new();
+    private readonly TextBlock nativeStatus = new();
+    private readonly Button nativeEnable = new();
+    private readonly Button nativeDisable = new();
+    private readonly Button nativeDiagnostics = new();
     private readonly Dictionary<string, ThemeCard> cards = new(StringComparer.Ordinal);
     private readonly HashSet<string> expanded = new(StringComparer.Ordinal);
     private readonly string language;
@@ -62,6 +67,7 @@ public sealed class ThemesView : UserControl
         root.Children.Add(connectionCard);
         root.Children.Add(themeList);
         root.Children.Add(emptyText);
+        root.Children.Add(BuildNativeKeyboardCard());
         Content = root;
     }
 
@@ -93,6 +99,7 @@ public sealed class ThemesView : UserControl
         try
         {
             last = response;
+            ApplyNativeKeyboard(response);
             ApplyConnection(response, operationError);
             // Home and system themes first, then the on-screen keyboard themes under their own heading.
             var installed = response.Themes
@@ -135,6 +142,66 @@ public sealed class ThemesView : UserControl
         {
             applying = false;
         }
+    }
+
+    private Border BuildNativeKeyboardCard()
+    {
+        var title = new TextBlock { Text = Localized("NativeKeyboardTitle"), Style = Resource<Style>("PdcTitleStyle") };
+        var detail = new TextBlock
+        {
+            Text = Localized("NativeKeyboardExperimental"), Style = Resource<Style>("PdcMutedStyle"),
+            TextWrapping = TextWrapping.WrapWholeWords,
+        };
+        nativeStatus.Style = Resource<Style>("PdcMutedStyle");
+        nativeStatus.TextWrapping = TextWrapping.WrapWholeWords;
+        foreach (var button in new[] { nativeEnable, nativeDisable, nativeDiagnostics })
+            button.Style = Resource<Style>("PdcChipButtonStyle");
+        nativeEnable.Content = Localized("NativeKeyboardTry");
+        nativeDisable.Content = Localized("NativeKeyboardDisable");
+        nativeDiagnostics.Content = Localized("NativeKeyboardDiagnostics");
+        nativeEnable.Click += async (_, _) => await RunAsync(() => client.SetNativeKeyboardAsync(true));
+        nativeDisable.Click += async (_, _) => await RunAsync(() => client.SetNativeKeyboardAsync(false));
+        nativeDiagnostics.Click += (_, _) =>
+        {
+            if (last?.NativeKeyboard?.Diagnostics is not string diagnostics) return;
+            try
+            {
+                var package = new DataPackage();
+                package.SetText(diagnostics);
+                Clipboard.SetContent(package);
+                nativeDiagnostics.Content = Localized("ReportCopied");
+            }
+            catch { nativeStatus.Text = Localized("NativeKeyboardCopyFailed"); }
+        };
+        return new Border
+        {
+            Style = Resource<Style>("PdcCardStyle"),
+            Child = new StackPanel { Spacing = 10, Children =
+            {
+                title, detail, nativeStatus, nativeEnable, nativeDisable, nativeDiagnostics,
+            } },
+        };
+    }
+
+    private void ApplyNativeKeyboard(ThemesResponse response)
+    {
+        var state = response.NativeKeyboard;
+        var key = state?.Status switch
+        {
+            "disabled" => "NativeKeyboardDisabled",
+            "discovering" => "NativeKeyboardDiscovering",
+            "runtime_missing" => "NativeKeyboardMissing",
+            "unsupported" => "NativeKeyboardUnsupported",
+            "discovery_required" => "NativeKeyboardPending",
+            "connection_failed" => "NativeKeyboardFailed",
+            _ => "NativeKeyboardUnavailable",
+        };
+        nativeStatus.Text = Localized(key);
+        if (state is not null && state.WindowsBuild > 0)
+            nativeStatus.Text += "\n" + string.Format(Localized("NativeKeyboardSummary"), state.WindowsBuild, state.Architecture, state.ObservedElements);
+        nativeEnable.IsEnabled = state is not null && !operationPending;
+        nativeDisable.IsEnabled = state?.Requested == true && !operationPending;
+        nativeDiagnostics.IsEnabled = state?.Diagnostics is not null && !operationPending;
     }
 
     private void ApplyConnection(ThemesResponse response, string? operationError)

@@ -39,6 +39,9 @@ public enum ThemesOperation
     /// <summary>Game Bar opened from the Xbox button, which Windows kept from Steam: Steam's Home for the theme.</summary>
     [EnumMember(Value = "steam_home")]
     SteamHome = 9,
+
+    [EnumMember(Value = "set_native_keyboard")]
+    SetNativeKeyboard = 10,
 }
 
 /// <summary>Why themes can or cannot reach Steam, as the widget explains it.</summary>
@@ -143,6 +146,8 @@ public sealed class ThemesRequest
 
     public static ThemesRequest SteamHome() => new(ThemesOperation.SteamHome);
 
+    public static ThemesRequest SetNativeKeyboard(bool enabled) => new(ThemesOperation.SetNativeKeyboard, enabled: enabled);
+
     internal void Validate()
     {
         bool Present(string? field) => !string.IsNullOrWhiteSpace(field) && field!.Length <= MaximumFieldLength;
@@ -153,6 +158,7 @@ public sealed class ThemesRequest
         {
             ThemesOperation.Get or ThemesOperation.RefreshCatalog or ThemesOperation.EnableSteamDebugging or ThemesOperation.RestartSteam or ThemesOperation.SteamHome =>
                 Absent(CatalogId) && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
+            ThemesOperation.SetNativeKeyboard => Enabled is not null && Absent(CatalogId) && Absent(Version) && Absent(Name) && Absent(Option) && Absent(Value),
             ThemesOperation.Install => Present(CatalogId) && Present(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.InstallEarly => Present(CatalogId) && ArchivePath is not null && Absent(Version) && Absent(Name) && Enabled is null && Absent(Option) && Absent(Value),
             ThemesOperation.Uninstall => Present(Name) && Enabled is null && Absent(CatalogId) && Absent(Version) && Absent(Option) && Absent(Value),
@@ -347,6 +353,9 @@ public sealed class ThemesResponse
 
     [DataMember(Name = "runtime_errors", Order = 6, EmitDefaultValue = false)]
     public string[]? RuntimeErrors { get; set; }
+
+    [DataMember(Name = "native_keyboard", Order = 7, EmitDefaultValue = false)]
+    public NativeKeyboard.NativeKeyboardStatus? NativeKeyboard { get; set; }
 
     internal void Validate()
     {

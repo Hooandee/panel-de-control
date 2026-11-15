@@ -14,6 +14,8 @@ public sealed class ThemesClient
     private static readonly TimeSpan QuickResponseTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan LongResponseTimeout = TimeSpan.FromSeconds(110);
 
+    public Task<ThemesResponse> SetNativeKeyboardAsync(bool enabled) => SendAsync(ThemesRequest.SetNativeKeyboard(enabled));
+
     public Task<ThemesResponse> GetAsync() => SendAsync(ThemesRequest.Get());
 
     public Task<ThemesResponse> InstallAsync(string catalogId, string version) => SendAsync(ThemesRequest.Install(catalogId, version));
@@ -72,7 +74,7 @@ public sealed class ThemesClient
             requestWriteStarted = true;
             await writer.WriteLineAsync(ThemesWireCodec.SerializeRequest(request));
 
-            var timeout = request.Operation is ThemesOperation.Install or ThemesOperation.InstallEarly or ThemesOperation.RestartSteam
+            var timeout = request.Operation is ThemesOperation.Install or ThemesOperation.InstallEarly or ThemesOperation.RestartSteam or ThemesOperation.SetNativeKeyboard
                 ? LongResponseTimeout
                 : QuickResponseTimeout;
             var readTask = reader.ReadLineAsync();

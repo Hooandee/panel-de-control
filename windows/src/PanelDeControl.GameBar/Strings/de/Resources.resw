@@ -464,4 +464,18 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Seine Dateien und Einstellungen werden gelöscht. Du kannst es später erneut installieren.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Entfernen</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="NativeKeyboardTitle" xml:space="preserve"><value>Terciopelo — Windows-Tastatur</value></data>
+  <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Experimentell. Diese Version prüft die Verbindung zur nativen Tastatur, ändert aber noch nicht ihr Aussehen. Die Anforderung gilt nur für diese Sitzung.</value></data>
+  <data name="NativeKeyboardTry" xml:space="preserve"><value>Terciopelo testen</value></data>
+  <data name="NativeKeyboardDisable" xml:space="preserve"><value>Anforderung deaktivieren</value></data>
+  <data name="NativeKeyboardDiagnostics" xml:space="preserve"><value>Diagnose kopieren</value></data>
+  <data name="NativeKeyboardCopyFailed" xml:space="preserve"><value>Diagnose konnte nicht kopiert werden.</value></data>
+  <data name="NativeKeyboardDisabled" xml:space="preserve"><value>Deaktiviert. Das ursprüngliche Aussehen bleibt erhalten.</value></data>
+  <data name="NativeKeyboardDiscovering" xml:space="preserve"><value>Tastatur wird untersucht…</value></data>
+  <data name="NativeKeyboardMissing" xml:space="preserve"><value>Runtime fehlt. Installiere das vollständige experimentelle Paket.</value></data>
+  <data name="NativeKeyboardUnsupported" xml:space="preserve"><value>Diese Windows-Version, Architektur oder XAML-Schnittstelle wird nicht unterstützt.</value></data>
+  <data name="NativeKeyboardPending" xml:space="preserve"><value>Untersuchung abgeschlossen. Das Design wurde nicht angewendet: Tasten und Zustände müssen noch geprüft werden.</value></data>
+  <data name="NativeKeyboardFailed" xml:space="preserve"><value>Untersuchung fehlgeschlagen. Öffne die Bildschirmtastatur und versuche es erneut; prüfe die Diagnose.</value></data>
+  <data name="NativeKeyboardUnavailable" xml:space="preserve"><value>Aktualisiere oder starte den Companion, um die Windows-Tastatur zu prüfen.</value></data>
+  <data name="NativeKeyboardSummary" xml:space="preserve"><value>Letzte Untersuchung: Windows {0}, {1}, {2} Elemente.</value></data>
 </root>

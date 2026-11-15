@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="../../native/keyboard/dist/**/*" Link="NativeKeyboard/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="../../../shared/devices/catalog.json" Link="Devices/catalog.json" LogicalName="PanelDeControl.Hardware.Devices.catalog.json" />
     <EmbeddedResource Include="../../../dist/windows/steam-theme-host.js" Link="Themes/steam-theme-host.js" LogicalName="PanelDeControl.Hardware.Themes.steam-theme-host.js" />
   </ItemGroup>

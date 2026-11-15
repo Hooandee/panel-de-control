@@ -504,4 +504,18 @@
   <data name="ThemesRemoveDescription" xml:space="preserve"><value>Se borrarán sus archivos y sus ajustes. Se podrá volver a instalar más tarde.</value></data>
   <data name="ThemesRemoveConfirm" xml:space="preserve"><value>Eliminar</value></data>
   <data name="ThemesRemoveCancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="NativeKeyboardTitle" xml:space="preserve"><value>Terciopelo — Teclado de Windows</value></data>
+  <data name="NativeKeyboardExperimental" xml:space="preserve"><value>Experimental. Esta versión comprueba la conexión con el teclado nativo, pero todavía no cambia su aspecto. La solicitud solo dura esta sesión.</value></data>
+  <data name="NativeKeyboardTry" xml:space="preserve"><value>Probar Terciopelo</value></data>
+  <data name="NativeKeyboardDisable" xml:space="preserve"><value>Desactivar solicitud</value></data>
+  <data name="NativeKeyboardDiagnostics" xml:space="preserve"><value>Copiar diagnóstico</value></data>
+  <data name="NativeKeyboardCopyFailed" xml:space="preserve"><value>No se pudo copiar el diagnóstico.</value></data>
+  <data name="NativeKeyboardDisabled" xml:space="preserve"><value>Desactivado. Se conserva el aspecto original.</value></data>
+  <data name="NativeKeyboardDiscovering" xml:space="preserve"><value>Explorando el teclado…</value></data>
+  <data name="NativeKeyboardMissing" xml:space="preserve"><value>Falta el runtime. Instala el paquete experimental completo.</value></data>
+  <data name="NativeKeyboardUnsupported" xml:space="preserve"><value>Esta versión de Windows, arquitectura o interfaz XAML no es compatible.</value></data>
+  <data name="NativeKeyboardPending" xml:space="preserve"><value>Exploración completada. El tema sigue sin aplicarse: falta validar las teclas y sus estados.</value></data>
+  <data name="NativeKeyboardFailed" xml:space="preserve"><value>No se pudo completar la exploración. Abre el teclado táctil y vuelve a probar; consulta el diagnóstico.</value></data>
+  <data name="NativeKeyboardUnavailable" xml:space="preserve"><value>Actualiza o inicia el companion para comprobar el teclado de Windows.</value></data>
+  <data name="NativeKeyboardSummary" xml:space="preserve"><value>Última exploración: Windows {0}, {1}, {2} elementos.</value></data>
 </root>

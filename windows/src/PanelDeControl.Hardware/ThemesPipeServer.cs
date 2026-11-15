@@ -15,6 +15,7 @@ public sealed class ThemesController : IThemesController
     private static readonly TimeSpan ReadbackTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan LongOperationTimeout = TimeSpan.FromSeconds(90);
 
+    private readonly NativeKeyboard.NativeKeyboardController nativeKeyboard = new(new NativeKeyboard.NativeKeyboardHost());
     private readonly ThemeService service;
     private readonly SteamThemeEngine engine;
 
@@ -30,6 +31,9 @@ public sealed class ThemesController : IThemesController
         {
             switch (request.Operation)
             {
+                case ThemesOperation.SetNativeKeyboard:
+                    await nativeKeyboard.SetEnabledAsync(request.Enabled!.Value, cancellationToken).ConfigureAwait(false);
+                    return Response(engine.Status);
                 case ThemesOperation.Get:
                     _ = Task.Run(() => service.RefreshCatalogAsync(force: false, CancellationToken.None), CancellationToken.None);
                     return Response(engine.Status);
@@ -108,7 +112,14 @@ public sealed class ThemesController : IThemesController
     }
 
     private ThemesResponse Response(ThemeEngineStatus status, ThemesResponseStatus result = ThemesResponseStatus.Ok, string? errorCode = null) =>
-        ThemesResponseBuilder.Build(service.Catalog, service.Library(), service.Settings(), status, result, errorCode);
+        BuildResponse(status, result, errorCode);
+
+    private ThemesResponse BuildResponse(ThemeEngineStatus status, ThemesResponseStatus result, string? errorCode)
+    {
+        var response = ThemesResponseBuilder.Build(service.Catalog, service.Library(), service.Settings(), status, result, errorCode);
+        response.NativeKeyboard = nativeKeyboard.Status;
+        return response;
+    }
 
     private static CancellationTokenSource Timeout(CancellationToken cancellationToken, TimeSpan timeout)
     {

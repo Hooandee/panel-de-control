@@ -76,6 +76,7 @@ public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* value) override {
         if (!value) return S_OK;
         if (discovering.exchange(true)) return HRESULT_FROM_WIN32(ERROR_BUSY);
+        { std::lock_guard lock(gate); report = {}; }
         auto hr = value->QueryInterface(IID_PPV_ARGS(&tree));
         if (FAILED(hr)) { discovering = false; return hr; }
         site = value;
