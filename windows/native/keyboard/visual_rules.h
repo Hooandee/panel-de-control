@@ -3,6 +3,15 @@
 
 namespace keyboard {
 enum class KeyRole { Normal, Enter, Backspace, Shift, CapsLock, Tab, AltGr };
+struct KeyGlyph { KeyRole role; bool latched; };
+inline constexpr KeyGlyph RoleFromGlyph(wchar_t glyph) {
+    switch (glyph) {
+    case L'\uE750': return {KeyRole::Backspace, false};
+    case L'\uE751': return {KeyRole::Enter, false};
+    case L'\uE752': return {KeyRole::Shift, false};
+    default: return {KeyRole::Normal, false};
+    }
+}
 inline constexpr bool SignKey(KeyRole role) {
     return role >= KeyRole::Enter && role <= KeyRole::Tab;
 }

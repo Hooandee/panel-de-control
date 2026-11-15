@@ -3,6 +3,11 @@
 #include <cassert>
 int main() {
     using namespace keyboard;
+    assert(RoleFromGlyph(L'\uE750').role == KeyRole::Backspace);
+    assert(RoleFromGlyph(L'\uE751').role == KeyRole::Enter);
+    assert(RoleFromGlyph(L'\uE752').role == KeyRole::Shift);
+    assert(RoleFromGlyph(L'a').role == KeyRole::Normal);
+    assert(RoleFromGlyph(L'\uE753').role == KeyRole::Normal);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Normal, false, false, false, false) == 0);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Enter, false, false, false, false) == 7);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Backspace, false, true, false, false) == 8);

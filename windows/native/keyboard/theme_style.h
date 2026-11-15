@@ -4,6 +4,9 @@
 #include <array>
 
 namespace keyboard {
+inline constexpr std::array<winrt::Windows::UI::Color, 5> LoboGlowColors{{
+    {191,255,140,60},{179,150,210,255},{179,255,214,110},{179,200,160,255},{179,160,235,130}
+}};
 struct ThemeStyle {
     ThemeId id;
     winrt::Windows::UI::Color ink, soft, accent, pressed, enamel, focusedSoft;

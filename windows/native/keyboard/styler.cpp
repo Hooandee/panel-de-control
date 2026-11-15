@@ -16,9 +16,6 @@
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include "theme_style.h"
-#include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
-#include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include "font_resource.h"
 #include <array>
 #include <algorithm>
@@ -177,33 +174,29 @@ void FollowNativeOpacity(UIElement const& source, UIElement const& target) {
     opacity.SetReferenceParameter(L"native", native);
     overlay.StartAnimation(L"Opacity", opacity);
 }
-KeyRole IdentifyRole(FrameworkElement const& key) {
-    using namespace Automation::Peers;
-    auto peer = FrameworkElementAutomationPeer::FromElement(key);
-    if (!peer) peer = FrameworkElementAutomationPeer::CreatePeerForElement(key);
-    auto identify = [](hstring const& value) {
-        auto name = std::wstring(value);
-        std::transform(name.begin(), name.end(), name.begin(), towlower);
-        if (name == L"enter" || name == L"enterkey" || name == L"intro" || name == L"entrar" || name == L"return") return KeyRole::Enter;
-        if (name == L"backspace" || name == L"backspacekey" || name == L"retroceso" || name == L"borrar") return KeyRole::Backspace;
-        if (name == L"shift" || name == L"shiftkey" || name == L"leftshift" || name == L"rightshift" || name == L"mayús" || name == L"mayúsculas") return KeyRole::Shift;
-        if (name == L"capslock" || name == L"capslockkey" || name == L"caps lock" || name == L"bloq mayús") return KeyRole::CapsLock;
-        if (name == L"tab" || name == L"tabkey" || name == L"tabulador") return KeyRole::Tab;
-        if (name == L"altgr" || name == L"alt gr") return KeyRole::AltGr;
-        return KeyRole::Normal;
-    };
-    auto role = identify(Automation::AutomationProperties::GetAutomationId(key));
-    if (role == KeyRole::Normal) role = identify(key.Name());
-    if (role == KeyRole::Normal && peer) role = identify(peer.GetAutomationId());
-    if (role == KeyRole::Normal && peer) role = identify(peer.GetName());
-    return role;
-}
-bool IsLatched(FrameworkElement const& key) {
-    using namespace Automation::Peers;
-    auto peer = FrameworkElementAutomationPeer::FromElement(key);
-    if (!peer) return false;
-    auto toggle = peer.GetPattern(PatternInterface::Toggle).try_as<Automation::Provider::IToggleProvider>();
-    return toggle && toggle.ToggleState() != Automation::ToggleState::Off;
+KeyGlyph IdentifyKeyGlyph(DependencyObject const& node, unsigned depth = 0) {
+    if (!node || depth > 6) return {KeyRole::Normal, false};
+    FontFamily family{nullptr};
+    if (auto text = node.try_as<TextBlock>()) family = text.FontFamily();
+    else if (auto icon = node.try_as<FontIcon>()) family = icon.FontFamily();
+    if (family) {
+        auto familySource = family.Source();
+        auto source = std::wstring_view(familySource);
+        if (const auto fragment = source.rfind(L'#'); fragment != std::wstring_view::npos) source.remove_prefix(fragment + 1);
+        if (source.find(L"Segoe Fluent Icons") != std::wstring_view::npos || source.find(L"Segoe MDL2 Assets") != std::wstring_view::npos) {
+            // Only native icon labels are inspected; ordinary key text and input fields are never read.
+            auto glyph = node.try_as<TextBlock>() ? node.as<TextBlock>().Text() : node.as<FontIcon>().Glyph();
+            if (glyph.size() == 1) {
+                auto match = RoleFromGlyph(glyph[0]);
+                if (match.role != KeyRole::Normal) return match;
+            }
+        }
+    }
+    for (int i = 0, count = VisualTreeHelper::GetChildrenCount(node); i < count; ++i) {
+        auto match = IdentifyKeyGlyph(VisualTreeHelper::GetChild(node, i), depth + 1);
+        if (match.role != KeyRole::Normal) return match;
+    }
+    return {KeyRole::Normal, false};
 }
 struct Cell {
     Border face{nullptr};
@@ -256,7 +249,7 @@ struct Cell {
     }
     void Paint() {
         if (retiring || !inserted) return;
-        if (style->id == ThemeId::LoboBlanco) latched = IsLatched(key);
+        if (style->id == ThemeId::LoboBlanco) latched = IdentifyKeyGlyph(content).latched;
         const unsigned index = FaceIndex(style->id, role, focused, pressed, hover, latched);
         brush.Source(sources[index]);
         if (contentTransform) {
@@ -398,7 +391,7 @@ struct Cell {
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
         }
-        if (style->id == ThemeId::LoboBlanco) role = IdentifyRole(key);
+        if (style->id == ThemeId::LoboBlanco) role = IdentifyKeyGlyph(children.GetAt(1)).role;
         canvas = Canvas(); canvas.Width(0); canvas.Height(0);
         canvas.HorizontalAlignment(HorizontalAlignment::Left); canvas.VerticalAlignment(VerticalAlignment::Top);
         canvas.IsHitTestVisible(false);
@@ -429,8 +422,7 @@ struct Cell {
         if (style->id == ThemeId::LoboBlanco && SignKey(role)) {
             glow = compositor.CreateSpriteVisual(); glow.Opacity(0);
             auto gradient = compositor.CreateRadialGradientBrush();
-            constexpr std::array<Color, 5> colors{{{191,255,140,60},{179,150,210,255},{179,255,214,110},{179,200,160,255},{179,160,235,130}}};
-            gradient.ColorStops().Append(compositor.CreateColorGradientStop(0, colors[static_cast<unsigned>(role)-1]));
+            gradient.ColorStops().Append(compositor.CreateColorGradientStop(0, LoboGlowColors[static_cast<unsigned>(role)-1]));
             gradient.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{0,0,0,0}));
             glow.Brush(gradient); effects.Children().InsertAtBottom(glow);
             glowFade = compositor.CreateScalarKeyFrameAnimation();

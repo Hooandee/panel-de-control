@@ -1,7 +1,7 @@
-# Terciopelo para el teclado táctil de Windows
+# Temas para el teclado táctil de Windows
 
 Integración experimental para `TextInputHost.exe`, Windows 11 x64 build 26300.
-Panel permite activar Terciopelo, comprobar el estado confirmado por el runtime,
+Panel permite seleccionar Terciopelo o Lobo Blanco, comprobar el tema y el estado confirmados por el runtime,
 probar la escritura y desactivar restaurando el aspecto anterior. La solicitud
 es de la sesión del companion: no se activa por defecto ni modifica preferencias
 persistentes de personalización de Windows. No es `osk.exe` ni el teclado de Steam.
@@ -9,7 +9,7 @@ persistentes de personalización de Windows. No es `osk.exe` ni el teclado de St
 ## Arquitectura
 
 La tarjeta de Temas usa el contrato existente del companion. Este inicia
-`NativeKeyboard/PanelDeControl.KeyboardHost.exe serve` sin elevación, mantiene
+`NativeKeyboard/PanelDeControl.KeyboardHost.exe serve <theme-id>` sin elevación, mantiene
 su entrada abierta y procesa recibos JSONL acotados. `stop` o EOF solicitan
 restauración. El host se conecta mediante `InitializeXamlDiagnosticsEx` a nuestra
 DLL COM y mantiene un heartbeat; la DLL restaura al perderlo durante cuatro
@@ -33,7 +33,7 @@ nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resue
 en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
 conservar fuente y colores al cambiar Mayús sin esperar al temporizador.
 Las etiquetas reutilizadas observan también cambios de FontFamily y Foreground;
-se retiran esos callbacks antes de restaurarlas. No lee ni registra texto,
+se retiran esos callbacks antes de restaurarlas. No lee campos de entrada ni registra texto escrito,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
 capturan el puntero. Las capas propias siguen la opacidad de composición de la
@@ -51,8 +51,10 @@ liberado; puede seguir cargado hasta que Windows cierre TextInputHost.
 
 ## Reglas y recursos
 
-El motor y los tokens de Terciopelo están separados (`styler.cpp`, `terciopelo.h`
-y `themes/terciopelo`). Se conserva la distribución y el contenido nativo, sin
+El motor y los tokens están separados (`styler.cpp`, `theme_style.h`
+y `themes/<theme-id>`). El catálogo cerrado solo admite `terciopelo` y `lobo-blanco`.
+El inventario original de Lobo Blanco, fuentes y efectos se describe en
+[LOBO-BLANCO.md](LOBO-BLANCO.md). Se conserva la distribución y el contenido nativo, sin
 coordenadas de una distribución española ni teclas dibujadas por encima.
 
 La forma observada de una tecla es:
@@ -122,6 +124,11 @@ Segoe UI. La presencia en cmap y la preservación de FontFamily no sustituyen la
 comprobación visual de cada glifo, disposición y estado de interacción.
 
 ## Estado y diagnóstico
+
+`Requested` y `RequestedTheme` expresan intención; `AppliedTheme` procede del recibo
+versionado de la DLL y solo se publica cuando el tema coincide con la solicitud. El
+cambio detiene el auxiliar anterior, espera restauración y salida antes de iniciar el
+siguiente. Un recibo antiguo o de otro tema se rechaza.
 
 `Requested` expresa intención; `applied` requiere conexión vigente, imágenes y
 fuente resueltas, y todas las teclas candidatas visibles confirmadas, sin tareas
