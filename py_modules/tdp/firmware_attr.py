@@ -301,6 +301,35 @@ class FirmwareAttrBackend(TDPBackend):
                 mismatches.append(f"platform-profile={current_profile}")
         return mismatches
 
+    def _firmware_holds_rails(self, surfaces, snapshot, targets, profile):
+        # Lenovo firmware pins its own rails at <=20 % battery and ignores (or EBUSYs)
+        # both the write and the rollback. If no rail kept a value this transaction
+        # wrote, nothing of Panel's is left behind and the lock would only hide TDP.
+        # Models that re-arm "custom" or hand off to a named profile keep their lock.
+        if self._custom_rearm_enabled or self._handoff_profile is not None:
+            return False
+        if not targets or self._snapshot_mismatches(
+            surfaces, snapshot, profile, compare_values=False,
+        ):
+            return False
+        for _surface, _rail, path in surfaces:
+            target = targets.get(path)
+            if target is None:
+                return False
+            if target != snapshot[path] and self._read_int(path) == target:
+                return False
+        return True
+
+    @staticmethod
+    def _payload_targets(payload, paths_by_label):
+        saved = payload.get("targets") if isinstance(payload, dict) else None
+        if not isinstance(saved, dict) or set(saved) != set(paths_by_label):
+            return {}
+        try:
+            return {paths_by_label[label]: int(value) for label, value in saved.items()}
+        except (TypeError, ValueError):
+            return {}
+
     def _named_profile_owns_transaction_rails(self, purpose, profile):
         return (
             purpose == "transaction"
@@ -437,6 +466,17 @@ class FirmwareAttrBackend(TDPBackend):
             restore_rails=not profile_owns_rails,
             allow_rearm=not payload.get("custom_rearm_attempted"),
         )
+        if (
+            not recovered
+            and purpose == "transaction"
+            and self._firmware_holds_rails(
+                surfaces,
+                snapshot,
+                self._payload_targets(payload, current),
+                profile,
+            )
+        ):
+            recovered = True
         if not recovered:
             detail = f"firmware {purpose} recovery failed: " + ", ".join(problems)
             payload = {**payload, "state": "rollback_failed", "detail": detail}
@@ -1020,6 +1060,10 @@ class FirmwareAttrBackend(TDPBackend):
                 self._surface_label(surface, rail): snapshot[path]
                 for surface, rail, path in surfaces
             },
+            "targets": {
+                self._surface_label(surface, rail): targets[rail]
+                for surface, rail, _path in surfaces
+            },
             "profile": previous_profile,
         }
         if not self._safety_lock.persist_payload(lock_payload):
@@ -1123,6 +1167,14 @@ class FirmwareAttrBackend(TDPBackend):
                 ),
             )
             rollback_detail = "rollback confirmed"
+            if not rollback_ok and self._firmware_holds_rails(
+                surfaces,
+                snapshot,
+                {path: targets[rail] for _surface, rail, path in surfaces},
+                previous_profile,
+            ):
+                rollback_ok = True
+                rollback_detail = "firmware holds rails: " + ", ".join(rollback_problems)
             if self._handoff is not None or (
                 self._handoff_profile is not None
                 and previous_profile == self._handoff_profile
