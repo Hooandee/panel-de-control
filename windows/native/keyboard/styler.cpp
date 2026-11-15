@@ -228,7 +228,7 @@ struct Plate {
     }
 };
 struct Engine {
-    ULONGLONG epoch = 0;
+    ULONGLONG epoch = 0, loadingStarted = 0;
     FontResource font;
     bool fontReady = false;
     unsigned fontChecks = 0;
@@ -244,7 +244,7 @@ struct Engine {
 
     void Start(FrameworkElement const& anchor, ULONGLONG value) {
         if (started) return;
-        epoch = value; ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
+        epoch = value; loadingStarted = GetTickCount64(); ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
         HMODULE module = nullptr;
         check_bool(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
@@ -323,6 +323,9 @@ struct Engine {
             if (!stopping && !fontReady && ++fontChecks <= 12) fontReady = font.Resolved();
             if (!stopping && !fontReady && fontChecks > 12) { Fail(E_FAIL); requested = false; stopping = true; }
             bool loaded = fontReady; for (bool value : ready) loaded &= value;
+            if (!stopping && !loaded && GetTickCount64() - loadingStarted > 10000) {
+                Fail(HRESULT_FROM_WIN32(ERROR_TIMEOUT)); requested = false; stopping = true;
+            }
             unsigned visible = 0, styled = 0, pending = 0;
             if (!stopping) for (auto it = candidates.begin(); it != candidates.end();) {
                 auto key = it->get();
