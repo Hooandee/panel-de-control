@@ -1,12 +1,11 @@
 """A fresh install starts from the power the machine already runs, so installing Panel
 changes nothing until the user moves the dial."""
-import sys
 import types
 
 import pytest
 
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 
 class ReadableBackend:
@@ -66,13 +65,7 @@ class FakeFan:
 @pytest.fixture
 def make_plugin(tmp_path, monkeypatch):
     def build(rails, *, on_ac=False, battery=80, backend_cls=ReadableBackend):
-        fake = types.ModuleType("decky")
-        fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-        fake.DECKY_USER = "deck"
-        fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                            warning=lambda *a, **k: None,
-                                            error=lambda *a, **k: None)
-        monkeypatch.setitem(sys.modules, "decky", fake)
+        fake_decky(monkeypatch, tmp_path)
         backend = backend_cls(rails)
         import tdp.factory as factory
         monkeypatch.setattr(factory, "select_backend", lambda device, **kw: backend)

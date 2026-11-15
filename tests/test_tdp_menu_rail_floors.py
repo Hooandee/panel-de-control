@@ -1,12 +1,10 @@
 import asyncio
-import sys
-import types
 
 import pytest
 
 from tdp.backend import TDPBackend
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 
 class MenuFloorBackend(TDPBackend):
@@ -57,15 +55,7 @@ class PlainBackend(MenuFloorBackend):
 
 
 def _plugin(tmp_path, monkeypatch, backend_cls):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None,
-        warning=lambda *a, **k: None,
-        error=lambda *a, **k: None,
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     import tdp.factory as factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: backend_cls())
     import lifecycle

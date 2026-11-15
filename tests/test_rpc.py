@@ -1,10 +1,8 @@
 import asyncio
 import pathlib
-import sys
-import types
 
 import pytest
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -15,13 +13,7 @@ def Plugin(tmp_path, monkeypatch):
     top level and reads decky.DECKY_PLUGIN_SETTINGS_DIR, so inject a fake `decky`
     module pointing settings at a tmp dir BEFORE importing main. Async methods are
     driven with asyncio.run() (no pytest-asyncio needed)."""
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     monkeypatch.syspath_prepend(str(ROOT))
     main = load_main(monkeypatch)
     return main.Plugin

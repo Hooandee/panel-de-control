@@ -9,7 +9,7 @@ import pytest
 
 from power.reader import PowerReader
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 _FAKE_POWER = {"watts": 13.1, "gpu_busy": 49}
 
@@ -101,13 +101,7 @@ class FakeBackend:
 
 @pytest.fixture
 def Plugin(tmp_path, monkeypatch):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     import tdp.factory as factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import lifecycle

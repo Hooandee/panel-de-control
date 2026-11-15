@@ -5,13 +5,12 @@ test_tdp_suggest / test_auto_tdp / test_fans_suggest; this locks the glue in mai
 import asyncio
 import sys
 import threading
-import types
 
 import pytest
 
 from gamescope_stats import GamescopeStats
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 
 class FakeBackend:
@@ -64,13 +63,7 @@ class FakeFan:
 
 @pytest.fixture
 def Plugin(tmp_path, monkeypatch):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     import tdp.factory as factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import fans.control as fan_control

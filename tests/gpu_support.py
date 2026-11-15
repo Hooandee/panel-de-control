@@ -1,6 +1,4 @@
-import sys
-import types
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 
 class _FakeGpuClock:
@@ -49,13 +47,7 @@ class _FakeGpuClock:
 
 
 def _make_plugin(tmp_path, monkeypatch, gpu=None):
-    fake_decky = types.ModuleType("decky")
-    fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake_decky.DECKY_USER = "deck"
-    fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake_decky)
+    fake_decky(monkeypatch, tmp_path)
 
     import tdp.factory as factory
     from tdp.types import TdpLimits, TdpResult

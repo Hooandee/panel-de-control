@@ -5,12 +5,10 @@ locks the backend snapshot: telemetry opt-in + real per-device capabilities,
 including the honest fan-Null (read-only) path.
 """
 import asyncio
-import sys
-import types
 
 
 from tdp.types import TdpLimits, TdpResult
-from main_harness import load_main
+from main_harness import fake_decky, load_main
 
 
 class FakeBackend:
@@ -45,13 +43,7 @@ class FakeFan:
 
 
 def _make_plugin(tmp_path, monkeypatch, fan_supported=True):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     import tdp.factory as factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import fans.control as fan_control
