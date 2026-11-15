@@ -13,7 +13,13 @@ public sealed class NativeKeyboardHost : INativeKeyboardHost
     private static TaskCompletionSource<Process> NewReady() => new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool Available => File.Exists(executable) && File.Exists(Path.Combine(Path.GetDirectoryName(executable)!, "PanelDeControl.KeyboardTap.dll"));
 
-    public async Task RunAsync(string themeId, Action<string> onReceipt, CancellationToken token)
+    public Task RunAsync(string themeId, Action<string> onReceipt, CancellationToken token) =>
+        RunCommandAsync("serve", themeId, onReceipt, token);
+
+    public Task RestoreAsync(string themeId, Action<string> onReceipt, CancellationToken token) =>
+        RunCommandAsync("restore", themeId, onReceipt, token);
+
+    private async Task RunCommandAsync(string command, string themeId, Action<string> onReceipt, CancellationToken token)
     {
         if (!NativeKeyboardThemes.IsValid(themeId)) throw new ArgumentException("Unknown keyboard theme.", nameof(themeId));
         using var process = new Process
@@ -25,7 +31,7 @@ public sealed class NativeKeyboardHost : INativeKeyboardHost
                 WorkingDirectory = Path.GetDirectoryName(executable)!,
             },
         };
-        process.StartInfo.ArgumentList.Add("serve");
+        process.StartInfo.ArgumentList.Add(command);
         process.StartInfo.ArgumentList.Add(themeId);
         var started = Volatile.Read(ref ready);
         var launched = false;

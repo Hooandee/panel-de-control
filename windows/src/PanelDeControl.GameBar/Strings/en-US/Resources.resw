@@ -525,4 +525,5 @@
   <data name="NativeKeyboardTheme" xml:space="preserve"><value>Theme</value></data>
   <data name="NativeKeyboardThemeStatus" xml:space="preserve"><value>Requested: {0}. Confirmed: {1}.</value></data>
   <data name="NativeKeyboardNone" xml:space="preserve"><value>None</value></data>
+  <data name="NativeKeyboardRetry" xml:space="preserve"><value>Retry selected theme</value></data>
 </root>

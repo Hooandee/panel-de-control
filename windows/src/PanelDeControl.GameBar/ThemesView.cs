@@ -249,8 +249,9 @@ public sealed class ThemesView : UserControl
     private void ApplyNativeKeyboardActions(NativeKeyboardStatus? state)
     {
         nativeTheme.IsEnabled = state is not null && !operationPending && state.Status != "restoring";
-        nativeEnable.IsEnabled = state is not null && !operationPending && state.Status != "restore_unconfirmed" &&
-            (state.Status is "disabled" or "connection_failed" or "runtime_missing" ||
+        nativeEnable.Content = Localized(state?.Status is "connection_failed" or "restore_unconfirmed" ? "NativeKeyboardRetry" : "NativeKeyboardTry");
+        nativeEnable.IsEnabled = state is not null && !operationPending &&
+            (state.Status is "disabled" or "connection_failed" or "restore_unconfirmed" or "runtime_missing" ||
              (state.Status is "applied" or "applying" or "waiting_for_keyboard" && state.RequestedTheme != SelectedNativeTheme));
         nativeDisable.IsEnabled = state is not null && !operationPending && (state.Requested || state.Status == "restore_unconfirmed");
         nativeDiagnostics.IsEnabled = state?.Diagnostics is not null && !operationPending;

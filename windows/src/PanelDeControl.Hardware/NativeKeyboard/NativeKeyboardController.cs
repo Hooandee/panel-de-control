@@ -8,6 +8,7 @@ public interface INativeKeyboardHost
 {
     bool Available { get; }
     Task RunAsync(string themeId, Action<string> onReceipt, CancellationToken token);
+    Task RestoreAsync(string themeId, Action<string> onReceipt, CancellationToken token);
     Task RequestStopAsync(CancellationToken token);
 }
 
@@ -22,6 +23,7 @@ public sealed class NativeKeyboardController(
     private int generation;
     private bool disposed;
     public NativeKeyboardStatus Status => Volatile.Read(ref status);
+    private TimeSpan RecoveryTimeout => stopTimeout ?? TimeSpan.FromSeconds(18);
 
     public Task<NativeKeyboardStatus> SetEnabledAsync(bool enabled, CancellationToken token) =>
         SetEnabledAsync(enabled, NativeKeyboardThemes.Terciopelo, token);
@@ -34,35 +36,42 @@ public sealed class NativeKeyboardController(
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             if (!enabled) return await StopAsync().ConfigureAwait(false);
-            if (Status.Status == "restore_unconfirmed") return Status;
-            if (running is not null && (Status.RequestedTheme != themeId || Status.Status == "connection_failed"))
+            while (true)
             {
+                lock (sync)
+                {
+                    if (running is { IsCompleted: false } && Status.Requested && Status.RequestedTheme == themeId &&
+                        Status.Status is not ("connection_failed" or "restore_unconfirmed")) return Status;
+                    if ((running is null || running.IsCompleted) && Status.Status is ("disabled" or "unsupported" or "runtime_missing"))
+                    {
+                        if (!host.Available) return Publish(Failure(true, "runtime_missing", "runtime_missing", themeId));
+                        StartSession(themeId, restoreOnly: false);
+                        return Status;
+                    }
+                }
                 var restored = await StopAsync().ConfigureAwait(false);
                 if (restored.Status != "disabled") return restored;
-            }
-            lock (sync)
-            {
-                if (running is { IsCompleted: false }) return Status;
-                if (running is not null && Status.Status is not ("disabled" or "unsupported" or "runtime_missing"))
-                    return Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
-                if (!host.Available) return Publish(Failure(true, "runtime_missing", "runtime_missing", themeId));
-                lifetime?.Dispose();
-                lifetime = new CancellationTokenSource(receiptTimeout ?? TimeSpan.FromSeconds(15));
-                var current = ++generation;
-                var cancellation = lifetime;
-                Publish(new NativeKeyboardStatus { Requested = true, RequestedTheme = themeId, Status = "applying" });
-                running = Task.Run(() => MonitorAsync(current, themeId, cancellation));
-                return Status;
             }
         }
         finally { gate.Release(); }
     }
 
-    private async Task MonitorAsync(int current, string themeId, CancellationTokenSource cancellation)
+    private Task StartSession(string themeId, bool restoreOnly)
+    {
+        lifetime?.Dispose();
+        lifetime = new CancellationTokenSource(restoreOnly ? RecoveryTimeout : receiptTimeout ?? TimeSpan.FromSeconds(15));
+        var current = ++generation;
+        var cancellation = lifetime;
+        Publish(new NativeKeyboardStatus { Requested = !restoreOnly, RequestedTheme = themeId, Status = restoreOnly ? "restoring" : "applying" });
+        return running = Task.Run(() => MonitorAsync(current, themeId, restoreOnly, cancellation));
+    }
+
+    private async Task MonitorAsync(int current, string themeId, bool restoreOnly, CancellationTokenSource cancellation)
     {
         try
         {
-            await host.RunAsync(themeId, output => Receive(current, themeId, output, cancellation), cancellation.Token).ConfigureAwait(false);
+            Action<string> receive = output => Receive(current, themeId, restoreOnly, output, cancellation);
+            await (restoreOnly ? host.RestoreAsync(themeId, receive, cancellation.Token) : host.RunAsync(themeId, receive, cancellation.Token)).ConfigureAwait(false);
             lock (sync)
             {
                 if (current != generation || Status.Status is "connection_failed" or "restore_unconfirmed" or "unsupported" or "runtime_missing" || (!Status.Requested && Status.Status == "disabled")) return;
@@ -80,7 +89,7 @@ public sealed class NativeKeyboardController(
         }
     }
 
-    private void Receive(int current, string themeId, string output, CancellationTokenSource cancellation)
+    private void Receive(int current, string themeId, bool restoreOnly, string output, CancellationTokenSource cancellation)
     {
         lock (sync)
         {
@@ -92,7 +101,7 @@ public sealed class NativeKeyboardController(
                 if (!value.Requested && value.Status is not ("disabled" or "restoring" or "connection_failed")) return;
                 if (value.Requested && value.Status == "disabled") throw new InvalidDataException();
                 if (!value.Requested && value.Status == "connection_failed") value.Status = "restore_unconfirmed";
-                cancellation.CancelAfter(receiptTimeout ?? TimeSpan.FromSeconds(6));
+                cancellation.CancelAfter(restoreOnly ? RecoveryTimeout : receiptTimeout ?? TimeSpan.FromSeconds(6));
                 Publish(value);
             }
             catch (Exception exception) when (exception is JsonException or InvalidDataException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
@@ -106,36 +115,75 @@ public sealed class NativeKeyboardController(
     private async Task<NativeKeyboardStatus> StopAsync()
     {
         Task? task;
+        string themeId;
         lock (sync)
         {
             task = running;
-            if (task is null)
-                return Status.Status == "restore_unconfirmed" ? Status : Publish(new NativeKeyboardStatus());
-            if (task.IsCompleted)
+            themeId = Status.RequestedTheme;
+            if ((task is null || task.IsCompleted) && Status.Status == "disabled")
             {
                 running = null;
-                if (Status.Status is "unsupported" or "runtime_missing" && !Status.Connected && Status.StyledKeys == 0)
-                    return Publish(new NativeKeyboardStatus());
-                return Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
+                return Status;
             }
-            Publish(new NativeKeyboardStatus { RequestedTheme = Status.RequestedTheme, Status = "restoring" });
+            if ((task is null || task.IsCompleted) && Status.Status is ("unsupported" or "runtime_missing") && !Status.Connected && Status.StyledKeys == 0)
+            {
+                running = null;
+                return Publish(new NativeKeyboardStatus());
+            }
+            Publish(new NativeKeyboardStatus { RequestedTheme = themeId, Status = "restoring" });
         }
-        using var deadline = new CancellationTokenSource(stopTimeout ?? TimeSpan.FromSeconds(6));
-        try
+        if (task is { IsCompleted: false })
         {
-            await host.RequestStopAsync(deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false);
-            await task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            using var deadline = new CancellationTokenSource(stopTimeout ?? TimeSpan.FromSeconds(6));
+            try
+            {
+                await host.RequestStopAsync(deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false);
+                await task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException)
+            {
+            }
         }
-        catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException)
+        await FinishHostAsync(task).ConfigureAwait(false);
+        lock (sync)
         {
+            if (task is { IsCompleted: false }) return Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
+            running = null;
+            if (Status.Status == "disabled") return Status;
         }
+        return await RestoreOnlyAsync(themeId).ConfigureAwait(false);
+    }
+
+    private async Task FinishHostAsync(Task? task)
+    {
         lock (sync)
         {
             generation++;
             lifetime?.Cancel();
+        }
+        if (task is not { IsCompleted: false }) return;
+        try { await task.WaitAsync(stopTimeout ?? TimeSpan.FromSeconds(6)).ConfigureAwait(false); }
+        catch (Exception exception) when (exception is TimeoutException or OperationCanceledException) { }
+    }
+
+    private async Task<NativeKeyboardStatus> RestoreOnlyAsync(string themeId)
+    {
+        Task task;
+        lock (sync)
+        {
+            if (!NativeKeyboardThemes.IsValid(themeId) || !host.Available)
+                return Publish(Failure(false, "restore_unconfirmed", "runtime_missing"));
+            task = StartSession(themeId, restoreOnly: true);
+        }
+        try { await task.WaitAsync(RecoveryTimeout).ConfigureAwait(false); }
+        catch (TimeoutException) { }
+        await FinishHostAsync(task).ConfigureAwait(false);
+        lock (sync)
+        {
             if (task.IsCompleted) running = null;
-            if (!task.IsCompleted || Status.Status != "disabled") Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
-            return Status;
+            if (task.IsCompleted && Status.Status == "disabled") return Status;
+            if (Status.Status == "restore_unconfirmed") return Status;
+            return Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
         }
     }
 
