@@ -107,14 +107,21 @@ struct Property {
         binding = nullptr;
         if (auto expression = element.GetBindingExpression(property)) binding = expression.ParentBinding();
     }
+    bool Same(IInspectable const& left, IInspectable const& right) const {
+        if (left == right) return true;
+        if (property != TextBlock::FontWeightProperty()) return false;
+        auto a = left.try_as<Windows::Foundation::IReference<Windows::UI::Text::FontWeight>>();
+        auto b = right.try_as<Windows::Foundation::IReference<Windows::UI::Text::FontWeight>>();
+        return a && b && a.Value().Weight == b.Value().Weight;
+    }
     void Assign(IInspectable const& value) {
-        if (element.GetValue(property) == value) return;
-        if (assigned && element.ReadLocalValue(property) != owned) Capture();
+        if (Same(element.GetValue(property), value)) return;
+        if (assigned && !Same(element.ReadLocalValue(property), owned)) Capture();
         element.SetValue(property, value); owned = value; assigned = true; restoring = false; restored = false;
     }
     void Restore() {
         if (restored || !assigned) return;
-        if (!restoring && element.ReadLocalValue(property) != owned) { restored = true; return; }
+        if (!restoring && !Same(element.ReadLocalValue(property), owned)) { restored = true; return; }
         restoring = true;
         if (binding) { element.ClearValue(property); element.SetBinding(property, binding); }
         else if (original == DependencyProperty::UnsetValue()) element.ClearValue(property);
@@ -122,7 +129,7 @@ struct Property {
         if (binding) {
             auto expression = element.GetBindingExpression(property);
             if (!expression || expression.ParentBinding() != binding) throw hresult_error(E_FAIL);
-        } else if (element.ReadLocalValue(property) != original) throw hresult_error(E_FAIL);
+        } else if (!Same(element.ReadLocalValue(property), original)) throw hresult_error(E_FAIL);
         restored = true;
     }
 
