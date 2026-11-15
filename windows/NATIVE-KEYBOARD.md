@@ -56,8 +56,10 @@ KeyboardKey
 
 El motor valida esta forma, inserta una decoración no interactiva entre Border
 y ContentControl, y verifica su pertenencia real. La placa se coloca solo en el
-Grid que pertenece a KeyboardGrid y cuyos hijos son KeyboardKey. No se extiende
-al panel de sugerencias, emoji, portapapeles ni otras superficies del proceso.
+Grid que pertenece a KeyboardGrid y cuyos hijos son KeyboardKey. El marco se extiende al Grid padre de KeyboardGrid cuando contiene el GripperBar
+observado: placa original, fondo oscuro y controles estándar de su barra. Se
+conservan el radio, clipping y sombra nativos; no se dibuja fuera de la ventana
+ni se modifica el contenido de emoji, portapapeles o campos de texto.
 Las teclas visibles con forma desconocida impiden confirmar cobertura completa.
 
 Terciopelo 0.2.13 aporta estos recursos y propiedades, extraídos de su CSS real:
@@ -71,7 +73,8 @@ Terciopelo 0.2.13 aporta estos recursos y propiedades, extraídos de su CSS real
 | Pulsación, hover y foco | Caras originales; cancelación y pérdida de captura restablecen la cara |
 | Letras, números, iconos y distribuciones | Contenido nativo; se conservan tamaños y posiciones de Windows |
 | Bloqueo de Mayús y teclas muertas | Se conservan cambios nativos de glifo y contenido; el halo dorado específico necesita un estado nativo observado |
-| Polvo WebP 3240×140, 18 frames/720 ms | Recurso conservado; efecto no implementado |
+| Polvo WebP 3240×140, 18 frames/720 ms | Sprite de 126×98 al pulsar, avance discreto y fundido en los últimos 144 ms, animado por Composition |
+| Desplazamiento de texto pulsado | 3 px cuando el contenido nativo no tiene una transformación propia; restaurado al soltar |
 | Sonido del teclado Steam | No se modifica el sonido nativo |
 
 Los PNG y WebP se cargan desde RCDATA mediante un stream en memoria, sin depender

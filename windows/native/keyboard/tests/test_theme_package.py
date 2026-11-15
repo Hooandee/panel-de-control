@@ -25,7 +25,7 @@ class ThemePackageTests(unittest.TestCase):
         self.assertEqual('TextInputHost.exe', manifest['target'])
         self.assertTrue(manifest['supportedBuilds'])
         self.assertTrue(all(isinstance(build, int) and build >= 22000 for build in manifest['supportedBuilds']))
-        self.assertEqual({'key', 'plate'}, {binding['kind'] for binding in manifest['bindings']})
+        self.assertEqual({'key', 'plate', 'chrome'}, {binding['kind'] for binding in manifest['bindings']})
 
 
 if __name__ == '__main__':

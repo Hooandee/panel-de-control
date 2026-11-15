@@ -100,6 +100,11 @@
     {
       "kind": "plate",
       "parentType": "WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardGrid"
+    },
+    {
+      "kind": "chrome",
+      "anchorType": "WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.GripperBar",
+      "scope": "parent_grid_of_keyboard_grid"
     }
   ],
   "supportedBuilds": [
@@ -108,7 +113,18 @@
   "limitations": [
     "native_modifier_indicators",
     "native_label_sizes",
-    "native_suggestions_bar",
-    "dust_animation_not_applied"
-  ]
+    "native_window_corner_and_shadow"
+  ],
+  "effects": {
+    "dust": {
+      "asset": "assets/velvet-dust.webp",
+      "frames": 18,
+      "width": 126,
+      "height": 98,
+      "durationMs": 720,
+      "fadeStartsMs": 576,
+      "trigger": "pointer_pressed"
+    },
+    "pressedTextOffset": 3
+  }
 }

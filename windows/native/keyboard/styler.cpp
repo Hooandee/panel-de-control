@@ -34,6 +34,7 @@ using namespace Windows::UI::Xaml::Media;
 using namespace Windows::UI::Composition;
 using Windows::Foundation::IInspectable;
 constexpr wchar_t KeyType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey";
+constexpr wchar_t BarType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.GripperBar";
 constexpr wchar_t GridType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardGrid";
 std::atomic<bool> requested{false};
 std::atomic<ULONGLONG> lease{0}, generation{0};
@@ -79,7 +80,7 @@ struct Property {
     void Assign(IInspectable const& value) {
         if (element.GetValue(property) == value) return;
         if (assigned && element.ReadLocalValue(property) != owned) Capture();
-        element.SetValue(property, value); owned = value; assigned = true; restored = false;
+        element.SetValue(property, value); owned = value; assigned = true; restoring = false; restored = false;
     }
     void Restore() {
         if (restored || !assigned) return;
@@ -102,17 +103,30 @@ struct Label {
     std::unique_ptr<Property> font;
     bool icon = false, secondary = false;
 };
+bool IdentityTransform(Transform const& value) {
+    if (!value) return true;
+    auto origin = value.TransformPoint({0, 0});
+    auto horizontal = value.TransformPoint({1, 0});
+    auto vertical = value.TransformPoint({0, 1});
+    return origin.X == 0 && origin.Y == 0 && horizontal.X == 1 && horizontal.Y == 0 && vertical.X == 0 && vertical.Y == 1;
+}
 struct Cell {
     Border face{nullptr};
     Grid parent{nullptr};
     FrameworkElement key{nullptr};
     Grid outer{nullptr};
     ContentControl content{nullptr};
+    std::unique_ptr<Property> contentTransform;
+    TranslateTransform pressedTransform;
     FontFamily font{nullptr};
     SolidColorBrush ink{terciopelo::Ink}, soft{terciopelo::SoftInk}, accent{terciopelo::Accent}, pressedInk{terciopelo::Pressed};
     Canvas canvas{nullptr};
     SpriteVisual visual{nullptr};
     CompositionNineGridBrush brush{nullptr};
+    SpriteVisual dust{nullptr};
+    CompositionSurfaceBrush dustBrush{nullptr};
+    Vector2KeyFrameAnimation dustFrames{nullptr};
+    ScalarKeyFrameAnimation dustFade{nullptr};
     std::vector<Label> labels;
     bool retiring = false;
     bool inserted = false, unloaded = false, hover = false, pressed = false, focused = false;
@@ -125,10 +139,21 @@ struct Cell {
         if (retiring || !inserted) return;
         const unsigned index = pressed ? (focused ? 4 : 3) : focused ? 2 : hover ? 1 : 0;
         brush.Source(sources[index]);
+        if (contentTransform) {
+            if (pressed && content.RenderTransform() != pressedTransform && !IdentityTransform(content.RenderTransform())) {
+                contentTransform->Restore(); contentTransform.reset();
+            } else if (pressed) contentTransform->Assign(pressedTransform);
+            else contentTransform->Restore();
+        }
         for (auto& label : labels) {
             label.foreground->Assign(label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink);
             if (label.font) label.font->Assign(font);
         }
+    }
+    void Strike() {
+        if (retiring || !dust) return;
+        dustBrush.StartAnimation(L"Offset", dustFrames);
+        dust.StartAnimation(L"Opacity", dustFade);
     }
     void Geometry() {
         if (retiring || !visual || !parent || face.ActualWidth() <= 0 || face.ActualHeight() <= 0) return;
@@ -136,6 +161,8 @@ struct Cell {
         visual.Offset({origin.X - terciopelo::Outset, origin.Y - terciopelo::Outset, 0});
         visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
                      static_cast<float>(face.ActualHeight()) + 2 * terciopelo::Outset});
+        if (dust) dust.Offset({static_cast<float>(face.ActualWidth()) / 2 - 63 + terciopelo::Outset,
+            static_cast<float>(face.ActualHeight()) / 2 - 66 + terciopelo::Outset, 0});
     }
     void FindLabels(DependencyObject const& root, std::vector<TextBlock>& found, unsigned depth = 0) {
         if (depth > 6 || found.size() >= 12) return;
@@ -148,7 +175,15 @@ struct Cell {
         if (children.Size() != 3 || children.GetAt(0) != face || children.GetAt(1) != canvas) return false;
         auto current = children.GetAt(2).try_as<ContentControl>();
         if (!current) return false;
-        content = current;
+        if (current != content) {
+            if (contentTransform) contentTransform->Restore();
+            contentTransform.reset(); content = current;
+        }
+        if (!contentTransform) {
+            if (IdentityTransform(content.RenderTransform())) {
+                contentTransform = std::make_unique<Property>(content, UIElement::RenderTransformProperty()); pressedTransform.Y(3);
+            }
+        }
         std::vector<TextBlock> found;
         FindLabels(content, found);
         for (auto it = labels.begin(); it != labels.end();) {
@@ -190,7 +225,8 @@ struct Cell {
     void Pointer(RoutedEvent const& event, int action) {
         Windows::UI::Xaml::Input::PointerEventHandler handler([this, action](IInspectable const&, Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) noexcept {
             try {
-                if (action == 0) pressed = true;
+                if (retiring) return;
+                if (action == 0) { pressed = true; Strike(); }
                 else if (action == 1) pressed = false;
                 else if (action == 2) hover = true;
                 else if (action == 3) { hover = false; pressed = false; }
@@ -201,7 +237,7 @@ struct Cell {
         key.AddHandler(event, boxed, true);
         handlers.emplace_back(event, boxed);
     }
-    void Insert(std::array<LoadedImageSurface, 6> const& surfaces, FontFamily const& desiredFont) {
+    void Insert(std::array<LoadedImageSurface, 7> const& surfaces, FontFamily const& desiredFont) {
         auto children = parent.Children();
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
@@ -216,7 +252,20 @@ struct Cell {
         brush = compositor.CreateNineGridBrush();
         brush.SetInsets(terciopelo::Slice); brush.SetInsetScales(terciopelo::Border / terciopelo::Slice);
         brush.IsCenterHollow(false); brush.Source(sources[0]);
-        visual = compositor.CreateSpriteVisual(); visual.Brush(brush); Geometry();
+        visual = compositor.CreateSpriteVisual(); visual.Brush(brush);
+        dust = compositor.CreateSpriteVisual(); dust.Size({126, 98}); dust.Opacity(0);
+        dustBrush = compositor.CreateSurfaceBrush(surfaces[6]); dustBrush.Stretch(CompositionStretch::None);
+        dustBrush.HorizontalAlignmentRatio(0); dustBrush.VerticalAlignmentRatio(0); dustBrush.Scale({0.7f, 0.7f});
+        dust.Brush(dustBrush); visual.Children().InsertAtTop(dust);
+        auto steps = compositor.CreateStepEasingFunction(17);
+        steps.IsInitialStepSingleFrame(false); steps.IsFinalStepSingleFrame(true);
+        dustFrames = compositor.CreateVector2KeyFrameAnimation();
+        dustFrames.InsertKeyFrame(0, {0, 0}); dustFrames.InsertKeyFrame(1, {-2142, 0}, steps);
+        dustFrames.Duration(std::chrono::milliseconds(720));
+        dustFade = compositor.CreateScalarKeyFrameAnimation();
+        auto linear = compositor.CreateLinearEasingFunction();
+        dustFade.InsertKeyFrame(0, 1); dustFade.InsertKeyFrame(0.8f, 1, linear); dustFade.InsertKeyFrame(1, 0, linear);
+        dustFade.Duration(std::chrono::milliseconds(720)); Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
         children.InsertAt(1, canvas); inserted = true;
@@ -245,6 +294,7 @@ struct Cell {
                 Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, nullptr);
             }
         });
+        if (contentTransform) attempt([&] { contentTransform->Restore(); });
         for (auto& label : labels) {
             attempt([&] { label.foreground->Restore(); });
             if (label.font) attempt([&] { label.font->Restore(); });
@@ -283,18 +333,78 @@ struct Plate {
         } catch (...) { Fail(to_hresult()); return false; }
     }
 };
+struct Chrome {
+    Grid root{nullptr};
+    FrameworkElement bar{nullptr};
+    Plate plate;
+    bool confirmed = false;
+    SolidColorBrush background{terciopelo::Background}, clear{Color{0, 0, 0, 0}}, accent{terciopelo::Accent};
+    struct Entry { std::unique_ptr<Property> property; IInspectable value; };
+    std::vector<Entry> properties;
+    void Set(FrameworkElement const& element, DependencyProperty const& dp, IInspectable const& value) {
+        for (auto& entry : properties) if (entry.property->element == element && entry.property->property == dp) {
+            entry.property->Assign(value); return;
+        }
+        if (properties.size() >= 256) throw hresult_error(E_BOUNDS);
+        auto property = std::make_unique<Property>(element, dp);
+        properties.push_back({std::move(property), value});
+        properties.back().property->Assign(value);
+    }
+    void StyleBar(DependencyObject const& node, unsigned depth = 0) {
+        if (depth > 10) throw hresult_error(E_BOUNDS);
+        if (auto panel = node.try_as<Panel>()) Set(panel, Panel::BackgroundProperty(), clear);
+        if (auto border = node.try_as<Border>()) Set(border, Border::BackgroundProperty(), clear);
+        if (auto control = node.try_as<Control>()) {
+            Set(control, Control::BackgroundProperty(), clear);
+            Set(control, Control::ForegroundProperty(), accent);
+        }
+        if (auto text = node.try_as<TextBlock>()) Set(text, TextBlock::ForegroundProperty(), accent);
+        if (auto icon = node.try_as<IconElement>()) Set(icon, IconElement::ForegroundProperty(), accent);
+        for (int i = 0, n = VisualTreeHelper::GetChildrenCount(node); i < n; ++i)
+            StyleBar(VisualTreeHelper::GetChild(node, i), depth + 1);
+    }
+    bool Update() {
+        if (VisualTreeHelper::GetParent(bar) != root) return false;
+        unsigned index = 0;
+        if (!root.Children().IndexOf(plate.canvas, index) || index != 0 ||
+            Hosting::ElementCompositionPreview::GetElementChildVisual(plate.canvas) != plate.visual) return false;
+        for (auto it = properties.begin(); it != properties.end();) {
+            DependencyObject node = it->property->element;
+            for (unsigned depth = 0; node && node != root && depth < 16; ++depth) node = VisualTreeHelper::GetParent(node);
+            if (node != root) { it->property->Restore(); it = properties.erase(it); }
+            else ++it;
+        }
+        Set(root, Panel::BackgroundProperty(), background);
+        for (auto const& child : root.Children()) {
+            auto type = get_class_name(child);
+            if (child == bar || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
+        }
+        for (auto const& entry : properties)
+            if (entry.property->element.GetValue(entry.property->property) != entry.value) return false;
+        return true;
+    }
+    bool Restore() noexcept {
+        bool clean = plate.Restore();
+        for (auto& entry : properties) {
+            try { entry.property->Restore(); }
+            catch (...) { clean = false; Fail(to_hresult()); }
+        }
+        return clean;
+    }
+};
 struct Engine {
     ULONGLONG epoch = 0, loadingStarted = 0;
     FontResource font;
     bool fontReady = false;
     unsigned fontChecks = 0;
     DispatcherTimer timer{nullptr}; event_token tick{};
-    std::array<LoadedImageSurface, 6> surfaces{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    std::array<event_token, 6> completions{};
-    std::array<bool, 6> ready{};
+    std::array<LoadedImageSurface, 7> surfaces{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    std::array<event_token, 7> completions{};
+    std::array<bool, 7> ready{};
     std::vector<std::unique_ptr<Cell>> cells;
     std::vector<weak_ref<FrameworkElement>> candidates;
     std::vector<std::unique_ptr<Plate>> plates;
+    std::vector<std::unique_ptr<Chrome>> chromes;
     unsigned restored = 0, cleanupAttempts = 0;
     bool started = false;
 
@@ -309,7 +419,7 @@ struct Engine {
         font.Load(module);
         auto dispatcher = anchor.Dispatcher();
         for (unsigned i = 0; i < surfaces.size(); ++i) {
-            auto resource = FindResourceW(module, MAKEINTRESOURCEW(101 + i), RT_RCDATA);
+            auto resource = FindResourceW(module, MAKEINTRESOURCEW(i == 6 ? 108 : 101 + i), RT_RCDATA);
             if (!resource) throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
             auto bytes = static_cast<const BYTE*>(LockResource(LoadResource(module, resource)));
             auto count = SizeofResource(module, resource);
@@ -362,6 +472,22 @@ struct Engine {
         if (!parent || parent.Children().Size() < 2) return;
         if (auto face = parent.Children().GetAt(0).try_as<Border>()) Add(face, epoch);
     }
+    bool EnsureChrome(Cell const& cell) {
+        auto keys = VisualTreeHelper::GetParent(cell.key);
+        if (!keys) return false;
+        auto grid = VisualTreeHelper::GetParent(keys);
+        if (!grid || get_class_name(grid) != GridType) return false;
+        auto root = VisualTreeHelper::GetParent(grid).try_as<Grid>();
+        if (!root) return false;
+        for (auto const& chrome : chromes) if (chrome->root == root) return chrome->confirmed;
+        FrameworkElement bar{nullptr};
+        for (auto const& child : root.Children()) if (get_class_name(child) == BarType) bar = child.as<FrameworkElement>();
+        if (!bar || chromes.size() >= 8) return false;
+        auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar;
+        auto pointer = chrome.get(); chromes.push_back(std::move(chrome));
+        pointer->plate.Insert(root, surfaces[5]);
+        return pointer->confirmed = pointer->Update();
+    }
     void EnsurePlate(Cell const& cell) {
         auto parent = VisualTreeHelper::GetParent(cell.key).try_as<Grid>();
         if (!parent) return;
@@ -383,6 +509,7 @@ struct Engine {
                 Fail(HRESULT_FROM_WIN32(ERROR_TIMEOUT)); requested = false; stopping = true;
             }
             unsigned visible = 0, styled = 0, pending = 0;
+            if (!stopping) for (auto const& chrome : chromes) chrome->confirmed = chrome->Update();
             if (!stopping) for (auto it = candidates.begin(); it != candidates.end();) {
                 auto key = it->get();
                 if (!key || !VisualTreeHelper::GetParent(key)) { it = candidates.erase(it); continue; }
@@ -404,7 +531,7 @@ struct Engine {
                     if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
                     unsigned childIndex = 0;
                     if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
-                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels()) ++styled;
+                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) ++styled;
                     else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
                 }
                 ++it;
@@ -415,8 +542,14 @@ struct Engine {
                 }
                 ++it;
             }
+            for (auto it = chromes.begin(); it != chromes.end();) {
+                if (stopping || !VisualTreeHelper::GetParent((*it)->root) || VisualTreeHelper::GetParent((*it)->bar) != (*it)->root) {
+                    if ((*it)->Restore()) { it = chromes.erase(it); continue; }
+                }
+                ++it;
+            }
             pending = visible > styled ? visible - styled : 0;
-            const bool clean = stopping && cells.empty() && plates.empty();
+            const bool clean = stopping && cells.empty() && plates.empty() && chromes.empty();
             if (stopping && !clean && ++cleanupAttempts > 12) {
                 Fail(E_FAIL); timer.Stop(); return;
             }
