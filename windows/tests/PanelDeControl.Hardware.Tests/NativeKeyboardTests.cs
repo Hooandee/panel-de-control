@@ -100,6 +100,41 @@ public sealed class NativeKeyboardTests
     }
 
     [Fact]
+    public async Task ReplacementKeyboardCanWaitForXamlAndRecoverWithoutReactivation()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 40, pid: 16740));
+        Assert.Equal("applied", controller.Status.Status);
+        Assert.Equal(40, controller.Status.StyledKeys);
+        Assert.Equal(16740, controller.Status.ProcessId);
+
+        host.Emit(Receipt("waiting_for_keyboard", pid: 17200,
+            errorCode: "xaml_framework_not_observed", connected: false));
+        Assert.True(controller.Status.Requested);
+        Assert.Equal("waiting_for_keyboard", controller.Status.Status);
+        Assert.Equal("xaml_framework_not_observed", controller.Status.ErrorCode);
+        Assert.Equal(17200, controller.Status.ProcessId);
+        Assert.False(controller.Status.Connected);
+        Assert.Equal(0, controller.Status.StyledKeys);
+        Assert.Equal(0, controller.Status.KeyCount);
+        Assert.False(host.StopRequested.Task.IsCompleted);
+
+        host.Emit(Receipt("applied", styled: 40, pid: 17200));
+        Assert.True(controller.Status.Requested);
+        Assert.Equal("applied", controller.Status.Status);
+        Assert.Equal("styles_active", controller.Status.ErrorCode);
+        Assert.Equal(17200, controller.Status.ProcessId);
+        Assert.True(controller.Status.Connected);
+        Assert.Equal(40, controller.Status.StyledKeys);
+        Assert.Equal(40, controller.Status.KeyCount);
+        Assert.Equal(1, host.Starts);
+        host.Finish();
+    }
+
+    [Fact]
     public async Task MissingRuntimeAndSilenceNeverRestartAutomatically()
     {
         var absent = new Host(available: false);
@@ -181,10 +216,11 @@ public sealed class NativeKeyboardTests
         host.Finish();
     }
 
-    private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300) => JsonSerializer.Serialize(new
+    private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300,
+        string? errorCode = null, bool? connected = null) => JsonSerializer.Serialize(new
     {
-        status, errorCode = status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running", windowsBuild = build, architecture = "x64", processId = pid,
-        connected = pid != 0, observedElements = 0, nodes = Array.Empty<object>(), hresult = 0,
+        status, errorCode = errorCode ?? (status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running"), windowsBuild = build, architecture = "x64", processId = pid,
+        connected = connected ?? pid != 0, observedElements = 0, nodes = Array.Empty<object>(), hresult = 0,
         styledKeys = styled, restoredKeys = restored, keyCount = styled, pendingKeys = 0, stateCatalog = Array.Empty<string>(),
     });
 

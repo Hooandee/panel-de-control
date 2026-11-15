@@ -218,7 +218,10 @@ multilínea, contraseña, RichTextBox y ComboBox editable), ocho campos en Edge
 (texto, contraseña, búsqueda, correo, URL, número, textarea y contenteditable),
 texto y contraseña en una aplicación elevada y búsqueda en un diálogo nativo de
 archivos. Estas comprobaciones usan campos propios y texto sintético; no prueban
-cualquier aplicación posible. Se conserva la capitalización y el enmascarado
+cualquier aplicación posible. También se han comprobado tres ciclos consecutivos
+de activar/restaurar desde la UI, desactivación inmediata y cierre/reapertura de
+Panel: cerrar su ventana conserva el tema mientras siga vivo el companion.
+Se conserva la capitalización y el enmascarado
 nativos. El tema no añade apertura automática donde Windows no la proporciona,
 ni soporte para el escritorio seguro de UAC o la pantalla de inicio de sesión.
 
