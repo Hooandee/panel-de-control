@@ -293,10 +293,13 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
         while (true) {
             const bool stopping = stopRequested.load();
             if (!WriteCommand(pipe.value, event.value, stopping ? 2 : 1) || !ReadReport(pipe.value, event.value, report)) {
-                Result("connection_failed", stopping ? "restore_unconfirmed" : "receipt_invalid"); return 0;
+                if (WaitForSingleObject(process.value, 100) == WAIT_OBJECT_0)
+                    Result(stopping ? "disabled" : "waiting_for_keyboard", stopping ? "styles_restored" : "keyboard_not_running");
+                else Result("connection_failed", stopping ? "restore_unconfirmed" : "receipt_invalid");
+                return 0;
             }
-            if (WaitForSingleObject(process.value, 0) != WAIT_TIMEOUT) {
-                Result("waiting_for_keyboard", "keyboard_not_running"); return 0;
+            if (WaitForSingleObject(process.value, 0) == WAIT_OBJECT_0) {
+                Result(stopping ? "disabled" : "waiting_for_keyboard", stopping ? "styles_restored" : "keyboard_not_running"); return 0;
             }
             StyleResult(report);
             if (stopping || report.phase == keyboard::StylePhase::Idle || FAILED(report.styleResult)) return 0;
@@ -334,6 +337,7 @@ int wmain(int argc, wchar_t** argv) {
         if (lastStatus == "unsupported" || lastStatus == "runtime_missing") break;
         for (int i = 0; i < 20 && !stopRequested; ++i) Sleep(100);
     } while (!stopRequested);
-    if (!targetPid && lastStatus == "waiting_for_keyboard") Result("disabled", "styles_restored");
+    if ((lastStatus == "waiting_for_keyboard" && lastError == "keyboard_not_running") ||
+        (attempts == 0 && lastError == "xaml_framework_not_observed")) Result("disabled", "styles_restored");
     return 0;
 }
