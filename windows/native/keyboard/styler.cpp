@@ -111,6 +111,13 @@ bool IdentityTransform(Transform const& value) {
     auto vertical = value.TransformPoint({0, 1});
     return origin.X == 0 && origin.Y == 0 && horizontal.X == 1 && horizontal.Y == 0 && vertical.X == 0 && vertical.Y == 1;
 }
+void FollowNativeOpacity(UIElement const& source, UIElement const& target) {
+    auto native = Hosting::ElementCompositionPreview::GetElementVisual(source);
+    auto overlay = Hosting::ElementCompositionPreview::GetElementVisual(target);
+    auto opacity = native.Compositor().CreateExpressionAnimation(L"native.Opacity");
+    opacity.SetReferenceParameter(L"native", native);
+    overlay.StartAnimation(L"Opacity", opacity);
+}
 struct Cell {
     Border face{nullptr};
     Grid parent{nullptr};
@@ -176,7 +183,11 @@ struct Cell {
         dust.StartAnimation(L"Opacity", dustFade);
     }
     void Geometry() {
-        if (retiring || !visual || !parent || face.ActualWidth() <= 0 || face.ActualHeight() <= 0) return;
+        if (retiring || !visual || !parent) return;
+        const bool visible = face.Visibility() == Visibility::Visible && face.ActualWidth() > 0 && face.ActualHeight() > 0;
+        visual.Opacity(visible ? 1 : 0);
+        if (dustCanvas) dustCanvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+        if (!visible) return;
         const auto origin = face.TransformToVisual(parent).TransformPoint({0, 0});
         visual.Offset({origin.X - terciopelo::Outset, origin.Y - terciopelo::Outset, 0});
         visual.Size({static_cast<float>(face.ActualWidth()) + 2 * terciopelo::Outset,
@@ -293,6 +304,8 @@ struct Cell {
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
         children.InsertAt(1, canvas); inserted = true; children.Append(dustCanvas);
+        FollowNativeOpacity(face, canvas);
+        FollowNativeOpacity(face, dustCanvas);
         size = face.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { unloaded = true; } });
         removed = key.Unloaded([this](auto const&, auto const&) noexcept { unloaded = true; });
         Pointer(UIElement::PointerPressedEvent(), 0); Pointer(UIElement::PointerReleasedEvent(), 1);
@@ -368,6 +381,7 @@ struct Plate {
         Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         parent.Children().InsertAt(0, canvas);
+        if (frame) FollowNativeOpacity(frame, canvas);
         size = parent.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { Fail(to_hresult()); requested = false; } });
     }
     bool Restore() noexcept {
@@ -462,6 +476,7 @@ struct Chrome {
             auto next = FindFrame(root);
             if (!next) { plate.visual.Opacity(0); return false; }
             plate.frame = next;
+            FollowNativeOpacity(next, plate.canvas);
         }
         plate.Geometry();
         for (auto const& child : root.Children()) {
@@ -632,6 +647,7 @@ struct Engine {
             }
             for (auto it = cells.begin(); it != cells.end();) {
                 auto& cell = **it;
+                if (!stopping && cell.inserted) cell.Geometry();
                 if (stopping || cell.unloaded || !VisualTreeHelper::GetParent(cell.key) ||
                     VisualTreeHelper::GetParent(cell.face) != cell.parent ||
                     (cell.outer ? (VisualTreeHelper::GetParent(cell.parent) != cell.outer || VisualTreeHelper::GetParent(cell.outer) != cell.key)
