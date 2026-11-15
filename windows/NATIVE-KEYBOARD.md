@@ -26,7 +26,9 @@ no se desactiva seguridad ni se necesita un servicio privilegiado para el tema.
 El helper observa reinicios del proceso a intervalos de dos segundos, con hasta
 tres intentos de conexión por ejecución. Las teclas nuevas llegan por el árbol
 visual; una reconciliación de 250 ms verifica identidad, disposición de los
-nodos propios, cambios de plantilla y caducidad. No lee ni registra texto,
+nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resuelven
+en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
+conservar fuente y colores al cambiar Mayús sin esperar al temporizador. No lee ni registra texto,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
 capturan el puntero.
