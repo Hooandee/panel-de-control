@@ -2,6 +2,7 @@
 #undef NDEBUG
 #include <cassert>
 #include <cstring>
+#include <limits>
 int main() {
     keyboard::Report report{};
     assert(keyboard::Valid(report));
@@ -29,6 +30,16 @@ int main() {
     report = {};
     report.stateCount = 1;
     std::strcpy(report.states[0], "state with input");
+    assert(!keyboard::Valid(report));
+    report = {};
+    report.chromeCount = 1;
+    report.chrome[0].width = std::numeric_limits<float>::infinity();
+    assert(!keyboard::Valid(report));
+    report.chrome[0].width = -1;
+    assert(!keyboard::Valid(report));
+    report.chrome[0].width = 800;
+    assert(keyboard::Valid(report));
+    report.chromeCount = keyboard::MaxChromeNodes + 1;
     assert(!keyboard::Valid(report));
     report = {};
     report.version = 9;

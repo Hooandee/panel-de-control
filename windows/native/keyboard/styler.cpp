@@ -360,6 +360,21 @@ struct Chrome {
     SolidColorBrush background{terciopelo::Background}, clear{Color{0, 0, 0, 0}}, accent{terciopelo::Accent};
     struct Entry { std::unique_ptr<Property> property; IInspectable value; };
     std::vector<Entry> properties;
+    void Measure() {
+        std::lock_guard lock(receiptGate);
+        receipt.chromeCount = 0;
+        auto record = [&](FrameworkElement const& element, unsigned kind, bool hasBackground, double radius) {
+            if (receipt.chromeCount >= MaxChromeNodes) return;
+            auto origin = element.TransformToVisual(root).TransformPoint({0, 0});
+            receipt.chrome[receipt.chromeCount++] = {kind, hasBackground ? 1u : 0u, origin.X, origin.Y,
+                static_cast<float>(element.ActualWidth()), static_cast<float>(element.ActualHeight()), static_cast<float>(radius)};
+        };
+        record(root, 0, !!root.Background(), root.CornerRadius().TopLeft);
+        for (auto const& child : root.Children()) {
+            if (auto border = child.try_as<Border>()) record(border, 2, !!border.Background(), border.CornerRadius().TopLeft);
+            else if (auto grid = child.try_as<Grid>()) record(grid, 1, !!grid.Background(), grid.CornerRadius().TopLeft);
+        }
+    }
     void Set(FrameworkElement const& element, DependencyProperty const& dp, IInspectable const& value) {
         for (auto& entry : properties) if (entry.property->element == element && entry.property->property == dp) {
             entry.property->Assign(value); return;
@@ -520,6 +535,7 @@ struct Engine {
         if (!bar || chromes.size() >= 8) return false;
         auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar;
         auto pointer = chrome.get(); chromes.push_back(std::move(chrome));
+        pointer->Measure();
         pointer->plate.Insert(root, surfaces[5]);
         return pointer->confirmed = pointer->Update();
     }
@@ -658,5 +674,7 @@ void ReadStyleSession(Report& report) noexcept {
     report.restoredKeys = receipt.restoredKeys; report.pendingKeys = receipt.pendingKeys;
     report.styleResult = receipt.styleResult; report.stateCount = receipt.stateCount;
     memcpy(report.states, receipt.states, sizeof(receipt.states));
+    report.chromeCount = receipt.chromeCount;
+    memcpy(report.chrome, receipt.chrome, sizeof(receipt.chrome));
 }
 }

@@ -40,6 +40,14 @@ void Result(const char* status, const char* error, HRESULT hr = S_OK,
         if (i) std::cout << ',';
         std::cout << '\"' << report->states[i] << '\"';
     }
+    std::cout << "],\"chromeGeometry\":[";
+    if (report) for (unsigned i = 0; i < report->chromeCount; ++i) {
+        if (i) std::cout << ',';
+        const auto& n = report->chrome[i];
+        std::cout << "{\"kind\":" << n.kind << ",\"background\":" << n.background
+                  << ",\"x\":" << n.x << ",\"y\":" << n.y << ",\"width\":" << n.width
+                  << ",\"height\":" << n.height << ",\"radius\":" << n.radius << '}';
+    }
     std::cout << "],\"nodes\":[";
     if (report) for (std::uint32_t i = 0; i < report->count; ++i) {
         if (i) std::cout << ',';
