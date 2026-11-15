@@ -186,6 +186,13 @@ La validación física en ROG Xbox Ally X, build 26300 x64, incluye cobertura de
 privada y polvo visible mediante pulsación de Mayús. Se han comprobado cierre
 con X y reapertura, restauración tras caída del helper, reactivación desde Panel
 y reconexión tras reiniciar TextInputHost. La prueba visual no mide la duración
-ni fluidez de cada fotograma. La validación del MSIX final completo, actualización
-desde producción y desinstalación con el tema activo siguen pendientes.
+ni fluidez de cada fotograma. El paquete MSIX completo también se ha instalado en modo de desarrollo: se
+comprobaron activación desde Panel, escritura de letras, borrar, espacio, Mayús
+e Intro, cierre con X, reapertura, recuperación tras caída del helper y reinicio
+de TextInputHost, y polvo visible con entrada real. La placa flotante respeta el
+contorno nativo observado sin pintar su margen de sombra.
+Siguen pendientes el cambio de tamaño o DPI, todas las distribuciones de idioma,
+las interacciones de mando y deslizamiento, actualización desde producción y
+desinstalación con el tema activo. El halo latched y la sombra de texto específica
+de Steam no están adaptados. No se declara equivalencia visual completa.
 Las pruebas de compilación y protocolo no sustituyen esos recorridos.
