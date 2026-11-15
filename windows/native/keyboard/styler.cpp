@@ -250,7 +250,8 @@ struct Cell {
         for (auto const& text : found) {
             bool known = false;
             auto family = text.FontFamily().Source();
-            const bool icon = std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
+            const bool icon = std::wstring_view(family) == L"Xbox Fluent v2" ||
+                std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"Symbol") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"MDL2") != std::wstring_view::npos;
             for (auto& label : labels) if (label.element == text) {

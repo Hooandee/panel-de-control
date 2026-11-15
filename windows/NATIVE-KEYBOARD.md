@@ -96,6 +96,11 @@ Josefin se extrae a un archivo propio de nombre único en TemporaryFolder del
 proceso destino y se referencia mediante ms-appdata. No se instala globalmente.
 Se verifica una diferencia de métricas frente al fallback con una cadena fija,
 y se contrasta visualmente la tipografía; no se inspecciona texto del teclado.
+Los indicadores de mando observados usan Xbox Fluent v2; se conserva esa fuente
+igual que las fuentes nativas de iconos. El diagnóstico incluye hasta dieciséis
+muestras de familia, ubicación fondo/contenido, tamaño, opacidad y visibilidad,
+sin texto ni rutas de archivos.
+
 La restauración repone FontFamily y elimina el archivo propio cuando el sistema
 lo permite. Si sigue en uso, se conserva una sola ruta y se verifican sus bytes
 antes de reutilizarla; no se sobrescriben archivos ajenos.
