@@ -74,7 +74,7 @@ struct Property {
     }
     void Restore() {
         if (restored) return;
-        if (binding) element.SetBinding(property, binding);
+        if (binding) { element.ClearValue(property); element.SetBinding(property, binding); }
         else if (original == DependencyProperty::UnsetValue()) element.ClearValue(property);
         else element.SetValue(property, original);
         restored = true;
@@ -89,13 +89,14 @@ struct Cell {
     Border face{nullptr};
     Grid parent{nullptr};
     FrameworkElement key{nullptr};
+    Grid outer{nullptr};
     Canvas canvas{nullptr};
     SpriteVisual visual{nullptr};
     CompositionNineGridBrush brush{nullptr};
     std::vector<Label> labels;
     bool inserted = false, unloaded = false, hover = false, pressed = false, focused = false;
     std::vector<std::pair<RoutedEvent, IInspectable>> handlers;
-    event_token size{}, removed{};
+    event_token size{}, removed{}, gotFocus{}, lostFocus{};
     std::vector<std::pair<VisualStateGroup, event_token>> groups;
     std::array<CompositionSurfaceBrush, 5> sources{nullptr, nullptr, nullptr, nullptr, nullptr};
 
@@ -126,7 +127,7 @@ struct Cell {
             ReadLabels(VisualTreeHelper::GetChild(root, i), depth + 1);
     }
     void Pointer(RoutedEvent const& event, int action) {
-        Input::PointerEventHandler handler([this, action](IInspectable const&, Input::PointerRoutedEventArgs const&) noexcept {
+        Windows::UI::Xaml::Input::PointerEventHandler handler([this, action](IInspectable const&, Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) noexcept {
             try {
                 if (action == 0) pressed = true;
                 else if (action == 1) pressed = false;
@@ -135,8 +136,9 @@ struct Cell {
                 Paint();
             } catch (...) { Fail(to_hresult()); requested = false; }
         });
-        key.AddHandler(event, handler, true);
-        handlers.emplace_back(event, handler);
+        auto boxed = box_value(handler);
+        key.AddHandler(event, boxed, true);
+        handlers.emplace_back(event, boxed);
     }
     void Insert(std::array<LoadedImageSurface, 6> const& surfaces) {
         auto children = parent.Children();
@@ -164,8 +166,8 @@ struct Cell {
         Pointer(UIElement::PointerCanceledEvent(), 3); Pointer(UIElement::PointerCaptureLostEvent(), 3);
         RoutedEventHandler got([this](auto const&, auto const&) noexcept { try { focused = true; Paint(); } catch (...) { Fail(to_hresult()); requested = false; } });
         RoutedEventHandler lost([this](auto const&, auto const&) noexcept { try { focused = false; Paint(); } catch (...) { Fail(to_hresult()); requested = false; } });
-        key.AddHandler(UIElement::GotFocusEvent(), got, true); handlers.emplace_back(UIElement::GotFocusEvent(), got);
-        key.AddHandler(UIElement::LostFocusEvent(), lost, true); handlers.emplace_back(UIElement::LostFocusEvent(), lost);
+        gotFocus = key.GotFocus(got);
+        lostFocus = key.LostFocus(lost);
         Catalog(key); Catalog(parent);
         if (auto outer = VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>()) Catalog(outer);
         Paint();
@@ -185,6 +187,8 @@ struct Cell {
         for (auto& pair : handlers) attempt([&] { key.RemoveHandler(pair.first, pair.second); });
         attempt([&] { if (size.value) face.SizeChanged(size); });
         attempt([&] { if (removed.value) key.Unloaded(removed); });
+        attempt([&] { if (gotFocus.value) key.GotFocus(gotFocus); });
+        attempt([&] { if (lostFocus.value) key.LostFocus(lostFocus); });
         if (clean) { handlers.clear(); labels.clear(); inserted = false; }
         return clean;
     }
@@ -221,18 +225,19 @@ struct Engine {
     std::array<event_token, 6> completions{};
     std::array<bool, 6> ready{};
     std::vector<std::unique_ptr<Cell>> cells;
+    std::vector<weak_ref<FrameworkElement>> candidates;
     std::vector<std::unique_ptr<Plate>> plates;
     unsigned restored = 0, cleanupAttempts = 0;
     bool started = false;
 
     void Start(FrameworkElement const& anchor, ULONGLONG value) {
         if (started) return;
-        epoch = value; started = true; ready.fill(false); restored = 0; cleanupAttempts = 0;
+        epoch = value; ready.fill(false); restored = 0; cleanupAttempts = 0;
         HMODULE module = nullptr;
         check_bool(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
         timer = DispatcherTimer(); timer.Interval(std::chrono::milliseconds(250));
-        tick = timer.Tick([this](auto const&, auto const&) noexcept { Update(); }); timer.Start();
+        tick = timer.Tick([this](auto const&, auto const&) noexcept { Update(); }); timer.Start(); started = true;
         auto dispatcher = anchor.Dispatcher();
         for (unsigned i = 0; i < surfaces.size(); ++i) {
             auto resource = FindResourceW(module, MAKEINTRESOURCEW(101 + i), RT_RCDATA);
@@ -268,9 +273,25 @@ struct Engine {
         auto key = VisualTreeHelper::GetParent(outer).try_as<FrameworkElement>();
         if (!key || get_class_name(key) != KeyType) return;
         if (cells.size() >= 256) { Fail(E_BOUNDS); requested = false; return; }
-        Start(parent, value);
-        auto cell = std::make_unique<Cell>(); cell->face = face; cell->parent = parent; cell->key = key;
+        auto cell = std::make_unique<Cell>(); cell->face = face; cell->parent = parent; cell->key = key; cell->outer = outer;
         cells.push_back(std::move(cell));
+    }
+    void AddCandidate(FrameworkElement const& key, ULONGLONG value) {
+        if (!requested || generation != value || get_class_name(key) != KeyType) return;
+        DWORD empty = 0, thread = GetCurrentThreadId();
+        if (!owner.compare_exchange_strong(empty, thread) && empty != thread) return;
+        Start(key, value);
+        for (auto const& weak : candidates) if (weak.get() == key) return;
+        if (candidates.size() >= 256) { Fail(E_BOUNDS); requested = false; return; }
+        candidates.push_back(make_weak(key));
+    }
+    void FindFace(FrameworkElement const& key) {
+        if (VisualTreeHelper::GetChildrenCount(key) != 1) return;
+        auto outer = VisualTreeHelper::GetChild(key, 0).try_as<Grid>();
+        if (!outer || outer.Children().Size() != 1) return;
+        auto parent = outer.Children().GetAt(0).try_as<Grid>();
+        if (!parent || parent.Children().Size() < 2) return;
+        if (auto face = parent.Children().GetAt(0).try_as<Border>()) Add(face, epoch);
     }
     void EnsurePlate(Cell const& cell) {
         auto parent = VisualTreeHelper::GetParent(cell.key).try_as<Grid>();
@@ -288,16 +309,29 @@ struct Engine {
             bool stopping = !requested || epoch != generation;
             bool loaded = true; for (bool value : ready) loaded &= value;
             unsigned visible = 0, styled = 0, pending = 0;
+            if (!stopping) for (auto it = candidates.begin(); it != candidates.end();) {
+                auto key = it->get();
+                if (!key || !VisualTreeHelper::GetParent(key)) { it = candidates.erase(it); continue; }
+                if (key.XamlRoot() && key.XamlRoot().IsHostVisible() && key.ActualWidth() > 0 && key.ActualHeight() > 0) {
+                    ++visible; FindFace(key);
+                }
+                ++it;
+            }
             for (auto it = cells.begin(); it != cells.end();) {
                 auto& cell = **it;
-                if (stopping || cell.unloaded || !VisualTreeHelper::GetParent(cell.key)) {
+                if (stopping || cell.unloaded || !VisualTreeHelper::GetParent(cell.key) ||
+                    VisualTreeHelper::GetParent(cell.face) != cell.parent ||
+                    VisualTreeHelper::GetParent(cell.parent) != cell.outer ||
+                    VisualTreeHelper::GetParent(cell.outer) != cell.key) {
                     const bool wasInserted = cell.inserted;
                     if (cell.Restore()) { if (wasInserted) ++restored; it = cells.erase(it); continue; }
                 } else if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&
-                           cell.face.ActualWidth() >= 36 && cell.face.ActualHeight() >= 36) {
-                    ++visible;
+                           cell.face.ActualWidth() > 0 && cell.face.ActualHeight() > 0) {
                     if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces); }
-                    if (cell.inserted) ++styled; else ++pending;
+                    unsigned childIndex = 0;
+                    if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
+                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual) ++styled;
+                    else if (cell.inserted) cell.unloaded = true;
                 }
                 ++it;
             }
@@ -307,6 +341,7 @@ struct Engine {
                 }
                 ++it;
             }
+            pending = visible > styled ? visible - styled : 0;
             const bool clean = stopping && cells.empty() && plates.empty();
             if (stopping && !clean && ++cleanupAttempts > 12) {
                 Fail(E_FAIL); timer.Stop(); return;
@@ -327,7 +362,7 @@ struct Engine {
                 for (unsigned i = 0; i < surfaces.size(); ++i) {
                     if (surfaces[i]) surfaces[i].LoadCompleted(completions[i]); surfaces[i] = nullptr;
                 }
-                started = false; owner = 0;
+                candidates.clear(); started = false; owner = 0;
             }
         } catch (...) { Fail(to_hresult()); requested = false; }
     }
@@ -352,23 +387,21 @@ void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept
     try {
         IInspectable object{nullptr};
         check_hresult(diagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(put_abi(object))));
-        auto face = object.try_as<Border>();
-        if (!face || !face.Dispatcher().HasThreadAccess()) return;
-        auto parent = VisualTreeHelper::GetParent(face).try_as<Grid>();
-        if (!parent) return;
-        auto outer = VisualTreeHelper::GetParent(parent).try_as<Grid>();
-        if (!outer) return;
-        auto key = VisualTreeHelper::GetParent(outer);
-        if (!key || get_class_name(key) != KeyType) return;
-        DWORD empty = 0, thread = GetCurrentThreadId();
-        if (!owner.compare_exchange_strong(empty, thread) && empty != thread) return;
+        auto key = object.try_as<FrameworkElement>();
+        if (!key || !key.Dispatcher().HasThreadAccess() || get_class_name(key) != KeyType) return;
+        const auto thread = owner.load();
+        if (thread && thread != GetCurrentThreadId()) return;
         const auto value = generation.load();
-        face.Dispatcher().RunAsync(Core::CoreDispatcherPriority::Normal, [face, value]() noexcept {
-            try { Current().Add(face, value); }
-            catch (...) { Fail(to_hresult()); requested = false; Current().Update(); }
+        key.Dispatcher().RunAsync(Core::CoreDispatcherPriority::Normal, [key, value]() noexcept {
+            try { Current().AddCandidate(key, value); }
+            catch (...) {
+                Fail(to_hresult()); requested = false;
+                if (Current().started) Current().Update(); else owner = 0;
+            }
         });
     } catch (...) { Fail(to_hresult()); requested = false; }
 }
+
 void ReadStyleSession(Report& report) noexcept {
     std::lock_guard lock(receiptGate);
     report.phase = receipt.phase; report.keyCount = receipt.keyCount; report.styledKeys = receipt.styledKeys;

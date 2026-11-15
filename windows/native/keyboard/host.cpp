@@ -316,6 +316,6 @@ int wmain(int argc, wchar_t** argv) {
         if (lastStatus == "unsupported" || lastStatus == "runtime_missing") break;
         for (int i = 0; i < 20 && !stopRequested; ++i) Sleep(100);
     } while (!stopRequested);
-    if (lastStatus == "waiting_for_keyboard" || lastStatus == "applying") Result("disabled", "styles_restored");
+    if (!targetPid && lastStatus == "waiting_for_keyboard") Result("disabled", "styles_restored");
     return 0;
 }

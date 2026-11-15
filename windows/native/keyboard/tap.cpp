@@ -74,7 +74,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
             keyboard::Report state;
             do {
                 Sleep(100); keyboard::ReadStyleSession(state);
-            } while (state.phase != keyboard::StylePhase::Idle && state.keyCount && GetTickCount64() < deadline);
+            } while (state.phase != keyboard::StylePhase::Idle && GetTickCount64() < deadline);
             if (SUCCEEDED(self->report.subscribeResult))
                 self->report.unsubscribeResult = self->tree->UnadviseVisualTreeChange(self);
             if (connected) self->Send(pipe.value);
@@ -140,12 +140,14 @@ public:
         site = value;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                reinterpret_cast<LPCWSTR>(&KeyboardTapId), &pin)) {
+            if (styling) keyboard::StopStyleSession();
             discovering = false; return HRESULT_FROM_WIN32(GetLastError());
         }
         AddRef();
         Handle worker(CreateThread(nullptr, 0, Collect, this, 0, nullptr));
         if (!worker) {
             hr = HRESULT_FROM_WIN32(GetLastError());
+            if (styling) keyboard::StopStyleSession();
             Release(); FreeLibrary(pin); discovering = false; return hr;
         }
         return S_OK;
@@ -161,7 +163,7 @@ public:
         if (faceProbe && GetTickCount64() < observeUntil &&
             wcscmp(element.Type, L"Windows.UI.Xaml.Controls.Border") == 0)
             keyboard::ObserveFace(diagnostics.Get(), element.Handle);
-        if (styling && wcscmp(element.Type, L"Windows.UI.Xaml.Controls.Border") == 0)
+        if (styling && wcscmp(element.Type, L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey") == 0)
             keyboard::ObserveStyle(diagnostics.Get(), element.Handle);
         keyboard::Node node{};
         node.id = element.Handle;
