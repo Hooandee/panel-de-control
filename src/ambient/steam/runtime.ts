@@ -882,7 +882,8 @@ export class AmbientRuntime {
       doc?.documentElement.removeAttribute("data-pdc-ambient-background");
       this.channel.publish({ owner: "theme", media: null, motion });
       if (doc) applyNeutralizer(doc, []);
-      this.patch({ coveredBy: [] });
+      const themeOwner = this.themeClaim?.id;
+      this.patch({ coveredBy: decision.background === "theme" && themeOwner && settings.claims[themeOwner] === "theme" ? [themeOwner] : [] });
       this.previousOwner = decision.background === "panel" && !owns ? null : decision.background;
       this.patch({ currentUrl: null });
       return;
@@ -897,7 +898,7 @@ export class AmbientRuntime {
       if (doc) applyNeutralizer(doc, []);
       doc?.documentElement.setAttribute("data-pdc-ambient-background", "panel");
       this.previousOwner = "panel";
-      this.patch({ currentUrl: url });
+      this.patch({ currentUrl: url, coveredBy: [] });
       return;
     }
     const chosen = Object.entries(settings.claims).filter(([id, owner]) => id.startsWith("css:") && owner === "panel").map(([id]) => id);

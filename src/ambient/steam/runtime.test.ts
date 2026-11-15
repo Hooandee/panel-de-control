@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import defaults from "../../../shared/contracts/ambient/fixtures/defaults.json";
+import savedThemeBackground from "../../../shared/contracts/ambient/fixtures/saved-theme-background.json";
 import type { AmbientSettings } from "../core/types";
 import type { GameMedia } from "./gameMedia";
 
@@ -738,6 +739,7 @@ describe("AmbientRuntime", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(p.notify).toHaveBeenCalledTimes(1);
     expect(p.notify).toHaveBeenCalledWith("ambient.toast.theme:Gallery", "ambient.toast.body");
+    expect(runtime.getSnapshot().coveredBy).toEqual([]);
     expect(document.getElementById("pdc-ambient-layer")).toBeNull();
     runtime.stop();
   });
@@ -752,6 +754,32 @@ describe("AmbientRuntime", () => {
     await vi.waitFor(() => expect(document.getElementById("pdc-ambient-layer")).not.toBeNull());
     expect(rpcMock.saveAmbientSettings).toHaveBeenLastCalledWith(expect.objectContaining({ claims: { "hooandee-gallery": "panel" } }));
     runtime.stop();
+  });
+
+  it.each(["css", "host"] as const)("lets the saved %s theme background choice be changed back to Panel", async (mode) => {
+    const configured = settings({ claims: savedThemeBackground.claims as AmbientSettings["claims"] });
+    configured.background.enabled = savedThemeBackground.backgroundEnabled;
+    configured.background.gameArt = savedThemeBackground.setup.gameArt as AmbientSettings["background"]["gameArt"];
+    const channel = new AmbientThemeChannel();
+    if (mode === "host") channel.claim("hooandee-loop", { name: "Loop", surfaces: ["home"], mode: "host" });
+    else {
+      document.documentElement.style.setProperty("--pdc-ambient-claim", "hooandee-loop");
+      document.documentElement.style.setProperty("--pdc-ambient-claim-name", "Loop");
+    }
+    rpcMock.getAmbientState.mockResolvedValue({ settings: configured, knownFolders: {}, collections: [], mediaServer: "stopped" });
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts, channel);
+    try {
+      await runtime.start();
+      expect(runtime.getSnapshot().decision).toMatchObject({ background: "theme", conflict: null });
+      expect(runtime.getSnapshot().coveredBy).toEqual(["hooandee-loop"]);
+      await runtime.showMineOver(runtime.getSnapshot().coveredBy);
+      await vi.waitFor(() => expect(runtime.getSnapshot().decision.background).toBe("panel"));
+      await vi.waitFor(() => expect(channel.getState().owner).toBe("panel"));
+      expect(runtime.getSnapshot().currentUrl).toBeTruthy();
+      expect(document.documentElement.getAttribute("data-pdc-ambient-background")).toBe("panel");
+      if (mode === "css") expect(document.getElementById("pdc-ambient-layer")).not.toBeNull();
+      expect(runtime.getSnapshot().coveredBy).toEqual([]);
+    } finally { runtime.stop(); }
   });
 
   it("entering a game pauses the video layer and leaves the game's volume alone", async () => {

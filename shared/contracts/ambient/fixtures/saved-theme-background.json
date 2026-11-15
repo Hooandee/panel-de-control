@@ -1,0 +1,11 @@
+{
+  "backgroundEnabled": true,
+  "selectedBackgroundCount": 0,
+  "claims": {
+    "hooandee-loop": "theme"
+  },
+  "setup": {
+    "gameArt": "mine",
+    "collections": 3
+  }
+}

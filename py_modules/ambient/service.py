@@ -948,6 +948,8 @@ def _settings_summary(settings: dict[str, Any]) -> dict[str, Any]:
     background, music, radio = settings["background"], settings["music"], settings["radio"]
     return {
         "gameArt": background.get("gameArt"),
+        "pinned": bool(background.get("pinned")),
+        "suggestedCollections": [key for key in background.get("collections", []) if key in {"suggested.library", "suggested.nasa", "suggested.bing"}],
         "transition": background.get("transition"),
         "optimizeVideos": background.get("optimizeVideos"),
         "videoQuality": background.get("videoQuality"),
