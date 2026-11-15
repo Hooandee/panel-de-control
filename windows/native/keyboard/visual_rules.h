@@ -1,5 +1,6 @@
 #pragma once
 #include "theme_id.h"
+#include <string_view>
 
 namespace keyboard {
 enum class KeyRole { Normal, Enter, Backspace, Shift, CapsLock, Tab, AltGr };
@@ -17,6 +18,9 @@ inline constexpr KeyGlyph RoleFromSipGlyph(wchar_t glyph) {
     if (glyph == L'\uE3D7') return {KeyRole::Shift, false};
     if (glyph == L'\uE3D8') return {KeyRole::Shift, true};
     return RoleFromGlyph(glyph);
+}
+inline constexpr KeyGlyph RoleFromCaption(std::wstring_view caption) {
+    return caption == L"Tab" ? KeyGlyph{KeyRole::Tab, false} : KeyGlyph{KeyRole::Normal, false};
 }
 inline constexpr bool SignKey(KeyRole role) {
     return role >= KeyRole::Enter && role <= KeyRole::Tab;

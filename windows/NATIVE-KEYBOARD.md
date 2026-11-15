@@ -33,7 +33,7 @@ nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resue
 en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
 conservar fuente y colores al cambiar Mayús sin esperar al temporizador.
 Las etiquetas reutilizadas observan también cambios de FontFamily, FontWeight y Foreground;
-las etiquetas de iconos observan cambios de glifo para actualizar Mayús bloqueado;
+los cambios de etiqueta dentro de KeyboardKey actualizan el rol y Mayús bloqueado;
 se retiran esos callbacks antes de restaurarlas. No lee campos de entrada ni registra texto escrito,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
@@ -100,7 +100,8 @@ de acceso a rutas de Panel desde AppContainer. Se exige LoadCompleted/Success.
 Cada fuente se extrae a un archivo propio de nombre único en TemporaryFolder del
 proceso destino y se referencia mediante ms-appdata. No se instala globalmente.
 Se verifica una diferencia de métricas frente al fallback con una cadena fija,
-y se contrasta visualmente la tipografía; no se inspecciona texto del teclado.
+y se contrasta visualmente la tipografía. La clasificación de teclas especiales
+solo consulta glifos y la etiqueta Tab dentro de KeyboardKey, sin registrarlos.
 Los indicadores de mando observados usan Xbox Fluent v2; se conserva esa fuente
 igual que las fuentes nativas de iconos. El diagnóstico incluye hasta dieciséis
 muestras de familia, ubicación fondo/contenido, tamaño, opacidad y visibilidad,
@@ -183,7 +184,7 @@ con su OFL y procedencia en `themes/terciopelo/fonts`.
 ## Compilar y probar
 
 Windows x64, Visual Studio 2022 con Desktop development with C++ y SDK de
-Windows, CMake 3.24 o posterior:
+Windows, CMake 3.24 o posterior y Python 3.9 o posterior:
 
 ```powershell
 ./windows/native/keyboard/build.ps1

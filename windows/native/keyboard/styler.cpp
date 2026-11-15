@@ -147,7 +147,7 @@ struct Label {
         foregroundChanged = element.RegisterPropertyChangedCallback(TextBlock::ForegroundProperty(), changed);
         fontChanged = element.RegisterPropertyChangedCallback(TextBlock::FontFamilyProperty(), changed);
         weightChanged = element.RegisterPropertyChangedCallback(TextBlock::FontWeightProperty(), changed);
-        if (icon) glyphChanged = element.RegisterPropertyChangedCallback(TextBlock::TextProperty(), changed);
+        glyphChanged = element.RegisterPropertyChangedCallback(TextBlock::TextProperty(), changed);
     }
     void Unwatch() {
         if (glyphChanged) { element.UnregisterPropertyChangedCallback(TextBlock::TextProperty(), *glyphChanged); glyphChanged.reset(); }
@@ -186,13 +186,18 @@ KeyGlyph IdentifyKeyGlyph(DependencyObject const& node, unsigned depth = 0) {
         auto source = std::wstring_view(familySource);
         if (const auto fragment = source.rfind(L'#'); fragment != std::wstring_view::npos) source.remove_prefix(fragment + 1);
         if (source.find(L"Segoe Fluent Icons") != std::wstring_view::npos || source.find(L"Segoe MDL2 Assets") != std::wstring_view::npos || source == L"Emoji SIP Fluent Icons") {
-            // Only native icon labels are inspected; ordinary key text and input fields are never read.
+            // Only labels inside a validated KeyboardKey are inspected; input fields are never read.
             auto glyph = node.try_as<TextBlock>() ? node.as<TextBlock>().Text() : node.as<FontIcon>().Glyph();
             if (glyph.size() == 1) {
                 auto match = source == L"Emoji SIP Fluent Icons" ? RoleFromSipGlyph(glyph[0]) : RoleFromGlyph(glyph[0]);
                 if (match.role != KeyRole::Normal) return match;
             }
         }
+    }
+    if (auto text = node.try_as<TextBlock>()) {
+        auto caption = text.Text();
+        auto match = RoleFromCaption(std::wstring_view(caption));
+        if (match.role != KeyRole::Normal) return match;
     }
     for (int i = 0, count = VisualTreeHelper::GetChildrenCount(node); i < count; ++i) {
         auto match = IdentifyKeyGlyph(VisualTreeHelper::GetChild(node, i), depth + 1);
@@ -249,6 +254,46 @@ struct Cell {
             node = VisualTreeHelper::GetParent(node);
         }
     }
+    void ReconcileRole() {
+        if (style->id != ThemeId::LoboBlanco) return;
+        const auto next = IdentifyKeyGlyph(content).role;
+        if (next == role) return;
+        role = next;
+        auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(parent).Compositor();
+        if (SignKey(role)) {
+            if (!rune) {
+                rune = compositor.CreateSpriteVisual(); rune.Size({13,13});
+                decoration.Children().InsertAtTop(rune);
+            }
+            rune.Brush(sources[9 + static_cast<unsigned>(role)]); rune.Opacity(1);
+        } else if (rune) rune.Opacity(0);
+        if (SignKey(role) && !glow) {
+            glow = compositor.CreateSpriteVisual(); glow.Opacity(0);
+            auto gradient = compositor.CreateRadialGradientBrush();
+            gradient.ColorStops().Append(compositor.CreateColorGradientStop(0, LoboGlowColors[static_cast<unsigned>(role)-1]));
+            gradient.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{0,0,0,0}));
+            glow.Brush(gradient); effects.Children().InsertAtBottom(glow);
+            glowFade = compositor.CreateScalarKeyFrameAnimation();
+            glowFade.InsertKeyFrame(0,0); glowFade.InsertKeyFrame(.25f,1); glowFade.InsertKeyFrame(1,0);
+            glowFade.Duration(std::chrono::milliseconds(420));
+            glowScale = compositor.CreateVector3KeyFrameAnimation();
+            auto ease = compositor.CreateCubicBezierEasingFunction({.2f,.7f},{.2f,1});
+            glowScale.InsertKeyFrame(0,{.9f,.9f,1}); glowScale.InsertKeyFrame(.25f,{1,1,1},ease);
+            glowScale.InsertKeyFrame(1,{1.08f,1.08f,1},ease); glowScale.Duration(std::chrono::milliseconds(420));
+        }
+        if (glow) {
+            glow.StopAnimation(L"Opacity"); glow.Opacity(0);
+            if (SignKey(role)) glow.Brush().as<CompositionRadialGradientBrush>().ColorStops().GetAt(0).Color(LoboGlowColors[static_cast<unsigned>(role)-1]);
+        }
+        dust.StopAnimation(L"Opacity"); dust.Opacity(0); dustStrip.StopAnimation(L"Offset");
+        dust.Size({EffectWidth(), EffectHeight()}); dustStrip.Size({EffectWidth()*style->frames, EffectHeight()});
+        auto steps = compositor.CreateStepEasingFunction(style->frames - 1);
+        steps.IsInitialStepSingleFrame(false); steps.IsFinalStepSingleFrame(true);
+        dustFrames.InsertKeyFrame(1, {-EffectWidth() * (style->frames - 1), 0, 0}, steps);
+        const auto duration = std::chrono::milliseconds(role == KeyRole::Enter ? style->enterDuration : style->duration);
+        dustFrames.Duration(duration); dustFade.Duration(duration);
+        Geometry();
+    }
     void Paint() {
         if (retiring || !inserted) return;
         if (style->id == ThemeId::LoboBlanco) latched = IdentifyKeyGlyph(content).latched;
@@ -273,13 +318,13 @@ struct Cell {
         if (retiring || !dust) return;
         dustStrip.StopAnimation(L"Offset"); dust.StopAnimation(L"Opacity");
         dustStrip.Offset({-4 * EffectWidth(), 0, 0}); dust.Opacity(1);
-        if (glow) glow.Opacity(1);
+        if (glow && SignKey(role)) glow.Opacity(1);
     }
     void Strike() {
         if (retiring || !dust) return;
         dustStrip.StartAnimation(L"Offset", dustFrames);
         dust.StartAnimation(L"Opacity", dustFade);
-        if (glow) { glow.StartAnimation(L"Opacity", glowFade); glow.StartAnimation(L"Scale", glowScale); }
+        if (glow && SignKey(role)) { glow.StartAnimation(L"Opacity", glowFade); glow.StartAnimation(L"Scale", glowScale); }
     }
     void Geometry() {
         if (retiring || !visual || !parent) return;
@@ -363,6 +408,7 @@ struct Cell {
                 icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon, false});
             labels.back().Watch();
         }
+        ReconcileRole();
         double primarySize = 0;
         for (auto const& label : labels) if (!label.icon) primarySize = std::max(primarySize, label.element.FontSize());
         for (auto& label : labels) label.secondary = !label.icon && label.element.FontSize() + 1 < primarySize;
@@ -393,7 +439,6 @@ struct Cell {
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
         }
-        if (style->id == ThemeId::LoboBlanco) role = IdentifyKeyGlyph(children.GetAt(1)).role;
         canvas = Canvas(); canvas.Width(0); canvas.Height(0);
         canvas.HorizontalAlignment(HorizontalAlignment::Left); canvas.VerticalAlignment(VerticalAlignment::Top);
         canvas.IsHitTestVisible(false);
@@ -406,12 +451,6 @@ struct Cell {
         brush.IsCenterHollow(false); brush.Source(sources[0]);
         visual = compositor.CreateSpriteVisual(); visual.Brush(brush);
         decoration = compositor.CreateContainerVisual(); decoration.Children().InsertAtBottom(visual);
-        if (style->id == ThemeId::LoboBlanco && SignKey(role)) {
-            rune = compositor.CreateSpriteVisual(); rune.Size({13,13});
-            auto runeBrush = compositor.CreateSurfaceBrush(surfaces[9 + static_cast<unsigned>(role)]);
-            runeBrush.Stretch(CompositionStretch::Uniform); rune.Brush(runeBrush);
-            decoration.Children().InsertAtTop(rune);
-        }
         dustCanvas = Canvas(); dustCanvas.Width(0); dustCanvas.Height(0);
         dustCanvas.HorizontalAlignment(HorizontalAlignment::Left); dustCanvas.VerticalAlignment(VerticalAlignment::Top); dustCanvas.IsHitTestVisible(false);
         effects = compositor.CreateContainerVisual();
@@ -421,20 +460,6 @@ struct Cell {
         dustStrip.Brush(dustBrush); dust.Children().InsertAtTop(dustStrip);
         Hosting::ElementCompositionPreview::SetElementChildVisual(dustCanvas, effects);
         effects.Children().InsertAtTop(dust);
-        if (style->id == ThemeId::LoboBlanco && SignKey(role)) {
-            glow = compositor.CreateSpriteVisual(); glow.Opacity(0);
-            auto gradient = compositor.CreateRadialGradientBrush();
-            gradient.ColorStops().Append(compositor.CreateColorGradientStop(0, LoboGlowColors[static_cast<unsigned>(role)-1]));
-            gradient.ColorStops().Append(compositor.CreateColorGradientStop(1, Color{0,0,0,0}));
-            glow.Brush(gradient); effects.Children().InsertAtBottom(glow);
-            glowFade = compositor.CreateScalarKeyFrameAnimation();
-            glowFade.InsertKeyFrame(0,0); glowFade.InsertKeyFrame(.25f,1); glowFade.InsertKeyFrame(1,0);
-            glowFade.Duration(std::chrono::milliseconds(420));
-            glowScale = compositor.CreateVector3KeyFrameAnimation();
-            auto ease = compositor.CreateCubicBezierEasingFunction({.2f,.7f},{.2f,1});
-            glowScale.InsertKeyFrame(0,{.9f,.9f,1}); glowScale.InsertKeyFrame(.25f,{1,1,1},ease);
-            glowScale.InsertKeyFrame(1,{1.08f,1.08f,1},ease); glowScale.Duration(std::chrono::milliseconds(420));
-        }
         auto steps = compositor.CreateStepEasingFunction(style->frames - 1);
         steps.IsInitialStepSingleFrame(false); steps.IsFinalStepSingleFrame(true);
         dustFrames = compositor.CreateVector3KeyFrameAnimation();

@@ -16,6 +16,10 @@ int main() {
     assert(RoleFromSipGlyph(L'\uE3D8').latched);
     assert(RoleFromSipGlyph(L'\uE752').role == KeyRole::Shift);
     assert(RoleFromGlyph(L'\uE3D8').role == KeyRole::Normal);
+    assert(RoleFromCaption(L"Tab").role == KeyRole::Tab);
+    assert(RoleFromCaption(L"Home").role == KeyRole::Normal);
+    assert(RoleFromCaption(L"TAB").role == KeyRole::Normal);
+    assert(RoleFromCaption(L"").role == KeyRole::Normal);
     assert(RoleFromGlyph(L'a').role == KeyRole::Normal);
     assert(RoleFromGlyph(L'\uE753').role == KeyRole::Normal);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Normal, false, false, false, false) == 0);

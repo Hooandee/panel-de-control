@@ -143,8 +143,8 @@ iconos de Windows. Aplica las tintas originales, peso 700 a letras y el descenso
 de 2 px al pulsar, sin sustituir transformaciones nativas que ya estén activas.
 Las runas quedan arriba a la izquierda para reservar el indicador Xbox nativo.
 
-Intro, Retroceso, Mayús y Tab se identifican exclusivamente por glifos de las
-fuentes nativas de iconos. En Emoji SIP Fluent Icons, el glifo de Mayús con
+Intro, Retroceso, Mayús y Tab se identifican por glifos de las fuentes nativas
+de iconos; Tab también admite la etiqueta exacta observada en el modo numérico. En Emoji SIP Fluent Icons, el glifo de Mayús con
 candado permite aplicar la cara granate; sus cambios se observan y se retira el
 callback al restaurar. La fuente del sistema se consulta, nunca se redistribuye.
 No se lee el texto de campos ni se envían pulsaciones a los diagnósticos.
