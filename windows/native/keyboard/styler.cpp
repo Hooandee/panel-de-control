@@ -250,10 +250,13 @@ struct Cell {
         for (auto const& text : found) {
             bool known = false;
             auto family = text.FontFamily().Source();
-            const bool icon = std::wstring_view(family) == L"Xbox Fluent v2" ||
-                std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
-                std::wstring_view(family).find(L"Symbol") != std::wstring_view::npos ||
-                std::wstring_view(family).find(L"MDL2") != std::wstring_view::npos;
+            auto familyName = std::wstring_view(family);
+            if (const auto fragment = familyName.rfind(L'#'); fragment != std::wstring_view::npos)
+                familyName.remove_prefix(fragment + 1);
+            const bool icon = familyName == L"Xbox Fluent v2" ||
+                familyName.find(L"Icon") != std::wstring_view::npos ||
+                familyName.find(L"Symbol") != std::wstring_view::npos ||
+                familyName.find(L"MDL2") != std::wstring_view::npos;
             for (auto& label : labels) if (label.element == text) {
                 known = true;
                 if (label.icon != icon) {
