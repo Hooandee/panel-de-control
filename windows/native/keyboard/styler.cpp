@@ -329,14 +329,29 @@ struct Cell {
 };
 struct Plate {
     Grid parent{nullptr}; Canvas canvas{nullptr}; SpriteVisual visual{nullptr}; event_token size{};
-    void Geometry() { visual.Size({static_cast<float>(parent.ActualWidth()), static_cast<float>(parent.ActualHeight())}); }
+    Border frame{nullptr}; RectangleClip clip{nullptr};
+    void Geometry() {
+        if (!frame) { visual.Size({static_cast<float>(parent.ActualWidth()), static_cast<float>(parent.ActualHeight())}); return; }
+        if (VisualTreeHelper::GetParent(frame) != parent || frame.Visibility() != Visibility::Visible) { visual.Opacity(0); return; }
+        visual.Opacity(1);
+        const auto origin = frame.TransformToVisual(parent).TransformPoint({0, 0});
+        const auto width = static_cast<float>(frame.ActualWidth()), height = static_cast<float>(frame.ActualHeight());
+        const auto radius = frame.CornerRadius();
+        visual.Offset({origin.X, origin.Y, 0}); visual.Size({width, height});
+        clip.Left(0); clip.Top(0); clip.Right(width); clip.Bottom(height);
+        auto corner = [](double value) { const auto r = static_cast<float>(value); return Windows::Foundation::Numerics::float2{r, r}; };
+        clip.TopLeftRadius(corner(radius.TopLeft)); clip.TopRightRadius(corner(radius.TopRight));
+        clip.BottomLeftRadius(corner(radius.BottomLeft)); clip.BottomRightRadius(corner(radius.BottomRight));
+    }
     void Insert(Grid const& value, LoadedImageSurface const& surface) {
         parent = value; canvas = Canvas(); canvas.Width(0); canvas.Height(0);
         canvas.HorizontalAlignment(HorizontalAlignment::Left); canvas.VerticalAlignment(VerticalAlignment::Top); canvas.IsHitTestVisible(false);
         auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(parent).Compositor();
         visual = compositor.CreateSpriteVisual();
         auto brush = compositor.CreateSurfaceBrush(surface); brush.Stretch(CompositionStretch::Fill);
-        visual.Brush(brush); Geometry();
+        visual.Brush(brush);
+        if (frame) { clip = compositor.CreateRectangleClip(); visual.Clip(clip); }
+        Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         parent.Children().InsertAt(0, canvas);
         size = parent.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { Fail(to_hresult()); requested = false; } });
@@ -357,9 +372,20 @@ struct Chrome {
     FrameworkElement bar{nullptr};
     Plate plate;
     bool confirmed = false;
-    SolidColorBrush background{terciopelo::Background}, clear{Color{0, 0, 0, 0}}, accent{terciopelo::Accent};
+    SolidColorBrush clear{Color{0, 0, 0, 0}}, accent{terciopelo::Accent};
     struct Entry { std::unique_ptr<Property> property; IInspectable value; };
     std::vector<Entry> properties;
+    static Border FindFrame(Grid const& root) {
+        Border frame{nullptr}; double area = 0;
+        // In the observed build, the largest direct background Border owns the window outline.
+        for (auto const& child : root.Children()) if (auto border = child.try_as<Border>()) {
+            const auto candidateArea = border.ActualWidth() * border.ActualHeight();
+            if (border.Visibility() == Visibility::Visible && border.Background() && candidateArea > area) {
+                frame = border; area = candidateArea;
+            }
+        }
+        return frame;
+    }
     void Measure() {
         std::lock_guard lock(receiptGate);
         receipt.chromeCount = 0;
@@ -418,7 +444,12 @@ struct Chrome {
             if (node != root) { it->property->Restore(); it = properties.erase(it); }
             else ++it;
         }
-        SetBackground(root, Panel::BackgroundProperty(), background);
+        if (!plate.frame || VisualTreeHelper::GetParent(plate.frame) != root || plate.frame.Visibility() != Visibility::Visible) {
+            auto next = FindFrame(root);
+            if (!next) { plate.visual.Opacity(0); return false; }
+            plate.frame = next;
+        }
+        plate.Geometry();
         for (auto const& child : root.Children()) {
             auto type = get_class_name(child);
             if (child == bar || type == SuggestionsType || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
@@ -533,7 +564,9 @@ struct Engine {
         FrameworkElement bar{nullptr};
         for (auto const& child : root.Children()) if (get_class_name(child) == BarType) bar = child.as<FrameworkElement>();
         if (!bar || chromes.size() >= 8) return false;
-        auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar;
+        auto frame = Chrome::FindFrame(root);
+        if (!frame) return false;
+        auto chrome = std::make_unique<Chrome>(); chrome->root = root; chrome->bar = bar; chrome->plate.frame = frame;
         auto pointer = chrome.get(); chromes.push_back(std::move(chrome));
         pointer->Measure();
         pointer->plate.Insert(root, surfaces[5]);

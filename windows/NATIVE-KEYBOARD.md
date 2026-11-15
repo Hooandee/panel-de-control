@@ -60,7 +60,10 @@ Border + ContentControl. El motor valida estas dos formas, inserta una decoraci�
 y ContentControl, y verifica su pertenencia real. La placa se coloca solo en el
 Grid que pertenece a KeyboardGrid y cuyos hijos son KeyboardKey. El marco se extiende al Grid padre de KeyboardGrid cuando contiene el GripperBar
 observado: placa original, fondo oscuro y controles estándar de su barra. Se
-conservan el radio, clipping y sombra nativos; no se dibuja fuera de la ventana
+conservan el radio, clipping y sombra nativos. La placa toma su posición, tamaño
+y cuatro radios del Border de fondo de mayor área observado, no del contenedor
+raíz que también incluye márgenes transparentes. Su RectangleClip propio se
+actualiza con la geometría nativa; no se dibuja fuera de la ventana
 ni se modifica el contenido de emoji, portapapeles o campos de texto.
 Las teclas visibles con forma desconocida impiden confirmar cobertura completa.
 
@@ -69,14 +72,14 @@ Terciopelo 0.2.13 aporta estos recursos y propiedades, extraídos de su CSS real
 | Propiedad | Adaptación |
 |---|---|
 | Cinco caras PNG 216×168: idle, hover, focus, press-v3 y focus-press-v3 | Incrustadas sin transformar; nine-grid de cortes 54, grosor 18 y outset 6 |
-| Placa WebP 1708×478, fondo #0b0b0c | Textura original bajo el área de teclas |
+| Placa WebP 1708×478, fondo #0b0b0c | Textura original bajo las teclas y en el marco y la barra del teclado |
 | Tinta #f0dcb2, acento #d9c197, pulsación #fff3da | Aplicada a las etiquetas nativas, con restauración |
-| Josefin Sans 400/600 | TTF oficial variable con licencia OFL; se preservan fuentes de iconos |
+| Josefin Sans 400/600 | TTF oficial variable con licencia OFL; se conservan los pesos nativos y las fuentes de iconos |
 | Pulsación, hover y foco | Caras originales; cancelación y pérdida de captura restablecen la cara |
 | Letras, números, iconos y distribuciones | Contenido nativo; se conservan tamaños y posiciones de Windows |
 | Bloqueo de Mayús y teclas muertas | Se conservan cambios nativos de glifo y contenido; el halo dorado específico necesita un estado nativo observado |
 | Polvo WebP 3240×140, 18 frames/720 ms | Sprite de 126×98 al pulsar, avance discreto y fundido en los últimos 144 ms, animado por Composition |
-| Desplazamiento de texto pulsado | 3 px cuando el contenido nativo no tiene una transformación propia; restaurado al soltar |
+| Desplazamiento de texto pulsado | 3 px cuando el contenido nativo tiene una transformación identidad; restaurado al soltar |
 | Sonido del teclado Steam | No se modifica el sonido nativo |
 
 Los PNG y WebP se cargan desde RCDATA mediante un stream en memoria, sin depender
@@ -98,7 +101,10 @@ El teclado cerrado queda esperando, y los errores o silencios retiran el estado
 aplicado. La UI muestra restauración sin confirmar si falta el recibo necesario.
 
 Los diagnósticos incluyen build, arquitectura, PID, HRESULT, cobertura de teclas,
-restauraciones y un árbol acotado de tipos/handles efímeros/padres. El catálogo de
+restauraciones y un árbol acotado de tipos/handles efímeros/padres. El host también
+expone un snapshot numérico inicial de hasta 24 Grid/Border del marco (posición,
+tamaño, radio superior izquierdo y presencia de fondo), sin nombres ni contenido.
+No representa una traza de pulsaciones ni una medida continua tras redimensionar. El catálogo de
 estados solo admite nombres definidos y deduplicados, sin estados actuales por
 tecla ni transiciones. En la plantilla observada de build 26300 no se encontraron
 grupos VSM en KeyboardKey y sus dos Grid; no se inventan selectores de latched.
@@ -175,7 +181,11 @@ Recorrido manual:
 9. Antes de extender compatibilidad, validar actualización y desinstalación con
    tema activo, versiones adicionales de Windows y las distribuciones afectadas.
 
-La validación física disponible incluye aplicación y restauración de las 40
-teclas del teclado estándar en ROG Xbox Ally X, build 26300 x64, con placa y fuente
-privada. Las pruebas de compilación y protocolo no sustituyen las pruebas de
-interacción, distribuciones y lifecycle del artefacto instalado completo.
+La validación física en ROG Xbox Ally X, build 26300 x64, incluye cobertura de
+40 teclas en modo estándar, 35 en compacto y 69 en tradicional, placa, fuente
+privada y polvo visible mediante pulsación de Mayús. Se han comprobado cierre
+con X y reapertura, restauración tras caída del helper, reactivación desde Panel
+y reconexión tras reiniciar TextInputHost. La prueba visual no mide la duración
+ni fluidez de cada fotograma. La validación del MSIX final completo, actualización
+desde producción y desinstalación con el tema activo siguen pendientes.
+Las pruebas de compilación y protocolo no sustituyen esos recorridos.
