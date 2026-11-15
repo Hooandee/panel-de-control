@@ -142,7 +142,7 @@ public:
     HRESULT STDMETHODCALLTYPE LockServer(BOOL lock) override { if (lock) ++objects; else --objects; return S_OK; }
 };
 }
-extern "C" HRESULT __declspec(dllexport) __stdcall DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
     if (clsid != KeyboardTapId) return CLASS_E_CLASSNOTAVAILABLE;
@@ -150,4 +150,4 @@ extern "C" HRESULT __declspec(dllexport) __stdcall DllGetClassObject(REFCLSID cl
     if (!factory) return E_OUTOFMEMORY;
     auto hr = factory->QueryInterface(iid, out); factory->Release(); return hr;
 }
-extern "C" HRESULT __declspec(dllexport) __stdcall DllCanUnloadNow() { return objects == 0 ? S_OK : S_FALSE; }
+STDAPI DllCanUnloadNow() { return objects == 0 ? S_OK : S_FALSE; }
