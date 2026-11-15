@@ -137,6 +137,19 @@ struct Cell {
     std::vector<std::pair<VisualStateGroup, event_token>> groups;
     std::array<CompositionSurfaceBrush, 5> sources{nullptr, nullptr, nullptr, nullptr, nullptr};
 
+    Brush LabelBrush(Label const& label) const {
+        return label.secondary ? soft : (pressed || focused) ? pressedInk : label.icon ? accent : ink;
+    }
+    void ReadFocus() {
+        focused = false;
+        if (auto control = key.try_as<Control>()) focused = control.FocusState() != FocusState::Unfocused;
+        if (focused || !key.XamlRoot()) return;
+        auto node = Input::FocusManager::GetFocusedElement(key.XamlRoot()).try_as<DependencyObject>();
+        for (unsigned depth = 0; node && depth < 12; ++depth) {
+            if (node == key) { focused = true; return; }
+            node = VisualTreeHelper::GetParent(node);
+        }
+    }
     void Paint() {
         if (retiring || !inserted) return;
         const unsigned index = pressed ? (focused ? 4 : 3) : focused ? 2 : hover ? 1 : 0;
@@ -148,7 +161,7 @@ struct Cell {
             else contentTransform->Restore();
         }
         for (auto& label : labels) {
-            label.foreground->Assign(label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink);
+            label.foreground->Assign(LabelBrush(label));
             if (label.font) label.font->Assign(font);
         }
     }
@@ -225,7 +238,7 @@ struct Cell {
         for (auto& label : labels) label.secondary = !label.icon && label.element.FontSize() + 1 < primarySize;
         Paint();
         for (auto const& label : labels) {
-            Brush expected = label.secondary ? soft : pressed ? pressedInk : label.icon ? accent : ink;
+            Brush expected = LabelBrush(label);
             if (label.element.Foreground() != expected || (label.font && label.element.FontFamily() != font)) return false;
         }
         return true;
@@ -289,6 +302,7 @@ struct Cell {
         RoutedEventHandler lost([this](auto const&, auto const&) noexcept { try { focused = false; Paint(); } catch (...) { Fail(to_hresult()); requested = false; } });
         gotFocus = key.GotFocus(got);
         lostFocus = key.LostFocus(lost);
+        ReadFocus();
         Catalog(key); Catalog(parent);
         if (auto outer = VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>()) Catalog(outer);
         ReconcileLabels();
