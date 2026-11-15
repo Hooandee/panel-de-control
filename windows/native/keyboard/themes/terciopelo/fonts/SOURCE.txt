@@ -1,0 +1,3 @@
+Josefin Sans variable font, unchanged.
+Source: https://github.com/google/fonts/tree/0fd277cf519ed2c02e63e4e19220f4cf6103df51/ofl/josefinsans
+License: SIL Open Font License 1.1, see OFL.txt.

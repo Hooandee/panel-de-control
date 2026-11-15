@@ -46,6 +46,11 @@
       "path": "assets/velvet-press-v3.png",
       "bytes": 14200,
       "sha256": "791b8d5cb78f5f1ad4dd68a03975616defd97644f17297b081aa564be5abc36f"
+    },
+    {
+      "path": "fonts/JosefinSans.ttf",
+      "bytes": 118588,
+      "sha256": "9255abdb5f393bc51e101abbd07a716a977fd3e15472b1b84b260f426a342bfd"
     }
   ],
   "tokens": {

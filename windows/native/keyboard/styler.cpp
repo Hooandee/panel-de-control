@@ -15,6 +15,7 @@
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include "terciopelo.h"
+#include "font_resource.h"
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -83,6 +84,7 @@ struct Property {
 struct Label {
     TextBlock element{nullptr};
     std::unique_ptr<Property> foreground;
+    std::unique_ptr<Property> font;
     bool icon = false;
 };
 struct Cell {
@@ -122,7 +124,8 @@ struct Cell {
             const bool icon = std::wstring_view(family).find(L"Icon") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"Symbol") != std::wstring_view::npos ||
                 std::wstring_view(family).find(L"MDL2") != std::wstring_view::npos;
-            labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()), icon});
+            labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()),
+                icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon});
         }
         for (int i = 0, n = VisualTreeHelper::GetChildrenCount(root); i < n; ++i)
             ReadLabels(VisualTreeHelper::GetChild(root, i), depth + 1);
@@ -141,7 +144,7 @@ struct Cell {
         key.AddHandler(event, boxed, true);
         handlers.emplace_back(event, boxed);
     }
-    void Insert(std::array<LoadedImageSurface, 6> const& surfaces) {
+    void Insert(std::array<LoadedImageSurface, 6> const& surfaces, FontFamily const& font) {
         auto children = parent.Children();
         if (children.Size() != 2 || children.GetAt(0) != face || !children.GetAt(1).try_as<ContentControl>()) {
             unloaded = true; return;
@@ -159,6 +162,7 @@ struct Cell {
         visual = compositor.CreateSpriteVisual(); visual.Brush(brush); Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         ReadLabels(children.GetAt(1));
+        for (auto& label : labels) if (!label.icon) label.element.FontFamily(font);
         children.InsertAt(1, canvas); inserted = true;
         size = face.SizeChanged([this](auto const&, auto const&) noexcept { try { Geometry(); } catch (...) { unloaded = true; } });
         removed = key.Unloaded([this](auto const&, auto const&) noexcept { unloaded = true; });
@@ -185,7 +189,10 @@ struct Cell {
                 Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, nullptr);
             }
         });
-        for (auto& label : labels) attempt([&] { label.foreground->Restore(); });
+        for (auto& label : labels) {
+            attempt([&] { label.foreground->Restore(); });
+            if (label.font) attempt([&] { label.font->Restore(); });
+        }
         for (auto& pair : handlers) attempt([&] { key.RemoveHandler(pair.first, pair.second); });
         attempt([&] { if (size.value) face.SizeChanged(size); });
         attempt([&] { if (removed.value) key.Unloaded(removed); });
@@ -222,6 +229,9 @@ struct Plate {
 };
 struct Engine {
     ULONGLONG epoch = 0;
+    FontResource font;
+    bool fontReady = false;
+    unsigned fontChecks = 0;
     DispatcherTimer timer{nullptr}; event_token tick{};
     std::array<LoadedImageSurface, 6> surfaces{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     std::array<event_token, 6> completions{};
@@ -234,12 +244,13 @@ struct Engine {
 
     void Start(FrameworkElement const& anchor, ULONGLONG value) {
         if (started) return;
-        epoch = value; ready.fill(false); restored = 0; cleanupAttempts = 0;
+        epoch = value; ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
         HMODULE module = nullptr;
         check_bool(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
         timer = DispatcherTimer(); timer.Interval(std::chrono::milliseconds(250));
         tick = timer.Tick([this](auto const&, auto const&) noexcept { Update(); }); timer.Start(); started = true;
+        font.Load(module);
         auto dispatcher = anchor.Dispatcher();
         for (unsigned i = 0; i < surfaces.size(); ++i) {
             auto resource = FindResourceW(module, MAKEINTRESOURCEW(101 + i), RT_RCDATA);
@@ -309,7 +320,9 @@ struct Engine {
         try {
             if (GetTickCount64() >= lease.load()) requested = false;
             bool stopping = !requested || epoch != generation;
-            bool loaded = true; for (bool value : ready) loaded &= value;
+            if (!stopping && !fontReady && ++fontChecks <= 12) fontReady = font.Resolved();
+            if (!stopping && !fontReady && fontChecks > 12) { Fail(E_FAIL); requested = false; stopping = true; }
+            bool loaded = fontReady; for (bool value : ready) loaded &= value;
             unsigned visible = 0, styled = 0, pending = 0;
             if (!stopping) for (auto it = candidates.begin(); it != candidates.end();) {
                 auto key = it->get();
@@ -329,7 +342,7 @@ struct Engine {
                     if (cell.Restore()) { if (wasInserted) ++restored; it = cells.erase(it); continue; }
                 } else if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&
                            cell.face.ActualWidth() > 0 && cell.face.ActualHeight() > 0) {
-                    if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces); }
+                    if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
                     unsigned childIndex = 0;
                     if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
                         Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual) ++styled;
@@ -364,7 +377,7 @@ struct Engine {
                 for (unsigned i = 0; i < surfaces.size(); ++i) {
                     if (surfaces[i]) surfaces[i].LoadCompleted(completions[i]); surfaces[i] = nullptr;
                 }
-                candidates.clear(); started = false; owner = 0;
+                font.Clear(); candidates.clear(); started = false; owner = 0;
             }
         } catch (...) { Fail(to_hresult()); requested = false; }
     }

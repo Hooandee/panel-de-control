@@ -39,6 +39,9 @@ inline bool Valid(const Report& report) {
     if (report.version != 3 || report.count > MaxNodes || report.truncated > 1 || report.probeFlags > 63 || report.stateCount > MaxStates ||
         report.keyCount > 256 || report.styledKeys > report.keyCount ||
         report.pendingKeys > 256 || static_cast<unsigned>(report.phase) > 5) return false;
+    if (report.phase == StylePhase::Applied &&
+        (!report.keyCount || report.keyCount != report.styledKeys || report.pendingKeys || report.styleResult < 0)) return false;
+    if (report.phase == StylePhase::Idle && (report.keyCount || report.styledKeys || report.pendingKeys)) return false;
     for (std::uint32_t i = 0; i < report.count; ++i) {
         std::size_t j = 0;
         for (; j < TypeLength && report.nodes[i].type[j]; ++j)

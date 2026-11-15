@@ -18,6 +18,19 @@ int main() {
     report.probeFlags = 64;
     assert(!keyboard::Valid(report));
     report = {};
+    report.phase = keyboard::StylePhase::Applied;
+    assert(!keyboard::Valid(report));
+    report.keyCount = 40; report.styledKeys = 39; report.pendingKeys = 1;
+    assert(!keyboard::Valid(report));
+    report.styledKeys = 40; report.pendingKeys = 0;
+    assert(keyboard::Valid(report));
+    report.phase = keyboard::StylePhase::Idle;
+    assert(!keyboard::Valid(report));
+    report = {};
+    report.stateCount = 1;
+    std::strcpy(report.states[0], "state with input");
+    assert(!keyboard::Valid(report));
+    report = {};
     report.version = 9;
     assert(!keyboard::Valid(report));
 }
