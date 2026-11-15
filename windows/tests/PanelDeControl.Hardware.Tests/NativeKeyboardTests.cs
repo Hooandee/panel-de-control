@@ -148,6 +148,39 @@ public sealed class NativeKeyboardTests
         host.Finish();
     }
 
+    [Fact]
+    public async Task RetryStopsLiveFailedHostBeforeStartingAnother()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("connection_failed"));
+        var retry = controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.StopRequested.Task;
+        Assert.Equal(1, host.Starts);
+        host.Emit(Receipt("disabled"));
+        host.FinishAndReset();
+        Assert.Equal("applying", (await retry).Status);
+        await Eventually(() => host.Starts == 2);
+        host.Emit(Receipt("applied", styled: 2));
+        Assert.Equal("applied", controller.Status.Status);
+        host.Finish();
+    }
+
+    [Fact]
+    public async Task RetryCannotOverlapHostThatIgnoresCancellation()
+    {
+        var host = new Host(ignoreCancellation: true);
+        await using var controller = new NativeKeyboardController(host, stopTimeout: TimeSpan.FromMilliseconds(20));
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        await controller.SetEnabledAsync(false, CancellationToken.None);
+        Assert.Equal("restore_unconfirmed", (await controller.SetEnabledAsync(true, CancellationToken.None)).Status);
+        Assert.Equal(1, host.Starts);
+        host.Finish();
+    }
+
     private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300) => JsonSerializer.Serialize(new
     {
         status, errorCode = status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running", windowsBuild = build, architecture = "x64", processId = pid,
@@ -181,5 +214,6 @@ public sealed class NativeKeyboardTests
         public void Emit(string json) => receive!(json);
         public void Finish() => finished.TrySetResult();
         public void Reset() => finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void FinishAndReset() { var previous = finished; Reset(); previous.TrySetResult(); }
     }
 }

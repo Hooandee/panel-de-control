@@ -30,6 +30,8 @@ public sealed class NativeKeyboardController(
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             if (!enabled) return await StopAsync().ConfigureAwait(false);
+            if (running is { IsCompleted: false } && Status.Status is ("connection_failed" or "restore_unconfirmed"))
+                await StopAsync().ConfigureAwait(false);
             lock (sync)
             {
                 if (running is { IsCompleted: false }) return Status;
@@ -121,7 +123,7 @@ public sealed class NativeKeyboardController(
         {
             generation++;
             lifetime?.Cancel();
-            running = null;
+            if (task.IsCompleted) running = null;
             if (Status.Status != "disabled") Publish(Failure(false, "restore_unconfirmed", "restore_receipt_missing"));
             return Status;
         }
