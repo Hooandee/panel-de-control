@@ -144,6 +144,7 @@ def test_cancel_interrupts_active_conversion_and_allows_next_job(host, monkeypat
     from ambient.adapters import optimizer
 
     monkeypatch.setattr(optimizer, "find_ffmpeg", lambda: sys.executable)
+    monkeypatch.setattr(optimizer, "_POLL_SEC", 0.01)
     outputs = []
 
     def commands(ffmpeg, source, target, height, fps):

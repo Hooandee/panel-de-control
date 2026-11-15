@@ -64,10 +64,15 @@ class MediaServer:
         listener, self._socket = self._socket, None
         self._stopping.set()
         if listener:
-            listener.close()
+            try:
+                socket.create_connection(listener.getsockname(), timeout=0.1).close()
+            except OSError:
+                pass
         if self._thread:
             self._thread.join(timeout=2)
             self._thread = None
+        if listener:
+            listener.close()
 
     def url_for(self, media_id: str) -> Optional[str]:
         if not self._socket:
@@ -88,6 +93,9 @@ class MediaServer:
             except socket.timeout:
                 continue
             except OSError:
+                return
+            if self._stopping.is_set():
+                client.close()
                 return
             threading.Thread(target=self._handle, args=(client,), name="ambient-media-client", daemon=True).start()
 

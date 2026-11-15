@@ -1,13 +1,16 @@
-"""Generic hwmon PWM fan backend — last-resort software loop for handhelds whose
-fan chip exposes the standard manual-PWM interface (pwmN + pwmN_enable) but no
-vendor curve-table. Synthetic sysfs; the asyncio loop isn't exercised (start() is
-a no-op without a running loop) — the seams are the immediate apply + release."""
 import os
 import re
 
+import pytest
+
 import fans.generic_pwm as generic_pwm
-from fans.generic_pwm import GenericPwmFanBackend
+from device_profiles import DESKTOP_PC
 from fans.control import NullFanBackend, select_fan_backend
+from fans.generic_pwm import GenericPwmFanBackend
+from fans.presets import RESOLVED
+
+CURVE = [(40, 0), (50, 30), (60, 60), (70, 95), (80, 135), (85, 175), (90, 215), (95, 255)]
+GPU_DRIVERS = ("amdgpu", "radeon", "nouveau", "i915", "xe")
 
 
 def _w(d, name, val):
@@ -20,39 +23,33 @@ def _r(d, name):
         return f.read().strip()
 
 
-def _mk_pwm_chip(root, idx=0, name="generic_ec", fans=(1,), enable="2"):
-    d = os.path.join(root, "sys/class/hwmon", f"hwmon{idx}")
+def _chip(root, idx=0, name="generic_ec", fans=(1,), enable="2", tach=True):
+    d = os.path.join(str(root), "sys/class/hwmon", f"hwmon{idx}")
     os.makedirs(d, exist_ok=True)
     _w(d, "name", name)
     for m in fans:
         _w(d, f"pwm{m}", "0")
         _w(d, f"pwm{m}_enable", enable)
-        _w(d, f"fan{m}_input", "1800")
+        if tach:
+            _w(d, f"fan{m}_input", "1800")
     return d
-
-
-CURVE = [(40, 0), (50, 30), (60, 60), (70, 95), (80, 135), (85, 175), (90, 215), (95, 255)]
 
 
 def _backend(root, temp=70.0):
     return GenericPwmFanBackend(root=str(root), temp_fn=lambda: temp)
 
 
-def _install_strict_driver(monkeypatch):
-    """Model the hwmon contract of drivers like gpd_fan: a ``pwmN`` write is rejected
-    unless ``pwmN_enable`` currently reads manual (1). A plain temp file accepts any
-    write regardless of mode, so without this a spec-compliant enable-first order and a
-    broken pwm-first one are indistinguishable."""
+def _strict_driver(monkeypatch):
     real_write = generic_pwm._write
 
     def strict_write(path, value):
         m = re.match(r"pwm(\d+)$", os.path.basename(path))
-        if m:  # duty write: only honored while the fan is already in manual mode
-            enable_path = os.path.join(os.path.dirname(path), f"pwm{m.group(1)}_enable")
+        if m:
+            enable = os.path.join(os.path.dirname(path), f"pwm{m.group(1)}_enable")
             try:
-                with open(enable_path) as f:
+                with open(enable) as f:
                     if f.read().strip() != "1":
-                        return False  # driver returns -EPERM outside manual mode
+                        return False
             except OSError:
                 return False
         return real_write(path, value)
@@ -60,209 +57,97 @@ def _install_strict_driver(monkeypatch):
     monkeypatch.setattr(generic_pwm, "_write", strict_write)
 
 
-def test_unsupported_without_pwm(tmp_path):
-    assert _backend(tmp_path).supported is False
-
-
-def test_unsupported_when_pwm_has_no_real_fan(tmp_path):
-    # A pwm with no fanN_input on the chip is not trusted to drive a real fan.
-    d = os.path.join(str(tmp_path), "sys/class/hwmon/hwmon0")
-    os.makedirs(d, exist_ok=True)
-    _w(d, "name", "mystery")
-    _w(d, "pwm1", "0")
-    _w(d, "pwm1_enable", "2")
-    assert _backend(tmp_path).supported is False
-
-
-def test_supported_with_pwm_and_fan(tmp_path):
-    _mk_pwm_chip(str(tmp_path))
-    assert _backend(tmp_path).supported is True
-
-
-def test_read_state_reports_fan(tmp_path):
-    _mk_pwm_chip(str(tmp_path))
-    st = _backend(tmp_path).read_state()
-    assert st["supported"] is True
-    assert st["fans"] and st["fans"][0]["rpm"] == 1800
-
-
-def test_apply_switches_to_manual_and_writes_curve_pwm(tmp_path):
-    d = _mk_pwm_chip(str(tmp_path))
-    b = _backend(tmp_path, temp=70.0)
-    res = b.apply_curve_all(CURVE)
-    assert res["ok"] is True
-    assert _r(d, "pwm1_enable") == "1"
-    assert int(_r(d, "pwm1")) == 95  # curve pwm at 70C
-
-
-def test_engages_manual_before_pwm_on_strict_driver(tmp_path, monkeypatch):
-    # A driver that rejects a pwm write while in auto (gpd_fan) is only driven if the
-    # backend switches to manual first; a pwm-first order leaves it on firmware auto.
-    d = _mk_pwm_chip(str(tmp_path), name="gpdfan", enable="2")
-    _install_strict_driver(monkeypatch)
-    b = _backend(tmp_path, temp=70.0)
-    res = b.apply_curve_all(CURVE)
-    assert res["ok"] is True
-    assert _r(d, "pwm1_enable") == "1"       # manual actually engaged
-    assert int(_r(d, "pwm1")) == 95          # curve duty landed (only possible in manual)
-
-
-def test_strict_driver_with_oxp_auto_sentinel_drives_and_releases(tmp_path, monkeypatch):
-    # Same strict pwm gate but the auto sentinel is 0 (oxp-sensors): manual is still 1,
-    # so the fan drives, and release restores the captured auto value (0) — the fix is
-    # not tied to the enable==2 sentinel.
-    d = _mk_pwm_chip(str(tmp_path), name="oxpec", enable="0")
-    _install_strict_driver(monkeypatch)
-    b = _backend(tmp_path, temp=80.0)
-    assert b.apply_curve_all(CURVE)["ok"] is True
-    assert _r(d, "pwm1_enable") == "1"
-    assert int(_r(d, "pwm1")) == 135
-    b.set_auto(None)
-    assert _r(d, "pwm1_enable") == "0"       # back to the real auto value, not 2
-
-
-def test_hot_point_keeps_safety_floor(tmp_path):
-    # A curve pushed to 0% everywhere still writes >=76 at the hottest point.
-    d = _mk_pwm_chip(str(tmp_path))
-    b = _backend(tmp_path, temp=95.0)
-    b.apply_curve_all([(40, 0), (95, 0)])
-    assert int(_r(d, "pwm1")) >= 76
-
-
-def test_cool_temp_allows_zero_pwm(tmp_path):
-    d = _mk_pwm_chip(str(tmp_path))
-    b = _backend(tmp_path, temp=40.0)
-    b.apply_curve_all(CURVE)
-    assert int(_r(d, "pwm1")) == 0  # fan off when cold is legitimate
-
-
-def test_set_auto_restores_original_enable(tmp_path):
-    d = _mk_pwm_chip(str(tmp_path), enable="2")
-    b = _backend(tmp_path, temp=70.0)
-    b.apply_curve_all(CURVE)
-    b.set_auto(None)
-    assert _r(d, "pwm1_enable") == "2"
-
-
-def test_temp_none_releases_to_auto(tmp_path):
-    d = _mk_pwm_chip(str(tmp_path))
-    b = GenericPwmFanBackend(root=str(tmp_path), temp_fn=lambda: None)
-    b.apply_curve_all(CURVE)
-    # No safe temp reading → hand back to firmware rather than hold a stale pwm.
-    assert _r(d, "pwm1_enable") == "2"
-
-
-def test_multi_fan_all_driven(tmp_path):
-    d = _mk_pwm_chip(str(tmp_path), fans=(1, 2))
-    b = _backend(tmp_path, temp=80.0)
-    b.apply_curve_all(CURVE)
-    assert _r(d, "pwm1_enable") == "1" and _r(d, "pwm2_enable") == "1"
-    assert int(_r(d, "pwm1")) == 135 and int(_r(d, "pwm2")) == 135
-
-
-def test_oxp_style_chip_supported(tmp_path):
-    # OneXPlayer oxp-sensors exposes the standard manual-PWM trio (pwm1 +
-    # pwm1_enable + fan1_input); the generic probe must catch it.
-    _mk_pwm_chip(str(tmp_path), name="oxpec")
-    assert _backend(tmp_path).supported is True
-
-
-def test_oxp_style_release_restores_captured_auto_value(tmp_path):
-    # oxp's auto value is 0 (not the hwmon-standard 2). Capturing the original
-    # enable before driving means release hands it back to the right auto value.
-    d = _mk_pwm_chip(str(tmp_path), name="oxpec", enable="0")
-    b = _backend(tmp_path, temp=70.0)
-    b.apply_curve_all(CURVE)
-    assert _r(d, "pwm1_enable") == "1"  # driven manual
-    b.set_auto(None)
-    assert _r(d, "pwm1_enable") == "0"  # restored to the captured auto value
-
-
-def test_read_state_reflects_the_manual_mode_readback(tmp_path):
-    # enable = the ACTUAL manual-mode readback, not our write and not the tach: a fan
-    # in manual mode reads manual even if it isn't (yet) spinning.
-    d = _mk_pwm_chip(str(tmp_path))
-    _w(d, "fan1_input", "0")            # not spinning
-    b = _backend(tmp_path, temp=70.0)
-    b.apply_curve_all(CURVE)
-    assert b.read_state()["fans"][0]["enable"] == 1  # manual mode is active
-
-
-def test_read_state_firmware_when_enable_reverted_even_if_spinning(tmp_path):
-    # The firmware owns the mode (enable=2) and the fan happens to spin — a positive
-    # RPM must NOT confirm manual on its own; the enable readback rules.
-    d = _mk_pwm_chip(str(tmp_path))
-    _w(d, "fan1_input", "1800")         # spinning (firmware's doing)
-    b = _backend(tmp_path, temp=70.0)
-    b.apply_curve_all(CURVE)
-    _w(d, "pwm1_enable", "2")           # firmware reclaimed the mode
-    assert b.read_state()["fans"][0]["enable"] == 2
-
-
-def test_read_state_firmware_when_not_driving(tmp_path):
-    _mk_pwm_chip(str(tmp_path), enable="2")
-    assert _backend(tmp_path).read_state()["fans"][0]["enable"] == 2  # never applied
-
-
-def test_partial_write_leaves_failed_fan_in_firmware(tmp_path):
-    # fan2's pwm write fails after manual engaged → fan2 is rolled back to firmware auto
-    # (never left stuck manual@max); fan1 (fully written) reads manual. One failure ≠
-    # all firmware.
-    import os as _os
-    d = _mk_pwm_chip(str(tmp_path), fans=(1, 2))
-    _w(d, "fan1_input", "1800")
-    _w(d, "fan2_input", "1800")
-    _os.chmod(_os.path.join(d, "pwm2"), 0o444)  # fan2 pwm write fails
-    b = _backend(tmp_path, temp=80.0)
-    res = b.apply_curve_all(CURVE)
-    assert res["ok"] is False
-    st = {f["key"]: f["enable"] for f in b.read_state()["fans"]}
-    assert st["fan1"] == 1                    # fully driven → manual
-    assert st["fan2"] == 2                    # duty refused → rolled back to firmware
-    assert _r(d, "pwm2_enable") == "2"        # stays auto, never stuck manual@max
-
-
-def test_factory_selects_generic_pwm_last(tmp_path):
-    _mk_pwm_chip(str(tmp_path))
-    backend = select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0)
-    assert isinstance(backend, GenericPwmFanBackend)
-
-
-def test_factory_null_when_nothing(tmp_path):
-    assert isinstance(select_fan_backend(None, root=str(tmp_path)), NullFanBackend)
-
-
-def test_discrete_gpu_fan_is_never_driven(tmp_path):
-    # A desktop whose only pwm+tach chip is the dGPU's amdgpu hwmon.
-    # The graphics firmware owns that fan; the generic loop must leave it alone.
-    for idx, driver in enumerate(("amdgpu", "radeon", "nouveau", "i915", "xe")):
-        _mk_pwm_chip(str(tmp_path), idx=idx, name=driver)
+@pytest.mark.parametrize("chips", [
+    pytest.param([], id="no-hwmon"),
+    pytest.param([dict(name="mystery", tach=False)], id="pwm-without-tach"),
+    pytest.param([dict(idx=3, name="nct6798", tach=False)], id="tachless-board-chip"),
+    pytest.param([dict(idx=i, name=n) for i, n in enumerate(GPU_DRIVERS)], id="discrete-gpu-only"),
+])
+def test_chips_that_are_never_driven(tmp_path, chips):
+    for chip in chips:
+        _chip(tmp_path, **chip)
     assert _backend(tmp_path).supported is False
     assert isinstance(select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0),
                       NullFanBackend)
 
 
+@pytest.mark.parametrize("temp, curve, fans, check", [
+    pytest.param(70.0, CURVE, (1,), lambda duty: duty == 95, id="interpolated"),
+    pytest.param(40.0, CURVE, (1,), lambda duty: duty == 0, id="cold-allows-zero"),
+    pytest.param(95.0, [(40, 0), (95, 0)], (1,), lambda duty: duty >= 76, id="hot-safety-floor"),
+    pytest.param(80.0, CURVE, (1, 2), lambda duty: duty == 135, id="every-fan"),
+])
+def test_apply_engages_manual_and_writes_the_curve_duty(tmp_path, temp, curve, fans, check):
+    d = _chip(tmp_path, fans=fans)
+    backend = select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: temp)
+    assert isinstance(backend, GenericPwmFanBackend)
+    assert backend.read_state()["fans"][0]["rpm"] == 1800
+    assert backend.apply_curve_all(curve)["ok"] is True
+    for m in fans:
+        assert _r(d, f"pwm{m}_enable") == "1"
+        assert check(int(_r(d, f"pwm{m}")))
+    backend.set_auto(None)
+    assert all(_r(d, f"pwm{m}_enable") == "2" for m in fans)
+
+
+@pytest.mark.parametrize("name, auto, temp, duty", [
+    pytest.param("gpdfan", "2", 70.0, 95, id="gpd_fan"),
+    pytest.param("oxpec", "0", 80.0, 135, id="oxp-auto-sentinel-0"),
+])
+def test_strict_driver_gets_manual_before_duty_and_its_own_auto_back(
+        tmp_path, monkeypatch, name, auto, temp, duty):
+    d = _chip(tmp_path, name=name, enable=auto)
+    _strict_driver(monkeypatch)
+    backend = _backend(tmp_path, temp=temp)
+    assert backend.apply_curve_all(CURVE)["ok"] is True
+    assert _r(d, "pwm1_enable") == "1"
+    assert int(_r(d, "pwm1")) == duty
+    backend.set_auto(None)
+    assert _r(d, "pwm1_enable") == auto
+
+
+def test_missing_temperature_releases_to_auto(tmp_path):
+    d = _chip(tmp_path)
+    GenericPwmFanBackend(root=str(tmp_path), temp_fn=lambda: None).apply_curve_all(CURVE)
+    assert _r(d, "pwm1_enable") == "2"
+
+
+def test_read_state_enable_follows_the_mode_readback_not_the_tach(tmp_path):
+    d = _chip(tmp_path)
+    backend = _backend(tmp_path)
+    assert backend.read_state()["fans"][0]["enable"] == 2
+    _w(d, "fan1_input", "0")
+    backend.apply_curve_all(CURVE)
+    assert backend.read_state()["fans"][0]["enable"] == 1
+    _w(d, "fan1_input", "1800")
+    _w(d, "pwm1_enable", "2")
+    assert backend.read_state()["fans"][0]["enable"] == 2
+
+
+def test_partial_write_rolls_the_failed_fan_back_to_firmware(tmp_path):
+    d = _chip(tmp_path, fans=(1, 2))
+    os.chmod(os.path.join(d, "pwm2"), 0o444)
+    backend = _backend(tmp_path, temp=80.0)
+    assert backend.apply_curve_all(CURVE)["ok"] is False
+    assert {f["key"]: f["enable"] for f in backend.read_state()["fans"]} == {"fan1": 1, "fan2": 2}
+    assert _r(d, "pwm2_enable") == "2"
+
+
 def test_discrete_gpu_chip_is_skipped_for_the_system_fan_chip(tmp_path):
-    gpu = _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
-    board = _mk_pwm_chip(str(tmp_path), idx=1, name="nct6798")
-    backend = _backend(tmp_path, temp=70.0)
+    gpu = _chip(tmp_path, idx=0, name="amdgpu")
+    board = _chip(tmp_path, idx=1, name="nct6798")
+    backend = _backend(tmp_path)
     assert backend.supported is True
     backend.set_curve("fan1", CURVE)
     assert _r(board, "pwm1_enable") == "1"
-    assert _r(gpu, "pwm1_enable") == "2"
-    assert _r(gpu, "pwm1") == "0"
-
-
-def _desktop():
-    from device_profiles import DESKTOP_PC
-    return DESKTOP_PC
+    assert (_r(gpu, "pwm1_enable"), _r(gpu, "pwm1")) == ("2", "0")
 
 
 def test_desktop_drives_only_spinning_board_headers_above_the_floor(tmp_path):
-    gpu = _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
-    board = _mk_pwm_chip(str(tmp_path), idx=1, name="nct6798", fans=(1, 2, 3), enable="5")
+    gpu = _chip(tmp_path, idx=0, name="amdgpu")
+    board = _chip(tmp_path, idx=1, name="nct6798", fans=(1, 2, 3), enable="5")
     _w(board, "fan3_input", "0")
-    backend = select_fan_backend(_desktop(), root=str(tmp_path), temp_fn=lambda: 30.0)
+    backend = select_fan_backend(DESKTOP_PC, root=str(tmp_path), temp_fn=lambda: 30.0)
 
     assert isinstance(backend, GenericPwmFanBackend)
     backend.set_curve("fan1", CURVE)
@@ -276,14 +161,13 @@ def test_desktop_drives_only_spinning_board_headers_above_the_floor(tmp_path):
 
 
 def test_desktop_without_board_fans_is_read_only(tmp_path):
-    _mk_pwm_chip(str(tmp_path), idx=0, name="amdgpu")
-    assert isinstance(select_fan_backend(_desktop(), root=str(tmp_path)), NullFanBackend)
+    _chip(tmp_path, name="amdgpu")
+    assert isinstance(select_fan_backend(DESKTOP_PC, root=str(tmp_path)), NullFanBackend)
 
 
 def _pwm_fan_board(root, bound=False):
-    """An ARM board with the kernel pwm-fan driver: enable 3 = regulator off, no automatic."""
-    chip = _mk_pwm_chip(root, name="pwmfan", enable="3")
-    thermal = os.path.join(root, "sys/class/thermal")
+    chip = _chip(root, name="pwmfan", enable="3")
+    thermal = os.path.join(str(root), "sys/class/thermal")
     cooling = os.path.join(thermal, "cooling_device3")
     os.makedirs(cooling)
     _w(cooling, "type", "pwm-fan")
@@ -294,49 +178,25 @@ def _pwm_fan_board(root, bound=False):
     return chip
 
 
-def test_pwm_fan_without_a_thermal_binding_has_no_firmware_automatic(tmp_path):
-    _pwm_fan_board(tmp_path)
-    assert _backend(tmp_path).firmware_auto is False
-
-
-def test_pwm_fan_bound_to_a_thermal_zone_keeps_the_kernel_automatic(tmp_path):
-    _pwm_fan_board(tmp_path, bound=True)
+@pytest.mark.parametrize("make, expected", [
+    pytest.param(_chip, True, id="pc-fan-chip"),
+    pytest.param(lambda root: _pwm_fan_board(root, bound=True), True, id="pwm-fan-thermally-bound"),
+    pytest.param(_pwm_fan_board, False, id="pwm-fan-unbound"),
+])
+def test_firmware_automatic_exists_only_where_something_else_drives_the_fan(tmp_path, make, expected):
+    make(tmp_path)
     backend = _backend(tmp_path)
-    assert backend.firmware_auto is True
+    assert backend.firmware_auto is expected
     assert backend.set_auto()["ok"] is True
 
 
-def test_pc_fan_chips_keep_their_firmware_automatic(tmp_path):
-    _mk_pwm_chip(tmp_path)
-    assert _backend(tmp_path).firmware_auto is True
-
-
-def test_auto_without_a_firmware_automatic_runs_panels_own_curve(tmp_path):
+def test_without_a_firmware_automatic_auto_runs_panels_curve_and_release_keeps_it_spinning(tmp_path):
     chip = _pwm_fan_board(tmp_path)
     backend = _backend(tmp_path, temp=70.0)
-    result = backend.set_auto()
-    assert result["ok"] is True
+    assert backend.set_auto()["ok"] is True
     assert _r(chip, "pwm1_enable") == "1"
-    from fans.presets import RESOLVED
-    expected = dict(RESOLVED["balanced"])[70]
-    assert int(_r(chip, "pwm1")) == expected
+    assert int(_r(chip, "pwm1")) == dict(RESOLVED["balanced"])[70]
 
-
-def test_letting_go_without_a_firmware_automatic_leaves_the_fan_spinning(tmp_path):
-    chip = _pwm_fan_board(tmp_path)
-    backend = _backend(tmp_path, temp=40.0)
-    backend.set_auto()
-    result = backend.restore_auto()
-    assert result["ok"] is True
+    assert backend.restore_auto()["ok"] is True
     assert _r(chip, "pwm1_enable") == "1"
     assert _r(chip, "pwm1") == str(generic_pwm.FAILSAFE_DUTY)
-
-
-def test_tachless_pwm_on_other_chips_is_never_driven(tmp_path):
-    root = str(tmp_path)
-    d = os.path.join(root, "sys/class/hwmon/hwmon3")
-    os.makedirs(d)
-    for name, value in (("name", "nct6798"), ("pwm1", "100"), ("pwm1_enable", "2")):
-        with open(os.path.join(d, name), "w") as handle:
-            handle.write(value)
-    assert GenericPwmFanBackend(temp_fn=lambda: 50.0, root=root).supported is False

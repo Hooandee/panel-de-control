@@ -205,6 +205,7 @@ _SCREEN_LEASE_S = 15.0
 _ECO_INPUT_POLL_S = 0.25
 _ECO_INPUT_REPORT_S = 1.0
 _ECO_RESCAN_S = 5.0
+_ECO_READBACK_TIMEOUT_S = 0.5
 _SCREEN_WAKE_RETRY_S = 2.0
 _ECO_INPUT_EVENT = "pdc_eco_input"
 _SUPPORT_CONTEXT_INTERVAL_S = 900
@@ -10615,7 +10616,7 @@ class Plugin(AmbientRpc):
 
     async def _eco_performance_readback(self) -> dict:
         try:
-            return await asyncio.wait_for(asyncio.to_thread(pulse.performance_sample), timeout=0.5)
+            return await asyncio.wait_for(asyncio.to_thread(pulse.performance_sample), timeout=_ECO_READBACK_TIMEOUT_S)
         except Exception as error:  # noqa: BLE001
             return {"error": type(error).__name__}
 

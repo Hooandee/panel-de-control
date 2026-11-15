@@ -12,6 +12,11 @@ from tdp.reconcile import build_targets
 from tdp.types import RailReading, TdpObservation
 
 
+@pytest.fixture(autouse=True)
+def _instant_readback_settle(monkeypatch):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+
+
 def _p(key):
     return next(x for x in DEVICE_TABLE if x.key == key)
 
@@ -493,7 +498,6 @@ def test_exact_legion_go_2_83n0_rearms_custom_when_firmware_left_it(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
@@ -520,7 +524,6 @@ def test_exact_legion_go_2_83n0_recovers_lock_by_rearming_custom(
     monkeypatch,
     rail_writes_fail,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     lock_path = _arm_lenovo_transaction_lock(
@@ -559,7 +562,6 @@ def test_exact_legion_go_2_83n0_recovers_lock_by_rearming_custom(
 
 def _stuck_go_2_lock(tmp_path, monkeypatch, choices=None):
     clock = {"now": 1000.0}
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     monkeypatch.setattr("tdp.firmware_attr.time.monotonic", lambda: clock["now"])
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
@@ -688,7 +690,6 @@ def test_exact_legion_go_2_83n0_handoff_backoff_survives_a_restart(tmp_path, mon
 
 
 def test_exact_legion_go_2_83n0_failed_rollback_lock_reports_its_age(tmp_path, monkeypatch):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
@@ -737,7 +738,6 @@ def test_exact_legion_go_2_83n0_unreadable_rail_does_not_rearm_on_recovery(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     lock_path = _arm_lenovo_transaction_lock(root, "custom")
@@ -761,7 +761,6 @@ def test_exact_legion_go_2_83n0_rails_held_at_live_max_do_not_rearm(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(35, 30, 30))
     attributes = os.path.join(root, "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes")
@@ -791,7 +790,6 @@ def test_exact_legion_go_2_83n0_partial_convergence_does_not_rearm(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     backend = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
@@ -1141,7 +1139,6 @@ def test_exact_legion_go_s_83n6_low_power_boot_rollback_does_not_lock_tdp(
         return written
 
     monkeypatch.setattr(backend, "_write", low_power_firmware)
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
 
     result = backend.set_levels(5, 15, 20, ac=False)
 
@@ -1238,7 +1235,6 @@ def test_exact_legion_go_s_named_recovery_fails_closed(
     )
     if failure == "profile-unreadable":
         monkeypatch.setattr(backend, "read_profile", lambda: None)
-        monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     elif failure == "lock-clear":
         monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
     elif failure == "rail-unreadable":
@@ -2499,7 +2495,6 @@ def test_go_2_lock_with_changed_surfaces_hands_off_instead_of_retrying_forever(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)
     _mk_legion_firmware(root, "83N0", "custom", current=(28, 28, 30))
     lock_path = _arm_lenovo_transaction_lock(

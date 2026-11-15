@@ -15,6 +15,7 @@ from pdc_platform.host_env import clean_env
 FRAME_RATES = (10, 15, 24, 30)
 CODECS = ("h264", "vp9")
 TIMEOUT_SEC = 900
+_POLL_SEC = 0.5
 _KNOWN_FFMPEG = ("/usr/bin/ffmpeg",)
 
 
@@ -100,7 +101,7 @@ def _run(command: list[str], cancel: Optional[threading.Event], timeout: float =
     deadline = time.monotonic() + timeout
     while True:
         try:
-            code = process.wait(timeout=0.5)
+            code = process.wait(timeout=_POLL_SEC)
             break
         except subprocess.TimeoutExpired:
             if no_space.is_set() or (cancel is not None and cancel.is_set()) or time.monotonic() > deadline:

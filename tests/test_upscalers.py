@@ -513,7 +513,7 @@ def test_capture_moves_gamescope_shot_and_keeps_a_few(tmp_path):
 
     folder = tmp_path / "compare"
     for index in range(capture.KEEP + 2):
-        shot = capture.take(folder, f"s{index}", run=fake_run, scratch=str(tmp_path))
+        shot = capture.take(folder, f"s{index}", run=fake_run, scratch=str(tmp_path), sleep=lambda _: None)
         os.utime(shot, (index, index))
     assert len(list(folder.glob("*.png"))) == capture.KEEP
     assert capture.data_url(shot).startswith("data:image/png;base64,")

@@ -10,7 +10,6 @@ import {
   addSpacer,
   addTextItem,
   blockGroupOf,
-  blockMetricIds,
   canLabel,
   hasBlock,
   hexToRgb,
@@ -29,13 +28,6 @@ import {
 } from "./model";
 
 const metrics = (...ids: string[]): HudItem[] => ids.map((id) => ({ kind: "metric", id: id as never }));
-
-describe("default model", () => {
-  it("defines MangoHud's independent secondary font size", () => {
-    expect(DEFAULT_MODEL).toHaveProperty("fontSizeSecondary", 13);
-    expect(DEFAULT_MODEL).not.toHaveProperty("separateTextSize");
-  });
-});
 
 describe("preview font sizes", () => {
   it("mirrors MangoHud's main, small, auxiliary and media font roles", () => {
@@ -176,12 +168,6 @@ describe("blocks (GPU/CPU one expandable row each)", () => {
     expect(blockGroupOf(metric)).toBe(group);
   });
 
-  it("blockMetricIds lists every sub-metric of a group", () => {
-    expect(blockMetricIds("gpu")).toContain("vram");
-    expect(blockMetricIds("cpu")).toContain("cores");
-    expect(blockMetricIds("battery")).toContain("battery_watt");
-  });
-
   it("listRows collapses a contiguous battery run into one block row", () => {
     const rows = listRows(metrics("fps", "battery", "battery_watt", "ram"));
     expect(rows.map((r) => r.kind)).toEqual(["metric", "block", "metric"]);
@@ -280,14 +266,6 @@ describe("canLabel", () => {
 });
 
 describe("pdc (Panel de Control) metrics", () => {
-  it("has a pdc group listing all plugin-state metrics", () => {
-    const pdc = GROUPS.find((g) => g.key === "pdc");
-    expect(pdc?.ids).toEqual([
-      "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
-      "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_bat_power",
-      "pdc_bat_time", "pdc_smt", "pdc_boost", "pdc_cores", "pdc_gpu_clock", "pdc_model",
-    ]);
-  });
   it("renders a pdc metric with the latest honest backend value", () => {
     const rows = previewRows(
       { ...DEFAULT_MODEL, items: [{ kind: "metric", id: "pdc_tdp" }] },

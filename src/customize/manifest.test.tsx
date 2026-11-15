@@ -10,6 +10,7 @@ import {
   subitemsFor,
   TABS,
 } from "./manifest";
+import panelSections from "../../shared/contracts/panel-sections.json";
 
 describe("section block ownership", () => {
   it("places GPU frequency in System instead of Power", () => {
@@ -29,6 +30,10 @@ describe("theme section registration", () => {
       expect(tab.accent).toMatch(/^#[0-9a-f]{6}$/i);
       expect(typeof tab.icon).toBe("function");
     }
+  });
+
+  it("matches the section list the backend keeps support logs for", () => {
+    expect(TABS.map((tab) => tab.id)).toEqual(panelSections);
   });
 
   it("keeps Themes customizable immediately before pinned Settings", () => {

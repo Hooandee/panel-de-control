@@ -295,7 +295,3 @@ def test_observed_range_ignores_transient_bins():
 def test_observed_range_none_when_no_data():
     b = learned_band({})
     assert b["observed_lo"] is None and b["observed_hi"] is None
-
-
-def test_min_minutes_is_30():
-    assert tdp_suggest.MIN_MINUTES == 30

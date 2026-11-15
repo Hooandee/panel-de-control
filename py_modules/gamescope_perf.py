@@ -179,13 +179,13 @@ Emit = Callable[[float, int, int], None]
 
 def pump_frames(
     root: str, skip: set[str], app_id: Callable[[], int | None], emit: Emit, stopped: Callable[[], bool],
-    tick: Callable[[], None] = lambda: None,
+    tick: Callable[[], None] = lambda: None, pause: Callable[[float], object] = time.sleep,
 ) -> None:
     """Ask for every frame of the app `app_id()` names until `stopped()`; reconnects as needed."""
     while not stopped():
         wire = _connect(root, skip)
         if wire is None:
-            time.sleep(2.0)
+            pause(2.0)
             continue
         asked_for: int | None = None
         asked_at = 0.0
@@ -195,7 +195,7 @@ def pump_frames(
                 current = app_id()
                 if not current:
                     asked_for = None
-                    time.sleep(0.25)
+                    pause(0.25)
                     continue
                 if asked_for != current or time.monotonic() - asked_at > STALE_S:
                     _ask(wire, current)
@@ -211,7 +211,7 @@ def pump_frames(
             pass
         finally:
             wire.close()
-        time.sleep(1.0)
+        pause(1.0)
 
 
 # The helper sums frames into short buckets so the plugin handles a few lines a second, not one per
@@ -344,7 +344,7 @@ class GamescopePerf:
         else:
             target = pump_frames
             args = (self._root, set(self._skip_connectors()), self._app_id,
-                    lambda at, app, ft: self._record(app, ft, at), self._stop.is_set)
+                    lambda at, app, ft: self._record(app, ft, at), self._stop.is_set, lambda: None, self._stop.wait)
         self._thread = threading.Thread(target=target, args=args, daemon=True, name="gamescope-perf")
         self._thread.start()
 

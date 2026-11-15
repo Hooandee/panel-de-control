@@ -8,6 +8,11 @@ import time
 from ambient.adapters import optimizer as opt
 
 
+@pytest.fixture(autouse=True)
+def _fast_process_polling(monkeypatch):
+    monkeypatch.setattr(opt, "_POLL_SEC", 0.01)
+
+
 def test_plan_downscales_only_when_needed():
     assert opt.needs_optimization(width=3840, height=2160, target_height=800) is True
     assert opt.needs_optimization(width=1280, height=720, target_height=800) is False
@@ -75,7 +80,7 @@ def test_run_kills_a_cancelled_process(monkeypatch):
     import sys
     import threading
     cancel = threading.Event()
-    threading.Timer(0.3, cancel.set).start()
+    cancel.set()
     assert opt._run([sys.executable, "-c", "import time; time.sleep(30)"], cancel) == -1
 
 

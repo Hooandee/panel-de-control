@@ -21,7 +21,10 @@ class CaptureError(Exception):
         self.code = code
 
 
-def take(folder: Path, name: str, run: Run = gamescopectl, scratch: str = "/tmp") -> Path:
+def take(
+    folder: Path, name: str, run: Run = gamescopectl, scratch: str = "/tmp",
+    sleep: Callable[[float], object] = time.sleep,
+) -> Path:
     """Ask gamescope for a screenshot and move it into `folder`; gamescope writes as the session user."""
     folder.mkdir(parents=True, exist_ok=True)
     temporary = Path(scratch) / f"pdc-upscaler-{os.getpid()}-{time.monotonic_ns()}.png"
@@ -38,7 +41,7 @@ def take(folder: Path, name: str, run: Run = gamescopectl, scratch: str = "/tmp"
         if size > 0 and size == last:
             break
         last = size
-        time.sleep(0.15)
+        sleep(0.15)
     else:
         temporary.unlink(missing_ok=True)
         raise CaptureError("capture_failed")

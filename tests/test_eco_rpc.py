@@ -58,6 +58,7 @@ def _make_plugin(tmp_path, monkeypatch, boost=None):
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": False)
     main = importlib.reload(importlib.import_module("main"))
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": False, raising=False)
+    monkeypatch.setattr(main, "_ECO_INPUT_POLL_S", 0.01)
 
     if boost is not None:
         original_init = main.Plugin._init
@@ -219,8 +220,7 @@ def _setup(tmp_path, monkeypatch, screen=None):
     p._init()
     p._screen_sleep, p._input_wake = screen or _FakeScreen(), _FakeInput()
     main = sys.modules["main"]
-    for name, value in (("_ECO_INPUT_POLL_S", 0.01), ("_SCREEN_WAKE_RETRY_S", 0.01)):
-        monkeypatch.setattr(main, name, value)
+    monkeypatch.setattr(main, "_SCREEN_WAKE_RETRY_S", 0.01)
     emitted = []
 
     async def emit(event, *args):
@@ -422,6 +422,7 @@ def test_eco_readback_timeout_is_reported_without_waiting_for_hardware(tmp_path,
     async def stuck(*args, **kwargs):
         await asyncio.Event().wait()
     monkeypatch.setattr(main.asyncio, 'to_thread', stuck)
+    monkeypatch.setattr(main, '_ECO_READBACK_TIMEOUT_S', 0.01)
     async def scenario():
         result = await asyncio.wait_for(p._eco_performance_readback(), timeout=1.5)
         assert result == {'error': 'TimeoutError'}

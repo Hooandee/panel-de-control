@@ -1,26 +1,18 @@
 import asyncio
-import re
+import json
 import sys
 from pathlib import Path
 
 from journal_context import bounded, pick_fields, section_changes
 from test_tdp_guard_rpc import plugin  # noqa: F401
 
-REGISTRY = Path(__file__).resolve().parents[1] / "src" / "sections" / "registry.tsx"
-
-
-def _panel_sections():
-    source = REGISTRY.read_text()
-    block = source[source.index("const COMPONENTS"):]
-    block = block[:block.index("};")]
-    return set(re.findall(r"^\s+([a-z_]+):", block, re.M))
+PANEL_SECTIONS = Path(__file__).resolve().parents[1] / "shared" / "contracts" / "panel-sections.json"
 
 
 def test_every_panel_section_declares_what_it_has_applied(plugin):  # noqa: F811
     main = sys.modules["main"]
-    sections = _panel_sections()
-    assert sections, "registry.tsx changed shape; update this test"
-    assert sections == set(main._SUPPORT_SECTIONS), (
+    sections = json.loads(PANEL_SECTIONS.read_text())
+    assert set(sections) == set(main._SUPPORT_SECTIONS), (
         "Every Panel section needs support logs: add it to main._SUPPORT_SECTIONS"
     )
 

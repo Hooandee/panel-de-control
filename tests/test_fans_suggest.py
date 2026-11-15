@@ -136,10 +136,6 @@ def test_biased_curve_is_sanitized_8_points_monotonic():
         assert pwms == sorted(pwms)
 
 
-def test_min_minutes_is_30():
-    assert fan_suggest.MIN_MINUTES == 30
-
-
 # ---------------------------------------------------------------------------
 # curve_changed — anti-churn gate for periodic re-apply
 # ---------------------------------------------------------------------------

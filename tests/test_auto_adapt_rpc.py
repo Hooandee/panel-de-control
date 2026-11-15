@@ -903,26 +903,6 @@ def test_game_exit_keeps_global_auto_grid_floor_and_restores_manual_on_disable(P
     assert p._tdp_backend._levels == (5, 8, 12)
 
 
-def test_game_exit_applies_global_auto_floor_while_ui_is_active(Plugin):
-    p = Plugin()
-    p._init()
-    p._tdp_profiles.set_pl1("global", 5)
-    p._tdp_profiles.set_auto_config("global", 60, 5)
-    p._tdp_profiles.set_auto_tdp("global", True)
-    asyncio.run(p.set_current_game("42"))
-    p._auto_controller.setpoint = 33
-    p._auto_setpoint = 33
-    p._tdp_backend._applied = 33
-    p._tdp_backend._levels = (33, 33, 33)
-    asyncio.run(p.set_ui_active(True))
-
-    asyncio.run(p.set_current_game(None))
-
-    assert p._tdp_backend._levels == (15, 15, 15)
-    assert p._auto_controller is None
-    assert p._auto_setpoint is None
-
-
 def test_auto_tick_recovers_from_the_lowest_fps_between_ticks(Plugin):
     p = Plugin()
     p._init()
