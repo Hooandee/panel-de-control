@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PanelDeControl.Core.NativeKeyboard;
 using System.Text;
 
 namespace PanelDeControl.Hardware.NativeKeyboard;
@@ -12,17 +13,20 @@ public sealed class NativeKeyboardHost : INativeKeyboardHost
     private static TaskCompletionSource<Process> NewReady() => new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool Available => File.Exists(executable) && File.Exists(Path.Combine(Path.GetDirectoryName(executable)!, "PanelDeControl.KeyboardTap.dll"));
 
-    public async Task RunAsync(Action<string> onReceipt, CancellationToken token)
+    public async Task RunAsync(string themeId, Action<string> onReceipt, CancellationToken token)
     {
+        if (!NativeKeyboardThemes.IsValid(themeId)) throw new ArgumentException("Unknown keyboard theme.", nameof(themeId));
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo(executable, "serve")
+            StartInfo = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 WorkingDirectory = Path.GetDirectoryName(executable)!,
             },
         };
+        process.StartInfo.ArgumentList.Add("serve");
+        process.StartInfo.ArgumentList.Add(themeId);
         var started = Volatile.Read(ref ready);
         var launched = false;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -43,7 +47,11 @@ public sealed class NativeKeyboardHost : INativeKeyboardHost
             started.TrySetCanceled();
             Interlocked.CompareExchange(ref active, null, process);
             lifetime.Cancel();
-            if (launched && !process.HasExited) process.Kill();
+            if (launched)
+            {
+                try { if (!process.HasExited) process.Kill(); }
+                finally { await process.WaitForExitAsync().ConfigureAwait(false); }
+            }
             try { await Task.WhenAll(stdout, stderr).ConfigureAwait(false); }
             catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidDataException) { }
             Interlocked.CompareExchange(ref ready, NewReady(), started);

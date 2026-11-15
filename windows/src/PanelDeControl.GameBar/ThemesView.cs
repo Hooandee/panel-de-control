@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using PanelDeControl.Core.Themes;
+using PanelDeControl.Core.NativeKeyboard;
 using Windows.ApplicationModel.Resources;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.Resources.Core;
@@ -34,6 +35,7 @@ public sealed class ThemesView : UserControl
     private readonly StackPanel themeList = new() { Spacing = 10 };
     private readonly TextBlock emptyText = new();
     private readonly TextBlock nativeStatus = new();
+    private readonly ComboBox nativeTheme = new();
     private readonly Button nativeEnable = new();
     private readonly Button nativeDisable = new();
     private readonly Button nativeDiagnostics = new();
@@ -156,10 +158,18 @@ public sealed class ThemesView : UserControl
         nativeStatus.TextWrapping = TextWrapping.WrapWholeWords;
         foreach (var button in new[] { nativeEnable, nativeDisable, nativeDiagnostics })
             button.Style = Resource<Style>("PdcChipButtonStyle");
+        nativeTheme.Header = Localized("NativeKeyboardTheme");
+        nativeTheme.HorizontalAlignment = HorizontalAlignment.Stretch;
+        nativeTheme.Items.Add(new ComboBoxItem { Content = "Terciopelo", Tag = NativeKeyboardThemes.Terciopelo });
+        nativeTheme.Items.Add(new ComboBoxItem { Content = "Lobo Blanco", Tag = NativeKeyboardThemes.LoboBlanco });
+        nativeTheme.SelectedIndex = 0;
+        AutomationProperties.SetName(nativeTheme, Localized("NativeKeyboardTheme"));
+        AutomationProperties.SetAutomationId(nativeTheme, "NativeKeyboardThemeSelector");
+        nativeTheme.SelectionChanged += (_, _) => ApplyNativeKeyboardActions(last?.NativeKeyboard);
         nativeEnable.Content = Localized("NativeKeyboardTry");
         nativeDisable.Content = Localized("NativeKeyboardDisable");
         nativeDiagnostics.Content = Localized("NativeKeyboardDiagnostics");
-        nativeEnable.Click += async (_, _) => await RunAsync(() => client.SetNativeKeyboardAsync(true));
+        nativeEnable.Click += async (_, _) => await RunAsync(() => client.SetNativeKeyboardAsync(true, SelectedNativeTheme));
         nativeDisable.Click += async (_, _) => await RunAsync(() => client.SetNativeKeyboardAsync(false));
         nativeDiagnostics.Click += (_, _) =>
         {
@@ -196,7 +206,7 @@ public sealed class ThemesView : UserControl
             Style = Resource<Style>("PdcCardStyle"),
             Child = new StackPanel { Spacing = 10, Children =
             {
-                title, detail, nativeStatus, nativeEnable, nativeDisable, keyboardTest, nativeDiagnostics,
+                title, detail, nativeTheme, nativeStatus, nativeEnable, nativeDisable, keyboardTest, nativeDiagnostics,
             } },
         };
     }
@@ -218,10 +228,31 @@ public sealed class ThemesView : UserControl
             _ => "NativeKeyboardUnavailable",
         };
         nativeStatus.Text = Localized(key);
+        if (state is not null)
+            nativeStatus.Text += "\n" + string.Format(Localized("NativeKeyboardThemeStatus"),
+                NativeThemeName(state.Requested ? state.RequestedTheme : ""), NativeThemeName(state.AppliedTheme));
         if (state is not null && state.WindowsBuild > 0)
             nativeStatus.Text += "\n" + string.Format(Localized("NativeKeyboardSummary"), state.WindowsBuild, state.Architecture, state.StyledKeys, state.KeyCount, state.RestoredKeys);
-        nativeEnable.IsEnabled = state is not null && !operationPending && state.Status is ("disabled" or "connection_failed" or "restore_unconfirmed");
-        nativeDisable.IsEnabled = state?.Requested == true && !operationPending;
+        ApplyNativeKeyboardActions(state);
+    }
+
+    private string SelectedNativeTheme => nativeTheme.SelectedItem is ComboBoxItem { Tag: string id }
+        ? id : NativeKeyboardThemes.Terciopelo;
+
+    private static string NativeThemeName(string id) => id switch
+    {
+        NativeKeyboardThemes.Terciopelo => "Terciopelo",
+        NativeKeyboardThemes.LoboBlanco => "Lobo Blanco",
+        _ => Localized("NativeKeyboardNone"),
+    };
+
+    private void ApplyNativeKeyboardActions(NativeKeyboardStatus? state)
+    {
+        nativeTheme.IsEnabled = state is not null && !operationPending && state.Status != "restoring";
+        nativeEnable.IsEnabled = state is not null && !operationPending && state.Status != "restore_unconfirmed" &&
+            (state.Status is "disabled" or "connection_failed" or "runtime_missing" ||
+             (state.Status is "applied" or "applying" or "waiting_for_keyboard" && state.RequestedTheme != SelectedNativeTheme));
+        nativeDisable.IsEnabled = state is not null && !operationPending && (state.Requested || state.Status == "restore_unconfirmed");
         nativeDiagnostics.IsEnabled = state?.Diagnostics is not null && !operationPending;
     }
 

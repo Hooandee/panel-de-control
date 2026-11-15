@@ -34,7 +34,7 @@ public sealed class ThemesController : IThemesController, IAsyncDisposable
             switch (request.Operation)
             {
                 case ThemesOperation.SetNativeKeyboard:
-                    await nativeKeyboard.SetEnabledAsync(request.Enabled!.Value, cancellationToken).ConfigureAwait(false);
+                    await nativeKeyboard.SetEnabledAsync(request.Enabled!.Value, request.ThemeId ?? Core.NativeKeyboard.NativeKeyboardThemes.Terciopelo, cancellationToken).ConfigureAwait(false);
                     return Response(engine.Status);
                 case ThemesOperation.Get:
                     _ = Task.Run(() => service.RefreshCatalogAsync(force: false, CancellationToken.None), CancellationToken.None);

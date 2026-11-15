@@ -28,6 +28,21 @@ public sealed class NativeKeyboardTests
     }
 
     [Fact]
+    public async Task ImmediateDisableWaitsForRestorationFromStartingHost()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        var stopping = controller.SetEnabledAsync(false, CancellationToken.None);
+        await host.Started.Task;
+        await host.StopRequested.Task;
+        Assert.Equal("restoring", controller.Status.Status);
+        host.Emit(Receipt("disabled"));
+        host.Finish();
+        Assert.Equal("disabled", (await stopping).Status);
+    }
+
+    [Fact]
     public async Task ProcessExitWithoutRestoreReceiptDoesNotClaimOriginalAppearance()
     {
         var host = new Host();
@@ -233,7 +248,7 @@ public sealed class NativeKeyboardTests
     }
 
     [Fact]
-    public async Task ExplicitRetryAfterLostHostRequiresFreshAppliedReceipt()
+    public async Task LostHostWithoutRestorationReceiptBlocksFreshActivation()
     {
         var host = new Host();
         await using var controller = new NativeKeyboardController(host);
@@ -242,15 +257,134 @@ public sealed class NativeKeyboardTests
         host.Emit(Receipt("applied", styled: 3));
         host.Finish();
         await Eventually(() => controller.Status.Status == "connection_failed");
-        Assert.Equal("restore_unconfirmed", (await controller.SetEnabledAsync(false, CancellationToken.None)).Status);
-        host.Reset();
-        Assert.Equal("applying", (await controller.SetEnabledAsync(true, CancellationToken.None)).Status);
-        await Eventually(() => host.Starts == 2);
-        Assert.False(controller.Status.Connected);
-        host.Emit(Receipt("applied", styled: 4, pid: 99));
+        Assert.Equal("restore_unconfirmed", (await controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None)).Status);
+        Assert.Equal(1, host.Starts);
+        Assert.Empty(controller.Status.AppliedTheme);
+    }
+
+    [Theory]
+    [InlineData(5, "terciopelo", "terciopelo")]
+    [InlineData(6, "unknown", "unknown")]
+    [InlineData(6, "lobo-blanco", "lobo-blanco")]
+    [InlineData(6, "terciopelo", "lobo-blanco")]
+    [InlineData(6, "terciopelo", "")]
+    public async Task AppliedReceiptNeedsCurrentProtocolAndMatchingTheme(int protocolVersion, string requestedTheme, string appliedTheme)
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 3, protocolVersion: protocolVersion, requestedTheme: requestedTheme, appliedTheme: appliedTheme));
+        Assert.Equal("invalid_runtime_response", controller.Status.ErrorCode);
+        Assert.Empty(controller.Status.AppliedTheme);
+    }
+
+    [Fact]
+    public async Task WaitingReceiptCannotClaimAppliedTheme()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("waiting_for_keyboard", appliedTheme: "terciopelo"));
+        Assert.Equal("invalid_runtime_response", controller.Status.ErrorCode);
+    }
+
+    [Fact]
+    public async Task LoboBlancoNeedsItsOwnConfirmedReceipt()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        var applying = await controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None);
+        Assert.Equal("lobo-blanco", applying.RequestedTheme);
+        Assert.Empty(applying.AppliedTheme);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 40, requestedTheme: "lobo-blanco"));
         Assert.Equal("applied", controller.Status.Status);
-        Assert.Equal(99, controller.Status.ProcessId);
+        Assert.Equal("lobo-blanco", controller.Status.AppliedTheme);
+        Assert.Contains("lobo-blanco", controller.Status.Diagnostics);
         host.Finish();
+    }
+
+    [Fact]
+    public async Task ThemeSwapWaitsForRestorationAndOldHostExit()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 3));
+        var swap = controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None);
+        await host.StopRequested.Task;
+        Assert.False(swap.IsCompleted);
+        Assert.Equal("restoring", controller.Status.Status);
+        host.Emit(Receipt("disabled", restored: 3));
+        Assert.False(swap.IsCompleted);
+        Assert.Equal(1, host.Starts);
+        host.FinishAndReset();
+        Assert.Equal("applying", (await swap).Status);
+        await Eventually(() => host.Starts == 2);
+        Assert.Equal(new[] { "terciopelo", "lobo-blanco" }, host.Themes);
+        host.EmitPrevious(Receipt("applied", styled: 3));
+        Assert.Empty(controller.Status.AppliedTheme);
+        host.Emit(Receipt("applied", styled: 3, requestedTheme: "lobo-blanco"));
+        Assert.Equal("lobo-blanco", controller.Status.AppliedTheme);
+        host.Finish();
+    }
+
+    [Fact]
+    public async Task FailedRestorationBlocksSwapAndSubsequentActivation()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 3));
+        var swap = controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None);
+        await host.StopRequested.Task;
+        host.Finish();
+        Assert.Equal("restore_unconfirmed", (await swap).Status);
+        Assert.Equal("restore_unconfirmed", (await controller.SetEnabledAsync(true, CancellationToken.None)).Status);
+        Assert.Equal(1, host.Starts);
+    }
+
+    [Fact]
+    public async Task RestoreReceiptWithoutHostExitCannotStartSecondHost()
+    {
+        var host = new Host(ignoreCancellation: true);
+        await using var controller = new NativeKeyboardController(host, stopTimeout: TimeSpan.FromMilliseconds(30));
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        var swap = controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None);
+        await host.StopRequested.Task;
+        host.Emit(Receipt("disabled"));
+        Assert.Equal("restore_unconfirmed", (await swap).Status);
+        Assert.Equal(1, host.Starts);
+        host.Finish();
+    }
+
+    [Fact]
+    public async Task ConcurrentSameThemeActivationStartsOnlyOneHost()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => controller.SetEnabledAsync(true, "lobo-blanco", CancellationToken.None)));
+        await host.Started.Task;
+        Assert.Equal(1, host.Starts);
+        Assert.Equal("lobo-blanco", controller.Status.RequestedTheme);
+        host.Finish();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Lobo Blanco")]
+    [InlineData("unknown")]
+    public async Task UnknownThemeCannotLaunchHost(string theme)
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await Assert.ThrowsAsync<ArgumentException>(() => controller.SetEnabledAsync(true, theme, CancellationToken.None));
+        Assert.Equal(0, host.Starts);
     }
 
     [Fact]
@@ -287,8 +421,10 @@ public sealed class NativeKeyboardTests
     }
 
     private static string Receipt(string status, int styled = 0, int restored = 0, int pid = 41, int build = 26300,
-        string? errorCode = null, bool? connected = null) => JsonSerializer.Serialize(new
+        string? errorCode = null, bool? connected = null, int protocolVersion = 6,
+        string requestedTheme = "terciopelo", string? appliedTheme = null) => JsonSerializer.Serialize(new
     {
+        protocolVersion, requestedTheme, appliedTheme = appliedTheme ?? (status == "applied" ? requestedTheme : ""),
         status, errorCode = errorCode ?? (status == "applied" ? "styles_active" : status == "disabled" ? "styles_restored" : "keyboard_not_running"), windowsBuild = build, architecture = "x64", processId = pid,
         connected = connected ?? pid != 0, observedElements = 0, nodes = Array.Empty<object>(), hresult = 0,
         styledKeys = styled, restoredKeys = restored, keyCount = styled, pendingKeys = 0, stateCatalog = Array.Empty<string>(),
@@ -302,22 +438,26 @@ public sealed class NativeKeyboardTests
 
     private sealed class Host(bool available = true, bool ignoreCancellation = false) : INativeKeyboardHost
     {
-        private Action<string>? receive;
+        private Action<string>? receive, previousReceive;
+        public List<string> Themes { get; } = new();
         private TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StopRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Starts { get; private set; }
         public bool Available => available;
-        public async Task RunAsync(Action<string> onReceipt, CancellationToken token)
+        public async Task RunAsync(string themeId, Action<string> onReceipt, CancellationToken token)
         {
-            Starts++;
+            Themes.Add(themeId);
+            previousReceive = receive;
             receive = onReceipt;
+            Starts++;
             Started.TrySetResult();
             if (ignoreCancellation) await finished.Task;
             else await finished.Task.WaitAsync(token);
         }
         public Task RequestStopAsync(CancellationToken token) { StopRequested.TrySetResult(); return Task.CompletedTask; }
         public void Emit(string json) => receive!(json);
+        public void EmitPrevious(string json) => previousReceive!(json);
         public void Finish() => finished.TrySetResult();
         public void Reset() => finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public void FinishAndReset() { var previous = finished; Reset(); previous.TrySetResult(); }

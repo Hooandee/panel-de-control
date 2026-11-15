@@ -90,9 +90,10 @@ public sealed class ThemesRequest
     {
     }
 
-    private ThemesRequest(ThemesOperation operation, string? catalogId = null, string? version = null, string? name = null, bool? enabled = null, string? option = null, string? value = null, string? archivePath = null)
+    private ThemesRequest(ThemesOperation operation, string? catalogId = null, string? version = null, string? name = null, bool? enabled = null, string? option = null, string? value = null, string? archivePath = null, string? themeId = null)
     {
         ArchivePath = archivePath;
+        ThemeId = themeId;
         Operation = operation;
         CatalogId = catalogId;
         Version = version;
@@ -126,6 +127,9 @@ public sealed class ThemesRequest
     [DataMember(Name = "archive_path", Order = 8, EmitDefaultValue = false)]
     public string? ArchivePath { get; private set; }
 
+    [DataMember(Name = "theme_id", Order = 9, EmitDefaultValue = false)]
+    public string? ThemeId { get; private set; }
+
     public static ThemesRequest Get() => new(ThemesOperation.Get);
 
     public static ThemesRequest RefreshCatalog() => new(ThemesOperation.RefreshCatalog);
@@ -146,7 +150,7 @@ public sealed class ThemesRequest
 
     public static ThemesRequest SteamHome() => new(ThemesOperation.SteamHome);
 
-    public static ThemesRequest SetNativeKeyboard(bool enabled) => new(ThemesOperation.SetNativeKeyboard, enabled: enabled);
+    public static ThemesRequest SetNativeKeyboard(bool enabled, string? themeId = null) => new(ThemesOperation.SetNativeKeyboard, enabled: enabled, themeId: themeId);
 
     internal void Validate()
     {
@@ -166,7 +170,10 @@ public sealed class ThemesRequest
             ThemesOperation.SetOption => Present(Name) && Present(Option) && Present(Value) && Absent(CatalogId) && Absent(Version) && Enabled is null,
             _ => false,
         };
-        if (!valid || !pathValid || (ArchivePath is not null) != pathExpected)
+        var themeValid = Operation == ThemesOperation.SetNativeKeyboard
+            ? ThemeId is null || NativeKeyboard.NativeKeyboardThemes.IsValid(ThemeId)
+            : ThemeId is null;
+        if (!valid || !pathValid || !themeValid || (ArchivePath is not null) != pathExpected)
         {
             throw new InvalidDataException("Themes request is invalid.");
         }
