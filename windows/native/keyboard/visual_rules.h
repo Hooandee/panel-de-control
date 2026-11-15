@@ -6,9 +6,10 @@ enum class KeyRole { Normal, Enter, Backspace, Shift, CapsLock, Tab, AltGr };
 struct KeyGlyph { KeyRole role; bool latched; };
 inline constexpr KeyGlyph RoleFromGlyph(wchar_t glyph) {
     switch (glyph) {
-    case L'\uE750': return {KeyRole::Backspace, false};
-    case L'\uE751': return {KeyRole::Enter, false};
-    case L'\uE752': return {KeyRole::Shift, false};
+    case L'\uE925': case L'\uE926': case L'\uEB96': case L'\uE750': return {KeyRole::Backspace, false};
+    case L'\uE966': case L'\uEB97': case L'\uE751': return {KeyRole::Enter, false};
+    case L'\uE84A': case L'\uE84B': case L'\uE752': return {KeyRole::Shift, false};
+    case L'\uE7FD': return {KeyRole::Tab, false};
     default: return {KeyRole::Normal, false};
     }
 }

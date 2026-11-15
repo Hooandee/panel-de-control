@@ -6,6 +6,10 @@ int main() {
     assert(RoleFromGlyph(L'\uE750').role == KeyRole::Backspace);
     assert(RoleFromGlyph(L'\uE751').role == KeyRole::Enter);
     assert(RoleFromGlyph(L'\uE752').role == KeyRole::Shift);
+    assert(RoleFromGlyph(L'\uE84B').role == KeyRole::Shift);
+    assert(RoleFromGlyph(L'\uE925').role == KeyRole::Backspace);
+    assert(RoleFromGlyph(L'\uE966').role == KeyRole::Enter);
+    assert(RoleFromGlyph(L'\uE7FD').role == KeyRole::Tab);
     assert(RoleFromGlyph(L'a').role == KeyRole::Normal);
     assert(RoleFromGlyph(L'\uE753').role == KeyRole::Normal);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Normal, false, false, false, false) == 0);
