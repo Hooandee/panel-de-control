@@ -1,7 +1,7 @@
 # Lobo Blanco para el teclado nativo de Windows 11
 
 El paquete de `native/keyboard/themes/lobo-blanco/` conserva los recursos del
-teclado Steam **Lobo Blanco 0.9.11** antes de su adaptación nativa. Su identidad
+teclado Steam **Lobo Blanco 0.9.11** como referencia de su adaptación nativa. Su identidad
 es `hooandee-lobo-blanco`, su nombre CSS Loader es `Hooandee Lobo Blanco` y el
 catálogo acredita a Hooandee como autor. `theme.json` enumera tamaños y SHA-256 de
 todos los recursos y describe los valores de referencia. La presencia de un
@@ -132,3 +132,33 @@ inventario no declara builds validadas ni equivalencia visual en dispositivo.
 La integración debe conservar el layout, foco, etiquetas, indicadores y entrada
 de Windows y verificar por separado las capas gráficas, estados, tipografía,
 runas, efectos, sonido, teclado extendido y composición de caracteres.
+
+
+## Adaptación nativa
+
+El motor compartido carga las siete caras, placa y sprites originales desde RCDATA.
+Reproduce las brasas de 380 ms, Igni de 620 ms y los brillos de 420 ms mediante
+Composition. Mantiene distribución, tamaños, clipping, opacidad y fuentes de
+iconos de Windows. Aplica las tintas originales, peso 700 a letras y el descenso
+de 2 px al pulsar, sin sustituir transformaciones nativas que ya estén activas.
+Las runas quedan arriba a la izquierda para reservar el indicador Xbox nativo.
+
+Intro, Retroceso, Mayús y Tab se identifican exclusivamente por glifos de las
+fuentes nativas de iconos. En Emoji SIP Fluent Icons, el glifo de Mayús con
+candado permite aplicar la cara granate; sus cambios se observan y se retira el
+callback al restaurar. La fuente del sistema se consulta, nunca se redistribuye.
+No se lee el texto de campos ni se envían pulsaciones a los diagnósticos.
+
+La adaptación conserva el sonido y las transiciones de apertura y cierre de
+Windows. No incorpora el sintetizador de Steam, la salida por filas ni controles
+de sonido/efectos. Los efectos responden al puntero y no imponen el mínimo de
+pulsación de 70/90 ms. El foco XAML se conserva; no acredita navegación con mando.
+
+No hay detección general de Mayús de un uso, AltGr, Bloq Mayús independiente o
+teclas muertas. La presencia de la cara granate o la runa Yrden en el paquete no
+acredita esos estados. Los caracteres extendidos conservan su presentación nativa.
+Estas diferencias impiden declarar equivalencia visual completa con Steam.
+
+La [guía del runtime](NATIVE-KEYBOARD.md) describe selección, restauración,
+compilación, despliegue y comprobaciones. El inventario anterior es la referencia
+original, no una lista de funciones confirmadas en todas las versiones de Windows.

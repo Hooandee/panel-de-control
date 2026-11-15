@@ -32,7 +32,8 @@ visual; una reconciliación de 250 ms verifica identidad, disposición de los
 nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resuelven
 en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
 conservar fuente y colores al cambiar Mayús sin esperar al temporizador.
-Las etiquetas reutilizadas observan también cambios de FontFamily y Foreground;
+Las etiquetas reutilizadas observan también cambios de FontFamily, FontWeight y Foreground;
+las etiquetas de iconos observan cambios de glifo para actualizar Mayús bloqueado;
 se retiran esos callbacks antes de restaurarlas. No lee campos de entrada ni registra texto escrito,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
@@ -96,7 +97,7 @@ Terciopelo 0.2.13 aporta estos recursos y propiedades, extraídos de su CSS real
 
 Los PNG y WebP se cargan desde RCDATA mediante un stream en memoria, sin depender
 de acceso a rutas de Panel desde AppContainer. Se exige LoadCompleted/Success.
-Josefin se extrae a un archivo propio de nombre único en TemporaryFolder del
+Cada fuente se extrae a un archivo propio de nombre único en TemporaryFolder del
 proceso destino y se referencia mediante ms-appdata. No se instala globalmente.
 Se verifica una diferencia de métricas frente al fallback con una cadena fija,
 y se contrasta visualmente la tipografía; no se inspecciona texto del teclado.
@@ -106,7 +107,7 @@ muestras de familia, ubicación fondo/contenido, tamaño, opacidad y visibilidad
 sin texto ni rutas de archivos.
 
 La restauración repone FontFamily y elimina el archivo propio cuando el sistema
-lo permite. Si sigue en uso, se conserva una sola ruta y se verifican sus bytes
+lo permite. Si sigue en uso, se conserva una ruta por recurso de fuente y se verifican sus bytes
 antes de reutilizarla; no se sobrescriben archivos ajenos.
 
 El foco XAML ya existente se consulta al incorporar cada tecla, antes del primer
@@ -123,12 +124,26 @@ no contiene ✓, ←, → ni ⌫; se conservan las fuentes nativas de iconos y e
 Segoe UI. La presencia en cmap y la preservación de FontFamily no sustituyen la
 comprobación visual de cada glifo, disposición y estado de interacción.
 
+La adaptación de Lobo Blanco añade las siete caras plateadas/rojas/coral/granate,
+la placa original, fuentes Marcellus/Cinzel por cobertura y runas con fuego y brillo.
+Sus diferencias frente a Steam se enumeran en [LOBO-BLANCO.md](LOBO-BLANCO.md#adaptación-nativa).
+No se reemplazan los indicadores Xbox Fluent v2: la comparación elimina primero
+la URI y el fragmento `#` de FontFamily. Los glifos especiales se reconocen solo
+en Segoe Fluent Icons, Segoe MDL2 Assets y Emoji SIP Fluent Icons.
+
 ## Estado y diagnóstico
 
 `Requested` y `RequestedTheme` expresan intención; `AppliedTheme` procede del recibo
 versionado de la DLL y solo se publica cuando el tema coincide con la solicitud. El
 cambio detiene el auxiliar anterior, espera restauración y salida antes de iniciar el
-siguiente. Un recibo antiguo o de otro tema se rechaza.
+siguiente. Un recibo antiguo o de otro tema se rechaza. El protocolo 6 incluye la identidad
+aplicada y no permite publicarla en estados no aplicados.
+
+Tras perder el auxiliar, la recuperación usa `restore <theme-id>` antes de volver
+a activar: no inicia una sesión de estilos ni redescubre teclas durante la
+limpieza. Si TextInputHost ya terminó y una enumeración completa lo confirma,
+no quedan propiedades en ese proceso que restaurar. Un error de enumeración o
+una limpieza incompleta sigue siendo un fallo, nunca restauración confirmada.
 
 `Requested` expresa intención; `applied` requiere conexión vigente, imágenes y
 fuente resueltas, y todas las teclas candidatas visibles confirmadas, sin tareas
@@ -173,7 +188,7 @@ Windows, CMake 3.24 o posterior:
 ```powershell
 ./windows/native/keyboard/build.ps1
 ./windows/native/keyboard/dist/PanelDeControl.KeyboardHost.exe discover
-./windows/native/keyboard/dist/PanelDeControl.KeyboardHost.exe serve
+./windows/native/keyboard/dist/PanelDeControl.KeyboardHost.exe serve lobo-blanco
 # Escribir stop y pulsar Intro para restaurar y terminar serve.
 ```
 
@@ -183,8 +198,8 @@ seguir [Windows](README.md), generando primero `pnpm build:windows-theme-host`
 y ejecutando el script nativo. `probe-key-face` se conserva únicamente como
 ensayo CLI de una tecla durante ocho segundos; Panel usa `serve`.
 
-`PanelDeControl.KeyboardHost.exe probe-effects` es una prueba visual separada:
-muestra un fotograma fijo del polvo durante dos segundos en la primera tecla
+`PanelDeControl.KeyboardHost.exe probe-effects lobo-blanco` es una prueba visual separada:
+muestra un fotograma fijo del sprite del tema durante dos segundos en la primera tecla
 compatible y después ejecuta la animación, sin simular entrada. Solicita la
 desactivación a los doce segundos y confirma después la restauración. Mantener
 stdin abierto durante la prueba; EOF también solicita terminar. Permite distinguir un fallo de dibujo de un evento
@@ -195,6 +210,9 @@ Comprobaciones locales:
 
 ```sh
 python3 windows/native/keyboard/tests/test_theme_package.py
+python3 tests/test_lobo_package.py
+clang++ -std=c++17 -Wall -Wextra -Werror windows/native/keyboard/tests/visual_rules_test.cpp -o /tmp/keyboard-visual-test
+/tmp/keyboard-visual-test
 clang++ -std=c++17 -Wall -Wextra -Werror windows/native/keyboard/tests/protocol_test.cpp -o /tmp/keyboard-protocol-test
 /tmp/keyboard-protocol-test
 dotnet test windows/tests/PanelDeControl.Hardware.Tests/PanelDeControl.Hardware.Tests.csproj -c Release --filter NativeKeyboard
@@ -203,7 +221,8 @@ dotnet test windows/tests/PanelDeControl.Hardware.Tests/PanelDeControl.Hardware.
 Recorrido manual:
 
 1. Instalar el paquete experimental completo y abrir Panel > Temas > Teclado de Windows.
-2. Activar Terciopelo; abrir el teclado y comprobar estado, cobertura y aspecto.
+2. Seleccionar Lobo Blanco, activar y comprobar tema confirmado, cobertura y aspecto.
+   Cambiar Terciopelo → Lobo Blanco → Terciopelo y comprobar que solo hay un auxiliar.
 3. Escribir en el campo de prueba; comprobar letras, números, Mayús/Bloq Mayús,
    espacio, Intro, borrar, AltGr y teclas muertas. Comprobar hover, pulsación larga,
    cancelación, deslizamiento y uso de mando donde lo permita Windows.
@@ -217,7 +236,9 @@ Recorrido manual:
 9. Antes de extender compatibilidad, validar actualización y desinstalación con
    tema activo, versiones adicionales de Windows y las distribuciones afectadas.
 
-La validación física en ROG Xbox Ally X, build 26300 x64, incluye cobertura de
+### Cobertura previa de Terciopelo
+
+La validación de Terciopelo en ROG Xbox Ally X, build 26300 x64, incluye cobertura de
 40 teclas en modo estándar, 35 en compacto y 69 en tradicional, placa, fuente
 privada y polvo visible mediante pulsación de Mayús. Se han comprobado cierre
 con X y reapertura, restauración tras caída del helper, reactivación desde Panel
@@ -244,3 +265,25 @@ las interacciones de mando y deslizamiento, actualización desde producción y
 desinstalación con el tema activo. El halo latched y la sombra de texto específica
 de Steam no están adaptados. No se declara equivalencia visual completa.
 Las pruebas de compilación y protocolo no sustituyen esos recorridos.
+
+
+### Despliegue del paquete completo
+
+```sh
+scripts/deploy-windows-device.sh --run-id <windows-ci-run> <usuario@equipo>
+```
+
+Usar una ejecución satisfactoria de Windows CI correspondiente al código que se
+prueba. Verificar SHA-256 del MSIX antes y después de transferirlo, y del host/DLL
+instalados frente al paquete. Desactivar el tema y confirmar restauración antes
+de sustituir el layout; si la DLL sigue fijada, cerrar TextInputHost para liberar
+el archivo. La instalación de desarrollo requiere el modo de desarrollador ya
+habilitado. No equivale a publicar ni instalar una release de producción.
+
+### Comprobaciones de Lobo Blanco
+
+La matriz de Terciopelo anterior no acredita automáticamente Lobo Blanco.
+Comprobar por separado los campos propios y la navegación nativa con el paquete
+completo instalado. La navegación con mando físico requiere pulsaciones físicas;
+una inyección de teclado o de puntero no la acredita. No se admite entrada en el
+escritorio seguro de UAC ni se declara soporte para todas las builds de Windows.
