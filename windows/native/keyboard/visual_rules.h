@@ -13,6 +13,11 @@ inline constexpr KeyGlyph RoleFromGlyph(wchar_t glyph) {
     default: return {KeyRole::Normal, false};
     }
 }
+inline constexpr KeyGlyph RoleFromSipGlyph(wchar_t glyph) {
+    if (glyph == L'\uE3D7') return {KeyRole::Shift, false};
+    if (glyph == L'\uE3D8') return {KeyRole::Shift, true};
+    return RoleFromGlyph(glyph);
+}
 inline constexpr bool SignKey(KeyRole role) {
     return role >= KeyRole::Enter && role <= KeyRole::Tab;
 }

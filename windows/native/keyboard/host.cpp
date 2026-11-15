@@ -212,7 +212,10 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false, bool restoring =
     DWORD session = 0; ProcessIdToSessionId(GetCurrentProcessId(), &session);
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
-    if (snapshot && Process32FirstW(snapshot.value, &entry)) do {
+    if (!snapshot || !Process32FirstW(snapshot.value, &entry)) {
+        Result("connection_failed", "discovery_busy"); return 0;
+    }
+    do {
         DWORD candidateSession = 0;
         if (_wcsicmp(entry.szExeFile, L"TextInputHost.exe") == 0 &&
             ProcessIdToSessionId(entry.th32ProcessID, &candidateSession) && candidateSession == session) {
@@ -220,7 +223,13 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false, bool restoring =
             targetPid = entry.th32ProcessID;
         }
     } while (Process32NextW(snapshot.value, &entry));
-    if (!targetPid) { previousPid = 0; Result(styling ? "waiting_for_keyboard" : "connection_failed", "keyboard_not_running"); return 0; }
+    if (GetLastError() != ERROR_NO_MORE_FILES) { Result("connection_failed", "discovery_busy"); return 0; }
+    if (!targetPid) {
+        previousPid = 0;
+        Result(restoring ? "disabled" : styling ? "waiting_for_keyboard" : "connection_failed",
+               restoring ? "styles_restored" : "keyboard_not_running");
+        return 0;
+    }
 
     Handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, targetPid));
     USHORT machine = 0, nativeMachine = 0;

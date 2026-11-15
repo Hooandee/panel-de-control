@@ -10,6 +10,12 @@ int main() {
     assert(RoleFromGlyph(L'\uE925').role == KeyRole::Backspace);
     assert(RoleFromGlyph(L'\uE966').role == KeyRole::Enter);
     assert(RoleFromGlyph(L'\uE7FD').role == KeyRole::Tab);
+    assert(RoleFromSipGlyph(L'\uE3D7').role == KeyRole::Shift);
+    assert(!RoleFromSipGlyph(L'\uE3D7').latched);
+    assert(RoleFromSipGlyph(L'\uE3D8').role == KeyRole::Shift);
+    assert(RoleFromSipGlyph(L'\uE3D8').latched);
+    assert(RoleFromSipGlyph(L'\uE752').role == KeyRole::Shift);
+    assert(RoleFromGlyph(L'\uE3D8').role == KeyRole::Normal);
     assert(RoleFromGlyph(L'a').role == KeyRole::Normal);
     assert(RoleFromGlyph(L'\uE753').role == KeyRole::Normal);
     assert(FaceIndex(ThemeId::LoboBlanco, KeyRole::Normal, false, false, false, false) == 0);

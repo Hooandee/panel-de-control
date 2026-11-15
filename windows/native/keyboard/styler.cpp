@@ -137,7 +137,7 @@ struct Label {
     std::unique_ptr<Property> foreground;
     std::unique_ptr<Property> font;
     bool icon = false, secondary = false;
-    std::optional<std::int64_t> foregroundChanged, fontChanged, weightChanged;
+    std::optional<std::int64_t> foregroundChanged, fontChanged, weightChanged, glyphChanged;
     std::unique_ptr<Property> weight;
     void Watch() {
         DependencyPropertyChangedCallback changed([](DependencyObject const& sender, DependencyProperty const&) noexcept {
@@ -147,8 +147,10 @@ struct Label {
         foregroundChanged = element.RegisterPropertyChangedCallback(TextBlock::ForegroundProperty(), changed);
         fontChanged = element.RegisterPropertyChangedCallback(TextBlock::FontFamilyProperty(), changed);
         weightChanged = element.RegisterPropertyChangedCallback(TextBlock::FontWeightProperty(), changed);
+        if (icon) glyphChanged = element.RegisterPropertyChangedCallback(TextBlock::TextProperty(), changed);
     }
     void Unwatch() {
+        if (glyphChanged) { element.UnregisterPropertyChangedCallback(TextBlock::TextProperty(), *glyphChanged); glyphChanged.reset(); }
         if (weightChanged) { element.UnregisterPropertyChangedCallback(TextBlock::FontWeightProperty(), *weightChanged); weightChanged.reset(); }
         if (foregroundChanged) {
             element.UnregisterPropertyChangedCallback(TextBlock::ForegroundProperty(), *foregroundChanged);
@@ -183,11 +185,11 @@ KeyGlyph IdentifyKeyGlyph(DependencyObject const& node, unsigned depth = 0) {
         auto familySource = family.Source();
         auto source = std::wstring_view(familySource);
         if (const auto fragment = source.rfind(L'#'); fragment != std::wstring_view::npos) source.remove_prefix(fragment + 1);
-        if (source.find(L"Segoe Fluent Icons") != std::wstring_view::npos || source.find(L"Segoe MDL2 Assets") != std::wstring_view::npos) {
+        if (source.find(L"Segoe Fluent Icons") != std::wstring_view::npos || source.find(L"Segoe MDL2 Assets") != std::wstring_view::npos || source == L"Emoji SIP Fluent Icons") {
             // Only native icon labels are inspected; ordinary key text and input fields are never read.
             auto glyph = node.try_as<TextBlock>() ? node.as<TextBlock>().Text() : node.as<FontIcon>().Glyph();
             if (glyph.size() == 1) {
-                auto match = RoleFromGlyph(glyph[0]);
+                auto match = source == L"Emoji SIP Fluent Icons" ? RoleFromSipGlyph(glyph[0]) : RoleFromGlyph(glyph[0]);
                 if (match.role != KeyRole::Normal) return match;
             }
         }
@@ -296,7 +298,7 @@ struct Cell {
                 static_cast<float>(face.ActualHeight()) * (1 - bottom) - EffectHeight();
             dust.Offset({origin.X + static_cast<float>(face.ActualWidth()) / 2 - EffectWidth()/2, origin.Y + y, 0});
         }
-        if (rune) rune.Offset({origin.X + static_cast<float>(face.ActualWidth()) - 25, origin.Y + 9, 0});
+        if (rune) rune.Offset({origin.X + 12, origin.Y + 9, 0});
         if (glow) {
             glow.Offset({origin.X - 6, origin.Y - 6, 0});
             glow.Size({static_cast<float>(face.ActualWidth()) + 12, static_cast<float>(face.ActualHeight()) + 12});
@@ -352,7 +354,7 @@ struct Cell {
                 if (label.icon != icon) {
                     if (icon && label.font) { label.font->Restore(); label.font.reset(); if (label.weight) { label.weight->Restore(); label.weight.reset(); } }
                     else if (!icon) label.font = std::make_unique<Property>(text, TextBlock::FontFamilyProperty());
-                    label.icon = icon;
+                    label.Unwatch(); label.icon = icon; label.Watch();
                 }
             }
             if (known) continue;
@@ -911,7 +913,12 @@ bool BeginStyleSession(ThemeId theme, bool probe) noexcept {
 void RenewStyleLease() noexcept { if (requested) lease = GetTickCount64() + 4000; }
 void StopStyleSession() noexcept {
     requested = false;
-    if (!owner.load()) { std::lock_guard lock(receiptGate); receipt.phase = StylePhase::Idle; }
+    if (!owner.load()) {
+        std::lock_guard lock(receiptGate);
+        if (!receipt.keyCount && !receipt.styledKeys && !receipt.pendingKeys) {
+            receipt.phase = StylePhase::Idle; receipt.styleResult = S_OK;
+        }
+    }
 }
 void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept {
     if (!requested || !diagnostics) return;
