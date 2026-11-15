@@ -34,6 +34,7 @@ using namespace Windows::UI::Xaml::Media;
 using namespace Windows::UI::Composition;
 using Windows::Foundation::IInspectable;
 constexpr wchar_t KeyType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey";
+constexpr wchar_t SuggestionsType[] = L"WindowsInternal.ComposableShell.Experiences.SuggestionUIUndocked.SuggestionUIContainer";
 constexpr wchar_t BarType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.GripperBar";
 constexpr wchar_t GridType[] = L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardGrid";
 std::atomic<bool> requested{false};
@@ -352,6 +353,7 @@ struct Chrome {
     }
     void StyleBar(DependencyObject const& node, unsigned depth = 0) {
         if (depth > 10) throw hresult_error(E_BOUNDS);
+        if (node.try_as<WebView>() || node.try_as<TextBox>() || node.try_as<PasswordBox>()) return;
         if (auto panel = node.try_as<Panel>()) Set(panel, Panel::BackgroundProperty(), clear);
         if (auto border = node.try_as<Border>()) Set(border, Border::BackgroundProperty(), clear);
         if (auto control = node.try_as<Control>()) {
@@ -377,7 +379,7 @@ struct Chrome {
         Set(root, Panel::BackgroundProperty(), background);
         for (auto const& child : root.Children()) {
             auto type = get_class_name(child);
-            if (child == bar || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
+            if (child == bar || type == SuggestionsType || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
         }
         for (auto const& entry : properties)
             if (entry.property->element.GetValue(entry.property->property) != entry.value) return false;
