@@ -1,74 +1,19 @@
 import json
 import asyncio
-import importlib
 import pathlib
-import sys
 import types
 
 import pytest
+from theme_support import theme_rpc  # noqa: F401
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-
-@pytest.fixture
-def theme_rpc(tmp_path, monkeypatch):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path / "settings")
-    fake.DECKY_USER_HOME = str(tmp_path / "home")
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(
-        info=lambda *args, **kwargs: None,
-        warning=lambda *args, **kwargs: None,
-        error=lambda *args, **kwargs: None,
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake)
-    monkeypatch.syspath_prepend(str(ROOT / "py_modules"))
-    monkeypatch.syspath_prepend(str(ROOT))
-    main = importlib.reload(importlib.import_module("main"))
-    plugin = main.Plugin()
-    plugin._init = lambda: None
-    return main, plugin, fake
 
 
 def test_bundled_theme_prepare_rpc_is_not_exposed(theme_rpc):
     _, plugin, _ = theme_rpc
 
     assert not hasattr(plugin, "prepare_bundled_theme_install")
-
-
-def test_remote_service_uses_the_fixed_pages_channel_and_dedicated_cache(
-    theme_rpc,
-    monkeypatch,
-):
-    main, plugin, fake = theme_rpc
-    captured = {}
-
-    class Transport:
-        def __init__(self, pages_base_url):
-            captured["transport_url"] = pages_base_url
-
-    class Service:
-        def __init__(self, channel, **options):
-            captured["channel"] = channel
-            captured.update(options)
-
-    monkeypatch.setattr(main.theme_transport, "ThemeHttpTransport", Transport)
-    monkeypatch.setattr(main.theme_remote, "ThemeRemoteService", Service)
-
-    plugin._new_theme_remote_service()
-
-    assert captured["transport_url"] == "https://hooandee.github.io/panel-de-control"
-    assert captured["channel"] == main.theme_remote.OfficialThemeChannel(
-        pages_base_url="https://hooandee.github.io/panel-de-control",
-        catalog_path="themes/v1/catalog.json",
-    )
-    assert isinstance(captured["cache"], main.theme_remote.ThemeCatalogCacheStore)
-    captured["cache"].save(b'{"schemaVersion":1,"themes":[]}', 25.0)
-    expected_cache = pathlib.Path(
-        fake.DECKY_PLUGIN_SETTINGS_DIR
-    ) / "theme-catalog-cache.json"
-    assert expected_cache.is_file()
 
 
 def test_commit_and_rollback_theme_rpcs_use_the_opaque_transaction_token(theme_rpc, monkeypatch):
@@ -380,58 +325,6 @@ def test_remote_discovery_delegates_to_the_theme_service(theme_rpc):
     assert calls == [False]
 
 
-def test_remote_discovery_without_css_loader_keeps_catalog_visible(theme_rpc):
-    _, plugin, fake = theme_rpc
-    plugins = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "plugins"
-    assert not plugins.exists()
-
-    def check_releases(_force):
-        return {
-            "status": "published",
-            "checkedAt": 100.0,
-            "themes": [
-                {
-                    "catalogId": "example-theme",
-                    "compatibility": "compatible",
-                }
-            ],
-        }
-
-    plugin._theme_remote_service = types.SimpleNamespace(
-        check_releases=check_releases
-    )
-
-    result = asyncio.run(plugin.check_theme_releases(False))
-
-    assert result["themes"] == [
-        {
-            "catalogId": "example-theme",
-            "compatibility": "compatible",
-        }
-    ]
-
-
-def test_remote_install_does_not_require_css_loader_version_metadata(theme_rpc):
-    _, plugin, _ = theme_rpc
-    expected = {
-        "ok": True,
-        "code": "prepared",
-        "theme_id": "example-theme",
-        "theme_name": "Example Theme",
-        "version": "1.2.3",
-        "transaction": "token",
-    }
-    plugin._theme_remote_service = types.SimpleNamespace(
-        prepare_install=lambda *_args: expected
-    )
-
-    result = asyncio.run(
-        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
-    )
-
-    assert result == expected
-
-
 def test_remote_discovery_sanitizes_an_unexpected_service_failure(theme_rpc):
     _, plugin, _ = theme_rpc
 
@@ -476,37 +369,6 @@ def test_remote_prepare_rejects_invalid_identity_before_scheduling(
     assert calls == []
 
 
-def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
-    _, plugin, fake = theme_rpc
-    calls = []
-    prepared = {
-        "ok": True,
-        "code": "prepared",
-        "theme_id": "example-theme",
-        "theme_name": "Example Theme",
-        "version": "1.2.3",
-        "transaction": "opaque-token",
-    }
-    plugin._theme_remote_service = types.SimpleNamespace(
-        prepare_install=lambda *args: calls.append(args) or prepared
-    )
-
-    result = asyncio.run(
-        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
-    )
-
-    assert result == prepared
-    assert calls == [
-        (
-            "example-theme",
-            "1.2.3",
-            pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
-            pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR)
-            / "theme-extension-receipts.json",
-        )
-    ]
-
-
 def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     main, plugin, _ = theme_rpc
 
@@ -523,27 +385,6 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
         "ok": False,
         "code": "publication_changed",
         "theme_id": "example-theme",
-    }
-
-
-def test_remote_prepare_names_the_package_check_that_failed(theme_rpc):
-    """PDC-TM74: the log said only unsafe_archive; the validator's own sentence named the cause."""
-    main, plugin, _ = theme_rpc
-
-    def fail(*_args):
-        raise main.theme_packages.ThemePackageError(
-            "unsafe_archive", "Remote theme manifest profile is invalid"
-        )
-
-    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
-
-    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
-
-    assert result == {
-        "ok": False,
-        "code": "unsafe_archive",
-        "theme_id": "example-theme",
-        "reason": "Remote theme manifest profile is invalid",
     }
 
 
@@ -648,20 +489,6 @@ def test_theme_failures_reach_the_log_and_report_bounded_and_sanitized(theme_rpc
     failures = plugin._theme_report_diagnostics()["recent_failures"]
     assert len(failures) == 5
     assert failures[-1] == {"operation": "recovering", "code": "code_9", "count": 1}
-
-
-def test_theme_failure_counts_repeats_without_logging_them_again(theme_rpc):
-    _, plugin, fake = theme_rpc
-    warnings = []
-    fake.logger.warning = lambda message, *args: warnings.append(message % args)
-
-    for _ in range(3):
-        asyncio.run(plugin.record_theme_failure("recovering", "verification_failed", "same"))
-
-    assert len(warnings) == 1
-    assert plugin._theme_report_diagnostics()["recent_failures"] == [
-        {"operation": "recovering", "code": "verification_failed", "count": 3},
-    ]
 
 
 def test_report_counts_unreadable_theme_folders_without_naming_them(theme_rpc):
@@ -802,19 +629,6 @@ def test_theme_cleanup_rpc_answers_refusals_without_raising(theme_rpc):
     }
 
 
-def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
-    main, _, _ = theme_rpc
-
-    themes = main.Plugin._with_theme_display({"installed": []}, {"theme_display": {
-        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
-        "beta_name": "private", "width": float("nan"), "nested": {"x": 1},
-    }})
-
-    assert themes == {"installed": [], "display": {
-        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
-    }}
-
-
 def test_report_adds_the_home_surface_geometry_next_to_the_display(theme_rpc):
     main, _, _ = theme_rpc
 
@@ -917,3 +731,89 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
     asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
     asyncio.run(plugin.commit_theme_install("stable"))
     assert early_flags() == [False]
+
+
+def test_remote_discovery_without_css_loader_keeps_catalog_visible(theme_rpc):
+    _, plugin, fake = theme_rpc
+    plugins = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "plugins"
+    assert not plugins.exists()
+
+    def check_releases(_force):
+        return {
+            "status": "published",
+            "checkedAt": 100.0,
+            "themes": [
+                {
+                    "catalogId": "example-theme",
+                    "compatibility": "compatible",
+                }
+            ],
+        }
+
+    plugin._theme_remote_service = types.SimpleNamespace(
+        check_releases=check_releases
+    )
+
+    result = asyncio.run(plugin.check_theme_releases(False))
+
+    assert result["themes"] == [
+        {
+            "catalogId": "example-theme",
+            "compatibility": "compatible",
+        }
+    ]
+
+
+def test_remote_install_does_not_require_css_loader_version_metadata(theme_rpc):
+    _, plugin, _ = theme_rpc
+    expected = {
+        "ok": True,
+        "code": "prepared",
+        "theme_id": "example-theme",
+        "theme_name": "Example Theme",
+        "version": "1.2.3",
+        "transaction": "token",
+    }
+    plugin._theme_remote_service = types.SimpleNamespace(
+        prepare_install=lambda *_args: expected
+    )
+
+    result = asyncio.run(
+        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
+    )
+
+    assert result == expected
+
+
+def test_remote_prepare_names_the_package_check_that_failed(theme_rpc):
+    """PDC-TM74: the log said only unsafe_archive; the validator's own sentence named the cause."""
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Remote theme manifest profile is invalid"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result == {
+        "ok": False,
+        "code": "unsafe_archive",
+        "theme_id": "example-theme",
+        "reason": "Remote theme manifest profile is invalid",
+    }
+
+
+def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
+    main, _, _ = theme_rpc
+
+    themes = main.Plugin._with_theme_display({"installed": []}, {"theme_display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+        "beta_name": "private", "width": float("nan"), "nested": {"x": 1},
+    }})
+
+    assert themes == {"installed": [], "display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+    }}

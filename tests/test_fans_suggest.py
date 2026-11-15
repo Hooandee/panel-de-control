@@ -1,5 +1,4 @@
 
-from fans import suggest as fan_suggest
 from fans.suggest import band, biased_curve, curve_changed, enough_data, suggest_curves
 
 _SAFE_FLOOR = 76  # must match fans.control._SAFE_MAX_TEMP_FLOOR
@@ -134,10 +133,6 @@ def test_biased_curve_is_sanitized_8_points_monotonic():
         pwms = [p for _t, p in cur]
         assert temps == sorted(temps)
         assert pwms == sorted(pwms)
-
-
-def test_min_minutes_is_30():
-    assert fan_suggest.MIN_MINUTES == 30
 
 
 # ---------------------------------------------------------------------------

@@ -31,7 +31,7 @@ def _write_fdinfo(
 def test_power_reader_uses_successive_xe_fdinfo_samples(tmp_path):
     root = str(tmp_path)
     _write_fdinfo(root, 100, 3, 7, 100, 1_000)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     reader._intel_gpu._cache_s = 0
 
     assert reader.read_gpu_busy() is None
@@ -49,7 +49,7 @@ def test_xe_duplicate_file_descriptors_count_one_drm_client(tmp_path):
     root = str(tmp_path)
     _write_fdinfo(root, 100, 3, 7, 100, 1_000)
     _write_fdinfo(root, 100, 4, 7, 100, 1_000)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     reader._intel_gpu._cache_s = 0
     assert reader.read_gpu_busy() is None
 
@@ -61,7 +61,7 @@ def test_xe_duplicate_file_descriptors_count_one_drm_client(tmp_path):
 
 def test_xe_client_appearing_after_initial_probe_is_retried(tmp_path):
     root = str(tmp_path)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     reader._intel_gpu._cache_s = 0
     assert reader.read_gpu_busy() is None
 
@@ -75,7 +75,7 @@ def test_xe_client_appearing_after_initial_probe_is_retried(tmp_path):
 def test_xe_compute_engine_is_a_valid_gameplay_signal(tmp_path):
     root = str(tmp_path)
     _write_fdinfo(root, 100, 3, 7, 100, 1_000, engine="ccs")
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     reader._intel_gpu._cache_s = 0
     assert reader.read_gpu_busy() is None
 
@@ -87,7 +87,7 @@ def test_xe_compute_engine_is_a_valid_gameplay_signal(tmp_path):
 def test_non_xe_fdinfo_is_not_reported_as_gpu_activity(tmp_path):
     root = str(tmp_path)
     _write_fdinfo(root, 100, 3, 7, 100, 1_000, driver="amdgpu")
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     assert reader.read_gpu_busy() is None
 
 
@@ -101,7 +101,7 @@ def test_existing_amdgpu_node_never_switches_to_an_intel_gpu(tmp_path):
     with open(busy_path, "w") as handle:
         handle.write("unreadable")
     _write_fdinfo(root, 100, 3, 7, 100, 1_000)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
 
     assert reader.read_gpu_busy() is None
     _write_fdinfo(root, 100, 3, 7, 900, 2_000)
@@ -122,7 +122,7 @@ def test_detected_amdgpu_power_never_uses_an_unrelated_intel_gpu(tmp_path):
     with open(os.path.join(hwmon, "power1_average"), "w") as handle:
         handle.write("15000000")
     _write_fdinfo(root, 100, 3, 7, 100, 1_000)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
 
     assert reader.read() == {"watts": 15.0, "gpu_busy": None}
     assert reader.gpu_diagnostics() == {
@@ -159,7 +159,7 @@ def test_xe_none_result_is_cached_after_the_scan_completes(tmp_path, monkeypatch
 def test_xe_signal_lets_auto_tdp_leave_qualification_and_probe_down(tmp_path):
     root = str(tmp_path)
     _write_fdinfo(root, 100, 3, 7, 100, 1_000)
-    reader = PowerReader(root=root)
+    reader = PowerReader(root=root, gpu_sample_gap=0)
     reader._intel_gpu._cache_s = 0
     now = 0.0
     controller = AutoTdpController(

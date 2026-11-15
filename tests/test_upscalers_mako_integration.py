@@ -4,8 +4,7 @@ import sys
 
 import pytest
 
-from test_tdp_guard_rpc import plugin
-from test_upscalers import APPID, _service, steam, fake_catalog, proc
+from upscalers_support import APPID, _service
 from upscalers import mako
 from upscalers.service import UpscalerError
 

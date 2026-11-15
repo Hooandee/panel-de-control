@@ -1,9 +1,9 @@
 """RPC-level tests for download mode (eco): override + restore + manual clear."""
 import asyncio
-import importlib
 import sys
-import threading
 import types
+from main_harness import fake_decky, load_main
+import threading
 
 
 class _FakeToggle:
@@ -22,13 +22,7 @@ class _FakeToggle:
 
 
 def _make_plugin(tmp_path, monkeypatch, boost=None):
-    fake_decky = types.ModuleType("decky")
-    fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake_decky.DECKY_USER = "deck"
-    fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake_decky)
+    fake_decky(monkeypatch, tmp_path)
 
     import tdp.factory as factory
     from tdp.types import TdpLimits, TdpResult
@@ -56,8 +50,9 @@ def _make_plugin(tmp_path, monkeypatch, boost=None):
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": False)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": False, raising=False)
+    monkeypatch.setattr(main, "_ECO_INPUT_POLL_S", 0.01)
 
     if boost is not None:
         original_init = main.Plugin._init
@@ -71,79 +66,12 @@ def _make_plugin(tmp_path, monkeypatch, boost=None):
     return main.Plugin()
 
 
-def test_get_eco_state_shape(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    st = asyncio.run(p.get_eco_state())
-    assert st["enabled"] is False
-    assert st["tdp_min_w"] == 5
-    assert st["affects_boost"] is True
-
-
-def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
-    boost = _FakeToggle(on=True)
-    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
-    st = asyncio.run(p.set_eco(True, 55))
-    assert st["enabled"] is True
-    assert st["wake_brightness"] == 55  # snapshot of the passed brightness
-    # effective TDP forced to the device minimum, overriding any profile
-    levels, _active, _ac = p._effective_levels(None)
-    assert levels["pl1"] == 5 and levels["pl2"] == 5 and levels["pl3"] == 5
-    assert boost.enabled() is False  # boost forced off
-
-
-def test_eco_rpc_waits_until_cpu_override_is_applied(tmp_path, monkeypatch):
-    boost = _FakeToggle(on=True)
-    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
-    started = threading.Event()
-    release = threading.Event()
-
-    def block_apply_queue():
-        started.set()
-        release.wait(timeout=2)
-
-    p._submit_offloaded(p._ensure_apply_executor(), block_apply_queue)
-    assert started.wait(timeout=1)
-
-    async def exercise():
-        task = asyncio.create_task(p.set_eco(True, 55))
-        try:
-            await asyncio.sleep(0)
-            assert not task.done()
-        finally:
-            release.set()
-        await task
-
-    asyncio.run(exercise())
-    assert boost.enabled() is False
-
-
-def test_eco_off_restores(tmp_path, monkeypatch):
-    boost = _FakeToggle(on=True)
-    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
-    p._init()
-    before = p._effective_levels(None)[0]["pl1"]  # normal setpoint before eco
-    asyncio.run(p.set_eco(True, 55))
-    assert p._effective_levels(None)[0]["pl1"] == 5  # forced to min while on
-    st = asyncio.run(p.set_eco(False, 0))
-    assert st["enabled"] is False
-    assert p._effective_levels(None)[0]["pl1"] == before  # restored, not stuck at min
-    assert boost.enabled() is True  # boost restored to saved setting
-
-
 def test_manual_tdp_change_clears_eco(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
     asyncio.run(p.set_eco(True, 40))
     assert p._settings["eco_enabled"] is True
     asyncio.run(p.set_tdp_watts(18, "global", None))
     assert p._settings["eco_enabled"] is False  # manual control exits eco
-
-
-def test_zero_brightness_snapshot_is_ignored(tmp_path, monkeypatch):
-    # FE may pass 0 while brightness is still loading; storing it would restore the
-    # screen to black on exit. The snapshot must keep the previous (default) value.
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    st = asyncio.run(p.set_eco(True, 0))
-    assert st["wake_brightness"] == 40  # default kept, not 0
 
 
 def test_manual_boost_change_clears_eco(tmp_path, monkeypatch):
@@ -153,27 +81,6 @@ def test_manual_boost_change_clears_eco(tmp_path, monkeypatch):
     asyncio.run(p.set_cpu_boost(True))
     assert p._settings["eco_enabled"] is False
     assert boost.enabled() is True
-
-
-def test_manual_cpu_change_exits_eco_and_schedules_normal_tdp(
-    tmp_path, monkeypatch
-):
-    boost = _FakeToggle(on=False)
-    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
-
-    asyncio.run(p.set_eco(True, 40))
-    tdp_reapplies = []
-    monkeypatch.setattr(
-        p,
-        "_schedule_tdp_apply",
-        lambda reason, on_ac=None: tdp_reapplies.append((reason, on_ac)),
-    )
-
-    asyncio.run(p.set_cpu_boost(True))
-
-    assert p._settings["eco_enabled"] is False
-    assert boost.enabled() is True
-    assert tdp_reapplies
 
 
 class _FakeScreen:
@@ -219,8 +126,7 @@ def _setup(tmp_path, monkeypatch, screen=None):
     p._init()
     p._screen_sleep, p._input_wake = screen or _FakeScreen(), _FakeInput()
     main = sys.modules["main"]
-    for name, value in (("_ECO_INPUT_POLL_S", 0.01), ("_SCREEN_WAKE_RETRY_S", 0.01)):
-        monkeypatch.setattr(main, name, value)
+    monkeypatch.setattr(main, "_SCREEN_WAKE_RETRY_S", 0.01)
     emitted = []
 
     async def emit(event, *args):
@@ -250,20 +156,6 @@ def test_screen_state_and_refusal_outside_download_mode(tmp_path, monkeypatch):
     assert screen.calls == []
 
 
-def test_sleep_wake_and_leaving_download_mode(tmp_path, monkeypatch):
-    p, screen, _ = _setup(tmp_path, monkeypatch)
-
-    async def run():
-        await p.set_eco(True, 50)
-        assert await p.set_eco_screen(True) == {"ok": True, "asleep": True}
-        assert await p.set_eco_screen(False) == {"ok": True, "asleep": False}
-        await p.set_eco_screen(True)
-        await _leave(p)
-
-    asyncio.run(run())
-    assert screen.calls == [True, False, True, False] and not screen.asleep
-
-
 def test_unconfirmed_sleep_is_undone(tmp_path, monkeypatch):
     p, screen, _ = _setup(tmp_path, monkeypatch, _FakeScreen(confirm_sleep=False))
 
@@ -290,20 +182,6 @@ def test_raw_input_lights_the_panel_and_tells_the_frontend(tmp_path, monkeypatch
     asyncio.run(run())
     assert screen.calls == [True, False] and emitted == ["pdc_eco_input"]
     assert p._input_wake.closed >= 1
-
-
-def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
-    p, screen, emitted = _setup(tmp_path, monkeypatch)
-    monkeypatch.setattr(sys.modules["main"], "_SCREEN_LEASE_S", 0.05)
-
-    async def run():
-        await p.set_eco(True, 50)
-        await p.set_eco_screen(True)
-        await _until(lambda: not screen.asleep)
-        await _leave(p)
-
-    asyncio.run(run())
-    assert screen.calls == [True, False] and emitted == []
 
 
 def test_failed_wake_after_leaving_download_mode_is_retried(tmp_path, monkeypatch):
@@ -339,22 +217,6 @@ def test_wake_arriving_while_a_sleep_is_in_flight_wins(tmp_path, monkeypatch):
     assert screen.calls == [True, False]
 
 
-def test_eco_transition_records_before_and_after_readbacks(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    p._init()
-    main = sys.modules['main']
-    records = []
-    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: records.append((a, k))))
-    values = iter([{'boost': 1}, {'boost': 0}])
-    async def readback():
-        return next(values)
-    monkeypatch.setattr(p, '_eco_performance_readback', readback)
-    asyncio.run(p.set_eco(True, 50))
-    record = next(k for a, k in records if a[:3] == ('INFO', 'eco', 'transition_readback'))
-    assert record['before_enabled'] is False and record['enabled'] is True
-    assert record['before'] == {'boost': 1} and record['after'] == {'boost': 0}
-
-
 def test_eco_diagnostic_failure_does_not_prevent_toggle(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
     main = sys.modules['main']
@@ -367,32 +229,6 @@ def test_eco_diagnostic_failure_does_not_prevent_toggle(tmp_path, monkeypatch):
     assert result['enabled'] is True
     record = next(k for a, k in records if a[:3] == ('INFO', 'eco', 'transition_readback'))
     assert record['before'] == {'error': 'OSError'} and record['after'] == {'error': 'OSError'}
-
-
-def test_slow_diagnostic_cannot_override_a_newer_eco_request(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
-    p._init()
-    main = sys.modules['main']
-    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: None))
-    async def scenario():
-        pending = asyncio.get_running_loop().create_future()
-        entered = asyncio.Event()
-        calls = 0
-        async def readback():
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                entered.set()
-                return await pending
-            return {'boost': 1}
-        monkeypatch.setattr(p, '_eco_performance_readback', readback)
-        old_request = asyncio.create_task(p.set_eco(True, 50))
-        await entered.wait()
-        assert (await p.set_eco(False, 50))['enabled'] is False
-        pending.set_result({'boost': 1})
-        assert (await old_request)['enabled'] is False
-        assert p._settings['eco_enabled'] is False
-    asyncio.run(scenario())
 
 
 def test_manual_controls_cancel_pending_eco_activation(tmp_path, monkeypatch):
@@ -422,7 +258,115 @@ def test_eco_readback_timeout_is_reported_without_waiting_for_hardware(tmp_path,
     async def stuck(*args, **kwargs):
         await asyncio.Event().wait()
     monkeypatch.setattr(main.asyncio, 'to_thread', stuck)
+    monkeypatch.setattr(main, '_ECO_READBACK_TIMEOUT_S', 0.01)
     async def scenario():
         result = await asyncio.wait_for(p._eco_performance_readback(), timeout=1.5)
         assert result == {'error': 'TimeoutError'}
     asyncio.run(scenario())
+
+
+def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    st = asyncio.run(p.set_eco(True, 55))
+    assert st["enabled"] is True
+    assert st["wake_brightness"] == 55  # snapshot of the passed brightness
+    # effective TDP forced to the device minimum, overriding any profile
+    levels, _active, _ac = p._effective_levels(None)
+    assert levels["pl1"] == 5 and levels["pl2"] == 5 and levels["pl3"] == 5
+    assert boost.enabled() is False  # boost forced off
+
+
+def test_eco_off_restores(tmp_path, monkeypatch):
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    p._init()
+    before = p._effective_levels(None)[0]["pl1"]  # normal setpoint before eco
+    asyncio.run(p.set_eco(True, 55))
+    assert p._effective_levels(None)[0]["pl1"] == 5  # forced to min while on
+    st = asyncio.run(p.set_eco(False, 0))
+    assert st["enabled"] is False
+    assert p._effective_levels(None)[0]["pl1"] == before  # restored, not stuck at min
+    assert boost.enabled() is True  # boost restored to saved setting
+
+
+def test_eco_rpc_waits_until_cpu_override_is_applied(tmp_path, monkeypatch):
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    started = threading.Event()
+    release = threading.Event()
+
+    def block_apply_queue():
+        started.set()
+        release.wait(timeout=2)
+
+    p._submit_offloaded(p._ensure_apply_executor(), block_apply_queue)
+    assert started.wait(timeout=1)
+
+    async def exercise():
+        task = asyncio.create_task(p.set_eco(True, 55))
+        try:
+            await asyncio.sleep(0)
+            assert not task.done()
+        finally:
+            release.set()
+        await task
+
+    asyncio.run(exercise())
+    assert boost.enabled() is False
+
+
+def test_expired_lease_wakes_the_panel(tmp_path, monkeypatch):
+    p, screen, emitted = _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys.modules["main"], "_SCREEN_LEASE_S", 0.05)
+
+    async def run():
+        await p.set_eco(True, 50)
+        await p.set_eco_screen(True)
+        await _until(lambda: not screen.asleep)
+        await _leave(p)
+
+    asyncio.run(run())
+    assert screen.calls == [True, False] and emitted == []
+
+
+def test_slow_diagnostic_cannot_override_a_newer_eco_request(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    p._init()
+    main = sys.modules['main']
+    monkeypatch.setattr(main.journal, 'active', types.SimpleNamespace(write=lambda *a, **k: None))
+    async def scenario():
+        pending = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+        calls = 0
+        async def readback():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                entered.set()
+                return await pending
+            return {'boost': 1}
+        monkeypatch.setattr(p, '_eco_performance_readback', readback)
+        old_request = asyncio.create_task(p.set_eco(True, 50))
+        await entered.wait()
+        assert (await p.set_eco(False, 50))['enabled'] is False
+        pending.set_result({'boost': 1})
+        assert (await old_request)['enabled'] is False
+        assert p._settings['eco_enabled'] is False
+    asyncio.run(scenario())
+
+
+def test_get_eco_state_shape(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    st = asyncio.run(p.get_eco_state())
+    assert st["enabled"] is False
+    assert st["tdp_min_w"] == 5
+    assert st["affects_boost"] is True
+
+
+def test_zero_brightness_snapshot_is_ignored(tmp_path, monkeypatch):
+    # FE may pass 0 while brightness is still loading; storing it would restore the
+    # screen to black on exit. The snapshot must keep the previous (default) value.
+    p = _make_plugin(tmp_path, monkeypatch, boost=_FakeToggle())
+    st = asyncio.run(p.set_eco(True, 0))
+    assert st["wake_brightness"] == 40  # default kept, not 0

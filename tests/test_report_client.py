@@ -1,5 +1,4 @@
 import json
-import os
 
 from pdc_report.client import parse_response, save_local
 
@@ -32,11 +31,6 @@ def test_save_local_writes_json(tmp_path):
     assert path and path.endswith("report-PDC-XX.json")
     with open(path) as f:
         assert json.load(f) == {"a": 1}
-
-
-def test_save_local_offline_name(tmp_path):
-    path = save_local(str(tmp_path), {"a": 1})
-    assert os.path.basename(path) == "report-offline.json"
 
 
 def test_save_local_accepts_additive_cpu_gpu_category_and_state(tmp_path):

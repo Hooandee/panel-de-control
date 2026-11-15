@@ -2,7 +2,7 @@ import hashlib
 from dataclasses import replace
 from pathlib import Path
 import pytest
-from test_upscalers import APPID, _service, _write, steam, fake_catalog, dll_catalog, proc
+from upscalers_support import APPID, _service, _write
 from upscalers import catalog
 from upscalers.catalog import Asset
 from upscalers.service import UpscalerError

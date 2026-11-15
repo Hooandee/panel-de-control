@@ -15,53 +15,8 @@ from device_profiles import DEVICE_TABLE
 from tdp.backend import NullBackend
 from tdp.factory import select_backend as real_select_backend
 from tdp.types import TdpLimits, TdpResult
-
-
-class FakeBackend:
-    supported = True
-    supports_levels = True
-    name = "fake"
-
-    def __init__(self):
-        self.set_levels_calls = 0
-        self.release_calls = 0
-        self.release_ok = True
-        self._applied = None
-
-    def get_limits(self):
-        return TdpLimits(min_w=5, default_w=15, max_w=35, max_ac_w=35)
-
-    def level_limits(self):
-        return {"pl1": {"min": 5, "max": 35}}
-
-    def set_levels(self, pl1, pl2, pl3, ac):
-        self.set_levels_calls += 1
-        self._applied = pl1
-        return TdpResult(pl1, pl1, True, "")
-
-    def read_applied(self):
-        return self._applied
-
-    def release(self):
-        self.release_calls += 1
-        return self.release_ok
-
-
-class FakeFan:
-    supported = True
-    name = "fake-fan"
-
-    def read_state(self):
-        return {"supported": True, "source": "fake", "pwm_max": 255, "fans": []}
-
-    def apply_curve_all(self, points):
-        pass
-
-    def set_auto(self, points):
-        pass
-
-    def restore_auto(self):
-        pass
+from tdp_control_support import Plugin  # noqa: F401
+from tdp_control_support import FakeBackend, FakeFan  # noqa: F401
 
 
 class FakeHHD:
@@ -80,26 +35,6 @@ class FakeHHD:
         return self.value
 
 
-@pytest.fixture
-def Plugin(tmp_path, monkeypatch):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
-    import tdp.factory as factory
-    monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
-    import fans.control as fan_control
-    monkeypatch.setattr(fan_control, "select_fan_backend", lambda device, **kw: FakeFan())
-    import lifecycle
-    monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
-    monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
-    return main.Plugin
-
-
 def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
     plugin = Plugin.__new__(Plugin)
     plugin._device = next(
@@ -114,16 +49,6 @@ def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
     assert plugin._profile_storage_limits().max_ac_w == 120
     assert plugin._profile_storage_limits(extra=False).max_ac_w == 65
     assert plugin._auto_request_limits().max_ac_w == 65
-
-
-def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
-    plugin = Plugin.__new__(Plugin)
-    plugin._tdp_backend = types.SimpleNamespace(supported=True, ready=lambda: False)
-
-    assert plugin._tdp_supported() is False
-
-    plugin._tdp_backend.ready = lambda: True
-    assert plugin._tdp_supported() is True
 
 
 def _plugin_with_unready_backend(Plugin):
@@ -422,32 +347,6 @@ def test_backend_guard_follows_route_loss_and_autonomous_recovery(
         return False
 
     assert asyncio.run(wait_for_recovery()) is True
-
-
-def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
-    import main as main_mod
-
-    plugin = Plugin()
-    plugin._init()
-    plugin._tdp_backend = NullBackend("no viable route")
-    now = [100.0]
-    selections = []
-    monkeypatch.setattr(main_mod, "_monotonic", lambda: now[0])
-    monkeypatch.setattr(
-        main_mod.tdp_factory,
-        "select_backend",
-        lambda *_args, **_kwargs: selections.append(True)
-        or NullBackend("still unavailable"),
-    )
-
-    assert asyncio.run(plugin._probe_tdp_backend()) is False
-    assert asyncio.run(plugin._probe_tdp_backend()) is False
-    assert len(selections) == 1
-
-    now[0] += 30.0
-
-    assert asyncio.run(plugin._probe_tdp_backend()) is False
-    assert len(selections) == 2
 
 
 def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
@@ -776,16 +675,6 @@ def test_conflict_no_hhd_present(Plugin, fake_hhd):
     assert out["hhd_managing"] is False
 
 
-def test_conflict_reports_active_powerstation_tdp_interface(Plugin):
-    p = Plugin()
-    p._init()
-    p._powerstation_detector.tdp_active = lambda: True
-
-    out = asyncio.run(p.get_tdp_conflict())
-
-    assert out["powerstation_active"] is True
-
-
 # ---------------------------------------------------------------------------
 # Take / release control (reversible, saves previous value)
 # ---------------------------------------------------------------------------
@@ -975,16 +864,6 @@ def test_take_when_hhd_unreachable_is_honest(Plugin, monkeypatch):
     assert p._settings["hhd_tdp_prev"] is None
 
 
-def test_take_does_not_overwrite_saved_prev(Plugin, fake_hhd):
-    # Already off (someone else) → don't record False as the value to restore to.
-    p = Plugin()
-    p._init()
-    p._settings["hhd_tdp_prev"] = True   # a prior take is already remembered
-    fake_hhd.set(False)
-    asyncio.run(p.take_tdp_control())
-    assert p._settings["hhd_tdp_prev"] is True   # unchanged
-
-
 def test_take_does_not_apply_when_hhd_refuses_to_release(Plugin, monkeypatch):
     import main as main_mod
 
@@ -1083,34 +962,6 @@ def test_power_handoff_stops_before_hhd_if_backend_restore_fails(Plugin):
 # Master switch gating
 # ---------------------------------------------------------------------------
 
-def test_reapply_noop_when_control_disabled(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["tdp_control_enabled"] = False
-    p._tdp_backend.set_levels_calls = 0
-    res = p._reapply_tdp()
-    assert p._tdp_backend.set_levels_calls == 0
-    assert res.ok is True
-    assert res.detail == "tdp-control-disabled"
-
-
-def test_reapply_writes_when_control_enabled(Plugin):
-    p = Plugin()
-    p._init()
-    p._tdp_backend.set_levels_calls = 0
-    p._reapply_tdp()
-    assert p._tdp_backend.set_levels_calls == 1
-
-
-def test_set_tdp_watts_noop_when_control_disabled(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["tdp_control_enabled"] = False
-    p._tdp_backend.set_levels_calls = 0
-    out = asyncio.run(p.set_tdp_watts(20, "global"))
-    assert out["ok"] is False
-    assert p._tdp_backend.set_levels_calls == 0
-
 
 def test_stale_game_tdp_rpc_cannot_retarget_active_game(Plugin):
     p = Plugin()
@@ -1174,18 +1025,9 @@ def test_set_control_enabled_off_invalidates_queued_write(Plugin):
     assert p._tdp_backend.set_levels_calls == 0
 
 
-def test_set_control_enabled_on_reapplies(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["tdp_control_enabled"] = False
-    p._tdp_backend.set_levels_calls = 0
-    assert asyncio.run(p.set_tdp_control_enabled(True)) is True
-    assert p._tdp_backend.set_levels_calls == 1
-
-
 def test_report_961_external_setpoint_respects_existing_master_switch(Plugin):
     """Synthetic report semantics; fake backend does not validate Ally hardware."""
-    from test_tdp_guard_rpc import FakeBackend as ObservedBackend
+    from main_harness import FakeBackend as ObservedBackend
     plugin = Plugin()
     plugin._init()
     plugin._tdp_backend = ObservedBackend()
@@ -1247,24 +1089,6 @@ def test_seen_flag_setters_persist(Plugin):
     assert p2._settings["seen_tdp_conflict_takeover"] is True
 
 
-def test_tdp_state_exposes_control_and_seen_flags(Plugin):
-    p = Plugin()
-    p._init()
-    st = asyncio.run(p.get_tdp_state())
-    # Defaults: control on, notices unseen.
-    assert st["tdp_control_enabled"] is True
-    assert st["seen_autotdp_notice"] is False
-    assert st["seen_tdp_conflict_takeover"] is False
-    # They track the persisted settings.
-    p._settings["tdp_control_enabled"] = False
-    p._settings["seen_autotdp_notice"] = True
-    p._settings["seen_tdp_conflict_takeover"] = True
-    st = asyncio.run(p.get_tdp_state())
-    assert st["tdp_control_enabled"] is False
-    assert st["seen_autotdp_notice"] is True
-    assert st["seen_tdp_conflict_takeover"] is True
-
-
 # ---------------------------------------------------------------------------
 # Lifecycle restore: hand HHD back
 # ---------------------------------------------------------------------------
@@ -1277,26 +1101,6 @@ def test_unload_restores_hhd(Plugin, fake_hhd):
     assert fake_hhd.value is False
     asyncio.run(p._unload())
     assert fake_hhd.value is True
-
-
-def test_report_environment_names_the_steam_client_channel(Plugin, monkeypatch, tmp_path):
-    import main as main_mod
-
-    package = tmp_path / ".local" / "share" / "Steam" / "package"
-    package.mkdir(parents=True)
-    (package / "beta").write_text("steamdeck_publicbeta")
-    (package / "steam_client_steamdeck_publicbeta_ubuntu12.manifest").write_text(
-        '"ubuntu12"\n{\n\t"version"\t\t"1790000000"\n}\n'
-    )
-    monkeypatch.setattr(main_mod.decky, "DECKY_USER_HOME", str(tmp_path), raising=False)
-    plugin = Plugin()
-    plugin._init()
-
-    assert plugin._report_environment()["steam_client"] == {
-        "status": "captured",
-        "branch": "beta",
-        "version": 1790000000,
-    }
 
 
 def test_report_environment_lists_installed_decky_plugins(Plugin, monkeypatch, tmp_path):
@@ -1395,19 +1199,6 @@ def test_startup_leaves_hhd_alone_when_the_player_never_took_control(Plugin, fak
     fake_hhd.set(True)
 
     asyncio.run(p._resume_hhd_takeover())
-
-    assert fake_hhd.value is True
-
-
-def test_turning_panel_tdp_off_forgets_the_takeover(Plugin, fake_hhd):
-    p = _hhd_plugin(Plugin)
-    fake_hhd.set(True)
-    asyncio.run(p.take_tdp_control())
-    asyncio.run(p.set_tdp_control_enabled(False))
-    assert fake_hhd.value is True
-
-    rebooted = _hhd_plugin(Plugin)
-    asyncio.run(rebooted._resume_hhd_takeover())
 
     assert fake_hhd.value is True
 
@@ -1580,18 +1371,6 @@ def _measured_plugin(Plugin, tmp_path, monkeypatch, *, key="onexplayer_apex", am
     return plugin, watts
 
 
-def test_measured_route_offers_auto_tdp_only_with_a_single_apu_source(
-    Plugin, tmp_path, monkeypatch,
-):
-    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
-    assert plugin._tdp_backend.name == "ryzenadj-unverified"
-    assert plugin._auto_tdp_supported() is True
-
-    plugin._measured_power_source = None
-    plugin._power_reader.apu_power_source = lambda: False
-    assert plugin._auto_tdp_supported() is False
-
-
 def test_measured_route_is_not_offered_on_generic_hardware(Plugin, tmp_path, monkeypatch):
     from device_profiles import GENERIC
 
@@ -1634,28 +1413,6 @@ def test_measured_overshoot_reasserts_then_leaves_the_route(Plugin, tmp_path, mo
         / "run/panel-de-control/route-ryzenadj-unverified-onexplayer_apex.not-honored"
     ).exists()
     assert plugin._tdp_diagnostics()["measured_power"]["exceeded"][0]["average_w"] == 70.0
-
-
-def test_measured_watch_survives_periodic_reasserts_of_the_same_target(
-    Plugin, tmp_path, monkeypatch,
-):
-    import main as main_mod
-
-    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
-    watts["value"] = 8.0
-    clock = [100.0]
-    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
-    plugin._current_appid = 1234
-
-    async def run():
-        for i in range(10):
-            if i % 3 == 0:
-                plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 8})
-            await plugin._measured_power_tick()
-            clock[0] += 2.0
-
-    asyncio.run(run())
-    assert plugin._measured_verdict.state == "within_limit"
 
 
 def test_measured_power_within_limit_keeps_the_route(Plugin, tmp_path, monkeypatch):
@@ -1763,23 +1520,6 @@ def _measured_run(plugin, main_mod, monkeypatch, start=100.0):
     return run
 
 
-def test_measured_exceed_count_resets_when_the_game_ends(Plugin, tmp_path, monkeypatch):
-    import main as main_mod
-
-    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
-    run = _measured_run(plugin, main_mod, monkeypatch)
-    run(16)
-    assert plugin._measured_exceeded == 1
-
-    plugin._current_appid = None
-    run(2)
-    plugin._current_appid = 1234
-    run(16)
-
-    assert plugin._measured_exceeded == 1
-    assert plugin._tdp_backend.name == "ryzenadj-unverified"
-
-
 def test_external_writer_is_reported_instead_of_marking_the_route(
     Plugin, tmp_path, monkeypatch,
 ):
@@ -1821,7 +1561,6 @@ def test_backend_swapped_during_the_power_read_is_never_marked(
     assert not list((tmp_path / "run/panel-de-control").glob("route-*.not-honored"))
 
 
-
 @pytest.mark.parametrize("presence", [True, False, None])
 def test_ally_conflict_reports_steamos_service_without_changing_control(Plugin, presence):
     plugin = Plugin()
@@ -1835,20 +1574,6 @@ def test_ally_conflict_reports_steamos_service_without_changing_control(Plugin, 
     assert plugin._settings == settings_before
     assert getattr(plugin, "_tdp_external_owner", None) == owner_before
     assert plugin._tdp_backend.set_levels_calls == 0
-
-
-@pytest.mark.parametrize("device", ["steam_deck_lcd", "steam_deck_oled", "rog_ally_x"])
-def test_other_devices_do_not_probe_steamos_service(Plugin, device):
-    plugin = Plugin()
-    plugin._init()
-    plugin._device = next(item for item in DEVICE_TABLE if item.key == device)
-
-    def unexpected_probe():
-        pytest.fail("SteamOS Manager probe escaped RC71L scope")
-
-    plugin._steamos_manager_detector.active = unexpected_probe
-    result = asyncio.run(plugin.get_tdp_conflict())
-    assert result["steamos_manager_active"] is False
 
 
 def test_report_environment_records_steam_layout_settings_redacted(Plugin):
@@ -1895,10 +1620,175 @@ def test_report_environment_marks_missing_steam_layout(Plugin, context):
     assert layout["settings"] == {}
 
 
-def test_launch_frontend_does_not_duplicate_steam_layout(Plugin):
+def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend = NullBackend("no viable route")
+    now = [100.0]
+    selections = []
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True)
+        or NullBackend("still unavailable"),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert len(selections) == 1
+
+    now[0] += 30.0
+
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert len(selections) == 2
+
+
+def test_take_does_not_overwrite_saved_prev(Plugin, fake_hhd):
+    # Already off (someone else) → don't record False as the value to restore to.
+    p = Plugin()
+    p._init()
+    p._settings["hhd_tdp_prev"] = True   # a prior take is already remembered
+    fake_hhd.set(False)
+    asyncio.run(p.take_tdp_control())
+    assert p._settings["hhd_tdp_prev"] is True   # unchanged
+
+
+def test_reapply_noop_when_control_disabled(Plugin):
+    p = Plugin()
+    p._init()
+    p._settings["tdp_control_enabled"] = False
+    p._tdp_backend.set_levels_calls = 0
+    res = p._reapply_tdp()
+    assert p._tdp_backend.set_levels_calls == 0
+    assert res.ok is True
+    assert res.detail == "tdp-control-disabled"
+
+
+def test_turning_panel_tdp_off_forgets_the_takeover(Plugin, fake_hhd):
+    p = _hhd_plugin(Plugin)
+    fake_hhd.set(True)
+    asyncio.run(p.take_tdp_control())
+    asyncio.run(p.set_tdp_control_enabled(False))
+    assert fake_hhd.value is True
+
+    rebooted = _hhd_plugin(Plugin)
+    asyncio.run(rebooted._resume_hhd_takeover())
+
+    assert fake_hhd.value is True
+
+
+def test_measured_route_offers_auto_tdp_only_with_a_single_apu_source(
+    Plugin, tmp_path, monkeypatch,
+):
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+    assert plugin._auto_tdp_supported() is True
+
+    plugin._measured_power_source = None
+    plugin._power_reader.apu_power_source = lambda: False
+    assert plugin._auto_tdp_supported() is False
+
+
+def test_measured_watch_survives_periodic_reasserts_of_the_same_target(
+    Plugin, tmp_path, monkeypatch,
+):
+    import main as main_mod
+
+    plugin, watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    watts["value"] = 8.0
+    clock = [100.0]
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: clock[0])
+    plugin._current_appid = 1234
+
+    async def run():
+        for i in range(10):
+            if i % 3 == 0:
+                plugin._tdp_targets = types.SimpleNamespace(target={"pl1": 8})
+            await plugin._measured_power_tick()
+            clock[0] += 2.0
+
+    asyncio.run(run())
+    assert plugin._measured_verdict.state == "within_limit"
+
+
+def test_measured_exceed_count_resets_when_the_game_ends(Plugin, tmp_path, monkeypatch):
+    import main as main_mod
+
+    plugin, _watts = _measured_plugin(Plugin, tmp_path, monkeypatch)
+    run = _measured_run(plugin, main_mod, monkeypatch)
+    run(16)
+    assert plugin._measured_exceeded == 1
+
+    plugin._current_appid = None
+    run(2)
+    plugin._current_appid = 1234
+    run(16)
+
+    assert plugin._measured_exceeded == 1
+    assert plugin._tdp_backend.name == "ryzenadj-unverified"
+
+
+@pytest.mark.parametrize("device", ["steam_deck_lcd", "steam_deck_oled", "rog_ally_x"])
+def test_other_devices_do_not_probe_steamos_service(Plugin, device):
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = next(item for item in DEVICE_TABLE if item.key == device)
+
+    def unexpected_probe():
+        pytest.fail("SteamOS Manager probe escaped RC71L scope")
+
+    plugin._steamos_manager_detector.active = unexpected_probe
+    result = asyncio.run(plugin.get_tdp_conflict())
+    assert result["steamos_manager_active"] is False
+
+
+def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
+    plugin = Plugin.__new__(Plugin)
+    plugin._tdp_backend = types.SimpleNamespace(supported=True, ready=lambda: False)
+
+    assert plugin._tdp_supported() is False
+
+    plugin._tdp_backend.ready = lambda: True
+    assert plugin._tdp_supported() is True
+
+
+def test_conflict_reports_active_powerstation_tdp_interface(Plugin):
+    p = Plugin()
+    p._init()
+    p._powerstation_detector.tdp_active = lambda: True
+
+    out = asyncio.run(p.get_tdp_conflict())
+
+    assert out["powerstation_active"] is True
+
+
+def test_set_control_enabled_on_reapplies(Plugin):
+    p = Plugin()
+    p._init()
+    p._settings["tdp_control_enabled"] = False
+    p._tdp_backend.set_levels_calls = 0
+    assert asyncio.run(p.set_tdp_control_enabled(True)) is True
+    assert p._tdp_backend.set_levels_calls == 1
+
+
+def test_report_environment_names_the_steam_client_channel(Plugin, monkeypatch, tmp_path):
+    import main as main_mod
+
+    package = tmp_path / ".local" / "share" / "Steam" / "package"
+    package.mkdir(parents=True)
+    (package / "beta").write_text("steamdeck_publicbeta")
+    (package / "steam_client_steamdeck_publicbeta_ubuntu12.manifest").write_text(
+        '"ubuntu12"\n{\n\t"version"\t\t"1790000000"\n}\n'
+    )
+    monkeypatch.setattr(main_mod.decky, "DECKY_USER_HOME", str(tmp_path), raising=False)
     plugin = Plugin()
     plugin._init()
 
-    frontend = plugin._launch_report_state({"steam_client_layout": {"status": "captured"}})["frontend"]
-
-    assert "steam_client_layout" not in frontend
+    assert plugin._report_environment()["steam_client"] == {
+        "status": "captured",
+        "branch": "beta",
+        "version": 1790000000,
+    }

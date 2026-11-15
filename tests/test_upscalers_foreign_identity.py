@@ -3,14 +3,7 @@ import json
 import pytest
 
 from upscalers import games
-from test_upscalers import steam, fake_catalog, proc
-
-
-def write(root, name, text):
-    path = root / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
+from upscalers_support import SCALER_MANIFEST, scaler_install, write  # noqa: F401
 
 
 def test_helix_manifest_does_not_guess_variant_from_fsr_provider(tmp_path):
@@ -99,7 +92,7 @@ def test_analysis_preserves_ownership_and_foreign_boolean(tmp_path, monkeypatch)
 
 
 def test_service_rejects_helix_dlss_adoption_without_moving_files(steam, fake_catalog, proc):
-    from test_upscalers import APPID, _service
+    from upscalers_support import APPID, _service
     from upscalers.service import UpscalerError
     _, game = steam
     target = game / "bin/x64_dx12"
@@ -111,16 +104,6 @@ def test_service_rejects_helix_dlss_adoption_without_moving_files(steam, fake_ca
         service.adopt_foreign(APPID)
     assert payload.read_text() == "compiled-network"
     assert (target / "OptiScaler.log").exists()
-
-
-SCALER_MANIFEST = '# HelixSR Scaler, installed by HelixSR Desktop\n# version=\n# layout=ngx\nname=dxgi.dll\nLicenses/DirectX_LICENSE.txt\nLicenses/FidelityFX_v2_LICENSE.md\nLicenses/OptiPatcher_LICENSE.txt\nLicenses/OptiScaler_LICENSE.txt\nLicenses/XeSS_LICENSE.txt\ndxgi.dll\nOptiScaler.ini\nOptiScaler/D3D12_OptiScaler/D3D12Core.dll\nOptiScaler/amd_fidelityfx_framegeneration_dx12.dll\nOptiScaler/amd_fidelityfx_loader_dx12.dll\nOptiScaler/amd_fidelityfx_upscaler_dx12.amd.dll\nOptiScaler/amd_fidelityfx_upscaler_dx12.dll\nOptiScaler/amd_fidelityfx_vk.dll\nOptiScaler/libxell.dll\nOptiScaler/libxess.dll\nOptiScaler/libxess_dx11.dll\nOptiScaler/libxess_fg.dll\nOptiScaler/plugins/OptiPatcher.asi\nHelixSR/helixsr.dll\n'
-
-
-def scaler_install(root):
-    write(root, 'HelixSR-Scaler.files', SCALER_MANIFEST)
-    write(root, 'OptiScaler.ini', '; HelixSR Scaler\n[HelixSR]\nInt8=auto\n[Sharpness]\nOverrideSharpness=auto\nSharpness=auto\n[CAS]\nEnabled=auto\n')
-    write(root, 'dxgi.dll', 'MZproxy')
-    write(root, 'HelixSR/helixsr.dll', 'MZprovider')
 
 
 def test_official_scaler_manifest_identifies_manual_dlss_before_first_run(tmp_path):

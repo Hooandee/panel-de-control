@@ -175,9 +175,6 @@ def test_quality_change_preserves_external_sharpness_edit(setup, monkeypatch):
     assert ini.read(path.read_text(), 'Sharpness.Sharpness') == '0.62'
 
 
-from test_upscalers import fake_catalog, steam  # noqa: E402
-
-
 def test_reinstall_keeps_image_settings(steam, fake_catalog, tmp_path):
     from upscalers import catalog
     home, _ = steam
@@ -224,7 +221,7 @@ def test_disable_also_stops_motion_sharpening_and_restore_preserves_it(setup):
 
 
 def test_manual_scaler_image_controls_work_before_any_game_log(setup):
-    from test_upscalers_foreign_identity import scaler_install
+    from upscalers_support import scaler_install
     service, root, path, _ = setup
     (root / 'OptiScaler.log').unlink()
     scaler_install(root)
@@ -234,7 +231,7 @@ def test_manual_scaler_image_controls_work_before_any_game_log(setup):
 
 
 def test_incomplete_manual_scaler_marker_prevents_any_write(setup):
-    from test_upscalers_foreign_identity import scaler_install
+    from upscalers_support import scaler_install
     service, root, path, _ = setup
     (root / 'OptiScaler.log').unlink()
     scaler_install(root)

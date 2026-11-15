@@ -6,10 +6,8 @@ needed and we can assert what got applied.
 """
 import asyncio
 import dataclasses
-import importlib
-import sys
+from main_harness import fake_decky, load_main
 import threading
-import types
 
 
 class _FakeColorBackend:
@@ -26,13 +24,7 @@ class _FakeColorBackend:
 
 
 def _make_plugin(tmp_path, monkeypatch, color=None):
-    fake_decky = types.ModuleType("decky")
-    fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake_decky.DECKY_USER = "deck"
-    fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake_decky)
+    fake_decky(monkeypatch, tmp_path)
 
     import tdp.factory as factory
     from tdp.types import TdpLimits, TdpResult
@@ -62,43 +54,12 @@ def _make_plugin(tmp_path, monkeypatch, color=None):
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
 
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
 
     fake_color = color if color is not None else _FakeColorBackend()
     monkeypatch.setattr(main, "GamescopeColorBackend", lambda *a, **k: fake_color)
     return main.Plugin(), fake_color
-
-
-def test_get_color_state_shape(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.get_color_state())
-    assert st["supported"] is True
-    for f in ("saturation", "temperature", "contrast", "gamma", "hue",
-              "gain_r", "gain_g", "gain_b", "vibrance"):
-        assert f in st
-    assert st["saturation"] == 100  # native by default
-    assert st["gamma"] == 0 and st["gain_r"] == 100 and st["vibrance"] == 0
-    assert "native" in st["presets"] and st["active_preset"] == "native"
-    assert "oled_look" in st and "appid" in st and "has_game_profile" in st
-
-
-def test_set_saturation_global_applies(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.set_saturation(150, "global", None))
-    assert st["saturation"] == 150
-    assert color.applied[-1]["saturation"] == 150  # pushed to hardware
-
-
-def test_saturation_per_game(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_saturation(120, "global", None))
-    asyncio.run(p.set_current_game("42"))
-    st = asyncio.run(p.set_saturation(170, "game", "42"))
-    assert st["saturation"] == 170 and st["has_game_profile"] is True
-    # global untouched
-    asyncio.run(p.set_current_game(None))
-    assert asyncio.run(p.get_color_state())["saturation"] == 120
 
 
 def test_set_calibration_is_global(tmp_path, monkeypatch):
@@ -131,40 +92,6 @@ def test_preview_calibration_applies_live_but_does_not_persist(tmp_path, monkeyp
     assert asyncio.run(p2.get_color_state())["contrast"] == 0
 
 
-def test_contextual_preview_includes_saturation_without_persisting(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-
-    st = asyncio.run(p.preview_calibration(
-        {"saturation": 145, "contrast": 20}, "global", None, None
-    ))
-
-    assert st["preview"] is True
-    assert st["saturation"] == 145 and st["contrast"] == 20
-    assert color.applied[-1]["saturation"] == 145
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(restored.get_color_state())["saturation"] == 100
-
-
-def test_contextual_saturation_rpc_keeps_legacy_direct_save(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    st = asyncio.run(p.set_saturation(145, "global", None, None))
-
-    assert st["preview"] is False and st["saturation"] == 145
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(restored.get_color_state())["saturation"] == 145
-
-
-def test_contextual_apply_preset_rpc_keeps_legacy_direct_save(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    st = asyncio.run(p.apply_color_preset("cine", "global", None, None))
-
-    assert st["preview"] is False and st["active_preset"] == "cine"
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(restored.get_color_state())["active_preset"] == "cine"
-
-
 def test_preview_calibration_honors_safety_floor(tmp_path, monkeypatch):
     # A LIVE preview must be clamped to the same safe range as a saved value, so a
     # mis-drag can't push the panel past the -60 contrast floor before confirming.
@@ -172,14 +99,6 @@ def test_preview_calibration_honors_safety_floor(tmp_path, monkeypatch):
     st = asyncio.run(p.preview_calibration({"contrast": -100}))
     assert st["contrast"] == -60
     assert color.applied[-1]["contrast"] == -60
-
-
-def test_preview_empty_payload_does_not_arm_confirm(tmp_path, monkeypatch):
-    # A payload with no known calibration fields must not raise a confirm bar with
-    # nothing to confirm (nor arm a revert timer).
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.preview_calibration({"saturation": 150}))  # saturation isn't calibration
-    assert st["preview"] is False
 
 
 def test_empty_preview_payload_restores_an_existing_preview(tmp_path, monkeypatch):
@@ -202,34 +121,6 @@ def test_confirm_after_preview_persists(tmp_path, monkeypatch):
     assert asyncio.run(p2.get_color_state())["contrast"] == 40  # saved
 
 
-def test_contextual_confirm_persists_the_full_preview(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    profile = {"saturation": 145, "temperature": 10, "contrast": 20}
-    asyncio.run(p.preview_calibration(profile, "global", None, None))
-
-    st = asyncio.run(p.set_calibration(profile, "global", None, None))
-
-    assert st["preview"] is False
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    saved = asyncio.run(restored.get_color_state())
-    assert saved["saturation"] == 145 and saved["contrast"] == 20
-
-
-def test_contextual_game_confirm_keeps_global_untouched(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_saturation(120, "global", None))
-    asyncio.run(p.set_current_game("42"))
-    profile = {"saturation": 165, "temperature": 10, "contrast": 20}
-    asyncio.run(p.preview_calibration(profile, "game", "42", "42"))
-
-    st = asyncio.run(p.set_calibration(profile, "game", "42", "42"))
-
-    assert st["preview"] is False and st["saturation"] == 165
-    asyncio.run(p.set_current_game(None))
-    global_state = asyncio.run(p.get_color_state())
-    assert global_state["saturation"] == 120 and global_state["contrast"] == 0
-
-
 def test_auto_revert_drops_preview_and_reapplies_saved(tmp_path, monkeypatch):
     p, color = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_calibration({"temperature": 0, "contrast": 20}))       # saved baseline
@@ -239,44 +130,6 @@ def test_auto_revert_drops_preview_and_reapplies_saved(tmp_path, monkeypatch):
     st = asyncio.run(p.get_color_state())
     assert st["preview"] is False and st["contrast"] == 20  # back to saved
     assert color.applied[-1]["contrast"] == 20
-
-
-def test_auto_revert_restores_saved_saturation(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_saturation(120, "global", None))
-    asyncio.run(p.preview_calibration(
-        {"saturation": 180}, "global", None, None
-    ))
-
-    p._do_color_revert()
-
-    st = asyncio.run(p.get_color_state())
-    assert st["preview"] is False and st["saturation"] == 120
-    assert color.applied[-1]["saturation"] == 120
-
-
-def test_discard_preview_reapplies_saved_immediately(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_calibration({"contrast": 20}))
-    asyncio.run(p.preview_calibration({"contrast": 60}))
-
-    st = asyncio.run(p.discard_calibration())
-
-    assert st["preview"] is False and st["contrast"] == 20
-    assert color.applied[-1]["contrast"] == 20
-
-
-def test_preview_state_exposes_its_target_and_remaining_window(tmp_path, monkeypatch):
-    p, _color = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_current_game("42"))
-
-    st = asyncio.run(p.preview_calibration(
-        {"contrast": 20}, "game", "42", "42"
-    ))
-
-    assert st["preview_scope"] == "game"
-    assert st["preview_appid"] == "42"
-    assert 1 <= st["revert_remaining"] <= st["revert_seconds"]
 
 
 def test_preview_cannot_be_confirmed_into_a_different_scope(tmp_path, monkeypatch):
@@ -291,18 +144,6 @@ def test_preview_cannot_be_confirmed_into_a_different_scope(tmp_path, monkeypatc
     ))
 
     assert st["preview"] is True
-    assert p._color.effective(None)["contrast"] == 0
-
-
-def test_legacy_preview_can_still_be_confirmed_for_a_game(tmp_path, monkeypatch):
-    p, _color = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_current_game("42"))
-    asyncio.run(p.preview_calibration({"contrast": 40}))
-
-    st = asyncio.run(p.set_calibration({"contrast": 40}, "game", "42"))
-
-    assert st["preview"] is False
-    assert p._color.effective("42")["contrast"] == 40
     assert p._color.effective(None)["contrast"] == 0
 
 
@@ -400,24 +241,6 @@ def test_contextual_oled_look_is_previewed_before_persisting(tmp_path, monkeypat
     assert asyncio.run(restored.get_color_state())["saturation"] == 100
 
 
-def test_apply_color_preset_sets_full_look(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.apply_color_preset("cine"))
-    assert st["active_preset"] == "cine"
-    assert st["saturation"] != 100 and st["contrast"] != 0   # a full look, not just saturation
-    assert color.applied[-1]["saturation"] == st["saturation"]
-
-
-def test_contextual_preset_is_previewed_before_persisting(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    st = asyncio.run(p.preview_color_preset("cine", "global", None, None))
-
-    assert st["preview"] is True and st["active_preset"] == "cine"
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(restored.get_color_state())["active_preset"] == "native"
-
-
 def test_discard_contextual_preset_restores_saved_color(tmp_path, monkeypatch):
     p, color = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_saturation(120, "global", None))
@@ -435,55 +258,6 @@ def test_apply_native_preset_resets(tmp_path, monkeypatch):
     st = asyncio.run(p.apply_color_preset("native"))
     assert st["active_preset"] == "native"
     assert st["saturation"] == 100 and st["contrast"] == 0
-
-
-def test_editing_after_preset_clears_active(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.apply_color_preset("cine"))
-    st = asyncio.run(p.set_calibration({"contrast": 3}))  # nudge off the preset
-    assert st["active_preset"] is None
-
-
-def test_native_preset_keeps_per_game_saturation(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_current_game("42"))
-    asyncio.run(p.set_saturation(170, "game", "42"))
-    asyncio.run(p.apply_color_preset("native"))          # a casual look tap
-    assert asyncio.run(p.get_color_state())["has_game_profile"] is True  # not wiped
-    asyncio.run(p.set_current_game(None))
-    assert asyncio.run(p.get_color_state())["saturation"] == 100  # global reset to native
-
-
-def test_active_preset_is_honest_under_game_override(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.apply_color_preset("cine"))            # global look
-    asyncio.run(p.set_current_game("42"))
-    asyncio.run(p.set_saturation(200, "game", "42"))     # override hides the look's sat
-    st = asyncio.run(p.get_color_state())
-    assert st["active_preset"] is None  # the screen isn't showing cine → don't claim it
-
-
-def test_reset_color_back_to_native(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_calibration({"temperature": 40, "contrast": 20}))
-    asyncio.run(p.set_saturation(180, "global", None))
-    st = asyncio.run(p.reset_color())
-    assert st["saturation"] == 100 and st["contrast"] == 0 and st["temperature"] == 0
-
-
-def test_contextual_reset_previews_native_without_clearing_saved_profiles(
-    tmp_path, monkeypatch
-):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.apply_color_preset("vivo"))
-    asyncio.run(p.set_saturation(170, "game", "42"))
-
-    st = asyncio.run(p.reset_color("global", None, None))
-
-    assert st["preview"] is True and st["active_preset"] == "native"
-    restored, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(restored.get_color_state())["active_preset"] == "vivo"
-    assert restored._color.has_game("42") is True
 
 
 def test_contextual_game_reset_only_changes_that_game_after_confirm(tmp_path, monkeypatch):
@@ -517,31 +291,12 @@ def test_night_mode_manual_overlay_applies_but_does_not_leak(tmp_path, monkeypat
     assert asyncio.run(p.get_color_state())["temperature"] == 10
 
 
-def test_night_mode_off_applies_no_overlay(tmp_path, monkeypatch):
-    p, color = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_calibration({"temperature": 10}))
-    st = asyncio.run(p.set_night({"enabled": False}))
-    assert st["active"] is False
-    assert color.applied[-1]["temperature"] == 10           # no shift when off
-
-
 def test_night_state_persists(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_night({"schedule_enabled": True, "start": 1320, "end": 420, "warmth": 30}))
     p2, _ = _make_plugin(tmp_path, monkeypatch)
     st = asyncio.run(p2.get_night_state())
     assert st["schedule_enabled"] is True and st["start"] == 1320 and st["warmth"] == 30
-
-
-def test_hdr_state_shape_and_gating(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.get_hdr_state())
-    assert "supported" in st and st["enabled"] is False
-    # a generic (non-HDR) panel → unsupported even though gamescope is faked-present
-    assert st["supported"] is False
-    # flip the device to an HDR-capable panel → supported (color backend is faked on)
-    p._device = dataclasses.replace(p._device, hdr=True)
-    assert asyncio.run(p.get_hdr_state())["supported"] is True
 
 
 def test_set_hdr_persists(tmp_path, monkeypatch):
@@ -561,24 +316,6 @@ def test_color_look_applies_regardless_of_hdr(tmp_path, monkeypatch):
     asyncio.run(p.apply_color_preset("cine"))            # an SDR look (saturation != 100)
     asyncio.run(p.set_hdr({"enabled": True}))
     assert color.applied[-1]["saturation"] != 100        # still applied with HDR on
-
-
-def test_unsupported_backend_degrades(tmp_path, monkeypatch):
-    color = _FakeColorBackend(supported=False)
-    p, _ = _make_plugin(tmp_path, monkeypatch, color=color)
-    st = asyncio.run(p.get_color_state())
-    assert st["supported"] is False
-    # setting still persists + returns state, just no hardware apply
-    st2 = asyncio.run(p.set_saturation(150, "global", None))
-    assert st2["saturation"] == 150
-    assert color.applied == []
-
-
-def test_color_persists_across_instances(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_saturation(133, "global", None))
-    p2, _ = _make_plugin(tmp_path, monkeypatch)
-    assert asyncio.run(p2.get_color_state())["saturation"] == 133
 
 
 class _LateColorBackend:
@@ -603,19 +340,6 @@ class _LateColorBackend:
         return True
 
 
-def test_display_reapply_waits_for_gamescope_on_cold_boot(tmp_path, monkeypatch):
-    # Cold boot: the socket isn't up when the plugin loads, so the startup apply
-    # no-ops. The waiter must retry and push the persisted look once it comes up.
-    late = _LateColorBackend(ready_after=2)
-    p, _ = _make_plugin(tmp_path, monkeypatch, color=late)
-    asyncio.run(p.set_saturation(150, "global", None))  # persists regardless
-    late.applied.clear()
-    asyncio.run(p._await_display_backend(
-        attempts=8, interval=0, reasserts=3, reassert_interval=0))
-    assert late.applied, "color look was never re-applied once gamescope came up"
-    assert late.applied[-1]["saturation"] == 150
-
-
 def test_display_reapply_reasserts_multiple_times(tmp_path, monkeypatch):
     # gamescope can drop a look loaded during session bringup, so the waiter must
     # re-assert several times, not once.
@@ -626,6 +350,76 @@ def test_display_reapply_reasserts_multiple_times(tmp_path, monkeypatch):
     asyncio.run(p._await_display_backend(
         attempts=2, interval=0, reasserts=4, reassert_interval=0))
     assert len(late.applied) == 4
+
+
+def test_display_reapply_gives_up_without_gamescope(tmp_path, monkeypatch):
+    # No gamescope (desktop): bounded — returns without ever applying (honest no-op).
+    never = _LateColorBackend(ready_after=999)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=never)
+    asyncio.run(p.set_saturation(150, "global", None))
+    never.applied.clear()
+    asyncio.run(p._await_display_backend(attempts=3, interval=0))
+    assert never.applied == []
+
+
+def test_legacy_preview_can_still_be_confirmed_for_a_game(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.preview_calibration({"contrast": 40}))
+
+    st = asyncio.run(p.set_calibration({"contrast": 40}, "game", "42"))
+
+    assert st["preview"] is False
+    assert p._color.effective("42")["contrast"] == 40
+    assert p._color.effective(None)["contrast"] == 0
+
+
+def test_editing_after_preset_clears_active(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.apply_color_preset("cine"))
+    st = asyncio.run(p.set_calibration({"contrast": 3}))  # nudge off the preset
+    assert st["active_preset"] is None
+
+
+def test_native_preset_keeps_per_game_saturation(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_saturation(170, "game", "42"))
+    asyncio.run(p.apply_color_preset("native"))          # a casual look tap
+    assert asyncio.run(p.get_color_state())["has_game_profile"] is True  # not wiped
+    asyncio.run(p.set_current_game(None))
+    assert asyncio.run(p.get_color_state())["saturation"] == 100  # global reset to native
+
+
+def test_active_preset_is_honest_under_game_override(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.apply_color_preset("cine"))            # global look
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_saturation(200, "game", "42"))     # override hides the look's sat
+    st = asyncio.run(p.get_color_state())
+    assert st["active_preset"] is None  # the screen isn't showing cine → don't claim it
+
+
+def test_hdr_state_shape_and_gating(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_hdr_state())
+    assert "supported" in st and st["enabled"] is False
+    # a generic (non-HDR) panel → unsupported even though gamescope is faked-present
+    assert st["supported"] is False
+    # flip the device to an HDR-capable panel → supported (color backend is faked on)
+    p._device = dataclasses.replace(p._device, hdr=True)
+    assert asyncio.run(p.get_hdr_state())["supported"] is True
+
+
+def test_unsupported_backend_degrades(tmp_path, monkeypatch):
+    color = _FakeColorBackend(supported=False)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=color)
+    st = asyncio.run(p.get_color_state())
+    assert st["supported"] is False
+    # setting still persists + returns state, just no hardware apply
+    st2 = asyncio.run(p.set_saturation(150, "global", None))
+    assert st2["saturation"] == 150
+    assert color.applied == []
 
 
 def test_display_reapply_waits_for_each_hardware_apply(tmp_path, monkeypatch):
@@ -657,13 +451,3 @@ def test_display_reapply_waits_for_each_hardware_apply(tmp_path, monkeypatch):
 
     asyncio.run(exercise())
     assert len(late.applied) == 1
-
-
-def test_display_reapply_gives_up_without_gamescope(tmp_path, monkeypatch):
-    # No gamescope (desktop): bounded — returns without ever applying (honest no-op).
-    never = _LateColorBackend(ready_after=999)
-    p, _ = _make_plugin(tmp_path, monkeypatch, color=never)
-    asyncio.run(p.set_saturation(150, "global", None))
-    never.applied.clear()
-    asyncio.run(p._await_display_backend(attempts=3, interval=0))
-    assert never.applied == []

@@ -293,7 +293,6 @@ def test_user_files_dependency_rejects_unsafe_data(catalog_dir, change):
 
 
 def test_re4_brings_its_own_reframework_and_asks_the_user_only_for_puredark(tmp_path):
-    from pathlib import Path
     from py_modules.upscalers import auto_recipes, user_deps
     catalog = rc.load()
     game = catalog.match('2050650', 'optiscaler', 'linux', 'x86_64')
@@ -326,7 +325,6 @@ def test_standard_reframework_still_composes_for_other_re_engine_games(tmp_path)
     (root / 're_chunk_000.pak').write_bytes(b'')
     composed = recipes.with_engine(recipes.Recipe('3764200'), '3764200', root)
     assert composed.files == {'dinput8.dll': 'reframework-nightly'}
-
 
 
 def test_re4_keeps_optiscalers_libxess_beside_the_exe():

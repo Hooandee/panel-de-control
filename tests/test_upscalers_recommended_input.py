@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from test_upscalers import _service, _write, fake_catalog, proc, steam
+from upscalers_support import _service, _write
 from upscalers import recipe_catalog
 
 

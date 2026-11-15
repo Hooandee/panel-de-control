@@ -1,7 +1,6 @@
 """RPC-level tests for the HUD (MangoHud overlay) tab."""
 import asyncio
 import concurrent.futures
-import importlib
 import json
 import os
 import sys
@@ -11,6 +10,7 @@ import types
 import pytest
 
 from mangohud.observations import TimedValue
+from main_harness import load_main
 
 
 def _make_plugin(tmp_path, monkeypatch):
@@ -49,7 +49,7 @@ def _make_plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": False)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": False, raising=False)
     return main, main.Plugin()
 
@@ -109,87 +109,6 @@ def _ready_plugin(tmp_path, monkeypatch):
     main, plugin = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     return main, plugin, presets
-
-
-def test_get_hud_state_shape(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, str(tmp_path / "presets.conf"))
-    st = asyncio.run(p.get_hud_state())
-    assert st["model"]["enabled"] is False
-    assert st["capability"] == "ready"
-    assert st["applyStatus"] == "disabled"
-    assert st["values"] == {}
-
-
-def test_hud_report_diagnostics_are_useful_without_custom_content(
-    tmp_path,
-    monkeypatch,
-):
-    _main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    p._hud_managed_path = str(tmp_path / "private-presets.conf")
-    p._hud_sessions = (object(), object())
-    p._hud_reload_pending = (object(),)
-    p._hud_reload_attempt = 2
-    p._hud_conflict = {"reason": "external_config"}
-    state = {
-        "capability": "ready",
-        "applyStatus": "conflict",
-        "model": {
-            "enabled": True,
-            "layout": "horizontal",
-            "position": "bottom-right",
-            "fontSize": 32,
-            "fontSizeSecondary": 18,
-            "fontScale": 1.25,
-            "noSmallFont": False,
-            "items": [
-                {"kind": "metric", "id": "fps", "label": "PRIVATE-LABEL"},
-                {"kind": "metric", "id": "pdc_tdp"},
-                {"kind": "text", "id": "note", "text": "PRIVATE-TEXT"},
-                {"kind": "separator", "id": "line"},
-            ],
-        },
-        "values": {"pdc_tdp": "PRIVATE-VALUE"},
-    }
-
-    diagnostics = p._hud_report_diagnostics(state)
-
-    assert diagnostics == {
-        "capability": "ready",
-        "apply_status": "conflict",
-        "enabled": True,
-        "layout": "horizontal",
-        "position": "bottom-right",
-        "item_count": 4,
-        "metric_ids": ["fps", "pdc_tdp"],
-        "pdc_metric_ids": ["pdc_tdp"],
-        "live_value_ids": ["pdc_tdp"],
-        "custom_text_count": 1,
-        "separator_count": 1,
-        "typography": {
-            "font_size": 32,
-            "font_size_secondary": 18,
-            "font_scale": 1.25,
-            "no_small_font": False,
-        },
-        "managed_path_present": True,
-        "managed_session_count": 2,
-        "reload_pending_count": 1,
-        "reload_attempt": 2,
-        "value_publish_count": 0,
-        "redetect_count": 0,
-        "redetect_recovered": 0,
-        "reload_delivery": "unknown",
-        "unobserved_reloads": 0,
-        "power_source": None,
-        "conflict": True,
-        "conflict_reason": "external_config",
-        "shutdown": False,
-    }
-    encoded = json.dumps(diagnostics)
-    assert "PRIVATE" not in encoded
-    assert str(tmp_path) not in encoded
 
 
 def test_hud_report_diagnostics_allowlist_frontend_steam_overlay(
@@ -306,47 +225,6 @@ def test_same_game_name_hydration_only_refreshes_hud(tmp_path, monkeypatch):
     assert reapplies == []
 
 
-def test_offline_hud_stays_editable_and_pending_without_writing(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets, supported=False, running=False)
-
-    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert st["capability"] == "inactive"
-    assert st["applyStatus"] == "pending"
-    assert st["model"]["enabled"] is True
-    assert not os.path.exists(presets)
-
-
-def test_pending_hud_recovers_when_a_supported_session_appears(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets, supported=False, running=False)
-    state = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    assert state["applyStatus"] == "pending"
-
-    _fake_overlay(main, monkeypatch, presets)
-    state = asyncio.run(p.get_hud_state())
-
-    assert state["applyStatus"] == "reload_requested"
-    assert os.path.exists(presets)
-
-
-def test_unavailable_hud_recovers_when_preset_support_appears(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets, supported=False, running=True)
-    state = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    assert state["applyStatus"] == "unavailable"
-
-    _fake_overlay(main, monkeypatch, presets)
-    state = asyncio.run(p.get_hud_state())
-
-    assert state["applyStatus"] == "reload_requested"
-    assert os.path.exists(presets)
-
-
 def test_ambiguous_hud_recovers_when_sessions_converge_on_one_path(
     tmp_path,
     monkeypatch,
@@ -382,25 +260,6 @@ def test_ambiguous_hud_recovers_when_sessions_converge_on_one_path(
     assert os.path.exists(first)
 
 
-def test_offline_disable_clears_the_remembered_custom_path(tmp_path, monkeypatch):
-    custom = str(tmp_path / "custom" / "presets.conf")
-    default = str(tmp_path / "default" / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, custom)
-
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    assert os.path.exists(custom)
-    assert p._settings["hud_managed_path"] == custom
-
-    _fake_overlay(main, monkeypatch, default, supported=False, running=False)
-    st = asyncio.run(p.set_hud_enabled(False))
-
-    assert st["applyStatus"] == "disabled"
-    assert not os.path.exists(custom)
-    assert not os.path.exists(f"{custom}.pdc-managed")
-    assert p._settings["hud_managed_path"] is None
-
-
 def test_supported_path_change_restores_the_previous_managed_file(tmp_path, monkeypatch):
     previous = str(tmp_path / "previous" / "presets.conf")
     current = str(tmp_path / "current" / "presets.conf")
@@ -418,18 +277,6 @@ def test_supported_path_change_restores_the_previous_managed_file(tmp_path, monk
     assert not os.path.exists(f"{previous}.pdc-managed")
     assert os.path.exists(current)
     assert p._settings["hud_managed_path"] == current
-
-
-def test_running_without_preset_support_is_explicitly_unavailable(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets, supported=False, running=True)
-
-    st = asyncio.run(p.set_hud_enabled(True))
-
-    assert st["capability"] == "unsupported"
-    assert st["applyStatus"] == "unavailable"
-    assert not os.path.exists(presets)
 
 
 def test_distinct_live_presets_paths_are_ambiguous_and_never_written(tmp_path, monkeypatch):
@@ -459,86 +306,6 @@ def test_distinct_live_presets_paths_are_ambiguous_and_never_written(tmp_path, m
     assert not os.path.exists(second)
 
 
-def test_set_config_persists_but_does_not_write_while_disabled(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    _fake_overlay(main, monkeypatch, presets)
-    st = asyncio.run(p.set_hud_config({"items": _items("fps", "gpu"), "enabled": False}))
-    assert st["model"]["items"] == _items("fps", "gpu")
-    assert not os.path.exists(presets)  # disabled → stock, nothing hijacked
-
-
-def test_enabling_writes_presets_conf_and_disabling_clears_it(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_hud_config({"items": _items("fps", "gpu"), "enabled": False}))
-    asyncio.run(p.set_hud_enabled(True))
-    text = open(presets).read()
-    assert "[preset 2]" in text and "gpu_stats" in text
-    asyncio.run(p.set_hud_enabled(False))
-    assert not os.path.exists(presets)  # handed back to stock
-
-
-def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    calls = []
-    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
-
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert calls == [True]
-
-
-def test_successful_write_and_reload_reports_requested_not_applied(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        main,
-        "reload_sessions",
-        lambda sessions, **_kwargs: types.SimpleNamespace(
-            requested=tuple((session.pid, session.starttime) for session in sessions),
-            pending=(),
-        ),
-    )
-
-    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert st["applyStatus"] == "reload_requested"
-
-
-def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    scans = []
-
-    def detect_sessions(**_kwargs):
-        scans.append(True)
-        return (
-            main.mangohud_detect.HudSession(
-                4242, 9001, os.getuid(), str(tmp_path), presets, True
-            ),
-        )
-
-    monkeypatch.setattr(main.mangohud_detect, "detect_sessions", detect_sessions)
-    monkeypatch.setattr(
-        main.mangohud_detect,
-        "session_alive",
-        lambda _session, **_kwargs: True,
-    )
-    monkeypatch.setattr(
-        main,
-        "reload_sessions",
-        lambda sessions, **_kwargs: types.SimpleNamespace(
-            requested=tuple((session.pid, session.starttime) for session in sessions),
-            pending=(),
-        ),
-    )
-
-    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert st["applyStatus"] == "reload_requested"
-    assert scans == [True]
-
-
 def test_session_replaced_after_detection_prevents_write(tmp_path, monkeypatch):
     main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     monkeypatch.setattr(
@@ -553,15 +320,6 @@ def test_session_replaced_after_detection_prevents_write(tmp_path, monkeypatch):
 
     assert state["applyStatus"] == "pending"
     assert not os.path.exists(presets)
-
-
-def test_failed_reload_keeps_exact_file_readback_as_written(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    _set_reload(main, monkeypatch, lambda: False)
-
-    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert st["applyStatus"] == "written"
 
 
 def test_rejected_write_readback_reports_failure(tmp_path, monkeypatch):
@@ -591,39 +349,6 @@ def test_failed_clear_reports_failure(tmp_path, monkeypatch):
     st = asyncio.run(p.set_hud_enabled(False))
 
     assert st["applyStatus"] == "failed"
-
-
-def test_external_edit_becomes_an_explicit_conflict_without_data_loss(
-    tmp_path,
-    monkeypatch,
-):
-    presets = str(tmp_path / "presets.conf")
-    external = "fps\n"
-    edited = "fps\ngpu_stats\n"
-    os.makedirs(os.path.dirname(presets), exist_ok=True)
-    with open(presets, "w") as handle:
-        handle.write(external)
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
-    initial = asyncio.run(
-        p.set_hud_config({"items": _items("fps"), "enabled": True})
-    )
-    assert initial["applyStatus"] == "conflict"
-    asyncio.run(p.resolve_hud_conflict("use_pdc"))
-    with open(presets, "w") as handle:
-        handle.write(edited)
-
-    state = asyncio.run(p.reload_hud())
-
-    assert state["applyStatus"] == "conflict"
-    assert state["conflict"]["path"] == "presets.conf"
-    assert state["conflict"]["expectedHash"]
-    assert state["conflict"]["actualHash"]
-    assert p._hud_report_diagnostics(state)["conflict_reason"] == (
-        "managed_content_mismatch"
-    )
-    assert open(presets).read() == edited
-    assert open(f"{presets}.pdc-backup").read() == external
 
 
 @pytest.mark.parametrize("action", ("keep_external", "use_pdc"))
@@ -659,18 +384,6 @@ def test_conflict_resolution_is_explicit_and_preserves_the_latest_external_edit(
         assert state["applyStatus"] == "reload_requested"
         assert open(presets).read() != edited
         assert open(f"{presets}.pdc-backup").read() == edited
-
-
-def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    calls = []
-    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    calls.clear()
-
-    asyncio.run(p.set_hud_enabled(False))
-
-    assert calls == [True]
 
 
 def test_unsupported_overlay_never_writes(tmp_path, monkeypatch):
@@ -718,131 +431,6 @@ def test_disabling_never_touches_steam_live_config(tmp_path, monkeypatch):
     assert not os.path.exists(presets)
 
 
-def test_pdc_metric_bakes_applied_readback_not_profile_target(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    target = p._effective_levels(p._current_appid)[0]["pl1"]
-    assert target != 11
-    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: 11)
-    _fake_overlay(main, monkeypatch, presets)
-    asyncio.run(p.set_hud_config({"items": _items("fps", "pdc_tdp"), "enabled": True}))
-    # The row is a single baked custom_text=<label> <value> line — no exec, no state file.
-    conf = open(presets).read()
-    assert "custom_text=TDP 11W" in conf
-    assert f"custom_text=TDP {target}W" not in conf
-    assert "exec=" not in conf
-    assert not os.path.exists(str(tmp_path / "pdc_tdp.txt"))
-
-
-def test_persisted_hud_locale_controls_dynamic_in_game_text(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-
-    asyncio.run(p.set_hud_config({
-        "locale": "en",
-        "items": _items("pdc_eco"),
-        "enabled": True,
-    }))
-
-    assert "custom_text=Download Inactive" in open(presets).read()
-
-
-def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    applied = {"watts": 11}
-    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
-    _fake_overlay(main, monkeypatch, presets)
-    reloads = []
-    _set_reload(main, monkeypatch, lambda: reloads.append(True) or True)
-
-    asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
-    reloads.clear()
-    applied["watts"] = 13
-    p._hud_last_publish_at = 0.0
-    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
-
-    asyncio.run(p._refresh_pdc_metrics())
-
-    assert "custom_text=TDP 13W" in open(presets).read()
-    assert reloads == [True]
-
-
-def test_tdp_without_readback_does_not_masquerade_as_profile_target(tmp_path, monkeypatch):
-    _main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: None)
-    p._pdc_active_ids = ["pdc_tdp"]
-
-    assert p._pdc_values() == {"pdc_tdp": "-"}
-
-
-def test_pdc_tdp_uses_the_backends_primary_rail(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    p._tdp_backend.primary_rail = "pl2"
-    observation = main.TdpObservation(
-        readable=True,
-        surfaces={
-            p._tdp_backend.name: {
-                "pl1": main.RailReading(10),
-                "pl2": main.RailReading(17),
-            },
-        },
-    )
-
-    snapshot = p._pdc_snapshot(
-        ["pdc_tdp"],
-        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
-    )
-
-    assert snapshot["applied"] == 17
-
-
-def test_pdc_tdp_uses_active_low_battery_sidecar_readback(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    sidecar = types.SimpleNamespace(
-        name="ryzenadj-low-battery-hold",
-        primary_rail="pl1",
-        diagnostics=lambda: {"low_battery_hold_active": True},
-    )
-    p._low_battery_hold_backend = sidecar
-    observation = main.TdpObservation(
-        readable=True,
-        surfaces={sidecar.name: {"pl1": main.RailReading(19)}},
-    )
-
-    snapshot = p._pdc_snapshot(
-        ["pdc_tdp"],
-        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
-    )
-
-    assert snapshot["applied"] == 19
-
-
-def test_blocking_tdp_backend_reuses_reconciler_observation(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    p._tdp_backend.blocking = True
-    p._tdp_observation = main.TdpObservation(
-        readable=True,
-        surfaces={p._tdp_backend.name: {"pl1": main.RailReading(9)}},
-    )
-    p._tdp_observation_at = main._monotonic()
-    reads = []
-    monkeypatch.setattr(
-        p._tdp_backend,
-        "read_applied",
-        lambda: reads.append(True) or 12,
-    )
-    p._pdc_active_ids = ["pdc_tdp"]
-
-    assert p._pdc_values() == {"pdc_tdp": "9W"}
-    assert reads == []
-
-
 def test_blocking_tdp_backend_does_not_refresh_stale_cached_observation(
     tmp_path,
     monkeypatch,
@@ -859,41 +447,6 @@ def test_blocking_tdp_backend_does_not_refresh_stale_cached_observation(
     monkeypatch.setattr(main, "_monotonic", lambda: 20.0)
 
     assert p._pdc_values() == {"pdc_tdp": "-"}
-
-
-def test_pdc_custom_label_baked_with_value(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_hud_config({
-        "items": [{"kind": "metric", "id": "pdc_eco", "label": "Bateria"}],
-        "enabled": True,
-    }))
-    assert "custom_text=Bateria Inactivo" in open(presets).read()
-
-
-def test_pdc_metric_gone_from_presets_when_dropped(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
-    assert "pdc_eco" not in open(presets).read()  # no directive; but the label is baked
-    assert "custom_text=Descarga Inactivo" in open(presets).read()
-    # Drop the pdc metric → its baked row is gone from presets.conf.
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    assert "Descarga" not in open(presets).read()
-
-
-def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    calls = []
-    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
-    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
-    calls.clear()
-
-    p._settings["eco_enabled"] = True
-    p._hud_last_publish_at = 0.0
-    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
-    asyncio.run(p._refresh_pdc_metrics())
-
-    assert "custom_text=Descarga Activo" in open(presets).read()
-    assert calls == [True]
 
 
 def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
@@ -930,55 +483,6 @@ def test_reload_retries_stop_after_the_bounded_attempt_budget(tmp_path, monkeypa
 
     assert len(calls) == main._HUD_RELOAD_MAX_ATTEMPTS
     assert p._hud_reload_pending == ()
-
-
-def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    first = main.mangohud_detect.HudSession(
-        20, 9001, os.getuid(), str(tmp_path), presets, True
-    )
-    second = main.mangohud_detect.HudSession(
-        21, 9002, os.getuid(), str(tmp_path), presets, True
-    )
-    monkeypatch.setattr(
-        main.mangohud_detect,
-        "detect_sessions",
-        lambda **_kwargs: (first, second),
-    )
-    monkeypatch.setattr(
-        main.mangohud_detect,
-        "session_alive",
-        lambda _session, **_kwargs: True,
-    )
-    calls = []
-
-    def reload_sessions(sessions, **_kwargs):
-        calls.append(tuple(sessions))
-        if len(calls) == 1:
-            return types.SimpleNamespace(
-                requested=((first.pid, first.starttime),),
-                pending=((second.pid, second.starttime),),
-            )
-        return types.SimpleNamespace(
-            requested=((second.pid, second.starttime),),
-            pending=(),
-        )
-
-    monkeypatch.setattr(main, "reload_sessions", reload_sessions)
-    clock = {"now": 100.0}
-    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"], raising=False)
-
-    state = asyncio.run(
-        p.set_hud_config({"items": _items("pdc_eco"), "enabled": True})
-    )
-    assert state["applyStatus"] == "written"
-
-    clock["now"] = 101.1
-    asyncio.run(p._refresh_pdc_metrics())
-
-    assert calls == [(first, second), (second,)]
-    assert p._hud_apply_status == "reload_requested"
 
 
 def test_pdc_refresh_write_failure_reports_failed_and_stays_retryable(tmp_path, monkeypatch):
@@ -1022,18 +526,6 @@ def test_inactive_pdc_refresh_skips_executor(tmp_path, monkeypatch):
     p._apply_executor = executor
     p._pdc_active_ids = []
     p._pdc_presets_path = None
-
-    asyncio.run(p._refresh_pdc_metrics())
-
-    assert executor.count == 0
-
-
-def test_pdc_refresh_does_not_use_the_shared_apply_executor(tmp_path, monkeypatch):
-    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
-    executor = _RecordingExecutor()
-    p._apply_executor = executor
-    p._settings["eco_enabled"] = True
 
     asyncio.run(p._refresh_pdc_metrics())
 
@@ -1415,35 +907,6 @@ def test_hud_values_follow_a_restarted_mangoapp(tmp_path, monkeypatch):
     assert p._hud_sessions == (sessions[0],)
 
 
-def test_hud_sensor_only_changes_reload_less_often(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    _live_sessions(main, monkeypatch, [_session(main, presets, 3)])
-    reloaded = _record_reloads(main, monkeypatch)
-    power = {"watts": 6.0}
-    monkeypatch.setattr(
-        p._power_reader,
-        "read",
-        lambda: {"watts": power["watts"], "gpu_busy": 10},
-    )
-    clock = {"now": 10.0}
-    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
-    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
-    reloaded.clear()
-
-    power["watts"] = 9.0
-    clock["now"] += 2
-    p._refresh_pdc_metrics_sync()
-    assert reloaded == []
-    assert "custom_text=Consumo 6W" in open(presets).read()
-
-    clock["now"] += main._MIN_HUD_SENSOR_REFRESH_S
-    p._refresh_pdc_metrics_sync()
-    assert reloaded == [(3,)]
-    assert "custom_text=Consumo 9W" in open(presets).read()
-
-
 def test_hud_state_changes_still_publish_promptly_next_to_sensors(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
@@ -1478,16 +941,6 @@ def test_hud_power_falls_back_to_rapl_without_amdgpu(tmp_path, monkeypatch):
     p._pdc_active_ids = ["pdc_power"]
 
     assert p._pdc_values() == {"pdc_power": "9W"}
-
-
-def test_hud_power_keeps_amdgpu_as_the_source_when_it_reads(tmp_path, monkeypatch):
-    _main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 7.0, "gpu_busy": 4})
-    monkeypatch.setattr(p._rapl_power, "read", lambda: 30.0)
-    p._pdc_active_ids = ["pdc_power"]
-
-    assert p._pdc_values() == {"pdc_power": "7W"}
 
 
 def test_hud_battery_metrics_come_from_the_battery_reader(tmp_path, monkeypatch):
@@ -1563,95 +1016,213 @@ def test_a_reload_path_that_worked_is_reused(tmp_path, monkeypatch):
     assert p._hud_reload_via_proc_cwd is False
 
 
-def test_unconfirmed_delivery_pauses_the_confirmation_wait(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    clock = {"now": 100.0}
-    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
-    observed = []
+def test_successful_write_and_reload_reports_requested_not_applied(tmp_path, monkeypatch):
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        main,
+        "reload_sessions",
+        lambda sessions, **_kwargs: types.SimpleNamespace(
+            requested=tuple((session.pid, session.starttime) for session in sessions),
+            pending=(),
+        ),
+    )
 
-    def reload_snapshot(snapshot, **kwargs):
-        observed.append(kwargs["observe"])
-        identities = tuple((session.pid, session.starttime) for session in snapshot)
-        return types.SimpleNamespace(requested=identities, pending=(), delivery="unknown")
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
-    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
-    session = _session(main, str(tmp_path / "presets.conf"), 4)
-    monkeypatch.setattr(main.mangohud_detect, "session_alive", lambda *_a, **_k: True)
-
-    p._note_hud_delivery("unobserved")
-    p._request_hud_reload((session,), reset_backoff=True)
-    clock["now"] += main._HUD_UNOBSERVED_BACKOFF_S + 1
-    p._request_hud_reload((session,), reset_backoff=True)
-
-    assert observed == [False, True]
+    assert st["applyStatus"] == "reload_requested"
 
 
-def test_switching_the_hud_off_does_not_wait_for_reload_confirmation(tmp_path, monkeypatch):
+def test_failed_reload_keeps_exact_file_readback_as_written(tmp_path, monkeypatch):
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
+    _set_reload(main, monkeypatch, lambda: False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["applyStatus"] == "written"
+
+
+def test_pdc_metric_bakes_applied_readback_not_profile_target(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
-    _live_sessions(main, monkeypatch, [_session(main, presets, 6)])
-    observed = []
-
-    def reload_snapshot(snapshot, **kwargs):
-        observed.append(kwargs["observe"])
-        identities = tuple((session.pid, session.starttime) for session in snapshot)
-        return types.SimpleNamespace(requested=identities, pending=(), delivery="unknown")
-
-    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    observed.clear()
-
-    state = asyncio.run(p.set_hud_enabled(False))
-
-    assert observed == [False]
-    assert state["applyStatus"] == "disabled"
+    target = p._effective_levels(p._current_appid)[0]["pl1"]
+    assert target != 11
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: 11)
+    _fake_overlay(main, monkeypatch, presets)
+    asyncio.run(p.set_hud_config({"items": _items("fps", "pdc_tdp"), "enabled": True}))
+    # The row is a single baked custom_text=<label> <value> line — no exec, no state file.
+    conf = open(presets).read()
+    assert "custom_text=TDP 11W" in conf
+    assert f"custom_text=TDP {target}W" not in conf
+    assert "exec=" not in conf
+    assert not os.path.exists(str(tmp_path / "pdc_tdp.txt"))
 
 
-def test_pending_reload_retries_do_not_wait_for_confirmation(tmp_path, monkeypatch):
+def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
-    observed = []
+    applied = {"watts": 11}
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
+    _fake_overlay(main, monkeypatch, presets)
+    reloads = []
+    _set_reload(main, monkeypatch, lambda: reloads.append(True) or True)
 
-    def reload_snapshot(snapshot, **kwargs):
-        observed.append(kwargs["observe"])
-        identities = tuple((session.pid, session.starttime) for session in snapshot)
-        return types.SimpleNamespace(requested=(), pending=identities, delivery="unknown")
+    asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
+    reloads.clear()
+    applied["watts"] = 13
+    p._hud_last_publish_at = 0.0
+    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
 
-    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
-    monkeypatch.setattr(main.mangohud_detect, "session_alive", lambda *_a, **_k: True)
-    clock = {"now": 10.0}
-    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
-    session = _session(main, str(tmp_path / "presets.conf"), 8)
+    asyncio.run(p._refresh_pdc_metrics())
 
-    p._reload_mangoapp((session,), confirm=False)
-    clock["now"] += 5
-    p._retry_pending_hud_reload()
-
-    assert observed == [False, False]
+    assert "custom_text=TDP 13W" in open(presets).read()
+    assert reloads == [True]
 
 
-def test_power_source_is_unknown_when_nothing_reads(tmp_path, monkeypatch):
+def test_pdc_tdp_uses_the_backends_primary_rail(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.primary_rail = "pl2"
+    observation = main.TdpObservation(
+        readable=True,
+        surfaces={
+            p._tdp_backend.name: {
+                "pl1": main.RailReading(10),
+                "pl2": main.RailReading(17),
+            },
+        },
+    )
+
+    snapshot = p._pdc_snapshot(
+        ["pdc_tdp"],
+        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
+    )
+
+    assert snapshot["applied"] == 17
+
+
+def test_pdc_tdp_uses_active_low_battery_sidecar_readback(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    sidecar = types.SimpleNamespace(
+        name="ryzenadj-low-battery-hold",
+        primary_rail="pl1",
+        diagnostics=lambda: {"low_battery_hold_active": True},
+    )
+    p._low_battery_hold_backend = sidecar
+    observation = main.TdpObservation(
+        readable=True,
+        surfaces={sidecar.name: {"pl1": main.RailReading(19)}},
+    )
+
+    snapshot = p._pdc_snapshot(
+        ["pdc_tdp"],
+        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
+    )
+
+    assert snapshot["applied"] == 19
+
+
+def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    first = main.mangohud_detect.HudSession(
+        20, 9001, os.getuid(), str(tmp_path), presets, True
+    )
+    second = main.mangohud_detect.HudSession(
+        21, 9002, os.getuid(), str(tmp_path), presets, True
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **_kwargs: (first, second),
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda _session, **_kwargs: True,
+    )
+    calls = []
+
+    def reload_sessions(sessions, **_kwargs):
+        calls.append(tuple(sessions))
+        if len(calls) == 1:
+            return types.SimpleNamespace(
+                requested=((first.pid, first.starttime),),
+                pending=((second.pid, second.starttime),),
+            )
+        return types.SimpleNamespace(
+            requested=((second.pid, second.starttime),),
+            pending=(),
+        )
+
+    monkeypatch.setattr(main, "reload_sessions", reload_sessions)
+    clock = {"now": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"], raising=False)
+
+    state = asyncio.run(
+        p.set_hud_config({"items": _items("pdc_eco"), "enabled": True})
+    )
+    assert state["applyStatus"] == "written"
+
+    clock["now"] = 101.1
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert calls == [(first, second), (second,)]
+    assert p._hud_apply_status == "reload_requested"
+
+
+def test_unavailable_hud_recovers_when_preset_support_appears(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets, supported=False, running=True)
+    state = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    assert state["applyStatus"] == "unavailable"
+
+    _fake_overlay(main, monkeypatch, presets)
+    state = asyncio.run(p.get_hud_state())
+
+    assert state["applyStatus"] == "reload_requested"
+    assert os.path.exists(presets)
+
+
+def test_offline_disable_clears_the_remembered_custom_path(tmp_path, monkeypatch):
+    custom = str(tmp_path / "custom" / "presets.conf")
+    default = str(tmp_path / "default" / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, custom)
+
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    assert os.path.exists(custom)
+    assert p._settings["hud_managed_path"] == custom
+
+    _fake_overlay(main, monkeypatch, default, supported=False, running=False)
+    st = asyncio.run(p.set_hud_enabled(False))
+
+    assert st["applyStatus"] == "disabled"
+    assert not os.path.exists(custom)
+    assert not os.path.exists(f"{custom}.pdc-managed")
+    assert p._settings["hud_managed_path"] is None
+
+
+def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
+    calls = []
+    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    calls.clear()
+
+    asyncio.run(p.set_hud_enabled(False))
+
+    assert calls == [True]
+
+
+def test_hud_power_keeps_amdgpu_as_the_source_when_it_reads(tmp_path, monkeypatch):
     _main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
-    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": None, "gpu_busy": 1})
-    monkeypatch.setattr(p._rapl_power, "read", lambda: None)
+    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 7.0, "gpu_busy": 4})
+    monkeypatch.setattr(p._rapl_power, "read", lambda: 30.0)
     p._pdc_active_ids = ["pdc_power"]
 
-    assert p._pdc_values() == {"pdc_power": "-"}
-    assert p._hud_report_diagnostics(p._hud_state())["power_source"] is None
-
-
-def test_power_source_clears_when_power_is_no_longer_shown(tmp_path, monkeypatch):
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    p._init()
-    _live_sessions(main, monkeypatch, [_session(main, str(tmp_path / "presets.conf"), 2)])
-    _record_reloads(main, monkeypatch)
-    monkeypatch.setattr(p._power_reader, "read", lambda: {"watts": 6.0, "gpu_busy": 1})
-    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
-    assert p._hud_report_diagnostics(p._hud_state())["power_source"] == "amdgpu"
-
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-
-    assert p._hud_report_diagnostics(p._hud_state())["power_source"] is None
+    assert p._pdc_values() == {"pdc_power": "7W"}

@@ -2,7 +2,6 @@ import pytest
 
 from upscalers import games, ini, recipes
 from upscalers.service import UpscalerService
-from test_upscalers import fake_catalog, dll_catalog
 
 
 @pytest.fixture

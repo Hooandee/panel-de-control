@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers import APPID, FakeHelix, without_bundled_recipes, _service, _write, dll_catalog, fake_catalog, helix_catalog, proc, steam
+from upscalers_support import APPID, FakeHelix, _service, _write, without_bundled_recipes
 from upscalers import catalog, diagnostics, games, recipes
 from upscalers.catalog import Asset
 

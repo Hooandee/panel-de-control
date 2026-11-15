@@ -1,6 +1,6 @@
 import json
 
-from test_upscalers import APPID, _service, _write, steam, fake_catalog, proc
+from upscalers_support import APPID, _service, _write
 from upscalers import catalog, diagnostics
 from upscalers.service import UpscalerError, UpscalerService
 

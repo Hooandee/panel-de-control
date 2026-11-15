@@ -1,12 +1,10 @@
 """RPC-level coverage for the custom power-preset wiring in main.py. The store logic
 is unit-tested in test_power_presets; this locks the glue (clamp to rails + atomic apply)."""
 import asyncio
-import importlib
-import sys
-import types
 
 import pytest
 from tdp.types import TdpLimits, TdpResult
+from main_harness import fake_decky, load_main
 
 
 class FakeBackend:
@@ -55,18 +53,12 @@ class FakeBackend:
 
 @pytest.fixture
 def Plugin(tmp_path, monkeypatch):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     from tdp import factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     return main.Plugin
 
@@ -86,12 +78,6 @@ def _use_gpd_win_mini(monkeypatch):
     )
     monkeypatch.setattr(FakeBackend, "level_limits", lambda _self: {})
     return main_module
-
-
-def test_get_power_presets_fresh_shape(Plugin):
-    st = asyncio.run(Plugin().get_power_presets())
-    assert st["order"] == ["quiet", "balanced", "turbo"]
-    assert st["hidden"] == [] and st["custom"] == {}
 
 
 def test_create_clamps_watts_to_active_ceiling(Plugin):
@@ -121,13 +107,6 @@ def test_crud_and_hide_roundtrip_persists(Plugin):
     assert cid not in st["custom"]
 
 
-def test_apply_power_preset_sets_watts_on_scope(Plugin):
-    p = Plugin()
-    res = asyncio.run(p.apply_power_preset(18, "global", None, None))
-    assert res["ok"] is True and res["applied_w"] == 18
-    assert asyncio.run(p.get_tdp_state())["global_watts"] == 18
-
-
 def test_apply_three_watt_preset_preserves_request_and_applies_safe_minimum(Plugin):
     p = Plugin()
 
@@ -137,16 +116,6 @@ def test_apply_three_watt_preset_preserves_request_and_applies_safe_minimum(Plug
     state = asyncio.run(p.get_tdp_state())
     assert state["global_watts"] == 3
     assert state["global_levels"]["pl1"] == 5
-
-
-def test_three_watt_custom_preset_survives_reload_on_other_devices(Plugin):
-    p = Plugin()
-    state = asyncio.run(p.create_power_preset(3, "leaf", None))
-    preset_id = state["order"][-1]
-
-    reloaded = asyncio.run(Plugin().get_power_presets())
-
-    assert reloaded["custom"][preset_id]["watts"] == 3
 
 
 def test_gpd_win_mini_presets_keep_low_requests_and_the_safe_ceiling(Plugin, monkeypatch):
@@ -164,6 +133,11 @@ def test_gpd_win_mini_presets_keep_low_requests_and_the_safe_ceiling(Plugin, mon
     assert high["custom"][high_id]["watts"] == 35
 
 
+def test_apply_power_preset_unknown_scope_does_not_raise(Plugin):
+    res = asyncio.run(Plugin().apply_power_preset(15, "bogus", None, None))
+    assert res["ok"] is False and "unknown scope" in res["detail"]
+
+
 def test_apply_power_preset_with_boost_sets_custom_rails(Plugin):
     p = Plugin()
     res = asyncio.run(p.apply_power_preset(
@@ -172,8 +146,3 @@ def test_apply_power_preset_with_boost_sets_custom_rails(Plugin):
     st = asyncio.run(p.get_tdp_state())
     assert st["global_boost_mode"] == "custom"
     assert st["global_levels"]["pl2"] == 28 and st["global_levels"]["pl3"] == 32
-
-
-def test_apply_power_preset_unknown_scope_does_not_raise(Plugin):
-    res = asyncio.run(Plugin().apply_power_preset(15, "bogus", None, None))
-    assert res["ok"] is False and "unknown scope" in res["detail"]

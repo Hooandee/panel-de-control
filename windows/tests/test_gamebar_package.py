@@ -323,6 +323,33 @@ class GameBarProjectTests(unittest.TestCase):
             interfaces,
         )
 
+    def test_required_package_images_are_real_png_files(self):
+        expected_sizes = {
+            "Square44x44Logo.png": (44, 44),
+            "Square150x150Logo.png": (150, 150),
+            "StoreLogo.png": (50, 50),
+            "SplashScreen.png": (620, 300),
+            "WidgetIcon.png": (64, 64),
+        }
+
+        for name, expected_size in expected_sizes.items():
+            with self.subTest(name=name):
+                path = PROJECT_DIR / "Assets" / name
+                self.assertTrue(path.is_file())
+                with path.open("rb") as image:
+                    self.assertEqual(b"\x89PNG\r\n\x1a\n", image.read(8))
+                    image.read(8)
+                    self.assertEqual(expected_size, struct.unpack(">II", image.read(8)))
+
+    def test_package_has_the_expected_identity(self):
+        manifest = ElementTree.parse(MANIFEST).getroot()
+        identity = manifest.find(
+            "{http://schemas.microsoft.com/appx/manifest/foundation/windows10}Identity"
+        )
+
+        self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
+        self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
+
     def test_widget_has_controller_focus_targets_and_telemetry_cards(self):
         root = ElementTree.parse(WIDGET).getroot()
         names = {
@@ -427,7 +454,6 @@ class GameBarProjectTests(unittest.TestCase):
             slider.attrib["ValueChanged"],
         )
 
-
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
         xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
@@ -500,7 +526,6 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_refresh,
         )
 
-
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
 
@@ -539,24 +564,6 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("brightness_response_unavailable", code)
         self.assertIn("BrightnessControlResponse.Unverifiable", code)
         self.assertNotIn("Task.Run", code)
-
-    def test_required_package_images_are_real_png_files(self):
-        expected_sizes = {
-            "Square44x44Logo.png": (44, 44),
-            "Square150x150Logo.png": (150, 150),
-            "StoreLogo.png": (50, 50),
-            "SplashScreen.png": (620, 300),
-            "WidgetIcon.png": (64, 64),
-        }
-
-        for name, expected_size in expected_sizes.items():
-            with self.subTest(name=name):
-                path = PROJECT_DIR / "Assets" / name
-                self.assertTrue(path.is_file())
-                with path.open("rb") as image:
-                    self.assertEqual(b"\x89PNG\r\n\x1a\n", image.read(8))
-                    image.read(8)
-                    self.assertEqual(expected_size, struct.unpack(">II", image.read(8)))
 
     def test_widget_pauses_polling_when_game_bar_hides_it(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
@@ -649,15 +656,6 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertNotIn("DeviceIdentity", provider)
         self.assertNotIn("DeviceIdentity", controller)
 
-    def test_package_has_the_expected_identity(self):
-        manifest = ElementTree.parse(MANIFEST).getroot()
-        identity = manifest.find(
-            "{http://schemas.microsoft.com/appx/manifest/foundation/windows10}Identity"
-        )
-
-        self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
-        self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
-
     def test_brightness_timeouts_cover_full_verified_set(self):
         provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
         server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
@@ -707,16 +705,6 @@ class ProxyStubTests(unittest.TestCase):
             'IXboxGameBarWidgetNotificationHost" InterfaceId="6F68D392-E4A9-46F7-A024-5275BC2FE7BA"',
             manifest,
         )
-
-
-class SideloadPackageTests(unittest.TestCase):
-    def test_ci_builds_a_native_sideload_package(self):
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-        project = PROJECT.read_text(encoding="utf-8")
-
-        self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
-        self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
-        self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
 
 
 class GameBarLocalizationTests(unittest.TestCase):
@@ -824,3 +812,14 @@ class EnergyCardTests(unittest.TestCase):
         self.assertEqual(["BestEfficiency", "Balanced", "BetterPerformance", "BestPerformance"], names)
         for name in names:
             self.assertIn(f"PowerMode{name}", strings)
+
+
+class SideloadPackageTests(unittest.TestCase):
+
+    def test_ci_builds_a_native_sideload_package(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+
+        self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
+        self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
+        self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)

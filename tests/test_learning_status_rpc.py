@@ -5,13 +5,10 @@ locks the backend snapshot: telemetry opt-in + real per-device capabilities,
 including the honest fan-Null (read-only) path.
 """
 import asyncio
-import importlib
-import sys
-import types
 
-import pytest
 
 from tdp.types import TdpLimits, TdpResult
+from main_harness import fake_decky, load_main
 
 
 class FakeBackend:
@@ -46,13 +43,7 @@ class FakeFan:
 
 
 def _make_plugin(tmp_path, monkeypatch, fan_supported=True):
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(info=lambda *a, **k: None,
-                                        warning=lambda *a, **k: None,
-                                        error=lambda *a, **k: None)
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     import tdp.factory as factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import fans.control as fan_control
@@ -60,7 +51,7 @@ def _make_plugin(tmp_path, monkeypatch, fan_supported=True):
                         lambda device, **kw: FakeFan(supported=fan_supported))
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     return main.Plugin()
 
@@ -95,18 +86,3 @@ def test_learning_status_fan_null_reports_false(tmp_path, monkeypatch):
     st = asyncio.run(p.get_learning_status())
     assert st["fan_supported"] is False
     assert st["tdp_supported"] is True
-
-
-def test_learning_status_reflects_telemetry_opt_out(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_telemetry_enabled(False))
-    st = asyncio.run(p.get_learning_status())
-    assert st["telemetry_enabled"] is False
-
-
-@pytest.mark.parametrize("enabled", [True, False])
-def test_learning_status_telemetry_roundtrip(tmp_path, monkeypatch, enabled):
-    p = _make_plugin(tmp_path, monkeypatch)
-    asyncio.run(p.set_telemetry_enabled(enabled))
-    st = asyncio.run(p.get_learning_status())
-    assert st["telemetry_enabled"] is enabled

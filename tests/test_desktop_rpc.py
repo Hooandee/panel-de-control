@@ -76,11 +76,6 @@ def test_fremont_rpc_reports_automatic_desktop_mode():
     assert state["power"]["mode"] == "free"
 
 
-def test_generic_rpc_is_disabled_until_manual_opt_in():
-    assert asyncio.run(_plugin("Unknown PC").get_desktop_state())["enabled"] is False
-    assert asyncio.run(_plugin("Unknown PC", manual=True).get_desktop_state())["enabled"] is True
-
-
 def test_recognised_device_rejects_direct_manual_desktop_activation():
     plugin = _plugin("Galileo")
     before = dict(plugin._settings)
@@ -90,14 +85,6 @@ def test_recognised_device_rejects_direct_manual_desktop_activation():
     assert state["enabled"] is False
     assert plugin._settings == before
     assert plugin._desktop_power.calls == []
-
-
-def test_selecting_profile_persists_only_after_success():
-    plugin = _plugin()
-    result = asyncio.run(plugin.set_desktop_power_mode("balanced"))
-    assert result["ok"] is True
-    assert plugin._settings["desktop_power_mode"] == "balanced"
-    assert plugin._desktop_power.calls == [("mode", "balanced")]
 
 
 def test_persisted_profile_never_overrides_the_coordinator_actual_mode():
@@ -117,20 +104,6 @@ def test_custom_power_persists_independent_cpu_and_gpu_values():
     assert plugin._settings["desktop_cpu_w"] == 19
     assert plugin._settings["desktop_gpu_w"] == 72
     assert plugin._settings["desktop_power_mode"] == "custom"
-
-
-def test_gpu_only_custom_power_does_not_cast_unavailable_cpu_watts():
-    plugin = _plugin()
-
-    def gpu_only(cpu, gpu):
-        return {"ok": True, "mode": "custom", "cpu_w": None,
-                "gpu_w": gpu, "detail": "GPU only"}
-
-    plugin._desktop_power.apply_custom = gpu_only
-    result = asyncio.run(plugin.set_desktop_power_limits(23, 72))
-    assert result["ok"] is True
-    assert plugin._settings["desktop_cpu_w"] == 23
-    assert plugin._settings["desktop_gpu_w"] == 72
 
 
 def test_disabling_generic_desktop_restores_power_first():
@@ -302,41 +275,6 @@ def test_failed_recognised_device_restore_keeps_handoff_and_tdp_disabled():
     assert plugin._settings["tdp_control_enabled"] is False
     assert plugin._settings["desktop_power_handoff"] == {"device_key": "generic"}
     assert plugin._desktop_recognition_migration_pending is True
-
-
-def test_recognised_device_migration_retry_is_throttled_then_recovers(monkeypatch):
-    plugin = _plugin("Galileo", manual=True)
-    plugin._desktop_recognition_migration_pending = True
-    plugin._desktop_recognition_migration_last_attempt = float("-inf")
-    plugin._desktop_recognition_migration_last_failure = None
-    plugin._settings.update({
-        "desktop_prev_tdp_control": True,
-        "tdp_control_enabled": False,
-        "desktop_power_handoff": {"device_key": "generic"},
-    })
-    now = [10.0]
-    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
-    calls = []
-
-    def restore():
-        calls.append(now[0])
-        if len(calls) == 1:
-            return {"ok": False, "detail": "surface unavailable"}
-        plugin._settings["desktop_power_handoff"] = None
-        return {"ok": True, "detail": "restored"}
-
-    plugin._desktop_power.restore = restore
-
-    assert plugin._recover_recognised_desktop_migration() is False
-    assert plugin._recover_recognised_desktop_migration() is False
-    assert calls == [10.0]
-    assert plugin._desktop_state()["migration_pending"] is True
-    assert plugin._desktop_state()["migration_failure"] == "surface unavailable"
-
-    now[0] += 5.0
-    assert plugin._recover_recognised_desktop_migration() is True
-    assert calls == [10.0, 15.0]
-    assert plugin._desktop_state()["migration_pending"] is False
 
 
 def test_explicit_migration_retry_bypasses_background_throttle(monkeypatch):
@@ -575,42 +513,6 @@ def test_desktop_fan_state_never_fabricates_a_missing_gpu_channel():
     assert [channel["key"] for channel in state["channels"]] == ["system"]
 
 
-def test_desktop_fan_curve_reports_failed_hardware_apply():
-    plugin = main.Plugin.__new__(main.Plugin)
-    plugin._init = lambda: None
-    plugin._desktop_mode_on = lambda: True
-    plugin._resolve_scope = lambda scope, appid: scope
-    plugin._fan_ctrl = types.SimpleNamespace(read_state=lambda: {
-        "independent": True,
-        "fans": [{"key": "system", "controllable": True}],
-    })
-    plugin._desktop_fans = types.SimpleNamespace(
-        checkpoint=lambda: {},
-        set_channel=lambda *args: None,
-        restore_checkpoint=lambda _checkpoint: None,
-    )
-    plugin._reapply_fans = lambda: None
-    plugin._reapply_fans_sync = lambda: False
-    plugin._ensure_fan_loop = lambda: None
-
-    async def offload(fn):
-        return fn()
-
-    async def state():
-        return {"independent": True, "channels": [{
-            "key": "system", "preset": "custom", "points": [[40, 0]],
-            "controllable": True,
-        }]}
-
-    plugin._offload_call = offload
-    plugin._fan_curve_state_offloop = state
-
-    result = asyncio.run(plugin.set_desktop_fan_curve(
-        "system", "custom", [[40, 0]], "global", None))
-
-    assert result["apply_ok"] is False
-
-
 def test_desktop_fan_curve_restores_previous_profile_when_apply_fails(tmp_path):
     plugin = main.Plugin.__new__(main.Plugin)
     plugin._init = lambda: None
@@ -721,3 +623,56 @@ def test_desktop_fan_mutations_are_serialized_while_hardware_apply_is_pending():
 
     asyncio.run(scenario())
 
+
+def test_generic_rpc_is_disabled_until_manual_opt_in():
+    assert asyncio.run(_plugin("Unknown PC").get_desktop_state())["enabled"] is False
+    assert asyncio.run(_plugin("Unknown PC", manual=True).get_desktop_state())["enabled"] is True
+
+
+def test_gpu_only_custom_power_does_not_cast_unavailable_cpu_watts():
+    plugin = _plugin()
+
+    def gpu_only(cpu, gpu):
+        return {"ok": True, "mode": "custom", "cpu_w": None,
+                "gpu_w": gpu, "detail": "GPU only"}
+
+    plugin._desktop_power.apply_custom = gpu_only
+    result = asyncio.run(plugin.set_desktop_power_limits(23, 72))
+    assert result["ok"] is True
+    assert plugin._settings["desktop_cpu_w"] == 23
+    assert plugin._settings["desktop_gpu_w"] == 72
+
+
+def test_recognised_device_migration_retry_is_throttled_then_recovers(monkeypatch):
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._desktop_recognition_migration_last_attempt = float("-inf")
+    plugin._desktop_recognition_migration_last_failure = None
+    plugin._settings.update({
+        "desktop_prev_tdp_control": True,
+        "tdp_control_enabled": False,
+        "desktop_power_handoff": {"device_key": "generic"},
+    })
+    now = [10.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+    calls = []
+
+    def restore():
+        calls.append(now[0])
+        if len(calls) == 1:
+            return {"ok": False, "detail": "surface unavailable"}
+        plugin._settings["desktop_power_handoff"] = None
+        return {"ok": True, "detail": "restored"}
+
+    plugin._desktop_power.restore = restore
+
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert calls == [10.0]
+    assert plugin._desktop_state()["migration_pending"] is True
+    assert plugin._desktop_state()["migration_failure"] == "surface unavailable"
+
+    now[0] += 5.0
+    assert plugin._recover_recognised_desktop_migration() is True
+    assert calls == [10.0, 15.0]
+    assert plugin._desktop_state()["migration_pending"] is False

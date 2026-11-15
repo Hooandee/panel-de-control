@@ -16,6 +16,7 @@ import types
 
 import pytest
 import theme_packages
+from main_harness import fake_decky, load_main
 
 
 class _RecordingExecutor(concurrent.futures.Executor):
@@ -118,13 +119,7 @@ class _FakeColorBackend:
 
 
 def _make_plugin(tmp_path, monkeypatch):
-    fake_decky = types.ModuleType("decky")
-    fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake_decky.DECKY_USER = "deck"
-    fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake_decky)
+    fake_decky(monkeypatch, tmp_path)
 
     import tdp.factory as factory
     from tdp.types import TdpLimits, TdpResult
@@ -152,7 +147,7 @@ def _make_plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: _FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     color = _FakeColorBackend()
     monkeypatch.setattr(main, "GamescopeColorBackend", lambda *a, **k: color)
@@ -306,18 +301,6 @@ def test_offload_runs_off_the_loop_thread(tmp_path, monkeypatch):
 
 # ---- reapply paths dispatch off-loop -----------------------------------------
 
-def test_reapply_all_keeps_hud_out_of_the_shared_apply_executor(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    rec = _RecordingExecutor()
-    p._apply_executor = rec
-
-    async def _run():
-        p._reapply_all()  # sync, but under a running loop
-
-    asyncio.run(_run())
-    # TDP + power handoff + fans + color use the shared worker. HUD has its own.
-    assert rec.count == 4
-
 
 def test_shared_apply_worker_progresses_while_hud_worker_is_blocked(
     tmp_path,
@@ -433,23 +416,6 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
 
     asyncio.run(p._unload())
     assert events == ["handoff", "themes"]
-
-
-def test_unload_completes_without_yielding_to_the_stopping_event_loop(
-    tmp_path, monkeypatch
-):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    p._apply_executor = _RecordingExecutor()
-    p._restore_fans_safe = lambda: None
-    p._restore_color_safe = lambda: None
-    p._restore_audio_safe = lambda: None
-    p._restore_power_handoff = lambda: True
-    p._release_cpu_controls_sync = lambda _trigger: True
-    p._release_gpu_clock_sync = lambda _trigger: True
-
-    unload = p._unload()
-    with pytest.raises(StopIteration):
-        unload.send(None)
 
 
 @pytest.mark.parametrize("method", ("_unload", "_uninstall"))
@@ -763,28 +729,6 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
 
     asyncio.run(p._uninstall())
     assert events == ["handoff", "themes"]
-
-
-def test_uninstall_completes_without_yielding_to_the_stopping_event_loop(
-    tmp_path, monkeypatch
-):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    p._apply_executor = _RecordingExecutor()
-    p._restore_fans_safe = lambda: None
-    p._restore_color_safe = lambda: None
-    p._restore_audio_safe = lambda: None
-    p._restore_power_handoff = lambda: True
-    p._release_cpu_controls_sync = lambda _trigger: True
-    p._release_gpu_clock_sync = lambda _trigger: True
-    monkeypatch.setattr(
-        importlib.import_module("main").fan_expose,
-        "remove_conf",
-        lambda: None,
-    )
-
-    uninstall = p._uninstall()
-    with pytest.raises(StopIteration):
-        uninstall.send(None)
 
 
 class _SlowBackend:

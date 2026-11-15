@@ -34,6 +34,7 @@ class FakeGamescope:
         self.app_id = app_id
         self.requests = []
         self.screenshots = []
+        self.synced = threading.Event()
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(path)
         self.server.listen(4)
@@ -65,6 +66,7 @@ class FakeGamescope:
                         conn.sendall(_event(registry, 0, struct.pack("<I", 11) + gp._wl_string("gamescope_control") + struct.pack("<I", self.version)))
                     elif obj == 1 and opcode == 0:
                         conn.sendall(_event(struct.unpack_from("<I", data)[0], 0, struct.pack("<I", 0)))
+                        self.synced.set()
                     elif obj == 2 and opcode == 0:
                         new_id = struct.unpack_from("<I", data, len(data) - 4)[0]
                         conn.sendall(_event(new_id, gp._EVT_ACTIVE_DISPLAY_INFO, gp._wl_string(self.connector) + gp._wl_string("x") * 2 + struct.pack("<I", 0) + struct.pack("<I", 0)))
@@ -146,7 +148,8 @@ def test_old_gamescope_without_perf_query_is_left_alone(short_root, python):
     perf = gp.GamescopePerf(app_id=lambda: 4242, root=str(short_root), python=python)
     perf.start()
     try:
-        time.sleep(0.5)
+        assert fake.synced.wait(3)
+        perf.stop()
         assert perf.fps() is None
         assert fake.requests == []
     finally:

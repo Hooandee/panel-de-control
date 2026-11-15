@@ -922,6 +922,7 @@ def test_trusted_home_alias_is_resolved_before_secure_directory_walk(
     eq = PipeWireEq(runner=fake, name="X")
     eq._session = (os.getuid(), "/run/user/test", "deck")
     eq.is_supported = lambda: True
+    eq._sleep = lambda _delay: None
     fake._conf_path = eq._conf_path()
 
     assert eq._conf_path().startswith(str(real_home))

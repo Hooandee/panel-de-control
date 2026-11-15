@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from upscalers import games, launchers
-from test_upscalers import _service, steam, fake_catalog, proc  # noqa: F401
+from upscalers_support import _service
 
 
 @pytest.fixture

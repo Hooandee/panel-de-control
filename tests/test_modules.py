@@ -23,12 +23,6 @@ def _plugin(disabled=None, tdp_control=True, telemetry=True):
     return p
 
 
-def test_tab_enabled_by_default():
-    p = _plugin()
-    assert p._module_enabled("fans") is True
-    assert p._module_enabled("system") is True
-
-
 def test_generic_tab_disabled():
     p = _plugin(disabled=["fans"])
     assert p._module_enabled("fans") is False

@@ -50,27 +50,27 @@ def _mk_correlated_gpu(
 def test_reads_amdgpu_power_average(tmp_path):
     _mk_hwmon(str(tmp_path), 0, "BAT0", {"power1_input": 12498000})
     _mk_hwmon(str(tmp_path), 7, "amdgpu", {"power1_average": 13055000, "power1_input": 13056000})
-    assert PowerReader(root=str(tmp_path)).read_watts() == 13.1  # 13.055 -> 13.1
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_watts() == 13.1  # 13.055 -> 13.1
 
 
 def test_falls_back_to_power_input(tmp_path):
     _mk_hwmon(str(tmp_path), 7, "amdgpu", {"power1_input": 9500000})
-    assert PowerReader(root=str(tmp_path)).read_watts() == 9.5
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_watts() == 9.5
 
 
 def test_none_when_no_amdgpu(tmp_path):
     _mk_hwmon(str(tmp_path), 0, "k10temp", {"temp1_input": 50000})
-    assert PowerReader(root=str(tmp_path)).read_watts() is None
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_watts() is None
 
 
 def test_none_on_garbage(tmp_path):
     _mk_hwmon(str(tmp_path), 7, "amdgpu", {"power1_average": "x", "power1_input": "0"})
-    assert PowerReader(root=str(tmp_path)).read_watts() is None
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_watts() is None
 
 
 def test_read_dict_shape(tmp_path):
     _mk_hwmon(str(tmp_path), 7, "amdgpu", {"power1_average": 10000000})
-    r = PowerReader(root=str(tmp_path)).read()
+    r = PowerReader(root=str(tmp_path), gpu_sample_gap=0).read()
     assert r == {"watts": 10.0, "gpu_busy": None}
 
 
@@ -124,34 +124,34 @@ def test_generic_desktop_hides_uncorrelated_gpu_metrics(tmp_path):
 
 def test_reads_gpu_busy_percent(tmp_path):
     _mk_drm_card(str(tmp_path), 0, 72)
-    assert PowerReader(root=str(tmp_path)).read_gpu_busy() == 72
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy() == 72
 
 
 def test_gpu_busy_none_when_absent(tmp_path):
-    assert PowerReader(root=str(tmp_path)).read_gpu_busy() is None
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy() is None
 
 
 def test_gpu_busy_clamps_to_100(tmp_path):
     _mk_drm_card(str(tmp_path), 0, 150)
-    busy = PowerReader(root=str(tmp_path)).read_gpu_busy()
+    busy = PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy()
     assert busy == 100
 
 
 def test_gpu_busy_clamps_to_0(tmp_path):
     _mk_drm_card(str(tmp_path), 0, -5)
-    busy = PowerReader(root=str(tmp_path)).read_gpu_busy()
+    busy = PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy()
     assert busy == 0
 
 
 def test_gpu_busy_none_on_corrupt(tmp_path):
     _mk_drm_card(str(tmp_path), 0, "bogus")
-    assert PowerReader(root=str(tmp_path)).read_gpu_busy() is None
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy() is None
 
 
 def test_gpu_busy_keeps_legacy_first_card_for_non_desktop_consumers(tmp_path):
     _mk_drm_card(str(tmp_path), 0, 30)
     _mk_drm_card(str(tmp_path), 1, 80)
-    assert PowerReader(root=str(tmp_path)).read_gpu_busy() == 30
+    assert PowerReader(root=str(tmp_path), gpu_sample_gap=0).read_gpu_busy() == 30
 
 
 def test_only_fremont_snapshot_fails_closed_for_uncorrelated_devices(tmp_path):
@@ -274,7 +274,7 @@ def test_read_returns_both_fields(tmp_path):
         vram_used_gib=0,
         vram_total_gib=8,
     )
-    r = PowerReader(root=str(tmp_path)).read()
+    r = PowerReader(root=str(tmp_path), gpu_sample_gap=0).read()
     assert r["watts"] == 15.0
     assert r["gpu_busy"] == 55
 

@@ -29,6 +29,19 @@ async function settle() {
   });
 }
 
+async function advance(ms: number) {
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function edit(result: { current: ReturnType<typeof useHud> }, model: typeof DEFAULT_MODEL) {
+  act(() => result.current.setModel(model));
+  await advance(700);
+}
+
 async function renderHud() {
   const hook = renderHook(() => useHud());
   await settle();
@@ -61,11 +74,7 @@ describe("useHud coordination", () => {
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
     const latest = { ...first, offsetX: 12 };
     act(() => result.current.setModel(first));
-    act(() => result.current.setModel(latest));
-    await act(async () => {
-      vi.advanceTimersByTime(700);
-      await Promise.resolve();
-    });
+    await edit(result, latest);
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
     expect(setHudConfig).toHaveBeenCalledWith(latest);
@@ -78,16 +87,12 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
-    act(() => result.current.setModel(first));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, first);
 
     const intermediate = { ...first, offsetX: 8 };
     const latest = { ...intermediate, offsetX: 18 };
     act(() => result.current.setModel(intermediate));
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
 
@@ -104,20 +109,12 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
-    act(() => result.current.setModel(first));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, first);
     const latest = { ...first, offsetX: 18 };
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advance(4000);
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
     expect(result.current.saveStatus).toBe("error");
@@ -135,17 +132,13 @@ describe("useHud coordination", () => {
     vi.mocked(getHudState).mockReturnValue(stalled.promise);
     await renderHud();
 
-    await act(async () => {
-      vi.advanceTimersByTime(12000);
-      await Promise.resolve();
-    });
+    await advance(12000);
 
     expect(getHudState).toHaveBeenCalledTimes(1);
 
     stalled.resolve(state());
     await settle();
-    act(() => vi.advanceTimersByTime(4000));
-    await settle();
+    await advance(4000);
 
     expect(getHudState).toHaveBeenCalledTimes(2);
   });
@@ -156,18 +149,11 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const old = { ...DEFAULT_MODEL, fontSize: 20 };
-    act(() => result.current.setModel(old));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-    });
+    await edit(result, old);
+    await advance(4000);
 
     const latest = { ...old, fontSize: 44 };
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
     expect(result.current.state?.model).toEqual(latest);
 
     stalled.resolve(state(old));
@@ -206,10 +192,7 @@ describe("useHud coordination", () => {
 
     act(() => result.current.reload());
     await settle();
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-    });
+    await advance(4000);
     act(() => result.current.reload());
 
     expect(reloadHud).toHaveBeenCalledTimes(1);
@@ -229,9 +212,7 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const latest = { ...DEFAULT_MODEL, offsetY: 16 };
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
     act(() => result.current.reload());
     await settle();
 
@@ -252,13 +233,9 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
-    act(() => result.current.setModel(first));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, first);
     const latest = { ...first, offsetX: 18 };
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
     act(() => result.current.reload());
 
     firstRequest.resolve(state(first));
@@ -280,9 +257,7 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
 
     const latest = { ...DEFAULT_MODEL, offsetY: 16 };
-    act(() => result.current.setModel(latest));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, latest);
     act(() => result.current.resolveConflict("use_pdc"));
     await settle();
 
@@ -328,20 +303,12 @@ describe("useHud coordination", () => {
     await settle();
     const editorState = result.current.controller.state;
 
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advance(4000);
 
     expect(result.current.values.pdc_tdp).toBe("16W");
     expect(result.current.controller.state).toBe(editorState);
 
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advance(4000);
 
     expect(result.current.values.pdc_tdp).toBeUndefined();
     expect(result.current.controller.state).toBe(editorState);
@@ -357,11 +324,7 @@ describe("useHud coordination", () => {
     const { result } = await renderHud();
     const editorState = result.current.state;
 
-    await act(async () => {
-      vi.advanceTimersByTime(4000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advance(4000);
 
     expect(result.current.state).not.toBe(editorState);
     expect(result.current.state?.applyStatus).toBe("failed");
@@ -383,9 +346,7 @@ describe("useHud coordination", () => {
     const { result, unmount } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontScale: 1.1 };
-    act(() => result.current.setModel(first));
-    act(() => vi.advanceTimersByTime(700));
-    await settle();
+    await edit(result, first);
 
     const latest = { ...first, fontScale: 1.4 };
     act(() => result.current.setModel(latest));

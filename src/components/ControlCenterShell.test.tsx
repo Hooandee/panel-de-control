@@ -138,8 +138,8 @@ const activeLearning: LearningStatus = {
   fan_supported: true,
 };
 
-function renderShell(overrides: Partial<ControlCenterShellProps> = {}) {
-  return render(
+function shell(overrides: Partial<ControlCenterShellProps> = {}) {
+  return (
     <ControlCenterShell
       device={testDevice}
       gameName={null}
@@ -151,8 +151,12 @@ function renderShell(overrides: Partial<ControlCenterShellProps> = {}) {
       hasUpdate={false}
       onSelectSection={vi.fn()}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderShell(overrides: Partial<ControlCenterShellProps> = {}) {
+  return render(shell(overrides));
 }
 
 function alertDotWithin(root: Element): HTMLElement | undefined {
@@ -371,17 +375,7 @@ describe("ControlCenterShell", () => {
   it("resets the QAM scroll when opening a Dashboard destination", () => {
     render(
       <div data-testid="scroll-host" style={{ overflowY: "auto" }}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome
-          showDeviceHeader
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell()}
       </div>,
     );
     const host = screen.getByTestId("scroll-host");
@@ -398,17 +392,7 @@ describe("ControlCenterShell", () => {
     render(
       <div id="quickaccess_content_999" data-testid="qam-scroll-host" style={{ overflowY: "auto" }}>
         <div data-testid="inner-overflow" style={{ overflowY: "auto" }}>
-          <ControlCenterShell
-            device={testDevice}
-            gameName={null}
-            learning={null}
-            sections={testSections}
-            activeId="power"
-            showHome
-            showDeviceHeader
-            hasUpdate={false}
-            onSelectSection={vi.fn()}
-          />
+          {shell()}
         </div>
       </div>,
     );
@@ -429,17 +413,7 @@ describe("ControlCenterShell", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     render(
       <div id="quickaccess_content_999" data-testid="scroll-host" style={{ overflowY: "auto" }}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome
-          showDeviceHeader
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell()}
       </div>,
     );
     const host = screen.getByTestId("scroll-host");
@@ -457,17 +431,7 @@ describe("ControlCenterShell", () => {
     setShellMode("detail");
     render(
       <div id="quickaccess_content_999" data-testid="scroll-host" style={{ overflowY: "auto" }}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="settings"
-          showHome
-          showDeviceHeader
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell({ activeId: "settings" })}
       </div>,
     );
     const host = screen.getByTestId("scroll-host");
@@ -484,17 +448,7 @@ describe("ControlCenterShell", () => {
     setShellMode("detail");
     const view = render(
       <div id="quickaccess_content_999" style={{ overflowY: "auto" }}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome
-          showDeviceHeader
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell()}
       </div>,
     );
 
@@ -552,17 +506,7 @@ describe("ControlCenterShell", () => {
     const bubbled = vi.fn();
     const view = render(
       <div onContextMenu={bubbled}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome
-          showDeviceHeader={true}
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell()}
       </div>,
     );
     const surface = () => screen.getByTestId("shell-surface");
@@ -583,17 +527,7 @@ describe("ControlCenterShell", () => {
     act(() => setShellMode("tabs"));
     view.rerender(
       <div onContextMenu={bubbled}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome={false}
-          showDeviceHeader={true}
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell({ showHome: false })}
       </div>,
     );
     expect(surface().dataset.hasOnCancel).toBeUndefined();
@@ -605,17 +539,7 @@ describe("ControlCenterShell", () => {
     const root = container.querySelector(".pdc-root");
 
     rerender(
-      <ControlCenterShell
-        device={testDevice}
-        gameName={null}
-        learning={null}
-        sections={testSections}
-        activeId="power"
-        showHome={false}
-        showDeviceHeader={true}
-        hasUpdate={false}
-        onSelectSection={vi.fn()}
-      />,
+      shell({ showHome: false }),
     );
     expect(screen.getByTestId("tabs-carousel")).toBeTruthy();
     expect(screen.queryByTestId("tabs-back-row")).toBeNull();
@@ -624,17 +548,7 @@ describe("ControlCenterShell", () => {
 
     act(() => {
       rerender(
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          showHome
-          showDeviceHeader={true}
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />,
+        shell(),
       );
       setShellMode("home");
     });
@@ -737,18 +651,7 @@ describe("ControlCenterShell", () => {
     setShellMode("home");
     render(
       <div onContextMenu={bubbled}>
-        <ControlCenterShell
-          device={testDevice}
-          gameName={null}
-          learning={null}
-          sections={testSections}
-          activeId="power"
-          initialMode="detail"
-          showHome={false}
-          showDeviceHeader
-          hasUpdate={false}
-          onSelectSection={vi.fn()}
-        />
+        {shell({ initialMode: "detail", showHome: false })}
       </div>,
     );
 
@@ -925,17 +828,7 @@ describe("ControlCenterShell", () => {
     const powerBoundary = screen.getByTestId("error-boundary").dataset.instance;
 
     rerender(
-      <ControlCenterShell
-        device={testDevice}
-        gameName={null}
-        learning={null}
-        sections={testSections}
-        activeId="settings"
-        showHome
-        showDeviceHeader={true}
-        hasUpdate={false}
-        onSelectSection={vi.fn()}
-      />,
+      shell({ activeId: "settings" }),
     );
 
     expect(screen.getAllByTestId("section-body")).toHaveLength(1);

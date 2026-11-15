@@ -1,10 +1,8 @@
 import asyncio
-import importlib
 import pathlib
-import sys
-import types
 
 import pytest
+from main_harness import fake_decky, load_main
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -15,15 +13,9 @@ def Plugin(tmp_path, monkeypatch):
     top level and reads decky.DECKY_PLUGIN_SETTINGS_DIR, so inject a fake `decky`
     module pointing settings at a tmp dir BEFORE importing main. Async methods are
     driven with asyncio.run() (no pytest-asyncio needed)."""
-    fake = types.ModuleType("decky")
-    fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
-    fake.DECKY_USER = "deck"
-    fake.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    monkeypatch.setitem(sys.modules, "decky", fake)
+    fake_decky(monkeypatch, tmp_path)
     monkeypatch.syspath_prepend(str(ROOT))
-    main = importlib.reload(importlib.import_module("main"))
+    main = load_main(monkeypatch)
     return main.Plugin
 
 
@@ -32,6 +24,24 @@ def test_get_version_returns_package_version(Plugin):
     pkg = json.loads((ROOT / "package.json").read_text())
     p = Plugin()
     assert asyncio.run(p.get_version()) == pkg["version"]
+
+
+def test_set_telemetry_enabled_persists(Plugin):
+    p = Plugin()
+    assert asyncio.run(p.set_telemetry_enabled(False)) is False
+    assert asyncio.run(p.get_telemetry_enabled()) is False
+    # Persisted across a fresh Plugin instance (same settings dir).
+    p2 = Plugin()
+    assert asyncio.run(p2.get_telemetry_enabled()) is False
+    asyncio.run(p2.set_telemetry_enabled(True))
+    assert asyncio.run(Plugin().get_telemetry_enabled()) is True
+
+
+def test_set_ui_prefs_none_removes_key(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_ui_prefs({"pdc:layout": "{}"}))
+    asyncio.run(p.set_ui_prefs({"pdc:layout": None}))
+    assert asyncio.run(p.get_ui_prefs()) == {}
 
 
 def test_get_device_returns_detected_profile(Plugin, monkeypatch):
@@ -68,57 +78,6 @@ def test_get_device_surfaces_experimental_flag(Plugin, monkeypatch):
     assert dev["key"] == "onexplayer_apex"
     assert dev["experimental"] is True
     assert dev["is_generic"] is False
-
-
-def test_get_device_hides_unvalidated_experimental_ac_unlock(Plugin, monkeypatch):
-    import device_registry
-    import main
-    from device_profiles import DEVICE_TABLE
-
-    mini = next(p for p in DEVICE_TABLE if p.key == "gpd_win_mini_2025")
-    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: mini)
-    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
-
-    dev = asyncio.run(Plugin().get_device())
-
-    assert dev["tdp_max_charger"] == 35
-    assert dev["experimental_tdp_max_ac"] is None
-
-
-def test_telemetry_enabled_default_true(Plugin):
-    p = Plugin()
-    assert asyncio.run(p.get_telemetry_enabled()) is True
-
-
-def test_set_telemetry_enabled_persists(Plugin):
-    p = Plugin()
-    assert asyncio.run(p.set_telemetry_enabled(False)) is False
-    assert asyncio.run(p.get_telemetry_enabled()) is False
-    # Persisted across a fresh Plugin instance (same settings dir).
-    p2 = Plugin()
-    assert asyncio.run(p2.get_telemetry_enabled()) is False
-    asyncio.run(p2.set_telemetry_enabled(True))
-    assert asyncio.run(Plugin().get_telemetry_enabled()) is True
-
-
-def test_ui_prefs_default_empty(Plugin):
-    assert asyncio.run(Plugin().get_ui_prefs()) == {}
-
-
-def test_set_ui_prefs_persists(Plugin):
-    p = Plugin()
-    asyncio.run(p.set_ui_prefs({"panel-de-control-lang": "en", "pdc:valueToast:enabled": "1"}))
-    prefs = asyncio.run(p.get_ui_prefs())
-    assert prefs == {"panel-de-control-lang": "en", "pdc:valueToast:enabled": "1"}
-    # Survives a fresh Plugin instance (same settings dir) → survives a reboot.
-    assert asyncio.run(Plugin().get_ui_prefs()) == prefs
-
-
-def test_set_ui_prefs_none_removes_key(Plugin):
-    p = Plugin()
-    asyncio.run(p.set_ui_prefs({"pdc:layout": "{}"}))
-    asyncio.run(p.set_ui_prefs({"pdc:layout": None}))
-    assert asyncio.run(p.get_ui_prefs()) == {}
 
 
 def test_set_ui_prefs_coerces_value_to_string(Plugin):

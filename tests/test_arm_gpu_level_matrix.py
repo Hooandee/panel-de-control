@@ -1,10 +1,11 @@
 import asyncio
 import itertools
+import sys
 
 import pytest
 
-from test_arm_gpu_level import _arm_plugin
-from test_tdp_arm_levels import _caps
+from arm_support import _arm_plugin
+from arm_support import _caps
 
 
 def _expected(p, cpu, gpu):
@@ -113,6 +114,7 @@ def test_control_off_lifts_everything_and_on_restores_the_split(tmp_path, monkey
 
 def test_eco_drops_both_and_leaving_it_restores_the_split(tmp_path, monkeypatch):
     p, root = _arm_plugin(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys.modules["main"], "_ECO_INPUT_POLL_S", 0.01)
     _run(p.set_tdp_watts(4, "global", None))
     _run(p.set_gpu_level(10, "global", None))
     _run(p.set_eco(True, 50))
@@ -123,6 +125,7 @@ def test_eco_drops_both_and_leaving_it_restores_the_split(tmp_path, monkeypatch)
 
 def test_touching_the_gpu_level_leaves_eco(tmp_path, monkeypatch):
     p, root = _arm_plugin(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys.modules["main"], "_ECO_INPUT_POLL_S", 0.01)
     _run(p.set_tdp_watts(4, "global", None))
     _run(p.set_eco(True, 50))
     _run(p.set_gpu_level(7, "global", None))

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers_lsfg_update import payload
+from upscalers_support import payload
 from upscalers import lsfg
 from upscalers.lsfg_logs import RuntimeLog, RETAIN_BYTES, MAX_BYTES
 

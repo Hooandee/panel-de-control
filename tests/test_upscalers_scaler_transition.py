@@ -4,13 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from test_upscalers import APPID, _service, _write, dll_catalog, fake_catalog, proc, steam
+from upscalers_support import APPID, _service, _write
 from upscalers import games
 from upscalers.service import UpscalerError
-
-
-def files(root):
-    return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+from upscalers_support import files  # noqa: F401
 
 
 def test_checkpoint_restores_exact_managed_files_ini_and_state(steam, fake_catalog, proc):

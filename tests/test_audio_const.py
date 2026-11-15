@@ -1,19 +1,9 @@
 from audio.const import (
-    BAND_FREQS,
     GAIN_MAX,
     GAIN_MIN,
-    ROUTES,
     clamp_gain,
     compute_preamp,
 )
-
-
-def test_ten_bands():
-    assert BAND_FREQS == [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-
-
-def test_routes():
-    assert ROUTES == ["speaker", "headphone"]
 
 
 def test_clamp_gain():

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 import theme_packages
-from test_theme_extensions import THEME_ID, THEME_NAME, package, paths
+from theme_support import THEME_ID, THEME_NAME, package, paths
 
 
 LABELS = {

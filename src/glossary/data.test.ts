@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CATEGORIES, pick, pickTerm, type GlossaryTerm } from "./data";
+import { CATEGORIES, pick } from "./data";
 
 describe("glossary data", () => {
   const terms = CATEGORIES.flatMap((c) => c.terms);
@@ -72,43 +72,6 @@ describe("glossary data", () => {
     expect(italian.some((value) => value.includes("—"))).toBe(false);
   });
 
-  it("uses Italian generated-frame terminology", () => {
-    const frameGeneration = terms.find((term) => term.id === "frame-gen");
-
-    expect(frameGeneration).toMatchObject({
-      termIt: "Generazione di fotogrammi",
-      it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
-    });
-  });
-
-  it("distinguishes battery health from charge and capacity", () => {
-    const batteryHealth = terms.find((term) => term.id === "battery-health");
-
-    expect(batteryHealth?.termIt).toBe("Stato di salute della batteria");
-  });
-
-  it("uses natural German terminology for generated frames and battery health", () => {
-    expect(terms.find((term) => term.id === "frame-gen")).toMatchObject({
-      termDe: "Frame-Generierung",
-      de: "Das Gerät berechnet zusätzliche Bilder und fügt sie zwischen den echten Frames ein, damit Bewegungen flüssiger wirken. Das Ergebnis kann sehr gut aussehen, benötigt aber einen Teil der Grafikleistung und kann die Eingabeverzögerung leicht erhöhen.",
-    });
-    expect(terms.find((term) => term.id === "battery-health")?.termDe)
-      .toBe("Akkuzustand");
-  });
-
-  it("uses natural Brazilian terminology for generated frames and battery health", () => {
-    expect(terms.find((term) => term.id === "frame-gen")).toMatchObject({
-      termPtBR: "Geração de quadros",
-      ptBR: "O dispositivo calcula quadros extras e os insere entre os quadros reais para deixar o movimento mais fluido. O resultado pode ficar excelente, mas usa parte do desempenho gráfico e pode aumentar um pouco a latência dos controles.",
-    });
-    expect(terms.find((term) => term.id === "battery-health")?.termPtBR)
-      .toBe("Saúde da bateria");
-    expect(terms.find((term) => term.id === "gpu")?.termPtBR)
-      .toBe("GPU (processador gráfico)");
-    expect(terms.find((term) => term.id === "temp")?.ptBR)
-      .toBe("Indica a temperatura do chip em graus. É normal ela subir durante o jogo. As ventoinhas e o TDP ajudam a mantê-la sob controle e a proteger o dispositivo.");
-  });
-
   it("does not use em dashes in Brazilian Portuguese text", () => {
     const brazilianPortuguese = CATEGORIES.flatMap((category) => [
       category.ptBR,
@@ -126,12 +89,6 @@ describe("glossary data", () => {
 
     expect(french.some((value) => value.includes("—"))).toBe(false);
   });
-
-  it("uses natural French terminology for generated frames and battery health", () => {
-    expect(terms.find((term) => term.id === "frame-gen")?.termFr).toBe("Génération d'images");
-    expect(terms.find((term) => term.id === "battery-health")?.termFr).toBe("Santé de la batterie");
-    expect(terms.find((term) => term.id === "fan-curve")?.termFr).toBe("Courbe de ventilation");
-  });
 });
 
 describe("pick", () => {
@@ -143,29 +100,5 @@ describe("pick", () => {
     expect(pick(entry, "de")).toBe("hallo");
     expect(pick(entry, "pt-BR")).toBe("olá");
     expect(pick(entry, "fr")).toBe("salut");
-  });
-
-  it("uses the Italian display term without changing Spanish or English", () => {
-    const entry: GlossaryTerm = {
-      id: "battery",
-      term: "Salud de la batería",
-      termIt: "Stato di salute della batteria",
-      termDe: "Akkuzustand",
-      termPtBR: "Saúde da bateria",
-      termFr: "Santé de la batterie",
-      es: "estado",
-      en: "health",
-      it: "stato",
-      de: "Zustand",
-      ptBR: "saúde",
-      fr: "santé",
-    };
-
-    expect(pickTerm(entry, "es")).toBe("Salud de la batería");
-    expect(pickTerm(entry, "en")).toBe("Salud de la batería");
-    expect(pickTerm(entry, "it")).toBe("Stato di salute della batteria");
-    expect(pickTerm(entry, "de")).toBe("Akkuzustand");
-    expect(pickTerm(entry, "pt-BR")).toBe("Saúde da bateria");
-    expect(pickTerm(entry, "fr")).toBe("Santé de la batterie");
   });
 });

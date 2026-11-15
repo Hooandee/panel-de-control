@@ -4,7 +4,7 @@ import asyncio
 import dataclasses
 
 
-from tests.test_gpu_clock_rpc import _FakeGpuClock, _make_plugin
+from gpu_support import _FakeGpuClock, _make_plugin
 
 
 class _RecordingGpuClock(_FakeGpuClock):
@@ -109,15 +109,6 @@ def test_release_without_held_writes_applies_nothing(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-def test_without_a_resume_cores_and_gpu_apply_at_once(tmp_path, monkeypatch):
-    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
-    plugin._apply_cpu()
-    plugin._apply_gpu_clock()
-    assert intents == [3]
-    assert gpu.writes == [(800, 1200)]
-    assert plugin._pulse.marks == []
-
-
 def test_user_core_change_during_the_hold_is_not_blocked(tmp_path, monkeypatch):
     plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
 
@@ -127,6 +118,27 @@ def test_user_core_change_during_the_hold_is_not_blocked(tmp_path, monkeypatch):
         assert intents == [3]
 
     asyncio.run(scenario())
+
+
+def test_other_cpu_changes_during_the_hold_keep_cores_online(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
+
+    async def scenario():
+        _resume(plugin)
+        intent = {**plugin._cpu_intent(), "smt": False}
+        await plugin._apply_cpu_awaited(intent, trigger="set_smt")
+        assert intents == [None]
+
+    asyncio.run(scenario())
+
+
+def test_without_a_resume_cores_and_gpu_apply_at_once(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
+    plugin._apply_cpu()
+    plugin._apply_gpu_clock()
+    assert intents == [3]
+    assert gpu.writes == [(800, 1200)]
+    assert plugin._pulse.marks == []
 
 
 def test_resume_reapply_marks_each_hardware_step_in_order(tmp_path, monkeypatch):
@@ -147,15 +159,3 @@ def test_no_marks_outside_a_resume(tmp_path, monkeypatch):
     plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
     plugin._reapply_all()
     assert plugin._pulse.marks == []
-
-
-def test_other_cpu_changes_during_the_hold_keep_cores_online(tmp_path, monkeypatch):
-    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
-
-    async def scenario():
-        _resume(plugin)
-        intent = {**plugin._cpu_intent(), "smt": False}
-        await plugin._apply_cpu_awaited(intent, trigger="set_smt")
-        assert intents == [None]
-
-    asyncio.run(scenario())

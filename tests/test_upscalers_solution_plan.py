@@ -2,8 +2,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from test_upscalers import steam, fake_catalog, proc, _service, APPID
-from upscalers import recipes, solution_plan, ini, catalog
+from upscalers_support import APPID, _service
+from upscalers import recipes, solution_plan, ini
 from upscalers.service import UpscalerError
 
 

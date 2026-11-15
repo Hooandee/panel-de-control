@@ -4,7 +4,7 @@ import tomllib
 import pytest
 
 from upscalers.lsfg import Lsfg
-from test_upscalers_lsfg_update import payload
+from upscalers_support import payload
 
 
 @pytest.mark.parametrize('home_name', ['home', 'home with spaces', "someone's home"])
