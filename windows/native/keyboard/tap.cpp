@@ -163,7 +163,8 @@ public:
         if (faceProbe && GetTickCount64() < observeUntil &&
             wcscmp(element.Type, L"Windows.UI.Xaml.Controls.Border") == 0)
             keyboard::ObserveFace(diagnostics.Get(), element.Handle);
-        if (styling && wcscmp(element.Type, L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey") == 0)
+        if (styling && (wcscmp(element.Type, L"WindowsInternal.ComposableShell.Experiences.TextInputUndocked.Controls.KeyboardKey") == 0 ||
+                        wcscmp(element.Type, L"Windows.UI.Xaml.Controls.TextBlock") == 0))
             keyboard::ObserveStyle(diagnostics.Get(), element.Handle);
         keyboard::Node node{};
         node.id = element.Handle;

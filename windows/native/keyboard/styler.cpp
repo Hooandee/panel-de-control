@@ -469,7 +469,7 @@ struct Chrome {
 };
 struct Engine {
     ULONGLONG epoch = 0, loadingStarted = 0, probeStarted = 0;
-    bool probeAnimated = false;
+    bool probeAnimated = false, labelsQueued = false;
     FontResource font;
     bool fontReady = false;
     unsigned fontChecks = 0;
@@ -486,7 +486,7 @@ struct Engine {
 
     void Start(FrameworkElement const& anchor, ULONGLONG value) {
         if (started) return;
-        epoch = value; loadingStarted = GetTickCount64(); probeStarted = 0; probeAnimated = false; ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
+        epoch = value; loadingStarted = GetTickCount64(); probeStarted = 0; probeAnimated = false; labelsQueued = false; ready.fill(false); restored = 0; cleanupAttempts = 0; fontReady = false; fontChecks = 0;
         HMODULE module = nullptr;
         check_bool(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&KeyboardStyleId), &module));
@@ -535,6 +535,19 @@ struct Engine {
         if (cells.size() >= 256) { Fail(E_BOUNDS); requested = false; return; }
         auto cell = std::make_unique<Cell>(); cell->face = face; cell->parent = parent; cell->key = key; cell->outer = outer;
         cells.push_back(std::move(cell));
+    }
+    void RefreshLabels(FrameworkElement const& key, ULONGLONG value) {
+        if (!started || labelsQueued || !requested || epoch != value || generation != value) return;
+        labelsQueued = true;
+        key.Dispatcher().RunAsync(Core::CoreDispatcherPriority::High, [this, value]() noexcept {
+            if (epoch != value || generation != value) return;
+            labelsQueued = false;
+            if (!requested) return;
+            try {
+                for (auto& cell : cells) if (cell->inserted && !cell->retiring && !cell->unloaded)
+                    cell->ReconcileLabels();
+            } catch (...) { Fail(to_hresult()); requested = false; }
+        });
     }
     void AddCandidate(FrameworkElement const& key, ULONGLONG value) {
         if (!requested || generation != value || get_class_name(key) != KeyType) return;
@@ -687,10 +700,17 @@ void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept
         IInspectable object{nullptr};
         check_hresult(diagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(put_abi(object))));
         auto key = object.try_as<FrameworkElement>();
-        if (!key || !key.Dispatcher().HasThreadAccess() || get_class_name(key) != KeyType) return;
+        if (!key || !key.Dispatcher().HasThreadAccess()) return;
+        const bool label = get_class_name(key) == L"Windows.UI.Xaml.Controls.TextBlock";
+        if (label) {
+            for (unsigned depth = 0; key && get_class_name(key) != KeyType && depth < 12; ++depth)
+                key = VisualTreeHelper::GetParent(key).try_as<FrameworkElement>();
+        }
+        if (!key || get_class_name(key) != KeyType) return;
         const auto thread = owner.load();
         if (thread && thread != GetCurrentThreadId()) return;
         const auto value = generation.load();
+        if (label) { Current().RefreshLabels(key, value); return; }
         key.Dispatcher().RunAsync(Core::CoreDispatcherPriority::Normal, [key, value]() noexcept {
             try { Current().AddCandidate(key, value); }
             catch (...) {
