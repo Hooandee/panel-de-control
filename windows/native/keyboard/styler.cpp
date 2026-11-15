@@ -364,17 +364,22 @@ struct Chrome {
         properties.push_back({std::move(property), value});
         properties.back().property->Assign(value);
     }
-    void ClearBackground(FrameworkElement const& element, DependencyProperty const& dp) {
+    void SetBackground(FrameworkElement const& element, DependencyProperty const& dp, Brush const& value) {
         // Transparent brushes receive pointer input; null backgrounds must stay null.
-        if (element.GetValue(dp)) Set(element, dp, clear);
+        if (element.GetValue(dp)) { Set(element, dp, value); return; }
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            if (it->property->element == element && it->property->property == dp) {
+                it->property->Restore(); properties.erase(it); return;
+            }
+        }
     }
     void StyleBar(DependencyObject const& node, unsigned depth = 0) {
         if (depth > 10) throw hresult_error(E_BOUNDS);
         if (node.try_as<WebView>() || node.try_as<TextBox>() || node.try_as<PasswordBox>()) return;
-        if (auto panel = node.try_as<Panel>()) ClearBackground(panel, Panel::BackgroundProperty());
-        if (auto border = node.try_as<Border>()) ClearBackground(border, Border::BackgroundProperty());
+        if (auto panel = node.try_as<Panel>()) SetBackground(panel, Panel::BackgroundProperty(), clear);
+        if (auto border = node.try_as<Border>()) SetBackground(border, Border::BackgroundProperty(), clear);
         if (auto control = node.try_as<Control>()) {
-            ClearBackground(control, Control::BackgroundProperty());
+            SetBackground(control, Control::BackgroundProperty(), clear);
             Set(control, Control::ForegroundProperty(), accent);
         }
         if (auto text = node.try_as<TextBlock>()) Set(text, TextBlock::ForegroundProperty(), accent);
@@ -393,7 +398,7 @@ struct Chrome {
             if (node != root) { it->property->Restore(); it = properties.erase(it); }
             else ++it;
         }
-        if (root.Background()) Set(root, Panel::BackgroundProperty(), background);
+        SetBackground(root, Panel::BackgroundProperty(), background);
         for (auto const& child : root.Children()) {
             auto type = get_class_name(child);
             if (child == bar || type == SuggestionsType || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
