@@ -144,7 +144,7 @@ struct Cell {
         focused = false;
         if (auto control = key.try_as<Control>()) focused = control.FocusState() != FocusState::Unfocused;
         if (focused || !key.XamlRoot()) return;
-        auto node = Input::FocusManager::GetFocusedElement(key.XamlRoot()).try_as<DependencyObject>();
+        auto node = Windows::UI::Xaml::Input::FocusManager::GetFocusedElement(key.XamlRoot()).try_as<DependencyObject>();
         for (unsigned depth = 0; node && depth < 12; ++depth) {
             if (node == key) { focused = true; return; }
             node = VisualTreeHelper::GetParent(node);
