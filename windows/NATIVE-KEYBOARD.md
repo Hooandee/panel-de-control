@@ -216,8 +216,8 @@ contorno nativo observado sin pintar su margen de sombra.
 También se ha comprobado entrada táctil en cinco controles WinForms (texto simple,
 multilínea, contraseña, RichTextBox y ComboBox editable), ocho campos en Edge
 (texto, contraseña, búsqueda, correo, URL, número, textarea y contenteditable),
-texto y contraseña en una aplicación elevada y búsqueda en un diálogo nativo de
-archivos. Estas comprobaciones usan campos propios y texto sintético; no prueban
+texto y contraseña en una aplicación elevada, búsqueda en un diálogo nativo de
+archivos y el buscador de Configuración de Windows. Estas comprobaciones usan campos propios y texto sintético; no prueban
 cualquier aplicación posible. También se han comprobado tres ciclos consecutivos
 de activar/restaurar desde la UI, desactivación inmediata y cierre/reapertura de
 Panel: cerrar su ventana conserva el tema mientras siga vivo el companion.
