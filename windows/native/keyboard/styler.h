@@ -2,7 +2,7 @@
 #include "common.h"
 
 namespace keyboard {
-bool BeginStyleSession(bool effectProbe = false) noexcept;
+bool BeginStyleSession(ThemeId theme, bool effectProbe = false) noexcept;
 void ObserveStyle(IXamlDiagnostics* diagnostics, InstanceHandle handle) noexcept;
 void RenewStyleLease() noexcept;
 void StopStyleSession() noexcept;

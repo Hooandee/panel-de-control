@@ -21,6 +21,7 @@ class Tap final : public IObjectWithSite, public IVisualTreeServiceCallback2 {
     HMODULE pin = nullptr;
     bool faceProbe = false;
     bool styling = false, effectProbe = false;
+    keyboard::ThemeId theme = keyboard::ThemeId::None;
     std::wstring session;
     ULONGLONG observeUntil = 0;
     ComPtr<IXamlDiagnostics> diagnostics;
@@ -117,7 +118,6 @@ public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* value) override {
         if (!value) return S_OK;
         if (discovering.exchange(true)) return HRESULT_FROM_WIN32(ERROR_BUSY);
-        if (faceProbe && !keyboard::BeginFaceProbe()) { discovering = false; return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS); }
         { std::lock_guard lock(gate); report = {}; }
         auto hr = value->QueryInterface(IID_PPV_ARGS(&tree));
         if (FAILED(hr)) { discovering = false; return hr; }
@@ -127,16 +127,17 @@ public:
         }
         BSTR data = nullptr;
         hr = diagnostics->GetInitializationData(&data);
-        if (SUCCEEDED(hr) && data) {
-            const auto length = SysStringLen(data);
-            if (length != 37 || data[0] != L'.') hr = E_INVALIDARG;
-            for (UINT i = 1; SUCCEEDED(hr) && i < length; ++i)
-                if (!iswxdigit(data[i]) && data[i] != L'-') hr = E_INVALIDARG;
-            if (SUCCEEDED(hr)) session.assign(data, length);
+        keyboard::Initialization initialization;
+        const bool validInitialization = SUCCEEDED(hr) && data &&
+            keyboard::ParseInitialization(std::wstring_view(data, SysStringLen(data)), styling, initialization);
+        if (validInitialization) {
+            session.assign(initialization.session);
+            theme = initialization.theme;
         }
         SysFreeString(data);
-        if (FAILED(hr) || session.empty()) { discovering = false; return E_INVALIDARG; }
-        if (styling && !keyboard::BeginStyleSession(effectProbe)) { discovering = false; return HRESULT_FROM_WIN32(ERROR_BUSY); }
+        if (!validInitialization) { discovering = false; return E_INVALIDARG; }
+        if (faceProbe && !keyboard::BeginFaceProbe()) { discovering = false; return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS); }
+        if (styling && !keyboard::BeginStyleSession(theme, effectProbe)) { discovering = false; return HRESULT_FROM_WIN32(ERROR_BUSY); }
         site = value;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                                reinterpret_cast<LPCWSTR>(&KeyboardTapId), &pin)) {

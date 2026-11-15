@@ -3,8 +3,32 @@
 #include <cstdint>
 #include <cmath>
 #include <initializer_list>
+#include <string_view>
+#include "theme_id.h"
 
 namespace keyboard {
+constexpr std::uint32_t ProtocolVersion = 6;
+struct Initialization {
+    std::wstring_view session;
+    ThemeId theme = ThemeId::None;
+};
+inline bool ParseInitialization(std::wstring_view data, bool styling, Initialization& result) noexcept {
+    result = {};
+    if (data.size() < 40 || data.substr(0, 2) != L"6|" || data[2] != L'.' || data[39] != L'|') return false;
+    const auto session = data.substr(2, 37);
+    for (std::size_t i = 1; i < session.size(); ++i) {
+        const bool separator = i == 9 || i == 14 || i == 19 || i == 24;
+        const auto c = session[i];
+        const bool hex = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F');
+        if (separator ? c != L'-' : !hex) return false;
+    }
+    const auto name = data.substr(40);
+    const auto theme = name == L"terciopelo" ? ThemeId::Terciopelo :
+                       name == L"lobo-blanco" ? ThemeId::LoboBlanco : ThemeId::None;
+    if (styling ? !KnownTheme(theme) : !name.empty()) return false;
+    result = {session, theme};
+    return true;
+}
 constexpr std::uint32_t MaxNodes = 512;
 constexpr std::size_t TypeLength = 128;
 struct Node {
@@ -31,7 +55,7 @@ struct FontSample {
     std::uint32_t visible = 0;
 };
 struct Report {
-    std::uint32_t version = 5;
+    std::uint32_t version = ProtocolVersion;
     std::uint32_t count = 0;
     std::int32_t subscribeResult = 0;
     std::int32_t unsubscribeResult = 0;
@@ -39,6 +63,7 @@ struct Report {
     std::uint32_t probeFlags = 0;
     std::int32_t probeResult = 0;
     StylePhase phase = StylePhase::Idle;
+    ThemeId appliedTheme = ThemeId::None;
     std::uint32_t keyCount = 0, styledKeys = 0, restoredKeys = 0, pendingKeys = 0;
     std::int32_t styleResult = 0;
     std::uint32_t stateCount = 0;
@@ -54,9 +79,10 @@ inline bool TypeCharacter(char c) {
            (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '`';
 }
 inline bool Valid(const Report& report) {
-    if (report.version != 5 || report.fontCount > MaxFontSamples || report.chromeCount > MaxChromeNodes || report.count > MaxNodes || report.truncated > 1 || report.probeFlags > 63 || report.stateCount > MaxStates ||
+    if (report.version != ProtocolVersion || report.fontCount > MaxFontSamples || report.chromeCount > MaxChromeNodes || report.count > MaxNodes || report.truncated > 1 || report.probeFlags > 63 || report.stateCount > MaxStates ||
         report.keyCount > 256 || report.styledKeys > report.keyCount ||
         report.pendingKeys > 256 || static_cast<unsigned>(report.phase) > 5) return false;
+    if (report.phase == StylePhase::Applied ? !KnownTheme(report.appliedTheme) : report.appliedTheme != ThemeId::None) return false;
     if (report.phase == StylePhase::Applied &&
         (!report.keyCount || report.keyCount != report.styledKeys || report.pendingKeys || report.styleResult < 0)) return false;
     if (report.phase == StylePhase::Idle && (report.keyCount || report.styledKeys || report.pendingKeys)) return false;
