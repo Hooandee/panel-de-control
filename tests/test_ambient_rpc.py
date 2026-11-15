@@ -236,3 +236,14 @@ def test_share_session_round_trip_and_stop(host, monkeypatch):
     assert run(host.stop_ambient_share()) is True
     assert run(host.take_ambient_shared())["active"] is False
     assert run(host.start_ambient_share("nope")) == {"error": "invalid_arguments"}
+
+
+def test_diagnostics_do_not_start_service(tmp_path):
+    h = Host(tmp_path)
+    assert h.ambient_diagnostics() == {"mediaServer": "stopped", "started": False}
+
+
+def test_cancel_without_service_does_not_start_resources(host):
+    assert run(host.cancel_ambient_jobs()) is False
+    assert host._ambient_service is None
+    assert host._ambient_pools is None

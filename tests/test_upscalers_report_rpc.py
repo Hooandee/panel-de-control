@@ -55,3 +55,18 @@ def test_plugin_close_stops_lossless_log_monitor(plugin, tmp_path, monkeypatch):
     assert not worker.is_alive()
     engine.status()
     assert not worker.is_alive()
+
+
+def test_report_failure_keeps_separate_running_identities(plugin, monkeypatch):
+    async def unavailable(*args):
+        raise TimeoutError()
+    monkeypatch.setattr(plugin, '_upscalers_call', unavailable)
+    monkeypatch.setattr(plugin, '_current_appid', 'backend-key')
+    monkeypatch.setattr(plugin, '_current_game_name', 'Backend game', raising=False)
+    report = asyncio.run(plugin._upscalers_report({'upscalers': {'status': 'available',
+        'running': {'live_appid': '42', 'stable_appid': 'frontend-key', 'name': 'Frontend game', 'env': 'secret'}}}))
+    assert report['error'] == 'diagnostics_unavailable'
+    assert report['frontend']['running']['live_appid'] == '42'
+    assert report['backend_running']['stable_appid'] == 'backend-key'
+    assert 'env' not in report['frontend']['running']
+    assert 'upscalers' not in plugin._launch_report_state({'upscalers': {'running': 'private'}})['frontend']

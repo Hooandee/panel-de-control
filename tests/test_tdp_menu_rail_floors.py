@@ -133,3 +133,80 @@ def test_tdp_ownership_never_claims_a_menu_floor_without_one(tmp_path, monkeypat
     ownership = plugin._tdp_ownership_state(plugin._tdp_backend.observe())
 
     assert ownership["menu_floor"] is False
+
+
+def _minimums(command):
+    return {rail: command.safe_bounds[rail]["min"] for rail in ("pl1", "pl2", "pl3")}
+
+
+def test_game_in_focus_keeps_the_requested_low_boost_rails(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+    plugin._set_current_appid("42")
+
+    command = plugin._capture_tdp_command("manual-watts", on_ac=False)
+
+    assert _minimums(command) == {"pl1": 5, "pl2": 5, "pl3": 5}
+
+
+def test_steam_home_without_a_game_keeps_the_menu_rail_floors(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+
+    command = plugin._capture_tdp_command("lifecycle", on_ac=False)
+
+    assert _minimums(command) == {"pl1": 5, "pl2": 15, "pl3": 20}
+
+
+def test_open_menu_over_a_game_restores_the_menu_rail_floors(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+    plugin._set_current_appid("42")
+    plugin._ui_active = True
+
+    command = plugin._capture_tdp_command("menu-floor", on_ac=False)
+
+    assert _minimums(command) == {"pl1": 5, "pl2": 15, "pl3": 20}
+
+
+def test_backends_without_menu_floors_are_unchanged_in_menus(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, PlainBackend)
+
+    command = plugin._capture_tdp_command("lifecycle", on_ac=False)
+
+    assert _minimums(command) == {"pl1": 5, "pl2": 5, "pl3": 5}
+
+
+def test_menu_toggle_without_menu_floors_does_not_touch_power(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, PlainBackend)
+    plugin._set_current_appid("42")
+    reasons = []
+    monkeypatch.setattr(
+        plugin,
+        "_schedule_tdp_apply",
+        lambda reason, on_ac=None: reasons.append(reason),
+    )
+
+    asyncio.run(plugin.set_ui_active(True))
+    asyncio.run(plugin.set_ui_active(False))
+
+    assert reasons == []
+
+
+def test_menu_floor_apply_survives_a_loaded_but_idle_auto_controller(tmp_path, monkeypatch):
+    plugin = _plugin(tmp_path, monkeypatch, MenuFloorBackend)
+    plugin._set_current_appid("42")
+    plugin._auto_controller = object()
+    monkeypatch.setattr(plugin, "_auto_runtime_active", lambda: False)
+
+    async def no_auto_floor():
+        return None
+
+    monkeypatch.setattr(plugin, "_apply_auto_ui_floor", no_auto_floor)
+    generations = []
+    monkeypatch.setattr(
+        plugin,
+        "_schedule_tdp_apply",
+        lambda reason, on_ac=None: generations.append(plugin._tdp_generation),
+    )
+
+    asyncio.run(plugin.set_ui_active(True))
+
+    assert generations == [plugin._tdp_generation]

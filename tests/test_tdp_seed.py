@@ -161,3 +161,25 @@ def test_unreadable_hardware_leaves_the_default_and_never_breaks_startup(make_pl
     plugin._seed_tdp_from_hardware()
     assert _rails(plugin) == before
     assert plugin._tdp_profiles.seed_pending is True
+
+
+def test_seed_uses_primary_rail_when_backend_has_no_pl1(make_plugin):
+    class DeckLike(ReadableBackend):
+        name = "steamdeck-hwmon"
+        primary_rail = "pl2"
+
+        def level_limits(self):
+            return {"pl2": {"min": 3, "max": 15}, "pl3": {"min": 3, "max": 15}}
+
+        def get_limits(self):
+            return TdpLimits(min_w=3, default_w=12, max_w=15, max_ac_w=15)
+
+    plugin, _ = make_plugin({"pl2": 15, "pl3": 15}, backend_cls=DeckLike)
+    plugin._seed_tdp_from_hardware()
+    assert _rails(plugin)[:3] == (15, 15, 15)
+
+
+def test_seed_does_not_write_hardware(make_plugin):
+    plugin, backend = make_plugin({"pl1": 33, "pl2": 33, "pl3": 33})
+    plugin._seed_tdp_from_hardware()
+    assert backend.writes == []

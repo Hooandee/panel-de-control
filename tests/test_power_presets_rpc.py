@@ -136,3 +136,13 @@ def test_gpd_win_mini_presets_keep_low_requests_and_the_safe_ceiling(Plugin, mon
 def test_apply_power_preset_unknown_scope_does_not_raise(Plugin):
     res = asyncio.run(Plugin().apply_power_preset(15, "bogus", None, None))
     assert res["ok"] is False and "unknown scope" in res["detail"]
+
+
+def test_apply_power_preset_with_boost_sets_custom_rails(Plugin):
+    p = Plugin()
+    res = asyncio.run(p.apply_power_preset(
+        20, "global", None, {"mode": "custom", "off2": 8, "off3": 4}))
+    assert res["ok"] is True
+    st = asyncio.run(p.get_tdp_state())
+    assert st["global_boost_mode"] == "custom"
+    assert st["global_levels"]["pl2"] == 28 and st["global_levels"]["pl3"] == 32

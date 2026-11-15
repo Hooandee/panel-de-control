@@ -608,3 +608,56 @@ def test_cpu_scope_store_failure_restores_previous_game_hardware_and_memory(
     assert state["follows_global"] is False
     assert state["frequency"]["status"] == "failed"
     assert state["frequency"]["reason"] == "store_write_failed"
+
+
+def test_set_smt_toggles_and_persists(tmp_path, monkeypatch):
+    smt = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, smt=smt, boost=_FakeToggle())
+    st = asyncio.run(p.set_smt(False))
+    assert smt.enabled() is False
+    assert st["smt"]["enabled"] is False
+    # persisted
+    p2 = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(on=True), boost=_FakeToggle())
+    p2._init()
+    p2._apply_cpu()  # startup re-applies persisted state
+    assert p2._smt.enabled() is False
+
+
+def test_set_boost_toggles(tmp_path, monkeypatch):
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=boost)
+    asyncio.run(p.set_cpu_boost(False))
+    assert boost.enabled() is False
+
+
+def test_get_cpu_state_shape(tmp_path, monkeypatch):
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=_FakeFrequency(),
+    )
+    st = asyncio.run(p.get_cpu_state())
+    assert "chip" in st
+    assert st["smt"] == {"supported": True, "enabled": True}
+    assert st["boost"] == {"supported": True, "enabled": True}
+    assert "cores" in st and "max_khz" in st
+    assert st["frequency"]["supported"] is True
+    assert st["frequency"]["range_min_khz"] == 400_000
+    assert st["frequency"]["policy_state"][0]["name"] == "policy0"
+
+
+def test_cores_unsupported_hides(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+                     cores=_FakeCores(supported=False))
+    st = asyncio.run(p.get_cpu_state())
+    assert st["cores_supported"] is False and st["active_cores"] is None
+
+
+def test_unsupported_controls_degrade(tmp_path, monkeypatch):
+    p = _make_plugin(
+        tmp_path, monkeypatch,
+        smt=_FakeToggle(supported=False), boost=_FakeToggle(supported=False),
+    )
+    st = asyncio.run(p.set_smt(False))
+    assert st["smt"]["supported"] is False
+    st2 = asyncio.run(p.set_cpu_boost(False))
+    assert st2["boost"]["supported"] is False

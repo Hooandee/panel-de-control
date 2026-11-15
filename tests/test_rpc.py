@@ -42,3 +42,51 @@ def test_set_ui_prefs_none_removes_key(Plugin):
     asyncio.run(p.set_ui_prefs({"pdc:layout": "{}"}))
     asyncio.run(p.set_ui_prefs({"pdc:layout": None}))
     assert asyncio.run(p.get_ui_prefs()) == {}
+
+
+def test_get_device_returns_detected_profile(Plugin, monkeypatch):
+    import device_registry
+    import main
+    from device_profiles import DEVICE_TABLE
+    ally_x = next(p for p in DEVICE_TABLE if p.key == "rog_ally_x")
+    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: ally_x)
+    # get_device surfaces the REAL silicon name (read_cpu_model → /proc/cpuinfo),
+    # falling back to the profile's table chip when the kernel exposes nothing. Pin
+    # the reader off so the test is host-independent: a CI runner reports its own CPU
+    # (e.g. "AMD EPYC 7763"), which would otherwise fail this assertion.
+    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
+    p = Plugin()
+    dev = asyncio.run(p.get_device())
+    assert dev["key"] == "rog_ally_x"
+    assert dev["display_name"] == "ROG Ally X"
+    assert dev["chip"] == "AMD Z1 Extreme"
+    assert dev["vendor"] == "amd"
+    assert dev["tdp_max"] == 25
+    assert dev["tdp_max_charger"] == 30
+    assert dev["is_generic"] is False
+    assert dev["experimental"] is False
+
+
+def test_get_device_surfaces_experimental_flag(Plugin, monkeypatch):
+    import device_registry
+    import main
+    from device_profiles import DEVICE_TABLE
+    apex = next(p for p in DEVICE_TABLE if p.key == "onexplayer_apex")
+    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: apex)
+    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
+    dev = asyncio.run(Plugin().get_device())
+    assert dev["key"] == "onexplayer_apex"
+    assert dev["experimental"] is True
+    assert dev["is_generic"] is False
+
+
+def test_set_ui_prefs_coerces_value_to_string(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_ui_prefs({"k": 1}))
+    assert asyncio.run(p.get_ui_prefs()) == {"k": "1"}
+
+
+def test_set_ui_prefs_does_not_mutate_defaults(Plugin):
+    import main
+    asyncio.run(Plugin().set_ui_prefs({"k": "v"}))
+    assert main.DEFAULTS["ui_prefs"] == {}

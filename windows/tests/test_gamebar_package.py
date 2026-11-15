@@ -350,6 +350,339 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
         self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
 
+    def test_widget_has_controller_focus_targets_and_telemetry_cards(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        names = {
+            node.attrib.get("{http://schemas.microsoft.com/winfx/2006/xaml}Name")
+            for node in root.iter()
+        }
+
+        self.assertTrue(
+            {
+                "RefreshButton",
+                "BatteryCard",
+                "CpuCard",
+                "GpuCard",
+                "ConnectionStatus",
+                "SectionTabs",
+                "SectionHost",
+            }.issubset(names)
+        )
+        self.assertEqual(
+            "True",
+            next(
+                node.attrib["IsTabStop"]
+                for node in root.iter()
+                if node.attrib.get(
+                    "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+                )
+                == "RefreshButton"
+            ),
+        )
+
+    def test_widget_has_accessible_system_volume_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        slider = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "VolumeSlider"
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in root.iter()
+        }
+
+        self.assertTrue({"VolumeCard", "VolumeValue", "VolumeStatus"}.issubset(names))
+        self.assertEqual("0", slider.attrib["Minimum"])
+        self.assertEqual("100", slider.attrib["Maximum"])
+        self.assertEqual("5", slider.attrib["StepFrequency"])
+        self.assertEqual("True", slider.attrib["IsTabStop"])
+        self.assertEqual("VolumeSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Volumen del sistema", spanish_automation_name("VolumeSlider"))
+
+    def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
+
+        self.assertIn("VolumeSlider_ValueChanged", code)
+        self.assertIn("volumeGeneration", code)
+        self.assertIn("TimeSpan.FromMilliseconds(150)", code)
+        self.assertIn("ControlStatus.Unverifiable", code)
+        self.assertIn("ApplyVolumeResponse(volume)", code)
+        self.assertIn(
+            "var volumeWriteWasPendingAtRefreshStart = volumeWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!volumeWriteWasPendingAtRefreshStart && "
+            "!volumeWritePending && "
+            "volumeRefreshGeneration == volumeGeneration)",
+            normalized_refresh,
+        )
+
+    def test_widget_has_accessible_integrated_display_brightness_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        slider = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "BrightnessSlider"
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in root.iter()
+        }
+
+        self.assertTrue(
+            {"BrightnessCard", "BrightnessValue", "BrightnessStatus"}.issubset(
+                names
+            )
+        )
+        self.assertEqual("0", slider.attrib["Minimum"])
+        self.assertEqual("100", slider.attrib["Maximum"])
+        self.assertEqual("5", slider.attrib["StepFrequency"])
+        self.assertEqual("True", slider.attrib["IsTabStop"])
+        self.assertEqual("BrightnessSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Brillo de la pantalla integrada", spanish_automation_name("BrightnessSlider"))
+        self.assertEqual(
+            "BrightnessSlider_ValueChanged",
+            slider.attrib["ValueChanged"],
+        )
+
+    def test_widget_has_accessible_focusable_system_mute_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        volume_card = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "VolumeCard"
+        )
+        mute_toggle = next(
+            (
+                node
+                for node in volume_card.iter()
+                if node.attrib.get(xaml_name) == "MuteToggle"
+            ),
+            None,
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in volume_card.iter()
+        }
+        mute_status = next(
+            node
+            for node in volume_card.iter()
+            if node.attrib.get(xaml_name) == "MuteStatus"
+        )
+
+        self.assertIsNotNone(mute_toggle)
+        self.assertIn("MuteStatus", names)
+        self.assertEqual(
+            "Polite",
+            mute_status.attrib.get("AutomationProperties.LiveSetting"),
+        )
+        self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
+        self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
+        self.assertEqual("MuteToggle", mute_toggle.attrib[XAML_UID])
+        self.assertEqual(
+            "Silenciar audio del sistema",
+            spanish_automation_name("MuteToggle"),
+        )
+        self.assertTrue(load_strings("es")[f"MuteToggle.{AUTOMATION}.HelpText"])
+        self.assertEqual("MuteToggle_Toggled", mute_toggle.attrib["Toggled"])
+
+    def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
+
+        self.assertIn("MuteToggle_Toggled", code)
+        self.assertIn("volumeRefreshGeneration", code)
+        self.assertIn("muteRefreshGeneration", code)
+        self.assertIn("muteGeneration", code)
+        self.assertIn("muteWritePending", code)
+        self.assertIn("lastObservedMuted", code)
+        self.assertIn("volumeClient.SetMuteAsync", code)
+        self.assertIn("ApplyMuteResponse(volume)", code)
+        self.assertIn("response.ObservedMuted.HasValue", code)
+        self.assertIn("ApplyObservedMute(lastObservedMuted.Value)", code)
+        self.assertIn("CancelPendingMuteWrite", code)
+        self.assertIn(
+            "var muteWriteWasPendingAtRefreshStart = muteWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!muteWriteWasPendingAtRefreshStart && "
+            "!muteWritePending && "
+            "muteRefreshGeneration == muteGeneration)",
+            normalized_refresh,
+        )
+
+    def test_volume_client_never_retries_an_indeterminate_write(self):
+        code = VOLUME_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "public Task<VolumeControlResponse> SetMuteAsync(bool requestedMuted)",
+            code,
+        )
+        self.assertIn(
+            "SendAsync(VolumeControlRequest.SetMute(requestedMuted))",
+            code,
+        )
+        write_started = code.index("requestWriteStarted = true;")
+        write_call = code.index("await writer.WriteLineAsync(")
+        self.assertLess(write_started, write_call)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
+        self.assertIn("control_response_unavailable", code)
+        self.assertIn("VolumeControlResponse.Unverifiable", code)
+        self.assertIn("VolumeControlResponse.MuteUnverifiable", code)
+        self.assertNotIn("Task.Run", code)
+
+    def test_brightness_client_never_retries_an_indeterminate_write(self):
+        code = BRIGHTNESS_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "public Task<BrightnessControlResponse> SetAsync(",
+            code,
+        )
+        self.assertIn(
+            "SendAsync(BrightnessControlRequest.Set(requestedPercentage))",
+            code,
+        )
+        write_started = code.index("requestWriteStarted = true;")
+        write_call = code.index("await writer.WriteLineAsync(")
+        self.assertLess(write_started, write_call)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
+        self.assertIn("brightness_response_unavailable", code)
+        self.assertIn("BrightnessControlResponse.Unverifiable", code)
+        self.assertNotIn("Task.Run", code)
+
+    def test_widget_pauses_polling_when_game_bar_hides_it(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+
+        self.assertIn("VisibleChanged += OnWidgetVisibilityChanged", code)
+        self.assertIn("VisibleChanged -= OnWidgetVisibilityChanged", code)
+        self.assertIn("gameBarWidget.Visible", code)
+        self.assertIn("Dispatcher.HasThreadAccess", code)
+        self.assertIn("Dispatcher.RunAsync", code)
+
+    def test_suspension_does_not_dispose_the_live_widget_page(self):
+        code = APP_CODE.read_text(encoding="utf-8")
+
+        self.assertNotIn("Suspending += OnSuspending", code)
+        self.assertNotIn("OnSuspending(", code)
+
+    def test_pipe_connection_uses_bounded_async_io_without_worker_thread(self):
+        code = TELEMETRY_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "ConnectAsync((int)ConnectTimeout.TotalMilliseconds)",
+            code,
+        )
+        self.assertIn("SnapshotTimeout", code)
+        self.assertNotIn("Task.Run", code)
+
+    def test_transport_failure_does_not_invent_a_device_identity(self):
+        code = TELEMETRY_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn('"Unknown device"', code)
+        self.assertNotIn('"ROG Xbox Ally X"', code)
+
+    def test_widget_surfaces_unsupported_device_state(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+
+        self.assertIn('"device_not_supported"', code)
+        self.assertIn('Localized("DeviceUnrecognized")', code)
+        self.assertIn("var unsupported = snapshot.Readings.Any(", code)
+        self.assertIn("available && !unsupported", code)
+
+    def test_broker_uses_package_scoped_pipe_acl(self):
+        factory = PIPE_FACTORY.read_text(encoding="utf-8")
+        server = PIPE_SERVER.read_text(encoding="utf-8")
+
+        self.assertIn("WellKnownSidType.WorldSid", factory)
+        self.assertIn("NamedPipeServerStreamAcl.Create", factory)
+        self.assertIn('EntryPoint = "GetCurrentPackageFamilyName"', factory)
+        self.assertIn("AppContainerNames.SidFromPackageFamilyName", factory)
+        self.assertIn("AppContainerNames.ServerPipeName", factory)
+        self.assertNotIn("DeriveAppContainerSidFromAppContainerName", factory)
+        self.assertNotIn("new NamedPipeServerStream(", server)
+        self.assertIn("catch (IOException)", server)
+
+    def test_broker_hosts_volume_on_a_dedicated_strict_pipe(self):
+        factory = PIPE_FACTORY.read_text(encoding="utf-8")
+        control_server = CONTROL_PIPE_SERVER.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "return Create(pipeName, includeWorldAccess: false);",
+            factory,
+        )
+        self.assertIn("if (includeWorldAccess)", factory)
+        self.assertIn(r'@"LOCAL\PanelDeControl.Control"', control_server)
+        self.assertIn("new VolumeControlPipeServer(", program)
+        self.assertIn("PackageNamedPipeServerFactory.CreateControl", program)
+        self.assertIn("new CoreAudioEndpointVolumeProvider()", program)
+
+    def test_broker_hosts_brightness_on_a_dedicated_strict_pipe(self):
+        factory = PIPE_FACTORY.read_text(encoding="utf-8")
+        brightness_server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
+        provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
+        controller = BRIGHTNESS_CONTROLLER.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "return Create(pipeName, includeWorldAccess: false);",
+            factory,
+        )
+        self.assertIn(r'@"LOCAL\PanelDeControl.Display"', brightness_server)
+        self.assertIn("new BrightnessControlPipeServer(", program)
+        self.assertIn("new WmiDisplayBrightnessProvider()", program)
+        self.assertIn("SuperviseAsync(\"brightness\", () => brightnessServer.RunUntilCancelledAsync(token), token)", program)
+        self.assertIn(r'@"\\.\root\wmi"', provider)
+        self.assertIn("FROM WmiMonitorConnectionParams", provider)
+        self.assertIn("FROM WmiMonitorBrightness ", provider)
+        self.assertIn("FROM WmiMonitorBrightnessMethods", provider)
+        self.assertIn('"WmiSetBrightness"', provider)
+        self.assertIn("ReadbackTolerancePercentagePoints = 1", controller)
+        self.assertNotIn("DeviceIdentity", provider)
+        self.assertNotIn("DeviceIdentity", controller)
+
+    def test_brightness_timeouts_cover_full_verified_set(self):
+        provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
+        server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
+        client = BRIGHTNESS_CLIENT.read_text(encoding="utf-8")
+
+        provider_timeout = re.search(
+            r"OperationTimeout\s*=\s*TimeSpan\.FromMilliseconds\((\d+)\)",
+            provider,
+        )
+        server_timeout = re.search(
+            r"DefaultOperationTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            server,
+        )
+        client_timeout = re.search(
+            r"ResponseTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            client,
+        )
+
+        self.assertIsNotNone(provider_timeout)
+        self.assertIsNotNone(server_timeout)
+        self.assertIsNotNone(client_timeout)
+        provider_budget_ms = int(provider_timeout.group(1))
+        server_budget_ms = int(server_timeout.group(1)) * 1000
+        client_budget_ms = int(client_timeout.group(1)) * 1000
+        self.assertGreater(server_budget_ms, provider_budget_ms * 3)
+        self.assertGreater(client_budget_ms, server_budget_ms)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -479,3 +812,14 @@ class EnergyCardTests(unittest.TestCase):
         self.assertEqual(["BestEfficiency", "Balanced", "BetterPerformance", "BestPerformance"], names)
         for name in names:
             self.assertIn(f"PowerMode{name}", strings)
+
+
+class SideloadPackageTests(unittest.TestCase):
+
+    def test_ci_builds_a_native_sideload_package(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+
+        self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
+        self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
+        self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)

@@ -527,3 +527,69 @@ def test_reload_waits_for_context_before_applying_global_power(Plugin, monkeypat
     assert plugin._game_power_write_allowed() is allowed
     plugin._run_gpu_clock({"mode": "manual", "min_mhz": 200, "max_mhz": 1600})
     assert writes == ([(200, 1600)] if allowed else [])
+
+
+def test_unknown_observation_blocks_but_does_not_change_other_scoped_features(Plugin):
+    plugin = owned_plugin(Plugin)
+    plugin._power_ownership.observe("42", "unknown")
+    assert plugin._game_power_write_allowed() is False
+    assert plugin._resolve_scope("game", "42") == "game"
+
+
+@pytest.mark.parametrize("failure", ["tdp", "gpu"])
+def test_native_reset_abort_reports_rejected_restore(Plugin, monkeypatch, failure):
+    plugin = deck_owned_plugin(Plugin, monkeypatch)
+    plugin._power_ownership.set_owner("42", "pdc", plugin._power_ownership.state()["revision"])
+    async def apply(reason):
+        return SimpleNamespace(ok=failure != "tdp")
+    monkeypatch.setattr(plugin, "_apply_tdp_now", apply)
+    monkeypatch.setattr(plugin, "_run_gpu_clock", lambda *args, **kwargs: {"ok": failure != "gpu"})
+    monkeypatch.setattr(plugin, "_record_gpu_clock_transition", lambda *args: None)
+    async def run():
+        begun = await plugin.begin_game_power_reset("42", plugin._power_ownership.state()["revision"])
+        result = await plugin.abort_game_power_reset(begun["token"])
+        assert result["ok"] is False
+        assert result["detail"] == "reset_restore_failed"
+        assert not result["reset_pending"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("fail_save", [False, True])
+def test_native_global_reset_captures_baseline_without_game_profile(Plugin, monkeypatch, fail_save):
+    plugin = deck_owned_plugin(Plugin, monkeypatch)
+    plugin._set_current_appid(None)
+    plugin._power_ownership.observe(None, "inactive")
+    monkeypatch.setattr(plugin._gpu_clock, "capture_state", lambda: {"level": "auto", "window": (200, 1600)})
+    previous = [copy.deepcopy(s._data) for s in (plugin._tdp_profiles, plugin._gpu_profiles)]
+    if fail_save:
+        def fail():
+            raise OSError("disk failure")
+        monkeypatch.setattr(plugin._gpu_profiles, "_save", fail)
+    async def run():
+        begun = await plugin.begin_game_power_reset(None, plugin._power_ownership.state()["revision"])
+        assert begun["ok"]
+        return await plugin.finish_game_power_reset(begun["token"], {})
+    result = asyncio.run(run())
+    assert result["ok"] is not fail_save
+    assert result["explicit_owner"] is None
+    assert result["steam_settings"] == {}
+    if fail_save:
+        assert previous == [s._data for s in (plugin._tdp_profiles, plugin._gpu_profiles)]
+    else:
+        assert plugin._tdp_profiles.effective(None)["pl1"] == 12
+        assert plugin._gpu_profiles.clock(None) == {"manual": False, "min": None, "max": None}
+        assert plugin._tdp_profiles._data.get("games", {}) == previous[0].get("games", {})
+
+
+def test_unreadable_steam_state_preserves_types_and_labels_saved_values(Plugin, monkeypatch):
+    from tdp.types import TdpObservation
+
+    plugin = deck_owned_plugin(Plugin, monkeypatch)
+    monkeypatch.setattr(plugin._gpu_clock, "capture_state", lambda: None)
+    gpu = asyncio.run(plugin.get_gpu_clock())
+    tdp = plugin._tdp_state(TdpObservation(False))
+    assert type(gpu["manual"]) is bool
+    assert type(tdp["watts"]) is int
+    for state in (gpu, tdp):
+        assert state["display_source"] == "saved"
+        assert state["steam_readback_available"] is False

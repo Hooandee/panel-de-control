@@ -165,3 +165,35 @@ def test_bridge_replies_stay_out_of_the_journal(plugin):  # noqa: F811
     main = sys.modules["main"]
     assert not hasattr(main.Plugin.kiosk_steam_result, "__wrapped__")
     assert hasattr(main.Plugin.kiosk_steam, "__wrapped__")
+
+
+def test_kiosk_brightness_is_saved_only_when_the_panel_took_it(plugin, monkeypatch):  # noqa: F811
+    async def took(value):
+        return round(value, 3)
+
+    async def refused(_value):
+        return None
+
+    monkeypatch.setattr(plugin._kiosk, "set_brightness", took)
+    assert asyncio.run(plugin.set_kiosk_brightness(0.42)) == {"value": 0.42}
+    assert plugin._settings["kiosk_brightness"] == 0.42
+    monkeypatch.setattr(plugin._kiosk, "set_brightness", refused)
+    assert asyncio.run(plugin.set_kiosk_brightness(0.9)) == {"value": None}
+    assert plugin._settings["kiosk_brightness"] == 0.42
+
+
+def test_kiosk_frame_rate_says_why_it_is_missing(plugin, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(plugin._gamescope_stats, "start", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_perf, "start", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_perf, "fps", lambda: None)
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": None, "reason": "no_game_focus"})
+    assert asyncio.run(plugin.get_kiosk_live())["reason"] == "no_game_focus"
+    monkeypatch.setattr(plugin._gamescope_stats, "peek", lambda: {"fps": 120.0, "reason": "ok"})
+    live = asyncio.run(plugin.get_kiosk_live())
+    assert (live["fps"], live["reason"]) == (None, "fps_unavailable")
+
+
+def test_support_log_records_the_kiosk_setting(plugin):  # noqa: F811
+    _no_display(plugin)
+    asyncio.run(plugin.set_kiosk_enabled(True))
+    assert plugin._support_settings_state()["kiosk_enabled"] is True

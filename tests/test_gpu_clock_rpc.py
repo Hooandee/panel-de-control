@@ -598,3 +598,199 @@ def test_turning_power_off_lifts_level_ceilings_before_cpu_and_gpu_reapply(tmp_p
 
     assert order[:2] == ["release", "reapply"]
     assert order.count("release") == 1
+
+
+def test_global_gpu_manual_edit_preserves_current_own_game_hardware(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._set_current_appid("42")
+    plugin._gpu_profiles.set_clock("game", True, 500, 900, "42")
+    gpu.set(500, 900)
+    result = asyncio.run(plugin.set_gpu_clock(300, 700, "global", None, "42"))
+    assert gpu.get() == (500, 900)
+    assert plugin._gpu_profiles.clock("42") == {"manual": True, "min": 500, "max": 900}
+    assert plugin._gpu_profiles.clock(None) == {"manual": True, "min": 300, "max": 700}
+    assert result["global_min"] == 300
+
+
+def test_global_gpu_auto_edit_preserves_current_own_game_hardware(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._set_current_appid("42")
+    plugin._gpu_profiles.set_clock("global", True, 300, 700)
+    plugin._gpu_profiles.set_clock("game", True, 500, 900, "42")
+    gpu.set(500, 900)
+    asyncio.run(plugin.set_gpu_clock_auto("global", None, "42"))
+    assert gpu.get() == (500, 900)
+    assert gpu._auto is False
+    assert plugin._gpu_profiles.clock(None)["manual"] is False
+    assert plugin._gpu_profiles.clock("42")["manual"] is True
+
+
+def test_migrated_gpu_is_owned_by_system_even_when_power_was_disabled(
+    tmp_path, monkeypatch
+):
+    import json
+
+    from tdp_profiles import ProfileStore
+
+    legacy = ProfileStore(str(tmp_path / "tdp_profiles.json"), 15)
+    legacy.set_gpu_clock("global", True, 800, 2_000)
+    (tmp_path / "state.json").write_text(json.dumps({
+        "_potencia_scope_migrated": True,
+        "tdp_control_enabled": False,
+    }))
+
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._apply_gpu_clock()
+
+    assert plugin._module_enabled("power") is False
+    assert plugin._module_enabled("system") is True
+    assert plugin._gpu_profiles.clock(None)["manual"] is True
+    assert gpu.get() == (800, 2_000)
+
+
+def test_restart_releases_pending_gpu_when_system_module_is_disabled(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+    plugin._settings["disabled_modules"] = ["system"]
+    plugin._save()
+
+    restarted, _ = _make_plugin(tmp_path, monkeypatch, gpu)
+
+    async def scenario():
+        restarted._init()
+        restarted._apply_gpu_clock()
+        await restarted._drain_offloaded()
+
+    asyncio.run(scenario())
+
+    assert gpu._auto is True
+    assert restarted._settings["gpu_handoff_pending"] is False
+
+
+def test_gpu_clock_not_reapplied_when_auto(tmp_path, monkeypatch):
+    # Not manual → _apply_gpu_clock leaves the GPU alone (don't fight other tools).
+    p, gpu = _make_plugin(tmp_path, monkeypatch)
+    p._init()  # load settings so the module gate in _apply_gpu_clock can read them
+    gpu._cur = (300, 2000)
+    p._apply_gpu_clock()
+    assert gpu.get() == (300, 2000) and gpu._auto is True
+
+
+def test_disabling_power_module_keeps_manual_gpu_clock(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    assert gpu._auto is False
+    result = asyncio.run(plugin.set_ui_module("power", True))
+
+    assert "power" in result["disabled"]
+    assert gpu._auto is False
+    assert gpu.get() == (1_200, 2_400)
+
+
+def test_disabling_system_module_releases_manual_gpu_clock(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    assert gpu._auto is False
+    result = asyncio.run(plugin.set_ui_module("system", True))
+
+    assert "system" in result["disabled"]
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+
+
+def test_unload_preserves_external_manual_gpu_clock(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    gpu._cur = (1_200, 2_400)
+    gpu._auto = False
+
+    asyncio.run(plugin._unload())
+
+    assert gpu._auto is False
+    assert gpu.get() == (1_200, 2_400)
+
+
+def test_manual_gpu_store_failure_restores_auto_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(plugin._gpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(plugin.set_gpu_clock(900, 1_800))
+
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+    assert plugin._gpu_profiles.clock(None)["manual"] is False
+    assert state["status"] == "rejected"
+    assert state["reason"] == "store_write_failed"
+
+
+def test_get_gpu_clock_shape(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_gpu_clock())
+    assert st["supported"] is True
+    assert st["range_min"] == 200 and st["range_max"] == 2700
+    assert st["manual"] is False
+    assert st["follows_global"] is True
+    assert st["has_game_profile"] is False
+
+
+def test_set_gpu_clock_auto_releases(tmp_path, monkeypatch):
+    p, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_gpu_clock(1200, 2400))
+    st = asyncio.run(p.set_gpu_clock_auto())
+    assert st["manual"] is False and gpu._auto is True
+
+
+def test_report_bundle_includes_independent_gpu_profiles(tmp_path, monkeypatch):
+    plugin, _ = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    plugin._gpu_profiles.set_clock("global", True, 800, 2_000)
+
+    stores = plugin._report_stores()
+
+    assert stores["gpu_profiles"]["global"] == {
+        "manual": True,
+        "min": 800,
+        "max": 2_000,
+    }
+
+
+def test_report_bundle_includes_desktop_fan_profiles(tmp_path, monkeypatch):
+    plugin, _ = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    path = tmp_path / "desktop_fans.json"
+    path.write_text('{"global":{"system":{"preset":"balanced"}}}')
+
+    stores = plugin._report_stores()
+
+    assert stores["desktop_fans"] == {
+        "global": {"system": {"preset": "balanced"}},
+    }
+
+
+def test_arm_levels_can_request_the_lowest_level(tmp_path, monkeypatch):
+    from tdp.types import TdpLimits
+
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.unit = "level"
+    p._tdp_backend.get_limits = lambda: TdpLimits(1, 6, 10, 10)
+    assert p._tdp_request_min() == 1
+    assert p._clamp_tdp_request(1, 10) == 1
+    assert asyncio.run(p.get_tdp_state())["request_min"] == 1
+    p._tdp_profiles.set_pl1("global", 1)
+    p._retry_tdp_storage_migrations()
+    assert p._tdp_profiles.effective(None)["pl1"] == 1

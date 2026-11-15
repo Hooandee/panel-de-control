@@ -1062,3 +1062,303 @@ def test_learned_band_never_suggests_the_extra_range(Plugin):
 
     assert learned["ceil"] == 18
     assert learned["floor"] <= 18
+
+
+def test_entering_game_does_not_seed_pl1_from_band(Plugin):
+    p = Plugin()
+    p._init()
+    p._settings["auto_tdp"] = True
+    _feed_tdp_band(p)  # band floor=15, ceil=21; device active max = 35
+    before = p._tdp_profiles.effective("123")["pl1"]
+    st = asyncio.run(p.set_current_game("123"))
+    # PL1 is untouched by game entry — no band-derived jump (decoupled control).
+    assert st["levels"]["pl1"] == before
+    # …and the band is still exposed for the separate suggestion card.
+    assert st["learned"]["enough"] is True
+    assert st["learned"]["floor"] == 15 and st["learned"]["ceil"] == 21
+
+
+def test_loop_does_not_touch_global_when_no_game(Plugin, monkeypatch):
+    # Auto-TDP is a per-GAME dynamic control. With no game running (desktop/loading)
+    # the loop must NOT adjust the global PL1 — even if the desktop briefly saturates
+    # the GPU. Otherwise a stray high-GPU tick would ramp the global setpoint.
+    p = Plugin()
+    p._init()
+    p._current_appid = None
+    p._tdp_profiles.set_pl1("global", 20)
+    reads = [{"gpu_busy": 99, "watts": 30.0} for _ in range(4)]
+    _run_loop_ticks(p, reads, monkeypatch)
+    assert p._tdp_profiles.effective(None)["pl1"] == 20  # global untouched
+
+
+def test_set_ui_active_raises_a_reduced_auto_session_to_its_initial_tdp(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
+    controller, _created = p._ensure_auto_session(on_ac=True)
+    controller.setpoint = 5
+    p._auto_setpoint = 5
+    p._auto_applied = True
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+
+    assert asyncio.run(p.set_ui_active(True)) is True
+
+    assert p._tdp_backend._applied == 15
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_status["reason"] == "ui_active"
+    assert p._auto_status["held_watts"] == 15
+
+
+@pytest.mark.parametrize("minimum, maximum, expected", [
+    (None, None, 15),
+    (None, 10, 10),
+    (20, 25, 20),
+])
+def test_ui_floor_uses_device_default_within_requested_range(Plugin, minimum, maximum, expected):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g", min_tdp=minimum, max_tdp=maximum)
+    controller, _ = p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    setpoint = controller.setpoint
+
+    asyncio.run(p.set_ui_active(True))
+
+    assert p._tdp_backend._levels == (expected, expected, expected)
+    assert p._auto_status["held_watts"] == expected
+    assert p._auto_setpoint == setpoint
+    assert p._tdp_profiles.auto_config("g")["initial_tdp"] == 5
+    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
+
+
+@pytest.mark.parametrize("minimum, maximum, expected, bounds", [
+    (None, 10, 10, (5, 10)),
+    (20, None, 20, (20, 35)),
+])
+def test_game_range_edit_rebounds_open_qam_hold_immediately(
+    Plugin, minimum, maximum, expected, bounds,
+):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    asyncio.run(p.set_ui_active(True))
+    assert p._auto_status["held_watts"] == 15
+
+    asyncio.run(p.set_auto_tdp_config(40, 5, "global", None, "42", minimum, maximum))
+
+    assert p._tdp_backend._levels == (expected, expected, expected)
+    assert p._auto_status["held_watts"] == expected
+    assert p._ui_active is True
+    assert (p._auto_controller.min_w, p._auto_controller.max_w) == bounds
+    assert p._auto_setpoint == bounds[0]
+    assert p._tdp_profiles.auto_config(None)["initial_tdp"] == 5
+    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
+
+
+def test_leaving_ui_reapplies_the_auto_setpoint_on_the_next_fps_sample(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
+    controller, _created = p._ensure_auto_session(on_ac=True)
+    controller.setpoint = 5
+    p._auto_setpoint = 5
+    p._auto_applied = True
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+
+    asyncio.run(p.set_ui_active(True))
+    assert p._tdp_backend._applied == 15
+    asyncio.run(p.set_ui_active(False))
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=40")
+    stats._apply_line("focus=42")
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._applied == 5
+    assert p._tdp_backend._levels == (5, 5, 5)
+
+
+def test_non_steam_profile_uses_fresh_fps_from_its_rendering_process(
+    Plugin,
+):
+    p = Plugin()
+    p._init()
+    p._current_appid = "ns:pokémon blue"
+    p._tdp_profiles.set_auto_config("global", 40, 15)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._power_reader.read = lambda: {"watts": 11.0, "gpu_busy": 70.0}
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=39.5")
+    stats._apply_line("focus=-479910431")
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    status = asyncio.run(p._auto_tick())
+
+    assert status["reason"] == "awaiting_gameplay"
+    assert status["fps"] == 39.5
+    assert status["focus"] == "-479910431"
+
+
+def test_game_context_change_discards_the_previous_renderers_fps(Plugin):
+    p = Plugin()
+    p._init()
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=60")
+    stats._apply_line("focus=42")
+    p._gamescope_stats = stats
+
+    p._set_current_appid("new-game")
+
+    assert stats.read()["reason"] == "no_game_focus"
+
+
+def test_preset_does_not_trigger_adaptive_learner(Plugin):
+    # Choosing a fixed preset is an explicit choice → the learner never runs for it.
+    p = Plugin()
+    p._init()
+    _feed_temp_band(p)
+    asyncio.run(p.set_current_game("123"))
+    asyncio.run(p.set_fan_preset("silent", "game", "123"))
+    p._fan_ctrl.applied = None
+    p._maybe_reapply_adaptive_fan_curve()           # periodic re-fit tick
+    assert p._fan_ctrl.applied is None              # untouched (not adaptive)
+
+
+def test_custom_curve_not_touched_by_periodic_refit(Plugin):
+    p = Plugin()
+    p._init()
+    _feed_temp_band(p)
+    p._current_appid = "123"
+    manual = [[40, 0], [50, 30], [60, 60], [70, 90], [80, 150], [85, 200], [90, 255], [95, 255]]
+    asyncio.run(p.set_fan_curve_points(manual, "game", "123"))
+    before = list(p._fan_curves.effective("123")["points"])
+    p._maybe_reapply_adaptive_fan_curve()
+    assert p._fan_curves.effective("123")["points"] == before  # never touched
+    assert p._fan_curves.effective("123")["preset"] == "custom"
+
+
+def test_periodic_reapply_refreshes_when_band_shifts(Plugin):
+    p = Plugin()
+    p._init()
+    _feed_temp_band(p)  # cool band 58-78
+    asyncio.run(p.set_current_game("123"))
+    asyncio.run(p.set_fan_adaptive("game", "123"))
+    before = list(p._fan_ctrl.applied)
+    # The game heats up: the decaying histogram now leans hot → the fit shifts.
+    for tC in (82, 86, 88, 90, 92):
+        for _ in range(240):  # ~20 min per bin of fresh hot dwell
+            p._telemetry.add_sample("123", {"pl1": 15, "temp_cpu": tC, "temp_gpu": tC - 2}, dt=5.0)
+    p._maybe_reapply_adaptive_fan_curve()
+    assert list(p._fan_ctrl.applied) != before   # curve tracked the hotter zone
+
+
+def test_periodic_reapply_noop_when_not_adaptive(Plugin):
+    p = Plugin()
+    p._init()
+    _feed_temp_band(p)
+    p._current_appid = "123"  # default global/game = auto (not adaptive)
+    p._fan_ctrl.applied = None
+    p._maybe_reapply_adaptive_fan_curve()
+    assert p._fan_ctrl.applied is None
+
+
+def test_midsession_drive_noop_when_not_adaptive(Plugin):
+    # The O(1) mode check runs first — no drive when the mode isn't adaptive,
+    # even with plenty of data.
+    p = Plugin()
+    p._init()
+    p._current_appid = "123"  # default = auto
+    _feed_temp_band_minutes(p, 60)
+    p._on_sample_collected(("123", {"temp_cpu": 70}))
+    assert p._fan_ctrl.applied is None
+
+
+def test_game_profiles_overview_keeps_own_auto_values_while_following_global(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_auto_config(
+        "global",
+        40,
+        15,
+        min_tdp=6,
+        max_tdp=25,
+    )
+    p._tdp_profiles.set_auto_config(
+        "game",
+        55,
+        8,
+        appid="g",
+        min_tdp=5,
+        max_tdp=14,
+    )
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_follow_global("g", True)
+
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+
+    assert row["tdp"] == {
+        "unit": "W",
+        "pl1": 10,
+        "auto": True,
+        "target_fps": 55,
+        "initial_tdp": 8,
+        "min_tdp": 5,
+        "max_tdp": 14,
+        "follows_global": True,
+    }
+
+
+def test_game_profiles_overview_includes_the_full_auto_configuration(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_auto_config(
+        "game",
+        55,
+        8,
+        appid="g",
+        min_tdp=5,
+        max_tdp=14,
+    )
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+
+    assert row["tdp"] == {
+        "unit": "W",
+        "pl1": 10,
+        "auto": True,
+        "target_fps": 55,
+        "initial_tdp": 8,
+        "min_tdp": 5,
+        "max_tdp": 14,
+        "follows_global": False,
+    }
+
+
+def test_state_exposes_learned_no_game(Plugin):
+    st = asyncio.run(Plugin().get_tdp_state())
+    # The battery↔performance dial is no longer backend state (it's local UI state on
+    # the suggestion card); only the learned band is exposed.
+    assert "tdp_dial" not in st
+    assert st["learned"]["enough"] is False
+    assert st["learned"]["reason"] == "no_game"

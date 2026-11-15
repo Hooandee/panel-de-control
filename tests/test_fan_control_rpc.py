@@ -252,6 +252,11 @@ class TestFanCurveRpcNull:
         assert s["available"] is False
         assert s["reason"] == "unsupported"
 
+    def test_set_preset_degrades_without_raising(self, Plugin):
+        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
+        assert st["supported"] is False
+        assert st["preset"] == "balanced"  # persisted even though hardware can't apply
+
 
 class _EcRpmBackend:
     """Stand-in for the Legion EC backend: no hwmon fan, but reads RPM over the EC."""
@@ -359,6 +364,19 @@ class TestFanCurveRpcAsus:
         assert st["preset"] == "custom"
         assert len(st["points"]) == 8
         assert st["points"][-1][1] >= 76  # hottest point floored, honestly reflected
+
+    def test_set_preset_applies_to_all_fans(self, Plugin, asus_root):
+        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
+        assert st["preset"] == "balanced"
+        assert len(st["points"]) == 8
+        assert self._enables(asus_root) == ("1", "1")  # both fans manual
+
+    def test_default_state_is_auto(self, Plugin):
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["supported"] is True
+        assert st["source"] == "asus_custom_fan_curve"
+        assert st["preset"] == "auto"
+        assert st["points"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -574,3 +592,101 @@ def test_a_successful_ps5_release_clears_the_pending_hand_back(tmp_path, monkeyp
 
     assert plugin._settings["fan_release_pending"] is False
     assert len(released) == 1
+
+
+class _MalformedReapplyBackend(_ResetBackend):
+    def apply_curve_all(self, points):
+        self.calls.append("apply")
+        return {}  # malformed: no "ok" key
+
+
+def test_reset_fan_control_reestablishes_the_stored_curve(tmp_path, monkeypatch):
+    # After releasing, the reset must re-apply the stored curve (awaited), not just
+    # release — otherwise a manual curve would silently drop to firmware auto.
+    backend = _ResetBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    backend.calls.clear()
+    asyncio.run(p.reset_fan_control())
+    assert "restore_auto" in backend.calls
+    assert "apply" in backend.calls  # stored curve re-established
+
+
+def test_reset_ok_false_when_reapply_refuses(tmp_path, monkeypatch):
+    # Released fine, but the stored curve couldn't be re-established → reset_ok must
+    # be False, so "Control reiniciado" never shows on a still-wedged fan.
+    backend = _ResetBackend(release_ok=True, apply_ok=False)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))  # a curve profile
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
+    # A malformed re-apply response (no "ok") must not ride an optimistic default.
+    backend = _MalformedReapplyBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+def test_disabled_fan_control_releases_once_and_then_stops_writing(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+    first = fan.restores
+    for _ in range(3):
+        plugin._reapply_fans_sync()
+
+    assert first == 1
+    assert fan.restores == 1
+
+
+def test_release_interrupted_before_a_restart_is_retried_at_start(tmp_path, monkeypatch):
+    fan = _CountingFan()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=fan)
+    plugin = Plugin()
+    plugin._init()
+    plugin._settings["disabled_modules"] = ["fanControl"]
+    plugin._settings["fan_release_pending"] = True
+
+    plugin._reapply_fans_sync()
+    plugin._reapply_fans_sync()
+
+    assert fan.restores == 1
+    assert plugin._settings["fan_release_pending"] is False
+
+
+def test_a_backend_that_cannot_release_does_not_keep_retrying(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+    plugin = Plugin()
+    plugin._init()
+
+    asyncio.run(plugin.set_ui_module("fanControl", True))
+
+    _settle(plugin)
+
+    assert plugin._settings["fan_release_pending"] is False
+
+
+def test_state_resettable_true_for_software_loop_backend(tmp_path, monkeypatch):
+    # A software-loop backend (Deck / EC / generic PWM) can wedge → expose a reset.
+    backend = _ResetBackend()
+    backend.resettable = True
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is True
+
+
+def test_state_resettable_false_for_hardware_curve_backend(tmp_path, monkeypatch):
+    # A hardware-curve backend (ASUS/MSI) or Null doesn't wedge → no reset offered.
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)  # NullFanBackend
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is False

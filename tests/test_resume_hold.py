@@ -130,3 +130,32 @@ def test_other_cpu_changes_during_the_hold_keep_cores_online(tmp_path, monkeypat
         assert intents == [None]
 
     asyncio.run(scenario())
+
+
+def test_without_a_resume_cores_and_gpu_apply_at_once(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
+    plugin._apply_cpu()
+    plugin._apply_gpu_clock()
+    assert intents == [3]
+    assert gpu.writes == [(800, 1200)]
+    assert plugin._pulse.marks == []
+
+
+def test_resume_reapply_marks_each_hardware_step_in_order(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch, device_key="rog_ally")
+    _resume(plugin)
+    assert plugin._pulse.bursts == [60.0]
+
+    plugin._reapply_all()
+
+    steps = [m for m in plugin._pulse.marks if m.startswith("reapply:")]
+    assert steps == [
+        "reapply:cpu", "reapply:gpu", "reapply:tdp", "reapply:fans",
+        "reapply:hdr", "reapply:color", "reapply:audio", "reapply:done",
+    ]
+
+
+def test_no_marks_outside_a_resume(tmp_path, monkeypatch):
+    plugin, gpu, intents = _plugin(tmp_path, monkeypatch)
+    plugin._reapply_all()
+    assert plugin._pulse.marks == []

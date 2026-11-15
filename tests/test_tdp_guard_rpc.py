@@ -11,6 +11,7 @@ from main_harness import FakeBackend, FakeLowBatteryHoldBackend
 from tdp.overshoot import SUSTAIN_S, VERIFY_S, PlatformProfileWatch
 from tdp.reconcile import ReconcileMemory
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+import sys
 
 
 def test_stale_generation_never_writes(plugin):
@@ -2265,3 +2266,358 @@ def test_steam_download_mode_hold_needs_the_deck_backend(plugin, monkeypatch):
 
     assert not plugin._steam_download_hold.active
     assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_guard_corrects_confirmed_drift_without_mutating_profile(plugin):
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._levels["pl1"] == 15
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 15
+
+
+def test_guard_keeps_global_and_game_profiles_independent(plugin):
+    plugin._tdp_profiles.set_pl1("global", 18)
+    plugin._tdp_profiles.create_game_from_global("42")
+    plugin._tdp_profiles.set_pl1("game", 25, appid="42")
+
+    plugin._current_appid = "42"
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    assert plugin._tdp_backend._levels["pl1"] == 25
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 25
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 18
+
+    plugin._current_appid = None
+    plugin._advance_tdp_generation()
+    plugin._execute_tdp_command(plugin._capture_tdp_command("global"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=20.0)
+    plugin._tdp_guard_tick(now=20.75)
+    assert plugin._tdp_backend._levels["pl1"] == 18
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 18
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 25
+
+
+def test_guard_respects_follow_global_without_losing_stored_game_value(plugin):
+    plugin._tdp_profiles.set_pl1("global", 22)
+    plugin._tdp_profiles.create_game_from_global("42")
+    plugin._tdp_profiles.set_pl1("game", 12, appid="42")
+    plugin._tdp_profiles.set_follow_global("42", True)
+    plugin._current_appid = "42"
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("follow-global"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend._levels["pl1"] == 22
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 22
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 22
+    plugin._tdp_profiles.set_follow_global("42", False)
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 12
+
+
+def test_guard_does_nothing_with_control_off(plugin):
+    plugin._settings["tdp_control_enabled"] = False
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=11.0)
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_guard_only_touches_tdp(plugin, monkeypatch):
+    calls = []
+    for name in (
+        "_apply_charge_limit",
+        "_apply_cpu",
+        "_apply_gpu_clock",
+        "_reapply_fans",
+        "_reapply_color",
+    ):
+        monkeypatch.setattr(
+            plugin,
+            name,
+            lambda name=name: calls.append(name),
+        )
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    assert calls == []
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_write_only_guard_uses_backend_heartbeat(plugin):
+    class WriteOnly(FakeBackend):
+        readback = False
+        guard_interval_s = 15.0
+        heartbeat_s = 30.0
+
+        def observe(self):
+            return TdpObservation(readable=False)
+
+        def set_levels(self, pl1, pl2, pl3, ac):
+            self.set_levels_calls += 1
+            return TdpResult(pl1, None, True, "")
+
+    plugin._tdp_backend = WriteOnly()
+    plugin._tdp_observation = TdpObservation(readable=False)
+    plugin._tdp_reconcile_memory = ReconcileMemory()
+    plugin._tdp_guard_tick(now=0.0)
+    plugin._tdp_guard_tick(now=15.0)
+    plugin._tdp_guard_tick(now=29.9)
+    plugin._tdp_guard_tick(now=30.0)
+    assert plugin._tdp_backend.set_levels_calls == 2
+
+
+def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):
+    plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
+    plugin._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 5, "max": 35},
+        "pl2": {"min": 15, "max": 42},
+        "pl3": {"min": 20, "max": 49},
+    }
+    plugin._tdp_backend._levels = {"pl1": 15, "pl2": 15, "pl3": 20}
+    plugin._tdp_profiles.set_levels("global", 15, 15, 15)
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("manual")
+    )
+
+    assert result.ok is True
+    assert plugin._tdp_targets.requested == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }
+    assert plugin._tdp_targets.target == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 20,
+    }
+    assert plugin._tdp_targets.reasons == {"pl3": "safe_min"}
+    assert plugin._tdp_status == "constrained"
+    assert plugin._tdp_reconcile_memory.failures == 0
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_guard_tick(now=10.0)
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_same_value_write_ignored_falls_back_to_a_changed_value(plugin):
+    backend = HiddenLimitBackend(restore_on="changed")
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + VERIFY_S + 10.0)
+    assert backend.writes[0] == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend.writes[1] == {"pl1": 19, "pl2": 19, "pl3": 19}
+    assert backend.writes[2] == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend._levels == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert backend.hidden is False
+    assert overshoot_logs(plugin)[-1]["state"] == "restored"
+
+
+@pytest.mark.parametrize("variant", ["ryzenadj", "rearm_83l3"])
+def test_backends_without_physical_evidence_are_left_alone(plugin, variant):
+    backend = HiddenLimitBackend()
+    if variant == "ryzenadj":
+        backend.name = "ryzenadj"
+    else:
+        backend.name = "firmware-attr:lenovo-wmi-other"
+        backend.rearms_on_ignored_writes = True
+    start_game(plugin, backend)
+    backend.hidden = True
+    backend.writes.clear()
+    run(plugin, 10.0, 120.0)
+    assert backend.writes == []
+    assert overshoot_logs(plugin) == []
+
+
+def test_other_writers_wait_while_steam_has_not_confirmed(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+
+    for reason in ("settle-retry", "lifecycle", "reapply"):
+        result = plugin._execute_tdp_command(plugin._capture_tdp_command(reason))
+        assert not result.ok
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 6
+
+
+def test_writes_before_the_first_guard_tick_respect_steam_download_mode(plugin, monkeypatch):
+    _steam_download_mode_deck(plugin, monkeypatch, handles=1)
+    _steam_enters_download_mode(plugin)
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("lifecycle"))
+
+    assert not result.ok
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_reason == "steam_download_mode"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+@pytest.mark.parametrize("inactive_auto", ("module", "unsafe_backend"))
+def test_inactive_auto_intent_does_not_block_low_battery_hold(
+    plugin,
+    monkeypatch,
+    inactive_auto,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    if inactive_auto == "module":
+        plugin._settings["disabled_modules"] = ["autoTdp"]
+    else:
+        plugin._tdp_backend.auto_tdp_safe = False
+
+    decision = plugin._low_battery_hold_decision(on_ac=False)
+
+    assert decision.active is True
+    assert decision.reason == "active"
+
+
+def test_string_false_does_not_enable_low_battery_hold(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: (_ for _ in ()).throw(AssertionError("invalid bool read battery")),
+    )
+    plugin._low_battery_watch_at = float("inf")
+    plugin._settings["low_battery_tdp_hold"] = "false"
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=15.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_focus_floor_repairs_drift_on_a_secondary_surface(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._tdp_backend._legacy_levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    plugin._gamescope_stats.start = lambda: None
+    plugin._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    asyncio.run(plugin._auto_tick())
+    plugin._tdp_backend._legacy_levels["pl2"] = 14
+    plugin._tdp_backend.set_levels_calls = 0
+    asyncio.run(plugin._auto_tick())
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._legacy_levels == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }
+
+
+def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):
+    class _MaliciousGpu:
+        supported = True
+        backend = "fake"
+
+        def diagnostics(self):
+            return {
+                "backend": "fake",
+                "supported": True,
+                "range": {"min_mhz": 200, "max_mhz": 2000},
+                "applied": {"min_mhz": 300, "max_mhz": 1800},
+                "appid": "APPID-SECRET",
+                "title": "GAME-TITLE-SECRET",
+                "raw_sysfs": "/home/alice/secret",
+            }
+
+    plugin._gpu_clock = _MaliciousGpu()
+    encoded = json.dumps(plugin._cpu_gpu_diagnostics(), sort_keys=True)
+    assert "APPID-SECRET" not in encoded
+    assert "GAME-TITLE-SECRET" not in encoded
+    assert "/home/alice" not in encoded
+
+
+def test_diagnostics_expose_the_monitor_state(plugin):
+    backend = HiddenLimitBackend(restore_on="never")
+    start_game(plugin, backend)
+    backend.hidden = True
+    run(plugin, 10.0, SUSTAIN_S + 4.0)
+    diagnostics = plugin._tdp_diagnostics()["overshoot"]
+    assert diagnostics["correcting"] is True
+    assert diagnostics["last"]["target_w"] == 20
+    assert diagnostics["last"]["peak_w"] == 43.0
+
+
+def test_backend_diagnostics_include_selected_rail_floors(plugin):
+    plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
+
+    descriptor = plugin._tdp_backend_diagnostics()
+
+    assert descriptor.get("rail_floors") == {"pl2": 15, "pl3": 20}
+
+
+def test_autotdp_diagnostics_do_not_reprobe_backend_readiness(plugin):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    plugin._ensure_auto_session(on_ac=True)
+    calls = 0
+
+    def ready():
+        nonlocal calls
+        calls += 1
+        return True
+
+    plugin._tdp_backend.ready = ready
+
+    diagnostics = plugin._auto_tdp_diagnostics(
+        {
+            "supports_auto_tdp": True,
+            "auto_config": {"enabled": True, "target_fps": 40},
+            "auto_limits": {"min": 5, "max": 35, "max_ac": 35},
+            "on_ac": True,
+        },
+        {"auto_tdp": True, "setpoint": 15},
+    )
+
+    assert diagnostics["active"] is True
+    assert calls == 0
+
+
+def test_fan_service_stopping_late_still_enters_the_hold(plugin, monkeypatch):
+    import main
+
+    _steam_download_mode_deck(plugin, monkeypatch, fan_service_active=True)
+    _steam_enters_download_mode(plugin)
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    monkeypatch.setattr(main, "jupiter_fan_control_active", lambda: False)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert plugin._steam_download_hold.active
+    assert plugin._tdp_backend.set_levels_calls == 0

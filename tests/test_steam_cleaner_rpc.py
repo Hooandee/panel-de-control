@@ -455,3 +455,48 @@ def test_real_empty_scan_survives_reload_in_first_report(plugin, monkeypatch, tm
         assert reloaded._steam_cleaner.get_state()["status"] == "idle"
     finally:
         reloaded._close_steam_cleaner_sync()
+
+
+def test_first_report_recovers_journal_without_opening_cleaner(plugin, monkeypatch):
+    stub_other_report_sources(plugin, monkeypatch)
+    service = BlockingService()
+    service.diagnostics = lambda: {
+        "schema_version": 1, "phase": "interrupted", "interrupted": True,
+        "events": [{"event": "interrupted", "operation_id": "cleanup-1"}],
+    }
+    constructor_threads = []
+
+    def create(home, *, logger, state_dir):
+        constructor_threads.append(threading.get_ident())
+        return service
+
+    monkeypatch.setattr(main, "SteamCleanerService", create)
+    monkeypatch.setattr(main.decky, "DECKY_USER_HOME", "/home/player", raising=False)
+    bundle = asyncio.run(plugin._build_report_bundle([], "", "/home/player", None))
+    assert bundle["state"]["steam_cleaner"]["interrupted"] is True
+    assert constructor_threads[0] != threading.get_ident()
+    assert not service.started.is_set()
+
+
+def test_feature_report_does_not_read_steam_frontend_logs(plugin, monkeypatch):
+    stub_other_report_sources(plugin, monkeypatch)
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("feature reports must not read CEF logs")
+
+    monkeypatch.setattr(
+        main.report_collector,
+        "frontend_crash_diagnostics",
+        unexpected,
+    )
+
+    bundle = asyncio.run(plugin._build_report_bundle(
+        [],
+        "",
+        "/home/player",
+        None,
+        {"report_kind": "feature"},
+    ))
+
+    assert bundle["kind"] == "feature"
+    assert "frontend_crash" not in bundle["state"]

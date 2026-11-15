@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from journal_context import bounded, section_changes
+from journal_context import pick_fields
 
 PANEL_SECTIONS = Path(__file__).resolve().parents[1] / "shared" / "contracts" / "panel-sections.json"
 
@@ -44,3 +45,9 @@ def test_internal_counters_never_look_like_a_change(plugin, monkeypatch):  # noq
     first = asyncio.run(plugin._support_section_states())["system"]
     second = asyncio.run(plugin._support_section_states())["system"]
     assert first == second
+
+
+def test_pick_fields_reaches_nested_values_and_skips_missing():
+    value = {"a": 1, "model": {"layout": "vertical", "items": [1, 2]}, "live": 33}
+    assert pick_fields(value, ("a", "model.layout", "nope")) == {"a": 1, "model.layout": "vertical"}
+    assert pick_fields(value, None) is value

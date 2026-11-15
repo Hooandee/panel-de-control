@@ -57,3 +57,18 @@ def test_get_ui_modules_reports_full_set():
     p._settings = {"disabled_modules": ["display"], "tdp_control_enabled": False, "telemetry_enabled": True}
     out = asyncio.run(p.get_ui_modules())
     assert set(out["disabled"]) == {"display", "power"}
+
+
+def test_set_generic_module_persists():
+    p = _plugin()
+    out = asyncio.run(p.set_ui_module("fans", True))
+    assert "fans" in out["disabled"]
+    assert p._settings["disabled_modules"] == ["fans"]
+    out = asyncio.run(p.set_ui_module("fans", False))
+    assert "fans" not in out["disabled"]
+
+
+def test_set_learning_routes_to_telemetry():
+    p = _plugin()
+    asyncio.run(p.set_ui_module("learning", True))
+    assert p._settings["telemetry_enabled"] is False

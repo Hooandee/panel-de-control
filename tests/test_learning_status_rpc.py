@@ -78,3 +78,11 @@ def test_learning_status_marks_the_current_game_as_owned_by_auto_tdp(
     st = asyncio.run(p.get_learning_status())
 
     assert st["auto_tdp_active"] is True
+
+
+def test_learning_status_fan_null_reports_false(tmp_path, monkeypatch):
+    # Device whose fan backend can't write curves (e.g. MSI Claw Null) → honest False.
+    p = _make_plugin(tmp_path, monkeypatch, fan_supported=False)
+    st = asyncio.run(p.get_learning_status())
+    assert st["fan_supported"] is False
+    assert st["tdp_supported"] is True

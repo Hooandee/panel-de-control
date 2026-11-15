@@ -7,6 +7,7 @@ needed and we can assert what got applied.
 import asyncio
 import dataclasses
 from main_harness import fake_decky, load_main
+import threading
 
 
 class _FakeColorBackend:
@@ -359,3 +360,94 @@ def test_display_reapply_gives_up_without_gamescope(tmp_path, monkeypatch):
     never.applied.clear()
     asyncio.run(p._await_display_backend(attempts=3, interval=0))
     assert never.applied == []
+
+
+def test_legacy_preview_can_still_be_confirmed_for_a_game(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.preview_calibration({"contrast": 40}))
+
+    st = asyncio.run(p.set_calibration({"contrast": 40}, "game", "42"))
+
+    assert st["preview"] is False
+    assert p._color.effective("42")["contrast"] == 40
+    assert p._color.effective(None)["contrast"] == 0
+
+
+def test_editing_after_preset_clears_active(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.apply_color_preset("cine"))
+    st = asyncio.run(p.set_calibration({"contrast": 3}))  # nudge off the preset
+    assert st["active_preset"] is None
+
+
+def test_native_preset_keeps_per_game_saturation(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_saturation(170, "game", "42"))
+    asyncio.run(p.apply_color_preset("native"))          # a casual look tap
+    assert asyncio.run(p.get_color_state())["has_game_profile"] is True  # not wiped
+    asyncio.run(p.set_current_game(None))
+    assert asyncio.run(p.get_color_state())["saturation"] == 100  # global reset to native
+
+
+def test_active_preset_is_honest_under_game_override(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.apply_color_preset("cine"))            # global look
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_saturation(200, "game", "42"))     # override hides the look's sat
+    st = asyncio.run(p.get_color_state())
+    assert st["active_preset"] is None  # the screen isn't showing cine → don't claim it
+
+
+def test_hdr_state_shape_and_gating(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_hdr_state())
+    assert "supported" in st and st["enabled"] is False
+    # a generic (non-HDR) panel → unsupported even though gamescope is faked-present
+    assert st["supported"] is False
+    # flip the device to an HDR-capable panel → supported (color backend is faked on)
+    p._device = dataclasses.replace(p._device, hdr=True)
+    assert asyncio.run(p.get_hdr_state())["supported"] is True
+
+
+def test_unsupported_backend_degrades(tmp_path, monkeypatch):
+    color = _FakeColorBackend(supported=False)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=color)
+    st = asyncio.run(p.get_color_state())
+    assert st["supported"] is False
+    # setting still persists + returns state, just no hardware apply
+    st2 = asyncio.run(p.set_saturation(150, "global", None))
+    assert st2["saturation"] == 150
+    assert color.applied == []
+
+
+def test_display_reapply_waits_for_each_hardware_apply(tmp_path, monkeypatch):
+    late = _LateColorBackend(ready_after=0)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=late)
+    asyncio.run(p.set_saturation(150, "global", None))
+    asyncio.run(p._drain_offloaded())
+    late.applied.clear()
+    started = threading.Event()
+    release = threading.Event()
+    original_apply = late.apply
+
+    def blocked_apply(state):
+        started.set()
+        release.wait(timeout=2)
+        return original_apply(state)
+
+    monkeypatch.setattr(late, "apply", blocked_apply)
+
+    async def exercise():
+        task = asyncio.create_task(p._await_display_backend(
+            attempts=2, interval=0, reasserts=1, reassert_interval=0))
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            assert not task.done()
+        finally:
+            release.set()
+        await task
+
+    asyncio.run(exercise())
+    assert len(late.applied) == 1

@@ -731,3 +731,89 @@ def test_report_tells_early_installs_apart_until_another_build_replaces_them(the
     asyncio.run(plugin.prepare_remote_theme_install("hooandee-duo", "0.3.0"))
     asyncio.run(plugin.commit_theme_install("stable"))
     assert early_flags() == [False]
+
+
+def test_remote_discovery_without_css_loader_keeps_catalog_visible(theme_rpc):
+    _, plugin, fake = theme_rpc
+    plugins = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "plugins"
+    assert not plugins.exists()
+
+    def check_releases(_force):
+        return {
+            "status": "published",
+            "checkedAt": 100.0,
+            "themes": [
+                {
+                    "catalogId": "example-theme",
+                    "compatibility": "compatible",
+                }
+            ],
+        }
+
+    plugin._theme_remote_service = types.SimpleNamespace(
+        check_releases=check_releases
+    )
+
+    result = asyncio.run(plugin.check_theme_releases(False))
+
+    assert result["themes"] == [
+        {
+            "catalogId": "example-theme",
+            "compatibility": "compatible",
+        }
+    ]
+
+
+def test_remote_install_does_not_require_css_loader_version_metadata(theme_rpc):
+    _, plugin, _ = theme_rpc
+    expected = {
+        "ok": True,
+        "code": "prepared",
+        "theme_id": "example-theme",
+        "theme_name": "Example Theme",
+        "version": "1.2.3",
+        "transaction": "token",
+    }
+    plugin._theme_remote_service = types.SimpleNamespace(
+        prepare_install=lambda *_args: expected
+    )
+
+    result = asyncio.run(
+        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
+    )
+
+    assert result == expected
+
+
+def test_remote_prepare_names_the_package_check_that_failed(theme_rpc):
+    """PDC-TM74: the log said only unsafe_archive; the validator's own sentence named the cause."""
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "unsafe_archive", "Remote theme manifest profile is invalid"
+        )
+
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
+
+    result = asyncio.run(plugin.prepare_remote_theme_install("example-theme", "1.2.3"))
+
+    assert result == {
+        "ok": False,
+        "code": "unsafe_archive",
+        "theme_id": "example-theme",
+        "reason": "Remote theme manifest profile is invalid",
+    }
+
+
+def test_report_keeps_only_numeric_theme_display_values(theme_rpc):
+    main, _, _ = theme_rpc
+
+    themes = main.Plugin._with_theme_display({"installed": []}, {"theme_display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+        "beta_name": "private", "width": float("nan"), "nested": {"x": 1},
+    }})
+
+    assert themes == {"installed": [], "display": {
+        "scale": 1.25, "auto_scale": 1.0, "using_auto_scale": False, "beta": True,
+    }}

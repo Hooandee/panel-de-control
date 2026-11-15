@@ -20,3 +20,11 @@ def test_game_can_override_only_one_channel_without_losing_the_other(tmp_path):
     effective = store.effective("42")
     assert effective["system"]["preset"] == "silent"
     assert effective["gpu"]["preset"] == "performance"
+
+
+def test_defaults_both_channels_to_firmware_auto(tmp_path):
+    store = DesktopFanStore(str(tmp_path / "fans.json"))
+    assert store.effective(None) == {
+        "system": {"preset": "auto", "points": None},
+        "gpu": {"preset": "auto", "points": None},
+    }

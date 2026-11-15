@@ -622,3 +622,57 @@ def test_desktop_fan_mutations_are_serialized_while_hardware_apply_is_pending():
         assert len(calls) == 2
 
     asyncio.run(scenario())
+
+
+def test_generic_rpc_is_disabled_until_manual_opt_in():
+    assert asyncio.run(_plugin("Unknown PC").get_desktop_state())["enabled"] is False
+    assert asyncio.run(_plugin("Unknown PC", manual=True).get_desktop_state())["enabled"] is True
+
+
+def test_gpu_only_custom_power_does_not_cast_unavailable_cpu_watts():
+    plugin = _plugin()
+
+    def gpu_only(cpu, gpu):
+        return {"ok": True, "mode": "custom", "cpu_w": None,
+                "gpu_w": gpu, "detail": "GPU only"}
+
+    plugin._desktop_power.apply_custom = gpu_only
+    result = asyncio.run(plugin.set_desktop_power_limits(23, 72))
+    assert result["ok"] is True
+    assert plugin._settings["desktop_cpu_w"] == 23
+    assert plugin._settings["desktop_gpu_w"] == 72
+
+
+def test_recognised_device_migration_retry_is_throttled_then_recovers(monkeypatch):
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._desktop_recognition_migration_last_attempt = float("-inf")
+    plugin._desktop_recognition_migration_last_failure = None
+    plugin._settings.update({
+        "desktop_prev_tdp_control": True,
+        "tdp_control_enabled": False,
+        "desktop_power_handoff": {"device_key": "generic"},
+    })
+    now = [10.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+    calls = []
+
+    def restore():
+        calls.append(now[0])
+        if len(calls) == 1:
+            return {"ok": False, "detail": "surface unavailable"}
+        plugin._settings["desktop_power_handoff"] = None
+        return {"ok": True, "detail": "restored"}
+
+    plugin._desktop_power.restore = restore
+
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert calls == [10.0]
+    assert plugin._desktop_state()["migration_pending"] is True
+    assert plugin._desktop_state()["migration_failure"] == "surface unavailable"
+
+    now[0] += 5.0
+    assert plugin._recover_recognised_desktop_migration() is True
+    assert calls == [10.0, 15.0]
+    assert plugin._desktop_state()["migration_pending"] is False
