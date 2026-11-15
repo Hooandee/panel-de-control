@@ -7,6 +7,7 @@
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -132,7 +133,8 @@ struct Label {
     std::unique_ptr<Property> foreground;
     std::unique_ptr<Property> font;
     bool icon = false, secondary = false;
-    std::optional<std::int64_t> foregroundChanged, fontChanged;
+    std::optional<std::int64_t> foregroundChanged, fontChanged, weightChanged;
+    std::unique_ptr<Property> weight;
     void Watch() {
         DependencyPropertyChangedCallback changed([](DependencyObject const& sender, DependencyProperty const&) noexcept {
             try { QueueObservedElement(sender.try_as<FrameworkElement>()); }
@@ -140,8 +142,10 @@ struct Label {
         });
         foregroundChanged = element.RegisterPropertyChangedCallback(TextBlock::ForegroundProperty(), changed);
         fontChanged = element.RegisterPropertyChangedCallback(TextBlock::FontFamilyProperty(), changed);
+        weightChanged = element.RegisterPropertyChangedCallback(TextBlock::FontWeightProperty(), changed);
     }
     void Unwatch() {
+        if (weightChanged) { element.UnregisterPropertyChangedCallback(TextBlock::FontWeightProperty(), *weightChanged); weightChanged.reset(); }
         if (foregroundChanged) {
             element.UnregisterPropertyChangedCallback(TextBlock::ForegroundProperty(), *foregroundChanged);
             foregroundChanged.reset();
@@ -257,6 +261,10 @@ struct Cell {
         for (auto& label : labels) {
             label.foreground->Assign(LabelBrush(label));
             if (label.font) label.font->Assign(font);
+            if (style->id == ThemeId::LoboBlanco && !label.icon) {
+                if (!label.weight) label.weight = std::make_unique<Property>(label.element, TextBlock::FontWeightProperty());
+                label.weight->Assign(box_value(Windows::UI::Text::FontWeights::Bold()));
+            }
         }
     }
     void ShowEffectFrame() {
@@ -274,7 +282,7 @@ struct Cell {
     void Geometry() {
         if (retiring || !visual || !parent) return;
         const bool visible = face.Visibility() == Visibility::Visible && face.ActualWidth() > 0 && face.ActualHeight() > 0;
-        visual.Opacity(visible ? 1 : 0);
+        visual.Opacity(visible ? 1.f : 0.f);
         if (canvas) canvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
         if (dustCanvas) dustCanvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
         if (!visible) return;
@@ -325,7 +333,7 @@ struct Cell {
             for (auto const& text : found) if (text == it->element) present = true;
             if (!present) {
                 it->Unwatch();
-                it->foreground->Restore(); if (it->font) it->font->Restore();
+                it->foreground->Restore(); if (it->font) it->font->Restore(); if (it->weight) it->weight->Restore();
                 it = labels.erase(it);
             } else ++it;
         }
@@ -342,7 +350,7 @@ struct Cell {
             for (auto& label : labels) if (label.element == text) {
                 known = true;
                 if (label.icon != icon) {
-                    if (icon && label.font) { label.font->Restore(); label.font.reset(); }
+                    if (icon && label.font) { label.font->Restore(); label.font.reset(); if (label.weight) { label.weight->Restore(); label.weight.reset(); } }
                     else if (!icon) label.font = std::make_unique<Property>(text, TextBlock::FontFamilyProperty());
                     label.icon = icon;
                 }
@@ -452,7 +460,7 @@ struct Cell {
         lostFocus = key.LostFocus(lost);
         ReadFocus();
         Catalog(key); Catalog(parent);
-        if (auto outer = VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>()) Catalog(outer);
+        if (auto ancestor = VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>()) Catalog(ancestor);
         ReconcileLabels();
     }
     bool Restore() noexcept {
@@ -480,6 +488,7 @@ struct Cell {
             attempt([&] { label.Unwatch(); });
             attempt([&] { label.foreground->Restore(); });
             if (label.font) attempt([&] { label.font->Restore(); });
+            if (label.weight) attempt([&] { label.weight->Restore(); });
         }
         for (auto& pair : handlers) attempt([&] { key.RemoveHandler(pair.first, pair.second); });
         attempt([&] { if (size.value) face.SizeChanged(size); });

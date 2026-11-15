@@ -65,7 +65,7 @@ def test_lobo_resources_are_complete_and_match_their_hashes():
         assert len(data) == item["bytes"], item["path"]
         assert hashlib.sha256(data).hexdigest() == item["sha256"], item["path"]
     resources = {
-        str(path.relative_to(PACKAGE))
+        path.relative_to(PACKAGE).as_posix()
         for path in PACKAGE.rglob("*")
         if path.suffix in {".png", ".webp", ".woff2", ".ttf"}
     }
