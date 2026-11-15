@@ -364,13 +364,17 @@ struct Chrome {
         properties.push_back({std::move(property), value});
         properties.back().property->Assign(value);
     }
+    void ClearBackground(FrameworkElement const& element, DependencyProperty const& dp) {
+        // Transparent brushes receive pointer input; null backgrounds must stay null.
+        if (element.GetValue(dp)) Set(element, dp, clear);
+    }
     void StyleBar(DependencyObject const& node, unsigned depth = 0) {
         if (depth > 10) throw hresult_error(E_BOUNDS);
         if (node.try_as<WebView>() || node.try_as<TextBox>() || node.try_as<PasswordBox>()) return;
-        if (auto panel = node.try_as<Panel>()) Set(panel, Panel::BackgroundProperty(), clear);
-        if (auto border = node.try_as<Border>()) Set(border, Border::BackgroundProperty(), clear);
+        if (auto panel = node.try_as<Panel>()) ClearBackground(panel, Panel::BackgroundProperty());
+        if (auto border = node.try_as<Border>()) ClearBackground(border, Border::BackgroundProperty());
         if (auto control = node.try_as<Control>()) {
-            Set(control, Control::BackgroundProperty(), clear);
+            ClearBackground(control, Control::BackgroundProperty());
             Set(control, Control::ForegroundProperty(), accent);
         }
         if (auto text = node.try_as<TextBlock>()) Set(text, TextBlock::ForegroundProperty(), accent);
@@ -389,7 +393,7 @@ struct Chrome {
             if (node != root) { it->property->Restore(); it = properties.erase(it); }
             else ++it;
         }
-        Set(root, Panel::BackgroundProperty(), background);
+        if (root.Background()) Set(root, Panel::BackgroundProperty(), background);
         for (auto const& child : root.Children()) {
             auto type = get_class_name(child);
             if (child == bar || type == SuggestionsType || type == L"Windows.UI.Xaml.Controls.Grid" || type == L"Windows.UI.Xaml.Controls.Border") StyleBar(child);
