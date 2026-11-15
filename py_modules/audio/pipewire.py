@@ -518,7 +518,7 @@ class PipeWireEq:
             or not self._session
             or not downstream
             or not re.fullmatch(r"\d+%", str(volume or ""))
-            or phase not in ("prepared", "active")
+            or phase not in ("prepared", "active", "released")
             or not isinstance(muted, bool)
             or not isinstance(physical_volumes, (list, tuple))
             or not physical_volumes
@@ -575,7 +575,7 @@ class PipeWireEq:
             not isinstance(state.get("sink"), str)
             or not state["sink"]
             or not re.fullmatch(r"\d+%", str(state.get("volume", "")))
-            or state.get("phase") not in ("prepared", "active")
+            or state.get("phase") not in ("prepared", "active", "released")
             or not isinstance(state.get("muted"), bool)
             or not isinstance(state.get("physical_volumes"), list)
             or not state["physical_volumes"]
@@ -1753,8 +1753,30 @@ class PipeWireEq:
         path = self._conf_path()
         info["conf_path"] = path
         info["last_apply"] = self.apply_diagnostics()
+        info["route_state"] = self._route_state()
         info["conf"] = self._read_entry(path) if path else None
         return info
+
+    def _persist_released_state(self, state):
+        return self._persist_route_state(
+            state["sink"], state["volume"], "released", state["muted"],
+            state["physical_volumes"], state["physical_muted"],
+        )
+
+    def _reset_runtime(self):
+        self._orig_default = None
+        self._active_downstream = None
+        self._requested_downstream = None
+        self._configured_default_seen = None
+        self._configured_request = None
+        self._cleanup_pending = False
+        self._last_applied = None
+        self._user_vol = None
+        self._downstream_volumes = {}
+        self._downstream_mutes = {}
+        self._clear_retry()
+        self._active = False
+        self._owns_sink = False
 
     def teardown(self):
         self.stop_test()
@@ -1769,7 +1791,8 @@ class PipeWireEq:
         if state is not None:
             self._pending_restores = list(state["pending_restores"])
             if (
-                state["sink"] not in names
+                state["phase"] != "released"
+                and state["sink"] not in names
                 and not any(
                     item["sink"] == state["sink"]
                     for item in self._pending_restores
@@ -1809,6 +1832,21 @@ class PipeWireEq:
                 )
             self._clear_retry()
             state = self._route_state()
+        if (
+            state is not None and state["phase"] == "released"
+            and not had_conf and not eq_present
+        ):
+            self._reset_runtime()
+            if self._pending_restores:
+                return self._defer_failure(
+                    ("teardown",), "teardown", "teardown_pending_sink_missing", state["sink"]
+                )
+            if not self._clear_first_enable_pending():
+                return self._defer_failure(
+                    ("teardown_marker",), "marker", "teardown_marker_cleanup_failed", state["sink"]
+                )
+            self._record_apply(True, operation="teardown")
+            return True
         if (
             state is not None
             and current_default == state["sink"]
@@ -1911,6 +1949,10 @@ class PipeWireEq:
                     "teardown",
                     "teardown_mute_not_confirmed",
                     downstream,
+                )
+            if not self._persist_released_state(state):
+                return self._defer_failure(
+                    retry_request, "marker", "teardown_marker_write_failed", downstream
                 )
             if self._pending_restores:
                 return self._defer_failure(
@@ -2037,27 +2079,31 @@ class PipeWireEq:
                 downstream,
                 bypass=True,
             )
-        for sink in list(self._downstream_volumes):
-            if not self._restore_downstream(sink):
-                return self._defer_failure(
-                    retry_request,
-                    "teardown",
-                    "teardown_previous_sink_restore_not_confirmed",
-                    downstream,
-                )
-        self._orig_default = None
-        self._active_downstream = None
-        self._requested_downstream = None
-        self._configured_default_seen = None
-        self._configured_request = None
-        self._cleanup_pending = False
-        self._last_applied = None
-        self._user_vol = None
-        self._downstream_volumes = {}
-        self._downstream_mutes = {}
-        self._clear_retry()
-        self._active = False
-        self._owns_sink = False
+        for sink, volumes in self._downstream_volumes.items():
+            muted = self._downstream_mutes.get(sink)
+            if isinstance(muted, bool) and not any(
+                item["sink"] == sink for item in self._pending_restores
+            ):
+                self._pending_restores.append({
+                    "sink": sink, "volumes": list(volumes), "muted": muted,
+                })
+        released_pending = list(self._pending_restores)
+        if state is not None and not self._persist_released_state(state):
+            return self._defer_failure(
+                ("teardown_marker",), "marker", "teardown_marker_write_failed", downstream
+            )
+        if not self._restore_pending_routes(names):
+            return self._defer_failure(
+                retry_request, "teardown", "teardown_previous_sink_restore_not_confirmed", downstream
+            )
+        if (
+            state is not None and self._pending_restores != released_pending
+            and not self._persist_released_state(state)
+        ):
+            return self._defer_failure(
+                ("teardown_marker",), "marker", "teardown_marker_write_failed", downstream
+            )
+        self._reset_runtime()
         if self._pending_restores:
             return self._defer_failure(
                 retry_request,
