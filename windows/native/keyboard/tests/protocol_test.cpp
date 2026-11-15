@@ -42,6 +42,39 @@ int main() {
     report.chromeCount = keyboard::MaxChromeNodes + 1;
     assert(!keyboard::Valid(report));
     report = {};
+    report.fontCount = 1;
+    auto& font = report.fonts[0];
+    std::strcpy(font.family, "Segoe Fluent Icons, Segoe UI");
+    font.role = 1; font.kind = 1; font.size = 16; font.opacity = 1; font.visible = 1;
+    assert(keyboard::Valid(report));
+    for (const auto* family : {"", "C:\\Users\\private", "ms-appx:///font.ttf", "font\"secret", "font's", "font/secret"}) {
+        std::strcpy(font.family, family);
+        assert(!keyboard::Valid(report));
+    }
+    std::memset(font.family, 'a', keyboard::TypeLength);
+    assert(!keyboard::Valid(report));
+    std::strcpy(font.family, "Original Family-1._`");
+    for (float invalid : {-1.f, 1025.f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+        font.size = invalid;
+        assert(!keyboard::Valid(report));
+    }
+    font.size = 1024;
+    for (float invalid : {-0.1f, 1.1f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+        font.opacity = invalid;
+        assert(!keyboard::Valid(report));
+    }
+    font.opacity = 0;
+    font.role = 2;
+    assert(!keyboard::Valid(report));
+    font.role = 0; font.kind = 2;
+    assert(!keyboard::Valid(report));
+    font.kind = 0; font.visible = 2;
+    assert(!keyboard::Valid(report));
+    font.visible = 0;
+    assert(keyboard::Valid(report));
+    report.fontCount = keyboard::MaxFontSamples + 1;
+    assert(!keyboard::Valid(report));
+    report = {};
     report.version = 9;
     assert(!keyboard::Valid(report));
 }

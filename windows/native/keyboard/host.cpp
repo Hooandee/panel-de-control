@@ -49,6 +49,14 @@ void Result(const char* status, const char* error, HRESULT hr = S_OK,
                   << ",\"x\":" << n.x << ",\"y\":" << n.y << ",\"width\":" << n.width
                   << ",\"height\":" << n.height << ",\"radius\":" << n.radius << '}';
     }
+    std::cout << "],\"fontSamples\":[";
+    if (report) for (unsigned i = 0; i < report->fontCount; ++i) {
+        if (i) std::cout << ',';
+        const auto& sample = report->fonts[i];
+        std::cout << "{\"family\":\"" << sample.family << "\",\"role\":" << sample.role
+                  << ",\"kind\":" << sample.kind << ",\"size\":" << sample.size
+                  << ",\"opacity\":" << sample.opacity << ",\"visible\":" << sample.visible << '}';
+    }
     std::cout << "],\"nodes\":[";
     if (report) for (std::uint32_t i = 0; i < report->count; ++i) {
         if (i) std::cout << ',';

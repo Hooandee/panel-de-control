@@ -220,13 +220,31 @@ public sealed class NativeKeyboardController(
             if (name.Length is 0 or > 127 || !Regex.IsMatch(name, @"\A[A-Za-z0-9._:/-]+\z")) throw new InvalidDataException();
             stateCatalog.Add(name);
         }
+        var fontSamples = new List<object>();
+        if (root.TryGetProperty("fontSamples", out var samples))
+        {
+            if (samples.ValueKind != JsonValueKind.Array || samples.GetArrayLength() > 16) throw new InvalidDataException();
+            foreach (var sample in samples.EnumerateArray())
+            {
+                var family = sample.GetProperty("family").GetString() ?? throw new InvalidDataException();
+                var role = sample.GetProperty("role").GetUInt32();
+                var kind = sample.GetProperty("kind").GetUInt32();
+                var size = sample.GetProperty("size").GetSingle();
+                var opacity = sample.GetProperty("opacity").GetSingle();
+                var visible = sample.GetProperty("visible").GetUInt32();
+                if (family.Length is 0 or > 127 || !Regex.IsMatch(family, @"\A[A-Za-z0-9._` ,\-]*\z") ||
+                    role > 1 || kind > 1 || visible > 1 || !float.IsFinite(size) || size is < 0 or > 1024 ||
+                    !float.IsFinite(opacity) || opacity is < 0 or > 1) throw new InvalidDataException();
+                fontSamples.Add(new { family, role, kind, size, opacity, visible });
+            }
+        }
         value.Diagnostics = JsonSerializer.Serialize(new
         {
             status = value.Status, errorCode = value.ErrorCode, windowsBuild = value.WindowsBuild,
             architecture = value.Architecture, processId = value.ProcessId, connected = value.Connected,
             observedElements = value.ObservedElements, hresult = value.HResult,
             styledKeys = value.StyledKeys, restoredKeys = value.RestoredKeys, keyCount = value.KeyCount,
-            pendingKeys = value.PendingKeys, stateCatalog,
+            pendingKeys = value.PendingKeys, stateCatalog, fontSamples,
             truncated = root.TryGetProperty("truncated", out var truncated) && truncated.GetBoolean(), nodes,
         });
         return value;

@@ -65,6 +65,27 @@ void Catalog(FrameworkElement const& element) {
         }
     }
 }
+void RecordFont(UIElement const& element, FontFamily const& family, double size, unsigned role, unsigned kind) {
+    auto name = to_string(family.Source());
+    if (const auto fragment = name.rfind('#'); fragment != std::string::npos) name = name.substr(fragment + 1);
+    if (name.empty() || name.size() >= TypeLength) return;
+    for (char c : name) if (!TypeCharacter(c) && c != ' ' && c != '-' && c != ',') return;
+    std::lock_guard lock(receiptGate);
+    for (unsigned i = 0; i < receipt.fontCount; ++i)
+        if (receipt.fonts[i].role == role && receipt.fonts[i].kind == kind && name == receipt.fonts[i].family) return;
+    if (receipt.fontCount == MaxFontSamples) return;
+    auto& sample = receipt.fonts[receipt.fontCount++];
+    strcpy_s(sample.family, name.c_str()); sample.role = role; sample.kind = kind;
+    sample.size = static_cast<float>(size); sample.opacity = static_cast<float>(element.Opacity());
+    sample.visible = element.Visibility() == Visibility::Visible ? 1 : 0;
+}
+void RecordFonts(DependencyObject const& node, unsigned role, unsigned depth = 0) {
+    if (!node || depth > 6) return;
+    if (auto text = node.try_as<TextBlock>()) RecordFont(text, text.FontFamily(), text.FontSize(), role, 0);
+    else if (auto icon = node.try_as<FontIcon>()) RecordFont(icon, icon.FontFamily(), icon.FontSize(), role, 1);
+    for (int i = 0, count = VisualTreeHelper::GetChildrenCount(node); i < count; ++i)
+        RecordFonts(VisualTreeHelper::GetChild(node, i), role, depth + 1);
+}
 struct Property {
     FrameworkElement element{nullptr};
     DependencyProperty property{nullptr};
@@ -241,6 +262,7 @@ struct Cell {
                 }
             }
             if (known) continue;
+            RecordFont(text, text.FontFamily(), text.FontSize(), 1, 0);
             labels.push_back({text, std::make_unique<Property>(text, TextBlock::ForegroundProperty()),
                 icon ? nullptr : std::make_unique<Property>(text, TextBlock::FontFamilyProperty()), icon, false});
         }
@@ -303,6 +325,7 @@ struct Cell {
         dustFade.Duration(std::chrono::milliseconds(720)); Geometry();
         Hosting::ElementCompositionPreview::SetElementChildVisual(canvas, visual);
         content = children.GetAt(1).as<ContentControl>(); font = desiredFont;
+        RecordFonts(face, 0); RecordFonts(content, 1);
         children.InsertAt(1, canvas); inserted = true; children.Append(dustCanvas);
         FollowNativeOpacity(face, canvas);
         FollowNativeOpacity(face, dustCanvas);
@@ -762,6 +785,8 @@ void ReadStyleSession(Report& report) noexcept {
     report.restoredKeys = receipt.restoredKeys; report.pendingKeys = receipt.pendingKeys;
     report.styleResult = receipt.styleResult; report.stateCount = receipt.stateCount;
     memcpy(report.states, receipt.states, sizeof(receipt.states));
+    report.fontCount = receipt.fontCount;
+    memcpy(report.fonts, receipt.fonts, sizeof(receipt.fonts));
     report.chromeCount = receipt.chromeCount;
     memcpy(report.chrome, receipt.chrome, sizeof(receipt.chrome));
 }

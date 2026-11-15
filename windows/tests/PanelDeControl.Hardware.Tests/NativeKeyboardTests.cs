@@ -163,6 +163,76 @@ public sealed class NativeKeyboardTests
     }
 
     [Fact]
+    public async Task DiagnosticsKeepOnlyValidatedFontMetadata()
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        var samples = "[{\"family\":\"Original Family-1._`, Fallback\",\"role\":1,\"kind\":1,\"size\":16,\"opacity\":0.5,\"visible\":1,\"Text\":\"private input\"}]";
+        host.Emit(Receipt("applied", styled: 1).Insert(1, "\"fontSamples\":" + samples + ","));
+        Assert.Equal("applied", controller.Status.Status);
+        using var diagnostics = JsonDocument.Parse(controller.Status.Diagnostics!);
+        var font = diagnostics.RootElement.GetProperty("fontSamples")[0];
+        Assert.Equal("Original Family-1._`, Fallback", font.GetProperty("family").GetString());
+        Assert.Equal(16f, font.GetProperty("size").GetSingle());
+        Assert.Equal(0.5f, font.GetProperty("opacity").GetSingle());
+        Assert.Equal(1u, font.GetProperty("role").GetUInt32());
+        Assert.Equal(1u, font.GetProperty("kind").GetUInt32());
+        Assert.Equal(1u, font.GetProperty("visible").GetUInt32());
+        Assert.DoesNotContain("private input", controller.Status.Diagnostics);
+        host.Finish();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("C:\\Users\\private")]
+    [InlineData("ms-appx:///Assets/font.ttf")]
+    [InlineData("font\"secret")]
+    [InlineData("font's")]
+    [InlineData("font/secret")]
+    [InlineData("Fuente ñ")]
+    public async Task UnsafeFontFamilyCannotEnterDiagnostics(string family)
+    {
+        var sample = JsonSerializer.Serialize(new { family, role = 0, kind = 0, size = 16, opacity = 1, visible = 1 });
+        await AssertInvalidFonts("[" + sample + "]");
+    }
+
+    [Fact]
+    public async Task FontMetadataRejectsInvalidFieldsAndOversizedCatalog()
+    {
+        const string sample = "{\"family\":\"Original Family\",\"role\":0,\"kind\":0,\"size\":16,\"opacity\":1,\"visible\":1}";
+        foreach (var invalid in new[]
+        {
+            sample.Replace("\"role\":0", "\"role\":2"),
+            sample.Replace("\"kind\":0", "\"kind\":2"),
+            sample.Replace("\"visible\":1", "\"visible\":2"),
+            sample.Replace("\"size\":16", "\"size\":-1"),
+            sample.Replace("\"size\":16", "\"size\":1025"),
+            sample.Replace("\"size\":16", "\"size\":1e100"),
+            sample.Replace("\"size\":16", "\"size\":\"NaN\""),
+            sample.Replace("\"opacity\":1", "\"opacity\":-0.1"),
+            sample.Replace("\"opacity\":1", "\"opacity\":1.1"),
+            sample.Replace("Original Family", new string('a', 128)),
+            sample.Replace("\"kind\":0,", ""),
+        }) await AssertInvalidFonts("[" + invalid + "]");
+        await AssertInvalidFonts("[" + string.Join(",", Enumerable.Repeat(sample, 17)) + "]");
+        await AssertInvalidFonts("{}");
+    }
+
+    private static async Task AssertInvalidFonts(string samples)
+    {
+        var host = new Host();
+        await using var controller = new NativeKeyboardController(host);
+        await controller.SetEnabledAsync(true, CancellationToken.None);
+        await host.Started.Task;
+        host.Emit(Receipt("applied", styled: 1).Insert(1, "\"fontSamples\":" + samples + ","));
+        Assert.Equal("invalid_runtime_response", controller.Status.ErrorCode);
+        Assert.DoesNotContain("Original Family", controller.Status.Diagnostics);
+        host.Finish();
+    }
+
+    [Fact]
     public async Task ExplicitRetryAfterLostHostRequiresFreshAppliedReceipt()
     {
         var host = new Host();

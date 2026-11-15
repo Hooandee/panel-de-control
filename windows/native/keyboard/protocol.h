@@ -23,8 +23,15 @@ struct ChromeGeometry {
     std::uint32_t kind = 0, background = 0;
     float x = 0, y = 0, width = 0, height = 0, radius = 0;
 };
+constexpr std::uint32_t MaxFontSamples = 16;
+struct FontSample {
+    char family[TypeLength]{};
+    std::uint32_t role = 0, kind = 0;
+    float size = 0, opacity = 0;
+    std::uint32_t visible = 0;
+};
 struct Report {
-    std::uint32_t version = 4;
+    std::uint32_t version = 5;
     std::uint32_t count = 0;
     std::int32_t subscribeResult = 0;
     std::int32_t unsubscribeResult = 0;
@@ -39,13 +46,15 @@ struct Report {
     Node nodes[MaxNodes]{};
     std::uint32_t chromeCount = 0;
     ChromeGeometry chrome[MaxChromeNodes]{};
+    std::uint32_t fontCount = 0;
+    FontSample fonts[MaxFontSamples]{};
 };
 inline bool TypeCharacter(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
            (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '`';
 }
 inline bool Valid(const Report& report) {
-    if (report.version != 4 || report.chromeCount > MaxChromeNodes || report.count > MaxNodes || report.truncated > 1 || report.probeFlags > 63 || report.stateCount > MaxStates ||
+    if (report.version != 5 || report.fontCount > MaxFontSamples || report.chromeCount > MaxChromeNodes || report.count > MaxNodes || report.truncated > 1 || report.probeFlags > 63 || report.stateCount > MaxStates ||
         report.keyCount > 256 || report.styledKeys > report.keyCount ||
         report.pendingKeys > 256 || static_cast<unsigned>(report.phase) > 5) return false;
     if (report.phase == StylePhase::Applied &&
@@ -57,6 +66,17 @@ inline bool Valid(const Report& report) {
         for (float value : {node.x, node.y, node.width, node.height, node.radius})
             if (!std::isfinite(value) || std::abs(value) > 32768) return false;
         if (node.width < 0 || node.height < 0 || node.radius < 0) return false;
+    }
+    for (std::uint32_t i = 0; i < report.fontCount; ++i) {
+        const auto& sample = report.fonts[i];
+        if (sample.role > 1 || sample.kind > 1 || sample.visible > 1 ||
+            !std::isfinite(sample.size) || sample.size < 0 || sample.size > 1024 ||
+            !std::isfinite(sample.opacity) || sample.opacity < 0 || sample.opacity > 1) return false;
+        std::size_t j = 0;
+        for (; j < TypeLength && sample.family[j]; ++j)
+            if (!TypeCharacter(sample.family[j]) && sample.family[j] != ' ' &&
+                sample.family[j] != '-' && sample.family[j] != ',') return false;
+        if (j == 0 || j == TypeLength) return false;
     }
     for (std::uint32_t i = 0; i < report.count; ++i) {
         std::size_t j = 0;
