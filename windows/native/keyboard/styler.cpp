@@ -69,7 +69,7 @@ struct Property {
     IInspectable original{nullptr};
     Data::Binding binding{nullptr};
     IInspectable owned{nullptr};
-    bool assigned = false, restored = false;
+    bool assigned = false, restoring = false, restored = false;
     Property(FrameworkElement const& value, DependencyProperty const& dp) : element(value), property(dp) { Capture(); }
     void Capture() {
         original = element.ReadLocalValue(property);
@@ -83,7 +83,8 @@ struct Property {
     }
     void Restore() {
         if (restored || !assigned) return;
-        if (element.ReadLocalValue(property) != owned) { restored = true; return; }
+        if (!restoring && element.ReadLocalValue(property) != owned) { restored = true; return; }
+        restoring = true;
         if (binding) { element.ClearValue(property); element.SetBinding(property, binding); }
         else if (original == DependencyProperty::UnsetValue()) element.ClearValue(property);
         else element.SetValue(property, original);
