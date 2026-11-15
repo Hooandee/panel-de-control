@@ -462,10 +462,15 @@ struct Engine {
         auto parent = VisualTreeHelper::GetParent(face).try_as<Grid>();
         if (!parent || parent.Children().Size() != 2 || parent.Children().GetAt(0) != face ||
             !parent.Children().GetAt(1).try_as<ContentControl>()) return;
-        auto outer = VisualTreeHelper::GetParent(parent).try_as<Grid>();
-        if (!outer) return;
-        auto key = VisualTreeHelper::GetParent(outer).try_as<FrameworkElement>();
-        if (!key || get_class_name(key) != KeyType) return;
+        auto ancestor = VisualTreeHelper::GetParent(parent);
+        auto key = ancestor.try_as<FrameworkElement>();
+        Grid outer{nullptr};
+        if (!key || get_class_name(key) != KeyType) {
+            outer = ancestor.try_as<Grid>();
+            if (!outer || outer.Children().Size() != 1) return;
+            key = VisualTreeHelper::GetParent(outer).try_as<FrameworkElement>();
+            if (!key || get_class_name(key) != KeyType) return;
+        }
         if (cells.size() >= 256) { Fail(E_BOUNDS); requested = false; return; }
         auto cell = std::make_unique<Cell>(); cell->face = face; cell->parent = parent; cell->key = key; cell->outer = outer;
         cells.push_back(std::move(cell));
@@ -481,9 +486,9 @@ struct Engine {
     }
     void FindFace(FrameworkElement const& key) {
         if (VisualTreeHelper::GetChildrenCount(key) != 1) return;
-        auto outer = VisualTreeHelper::GetChild(key, 0).try_as<Grid>();
-        if (!outer || outer.Children().Size() != 1) return;
-        auto parent = outer.Children().GetAt(0).try_as<Grid>();
+        auto parent = VisualTreeHelper::GetChild(key, 0).try_as<Grid>();
+        if (!parent) return;
+        if (parent.Children().Size() == 1) parent = parent.Children().GetAt(0).try_as<Grid>();
         if (!parent || parent.Children().Size() < 2) return;
         if (auto face = parent.Children().GetAt(0).try_as<Border>()) Add(face, epoch);
     }
@@ -537,8 +542,8 @@ struct Engine {
                 auto& cell = **it;
                 if (stopping || cell.unloaded || !VisualTreeHelper::GetParent(cell.key) ||
                     VisualTreeHelper::GetParent(cell.face) != cell.parent ||
-                    VisualTreeHelper::GetParent(cell.parent) != cell.outer ||
-                    VisualTreeHelper::GetParent(cell.outer) != cell.key) {
+                    (cell.outer ? (VisualTreeHelper::GetParent(cell.parent) != cell.outer || VisualTreeHelper::GetParent(cell.outer) != cell.key)
+                                : VisualTreeHelper::GetParent(cell.parent) != cell.key)) {
                     const bool wasInserted = cell.inserted;
                     if (cell.Restore()) { if (wasInserted) ++restored; it = cells.erase(it); continue; }
                 } else if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&

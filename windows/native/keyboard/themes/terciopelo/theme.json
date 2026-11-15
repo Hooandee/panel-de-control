@@ -95,6 +95,11 @@
         "Grid",
         "Border",
         "ContentControl"
+      ],
+      "compactTemplate": [
+        "Grid",
+        "Border",
+        "ContentControl"
       ]
     },
     {

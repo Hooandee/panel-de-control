@@ -54,7 +54,8 @@ KeyboardKey
       ContentControl
 ```
 
-El motor valida esta forma, inserta una decoración no interactiva entre Border
+El modo compacto observado omite el Grid intermedio: KeyboardKey > Grid >
+Border + ContentControl. El motor valida estas dos formas, inserta una decoración no interactiva entre Border
 y ContentControl, y verifica su pertenencia real. La placa se coloca solo en el
 Grid que pertenece a KeyboardGrid y cuyos hijos son KeyboardKey. El marco se extiende al Grid padre de KeyboardGrid cuando contiene el GripperBar
 observado: placa original, fondo oscuro y controles estándar de su barra. Se
