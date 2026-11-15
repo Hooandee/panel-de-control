@@ -6,6 +6,7 @@ import math
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -179,6 +180,7 @@ from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
 from pdc_report import collector as report_collector
 from pdc_report import client as report_client
+from pdc_report import hardware_fingerprint
 from ambient.rpc import AmbientRpc
 from steam_cleaner import SteamCleanerError, SteamCleanerService
 from steam_cleaner.media import measure_screenshot_paths
@@ -3111,6 +3113,8 @@ class Plugin(AmbientRpc):
                 },
                 stores={}, logs=[],
                 kind=report_kind,
+                hardware_fingerprint=hardware_fingerprint.failed(
+                    "bundle_incomplete", home=home, hostname=hostname),
                 home=home, hostname=hostname,
             )
             bundle["error"] = "bundle_incomplete"
@@ -3270,12 +3274,14 @@ class Plugin(AmbientRpc):
             ),
         )
         diary = await loop.run_in_executor(None, self._journal_report)
+        environment = self._report_environment(context)
+        fingerprint = await self._report_hardware_fingerprint(environment, home, hostname)
         return report_collector.build_bundle(
             app=_REPORT_APP,
             categories=categories,
             text=text,
             kind=self._report_kind(context),
-            environment=self._report_environment(context),
+            environment=environment,
             capabilities=report_collector.capabilities_from(states),
             state=states,
             stores=self._report_stores(),
@@ -3283,9 +3289,65 @@ class Plugin(AmbientRpc):
             journal=diary,
             kernel=kernel,
             sysfs=snapshot,
+            hardware_fingerprint=fingerprint,
             home=home,
             hostname=hostname,
         )
+
+    async def _report_hardware_fingerprint(self, environment, home, hostname) -> dict:
+        try:
+            panel = self._fingerprint_panel_context(environment)
+        except Exception as error:  # noqa: BLE001
+            panel = {"error": type(error).__name__}
+        def failed(error: str) -> dict:
+            return hardware_fingerprint.failed(
+                error, panel=panel, home=home, hostname=hostname)
+
+        # A read stuck in the kernel cannot be cancelled; never stack a second one.
+        pending = getattr(self, "_fingerprint_read", None)
+        if pending is not None and not pending.done():
+            return failed("previous_read_stalled")
+        self._fingerprint_read = asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: hardware_fingerprint.collect(panel=panel, home=home, hostname=hostname),
+        )
+        try:
+            return await asyncio.wait_for(
+                asyncio.shield(self._fingerprint_read),
+                timeout=hardware_fingerprint.DEADLINE_S + 3,
+            )
+        except Exception as error:  # noqa: BLE001
+            return failed(type(error).__name__)
+
+    def _fingerprint_panel_context(self, environment) -> dict:
+        steam = environment.get("steam_client") or {}
+        device = getattr(self, "_device", None)
+        backend = getattr(self, "_tdp_backend", None)
+        writes = [
+            {key: event.get(key) for key in
+             ("at", "reason", "action", "requested", "target", "write", "observation")}
+            for event in list(getattr(self, "_tdp_history", ()))
+            if event.get("write") is not None
+        ]
+        return {
+            "versions": {
+                "panel": environment.get("plugin_version"),
+                "decky": environment.get("decky_version"),
+                "steam": steam.get("version"),
+                "steam_branch": steam.get("branch"),
+            },
+            "device_profile": asdict(device) if device is not None else None,
+            "tdp": {
+                "backend": getattr(backend, "name", None),
+                "backend_history": list(getattr(self, "_tdp_backend_history", ())),
+                "ryzenadj": {
+                    "system": shutil.which("ryzenadj"),
+                    "bundled": os.path.exists(
+                        os.path.join(os.path.dirname(__file__), "bin", "ryzenadj")),
+                },
+                "writes": writes,
+            },
+        }
 
     @staticmethod
     def _hud_steam_overlay_diagnostics(context) -> dict | None:

@@ -27,7 +27,7 @@ from pdc_report import connected_devices
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 6
+SCHEMA = 7
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -1577,11 +1577,14 @@ def build_bundle(
     journal: dict | None = None,
     kernel: dict | None = None,
     sysfs: dict | None = None,
+    hardware_fingerprint: dict | None = None,
     home: str | None = None,
     hostname: str | None = None,
 ) -> dict:
     """Assemble the final bundle from already-fetched pieces and redact the whole
-    thing again (logs are pre-redacted; this catches the rest)."""
+    thing again (logs are pre-redacted; this catches the rest). The hardware
+    fingerprint is redacted by its own collector: the serial-run scrubber would
+    shred its raw values ("1920x1080", "0x030000")."""
     bundle = {
         "schema": SCHEMA,
         "app": app,
@@ -1597,4 +1600,6 @@ def build_bundle(
         "kernel": kernel or {},
         "sysfs": sysfs or {},
     }
-    return redact_obj(bundle, home=home, hostname=hostname)
+    bundle = redact_obj(bundle, home=home, hostname=hostname)
+    bundle["hardware_fingerprint"] = hardware_fingerprint or {}
+    return bundle
