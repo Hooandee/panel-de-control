@@ -75,7 +75,7 @@ Terciopelo 0.2.13 aporta estos recursos y propiedades, extraídos de su CSS real
 |---|---|
 | Cinco caras PNG 216×168: idle, hover, focus, press-v3 y focus-press-v3 | Incrustadas sin transformar; nine-grid de cortes 54, grosor 18 y outset 6 |
 | Placa WebP 1708×478, fondo #0b0b0c | Textura original bajo las teclas y en el marco y la barra del teclado |
-| Tinta #f0dcb2, acento #d9c197, pulsación #fff3da | Aplicada a las etiquetas nativas, con restauración |
+| Tinta #f0dcb2, acento #d9c197, foco/pulsación #fff3da | Aplicada a las etiquetas nativas, con restauración; etiquetas secundarias al 60 % |
 | Josefin Sans 400/600 | TTF oficial variable con licencia OFL; se conservan los pesos nativos y las fuentes de iconos |
 | Pulsación, hover y foco | Caras originales; cancelación y pérdida de captura restablecen la cara |
 | Letras, números, iconos y distribuciones | Contenido nativo; se conservan tamaños y posiciones de Windows |
@@ -93,6 +93,20 @@ y se contrasta visualmente la tipografía; no se inspecciona texto del teclado.
 La restauración repone FontFamily y elimina el archivo propio cuando el sistema
 lo permite. Si sigue en uso, se conserva una sola ruta y se verifican sus bytes
 antes de reutilizarla; no se sobrescriben archivos ajenos.
+
+El foco XAML ya existente se consulta al incorporar cada tecla, antes del primer
+pintado. Esto no demuestra equivalencia con la navegación interna del modo
+«Controlador para juegos»: su árbol también contiene un
+`DirectionalNavigationHighlight` independiente con dos Rectangle. Su borde
+nativo sigue pendiente de adaptación, al igual que el contraste del engranaje
+seleccionado y los menús del teclado. La entrada simulada mediante InputInjector
+no movió el foco en la comparación con y sin tema; no se considera validación
+del mando físico ni prueba de un fallo exclusivo del runtime.
+
+La cobertura de la fuente incluye letras y acentos españoles, ¿¡ y €. Josefin
+no contiene ✓, ←, → ni ⌫; se conservan las fuentes nativas de iconos y el fallback
+Segoe UI. La presencia en cmap y la preservación de FontFamily no sustituyen la
+comprobación visual de cada glifo, disposición y estado de interacción.
 
 ## Estado y diagnóstico
 
