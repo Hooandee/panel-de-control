@@ -24,14 +24,20 @@ verifica el PID del cliente. No se empaqueta Windhawk, no se parchean ejecutable
 no se desactiva seguridad ni se necesita un servicio privilegiado para el tema.
 
 El helper observa reinicios del proceso a intervalos de dos segundos, con hasta
-tres intentos de conexión por ejecución. Las teclas nuevas llegan por el árbol
+tres intentos de conexión por proceso. Si el proceso acaba de arrancar y aún
+no ha cargado XAML, espera hasta quince comprobaciones antes de informar de
+fallo de conexión; esta espera no consume los intentos de conexión ni declara
+la versión incompatible. Las teclas nuevas llegan por el árbol
 visual; una reconciliación de 250 ms verifica identidad, disposición de los
 nodos propios, cambios de plantilla y caducidad. Las altas de etiquetas se resuelven
 en el Dispatcher antes de buscar su tecla y agrupan un refresco inmediato, para
 conservar fuente y colores al cambiar Mayús sin esperar al temporizador. No lee ni registra texto,
 contraseñas, teclas escritas, códigos de teclas ni secuencias de pulsaciones.
 Los eventos de puntero solo cambian el aspecto local: no consumen eventos ni
-capturan el puntero.
+capturan el puntero. Las capas propias siguen la opacidad de composición de la
+cara y del marco nativos; una cara oculta o sin tamaño oculta también su textura
+y partículas. Esto evita que las capas queden visibles durante las transiciones
+del teclado entre aplicaciones.
 
 Se conservan los valores locales y bindings de las propiedades modificadas.
 Restaurar un valor heredado usa ClearValue; un binding se repone tras limpiar el
@@ -207,6 +213,15 @@ comprobaron activación desde Panel, escritura de letras, borrar, espacio, Mayú
 e Intro, cierre con X, reapertura, recuperación tras caída del helper y reinicio
 de TextInputHost, y polvo visible con entrada real. La placa flotante respeta el
 contorno nativo observado sin pintar su margen de sombra.
+También se ha comprobado entrada táctil en cinco controles WinForms (texto simple,
+multilínea, contraseña, RichTextBox y ComboBox editable), ocho campos en Edge
+(texto, contraseña, búsqueda, correo, URL, número, textarea y contenteditable),
+texto y contraseña en una aplicación elevada y búsqueda en un diálogo nativo de
+archivos. Estas comprobaciones usan campos propios y texto sintético; no prueban
+cualquier aplicación posible. Se conserva la capitalización y el enmascarado
+nativos. El tema no añade apertura automática donde Windows no la proporciona,
+ni soporte para el escritorio seguro de UAC o la pantalla de inicio de sesión.
+
 Siguen pendientes el cambio de tamaño o DPI, todas las distribuciones de idioma,
 las interacciones de mando y deslizamiento, actualización desde producción y
 desinstalación con el tema activo. El halo latched y la sombra de texto específica

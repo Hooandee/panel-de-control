@@ -16,6 +16,7 @@ DWORD targetPid = 0;
 DWORD previousPid = 0;
 ULONGLONG previousCreation = 0;
 unsigned attempts = 0;
+unsigned frameworkChecks = 0;
 std::atomic<bool> stopRequested{false};
 std::string lastStatus = "waiting_for_keyboard", lastError = "keyboard_not_running";
 const char* architecture = "unknown";
@@ -217,11 +218,18 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false) {
     }
     const ULONGLONG created = (static_cast<ULONGLONG>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
     if (styling) {
-        if (previousPid != targetPid || previousCreation != created) { attempts = 0; previousPid = targetPid; previousCreation = created; }
-        if (attempts >= 3 || (attempts && lastError != "xaml_attach_failed")) { Result(lastStatus.c_str(), lastError.c_str()); return 0; }
-        ++attempts;
+        if (previousPid != targetPid || previousCreation != created) {
+            attempts = 0; frameworkChecks = 0; previousPid = targetPid; previousCreation = created;
+        }
+        if (attempts >= 3 || (attempts && lastError != "xaml_attach_failed" && lastError != "xaml_framework_not_observed")) { Result(lastStatus.c_str(), lastError.c_str()); return 0; }
+        if (frameworkChecks >= 15) { Result("connection_failed", "xaml_framework_not_observed"); return 0; }
     }
-    if (!UsesWindowsXaml(targetPid)) { Result("unsupported", "xaml_framework_not_observed"); return 0; }
+    if (!UsesWindowsXaml(targetPid)) {
+        if (styling) ++frameworkChecks;
+        Result(styling && frameworkChecks < 15 ? "waiting_for_keyboard" : "connection_failed", "xaml_framework_not_observed");
+        return 0;
+    }
+    if (styling) { frameworkChecks = 0; ++attempts; }
     const auto mutexName = L"Local\\PanelDeControl.KeyboardDiscovery." + std::to_wstring(targetPid);
     Handle mutex(CreateMutexW(nullptr, TRUE, mutexName.c_str()));
     if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {

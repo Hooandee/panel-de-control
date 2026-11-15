@@ -647,22 +647,24 @@ struct Engine {
             }
             for (auto it = cells.begin(); it != cells.end();) {
                 auto& cell = **it;
-                if (!stopping && cell.inserted) cell.Geometry();
                 if (stopping || cell.unloaded || !VisualTreeHelper::GetParent(cell.key) ||
                     VisualTreeHelper::GetParent(cell.face) != cell.parent ||
                     (cell.outer ? (VisualTreeHelper::GetParent(cell.parent) != cell.outer || VisualTreeHelper::GetParent(cell.outer) != cell.key)
                                 : VisualTreeHelper::GetParent(cell.parent) != cell.key)) {
                     const bool wasInserted = cell.inserted;
                     if (cell.Restore()) { if (wasInserted) ++restored; it = cells.erase(it); continue; }
-                } else if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&
+                } else {
+                    if (cell.inserted) cell.Geometry();
+                    if (cell.face.XamlRoot() && cell.face.XamlRoot().IsHostVisible() &&
                            cell.face.ActualWidth() > 0 && cell.face.ActualHeight() > 0) {
-                    if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
-                    unsigned childIndex = 0;
-                    if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
-                        Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) {
-                        ++styled; if (!probeCell) probeCell = &cell;
+                        if (!cell.inserted && loaded) { EnsurePlate(cell); cell.Insert(surfaces, font.family); }
+                        unsigned childIndex = 0;
+                        if (cell.inserted && cell.parent.Children().IndexOf(cell.canvas, childIndex) && childIndex == 1 &&
+                            Hosting::ElementCompositionPreview::GetElementChildVisual(cell.canvas) == cell.visual && cell.ReconcileLabels() && EnsureChrome(cell)) {
+                            ++styled; if (!probeCell) probeCell = &cell;
+                        }
+                        else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
                     }
-                    else if (cell.inserted && !cell.parent.Children().IndexOf(cell.canvas, childIndex)) cell.unloaded = true;
                 }
                 ++it;
             }
