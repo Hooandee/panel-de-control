@@ -133,6 +133,11 @@ export interface HudState {
   conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
+  /** Running game this model belongs to; null on the desktop. */
+  appid: string | null;
+  /** True while that game applies the global HUD (also true without a game). */
+  followsGlobal: boolean;
+  hasGameProfile: boolean;
 }
 
 interface MetricMeta {

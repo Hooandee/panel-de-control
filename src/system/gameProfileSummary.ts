@@ -67,5 +67,12 @@ export function sectionLine(section: SectionId, row: GameProfileRow, t: T): Sect
   if (section === "audio" && row.audio) {
     return { label: t("gameProfiles.sec.audio"), text: t("gameProfiles.audioCustom"), dim: row.audio.follows_global };
   }
+  if (section === "hud" && row.hud) {
+    return {
+      label: t("gameProfiles.sec.hud"),
+      text: t(row.hud.enabled ? "gameProfiles.hudOn" : "gameProfiles.hudOff"),
+      dim: row.hud.follows_global,
+    };
+  }
   return null;
 }

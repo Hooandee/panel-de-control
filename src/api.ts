@@ -1249,6 +1249,7 @@ export interface GameProfileRow {
   gpu?: { manual: boolean; min: number | null; max: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
   audio?: { follows_global: boolean };
+  hud?: { enabled: boolean; follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
@@ -1259,8 +1260,19 @@ import type { HudModel, HudState } from "./mangohud/model";
 export type { HudModel, HudState } from "./mangohud/model";
 
 export const getHudState = callable<[], HudState>("get_hud_state");
-export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_config");
-export const resetHud = callable<[], HudState>("reset_hud");
+export const setHudConfig = callable<
+  [model: HudModel, scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("set_hud_config");
+export const resetHud = callable<
+  [scope: Scope, appid: string | null, contextAppid: string | null],
+  HudState
+>("reset_hud");
+export const setHudFollowGlobal = callable<
+  [follow: boolean, appid: string, contextAppid: string | null],
+  HudState
+>("set_hud_follow_global");
+export const listHudGames = callable<[], string[]>("list_hud_games");
 export const reloadHud = callable<[], HudState>("reload_hud");
 export const resolveHudConflict =
   callable<[action: "keep_external" | "use_pdc"], HudState>("resolve_hud_conflict");

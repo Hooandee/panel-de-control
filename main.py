@@ -3765,7 +3765,7 @@ class Plugin(AmbientRpc):
         (the controller backend no-ops when it's not InputPlumber)."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
                 self._gpu_profiles,
-                self._audio_eq, self._controller_backend)
+                self._audio_eq, self._controller_backend, self._hud)
 
     def _game_profile_row(self, appid: str) -> dict:
         """A game's per-section profiles for the overview — RAW own values (what the user
@@ -3817,6 +3817,9 @@ class Plugin(AmbientRpc):
                              "follows_global": self._controller_backend.is_following_global(appid)}
         if self._audio_eq.differs_from_global(appid):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
+        if self._hud.differs_from_global(appid):
+            row["hud"] = {"enabled": bool(self._hud.game_profile(appid).get("enabled")),
+                          "follows_global": self._hud.is_following_global(appid)}
         return row
 
     async def list_game_profiles(self) -> list:
@@ -10784,9 +10787,13 @@ class Plugin(AmbientRpc):
             raise OSError("Could not persist the managed MangoHud presets path") from exc
         self._hud_managed_path = safe_path
 
+    def _hud_model(self) -> dict:
+        """The HUD model the running game applies: its own, or the global one."""
+        return self._hud.effective(self._current_appid)
+
     def _hud_state(self, *, cap=None, model=None) -> dict:
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         capability = (
             "ambiguous" if cap.get("ambiguous")
             else "ready" if cap["supported"]
@@ -10821,6 +10828,12 @@ class Plugin(AmbientRpc):
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
+            "appid": self._current_appid,
+            "followsGlobal": self._hud.is_following_global(self._current_appid),
+            "hasGameProfile": (
+                self._current_appid is not None
+                and self._hud.has_game(self._current_appid)
+            ),
         }
 
     def _record_hud_conflict(self, path, conflict) -> None:
@@ -10933,7 +10946,7 @@ class Plugin(AmbientRpc):
         auto loop, then reloaded through mangohudctl). We never write Steam's own live
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
         cap = self._detect_hud() if cap is None else cap
-        model = self._hud.load() if model is None else model
+        model = self._hud_model() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
             self._hud_power_source = None
@@ -11286,7 +11299,7 @@ class Plugin(AmbientRpc):
         """Find a mangoapp that started after the last apply (late session start or a
         restarted mangoapp) and re-apply to it. Returns True when a re-apply ran."""
         self._hud_redetect_at = _monotonic() + _HUD_REDETECT_S
-        model = self._hud.load()
+        model = self._hud_model()
         if not model["enabled"]:
             return False
         self._hud_redetect_count += 1
@@ -11345,7 +11358,7 @@ class Plugin(AmbientRpc):
         now = _monotonic()
         if not self._hud_values_due(values, now):
             return
-        model = self._hud.load()
+        model = self._hud_model()
         if model["enabled"]:
             self._pdc_preview_values = values
             try:
@@ -11447,7 +11460,7 @@ class Plugin(AmbientRpc):
     async def get_hud_state(self) -> dict:
         self._init()
         def refresh_pending_state():
-            model = self._hud.load()
+            model = self._hud_model()
             if model["enabled"] and self._hud_apply_status in (
                 "pending",
                 "unavailable",
@@ -11466,32 +11479,72 @@ class Plugin(AmbientRpc):
         self._apply_hud(cap=cap, model=model)
         return self._hud_state(cap=cap, model=model)
 
-    def _save_apply_hud_state(self, model) -> dict:
-        return self._apply_hud_state(self._hud.save(model))
+    def _save_apply_hud_state(self, model, scope="global", appid=None) -> dict:
+        self._hud.set_model(scope, appid, model)
+        return self._apply_hud_state(self._hud_model())
 
-    async def set_hud_config(self, model: dict) -> dict:
+    def _hud_scope_is_current(self, scope, appid, context_appid) -> bool:
+        return self._scope_context_is_current(scope, appid, context_appid)
+
+    async def set_hud_config(
+        self, model: dict, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(lambda: self._save_apply_hud_state(model))
+        def save():
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(model, scope, appid)
+        return await self._hud_call(save)
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
+        """Turn the HUD of the scope the running game applies on or off."""
         self._init()
         def save_apply_state():
-            model = self._hud.load()
+            model = self._hud_model()
             model["enabled"] = bool(enabled)
-            return self._save_apply_hud_state(model)
+            own = not self._hud.is_following_global(self._current_appid)
+            return self._save_apply_hud_state(
+                model, "game" if own else "global", self._current_appid if own else None
+            )
         return await self._hud_call(save_apply_state)
 
-    async def reset_hud(self) -> dict:
+    async def reset_hud(
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
-        return await self._hud_call(
-            lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
-        )
+        def reset():
+            if not self._hud_scope_is_current(scope, appid, context_appid):
+                return self._hud_state()
+            return self._save_apply_hud_state(
+                mangohud_config.DEFAULT_MODEL, scope, appid
+            )
+        return await self._hud_call(reset)
+
+    async def set_hud_follow_global(
+        self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        """Toggle a game between its own HUD and the global one, keeping its stored
+        model. Seeds from global the first time it uses its own."""
+        self._init()
+        def toggle():
+            if appid is None or not self._hud_scope_is_current("game", appid, context_appid):
+                return self._hud_state()
+            self._hud.set_follow(str(appid), bool(follow))
+            return self._apply_hud_state(self._hud_model())
+        return await self._hud_call(toggle)
+
+    async def list_hud_games(self) -> list:
+        """Games that apply their own HUD (for the "HUD" badge in Parámetros)."""
+        self._init()
+        return sorted(self._hud.own_hud_games())
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
         return await self._hud_call(
-            lambda: self._apply_hud_state(self._hud.load())
+            lambda: self._apply_hud_state(self._hud_model())
         )
 
     def _resolve_hud_conflict_sync(self, action) -> dict:
@@ -11502,9 +11555,7 @@ class Plugin(AmbientRpc):
             return self._hud_state()
         path = conflict["managedPath"]
         if action == "keep_external":
-            model = self._hud.load()
-            model["enabled"] = False
-            model = self._hud.save(model)
+            model = self._hud.disable_all()
             mangohud_ownership.relinquish_managed(
                 path,
                 trusted_root=self._hud_home,
@@ -11518,7 +11569,7 @@ class Plugin(AmbientRpc):
             self._pdc_preview_values = {}
             self._hud_conflict = None
             self._hud_apply_status = "disabled"
-            return self._hud_state(model=model)
+            return self._hud_state(model=self._hud_model())
 
         cap = self._detect_hud()
         if not cap["supported"] or cap["presetsPath"] != path:
@@ -11526,7 +11577,7 @@ class Plugin(AmbientRpc):
                 "ambiguous" if cap.get("ambiguous") else "pending"
             )
             return self._hud_state(cap=cap)
-        model = self._hud.load()
+        model = self._hud_model()
         self._apply_hud(cap=cap, model=model, replace_conflict=True)
         return self._hud_state(cap=cap, model=model)
 

@@ -11,13 +11,14 @@ import { FocusableCard } from "../components/FocusableCard";
 import { useGames, GameListItem } from "../launch/useGames";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useHiddenGames } from "../launch/useHiddenGames";
+import { useHudGames } from "../mangohud/useHudGames";
 import { sortGames, SortMode } from "../launch/sort";
 import { openLaunchEditorModal } from "../components/LaunchEditorModal";
 import { openCustomVarsManager } from "../components/CustomVarsManager";
 
 const SORT_MODES: SortMode[] = ["recent", "alpha", "played"];
 
-const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }> = ({ game, hidden, onClosed }) => {
+const GameRow: FC<{ game: GameListItem; hidden: boolean; hasHud: boolean; onClosed: () => void }> = ({ game, hidden, hasHud, onClosed }) => {
   const { t } = useI18n();
   return (
     <FocusableCard onActivate={() => openLaunchEditorModal(game, onClosed)} style={{ opacity: hidden ? 0.55 : 1 }}>
@@ -30,6 +31,14 @@ const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }>
           {game.isNonSteam ? t("params.badge.nonSteam") : t("params.badge.steam")}
         </div>
       </div>
+      {hasHud && (
+        <span
+          data-pdc-part="hud-badge"
+          style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.accent, borderRadius: 20, padding: "2px 8px", flexShrink: 0, boxShadow: `inset 0 0 0 1px ${theme.color.accent}` }}
+        >
+          {t("params.hudBadge")}
+        </span>
+      )}
       {game.activeCount === null ? (
         <span style={{ fontSize: themeSizeOverride("fontCaption") ?? 10, color: theme.color.textMuted, flexShrink: 0 }}>
           {t("params.activeLoading")}
@@ -76,6 +85,7 @@ export const ParametrosSection: FC = () => {
   const { t } = useI18n();
   const { games, reload } = useGames();
   const { hidden } = useHiddenGames();
+  const hudGames = useHudGames();
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
@@ -148,7 +158,7 @@ export const ParametrosSection: FC = () => {
           shown!.map((g) => (
             // Key by the unique live appid — two non-Steam shortcuts can share a
             // stableKey (name), which would collide as a React key.
-            <GameRow key={g.liveAppid} game={g} hidden={showHidden} onClosed={reload} />
+            <GameRow key={g.liveAppid} game={g} hidden={showHidden} hasHud={hudGames.has(g.stableKey)} onClosed={reload} />
           ))
         )}
       </div>
