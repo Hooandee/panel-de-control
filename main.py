@@ -107,6 +107,7 @@ from fans import expose as fan_expose
 from fans import gpd_recovery
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
+import fan_curves
 from fan_curves import FanCurveStore
 from launch import tools as launch_tools
 from launch import proton_caps
@@ -241,6 +242,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
+            "split", "split_available",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
             "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
             "board_fans.loaded_by_panel",
@@ -5500,6 +5502,8 @@ class Plugin(AmbientRpc):
                 self._log_fan_transition("desktop_channels", ok=ok, profile=profile)
                 return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
+            if profile.get("split") and self._fan_split_available():
+                return self._reapply_split_fans_sync(profile)
             preset = profile["preset"]
             points = None
             if preset == "adaptive":
@@ -5540,6 +5544,34 @@ class Plugin(AmbientRpc):
             self._sync_fremont_fan_handoff_marker()
             self._log_fan_transition("apply_failed", ok=False, error=type(error).__name__)
             return False
+
+    def _fan_split_available(self) -> bool:
+        return getattr(self._fan_ctrl, "split_available", False) is True
+
+    def _reapply_split_fans_sync(self, profile: dict) -> bool:
+        """Per-channel ("por separado") apply: each fan gets its own table, verified whole.
+        Any channel failing returns BOTH fans to firmware auto (done by the backend)."""
+        split_preset = profile.get("split_preset", "auto")
+        by_channel = profile.get("points_by_channel")
+        if split_preset == "auto" or not by_channel:
+            mode = "split_auto"
+            res = self._fan_ctrl.set_auto(None)
+            by_channel = None
+        else:
+            mode = "split_curve"
+            res = self._fan_ctrl.apply_curves(by_channel)
+        confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
+        self._fan_apply_confirmed = confirmed
+        self._log_fan_transition(
+            mode,
+            ok=confirmed,
+            preset=split_preset,
+            points_by_channel=by_channel,
+            channels=list(by_channel) if by_channel else None,
+            failed_channels=res.get("failed_channels") if isinstance(res, dict) else None,
+            detail=res.get("detail") if isinstance(res, dict) else "invalid_response",
+        )
+        return confirmed and self._sync_fremont_fan_handoff_marker()
 
     def _log_fan_transition(self, mode: str, *, ok: bool, **fields) -> None:
         if getattr(self._fan_ctrl, "supported", True) is False:
@@ -5641,6 +5673,23 @@ class Plugin(AmbientRpc):
         else:
             state["independent"] = False
             state["channels"] = []
+            split_available = self._fan_split_available()
+            state["split_available"] = split_available
+            state["split"] = False
+            if split_available:
+                split = self._fan_curves.split_state(self._current_appid)
+                state["split"] = split is not None
+                if split is not None:
+                    split_preset, by_channel = split
+                    state["preset"] = split_preset
+                    state["split_preset"] = split_preset
+                    state["points_by_channel"] = by_channel
+                    state["custom_points_by_channel"] = effective.get("custom_points_by_channel")
+                    state["channels"] = [
+                        {"key": key, "preset": split_preset,
+                         "points": (by_channel or {}).get(key)}
+                        for key in fan_curves.CHANNELS
+                    ]
         return state
 
     def _fan_kernel_pending(self) -> bool:
@@ -5763,7 +5812,10 @@ class Plugin(AmbientRpc):
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        else:
+            self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -5772,8 +5824,8 @@ class Plugin(AmbientRpc):
         auto-learning for this scope: the learner now drives + re-fits the curve."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
-            return await self._fan_curve_state_offloop()
+        if resolved is None or self._fan_split_scope(resolved, appid):
+            return await self._fan_curve_state_offloop()  # adaptive only exists joined
         self._fan_curves.set_adaptive(resolved, appid)
         # Re-arm the mid-session drive, then drive the learned curve now (also sets the
         # anti-churn baseline so the periodic re-fit doesn't needlessly re-drive).
@@ -5788,7 +5840,7 @@ class Plugin(AmbientRpc):
         the biased learned curve so the hardware reflects the dial immediately."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
+        if resolved is None or self._fan_split_scope(resolved, appid):
             return await self._fan_curve_state_offloop()
         self._fan_curves.set_adaptive_bias(resolved, bias, appid)
         # A new bias changes the target curve → reset the anti-churn baseline and drive.
@@ -5797,7 +5849,27 @@ class Plugin(AmbientRpc):
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
-    async def set_fan_curve_points(self, points: list, scope: str, appid=None) -> dict:
+    def _fan_split_scope(self, resolved_scope, appid) -> bool:
+        """Whether a write to this scope is per-channel (profile split AND the hardware can)."""
+        return self._fan_split_available() and self._fan_curves.is_split_scope(resolved_scope, appid)
+
+    async def set_fan_split(self, split: bool, scope: str, appid=None) -> dict:
+        """Joined <-> per-channel ("Juntos / Por separado"). Only where the backend exposes
+        independent channels; both channels start from the current curve, and going back keeps
+        the joined curve untouched."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None or not self._fan_split_available():
+            return await self._fan_curve_state_offloop()
+        seed = None
+        if split and self._fan_curves.effective(appid if resolved == "game" else None).get("preset") == "adaptive":
+            seed = self._adaptive_curve_points(appid if resolved == "game" else None) \
+                or [list(p) for p in fan_presets.RESOLVED["balanced"]]
+        self._fan_curves.set_split(resolved, bool(split), seed, appid)
+        self._reapply_fans()
+        return await self._fan_curve_state_offloop()
+
+    async def set_fan_curve_points(self, points: list, scope: str, appid=None, channel=None) -> dict:
         self._init()
         if not isinstance(points, list) or not points:
             return await self._fan_curve_state_offloop()
@@ -5808,7 +5880,13 @@ class Plugin(AmbientRpc):
         # the same transform applied at write time — so the persisted/returned state
         # reflects what the hardware will actually run. Never show a curve we override.
         safe_points = [list(p) for p in fan_control.sanitize_curve(points)]
-        self._fan_curves.set_custom(resolved, safe_points, appid)
+        if self._fan_split_scope(resolved, appid):
+            if channel in fan_curves.CHANNELS:
+                self._fan_curves.set_split_custom(resolved, channel, safe_points, appid)
+            else:
+                self._fan_curves.set_split_custom_both(resolved, safe_points, appid)
+        else:
+            self._fan_curves.set_custom(resolved, safe_points, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -5817,7 +5895,10 @@ class Plugin(AmbientRpc):
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._fan_curve_state_offloop()
-        self._fan_curves.set_auto(resolved, appid)
+        if self._fan_split_scope(resolved, appid):
+            self._fan_curves.set_split_auto(resolved, appid)
+        else:
+            self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
         return await self._fan_curve_state_offloop()
 
@@ -11205,9 +11286,9 @@ class Plugin(AmbientRpc):
                 snap["learn"] = self._tdp_learned_info(appid)
         if self._fan_ctrl.supported and "pdc_fan" in active_ids:
             prof = self._fan_curves.effective(appid)
-            snap["fan_mode"] = prof.get("preset")
+            snap["fan_mode"] = prof.get("split_preset") if prof.get("split") else prof.get("preset")
             snap["fan_confirmed"] = self._fan_apply_confirmed
-            snap["fan_learning"] = (prof.get("preset") == "adaptive"
+            snap["fan_learning"] = (self._fan_curves.is_adaptive(appid)
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
             fans = self._fresh_pdc_source(extras, "fans", self._read_fans)

@@ -5,6 +5,7 @@ import {
   setFanPreset,
   setFanCurvePoints,
   setFanCurveAuto,
+  setFanSplit,
   setFanAdaptive,
   setFanAdaptiveBias,
   setFanExperimental,
@@ -12,6 +13,7 @@ import {
   FanCurveState,
   FanScope,
   FanPreset,
+  SplitFanKey,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
@@ -30,6 +32,8 @@ export interface FanCurveControl {
   onAdaptive: () => void;
   onAdaptiveBias: (bias: number) => void;
   onCurve: (points: Point[]) => void;
+  onSplit: (split: boolean) => void;
+  onChannelCurve: (channel: SplitFanKey, points: Point[]) => void;
   onExperimental: (enabled: boolean) => void;
   onReset: () => Promise<boolean>;
 }
@@ -56,6 +60,8 @@ export function useFanCurve(): FanCurveControl {
   const [saved, setSaved] = useState(false);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One debounce per fan in per-channel mode: dragging CPU must not cancel a pending GPU commit.
+  const channelCommit = useRef<Partial<Record<SplitFanKey, ReturnType<typeof setTimeout>>>>({});
 
   // Don't apply a late RPC response after the section/modal unmounts.
   const alive = useMountedRef();
@@ -79,6 +85,8 @@ export function useFanCurve(): FanCurveControl {
     // Cancel any in-flight drag commit captured against the previous scope — its
     // late response would otherwise overwrite the freshly-refreshed new scope.
     if (commit.current) clearTimeout(commit.current);
+    Object.values(channelCommit.current).forEach((timer) => timer && clearTimeout(timer));
+    channelCommit.current = {};
     refresh();
   }, [appid, refresh]);
 
@@ -100,6 +108,7 @@ export function useFanCurve(): FanCurveControl {
   useEffect(() => () => {
     if (commit.current) clearTimeout(commit.current);
     if (savedTimer.current) clearTimeout(savedTimer.current);
+    Object.values(channelCommit.current).forEach((timer) => timer && clearTimeout(timer));
   }, []);
 
   // Resolve which profile a write targets: the running game's id when in game
@@ -146,6 +155,26 @@ export function useFanCurve(): FanCurveControl {
 
   const onCustomMode = useCallback(() => {
     if (state?.preset === "custom") return; // already editing
+    if (state?.split) {
+      // Per-channel: each fan resumes ITS last manual curve (else the one it shows).
+      const { appid: targetAppid, scope: targetScope } = resolveTarget();
+      const seeds = (["cpu", "gpu"] as SplitFanKey[]).map((key) => ({
+        key,
+        points: (state.custom_points_by_channel?.[key]
+          ?? state.channels?.find((c) => c.key === key)?.points
+          ?? shownPoints(state)) as Point[] | null,
+      }));
+      if (seeds.some((seed) => !seed.points)) return;
+      setState((cur) => (cur ? { ...cur, preset: "custom" } : cur));
+      seeds
+        .reduce(
+          (chain, seed) => chain.then(() => setFanCurvePoints(seed.points as Point[], targetScope, targetAppid, seed.key)),
+          Promise.resolve(null as FanCurveState | null),
+        )
+        .then((next) => { if (next && alive.current) setStateSafe(next); })
+        .catch(() => {});
+      return;
+    }
     const seed = state?.custom_points ?? shownPoints(state);
     if (!seed) return;
     const { appid: targetAppid, scope: targetScope } = resolveTarget();
@@ -157,7 +186,7 @@ export function useFanCurve(): FanCurveControl {
         flashSaved();
       })
       .catch(() => {});
-  }, [state, resolveTarget, flashSaved]);
+  }, [state, resolveTarget, flashSaved, alive, setStateSafe]);
 
   const onCurve = useCallback(
     (points: Point[]) => {
@@ -166,6 +195,40 @@ export function useFanCurve(): FanCurveControl {
       if (commit.current) clearTimeout(commit.current);
       commit.current = setTimeout(() => {
         setFanCurvePoints(points, targetScope, targetAppid)
+          .then((next) => {
+            if (!alive.current) return;
+            setState(next);
+            flashSaved();
+          })
+          .catch(() => {});
+      }, 200);
+    },
+    [resolveTarget, flashSaved],
+  );
+
+  // Joined <-> per-channel. The returned state is the source of truth (the backend seeds
+  // both channels from the current curve), so no optimism.
+  const onSplit = useCallback(
+    (split: boolean) => {
+      const { appid: targetAppid, scope: targetScope } = resolveTarget();
+      setFanSplit(split, targetScope, targetAppid).then(setStateSafe).catch(() => {});
+    },
+    [resolveTarget, setStateSafe],
+  );
+
+  const onChannelCurve = useCallback(
+    (channel: SplitFanKey, points: Point[]) => {
+      const { appid: targetAppid, scope: targetScope } = resolveTarget();
+      setState((cur) => (cur ? {
+        ...cur,
+        preset: "custom",
+        channels: cur.channels?.map((c) => (c.key === channel ? { ...c, preset: "custom", points } : c)),
+      } as FanCurveState : cur)); // optimistic
+      const pending = channelCommit.current[channel];
+      if (pending) clearTimeout(pending);
+      channelCommit.current[channel] = setTimeout(() => {
+        delete channelCommit.current[channel];
+        setFanCurvePoints(points, targetScope, targetAppid, channel)
           .then((next) => {
             if (!alive.current) return;
             setState(next);
@@ -194,5 +257,5 @@ export function useFanCurve(): FanCurveControl {
     [setStateSafe],
   );
 
-  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental, onReset };
+  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onSplit, onChannelCurve, onExperimental, onReset };
 }

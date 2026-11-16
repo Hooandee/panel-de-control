@@ -669,7 +669,16 @@ export interface FanCurveState {
   kernel_pending?: boolean;
   device_key?: string | null;
   independent?: boolean;
-  channels?: DesktopFanChannel[];
+  // Desktop PCs: the independent channels. With `split` (ASUS): one entry per fan
+  // (cpu = pwm1, gpu = pwm2) carrying its own curve.
+  channels?: Array<DesktopFanChannel | SplitFanChannel>;
+  // The hardware exposes two independent tables (ASUS) -> "Juntos / Por separado" is offered.
+  split_available?: boolean;
+  // Per-channel mode is active (always false when !split_available).
+  split?: boolean;
+  split_preset?: Exclude<FanPreset, "adaptive">;
+  points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
+  custom_points_by_channel?: Record<SplitFanKey, [number, number][]> | null;
   apply_ok?: boolean;
   rollback_ok?: boolean;
   board_fans?: BoardFanState;
@@ -701,6 +710,14 @@ export interface BoardFanState {
   channels?: number;
   control_off?: boolean;
   last?: { action: string; ok: boolean; channels: number; detail: string } | null;
+}
+
+export type SplitFanKey = "cpu" | "gpu";
+
+export interface SplitFanChannel {
+  key: SplitFanKey;
+  preset: Exclude<FanPreset, "adaptive">;
+  points: [number, number][] | null;
 }
 
 export interface DesktopFanChannel {
@@ -793,7 +810,11 @@ export const setFanPreset =
 export const setFanFollowGlobal =
   callable<[follow: boolean, appid: string | null], FanCurveState>("set_fan_follow_global");
 export const setFanCurvePoints =
-  callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
+  callable<[points: [number, number][], scope: FanScope, appid: string | null, channel?: SplitFanKey | null],
+    FanCurveState>("set_fan_curve_points");
+// Joined <-> per-channel ("Juntos / Por separado"); only where `split_available`.
+export const setFanSplit =
+  callable<[split: boolean, scope: FanScope, appid: string | null], FanCurveState>("set_fan_split");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
 // Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto
