@@ -1026,15 +1026,9 @@ class PipeWireEq:
                 return False
             self._downstream_mutes[downstream] = muted
         left, right = balance_channels(balance)
-        if not self._set_sink_volume_confirmed(downstream, "100%"):
+        values = ("100%",) if left == right else (f"{left}%", f"{right}%")
+        if not self._set_sink_volume_confirmed(downstream, *values):
             return False
-        if left != right:
-            if not self._set_sink_volume_confirmed(
-                downstream,
-                f"{left}%",
-                f"{right}%",
-            ):
-                return False
         if not self._set_sink_mute_confirmed(downstream, False):
             return False
         return True

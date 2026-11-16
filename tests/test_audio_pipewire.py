@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import stat
@@ -3357,3 +3358,51 @@ def test_teardown_retry_preserves_volume_after_handoff_with_unplugged_route(tmp_
     assert fake._volumes[sink] == writes[-1]["before"][0]
     assert fake._mutes[sink] is False
     assert not Path(eq._pending_path()).exists()
+
+
+def test_balance_pin_never_temporarily_restores_the_attenuated_channel(tmp_path):
+    report = json.loads((Path(__file__).parent / "data/audio_balance_pin.json").read_text())
+    sink = report["sink"]
+    for case in report["cases"]:
+        before = tuple(case["events"][0]["before"])
+        target = case["events"][-1]["requested"]
+        fake = _FakeRunner(downstream_vol={sink: before[0]})
+        fake._volume_channels[sink] = before
+        fake._mutes[sink] = True
+        eq = _make_eq(tmp_path, fake, conf_exists=False)
+
+        for _ in range(2):
+            checkpoint = len(fake.calls)
+            assert eq._pin_downstream(sink, case["balance"]) is True
+            requests = [call[3:] for call in fake.calls[checkpoint:]
+                        if call[:3] == ["pactl", "set-sink-volume", sink]]
+            assert requests == [target]
+            assert eq._sink_volume_pcts(sink) == tuple(target)
+            assert eq._downstream_volumes[sink] == before
+            assert eq._downstream_mutes[sink] is True
+            assert fake._mutes[sink] is False
+
+
+def test_cancelled_balance_pin_keeps_mute_and_the_owned_restore_snapshot(tmp_path):
+    report = json.loads((Path(__file__).parent / "data/audio_balance_pin.json").read_text())
+    case = report["cases"][0]
+    sink = report["sink"]
+    before = tuple(case["events"][0]["before"])
+    fake = _FakeRunner(downstream_vol={sink: before[0]})
+    fake._volume_channels[sink] = before
+    fake._mutes[sink] = True
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    run = eq._runner
+
+    def cancel_before_unmute(argv, timeout=8):
+        if argv[:3] == ["pactl", "set-sink-mute", sink]:
+            raise asyncio.CancelledError
+        return run(argv, timeout)
+
+    eq._runner = cancel_before_unmute
+    with pytest.raises(asyncio.CancelledError):
+        eq._pin_downstream(sink, case["balance"])
+    assert eq._sink_volume_pcts(sink) == tuple(case["events"][-1]["requested"])
+    assert fake._mutes[sink] is True
+    assert eq._downstream_volumes[sink] == before
+    assert eq._downstream_mutes[sink] is True
