@@ -81,6 +81,9 @@ works with the controller, and updates show up on their own in the quick access 
 Put your photos, your videos or your games' art behind Home, and let a game's soundtrack play or
 its trailer show when you land on it.
 
+If you chose to keep a theme’s background, **Show mine anyway** lets Ambient take it back for
+Panel while keeping your images and settings.
+
 It's also a player for everything: your music, radio from around the world on a map, YouTube,
 Twitch or TV channels from M3U lists. Queue it up, pick repeat or shuffle and take it into your game
 in a mini player you control with the gamepad. And instead of typing links with the D-pad, scan a

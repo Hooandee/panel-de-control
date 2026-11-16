@@ -81,6 +81,9 @@ Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido
 Pon de fondo en Inicio tus fotos, tus vídeos o el arte de tus juegos, y al pasar por un juego deja
 que suene su banda sonora o se vea su tráiler.
 
+Si has elegido conservar el fondo de un tema, Ambiente te permite recuperarlo para Panel con
+**Mostrar el mío igualmente**, sin perder tus imágenes ni la configuración.
+
 Además es un reproductor para todo: tu música, radios de todo el mundo en un mapa, YouTube, Twitch
 o canales de tele con listas M3U. Lo pones en cola, eliges repetir o aleatorio y te lo llevas a la
 partida en un mini reproductor que manejas con el mando. Y para no escribir enlaces con la
