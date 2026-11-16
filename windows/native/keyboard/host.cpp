@@ -209,7 +209,8 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false, bool restoring =
     }
     build = version.dwBuildNumber;
     if ((faceProbe || styling || restoring) && build != 26300) { Result("unsupported", "probe_build_unverified"); return 0; }
-    DWORD session = 0; ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    DWORD session = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) { Result("connection_failed", "discovery_busy"); return 0; }
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
     PROCESSENTRY32W entry{}; entry.dwSize = sizeof(entry);
     if (!snapshot || !Process32FirstW(snapshot.value, &entry)) {
@@ -217,8 +218,9 @@ int Run(bool faceProbe, bool styling, bool effectProbe = false, bool restoring =
     }
     do {
         DWORD candidateSession = 0;
-        if (_wcsicmp(entry.szExeFile, L"TextInputHost.exe") == 0 &&
-            ProcessIdToSessionId(entry.th32ProcessID, &candidateSession) && candidateSession == session) {
+        if (_wcsicmp(entry.szExeFile, L"TextInputHost.exe") == 0) {
+            if (!ProcessIdToSessionId(entry.th32ProcessID, &candidateSession)) { Result("connection_failed", "discovery_busy"); return 0; }
+            if (candidateSession != session) continue;
             if (targetPid) { Result("connection_failed", "ambiguous_target"); return 0; }
             targetPid = entry.th32ProcessID;
         }
