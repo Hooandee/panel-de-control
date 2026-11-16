@@ -1140,6 +1140,17 @@ def test_recipe_proxy_panel_cannot_install_is_left_out(steam, fake_catalog, proc
     assert service.install(APPID, {"build": "fsr-test"})["overrides"] == ["dxgi=n,b"]
 
 
+def test_endfield_recipe_installs_the_d3d12_proxy(steam, fake_catalog, proc, monkeypatch):
+    # Under Proton, OptiScaler as dxgi.dll makes Endfield quit seconds after init; d3d12.dll keeps it running.
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, proxy="d3d12.dll"))
+    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    service = _service(steam, fake_catalog, proc)
+    result = service.install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["d3d12=n,b"]
+    _, game = steam
+    assert (game / "bin/x64_dx12/d3d12.dll").is_file() and not (game / "bin/x64_dx12/dxgi.dll").exists()
+
+
 @pytest.fixture
 def proton_catalog(monkeypatch, fake_catalog):
     build = Build("proton-fsr4", "proton", "FSR 4", ("rdna2",), 3, 2, engine="proton")

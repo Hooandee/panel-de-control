@@ -2199,7 +2199,11 @@ def _with_leftovers(result: dict, left: dict | None) -> dict:
 
 
 def _recipe_proxy(recipe) -> str | None:
-    return recipe.proxy if recipe and recipe.proxy in catalog.PROXIES else None
+    if not recipe or recipe.proxy not in catalog.PROXIES:
+        return None
+    if recipe.proxy == "d3d12.dll" and recipe.appid not in catalog.D3D12_PROXY_APPIDS:
+        return None
+    return recipe.proxy
 
 
 def _recipe_info(recipe) -> dict | None:
