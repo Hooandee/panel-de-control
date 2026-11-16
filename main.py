@@ -242,7 +242,7 @@ _SUPPORT_SECTIONS: dict[str, tuple[tuple[str, tuple[str, ...] | None], ...]] = {
     "fans": (
         ("get_fan_curve_state", (
             "preset", "global_preset", "bias", "source", "experimental_enabled", "has_game_profile",
-            "split", "split_available",
+            "split", "split_available", "split_preset", "channels", "points_by_channel",
             "target_temp.target", "target_temp.other_controller", "backend_diagnostics",
             "board_fans.enabled", "board_fans.control_off", "board_fans.loaded",
             "board_fans.loaded_by_panel",
