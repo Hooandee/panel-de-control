@@ -183,7 +183,11 @@ class FanCurveStore(ScopedProfileStore):
         if split:
             seed = _clean_points(seed_points) or _clean_points(target.get("points"))
             target["split"] = True
-            if seed:
+            remembered = target.get("custom_points_by_channel") or {}
+            if all(_clean_points(remembered.get(channel)) for channel in CHANNELS):
+                target["split_preset"] = "custom"
+                target["points_by_channel"] = copy.deepcopy(remembered)
+            elif seed:
                 same_curve = target.get("points") == seed and target.get("preset") in _SPLIT_PRESETS
                 target["split_preset"] = target["preset"] if same_curve else "custom"
                 target["points_by_channel"] = {channel: [list(p) for p in seed] for channel in CHANNELS}

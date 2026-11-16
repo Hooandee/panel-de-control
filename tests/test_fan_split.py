@@ -87,6 +87,17 @@ class TestStoreSplit:
         s.set_split_preset("global", "silent", SILENT)
         assert s.split_state(None) == ("silent", {"cpu": SILENT, "gpu": SILENT})
 
+    def test_reactivating_split_restores_the_per_channel_curves(self, tmp_path):
+        s = _store(tmp_path)
+        s.set_preset("global", "balanced", BALANCED)
+        s.set_split("global", True)
+        s.set_split_custom("global", "cpu", CPU_HIGH)
+        s.set_split_custom("global", "gpu", GPU_LOW)
+        s.set_split("global", False)
+        assert s.effective(None)["points"] == BALANCED
+        s.set_split("global", True)
+        assert s.split_state(None) == ("custom", {"cpu": CPU_HIGH, "gpu": GPU_LOW})
+
     def test_manual_pair_is_remembered_outside_custom(self, tmp_path):
         s = _store(tmp_path)
         s.set_split("global", True, seed_points=BALANCED)
