@@ -64,6 +64,8 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
   const editable = curveState.preset === "custom";
   const split = curveState.split === true;
   const adaptive = curveState.preset === "adaptive" && !split;
+  // Per-fan firmware Auto has no per-channel curve to draw: show the same reference as joined.
+  const perChannelGraphs = split && curveState.preset !== "auto";
   const points = shownPoints(curveState) ?? [];
   const channelPoints = (key: SplitFanKey) =>
     (curveState.channels?.find((channel) => channel.key === key)?.points ?? points) as typeof points;
@@ -160,7 +162,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
           bias={curveState.bias}
           onBias={control.onAdaptiveBias}
         />
-      ) : split ? (
+      ) : perChannelGraphs ? (
         <>
           {SPLIT_CHANNELS.map((key) => (
             <div key={key} data-testid={`fan-split-${key}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>

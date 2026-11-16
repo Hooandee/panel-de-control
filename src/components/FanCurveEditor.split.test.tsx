@@ -78,4 +78,11 @@ describe("FanCurveEditor Juntos / Por separado", () => {
     expect(control.onPreset).not.toHaveBeenCalled();
     expect(screen.getByText("fans.split.adaptiveOff")).toBeTruthy();
   });
+
+  it("shows one firmware reference graph for split + Auto instead of two invented curves", () => {
+    render(<FanCurveEditor control={makeControl({ split_available: true, split: true, preset: "auto", channels: [
+      { key: "cpu", preset: "auto", points: null }, { key: "gpu", preset: "auto", points: null }] })} liveTemp={40} suggestion={null} />);
+    expect(screen.getAllByTestId("graph")).toHaveLength(1);
+    expect(screen.queryByTestId("fan-split-cpu")).toBeNull();
+  });
 });
