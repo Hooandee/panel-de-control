@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-loop",
   "cssLoaderName": "Hooandee Loop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "displayName": {
     "es": "Loop",
     "en": "Loop",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.2/theme.zip",
-    "size": 55870,
-    "sha256": "26aeaa11cb12918cfef73885940ba7732d0b267dd8b0aa407f9c59cea8a9c79f"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-loop/0.1.3/theme.zip",
+    "size": 56818,
+    "sha256": "cd2e1a3b9cfedb17f02e2b543321a8b29e27aed3b0d15839ad763f30552e1e96"
   },
   "minimumVersions": {
     "panel": "0.89.0",
@@ -26,8 +26,8 @@
     "cssLoaderBackend": 9
   },
   "notes": {
-    "es": "Ya se ven tus juegos con el «Fondo ampliado» de Steam activado, la tienda vuelve a abrirse desde el menú de Loop, las portadas que tardan en llegar muestran el nombre del juego y Proton ya no aparece entre tus juegos.",
-    "en": "Your games now show with Steam's \"Expanded background\" turned on, the store opens again from Loop's menu, covers that take too long show the game's name and Proton no longer appears among your games.",
-    "it": "I tuoi giochi ora si vedono anche con lo «Sfondo ampliato» di Steam attivo, il negozio si riapre dal menu di Loop, le copertine che tardano mostrano il nome del gioco e Proton non compare più tra i tuoi giochi."
+    "es": "Loop ya no muestra los juegos que has ocultado en Steam. El tráiler del Ambiente sigue al juego seleccionado, y los juegos recién instalados o comprados aparecen enseguida. Activarlo al arrancar ya no puede estropear tu biblioteca de Steam. Al moverte por el carrusel suena el sonido de navegación de Steam en las dos direcciones.",
+    "en": "Loop no longer shows the games you have hidden in Steam. The Ambient trailer follows the selected game, and newly installed or purchased games show up right away. Turning it on at startup can no longer break your Steam library. Moving through the carousel plays Steam's navigation sound in both directions.",
+    "it": "Loop non mostra più i giochi che hai nascosto in Steam. Il trailer dell'Ambiente segue il gioco selezionato e i giochi appena installati o acquistati compaiono subito. Attivarlo all'avvio non può più rovinare la tua libreria di Steam. Muovendoti nel carosello si sente il suono di navigazione di Steam in entrambe le direzioni."
   }
 }
