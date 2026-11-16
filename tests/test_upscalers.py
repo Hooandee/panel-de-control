@@ -1242,7 +1242,8 @@ def test_endfield_recipe_launches_in_directx11(steam, fake_catalog, proc, monkey
     monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, args=recipe.args, proxy="d3d12.dll"))
     monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
     result = _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test"})
-    assert result["overrides"] == ["d3d12=n,b"] and result["args"] == ["-force-d3d11"]
+    # The fixture game also has wiki arguments; the recipe only has to add its own.
+    assert result["overrides"] == ["d3d12=n,b"] and "-force-d3d11" in result["args"]
 
 
 @pytest.fixture
