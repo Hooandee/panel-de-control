@@ -10433,12 +10433,24 @@ class Plugin(AmbientRpc):
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
-        if not result.ok and (result.error_code or "").startswith("frequency_"):
+        recovery = getattr(result, "recovery", None)
+        if recovery:
+            event["recovery"] = {
+                key: recovery[key]
+                for key in ("attempted", "recovered", "boost", "delay_ms", "retry_reason", "retry")
+                if recovery.get(key) is not None
+            }
+        if recovery or (
+            not result.ok and (result.error_code or "").startswith("frequency_")
+        ):
             try:
                 failure = self._cpu_frequency_failure_diagnostic(
-                    self._cpu_frequency.diagnostics().get("last_failure")
+                    recovery["first_failure"] if recovery
+                    else self._cpu_frequency.diagnostics().get("last_failure")
                 )
-                if failure and result.error_code == f"frequency_{failure['reason']}":
+                if failure and (
+                    recovery or result.error_code == f"frequency_{failure['reason']}"
+                ):
                     event["frequency_failure"] = failure
             except Exception:  # noqa: BLE001
                 pass
@@ -12376,10 +12388,15 @@ class Plugin(AmbientRpc):
         policies = value.get("policies") or []
         return {
             "reason": value.get("reason"),
+            **({"boost": value["boost"]} if value.get("boost") is not None else {}),
             "requested": list(value["requested"]) if value.get("requested") else None,
             "policies": [{
                 "name": policy.get("name"),
                 "driver": policy.get("driver"),
+                **{
+                    key: policy[key] for key in ("amd_pstate_max", "writes")
+                    if policy.get(key) is not None
+                },
                 **{
                     key: list(policy[key]) if policy.get(key) else None
                     for key in ("hardware_bounds", "target", "applied")
