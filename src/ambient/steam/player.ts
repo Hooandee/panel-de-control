@@ -75,6 +75,11 @@ export function needsRelay(track: Track): boolean {
   return track.live && /^http:\/\//i.test(track.url) && !LOOPBACK_HTTP.test(track.url) && !isHls(track.url) && !parseEmbedStream(track.url);
 }
 
+/** hls.js lives in a frame under Steam's https document, which blocks its http requests as mixed content. */
+function secureHls(url: string): string {
+  return isHls(url) && /^http:\/\//i.test(url) && !LOOPBACK_HTTP.test(url) ? `https://${url.slice(7)}` : url;
+}
+
 /** One player for music, radio and YouTube. What the UI shows comes from the element's own events. */
 export class AmbientPlayer {
   private audio: MediaLike | null = null;
@@ -203,7 +208,7 @@ export class AmbientPlayer {
         if (generation !== this.loadGeneration || this.active !== audio) return;
         audio.src = url ?? track.url;
       });
-    } else audio.src = track.url;
+    } else audio.src = secureHls(track.url);
     audio.volume = this.volume * this.scale;
     if (position > 0 && !track.live) {
       audio.addEventListener("loadedmetadata", () => {

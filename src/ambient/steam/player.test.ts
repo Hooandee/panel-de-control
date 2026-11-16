@@ -297,13 +297,13 @@ describe("plain-http radio", () => {
     } finally { player.dispose(); }
   });
 
-  it("keeps https, loopback and HLS addresses as they are", () => {
+  it("keeps https and loopback addresses as they are", () => {
     const relay = vi.fn(async () => "http://127.0.0.1:9/r/t/key");
     const { audio, player } = setup(relay);
     try {
-      for (const url of ["https://s.test/live.mp3", "http://127.0.0.1:9/m/t/a", "http://hls.test/live.m3u8"]) player.playQueue([station(url)]);
+      for (const url of ["https://s.test/live.mp3", "http://127.0.0.1:9/m/t/a"]) player.playQueue([station(url)]);
       expect(relay).not.toHaveBeenCalled();
-      expect(audio.src).toBe("http://hls.test/live.m3u8");
+      expect(audio.src).toBe("http://127.0.0.1:9/m/t/a");
     } finally { player.dispose(); }
   });
 
@@ -324,6 +324,18 @@ describe("plain-http radio", () => {
       release("http://127.0.0.1:9/r/t/old");
       await Promise.resolve();
       expect(audio.src).toBe("https://fast.test/b.mp3");
+    } finally { player.dispose(); }
+  });
+
+  it("opens http HLS over https: hls.js runs in a frame under Steam's https document and its requests are blocked as mixed content", () => {
+    const audio = fakeAudio();
+    const video = Object.assign(fakeAudio(), { nextVideo: vi.fn(), previousVideo: vi.fn(), dispose: vi.fn(), setBounds: vi.fn(), setVisible: vi.fn() });
+    const player = new AmbientPlayer(() => audio, vi.fn(), undefined, () => video, async () => null);
+    try {
+      player.playQueue([station("http://hls.test/pool_1/live.isml/radio.m3u8?x=1")]);
+      expect(video.src).toBe("https://hls.test/pool_1/live.isml/radio.m3u8?x=1");
+      player.playQueue([station("http://127.0.0.1:8/m/t/live.m3u8")]);
+      expect(video.src).toBe("http://127.0.0.1:8/m/t/live.m3u8");
     } finally { player.dispose(); }
   });
 });
