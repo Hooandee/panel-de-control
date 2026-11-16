@@ -221,3 +221,10 @@ def test_a_copy_saved_in_an_older_format_is_ignored_and_fetched_again(tmp_path):
     assert cache.lookup("Stellar Blade") is None
     assert cache.refresh(fetch=lambda *a, **k: Response(TABLE.encode()), now=lambda: 1000.0)["updated"]
     assert cache.lookup("Stellar Blade")["status"] == "works"
+
+
+def test_use_dx12_note_adds_the_dx12_argument():
+    # Wiki notes such as Satisfactory's ("Use DX12 and install to ...") ask for DX12 without the literal flag.
+    for note in ("Use DX12 and install to `Satisfactory/` `Engine/` `Binaries/` `Win64/`.", "Use DX12 mode", "Use DX12, requires enabling Non-Linear sRGB Input for FSR4."):
+        assert wiki.facts("✅", "", note)["args"] == ["-dx12"]
+    assert "args" not in wiki.facts("✅", "", "DX11 only, do not use the DX12 path")

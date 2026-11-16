@@ -23,13 +23,13 @@ TIMEOUT_S = 8
 MAX_BYTES = 4 * 1024 * 1024
 PAGE_MAX_BYTES = 256 * 1024
 # Bumped whenever parse() keeps new facts, so a copy saved by an older Panel is fetched again.
-FORMAT = 2
+FORMAT = 3
 # Bumped when parse_page learns something new, so pages cached by an older parser are fetched whole again.
 PAGE_FORMAT = 2
 
 _ROW = re.compile(r"^\|(?P<cells>.+)\|\s*$")
 _LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)")
-_DX12 = re.compile(r"(?<![\w-])-dx12\b", re.I)
+_DX12 = re.compile(r"(?<![\w-])-dx12\b|(?<!not )(?<!n't )\buse\s+dx\s?12\b", re.I)
 _PROXY = re.compile(r"\b(?:as|rename(?:d)? (?:it )?to|use)\s+`?(winmm|version|dbghelp|wininet|winhttp|dxgi|d3d12)\.dll`?", re.I)
 _STORE_ONLY = re.compile(r"\b(?:xbox|game ?pass|ms store|microsoft store)\b", re.I)
 _LINUX = re.compile(r"\b(?:linux|steamos|steam ?deck|proton|wine|bazzite|cachyos)\b", re.I)
