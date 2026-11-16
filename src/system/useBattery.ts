@@ -66,7 +66,10 @@ export function useBattery(): BatteryController {
 
   useEffect(() => {
     let alive = true;
+    let inFlight = false;
     const tick = () => {
+      if (inFlight) return;
+      inFlight = true;
       const request = mutation.current;
       const wasPending = pending.current;
       getBatteryState()
@@ -90,6 +93,9 @@ export function useBattery(): BatteryController {
         })
         .catch(() => {
           /* keep last values */
+        })
+        .finally(() => {
+          inFlight = false;
         });
     };
     tick();

@@ -10440,7 +10440,9 @@ class Plugin(AmbientRpc):
         battery["ac_online"] = await asyncio.to_thread(read_on_ac)
         return {
             "battery": battery,
-            "charge_limit": await self._offload_call(self._charge_limit_state),
+            # Not the serial apply executor: a slow charge_types read would
+            # queue TDP, fan and CPU writes behind it.
+            "charge_limit": await asyncio.to_thread(self._charge_limit_state),
         }
 
     def _build_cpu_frequency_control(self):

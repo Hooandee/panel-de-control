@@ -479,3 +479,20 @@ def test_charge_types_only_selected_for_legion(tmp_path):
         key = "rog_ally"
 
     assert not isinstance(select_charge_limit(Ally(), root=str(tmp_path)), LenovoChargeTypes)
+
+
+def test_charge_types_active_is_cached_and_invalidated_on_write(tmp_path):
+    path = _mk_charge_types(str(tmp_path), "[Standard] Long_Life")
+    now = [0.0]
+    backend = LenovoChargeTypes(root=str(tmp_path), clock=lambda: now[0])
+    assert backend.active() == "Standard"
+    with open(path, "w") as f:
+        f.write("Standard [Long_Life]")
+    now[0] = 10.0
+    assert backend.active() == "Standard"  # served from the cache
+    now[0] = 31.0
+    assert backend.active() == "Long_Life"  # TTL expired
+    with open(path, "w") as f:
+        f.write("[Standard] Long_Life")
+    assert backend.disable() is True  # a write drops the cache
+    assert backend.active() == "Standard"

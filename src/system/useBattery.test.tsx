@@ -164,4 +164,19 @@ describe("useBattery mutation ordering", () => {
 
     expect(mocks.setChargeLimitFullOnce).toHaveBeenCalledWith(true);
   });
+
+  it("does not start another poll while one is still in flight", async () => {
+    let resolveRead: (s: BatteryState) => void = () => undefined;
+    mocks.getBatteryState.mockImplementation(
+      () => new Promise<BatteryState>((resolve) => { resolveRead = resolve; }),
+    );
+    renderHook(() => useBattery());
+    await settle();
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(12_000); });
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveRead(STATE); });
+    await act(async () => { vi.advanceTimersByTime(3_000); });
+    expect(mocks.getBatteryState).toHaveBeenCalledTimes(2);
+  });
 });
