@@ -11585,10 +11585,24 @@ class Plugin(AmbientRpc):
     ) -> dict:
         self._init()
         def save():
+            if self._is_late_own_hud_edit(scope, appid):
+                # The user edited this game's own HUD and the game closed before
+                # the debounced write landed: keep the edit, apply nothing.
+                self._hud.set_model("game", appid, model)
+                return self._hud_state()
             if not self._hud_scope_is_current(scope, appid, context_appid):
                 return self._hud_state()
             return self._save_apply_hud_state(model, scope, appid)
         return await self._hud_call(save)
+
+    def _is_late_own_hud_edit(self, scope, appid) -> bool:
+        return (
+            scope == "game"
+            and appid is not None
+            and str(appid) != self._current_appid
+            and self._hud.has_game(str(appid))
+            and not self._hud.is_following_global(str(appid))
+        )
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
         """Turn the HUD of the scope the running game applies on or off."""
