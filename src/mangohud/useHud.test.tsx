@@ -15,11 +15,12 @@ const running = vi.hoisted(() => ({
   game: null as { appid: string; liveAppid: number; name: string } | null,
 }));
 vi.mock("../tdp/useRunningGame", () => ({ useRunningGame: () => running.game }));
-vi.mock("./hudGameSync", () => ({ noteHudScope: vi.fn() }));
+vi.mock("./hudGameSync", () => ({ noteHudScope: vi.fn(), syncSteamOverlayForGame: vi.fn(async () => undefined) }));
 
 import {
   getHudState, reloadHud, resolveHudConflict, resetHud, setHudConfig, setHudFollowGlobal,
 } from "../api";
+import { syncSteamOverlayForGame } from "./hudGameSync";
 import { DEFAULT_MODEL, HudState } from "./model";
 import { useHud, useHudValues } from "./useHud";
 
@@ -459,6 +460,21 @@ describe("useHud coordination", () => {
       });
       expect(setHudFollowGlobal).toHaveBeenCalledWith(false, game.appid, game.appid);
       expect(result.current.scope).toBe("game");
+    });
+
+    it("re-syncs Steam's overlay level after switching between Global and Game", async () => {
+      running.game = game;
+      vi.mocked(getHudState).mockResolvedValue(state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: true }));
+      vi.mocked(setHudFollowGlobal).mockResolvedValue(
+        state(DEFAULT_MODEL, { appid: game.appid, followsGlobal: false }),
+      );
+      const { result } = await renderHud();
+      await act(async () => {
+        result.current.onScope("game");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(syncSteamOverlayForGame).toHaveBeenCalled();
     });
 
     it("resets only the scope being edited", async () => {

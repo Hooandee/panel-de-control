@@ -14,7 +14,7 @@ import {
 import { useMountedRef } from "../hooks/useMountedRef";
 import { RunningGame, useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
-import { noteHudScope } from "./hudGameSync";
+import { noteHudScope, syncSteamOverlayForGame } from "./hudGameSync";
 
 const POLL_MS = 4000;
 const DEBOUNCE_MS = 700;
@@ -360,6 +360,7 @@ export function useHud(): HudController {
         if (!mounted.current) return false;
         revisionRef.current += 1;
         accept(remote);
+        void syncSteamOverlayForGame().catch(() => {});
         return remote.followsGlobal === follow;
       } catch {
         return false;
