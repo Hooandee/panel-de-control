@@ -49,6 +49,10 @@ DEVICE_BUTTONS = {
     "msi_claw_8_ex_ai_plus": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
+    # InputPlumber's oxp8 capability map swaps the raw HID sides before profiles.
+    "onexplayer_apex": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
     "zotac_gaming_zone": [
         ("LeftPaddle1", "L"), ("RightPaddle1", "R"),
     ],

@@ -43,6 +43,22 @@ _HOME_PATH = re.compile(r"[\\/]home[\\/][^\\/\s:\"']+")
 _FIRMWARE_VERSION_KEYS = frozenset(
     {"bios_version", "bios_date", "bios_release", "ec_firmware_release"}
 )
+# Public controller enums resemble serials; preserve them only in typed fields.
+_CONTROLLER_ENUMS = frozenset(
+    prefix + name
+    for prefix in ("", "Gamepad:Button:")
+    for name in (
+        "LeftPaddle1", "LeftPaddle2", "LeftPaddle3",
+        "RightPaddle1", "RightPaddle2", "RightPaddle3", "QuickAccess2",
+    )
+)
+_CONTROLLER_ENUM_PATHS = frozenset({
+    ("controller", "gamepad_targets"),
+    ("controller", "buttons", "source"),
+    ("controller", "buttons", "target", "gamepad"),
+    ("controller_diagnostics", "dbus", "capabilities"),
+    ("controller_diagnostics", "mapped_buttons", "source"),
+})
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
 _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
@@ -86,7 +102,7 @@ def redact_text(
     return s
 
 
-def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
+def redact_obj(obj, *, home: str | None = None, hostname: str | None = None, _path=()):
     """Recursively redact a JSON-ish structure: scrub serial-like key values and
     run redact_text on every string. Idempotent."""
     if isinstance(obj, dict):
@@ -97,11 +113,13 @@ def redact_obj(obj, *, home: str | None = None, hostname: str | None = None):
             elif k in _FIRMWARE_VERSION_KEYS and isinstance(v, str):
                 out[k] = redact_text(v, home=home, hostname=hostname, keep_serial_runs=True)
             else:
-                out[k] = redact_obj(v, home=home, hostname=hostname)
+                out[k] = redact_obj(v, home=home, hostname=hostname, _path=(*_path, k))
         return out
     if isinstance(obj, (list, tuple)):
-        return [redact_obj(x, home=home, hostname=hostname) for x in obj]
-    return redact_text(obj, home=home, hostname=hostname)
+        return [redact_obj(x, home=home, hostname=hostname, _path=_path) for x in obj]
+    path = _path[1:] if _path[:1] == ("state",) else _path
+    keep_enum = isinstance(obj, str) and obj in _CONTROLLER_ENUMS and path in _CONTROLLER_ENUM_PATHS
+    return redact_text(obj, home=home, hostname=hostname, keep_serial_runs=keep_enum)
 
 
 def _tail_file(path: str, n: int) -> str:
