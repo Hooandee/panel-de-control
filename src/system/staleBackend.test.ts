@@ -18,6 +18,18 @@ describe("stale backend detection", () => {
     expect(isMissingBackendMethod(new Error(message))).toBe(true);
   });
 
+  it("recognises the error Decky hands the frontend: empty message, quoted name in the traceback", () => {
+    const error = Object.assign(new Error(""), {
+      name: "Python Exception",
+      pythonTraceback: "Traceback (most recent call last):\n  ...\nAttributeError: 'Plugin' object has no attribute 'check_theme_releases'\n",
+    });
+    expect(isMissingBackendMethod(error)).toBe(true);
+    const sink = vi.fn();
+    setStaleBackendSink(sink);
+    expect(reportStaleBackend(error)).toBe(true);
+    expect(sink).toHaveBeenCalledWith("'Plugin' object has no attribute 'check_theme_releases'");
+  });
+
   it("ignores unrelated failures", () => {
     expect(isMissingBackendMethod(new Error("network down"))).toBe(false);
     expect(isMissingBackendMethod(undefined)).toBe(false);
