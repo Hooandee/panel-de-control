@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.3...panel-de-control-v0.90.0) (2026-11-16)
+
+
+### Features
+
+* 0.89 report fixes, per-game HUD, TDP block and flow scale ([#1379](https://github.com/Hooandee/panel-de-control/issues/1379)) ([c417401](https://github.com/Hooandee/panel-de-control/commit/c41740100edf6d913dc2dc642f3e27098dd55bf3))
+
 ## [0.89.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.89.2...panel-de-control-v0.89.3) (2026-11-14)
 
 
