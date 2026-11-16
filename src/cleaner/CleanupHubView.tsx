@@ -62,7 +62,7 @@ export const CleanupHubView: FC<{
       </div>
       <CleanupPanel hidden={tab !== "games"}><SteamCleanerView controller={games} embedded /></CleanupPanel>
       <CleanupPanel hidden={tab !== "media"}><MediaCleanerView controller={media} /></CleanupPanel>
-      <CleanupPanel hidden={tab !== "proton"}><ProtonCleanerView controller={proton} /></CleanupPanel>
+      <CleanupPanel hidden={tab !== "proton"}><ProtonCleanerView controller={proton} active={tab === "proton"} /></CleanupPanel>
     </div>
   </PanelSectionRow>;
 };
