@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameEntry } from "../launch/steamApi";
@@ -69,8 +69,10 @@ describe("custom launch variables", () => {
     render(mocks.modal);
     const advanced = await screen.findByText("params.advanced");
     expect(screen.queryByRole("switch", { name: "Hide Shader Compilation" })).toBeNull();
-    setUiEventSink(sink);
-    expect(events).toContainEqual({ area: "launch", action: "editor_state", fields: { state: "ready", custom_state: "ready", custom_count: 1, advanced_open: false }, ok: true });
+    await waitFor(() => {
+      setUiEventSink(sink);
+      expect(events).toContainEqual({ area: "launch", action: "editor_state", fields: { state: "ready", custom_state: "ready", custom_count: 1, advanced_open: false }, ok: true });
+    });
     fireEvent.click(advanced);
     expect(screen.getByRole("switch", { name: "Hide Shader Compilation" }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText("DXVK_HUD=0")).toBeTruthy();
@@ -85,12 +87,16 @@ describe("custom launch variables", () => {
   it("records an unread custom library as unknown rather than an empty library", async () => {
     mocks.loadLibrary.mockRejectedValueOnce(new Error("private library error DXVK_HUD=0"));
     const events: Array<{ fields: unknown; ok: boolean }> = [];
-    setUiEventSink((_area, _action, detail, ok) => { events.push({ fields: JSON.parse(detail), ok }); });
+    const sink: UiEventSink = (_area, _action, detail, ok) => { events.push({ fields: JSON.parse(detail), ok }); };
+    setUiEventSink(sink);
     openLaunchEditorModal(game, () => {});
     render(mocks.modal);
     await screen.findByText("params.advanced");
+    await waitFor(() => {
+      setUiEventSink(sink);
+      expect(events[events.length - 1]).toEqual({ fields: { state: "ready", custom_state: "error", custom_count: null, advanced_open: false }, ok: false });
+    });
     setUiEventSink(null);
-    expect(events[events.length - 1]).toEqual({ fields: { state: "ready", custom_state: "error", custom_count: null, advanced_open: false }, ok: false });
     expect(JSON.stringify(events)).not.toContain("private library error");
     expect(screen.queryByRole("switch", { name: "Hide Shader Compilation" })).toBeNull();
     cleanup();
