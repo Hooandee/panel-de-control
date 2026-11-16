@@ -8144,7 +8144,7 @@ class Plugin(AmbientRpc):
             in ("target_not_applied", "live_max_rejected")
             and not getattr(self._tdp_backend, "safety_locked", False)
             and detail.startswith("write not confirmed")
-            and "; rollback confirmed" in detail
+            and ("; rollback confirmed" in detail or "; firmware holds rails" in detail)
         )
 
     def _apply_within_rejected_live_max(self, command, probe_live_max, result):
