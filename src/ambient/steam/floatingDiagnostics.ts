@@ -16,6 +16,16 @@ interface KeyboardSurface {
   border_image: { own: boolean | null; slice: number | null; width: number | null; outset: number | null };
 }
 
+interface KeyboardFocus {
+  owner_terciopelo: true;
+  focused_count: number | null;
+  gpfocus_count: number;
+  touched_count: number | null;
+  face_recognized: true | null;
+  face_focused: boolean | null;
+  face_pressed: boolean | null;
+}
+
 interface FloatingDiagnostics {
   widget: { mounted: boolean | null; visible: boolean | null };
   keyboard: {
@@ -26,6 +36,7 @@ interface FloatingDiagnostics {
     observed_windows: number | null;
     showing_windows: number | null;
     surface?: KeyboardSurface;
+    focus?: KeyboardFocus;
   };
 }
 
@@ -72,7 +83,57 @@ function loboSurface(doc: Document | null): KeyboardSurface | undefined {
   } catch { return; }
 }
 
-/** Only Panel's card and the known keyboard's numeric geometry leave this boundary. */
+// Native states are available only for allowlisted Steam keyboard signatures.
+const KEYBOARD_STATES = [{
+  Keyboard: "_45rH7-kY4P2uVEb3TxZhm",
+  KeyboardKey: "_2KhPXikozxMpbIRo_6jPxW",
+  Focused: "_21EoN2ZlmHNY3fjho_HMae",
+  Touched: "_3UFQq1GinEyksceos-TETi",
+}] as const;
+
+function terciopeloFace(value: string | undefined, base: string): { focused: boolean; pressed: boolean } | null {
+  try {
+    const match = value?.match(/^url\(["']?([^"')]+)["']?\)$/);
+    if (!match) return null;
+    const url = new URL(match[1], base);
+    if (!["https:", "http:"].includes(url.protocol) || url.hostname !== "steamloopback.host") return null;
+    const sprite = url.pathname.match(/^\/themes_custom\/Hooandee(?:%20| )Terciopelo\/assets\/velvet-(idle|hover|focus|press-v3|focus-press-v3)\.png$/)?.[1];
+    return sprite ? { focused: sprite.startsWith("focus"), pressed: sprite.endsWith("press-v3") } : null;
+  } catch { return null; }
+}
+
+function terciopeloFocus(doc: Document | null): KeyboardFocus | undefined {
+  try {
+    if (doc?.documentElement.getAttribute("data-hooandee-keyboard") !== "terciopelo") return;
+    const keyboard = doc.getElementById("virtual keyboard");
+    if (keyboard?.hasAttribute("data-kb-exit")) return;
+    const grid = keyboard?.querySelector(":scope > [role=grid]");
+    if (!grid) return;
+    const keys = [...grid.querySelectorAll("[data-key-row]")];
+    const classes = KEYBOARD_STATES.find((state) => grid.classList.contains(state.Keyboard)
+      && keys.some((key) => key.firstElementChild?.classList.contains(state.KeyboardKey)));
+    const has = (key: Element, token: string) => key.classList.contains(token) || key.firstElementChild?.classList.contains(token) === true;
+    const focused = classes ? keys.filter((key) => has(key, classes.Focused)) : null;
+    const touched = classes ? keys.filter((key) => has(key, classes.Touched)) : null;
+    const gamepad = keys.filter((key) => has(key, "gpfocus"));
+    const cursor = classes ? keys.find((key) => key.classList.contains(classes.Focused)
+      && key.firstElementChild?.classList.contains(classes.Focused)) : undefined;
+    const face = (cursor ?? touched?.[0])?.firstElementChild;
+    const image = face ? read(() => doc.defaultView?.getComputedStyle(face).borderImageSource) : undefined;
+    const recognized = terciopeloFace(image, doc.baseURI);
+    return {
+      owner_terciopelo: true,
+      focused_count: focused?.length ?? null,
+      gpfocus_count: gamepad.length,
+      touched_count: touched?.length ?? null,
+      face_recognized: recognized ? true : null,
+      face_focused: recognized?.focused ?? null,
+      face_pressed: recognized?.pressed ?? null,
+    };
+  } catch { return; }
+}
+
+/** Only Panel's card and allowlisted keyboard geometry/state leave this boundary. */
 export function floatingDiagnostics(
   doc: Document | null,
   observed: boolean,
@@ -98,6 +159,7 @@ export function floatingDiagnostics(
   const windows = read(() => store?.SteamUIWindows);
   const values = Array.isArray(windows) ? windows.map(showing) : null;
   const surface = observed ? loboSurface(doc) : undefined;
+  const focus = observed ? terciopeloFocus(doc) : undefined;
   return {
     widget,
     keyboard: {
@@ -108,6 +170,7 @@ export function floatingDiagnostics(
       observed_windows: values?.filter((value) => value !== null).length ?? null,
       showing_windows: values?.filter((value) => value === true).length ?? null,
       ...(surface ? { surface } : {}),
+      ...(focus ? { focus } : {}),
     },
   };
 }

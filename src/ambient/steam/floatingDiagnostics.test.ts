@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import loboSurface from "./fixtures/lobo-keyboard-surface.json";
+import terciopeloFocus from "./fixtures/terciopelo-keyboard-focus.json";
 
 import { floatingDiagnostics } from "./floatingDiagnostics";
 
@@ -96,5 +97,87 @@ describe("floatingDiagnostics", () => {
       widget: { mounted: null, visible: null },
       keyboard: { observed: true, active: null, main: null, windows: null, observed_windows: null, showing_windows: null },
     });
+  });
+
+  it.each(Object.entries(terciopeloFocus.states))("captures Terciopelo's observed %s state without key content", (_, state) => {
+    document.documentElement.setAttribute("data-hooandee-keyboard", "terciopelo");
+    document.body.innerHTML = '<input value="private draft"><div id="virtual keyboard"><div role="grid"><div data-key-row="private-row" data-key="private-key"><div>private label</div></div></div></div><div class="gpfocus">private conversation</div>';
+    const hit = document.querySelector("[data-key-row]")!;
+    const face = hit.firstElementChild as HTMLElement;
+    const grid = document.querySelector("[role=grid]")!;
+    grid.classList.add(terciopeloFocus.classes.Keyboard);
+    const other = document.createElement("div");
+    other.setAttribute("data-key-row", "private-other-row");
+    other.classList.toggle("gpfocus", terciopeloFocus.other_key.gpfocus);
+    const otherFace = document.createElement("div");
+    otherFace.classList.add(terciopeloFocus.classes.KeyboardKey);
+    otherFace.classList.toggle(terciopeloFocus.classes.Focused, terciopeloFocus.other_key.focused.face);
+    otherFace.style.borderImageSource = `url("https://steamloopback.host/themes_custom/Hooandee%20Terciopelo/assets/${terciopeloFocus.other_key.sprite}")`;
+    other.append(otherFace);
+    grid.prepend(other);
+    face.classList.add(terciopeloFocus.classes.KeyboardKey);
+    hit.classList.toggle(terciopeloFocus.classes.Focused, state.focused.area);
+    face.classList.toggle(terciopeloFocus.classes.Focused, state.focused.face);
+    hit.classList.toggle("gpfocus", state.gpfocus);
+    face.classList.toggle(terciopeloFocus.classes.Touched, state.touched);
+    face.style.borderImageSource = `url("https://steamloopback.host/themes_custom/Hooandee%20Terciopelo/assets/${state.sprite}")`;
+    const source = {};
+    const result = floatingDiagnostics(document, true, source);
+    expect(result.keyboard).toHaveProperty("focus", {
+      owner_terciopelo: true, focused_count: 2, gpfocus_count: 1, touched_count: state.touched ? 1 : 0,
+      face_recognized: true, face_focused: state.sprite.startsWith("velvet-focus"),
+      face_pressed: state.sprite.includes("press"),
+    });
+    expect(result.keyboard).not.toHaveProperty("surface");
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(400);
+    expect(JSON.stringify(result)).not.toMatch(/private|https:|velvet-|_21EoN|row|label/);
+    hit.classList.add("gpfocus");
+    face.classList.add("gpfocus");
+    expect(floatingDiagnostics(document, true, source).keyboard).toMatchObject({ focus: { gpfocus_count: 2 } });
+    expect(floatingDiagnostics(document, false, source).keyboard).not.toHaveProperty("focus");
+    document.documentElement.setAttribute("data-hooandee-keyboard", "private-owner");
+    expect(floatingDiagnostics(document, true, source).keyboard).not.toHaveProperty("focus");
+  });
+
+  it.each([
+    "https://private.example/private-user.png",
+    "https://private.example/themes_custom/Hooandee%20Terciopelo/assets/velvet-focus.png",
+  ])("keeps an unrecognized or missing face unknown (%s)", (image) => {
+    document.documentElement.setAttribute("data-hooandee-keyboard", "terciopelo");
+    document.body.innerHTML = '<div id="virtual keyboard"><div role="grid"><div data-key-row="0"><div></div></div></div></div>';
+    const face = document.querySelector("[data-key-row] > div") as HTMLElement;
+    document.querySelector("[role=grid]")!.classList.add(terciopeloFocus.classes.Keyboard);
+    face.classList.add(terciopeloFocus.classes.KeyboardKey, terciopeloFocus.classes.Focused);
+    face.parentElement!.classList.add(terciopeloFocus.classes.Focused);
+    face.style.borderImageSource = `url("${image}")`;
+    const result = floatingDiagnostics(document, true, {});
+    expect(result.keyboard).toHaveProperty("focus", {
+      owner_terciopelo: true, focused_count: 1, gpfocus_count: 0, touched_count: 0,
+      face_recognized: null, face_focused: null, face_pressed: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("private");
+    face.remove();
+    expect(floatingDiagnostics(document, true, {}).keyboard).toMatchObject({ focus: { face_recognized: null, face_focused: null, face_pressed: null } });
+    document.getElementById("virtual keyboard")!.setAttribute("data-kb-exit", "true");
+    expect(floatingDiagnostics(document, true, {}).keyboard).not.toHaveProperty("focus");
+  });
+
+  it("does not infer native states or choose the gamepad face on an unknown Steam signature", () => {
+    document.documentElement.setAttribute("data-hooandee-keyboard", "terciopelo");
+    document.body.innerHTML = '<div id="virtual keyboard"><div role="grid" class="private-new-surface"><div data-key-row="0" class="gpfocus"><div class="private-new-face"></div></div></div></div>';
+    const face = document.querySelector("[data-key-row] > div") as HTMLElement;
+    face.style.borderImageSource = 'url("https://steamloopback.host/themes_custom/Hooandee%20Terciopelo/assets/velvet-focus.png")';
+    const result = floatingDiagnostics(document, true, {});
+    expect(result.keyboard).toMatchObject({ focus: {
+      owner_terciopelo: true, focused_count: null, gpfocus_count: 1, touched_count: null,
+      face_recognized: null, face_focused: null, face_pressed: null,
+    } });
+    expect(JSON.stringify(result)).not.toMatch(/private|https:|velvet-|gpfocus"/);
+    document.querySelector("[role=grid]")!.classList.add(terciopeloFocus.classes.Keyboard);
+    face.classList.add(terciopeloFocus.classes.KeyboardKey, terciopeloFocus.classes.Focused);
+    expect(floatingDiagnostics(document, true, {}).keyboard).toMatchObject({ focus: {
+      focused_count: 1, gpfocus_count: 1, touched_count: 0,
+      face_recognized: null, face_focused: null, face_pressed: null,
+    } });
   });
 });
