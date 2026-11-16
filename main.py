@@ -3839,7 +3839,10 @@ class Plugin(AmbientRpc):
         appids = set()
         for store in self._scoped_stores():
             appids.update(store.list_games())
-        hud_rows = await self._hud_call(self._hud_profile_rows)
+        try:
+            hud_rows = await self._hud_call(self._hud_profile_rows)
+        except RuntimeError:  # HUD worker restarting: list the other sections
+            hud_rows = {}
         appids.update(hud_rows)
         rows = []
         for appid in sorted(appids):
@@ -3854,9 +3857,10 @@ class Plugin(AmbientRpc):
         global. Re-applies if it's the running game. Returns the refreshed list."""
         self._init()
         appid = str(appid)
+        # HUD first: if its worker is restarting, nothing has been forgotten yet.
+        await self._hud_call(lambda: self._hud.forget_game(appid))
         for store in self._scoped_stores():
             store.forget_game(appid)
-        await self._hud_call(lambda: self._hud.forget_game(appid))
         if appid == self._current_appid:
             self._reapply_all()
         return await self.list_game_profiles()
