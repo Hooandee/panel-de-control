@@ -10438,7 +10438,10 @@ class Plugin(AmbientRpc):
         battery = await asyncio.to_thread(self._battery.read)
         # Single AC-online source (same one every TDP clamp uses).
         battery["ac_online"] = await asyncio.to_thread(read_on_ac)
-        return {"battery": battery, "charge_limit": self._charge_limit_state()}
+        return {
+            "battery": battery,
+            "charge_limit": await self._offload_call(self._charge_limit_state),
+        }
 
     def _build_cpu_frequency_control(self):
         return select_cpu_frequency(
