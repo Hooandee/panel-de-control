@@ -79,7 +79,7 @@ export function useBattery(): BatteryController {
               superseded: request !== mutation.current,
               pendingAtStart: wasPending,
               observedPercent: s.charge_limit.percent,
-              keptPercent: settled.percent,
+              confirmedPercent: settled.percent,
             });
           }
           // Keep live battery info, without reviving a choice from before a write.

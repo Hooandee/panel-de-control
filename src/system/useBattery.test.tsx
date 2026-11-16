@@ -112,7 +112,7 @@ describe("useBattery mutation ordering", () => {
       superseded: readStarts === "before",
       pendingAtStart: readStarts === "during",
       observedPercent: before.readback,
-      keptPercent: chosen.readback,
+      confirmedPercent: chosen.readback,
     });
 
     mocks.getBatteryState.mockResolvedValueOnce({

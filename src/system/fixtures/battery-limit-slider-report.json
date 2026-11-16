@@ -1,9 +1,4 @@
 {
-  "report": "PDC-73VB",
-  "issue": 618,
-  "pluginVersion": "0.46.1",
-  "device": "ROG Ally RC71L_RC71L",
-  "text": "Hola maquina, soy yo de nuevo, el que te pidio lo del limite de carga independiente, sabes, no estoy intentando tomarte del pelo pero empece a acostumbrar a usar tu limite de carga en vez del que esta en el menu de Steam, y con ello note algo, cuando muevo el slider muy rapido con el d-pad (normalmente uso 50% cuando docked y 80% cuando handheld por asi decir) entonces mi salto de 50 a 80 es grande, y al hacer eso muchas veces el slider se regresa y/o pega saltos directamente, llego hasta 50% y al darle a la A me quedo en 65%, y muchas veces tambien pasa que el slider en si no sigue el numero, no sabria decir si es una cuestion de que lo hago muy rapido o algo asi? Y aprovechando, cuando activo el limite de carga de tu plugin pierdo el porcentaje de la bateria que aparece en el home screen (al lado de la foto  de perfil de usuario) y la forma que encontre para remediarlo es activar primero en tu plugin y seguidamente activar el porcentaje en el menu de SteamOS... Espero te este ayudando de alguna forma, eres un crack, mil gracias por todo",
   "battery": {
     "present": true,
     "percent": 73,
@@ -64,6 +59,5 @@
       "readback": 70,
       "ok": true
     }
-  ],
-  "raceOrder": "Controlled ordering of a delayed read and confirmed write; the original completion order was not captured."
+  ]
 }
