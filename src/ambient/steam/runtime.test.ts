@@ -28,6 +28,7 @@ const rpcMock = vi.hoisted(() => ({
   addAmbientFolder: vi.fn(),
   addAmbientFavorite: vi.fn(),
   addAmbientPlaylist: vi.fn(),
+  getAmbientPlaylist: vi.fn(),
   inspectAmbientLink: vi.fn(async (_url: string) => ({ kind: "stream" })),
   removeAmbientItem: vi.fn(),
   restoreAmbientSuggested: vi.fn(),
@@ -1233,6 +1234,23 @@ describe("AmbientRuntime", () => {
       await runtime.reload();
       expect(runtime.getSnapshot().current?.ref).toBe("local:chosen");
       expect(state.settings.background.collections).toContain(folder);
+    } finally { runtime.stop(); }
+  });
+
+  it("caches a saved list's channels but reads a local list file again each time", async () => {
+    rpcMock.getAmbientState.mockResolvedValue({ settings: settings(), knownFolders: {}, collections: [], mediaServer: "stopped" });
+    rpcMock.getAmbientPlaylist.mockImplementation(async (id: string) => ({ id, channels: [] }));
+    rpcMock.getAmbientPlaylist.mockClear();
+    audioStub();
+    const runtime = new AmbientRuntime(ports() as unknown as AmbientPorts);
+    try {
+      await runtime.start();
+      await runtime.playlist("list.tdt");
+      await runtime.playlist("list.tdt");
+      expect(rpcMock.getAmbientPlaylist).toHaveBeenCalledTimes(1);
+      await runtime.playlist("local:abc");
+      await runtime.playlist("local:abc");
+      expect(rpcMock.getAmbientPlaylist).toHaveBeenCalledTimes(3);
     } finally { runtime.stop(); }
   });
 

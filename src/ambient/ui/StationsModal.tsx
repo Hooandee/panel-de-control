@@ -302,7 +302,7 @@ export const StationsBody: FC<{ initialTab: LibraryTab; purpose: LibraryPurpose;
   if (tab === "lists") {
     return (
       <Sheet>
-        <PlaylistsTab runtime={runtime} playlists={snapshot.state?.settings.radio.playlists ?? []} header={header} row={row} />
+        <PlaylistsTab runtime={runtime} playlists={snapshot.state?.settings.radio.playlists ?? []} localLists={snapshot.scan?.lists ?? []} header={header} row={row} />
       </Sheet>
     );
   }

@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from ..core.media_types import media_kind
+from ..core.media_types import is_list_file, media_kind
 
 DEFAULT_MAX_DEPTH = 3
 DEFAULT_MAX_FILES = 2000
@@ -52,7 +52,7 @@ def scan_folder(
             except OSError:
                 continue
         for entry in reversed(files):
-            kind = media_kind(entry.name)
+            kind = media_kind(entry.name) or ("list" if is_list_file(entry.name) else None)
             if kind not in wanted:
                 continue
             if len(result.items) >= max_files:

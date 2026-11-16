@@ -1637,9 +1637,10 @@ export class AmbientRuntime {
 
   private playlists = new Map<string, Promise<PlaylistContents>>();
 
-  /** Channels of a saved list; one request per list while Panel runs, failures are retried. */
+  /** Channels of a saved list; one request per list while Panel runs, failures are retried. A list file on disk is read each time: it changes, and its local entries are served from a port that can change. */
   playlist(id: string): Promise<PlaylistContents> {
-    const cached = this.playlists.get(id);
+    const local = id.startsWith("local:");
+    const cached = local ? undefined : this.playlists.get(id);
     if (cached) return cached;
     const pending = rpc.getAmbientPlaylist(id)
       .then((contents) => contents ?? { id, channels: [], error: "unreachable" })
@@ -1648,7 +1649,7 @@ export class AmbientRuntime {
         if (contents.error) this.playlists.delete(id);
         return contents;
       });
-    this.playlists.set(id, pending);
+    if (!local) this.playlists.set(id, pending);
     return pending;
   }
 

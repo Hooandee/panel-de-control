@@ -23,6 +23,8 @@ export interface ScanResult {
   library?: Record<string, MediaItem[]>;
   collections: Record<string, MediaItem[]>;
   music: MediaItem[];
+  /** .m3u/.m3u8 files found inside the folders the listener chose. */
+  lists?: MediaItem[];
   truncated: boolean;
 }
 
