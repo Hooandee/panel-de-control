@@ -530,6 +530,26 @@ class FirmwareAttrBackend(TDPBackend):
         if self._handoff is not None:
             self._handoff["retry_at"] = 0.0
 
+    def recovery_diagnostics(self):
+        payload = self._runtime_lock_payload
+        snapshot = payload.get("snapshot", {}) if isinstance(payload, dict) else {}
+        return {
+            "profile": self.read_profile(),
+            "rails": {
+                rail: self._read_int(self._attr(attr))
+                for rail, attr in _RAIL_ATTRS if rail in self._primary_rails
+            },
+            "transaction": None if payload is None else {
+                "state": payload.get("state"),
+                "profile": payload.get("profile"),
+                "snapshot": {
+                    rail: snapshot.get(self._surface_label(self.name, rail))
+                    for rail in self._primary_rails
+                },
+            },
+            "ownership_pending": self._ownership_recovery_pending,
+        }
+
     def recover_runtime_transaction(self):
         self._firmware_io_error = False
         result = {"ok": True, "detail": "no firmware recovery pending"}

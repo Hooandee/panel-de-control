@@ -14235,6 +14235,14 @@ class Plugin(AmbientRpc):
                     return True
             result = trace_tdp_operation(
                 self._tdp_backend, "recover", recover,
+                recovery_owner={
+                    "status": "unknown",
+                    "source": "not_observed_for_recovery",
+                    "runtime_external_owner": self._tdp_external_owner,
+                } if (
+                    self._device.key == "legion_go_2"
+                    and backend.name == "firmware-attr:lenovo-wmi-other"
+                ) else None,
             )
         except Exception as error:  # noqa: BLE001
             decky.logger.error(
