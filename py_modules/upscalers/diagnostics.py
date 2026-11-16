@@ -351,9 +351,16 @@ _LAUNCH_WRAPPERS = {'mako': 'mako', 'mako-run': 'mako', 'mako-launch': 'mako', '
                     'mangohud': 'mangohud', 'gamemoderun': 'gamemoderun'}
 
 
+_LAUNCH_FG_ENV = {
+    'ENABLE_GAMESCOPE_WSI': 'switch', 'DISABLE_LSFGVK': 'switch',
+    'LSFGVK_PROFILE': 'profile', 'MAKO_PROFILE': 'profile',
+    'LSFGVK_CONFIG': 'path', 'MAKO_CONFIG': 'path', 'MAKO_LAUNCH_CONFIG': 'path',
+}
+
+
 def launch_diagnostics(value) -> dict:
     result = {'command_placeholder': False, 'render_flags': [], 'wrappers': [],
-              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False}
+              'dll_overrides': [], 'omitted_count': 0, 'reshade_redirected': False, 'framegen_env': {}}
     if not isinstance(value, str):
         return result
     try:
@@ -368,6 +375,19 @@ def launch_diagnostics(value) -> dict:
             flag = 'dx11' if token.lower() in ('-dx11', '-d3d11') else 'dx12'
             if flag not in result['render_flags']:
                 result['render_flags'].append(flag)
+        elif (name := token.partition('=')[0]) in _LAUNCH_FG_ENV and '=' in token:
+            value_class = 'empty'
+            assigned = token.partition('=')[2]
+            kind = _LAUNCH_FG_ENV[name]
+            if assigned:
+                if kind == 'switch':
+                    value_class = assigned if assigned in ('0', '1') else 'other'
+                elif kind == 'profile':
+                    # A pdc-shaped name is syntax, not ownership or observed activity.
+                    value_class = 'pdc' if re.fullmatch(r'pdc-(?:[0-9]{1,20}|none)', assigned) else 'other'
+                else:
+                    value_class = 'set'
+            result['framegen_env'][name] = value_class
         elif token.startswith('RESHADE_BASE_PATH_OVERRIDE='):
             result['reshade_redirected'] = bool(token.partition('=')[2])
         elif token.startswith('WINEDLLOVERRIDES='):
