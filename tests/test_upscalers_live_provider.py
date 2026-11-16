@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -153,7 +154,7 @@ def test_a_d3d11_game_bridged_to_d3d12_counts_as_running(tmp_path):
     (tmp_path / logread.LOG_NAME).write_text(D3D11_LOG)
     facts = logread.read(tmp_path)
     assert logread.verdict(facts) == 'active'
-    assert facts['input'] == 'DLSS'
+    assert 'input' not in facts
     assert facts['initial_resolution'] == {'render': [752, 423], 'output': [1280, 720]}
     assert logread.provider_observation(facts)['provider_family'] == 'fsr'
 
@@ -165,3 +166,23 @@ def test_d3d12_logs_read_exactly_as_before(tmp_path):
     assert (facts['upscaler'], facts['input'], logread.verdict(facts)) == ('fsr31', 'DLSS', 'active')
     (tmp_path / logread.LOG_NAME).write_text('[I] NVSDK_NGX_D3D11_Init_Ext AppId: 100980011\n')
     assert logread.verdict(logread.read(tmp_path)) == 'loaded'
+
+
+@pytest.mark.parametrize('before,after,expected', [
+    ('', '', None),
+    ('CreateXeSSContext\n', '', 'XeSS'),
+    ('', 'CreateXeSSContext\n', 'XeSS'),
+])
+def test_d3d11_backend_creation_does_not_identify_the_game_input(tmp_path, before, after, expected):
+    from upscalers import logread
+    excerpt = (Path(__file__).parent / 'fixtures/upscalers/d3d11_exposure_fallback.log').read_text()
+    service, install = make_service(tmp_path, before + excerpt + after)
+    entry = service._game_state('292030')
+    entry['history'] = [{'build': install['build']}]
+    facts = service.verify('292030')['facts']
+    assert facts.get('input') == expected
+    assert entry['history'][-1]['facts'].get('input') == expected
+    assert diagnostics.snapshot(install)['observed'].get('input') == expected
+    assert facts['upscaler'] == 'FSR 3.X/4 w/Dx12'
+    assert facts['errors'] == 1
+    assert logread.verdict(facts) == 'active'
