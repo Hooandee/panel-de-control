@@ -204,9 +204,13 @@ export class AmbientPlayer {
     this.wantPlaying = true;
     this.emit({ track, status: "loading", error: null, position: 0, duration: null, video: this.showsVideo(track), picture: true });
     if (this.relayStream && needsRelay(track) && this.engineFor(track) === "audio") {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
       void this.relayStream(track.url).catch(() => null).then((url) => {
         if (generation !== this.loadGeneration || this.active !== audio) return;
         audio.src = url ?? track.url;
+        if (this.wantPlaying) void audio.play().catch(() => undefined);
       });
     } else audio.src = secureHls(track.url);
     audio.volume = this.volume * this.scale;

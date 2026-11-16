@@ -297,6 +297,20 @@ describe("plain-http radio", () => {
     } finally { player.dispose(); }
   });
 
+  it("silences the previous source and plays again once the relay address arrives", async () => {
+    let release: (url: string) => void = () => undefined;
+    const { audio, player } = setup(() => new Promise<string | null>((resolve) => { release = resolve; }));
+    const playedWith: string[] = [];
+    vi.mocked(audio.play).mockImplementation(async () => { playedWith.push(audio.src); });
+    try {
+      audio.src = "https://other.test/song.mp3";
+      player.playQueue([station("http://livestreaming.test/stream64.mp3")]);
+      expect(audio.getAttribute("src")).toBeNull();
+      release("http://127.0.0.1:9/r/t/key");
+      await vi.waitFor(() => expect(playedWith).toContain("http://127.0.0.1:9/r/t/key"));
+    } finally { player.dispose(); }
+  });
+
   it("keeps https and loopback addresses as they are", () => {
     const relay = vi.fn(async () => "http://127.0.0.1:9/r/t/key");
     const { audio, player } = setup(relay);
