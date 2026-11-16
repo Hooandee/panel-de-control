@@ -611,7 +611,7 @@ export const de: Record<string, string> = {
   "up.steamMachine.helix": "In 4K auf der Steam Machine läuft HelixSR mit weniger als der halben Bildrate von FSR 4 mit OptiScaler und füllt den Grafikspeicher fast ganz: Das Spiel kann abstürzen",
   "up.steamMachine.native": "In 4K auf der Steam Machine füllt die Qualität Nativ den Grafikspeicher fast ganz und das Spiel kann abstürzen. Ausgewogen oder Leistung lassen Luft",
   "up.notice.dlssRemoved": "Seit dem letzten Update bietet dieses Spiel kein DLSS mehr an und OptiScaler kann seine Skalierung nicht ersetzen. An einer Lösung wird gearbeitet",
-  "up.notice.dx11Launch": "Dieses Spiel startet in DirectX 11, damit FSR 4 funktioniert",
+  "up.notice.dx11Launch": "Dieses Spiel startet in DirectX 11. Damit FSR 4 funktioniert, wähle in den Grafikeinstellungen DLSS",
   "up.helix.pick.fsr": "Wähle im Spiel AMD FSR. Die Qualität stellst du in seinem Menü ein",
   "up.error.helixsr_no_fsr": "Dieses Spiel hat kein FSR 3.1, HLX FSR 4 kann also nichts ersetzen",
   "up.error.helixsr_failed": "HelixSR konnte nicht abschließen",

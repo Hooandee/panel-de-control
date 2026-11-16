@@ -677,7 +677,7 @@ export const GameView: FC<{
         ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
         : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
-      {recommendedInput && <Notice icon={<LuInfo size={16} />}>
+      {recommendedInput && notice !== "up.notice.dx11Launch" && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
       </Notice>}
       {detail && !spatial && !detail.native && (installedOptiscaler || detail.analysis.foreign_identity?.engine === "helixsr") && (
