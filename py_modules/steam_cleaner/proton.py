@@ -163,6 +163,9 @@ class ProtonCleanerService:
             self._libraries = roots
             references, references_complete = self._read_references(roots)
             complete = complete and references_complete
+            # Only config.vdf/localconfig.vdf can reference a custom tool; an unreadable manifest or
+            # a disconnected library must not block deleting an unreferenced one.
+            references_trusted = references_complete
             mounts = filesystem.mount_points()
             activity = self._activity()
             entries = []
@@ -170,7 +173,7 @@ class ProtonCleanerService:
                 official, official_complete = self._official_entries(root, mounts)
                 entries.extend(official)
                 complete = complete and official_complete
-                custom, custom_complete = self._custom_entries(root, mounts, references, complete, activity)
+                custom, custom_complete = self._custom_entries(root, mounts, references, references_trusted, activity)
                 entries.extend(custom)
                 complete = complete and custom_complete
                 with self._lock:
@@ -442,7 +445,7 @@ class ProtonCleanerService:
                 complete = False
         return entries, complete
 
-    def _custom_entries(self, root, mounts, references, coverage_complete, activity):
+    def _custom_entries(self, root, mounts, references, references_trusted, activity):
         custom_root = root / "compatibilitytools.d"
         try:
             if not stat.S_ISDIR(custom_root.lstat().st_mode):
@@ -480,7 +483,7 @@ class ProtonCleanerService:
             referenced = any(name.casefold() in references for name, _ in names)
             if reason:
                 status = "protected"
-            elif not coverage_complete:
+            elif not references_trusted:
                 status, reason = "protected", "coverage_incomplete"
             elif referenced:
                 status, reason = "in_use", "tool_in_use"
