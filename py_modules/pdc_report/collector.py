@@ -1259,7 +1259,7 @@ def _snap_desktop(root: str) -> dict:
     return out
 
 
-_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
+_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name", "board_version",
                "product_name", "product_version", "product_family", "chassis_type",
                "bios_version", "bios_date", "bios_release", "ec_firmware_release")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
