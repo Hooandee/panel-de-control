@@ -1235,6 +1235,16 @@ def test_endfield_recipe_installs_the_d3d12_proxy(steam, fake_catalog, proc, mon
     assert (game / "bin/x64_dx12/d3d12.dll").is_file() and not (game / "bin/x64_dx12/dxgi.dll").exists()
 
 
+def test_endfield_recipe_launches_in_directx11(steam, fake_catalog, proc, monkeypatch):
+    # FSR 4 only runs through the D3D11 to D3D12 bridge; the Vulkan path falls back to FSR 2.2.
+    recipe = recipes.recipe_for("4732690")
+    assert recipe.args == ("-force-d3d11",)
+    monkeypatch.setitem(recipes.RECIPES, APPID, recipes.Recipe(APPID, args=recipe.args, proxy="d3d12.dll"))
+    monkeypatch.setattr(catalog, "D3D12_PROXY_APPIDS", frozenset({APPID}))
+    result = _service(steam, fake_catalog, proc).install(APPID, {"build": "fsr-test"})
+    assert result["overrides"] == ["d3d12=n,b"] and result["args"] == ["-force-d3d11"]
+
+
 @pytest.fixture
 def proton_catalog(monkeypatch, fake_catalog):
     build = Build("proton-fsr4", "proton", "FSR 4", ("rdna2",), 3, 2, engine="proton")

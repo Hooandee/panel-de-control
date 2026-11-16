@@ -93,9 +93,10 @@ export function gameOutputHeight(history: readonly Pick<HistoryEntry, "facts">[]
   return lastOutputHeight(outputs) ?? (display ? Math.min(...display) : undefined);
 }
 
-/** Games whose own update took away the input OptiScaler needs; the page says so instead of a silent failure. */
+/** Games whose page says something up front: a lost input, or a launch mode Panel sets for them. */
 const GAME_NOTICES: Record<string, string> = {
   "3564740": "up.notice.dlssRemoved",
+  "4732690": "up.notice.dx11Launch",
 };
 
 export function gameNotice(steamAppid: string | number | null | undefined): string | null {

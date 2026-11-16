@@ -673,7 +673,9 @@ export const GameView: FC<{
       )}
       {detail && !pendingModel && !spatial && !detail.native && !externalHelix && (qualityMode.mode === "game" || replacesFsr) && <Note>{t("up.quality.inGame")}</Note>}
       {detail && !pendingModel && !spatial && qualityMode.mode === "locked" && <Note>{t("up.quality.useInput", { input: qualityMode.input })}</Note>}
-      {notice && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>}
+      {notice && (notice === "up.notice.dx11Launch"
+        ? <Notice icon={<LuInfo size={16} />}>{t(notice)}</Notice>
+        : <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(notice)}</Notice>)}
       {strain && <Notice icon={<LuTriangleAlert size={16} />} tone="warn">{t(`up.steamMachine.${strain}`)}</Notice>}
       {recommendedInput && <Notice icon={<LuInfo size={16} />}>
         {t("up.input.recommended", { input: recommendedInput, name: badgeLabel(selected, choice.model, choice.build).full })}
