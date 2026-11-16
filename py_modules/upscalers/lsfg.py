@@ -84,10 +84,12 @@ class Lsfg:
         data.setdefault("files", {})
         data.setdefault("profiles", {})
         for profile in data["profiles"].values():
-            preset = profile.pop("flow", None)
+            preset = profile.get("flow")
             profile.setdefault("flow_scale", FLOW_PRESETS.get(preset, FLOW_SCALE_DEFAULT))
             # A saved value that matches a preset shows as that preset; any other is the manual one.
             profile.setdefault("flow_manual", profile["flow_scale"] not in FLOW_PRESETS.values())
+            # Kept in step so a previous version, which only reads `flow`, still loads the profile.
+            profile["flow"] = _nearest_preset(profile["flow_scale"])
         return data
 
     def _own(self, path: Path) -> None:
@@ -333,6 +335,7 @@ class Lsfg:
                 data["profiles"][appid] = {
                     "name": str(name or appid)[:80],
                     "multiplier": multiplier,
+                    "flow": _nearest_preset(flow_scale),
                     "flow_scale": flow_scale,
                     "flow_manual": manual,
                     "manual_scale": flow_scale if manual else _flow_scale({"flow_scale": config.get("manual_scale")}),
@@ -394,6 +397,10 @@ def _flow_scale(config: dict) -> float | None:
         return None
     value = round(float(value), 2)
     return value if FLOW_SCALE_MIN <= value <= FLOW_SCALE_MAX else None
+
+
+def _nearest_preset(scale: float) -> str:
+    return min(FLOW_PRESETS, key=lambda name: abs(FLOW_PRESETS[name] - scale))
 
 
 def _toml(value: str) -> str:
