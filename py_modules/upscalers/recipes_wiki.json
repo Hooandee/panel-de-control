@@ -140,6 +140,7 @@
   "1186640": {"name":"Pumpkin Jack","status":"works","inputs":["DLSS"]},
   "1190970": {"name":"House Flipper 2","status":"works","inputs":["DLSS"]},
   "1192810": {"name":"Romancelvania","status":"works","args":["-dx12"],"inputs":["DLSS"]},
+  "1196590": {"name":"Resident Evil 8 Village","needs":["reframework","mod"],"inputs":["DLSS","XeSS"],"page":"Resident-Evil-8-Village","page_facts":{"needs":["mod"]}},
   "1198970": {"name":"I Am Jesus Christ","status":"works","optipatcher":true,"inputs":["DLSS"]},
   "1203190": {"name":"Wreckfest 2","status":"works","inputs":["DLSS","FSR3"]},
   "1203620": {"name":"Enshrouded","status":"works","inputs":["DLSS"],"page":"Enshrouded","page_facts":{"proxy":"winmm.dll","linux":true}},

@@ -49,6 +49,7 @@ _AMD = re.compile(r"\b(?:amd|radeon|rdna)\b", re.I)
 _AUTOAPPLIED = re.compile(r"auto-?applied", re.I)
 _FILENAME = re.compile(r"`?([A-Za-z0-9_]+\.(?:dll|asi))`?", re.I)
 _SECTIONS = {"upscaler mods support": "mod", "luma unreal engine": "luma"}
+_NAME_ALIASES = {"resident evil village": "resident evil 8 village"}
 
 
 def clean(name: str) -> str:
@@ -238,10 +239,14 @@ class WikiCache:
 
     def lookup(self, *names: str | None) -> dict | None:
         rows = self.rows()
-        for name in names:
-            for key in variants(name or ""):
-                if key and key in rows:
-                    return rows[key]
+        keys = list(dict.fromkeys(key for name in names for key in variants(name or "") if key))
+        for key in keys:
+            if key in rows:
+                return rows[key]
+        for key in keys:
+            if alias := _NAME_ALIASES.get(key):
+                if alias in rows:
+                    return rows[alias]
         return None
 
     def _fetch(self, url: str, etag: str | None, limit: int, fetch) -> tuple[str, bytes | None, str | None]:
