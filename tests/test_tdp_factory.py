@@ -2722,7 +2722,7 @@ def test_every_intel_handheld_drives_both_rapl_surfaces(tmp_path):
 
 
 def test_exact_legion_go_2_83n1_low_battery_pin_does_not_lock_tdp(tmp_path, monkeypatch):
-    # PDC-S2ZD: the 83N1 firmware runs its own rails at <=20 % battery and ignores
+    # The 83N1 firmware runs its own rails at <=20 % battery and ignores
     # writes; nothing Panel wrote is left, so TDP must stay available.
     monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
     root = str(tmp_path)

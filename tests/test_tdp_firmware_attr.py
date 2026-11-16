@@ -1421,7 +1421,7 @@ def test_gos_83l3_eio_rollback_still_restores_a_rail_that_moved(tmp_path, monkey
 
 
 def _legion_go_2_low_battery(root, rails, safety_lock_path):
-    # PDC-S2ZD (83N1, Bazzite): at <=20 % battery the firmware pins its own rails
+    # 83N1: at <=20 % battery the firmware pins its own rails
     # and ignores every write, so neither the target nor the rollback ever lands.
     driver = "lenovo-wmi-other-0"
     _mk_attr(root, driver, "ppt_pl1_spl", rails[0], 5, 35)

@@ -646,7 +646,7 @@ def test_frame_timing_respects_steam_minimal_and_off_levels():
         assert "frametime=0" in _section(conf, level)
 
 
-# ---- horizontal row: stable width (#1158) ----
+# ---- horizontal row: stable width ----
 
 _REPORT_1158 = {
     "enabled": True, "layout": "horizontal", "compact": True, "noSmallFont": True,

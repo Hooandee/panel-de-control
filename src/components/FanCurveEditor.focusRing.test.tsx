@@ -31,7 +31,7 @@ describe("FanCurveEditor focus ring", () => {
   afterEach(cleanup);
 
   // Steam's own focus ring pulses 20 times on a focused control inside a full-size modal and
-  // repaints the whole modal each frame (~70% CPU, 50% GPU for 24 s on a ROG Ally); Panel draws its own ring.
+  // repaints the whole modal each frame; Panel draws its own ring.
   it("keeps Steam's pulsing ring off every selectable chip", () => {
     const { container } = render(<FanCurveEditor control={control} liveTemp={40} suggestion={null} expanded />);
     const chips = [...container.querySelectorAll('[data-focusable][data-activatable="1"]')];

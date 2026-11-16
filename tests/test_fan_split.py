@@ -1,4 +1,4 @@
-"""Fan curves "Juntos / Por separado" (#1069): per-channel store model, ASUS two-table
+"""Fan curves "Juntos / Por separado": per-channel store model, ASUS two-table
 backend with synthetic hwmon, and the backends that must stay joined."""
 import asyncio
 import os
@@ -31,9 +31,7 @@ def _store(tmp_path):
     return FanCurveStore(str(tmp_path / "fan_curves.json"))
 
 
-# ---------------------------------------------------------------------------
 # Store
-# ---------------------------------------------------------------------------
 
 class TestStoreSplit:
     def test_default_is_joined_and_legacy_profiles_load_unchanged(self, tmp_path):
@@ -107,7 +105,7 @@ class TestStoreSplit:
         assert s.effective(None)["custom_points_by_channel"] == {"cpu": CPU_HIGH, "gpu": GPU_LOW}
 
     def test_returning_to_joined_keeps_the_single_curve(self, tmp_path):
-        # Regression shape of #1334: the stored manual curve must not be replaced.
+        # The stored manual curve must not be replaced.
         s = _store(tmp_path)
         s.set_custom("global", BALANCED)
         s.set_split("global", True)
@@ -162,9 +160,7 @@ class TestStoreSplit:
         assert s.is_split("7") is False and s.is_split(None) is True
 
 
-# ---------------------------------------------------------------------------
 # ASUS backend with synthetic hwmon
-# ---------------------------------------------------------------------------
 
 def _asus(tmp_path):
     d = _make_asus_chip(str(tmp_path))
@@ -251,9 +247,7 @@ class TestAsusApplyCurves:
         assert _table(d, 1) == _table(d, 2)
 
 
-# ---------------------------------------------------------------------------
 # Backends that must stay "juntos"
-# ---------------------------------------------------------------------------
 
 class TestJoinedBackendsUnchanged:
     def test_msi_has_no_split(self, tmp_path):
@@ -287,9 +281,7 @@ class TestJoinedBackendsUnchanged:
         assert base.split_available is False
 
 
-# ---------------------------------------------------------------------------
 # RPC end to end (Plugin + ASUS synthetic chip)
-# ---------------------------------------------------------------------------
 
 from test_fan_control_rpc import _make_plugin_fixture  # noqa: E402
 

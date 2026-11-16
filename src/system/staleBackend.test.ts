@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRemotePublicationClient } from "../themes/remotePublicationClient";
 import { isMissingBackendMethod, reportStaleBackend, setStaleBackendSink } from "./staleBackend";
 
-// Journal of a Legion Go loading frontend 0.67.1 over a still-loaded 0.37.11 backend.
+// Journal of a frontend loading over a still-loaded older backend.
 const JOURNAL_ERRORS = [
   "Plugin object has no attribute list_theme_extensions",
   "Plugin object has no attribute check_theme_releases",

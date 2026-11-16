@@ -1918,8 +1918,8 @@ def test_a_limit_adopted_from_the_system_keeps_following_it(tmp_path, monkeypatc
     assert plugin._charge_limit_operation_for(system)[0] == "disable"
 
 
-# PDC-XPZK (#1371), Claw A8 MS-1T8K: limit 90, Panel starts on battery at 92 %.
-_PDC_XPZK_BOOT = {
+# Charge limit 90, Panel starts on battery at 92 %.
+_LIMIT_BOOT = {
     "present": True,
     "percent": 92,
     "status": "Discharging",
@@ -1945,7 +1945,7 @@ def test_reassert_logs_battery_above_limit_before_writing(tmp_path, monkeypatch)
     backend = _FakeChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
     asyncio.run(p.set_charge_limit(True, 90))
-    p._battery = types.SimpleNamespace(read=lambda: dict(_PDC_XPZK_BOOT))
+    p._battery = types.SimpleNamespace(read=lambda: dict(_LIMIT_BOOT))
     monkeypatch.setattr(sys.modules["main"], "read_on_ac", lambda root="/": False)
 
     p._apply_charge_limit()
@@ -1967,7 +1967,7 @@ def test_reassert_within_limit_keeps_deduplication(tmp_path, monkeypatch):
     backend = _FakeChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
     asyncio.run(p.set_charge_limit(True, 90))
-    p._battery = types.SimpleNamespace(read=lambda: {**_PDC_XPZK_BOOT, "percent": 91})
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 91})
     count = len(_transition_logs(p))
 
     p._apply_charge_limit()
@@ -1980,7 +1980,7 @@ def test_reassert_logs_threshold_lost_while_off(tmp_path, monkeypatch):
     backend = _FakeChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
     asyncio.run(p.set_charge_limit(True, 90))
-    p._battery = types.SimpleNamespace(read=lambda: {**_PDC_XPZK_BOOT, "percent": 90})
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 90})
     backend.value = 100
 
     p._apply_charge_limit()
@@ -2013,7 +2013,7 @@ def test_on_off_backend_never_flags_the_stored_percent(tmp_path, monkeypatch):
     backend.adjustable = False
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
     asyncio.run(p.set_charge_limit(True, 80))
-    p._battery = types.SimpleNamespace(read=lambda: {**_PDC_XPZK_BOOT, "percent": 82})
+    p._battery = types.SimpleNamespace(read=lambda: {**_LIMIT_BOOT, "percent": 82})
     monkeypatch.setattr(sys.modules["main"], "read_on_ac", lambda root="/": False)
     count = len(_transition_logs(p))
 
