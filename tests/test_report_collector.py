@@ -1565,3 +1565,52 @@ def test_theme_diagnostic_lines_read_webhelper_js_without_private_text(tmp_path)
     assert lines[1]["detail"] == "detached path=/library/home window=1280x800 sheets=3"
     assert "example.com" not in lines[2]["detail"] and "\u00e9" not in lines[2]["detail"]
     assert theme_diagnostic_lines(str(tmp_path / "missing"))["lines"] == []
+
+
+
+def test_sysfs_snapshot_preserves_reported_fan_curve_nodes(tmp_path):
+    import json
+    from pathlib import Path
+
+    fixtures = json.loads((Path(__file__).parent / "data/fan_curve_report_topology.json").read_text())["chips"]
+    for index, fixture in enumerate(fixtures):
+        chip = tmp_path / f"sys/class/hwmon/hwmon{index}"
+        _mk(str(chip / "name"), fixture["name"])
+        for name, facts in fixture["nodes"].items():
+            # MSI curve values were not captured; ASUS values are a real readback.
+            # Empty reads model unknown values without supplying numeric ones.
+            _mk(str(chip / name), facts["value"] if facts["value"] is not None else "")
+            if facts["writable"] is False:
+                os.chmod(chip / name, 0o444)
+
+    chips = {chip["name"]: chip["fan_nodes"] for chip in sysfs_snapshot(root=str(tmp_path))["hwmon"]}
+
+    for fixture in fixtures:
+        nodes = chips[fixture["name"]]
+        assert set(nodes) == set(fixture["nodes"])
+        for name, facts in fixture["nodes"].items():
+            assert nodes[name]["value"] == facts["value"]
+            if facts["writable"] is not None:
+                assert nodes[name]["writable"] is facts["writable"]
+
+
+def test_hwmon_curve_capture_bounds_indices_and_rejects_non_numeric_values(tmp_path):
+    for name, value in {
+        "pwm2_auto_point8_pwm": "255",
+        "pwm2_auto_point8_temp": "private-path-or-token",
+        "pwm1_auto_point1_pwm": "999999999999999999999999",
+        "pwm1_auto_point1_temp": "2147483648",
+        "pwm3_auto_point1_temp": "40",
+        "pwm1_auto_point9_temp": "40",
+        "pwm1_auto_point1_extra": "40",
+    }.items():
+        _mk(str(tmp_path / name), value)
+
+    nodes = report_collector._hwmon_fan_nodes(str(tmp_path))
+
+    assert set(nodes) == {
+        "pwm2_auto_point8_pwm", "pwm2_auto_point8_temp",
+        "pwm1_auto_point1_pwm", "pwm1_auto_point1_temp",
+    }
+    assert nodes["pwm2_auto_point8_pwm"]["value"] == "255"
+    assert all(nodes[name]["value"] is None for name in nodes if name != "pwm2_auto_point8_pwm")

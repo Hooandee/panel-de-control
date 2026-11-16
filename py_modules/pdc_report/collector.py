@@ -731,6 +731,8 @@ _SNAP_MAX_CHIPS = 32
 _RAPL_SAMPLE_S = 0.5
 _sleep = time.sleep
 _SNAP_MAX_NAMES = 128
+_SNAP_MAX_FAN_CURVE_CHANNELS = 2
+_SNAP_MAX_FAN_CURVE_POINTS = 8
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
 _HWMON_PATTERNS = (
@@ -786,12 +788,28 @@ def _hwmon_ppt_nodes(chip_dir: str) -> dict:
 
 def _hwmon_fan_nodes(chip_dir: str) -> dict:
     values = {}
-    for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input"):
-        for path in sorted(_glob(chip_dir, pat)):
-            values[os.path.basename(path)] = {
-                "value": read_str(path),
-                "writable": _mode_writable(path),
-            }
+    # Existing single-digit control nodes stay bounded; curve readback is at most
+    # two channels of eight points, independent of requested or active fan mode.
+    paths = [path for pat in ("pwm[0-9]", "pwm[0-9]_enable", "fan[0-9]_input")
+             for path in sorted(_glob(chip_dir, pat))]
+    paths += [
+        path
+        for channel in range(1, _SNAP_MAX_FAN_CURVE_CHANNELS + 1)
+        for point in range(1, _SNAP_MAX_FAN_CURVE_POINTS + 1)
+        for field in ("temp", "pwm")
+        if os.path.exists(path := os.path.join(chip_dir, f"pwm{channel}_auto_point{point}_{field}"))
+    ]
+    for path in paths:
+        raw = read_str(path)
+        value = None
+        if raw is not None and re.fullmatch(r"[+-]?[0-9]{1,10}", raw):
+            numeric = int(raw)
+            if -(2 ** 31) <= numeric < 2 ** 31:
+                value = str(numeric)
+        values[os.path.basename(path)] = {
+            "value": value,
+            "writable": _mode_writable(path),
+        }
     return values
 
 
