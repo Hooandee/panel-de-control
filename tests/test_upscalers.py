@@ -465,7 +465,7 @@ def test_log_reader_takes_real_optiscaler_lines(tmp_path):
     assert facts["version"] == "0.9.4-final"
     assert facts["proxy"] == "dxgi.dll"
     assert facts["upscaler"] == "fsr31"
-    assert facts["input"] == "DLSS"
+    assert "input" not in facts
     assert facts["initial_resolution"] == {"render": [936, 624], "output": [1440, 960]}
     assert "resolution" not in facts
     assert facts["resolution_source"] == "initialization_only"

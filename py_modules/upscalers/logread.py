@@ -19,7 +19,9 @@ _FACTS = (
     ("upscaler", re.compile(r"Creating (.+?) upscaler feature")),
     # XeSS D3D11 also calls NGX internally: this names the backend, not the game's input.
     ("d3d11_upscaler", re.compile(r"NVSDK_NGX_D3D11_CreateFeature Creating new (.+?)(?: w/Dx1[12])? feature")),
-    ("input", re.compile(r"Create(DLSS|FSR2|FSR3|XeSS)Context")),
+    # CreateDLSSContext is also an internal helper for XeSS and FSR, so only identify their API entry points.
+    ("xess_input", re.compile(r"(?:^|\]\s+)hk_xess(?:D3D11|D3D12|VK)Execute\s*$")),
+    ("fsr_input", re.compile(r"\bffxFsr([23])ContextCreate_(?:Dx11|Dx12|Vk) context created:")),
     ("ffx_input", re.compile(r"(ffxCreateContext_Dx12) context created")),
     ("fg_state", re.compile(r"D3D12_Configure Enabled: (true|false), result|SetEnabled: (true|false), result")),
     ("fg_input", re.compile(r"FrameGen\.FGInput: (\w+)")),
@@ -59,23 +61,17 @@ def read(target: Path, since: float | None = None) -> dict:
         facts["stale"] = True
         return facts
     errors = 0
-    ffx_input = False
     for line in text.splitlines():
         for key, pattern in _FACTS:
             match = pattern.search(line)
             if not match:
                 continue
             if key == "ffx_input":
-                ffx_input = True
                 facts["input"] = "FSR3"
-            elif key == "input":
-                value = match.group(1)
-                # FFX uses the shared CreateDLSSContext path after its own context creation.
-                if value == "DLSS" and ffx_input:
-                    value = "FSR3"
-                else:
-                    ffx_input = False
-                facts["input"] = value
+            elif key == "xess_input":
+                facts["input"] = "XeSS"
+            elif key == "fsr_input":
+                facts["input"] = "FSR" + match.group(1)
             elif key == "d3d11_upscaler":
                 facts["upscaler"] = match.group(1).strip()[:120]
             elif key == "initial_resolution":
