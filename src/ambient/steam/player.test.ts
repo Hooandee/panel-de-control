@@ -278,3 +278,52 @@ describe("local video capability", () => {
     } finally { player.dispose(); }
   });
 });
+
+describe("plain-http radio", () => {
+  const station = (url: string): Track => ({ id: "r", title: "Radio", subtitle: "", art: "", url, live: true });
+  const setup = (relay: (url: string) => Promise<string | null>) => {
+    const audio = fakeAudio();
+    const player = new AmbientPlayer(() => audio, vi.fn(), undefined, null, relay);
+    return { audio, player };
+  };
+
+  it("loads an http stream through the loopback relay, since Steam upgrades http media to https", async () => {
+    const relay = vi.fn(async () => "http://127.0.0.1:9/r/t/key");
+    const { audio, player } = setup(relay);
+    try {
+      player.playQueue([station("http://livestreaming.test/stream64.mp3")]);
+      await vi.waitFor(() => expect(audio.src).toBe("http://127.0.0.1:9/r/t/key"));
+      expect(relay).toHaveBeenCalledWith("http://livestreaming.test/stream64.mp3");
+    } finally { player.dispose(); }
+  });
+
+  it("keeps https, loopback and HLS addresses as they are", () => {
+    const relay = vi.fn(async () => "http://127.0.0.1:9/r/t/key");
+    const { audio, player } = setup(relay);
+    try {
+      for (const url of ["https://s.test/live.mp3", "http://127.0.0.1:9/m/t/a", "http://hls.test/live.m3u8"]) player.playQueue([station(url)]);
+      expect(relay).not.toHaveBeenCalled();
+      expect(audio.src).toBe("http://hls.test/live.m3u8");
+    } finally { player.dispose(); }
+  });
+
+  it("plays the original address when the relay is unavailable", async () => {
+    const { audio, player } = setup(async () => null);
+    try {
+      player.playQueue([station("http://livestreaming.test/stream64.mp3")]);
+      await vi.waitFor(() => expect(audio.src).toBe("http://livestreaming.test/stream64.mp3"));
+    } finally { player.dispose(); }
+  });
+
+  it("ignores a relay answer that arrives after another station was chosen", async () => {
+    let release: (url: string) => void = () => undefined;
+    const { audio, player } = setup(() => new Promise<string | null>((resolve) => { release = resolve; }));
+    try {
+      player.playQueue([station("http://slow.test/a.mp3")]);
+      player.playQueue([station("https://fast.test/b.mp3")]);
+      release("http://127.0.0.1:9/r/t/old");
+      await Promise.resolve();
+      expect(audio.src).toBe("https://fast.test/b.mp3");
+    } finally { player.dispose(); }
+  });
+});

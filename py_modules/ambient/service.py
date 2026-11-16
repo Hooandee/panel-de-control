@@ -21,6 +21,7 @@ from .adapters.game_media import game_theme, game_trailer
 from .adapters.known_paths import known_folders
 from .adapters.library_scan import media_id as local_media_id, scan_folder
 from .adapters.media_server import MediaServer
+from .adapters.stream_relay import StreamRelay
 from .adapters.optimizer import OptimizeError, optimize, output_name
 from .adapters.remote_sources import download
 from .adapters.share_server import ShareServer
@@ -85,7 +86,7 @@ class AmbientService:
         self._image_state_lock = threading.Lock()
         self._scale_failures: OrderedDict[tuple[tuple[str, int, int], int], float] = OrderedDict()
         self._image_probes: OrderedDict[tuple[str, int, int], Optional[ImageInfo]] = OrderedDict()
-        self._server = MediaServer(resolver=self._serve_path)
+        self._server = MediaServer(resolver=self._serve_path, relay=StreamRelay())
         self._server_started = False
         self._server_lock = threading.Lock()
         self._closed = False
@@ -590,6 +591,11 @@ class AmbientService:
         if self._resolve(media_id) is None or not self._ensure_server():
             return None
         return self._server.url_for(media_id)
+
+    def stream_url(self, url: str) -> Optional[str]:
+        if not self._ensure_server():
+            return None
+        return self._server.stream_url(url)
 
     def game_media(self, appid: str, name: str, now: Optional[float] = None, store: bool = True) -> dict[str, Any]:
         """Official trailer and a soundtrack preview for a game; found once, remembered for a week."""

@@ -40,6 +40,7 @@ export const getAmbientState = callable<[], AmbientState>("get_ambient_state");
 export const saveAmbientSettings = callable<[settings: AmbientSettings], AmbientSettings>("save_ambient_settings");
 export const scanAmbientSources = callable<[], ScanResult>("scan_ambient_sources");
 export const getAmbientMediaUrl = callable<[mediaId: string], string | null>("get_ambient_media_url");
+export const getAmbientStreamUrl = callable<[url: string], string | null>("get_ambient_stream_url");
 /** URLs of one theme picture per screen size bucket ("1280", "1920", "2560"). */
 export type ThemeImageUrls = Record<string, string>;
 export interface ThemeImageEntry { urls: ThemeImageUrls; owners: string[] }

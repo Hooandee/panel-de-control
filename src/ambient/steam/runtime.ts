@@ -239,6 +239,7 @@ export class AmbientRuntime {
       (detail) => void rpc.recordAmbientEvent(detail.startsWith("radio") ? "radio_error" : "playback_error", detail).catch(() => undefined),
       undefined,
       () => new VideoFrameEngine(() => rpc.getAmbientVideoPage(), () => spDocument()),
+      (url) => rpc.getAmbientStreamUrl(url),
     );
     this.snapshot = {
       ready: false,

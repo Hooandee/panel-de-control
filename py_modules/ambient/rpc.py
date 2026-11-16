@@ -94,6 +94,11 @@ class AmbientRpc:
             return None
         return await self._ambient_call(lambda s: s.media_url(media_id))
 
+    async def get_ambient_stream_url(self, url: str) -> Optional[str]:
+        if not isinstance(url, str) or not url.startswith("http://") or len(url) > 2048:
+            return None
+        return await self._ambient_call(lambda s: s.stream_url(url))
+
     async def register_ambient_theme_image(self, media_id: str, owner: str, max_side: Any = None) -> dict[str, Any]:
         if not isinstance(media_id, str) or len(media_id) > 512 or not isinstance(owner, str):
             return {"error": "unknown_media"}
