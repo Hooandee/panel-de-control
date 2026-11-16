@@ -1733,6 +1733,31 @@ def test_an_edit_of_a_games_own_hud_is_kept_when_the_game_closed_before_it_lande
     assert os.path.exists(presets) == before  # nothing applied: A is not running
 
 
+def test_profile_overview_and_reset_touch_the_hud_store_only_on_its_worker(tmp_path, monkeypatch):
+    import threading
+
+    main, p, _presets = _ready_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hud_state())
+    p._set_current_appid("A")
+    asyncio.run(p.set_hud_follow_global(False, "A", "A"))
+    p._set_current_appid(None)
+    worker = asyncio.run(p._hud_call(threading.get_ident))
+    seen = set()
+    for name in ("list_games", "own_hud_games", "forget_game", "differs_from_global", "game_profile"):
+        original = getattr(p._hud, name)
+
+        def spy(*a, _original=original, **k):
+            seen.add(threading.get_ident())
+            return _original(*a, **k)
+
+        monkeypatch.setattr(p._hud, name, spy)
+
+    asyncio.run(p.list_hud_games())
+    asyncio.run(p.list_game_profiles())
+    asyncio.run(p.reset_game_profiles("A"))
+    assert seen and seen == {worker}
+
+
 def test_disabling_the_hud_for_one_game_does_not_touch_the_global_one(tmp_path, monkeypatch):
     main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))

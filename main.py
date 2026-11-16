@@ -3765,10 +3765,11 @@ class Plugin(AmbientRpc):
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
-        (the controller backend no-ops when it's not InputPlumber)."""
+        (the controller backend no-ops when it's not InputPlumber). HudStore is
+        left out: it belongs to the HUD worker and goes through _hud_call."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
                 self._gpu_profiles,
-                self._audio_eq, self._controller_backend, self._hud)
+                self._audio_eq, self._controller_backend)
 
     def _game_profile_row(self, appid: str) -> dict:
         """A game's per-section profiles for the overview — RAW own values (what the user
@@ -3820,10 +3821,16 @@ class Plugin(AmbientRpc):
                              "follows_global": self._controller_backend.is_following_global(appid)}
         if self._audio_eq.differs_from_global(appid):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
-        if self._hud.differs_from_global(appid):
-            row["hud"] = {"enabled": bool(self._hud.game_profile(appid).get("enabled")),
-                          "follows_global": self._hud.is_following_global(appid)}
         return row
+
+    def _hud_profile_rows(self) -> dict:
+        """HudStore is owned by the HUD worker: only call this through _hud_call."""
+        rows = {}
+        for appid in self._hud.list_games():
+            if self._hud.differs_from_global(appid):
+                rows[appid] = {"enabled": bool(self._hud.game_profile(appid).get("enabled")),
+                               "follows_global": self._hud.is_following_global(appid)}
+        return rows
 
     async def list_game_profiles(self) -> list:
         """Every game with a per-game profile that differs from global in ANY section, for
@@ -3832,7 +3839,14 @@ class Plugin(AmbientRpc):
         appids = set()
         for store in self._scoped_stores():
             appids.update(store.list_games())
-        rows = (self._game_profile_row(a) for a in sorted(appids))
+        hud_rows = await self._hud_call(self._hud_profile_rows)
+        appids.update(hud_rows)
+        rows = []
+        for appid in sorted(appids):
+            row = self._game_profile_row(appid)
+            if appid in hud_rows:
+                row["hud"] = hud_rows[appid]
+            rows.append(row)
         return [r for r in rows if len(r) > 1]  # drop games whose every section == global
 
     async def reset_game_profiles(self, appid) -> list:
@@ -3842,6 +3856,7 @@ class Plugin(AmbientRpc):
         appid = str(appid)
         for store in self._scoped_stores():
             store.forget_game(appid)
+        await self._hud_call(lambda: self._hud.forget_game(appid))
         if appid == self._current_appid:
             self._reapply_all()
         return await self.list_game_profiles()
@@ -11645,7 +11660,7 @@ class Plugin(AmbientRpc):
     async def list_hud_games(self) -> list:
         """Games that apply their own HUD (for the "HUD" badge in Parámetros)."""
         self._init()
-        return sorted(self._hud.own_hud_games())
+        return await self._hud_call(lambda: sorted(self._hud.own_hud_games()))
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
