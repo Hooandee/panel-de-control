@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-terciopelo",
+  "cssLoaderName": "Hooandee Terciopelo",
+  "version": "0.2.14",
+  "displayName": {
+    "es": "Terciopelo",
+    "en": "Terciopelo",
+    "it": "Terciopelo"
+  },
+  "description": {
+    "es": "Un teclado de terciopelo negro con letras en champán y el sonido de una máquina de escribir. Cada tecla se hunde al pulsarla y suelta un poco de polvo dorado.",
+    "en": "A black velvet keyboard with champagne legends and the sound of a typewriter. Every key sinks when pressed and lets out a little golden dust.",
+    "it": "Una tastiera di velluto nero con lettere color champagne e il suono di una macchina da scrivere. Ogni tasto affonda quando lo premi e rilascia un po' di polvere dorata."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.14/theme.zip",
+    "size": 184298,
+    "sha256": "6c3b6b814d9cd59fb21dfbae908e65c87b339659dfcd0cef99576113a17248ee"
+  },
+  "minimumVersions": {
+    "panel": "0.89.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "exclusiveGroup": "keyboard",
+  "notes": {
+    "es": "El foco del trackpad se resalta ahora en el teclado.",
+    "en": "Trackpad focus is now highlighted on the keyboard.",
+    "it": "Il focus del trackpad ora è evidenziato sulla tastiera."
+  }
+}

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-terciopelo",
   "cssLoaderName": "Hooandee Terciopelo",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "displayName": {
     "es": "Terciopelo",
     "en": "Terciopelo",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.13/theme.zip",
-    "size": 183691,
-    "sha256": "06d4ca9ff3d77f9d3ec7187ad066961e767099011af898f3314682d3c910e0f5"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-terciopelo/0.2.14/theme.zip",
+    "size": 184298,
+    "sha256": "6c3b6b814d9cd59fb21dfbae908e65c87b339659dfcd0cef99576113a17248ee"
   },
   "minimumVersions": {
     "panel": "0.89.0",
@@ -27,8 +27,8 @@
   },
   "exclusiveGroup": "keyboard",
   "notes": {
-    "es": "Ya se instala: se corrige el error «unsafe_archive».",
-    "en": "It installs again: fixes the \"unsafe_archive\" error.",
-    "it": "Ora si installa: corretto l'errore «unsafe_archive»."
+    "es": "El foco del trackpad se resalta ahora en el teclado.",
+    "en": "Trackpad focus is now highlighted on the keyboard.",
+    "it": "Il focus del trackpad ora è evidenziato sulla tastiera."
   }
 }
