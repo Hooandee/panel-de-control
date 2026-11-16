@@ -4,9 +4,15 @@ import { describe, expect, it } from "vitest";
 import { FanChip } from "./FanChip";
 
 describe("FanChip", () => {
-  it("shows the commanded duty when the fan has no tachometer", () => {
+  it("shows the observed duty when the fan has no tachometer", () => {
     const { container } = render(<FanChip label="Fan" rpm={null} values={[]} dutyPercent={42} />);
     expect(container.textContent).toContain("42%");
+    expect(container.textContent).not.toContain("RPM");
+  });
+
+  it("keeps the duty unit when its observation is unknown", () => {
+    const { container } = render(<FanChip label="Fan" rpm={null} values={[]} dutyPercent={null} />);
+    expect(container.textContent).toContain("—%");
     expect(container.textContent).not.toContain("RPM");
   });
 

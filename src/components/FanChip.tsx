@@ -37,8 +37,9 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, maxRpm, dutyPercent, layou
   // fraction is only computed on the rpm != null branch, so observedMax's null
   // fallback is never exercised there — inline it.
   const observedMax = values.length ? Math.max(...values, rpm ?? 0) : (rpm ?? 0);
-  const duty = dutyPercent === undefined ? null : dutyPercent;
-  const fraction = duty != null ? Math.max(0, Math.min(1, duty / 100))
+  const dutyOnly = dutyPercent !== undefined;
+  const duty = dutyPercent ?? null;
+  const fraction = dutyOnly ? duty == null ? 0 : Math.max(0, Math.min(1, duty / 100))
     : rpm == null ? 0 : rpmFraction(rpm, observedMax, maxRpm ?? NOMINAL_MAX_RPM);
 
   const ring = (
@@ -56,10 +57,10 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, maxRpm, dutyPercent, layou
         transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
       />
       <text x="50%" y="46%" textAnchor="middle" fill={theme.color.textPrimary} fontSize={17} fontWeight={700} style={{ fontVariantNumeric: "tabular-nums" }}>
-        {duty != null ? duty : rpm == null ? "—" : rpm}
+        {dutyOnly ? duty ?? "—" : rpm ?? "—"}
       </text>
       <text x="50%" y="64%" textAnchor="middle" fill={theme.color.textMuted} fontSize="var(--pdc-graph-font-small, 9px)">
-        {duty != null ? "%" : "RPM"}
+        {dutyOnly ? "%" : "RPM"}
       </text>
     </svg>
   );

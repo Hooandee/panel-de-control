@@ -42,6 +42,7 @@ que necesitas sin gastar batería de más.
 
 🌀 **Ventiladores.** Temperaturas y RPM en directo, y curvas que dibujas con el dedo. Con el uso
 aprende cómo se calienta cada juego y te propone una curva pensada para él.
+En ventiladores que solo ofrecen porcentaje, se muestra ese dato en lugar de RPM.
 La curva personalizada de cada perfil se conserva al cambiar de modo y se recupera al volver a Personalizado.
 
 🎨 **Pantalla.** Colores de un toque (Nativo, Cine, Vivo, Cómodo) o ajuste fino si te gusta
