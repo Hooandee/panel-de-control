@@ -12,6 +12,7 @@ import { useRunningGame } from "../tdp/useRunningGame";
 import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
+import { onJobUpdate } from "./jobRunner";
 import { badgeLabel } from "./model";
 import type { BuildInfo, UpscalersOverview } from "./types";
 
@@ -522,8 +523,11 @@ export function startUpscalerOverlays(): () => void {
     });
   };
   load(0);
+  // A job tracked after the Quick Access Menu closed finishes without Escaladores open to republish the overview.
+  const stopJobs = onJobUpdate((update) => { if (update.finished) load(0); });
   return () => {
     stopped = true;
+    stopJobs();
     stopCounterSession();
     window.clearTimeout(retry);
     inGame();
