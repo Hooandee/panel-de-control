@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogId": "hooandee-lobo-blanco",
   "cssLoaderName": "Hooandee Lobo Blanco",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "displayName": {
     "es": "Lobo Blanco",
     "en": "Lobo Blanco",
@@ -16,9 +16,9 @@
   "author": "Hooandee",
   "tags": [],
   "artifact": {
-    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.11/theme.zip",
-    "size": 359021,
-    "sha256": "6721031e7bc1c9ced5f72bf22dcbd3cc437b5884303f1dfe66e0b398a75a85be"
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-lobo-blanco/0.9.12/theme.zip",
+    "size": 359653,
+    "sha256": "59f4372dcdf4591f245e71b75e2e34020238367398d26c8486ce37ef5ad91d1d"
   },
   "minimumVersions": {
     "panel": "0.89.0",
@@ -27,8 +27,8 @@
   },
   "exclusiveGroup": "keyboard",
   "notes": {
-    "es": "Ya se instala: se corrige el error «unsafe_archive».",
-    "en": "It installs again: fixes the \"unsafe_archive\" error.",
-    "it": "Ora si installa: corretto l'errore «unsafe_archive»."
+    "es": "El teclado ya no muestra una cuadrícula de líneas finas con escalas de interfaz grandes.",
+    "en": "The keyboard no longer shows a grid of thin lines with large interface scales.",
+    "it": "La tastiera non mostra più una griglia di linee sottili con scale dell'interfaccia grandi."
   }
 }
