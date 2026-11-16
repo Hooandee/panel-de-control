@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-gallery",
+  "cssLoaderName": "Hooandee Gallery",
+  "version": "0.9.59",
+  "displayName": {
+    "es": "Hooandee",
+    "en": "Hooandee",
+    "it": "Hooandee"
+  },
+  "description": {
+    "es": "Mi primer tema. Una versión más elegante de Steam inspirada en el cristal y las transparencias, con capas translúcidas y detalles sutiles que aportan profundidad sin perder claridad.",
+    "en": "My first theme. A more elegant take on Steam inspired by glass and transparency, with translucent layers and subtle details that add depth without sacrificing clarity.",
+    "it": "Il mio primo tema. Una versione più elegante di Steam ispirata al vetro e alle trasparenze, con strati traslucidi e dettagli discreti che aggiungono profondità senza rinunciare alla chiarezza."
+  },
+  "author": "Hooandee",
+  "tags": [],
+  "artifact": {
+    "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.9.59/theme.zip",
+    "size": 154234,
+    "sha256": "575b7c0e2c37158bca2cdb45a9037cf8282abd20d667cde7c109c27a6aca3514"
+  },
+  "minimumVersions": {
+    "panel": "0.38.0",
+    "cssLoader": "2.1.2",
+    "cssLoaderBackend": 9
+  },
+  "notes": {
+    "es": "Con el desenfoque del inicio desactivado, el fondo ya sale siempre nítido. El botón «Ver más» queda bien centrado. Al moverte por el carrusel suena el sonido de navegación de Steam en las dos direcciones.",
+    "en": "With Home blur turned off, the background now always stays sharp. The \"See more\" button is properly centered. Moving through the carousel plays Steam's navigation sound in both directions.",
+    "it": "Con la sfocatura della Home disattivata, lo sfondo resta sempre nitido. Il pulsante «Mostra altro» è ora centrato. Muovendoti nel carosello si sente il suono di navigazione di Steam in entrambe le direzioni."
+  }
+}
