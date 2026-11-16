@@ -11,12 +11,12 @@ import { usePotencia } from "../tdp/potenciaContext";
 import { TdpMonitorNotice } from "../components/TdpMonitorNotice";
 import { PotenciaProviderMount, SECTION_PROVIDERS } from "./providerMounts";
 
-const POWER_PROFILE_BLOCKS = new Set(["tdp", "autoTdp", "steamPerformance"]);
+const POWER_PROFILE_BLOCKS = new Set(["tdp", "tdpWatts", "autoTdp", "steamPerformance"]);
 
 const PowerMonitorFallback: FC = () => {
-  const { monitorOnly, onReactivate, tdp } = usePotencia();
+  const { monitorOnly, onReactivate, tdp, steamOsManagerActive } = usePotencia();
   if (!tdp?.supported || !monitorOnly) return null;
-  return <TdpMonitorNotice onReactivate={onReactivate} />;
+  return <TdpMonitorNotice steam={steamOsManagerActive} onReactivate={onReactivate} />;
 };
 
 export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
@@ -40,7 +40,7 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
     [blocks],
   );
 
-  const needsPowerFallback = blocks.includes("autoTdp") && !blocks.includes("tdp");
+  const needsPowerFallback = blocks.includes("autoTdp") && !blocks.includes("tdp") && !blocks.includes("tdpWatts");
   const needsPowerProfileSelector = blocks.some((id) => POWER_PROFILE_BLOCKS.has(id));
 
   const content: ReactNode = (

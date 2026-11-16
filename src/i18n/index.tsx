@@ -1658,6 +1658,9 @@ const es: Record<string, string> = {
   // Control de TDP + conflictos con otros gestores
   "tdp.monitor.notice": "Control de TDP desactivado · modo monitoreo",
   "tdp.monitor.reactivate": "Reactivar control de TDP",
+  "tdp.steamControl.line": "Steam está controlando el TDP",
+  "tdp.steamControl.recover": "Recuperar",
+  "tdp.conflict.hide": "No volver a mostrar",
   "tdp.conflict.take.title": "Tomo el control del TDP",
   "tdp.conflict.take.body": "Detecté otros gestores de TDP funcionando a la vez. Para que los juegos vayan bien, debe mandar solo uno.",
   "tdp.conflict.take.confirm": "Desactivarlos y gestionar yo",
@@ -1892,6 +1895,7 @@ const es: Record<string, string> = {
   "customize.views.delete": "Borrar vista",
   "customize.views.deleteConfirm": "Toca otra vez para borrar",
   "customize.block.tdp": "Control de TDP",
+  "customize.block.tdpWatts": "TDP",
   // Reports
   "report.button": "Enviar un reporte",
   "report.button.desc": "¿Algo falla o te gustaría añadir una función? Cuéntamelo y enviaré también el contexto técnico.",
@@ -3572,6 +3576,9 @@ const en: Record<string, string> = {
   // TDP control + conflicts with other managers
   "tdp.monitor.notice": "TDP control off · monitor only",
   "tdp.monitor.reactivate": "Re-enable TDP control",
+  "tdp.steamControl.line": "Steam is controlling TDP",
+  "tdp.steamControl.recover": "Recover",
+  "tdp.conflict.hide": "Don't show again",
   "tdp.conflict.take.title": "I'll take over the TDP",
   "tdp.conflict.take.body": "I detected other TDP managers running at the same time. For games to run well, only one should be in charge.",
   "tdp.conflict.take.confirm": "Turn them off and let me manage",
@@ -3806,6 +3813,7 @@ const en: Record<string, string> = {
   "customize.views.delete": "Delete view",
   "customize.views.deleteConfirm": "Tap again to delete",
   "customize.block.tdp": "TDP control",
+  "customize.block.tdpWatts": "TDP",
   // Reports
   "report.button": "Send a report",
   "report.button.desc": "Something broken or have a feature in mind? Tell me and I'll include the technical context.",

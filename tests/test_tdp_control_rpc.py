@@ -1902,3 +1902,16 @@ def test_launch_frontend_does_not_duplicate_steam_layout(Plugin):
     frontend = plugin._launch_report_state({"steam_client_layout": {"status": "captured"}})["frontend"]
 
     assert "steam_client_layout" not in frontend
+
+
+def test_hide_steamos_card_persists_and_reaches_the_state(Plugin):
+    p = Plugin()
+    p._init()
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is False
+    assert asyncio.run(p.set_hide_tdp_steamos_card(True)) is True
+    assert asyncio.run(p.get_tdp_state())["hide_tdp_steamos_card"] is True
+    p2 = Plugin()
+    p2._init()
+    assert p2._settings["hide_tdp_steamos_card"] is True
+    assert asyncio.run(p2.get_tdp_state())["tdp_control_enabled"] is True
+    assert asyncio.run(p2.set_hide_tdp_steamos_card(False)) is False

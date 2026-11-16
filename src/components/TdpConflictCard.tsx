@@ -3,6 +3,7 @@ import { Focusable } from "@decky/ui";
 import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
+import { NoticeDismissButton } from "./NoticeCard";
 import { theme } from "../theme";
 
 interface RivalRowProps {
@@ -61,6 +62,7 @@ interface Props {
   onDisableSdtdp: () => void;
   onTakeHhd: () => void;
   onDisablePdcTdp: () => void;
+  onHide?: () => void;
 }
 
 export const TdpConflictCard: FC<Props> = ({
@@ -68,6 +70,7 @@ export const TdpConflictCard: FC<Props> = ({
   onDisableSdtdp,
   onTakeHhd,
   onDisablePdcTdp,
+  onHide,
 }) => {
   const { t } = useI18n();
   return (
@@ -141,6 +144,7 @@ export const TdpConflictCard: FC<Props> = ({
           onAction={onDisablePdcTdp}
         />
       )}
+      {onHide && <NoticeDismissButton label={t("tdp.conflict.hide")} onActivate={onHide} />}
     </div>
   );
 };

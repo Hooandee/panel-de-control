@@ -98,6 +98,16 @@ describe("TdpConflictCard conflict explanation", () => {
     expect(takeover).not.toHaveBeenCalled();
   });
 
+  it("offers to hide the SteamOS Manager card for good only when asked to", () => {
+    const hide = vi.fn();
+    const rivals = { sdtdp: false, hhd: false, powerstation: false, steamOsManager: true };
+    const { rerender } = render(<TdpConflictCard rivals={rivals} onDisableSdtdp={noop} onTakeHhd={noop} onDisablePdcTdp={noop} />);
+    expect(screen.queryByText("copy:tdp.conflict.hide")).toBeNull();
+    rerender(<TdpConflictCard rivals={rivals} onDisableSdtdp={noop} onTakeHhd={noop} onDisablePdcTdp={noop} onHide={hide} />);
+    fireEvent.click(screen.getByText("copy:tdp.conflict.hide"));
+    expect(hide).toHaveBeenCalledTimes(1);
+  });
+
   it("stacks the takeover action below its copy and lets long labels wrap", () => {
     render(
       <TdpConflictCard

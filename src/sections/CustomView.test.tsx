@@ -59,6 +59,8 @@ import { CustomView } from "./CustomView";
 const AutoTdp: FC = () => <div>handheld-auto-tdp</div>;
 const DesktopPower: FC = () => <div>desktop-power</div>;
 const SteamPerformance: FC = () => <div>steam-performance</div>;
+const TdpWatts: FC = () => <div>tdp-watts-block</div>;
+registerBlock("tdpWatts", { sectionId: "power", Component: TdpWatts });
 registerBlock("autoTdp", { sectionId: "power", Component: AutoTdp });
 registerBlock("desktopPower", { sectionId: "power", Component: DesktopPower });
 registerBlock("steamPerformance", { sectionId: "power", Component: SteamPerformance });
@@ -116,5 +118,24 @@ describe("CustomView machine-specific blocks", () => {
 
     expect(screen.getByText("tdp-monitor-fallback")).toBeTruthy();
     expect(screen.getByText("handheld-auto-tdp")).toBeTruthy();
+  });
+
+  it("hosts the watts-only TDP block with the power provider and profile selector", () => {
+    context.blocks = ["tdpWatts"];
+
+    render(<CustomView viewId="mixed" />);
+
+    expect(screen.getByText("tdp-watts-block")).toBeTruthy();
+    expect(screen.getByTestId("power-provider")).toBeTruthy();
+    expect(screen.getByText("profile-selector")).toBeTruthy();
+  });
+
+  it("leaves the control-off notice to the watts block itself", () => {
+    context.blocks = ["autoTdp", "tdpWatts"];
+    context.monitorOnly = true;
+
+    render(<CustomView viewId="mixed" />);
+
+    expect(screen.queryByText("tdp-monitor-fallback")).toBeNull();
   });
 });

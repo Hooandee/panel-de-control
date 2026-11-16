@@ -555,6 +555,7 @@ DEFAULTS = {
     "disabled_modules": [],
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
+    "hide_tdp_steamos_card": False,
     "seen_autotdp_notice": False,
     "charger_notice_dismissed_at": None,
     "kernel_support_notice_dismissed": False,
@@ -4804,6 +4805,12 @@ class Plugin(AmbientRpc):
         self._settings["seen_tdp_conflict_takeover"] = bool(seen)
         self._save()
         return bool(seen)
+
+    async def set_hide_tdp_steamos_card(self, hidden: bool) -> bool:
+        self._init()
+        self._settings["hide_tdp_steamos_card"] = bool(hidden)
+        self._save()
+        return bool(hidden)
 
     async def dismiss_kernel_support_notice(self) -> bool:
         self._init()
@@ -13647,6 +13654,8 @@ class Plugin(AmbientRpc):
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
+            "hide_tdp_steamos_card": bool(
+                self._settings.get("hide_tdp_steamos_card", False)),
             "charger_unstable": self._charger_unstable_state(),
             "kernel_support": self._kernel_support_state(),
         }

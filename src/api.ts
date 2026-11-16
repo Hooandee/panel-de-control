@@ -393,6 +393,8 @@ export interface TdpState {
   // One-time full-screen notices already shown (durable across reboot).
   seen_autotdp_notice: boolean;
   seen_tdp_conflict_takeover: boolean;
+  // The user closed the "Stop controlling TDP" card; Panel keeps control.
+  hide_tdp_steamos_card: boolean;
   // AC kept dropping and coming back; null while power has been steady.
   charger_unstable: ChargerUnstable | null;
   // The kernel has asus-armoury but no power limits for this board yet, so TDP runs
@@ -608,6 +610,8 @@ export const setSeenAutotdpNotice =
   callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
 export const setSeenTdpConflictTakeover =
   callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
+export const setHideTdpSteamosCard =
+  callable<[hidden: boolean], boolean>("set_hide_tdp_steamos_card");
 export const dismissChargerNotice = callable<[], boolean>("dismiss_charger_notice");
 export const dismissKernelSupportNotice = callable<[], boolean>("dismiss_kernel_support_notice");
 

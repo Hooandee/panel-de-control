@@ -6,12 +6,14 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
 interface Props {
+  // Steam is driving the TDP: say so and offer to recover it.
+  steam?: boolean;
   onReactivate?: () => void | Promise<void>;
 }
 
 // Shown in Potencia when the TDP master switch is off: only the live arc plus a
 // button to turn control back on.
-export const TdpMonitorNotice: FC<Props> = ({ onReactivate }) => {
+export const TdpMonitorNotice: FC<Props> = ({ steam = false, onReactivate }) => {
   const { t } = useI18n();
   // Focusable fires onActivate AND onClick; guard for the whole write so one press
   // isn't two RPCs. Released when it settles so a later retry works.
@@ -35,7 +37,7 @@ export const TdpMonitorNotice: FC<Props> = ({ onReactivate }) => {
     >
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, fontSize: theme.font.body, color: theme.color.textMuted }}>
         <LuActivity size={16} color={theme.color.textMuted} style={{ flex: "0 0 auto" }} />
-        {t("tdp.monitor.notice")}
+        {t(steam ? "tdp.steamControl.line" : "tdp.monitor.notice")}
       </div>
       {onReactivate && (
         <Focusable
@@ -53,7 +55,7 @@ export const TdpMonitorNotice: FC<Props> = ({ onReactivate }) => {
             whiteSpace: "nowrap",
           }}
         >
-          {t("tdp.monitor.reactivate")}
+          {t(steam ? "tdp.steamControl.recover" : "tdp.monitor.reactivate")}
         </Focusable>
       )}
     </div>
