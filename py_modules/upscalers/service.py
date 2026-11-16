@@ -232,6 +232,7 @@ class UpscalerService:
                     "proxy": install.get("proxy"),
                     "status": self._status(install, entry),
                     "options": install.get("options") or {},
+                    "fallback": self._last_fallback(install, entry),
                 }
         return {
             "gpu": self.gpu,
@@ -245,6 +246,15 @@ class UpscalerService:
             "job": self.job(),
             "helixsr": {"downloaded": self.helix.ready()},
         }
+
+    @staticmethod
+    def _last_fallback(install: dict, entry: dict) -> dict | None:
+        """What the last check of this build found: the log of an older game session says nothing about it."""
+        history = entry.get("history") or []
+        if not history or history[-1].get("build") != install.get("build"):
+            return None
+        fallen = (history[-1].get("facts") or {}).get("fallback")
+        return fallen if isinstance(fallen, dict) else None
 
     def _engine_summaries(self) -> dict:
         """What Mako and Lossless Scaling do per game, for the list: neither shows up as an install."""
@@ -1764,6 +1774,7 @@ class UpscalerService:
             generating = True
         return {"result": _verdict(install, facts), "resolution": facts.get("resolution"),
                 "resolution_source": facts.get("resolution_source", "unavailable"), "fg": generating, "fg_toggle": not blind,
+                "fallback": facts.get("fallback"),
                 **logread.provider_observation(facts if install.get("engine", "optiscaler") == "optiscaler" else {})}
 
     # ---- lsfg-vk -----------------------------------------------------------------------------
@@ -2019,7 +2030,7 @@ class UpscalerService:
         history = entry.get("history") or []
         if history and history[-1].get("build") == install.get("build") and result != "not_run":
             history[-1]["result"] = result
-            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "initial_resolution", "resolution_source", "version") if k in facts}
+            history[-1]["facts"] = {k: facts[k] for k in ("upscaler", "input", "fg", "resolution", "initial_resolution", "resolution_source", "version", "fallback") if k in facts}
             self._save()
         return {"result": result, "facts": facts}
 
@@ -2263,7 +2274,10 @@ def _facts(install: dict) -> dict:
         return {"present": False, "unverifiable": True}
     if _is_helix(install):
         return helixsr.read_install_log(install)
-    return logread.read(Path(install["target"]), since=diagnostics.verification_since(install))
+    facts = logread.read(Path(install["target"]), since=diagnostics.verification_since(install))
+    if fallen := logread.fallback(install, facts):
+        facts["fallback"] = fallen
+    return facts
 
 
 def _verdict(install: dict, facts: dict) -> str:

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { createPortal } from "react-dom";
 
 import { getUpscalersOverview } from "../api";
-import { useI18n } from "../i18n";
+import { translate, useI18n } from "../i18n";
 import { registerGlobal } from "../platform/globalComponent";
 import { OverGameComposition } from "../platform/overGameComposition";
 import { subscribeQamSurface, type QamSurface } from "../platform/qamSurface";
@@ -13,8 +13,8 @@ import { useGameInFront } from "./gameInFront";
 import { useOverlayLive } from "./useOverlayLive";
 import { startFpsCounterSession } from "./fpsCounter";
 import { onJobUpdate } from "./jobRunner";
-import { badgeLabel } from "./model";
-import type { BuildInfo, UpscalersOverview } from "./types";
+import { badgeLabel, fallbackLine } from "./model";
+import type { BuildInfo, ScalerFallback, UpscalersOverview } from "./types";
 
 export type InGameMode = "off" | "start" | "always";
 export const IN_GAME_MODES: InGameMode[] = ["off", "start", "always"];
@@ -44,6 +44,7 @@ interface Badge {
   provider: ProviderFamily | null;
   fg: boolean;
   fgRoute: string | null;
+  fallback: ScalerFallback | null;
 }
 
 let installs: Record<string, Badge> = {};
@@ -63,7 +64,12 @@ export function publishOverview(overview: UpscalersOverview): void {
   for (const [appid, install] of Object.entries(overview.installs)) {
     const build = overview.builds.find((b) => b.id === install.build);
     const label = badgeLabel(build, install.options?.model, install.build);
-    next[appid] = { label: label.full, short: label.short, state: install.status, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null };
+    const fallback = install.fallback ?? null;
+    // The cover must not announce FSR 4 while the log shows another scaler runs.
+    const cover = fallback
+      ? { label: translate(fallback.observed ? "up.fallback.cover" : "up.fallback.coverNone", { from: fallback.requested, to: fallback.observed ?? "" }), short: fallback.observed ?? translate("up.fallback.coverNone", { from: fallback.requested, to: "" }), state: "fallback" }
+      : { label: label.full, short: label.short, state: install.status };
+    next[appid] = { ...cover, build: install.build, engine: build?.engine ?? null, provider: providerOf(build), fg: install.options?.fg === "on", fgRoute: install.options?.fg_route ?? null, fallback };
   }
   installs = next;
   const covers: Record<string, Badge> = {};
@@ -72,7 +78,7 @@ export function publishOverview(overview: UpscalersOverview): void {
     const label = engines.mako?.spatial ? "Mako"
       : engines.mako?.fg ? `Mako${engines.mako.multiplier ? ` ×${engines.mako.multiplier}` : ""}`
       : engines.lossless ? `Lossless${engines.lossless.multiplier ? ` ×${engines.lossless.multiplier}` : ""}` : null;
-    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null };
+    if (label) covers[appid] = { label, short: label, state: "pending", build: label.toLowerCase(), engine: null, provider: null, fg: false, fgRoute: null, fallback: null };
   }
   engineCovers = covers;
   emit();
@@ -173,8 +179,9 @@ const COVER_CSS = `
 .${BADGE_CLASS} > b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .${BADGE_CLASS}[data-state="active"] > svg { color: #6fe3a1; }
 .${BADGE_CLASS}[data-state="active"] { box-shadow: inset 0 0 0 1px rgba(111, 227, 161, .55), 0 3px 10px rgba(0, 0, 0, .38); }
-.${BADGE_CLASS}[data-state="broken"] > svg, .${BADGE_CLASS}[data-state="broken"] > b { color: #ffbe63; }
-.${BADGE_CLASS}[data-state="broken"] { box-shadow: inset 0 0 0 1px rgba(255, 190, 99, .6), 0 3px 10px rgba(0, 0, 0, .38); }
+.${BADGE_CLASS}[data-state="broken"] > svg, .${BADGE_CLASS}[data-state="broken"] > b,
+.${BADGE_CLASS}[data-state="fallback"] > svg, .${BADGE_CLASS}[data-state="fallback"] > b { color: #ffbe63; }
+.${BADGE_CLASS}[data-state="broken"], .${BADGE_CLASS}[data-state="fallback"] { box-shadow: inset 0 0 0 1px rgba(255, 190, 99, .6), 0 3px 10px rgba(0, 0, 0, .38); }
 .${BADGE_CLASS}[data-size="s"] { padding: 2px 7px 2px 5px; gap: 4px; font-size: 9.5px; line-height: 13px; }
 .${BADGE_CLASS}[data-size="s"] > svg { font-size: 10px; }
 .${BADGE_CLASS}[data-round] { top: auto; left: 50%; bottom: 4%; transform: translateX(-50%); animation-name: pdc-up-badge-in-round; }
@@ -402,6 +409,7 @@ export const InGameBadge: FC = () => {
     ? [observedName, live?.provider_version].filter(Boolean).join(" ")
     : live?.provider_source === "optiscaler_log" && live.provider_name && live.provider_version
       ? `${live.provider_name} ${live.provider_version}` : null;
+  const fallback = live ? live.fallback ?? null : badge?.fallback ?? null;
   const fgLabel = lossless
     ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
@@ -486,7 +494,7 @@ export const InGameBadge: FC = () => {
           }}
         >
           {scalerShown && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>
-            <span>{observedProvider ?? badge!.label}</span>
+            <span style={fallback ? { color: "#ffbe63" } : undefined}>{fallback ? fallbackLine(fallback, t) : observedProvider ?? badge!.label}</span>
             {resolution && <span style={{ color: "#9aa3ae", fontVariantNumeric: "tabular-nums" }}>{resolution[0]}p → {resolution[1]}p</span>}
           </div>}
           {makoSpatial && <div style={{ background: "#15181e", borderRadius: 8, padding: "3px 10px", display: "flex", gap: 8 }}>

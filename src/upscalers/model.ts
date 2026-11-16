@@ -1,5 +1,5 @@
 import { addArg, getEnv, hasArg, parse, removeArg, serialize, setEnv } from "../launch/compose";
-import type { BuildInfo, FgRoute, HistoryEntry, Quality, UpscalerChoice } from "./types";
+import type { BuildInfo, FgRoute, HistoryEntry, Quality, ScalerFallback, UpscalerChoice } from "./types";
 
 const OVERRIDES = "WINEDLLOVERRIDES";
 
@@ -47,6 +47,13 @@ export function badgeLabel(build: Pick<BuildInfo, "family" | "version" | "models
   const lite = build.models?.includes("lite") && model !== "full" ? " Lite" : "";
   const major = build.version.split(".")[0];
   return { full: `${family} ${build.version}${lite}`.trim(), short: `${family} ${major}${lite}`.trim() };
+}
+
+/** What a card or the in-game pill says when the log shows the installed scaler is not the one running. */
+export function fallbackLine(fallback: ScalerFallback, t: (key: string, params?: Record<string, string | number>) => string): string {
+  return fallback.observed
+    ? t("up.fallback.line", { from: fallback.requested, to: fallback.observed })
+    : t("up.fallback.lineNone", { from: fallback.requested });
 }
 
 export function buildLabel(build: Pick<BuildInfo, "family" | "version"> & { channel?: BuildInfo["channel"] }): string {

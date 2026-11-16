@@ -254,6 +254,8 @@ def _snapshot(install) -> dict:
                     injector_version=facts.get("version"),
                     **logread.provider_observation(facts if engine == "optiscaler" else {}))
     observed["resolution_source"] = facts.get("resolution_source", "unavailable")
+    if engine == "optiscaler" and (fallen := logread.fallback(install, facts)):
+        observed["fallback"] = fallen
     for name in ("resolution", "initial_resolution"):
         resolution = facts.get(name)
         if isinstance(resolution, dict):
@@ -532,6 +534,8 @@ def game_report(home: str, appid: str, entry: dict, installed=None) -> dict:
     elif install:
         target = Path(install.get("target", ""))
         facts = logread.read(target, since=verification_since(install))
+        if fallen := logread.fallback(install, facts):
+            facts["fallback"] = fallen
         report.update({
             "manifest": _manifest_check(target),
             "ini": ini_values(target / "OptiScaler.ini"),
