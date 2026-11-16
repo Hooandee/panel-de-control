@@ -799,13 +799,14 @@ class UpscalerService:
                 attempts: list[dict] = []
                 try:
                     try:
-                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts)
+                        receipt = prefix_dependencies.prepare(self.home, installed, auto_recipes.verbs(automatic), self.logger, self.proc, attempts,
+                                                              cancelled=self._cancel.is_set)
                     finally:
                         entry["windows_components"] = {"at": time.time(), "attempts": attempts[-8:]}
                 except (prefix_dependencies.DependencyError, OSError) as error:
                     components_error = getattr(error, "code", type(error).__name__)
                     entry["windows_components"]["error"] = components_error
-                    if components_error == "running":
+                    if components_error in ("running", "cancelled"):
                         raise
                     # The game files still go in: the game page says what is missing and offers to try again.
                     receipt = None
