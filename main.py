@@ -10459,16 +10459,23 @@ class Plugin(AmbientRpc):
         return result
 
     def _guard_sleep_with_cores_off(self) -> None:
-        """Runs on the serial executor: with any core switched off, make sure the
-        system brings them back before it sleeps."""
+        """Keep offline physical cores or SMT siblings safe before sleep."""
+        if getattr(self, "_cpu_shutdown", False):
+            return
         cores = getattr(self, "_cores", None)
-        if not getattr(cores, "supported", False) or getattr(self, "_cpu_shutdown", False):
-            return
+        smt = getattr(self, "_smt", None)
+        limited = smt_off = False
         try:
-            limited = cores.active() < cores.max_cores
+            if getattr(cores, "supported", False):
+                limited = cores.active() < cores.max_cores
         except Exception:  # noqa: BLE001
-            return
-        if not limited:
+            pass
+        try:
+            if getattr(smt, "supported", False):
+                smt_off = not smt.enabled()
+        except Exception:  # noqa: BLE001
+            pass
+        if not (limited or smt_off):
             return
         guard = getattr(self, "_sleep_core_guard", None)
         if guard is None:
@@ -10480,8 +10487,9 @@ class Plugin(AmbientRpc):
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
         generation = self._next_cpu_generation()
         selected = intent if intent is not None else self._cpu_intent()
-        if trigger != "set_cores":
-            selected = self._hold_cores_after_resume(selected)
+        selected = self._hold_cores_after_resume(
+            selected, allow_cores=trigger == "set_cores", allow_smt=trigger == "set_smt",
+        )
         result = await self._offload_call(
             lambda: self._run_cpu_apply(selected, generation, enabled)
         )
@@ -12028,25 +12036,43 @@ class Plugin(AmbientRpc):
         self._pulse_mark("resume", sync=False, suspend_s=suspend_seconds, token=self._resume_token)
         self._start_resume_hold(self._resume_token)
 
-    def _hold_cores_after_resume(self, intent: dict) -> dict:
-        """During the hold every core stays online; only an explicit core change applies."""
-        if intent.get("cores") is None or not self._resume_hold_active():
+    def _hold_cores_after_resume(
+        self, intent: dict, *, allow_cores=False, allow_smt=False,
+    ) -> dict:
+        """Hold automatic restrictions; an explicit choice overrides only its field."""
+        if not self._resume_hold_active():
             return intent
-        self._note_resume_hold("cores", requested=intent.get("cores"))
-        return {**intent, "cores": None}
+        context = (getattr(self, "_current_appid", None), self._cpu_scope_label())
+        if getattr(self, "_resume_hold_override_context", None) != context:
+            self._resume_hold_overrides = set()
+            self._resume_hold_override_context = context
+        overrides = self._resume_hold_overrides
+        if allow_cores:
+            overrides.add("cores")
+        if allow_smt:
+            overrides.add("smt")
+        selected = dict(intent)
+        if intent.get("cores") is not None and "cores" not in overrides:
+            self._note_resume_hold("cores", requested=intent["cores"])
+            selected["cores"] = None
+        if intent.get("smt") is False and "smt" not in overrides:
+            self._note_resume_hold("smt", requested=False)
+            selected["smt"] = True
+        return selected
 
     def _resume_hold_active(self) -> bool:
         return getattr(self, "_resume_hold_token", None) is not None
 
     def _start_resume_hold(self, token) -> None:
-        """Core limits and a manual GPU clock wait until the machine has been awake
-        for _RESUME_HOLD_S; everything else re-applies as before."""
+        """Automatic CPU restrictions and manual GPU clocks wait after resume."""
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
         self._resume_hold_token = token
         self._resume_hold_noted = set()
+        self._resume_hold_overrides = set()
+        self._resume_hold_override_context = None
         loop.call_later(_RESUME_HOLD_S, self._release_resume_hold, token)
 
     def _note_resume_hold(self, what, **detail) -> None:
@@ -12068,17 +12094,22 @@ class Plugin(AmbientRpc):
 
     def _release_resume_hold(self, token) -> None:
         if getattr(self, "_resume_hold_token", None) != token:
-            return  # a newer resume restarted the hold
-        held = sorted(getattr(self, "_resume_hold_noted", None) or ())
+            return
+        overrides = getattr(self, "_resume_hold_overrides", None) or set()
+        held = sorted(set(getattr(self, "_resume_hold_noted", None) or ()) - overrides)
         self._resume_hold_token = None
         self._resume_hold_noted = None
+        self._resume_hold_overrides = None
+        self._resume_hold_override_context = None
         if getattr(self, "_shutting_down", False):
             return
         self._log_resume_hold("released", held=held)
         if not held:
             return
-        if "cores" in held:
-            self._queue_pulse_mark("release:cores", token)
+        cpu_fields = [field for field in ("cores", "smt") if field in held]
+        if cpu_fields:
+            for field in cpu_fields:
+                self._queue_pulse_mark(f"release:{field}", token)
             self._apply_cpu()
         if "gpu" in held:
             self._queue_pulse_mark("release:gpu", token)
@@ -12090,6 +12121,7 @@ class Plugin(AmbientRpc):
         return {
             "active": self._resume_hold_active(),
             "hold_s": _RESUME_HOLD_S,
+            "overridden": sorted(getattr(self, "_resume_hold_overrides", None) or ()),
             "history": list(getattr(self, "_resume_hold_history", ())),
             "sleep_core_guard": guard.diagnostics() if guard is not None else None,
         }
