@@ -824,6 +824,8 @@ export const ptBR: Record<string, string> = {
   "themes.health.title": "Problemas com um tema?",
   "themes.health.covered.title": "Problemas com um tema?",
   "themes.health.covered.body": "Um tema está cobrindo o menu de acesso rápido. Toque para corrigir.",
+  "backend.outdated.title": "Os temas precisam reiniciar o Decky",
+  "backend.outdated.body": "Panel de Control foi atualizado e o Decky precisa ser reiniciado. Toque para reiniciar.",
   "themes.health.summary.checking": "Verificando temas, pastas e tela…",
   "themes.health.summary.unavailable": "Não foi possível verificar a pasta de temas.",
   "themes.health.summary.clean": "Tudo certo: nada deve interferir nos temas.",

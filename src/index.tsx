@@ -51,6 +51,8 @@ import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { recordUiDiagnostic, startFrontendErrorReporting } from "./system/uiDiagnostics";
+import { setStaleBackendSink } from "./system/staleBackend";
+import { reloadDeckyAfterClosingMenus } from "./system/reloadDecky";
 import { recordUiEvent as queueUiEvent, setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
@@ -224,6 +226,14 @@ export default definePlugin(() => {
 
   const stopFrontendErrorReporting = startFrontendErrorReporting(window);
   setUiEventSink((area, action, detail, ok) => recordUiEvent(area, action, detail, ok));
+  setStaleBackendSink((detail) => {
+    recordUiDiagnostic("themes", "backend_outdated", detail);
+    toaster.toast({
+      title: translate("backend.outdated.title"),
+      body: translate("backend.outdated.body"),
+      onClick: reloadDeckyAfterClosingMenus,
+    });
+  });
   const stopGameWatcher = startGameWatcher();
   const stopCollectionsHeal = startCollectionsHeal(
     () => (globalThis as { collectionStore?: object }).collectionStore,
@@ -325,6 +335,7 @@ export default definePlugin(() => {
       stopSteamPerformanceOwnership();
       stopGameWatcher();
       stopFrontendErrorReporting();
+      setStaleBackendSink(null);
       setUiEventSink(null);
       stopEcoAmbient();
       stopValueToast();

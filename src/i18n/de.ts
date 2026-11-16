@@ -824,6 +824,8 @@ export const de: Record<string, string> = {
   "themes.health.title": "Probleme mit einem Theme?",
   "themes.health.covered.title": "Probleme mit einem Theme?",
   "themes.health.covered.body": "Ein Theme verdeckt das Schnellzugriffsmenü. Tippen zum Beheben.",
+  "backend.outdated.title": "Themes erfordern einen Neustart von Decky",
+  "backend.outdated.body": "Panel de Control wurde aktualisiert, Decky muss neu gestartet werden. Tippen zum Neustarten.",
   "themes.health.summary.checking": "Themes, Ordner und Anzeige werden geprüft…",
   "themes.health.summary.unavailable": "Der Theme-Ordner konnte nicht geprüft werden.",
   "themes.health.summary.clean": "Alles in Ordnung: Nichts sollte die Themes stören.",
