@@ -84,4 +84,21 @@ describe("per-channel curves (Por separado)", () => {
     expect(mocks.setFanCurvePoints).toHaveBeenCalledTimes(1);
     expect(mocks.setFanCurvePoints).toHaveBeenCalledWith(B, "global", null, "gpu");
   });
+
+  it("applies only the most recent write response when the two fans answer out of order", async () => {
+    mocks.getFanCurveState.mockResolvedValue(split);
+    const answers: Array<(s: FanCurveState) => void> = [];
+    mocks.setFanCurvePoints.mockImplementation(() => new Promise((resolve) => { answers.push(resolve); }));
+    const { result } = renderHook(() => useFanCurve());
+    await act(async () => { await Promise.resolve(); });
+    act(() => { result.current.onChannelCurve("cpu", A); });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    act(() => { result.current.onChannelCurve("gpu", B); });
+    await act(async () => { vi.advanceTimersByTime(200); });
+    const stale = { ...split, bias: 1 } as unknown as FanCurveState;
+    const latest = { ...split, bias: 2 } as unknown as FanCurveState;
+    await act(async () => { answers[1](latest); await Promise.resolve(); });
+    await act(async () => { answers[0](stale); await Promise.resolve(); });
+    expect(result.current.state).toBe(latest);
+  });
 });

@@ -61,6 +61,7 @@ export function useFanCurve(): FanCurveControl {
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One debounce per fan in per-channel mode: dragging CPU must not cancel a pending GPU commit.
+  const writeGen = useRef(0);
   const channelCommit = useRef<Partial<Record<SplitFanKey, ReturnType<typeof setTimeout>>>>({});
 
   // Don't apply a late RPC response after the section/modal unmounts.
@@ -194,9 +195,10 @@ export function useFanCurve(): FanCurveControl {
       setState((cur) => (cur ? { ...cur, preset: "custom", points } : cur)); // optimistic
       if (commit.current) clearTimeout(commit.current);
       commit.current = setTimeout(() => {
+        const gen = ++writeGen.current;
         setFanCurvePoints(points, targetScope, targetAppid)
           .then((next) => {
-            if (!alive.current) return;
+            if (!alive.current || gen !== writeGen.current) return;
             setState(next);
             flashSaved();
           })
@@ -228,9 +230,10 @@ export function useFanCurve(): FanCurveControl {
       if (pending) clearTimeout(pending);
       channelCommit.current[channel] = setTimeout(() => {
         delete channelCommit.current[channel];
+        const gen = ++writeGen.current;
         setFanCurvePoints(points, targetScope, targetAppid, channel)
           .then((next) => {
-            if (!alive.current) return;
+            if (!alive.current || gen !== writeGen.current) return;
             setState(next);
             flashSaved();
           })
