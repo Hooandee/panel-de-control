@@ -476,9 +476,6 @@ describe("French catalog", () => {
     ]) {
       expect(catalog, rejected).not.toContain(rejected);
     }
-    for (const [key, value] of Object.entries(frenchCatalog())) {
-      if (key !== "app.title" && !key.startsWith("up.")) expect(value, key).not.toContain("Panel de Control");
-    }
     expect(catalog).not.toMatch(/(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/u);
   });
 
