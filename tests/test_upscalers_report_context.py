@@ -109,7 +109,7 @@ def test_advanced_records_known_values_but_omits_paths_and_free_text(tmp_path):
 
 def test_lsfg_request_and_applied_profile_are_preserved(steam, fake_catalog, proc, monkeypatch):
     service = _service(steam, fake_catalog, proc)
-    knobs = {'multiplier': 3, 'flow': 'quality', 'performance': False}
+    knobs = {'multiplier': 3, 'flow_scale': 0.85, 'performance': False}
     monkeypatch.setattr(service.lsfg, 'status', lambda: {'profiles': {APPID: {**knobs, 'exe': 'private'}}})
     service.record_action(APPID, 'lsfg_game', 'done', {**knobs, 'enabled': True, 'env': 'secret'})
     event = service.report()['games'][0]['actions'][-1]

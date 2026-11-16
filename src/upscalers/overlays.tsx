@@ -403,7 +403,7 @@ export const InGameBadge: FC = () => {
     : live?.provider_source === "optiscaler_log" && live.provider_name && live.provider_version
       ? `${live.provider_name} ${live.provider_version}` : null;
   const fgLabel = lossless
-    ? `Lossless Scaling ×${lossless.multiplier} ${t(`up.lsfg.flow.${lossless.flow}`)}`
+    ? `Lossless Scaling ×${lossless.multiplier} · ${t("up.lsfg.flowScale")} ${Math.round(lossless.flow_scale * 100)} %`
     : badge?.fg ? t(`up.fg.pick.${badge.fgRoute ?? "optiscaler"}`) : null;
   const fgState = lossless || live?.fg == null ? t("up.overlay.configured") : live.fg ? t("up.overlay.generating") : t("up.overlay.paused");
 

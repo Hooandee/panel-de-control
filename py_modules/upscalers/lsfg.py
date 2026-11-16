@@ -9,6 +9,7 @@ config file it wrote, and leaves another tool's install or config alone.
 """
 
 import json
+import math
 import os
 import tempfile
 import threading
@@ -32,8 +33,13 @@ LAYER_FILES = (
 CONFIG = ".config/lsfg-vk/conf.toml"
 MARKER = "# Managed by Panel de Control"
 MULTIPLIERS = (2, 3, 4, 5, 6)
-# lsfg-vk accepts 0.25-1.0; lower is faster and softer.
-FLOW_SCALES = {"quality": 1.0, "balanced": 0.75, "performance": 0.5, "fastest": 0.25}
+# lsfg-vk rejects a flow_scale outside 0.25-1.0 (lsfg-vk-config/src/config.cpp); its own default is 1.0.
+FLOW_SCALE_MIN = 0.25
+FLOW_SCALE_MAX = 1.0
+# What Panel pre-selects for a profile it creates: lighter than lsfg-vk's own 1.0 for handheld GPUs.
+FLOW_SCALE_DEFAULT = 0.75
+# Profiles saved before the free value kept one of these names.
+FLOW_PRESETS = {"quality": 1.0, "balanced": 0.75, "performance": 0.5, "fastest": 0.25}
 # lsfg-vk rejects a config without any [[profile]] and then fails every present (the game freezes).
 PLACEHOLDER = "pdc-none"
 PAUSED_LIMIT = 50
@@ -77,6 +83,9 @@ class Lsfg:
             return {"files": {}, "profiles": {}}
         data.setdefault("files", {})
         data.setdefault("profiles", {})
+        for profile in data["profiles"].values():
+            preset = profile.pop("flow", None)
+            profile.setdefault("flow_scale", FLOW_PRESETS.get(preset, FLOW_SCALE_DEFAULT))
         return data
 
     def _own(self, path: Path) -> None:
@@ -315,13 +324,13 @@ class Lsfg:
                     paused.append(appid)
             else:
                 multiplier = int(config.get("multiplier", 2))
-                flow = str(config.get("flow", "balanced"))
-                if multiplier not in MULTIPLIERS or flow not in FLOW_SCALES:
+                flow_scale = _flow_scale(config)
+                if multiplier not in MULTIPLIERS or flow_scale is None:
                     raise LsfgError("lsfg_invalid")
                 data["profiles"][appid] = {
                     "name": str(name or appid)[:80],
                     "multiplier": multiplier,
-                    "flow": flow,
+                    "flow_scale": flow_scale,
                     "performance": bool(config.get("performance", True)),
                     "exe": Path(exe).name if exe else None,
                 }
@@ -352,7 +361,7 @@ class Lsfg:
                 lines.append(f"active_in = [{_toml(profile['exe'])}]")
             lines += [
                 f"multiplier = {profile['multiplier']}",
-                f"flow_scale = {FLOW_SCALES[profile['flow']]}",
+                f"flow_scale = {profile['flow_scale']}",
                 f"performance_mode = {'true' if profile['performance'] else 'false'}",
             ]
         tmp = self._stage_bytes(self.config_path, ("\n".join(lines) + "\n").encode())
@@ -366,6 +375,20 @@ class Lsfg:
 def profile_name(appid: str) -> str:
     """Spaceless so `LSFGVK_PROFILE=` needs no quoting in Steam's launch options."""
     return f"pdc-{appid}"
+
+
+def _flow_scale(config: dict) -> float | None:
+    """`flow_scale` wins; a legacy preset name still works; neither means Panel's default. None when out of lsfg-vk's range."""
+    if "flow_scale" in config:
+        value = config["flow_scale"]
+    elif "flow" in config:
+        value = FLOW_PRESETS.get(config["flow"])
+    else:
+        value = FLOW_SCALE_DEFAULT
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    value = round(float(value), 2)
+    return value if FLOW_SCALE_MIN <= value <= FLOW_SCALE_MAX else None
 
 
 def _toml(value: str) -> str:

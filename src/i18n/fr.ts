@@ -539,6 +539,8 @@ export const fr: Record<string, string> = {
   "up.foreign.adopt": "Le remplacer par celui de Panel de Control",
   "up.lsfg.light": "Mode performance",
   "up.lsfg.lightHint": "Réduit la consommation GPU au détriment de la qualité.",
+  "up.lsfg.flowScale": "Échelle de flux",
+  "up.lsfg.flowScaleHint": "Résolution à laquelle le mouvement est calculé (%). Moins : plus de performances, qualité réduite.",
   "up.overlay.configured": "Configuré",
   "up.overlay.generating": "Génération de frames active",
   "up.overlay.paused": "En pause",

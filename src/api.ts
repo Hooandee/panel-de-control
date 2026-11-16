@@ -1414,7 +1414,7 @@ export const restoreUpscalerImageSettings = callable<[appid: string], UpscalerIm
 export const getUpscalerIni = callable<[appid: string], { sections: IniSection[] }>("get_upscaler_ini");
 export const setUpscalerIni = callable<[appid: string, key: string, value: string], { key: string; value: string }>("set_upscaler_ini");
 export const getUpscalerLive = callable<[appid: string], { result: string; resolution?: { render: number[]; output: number[] } | null; resolution_source?: "initialization_only" | "unavailable"; fg?: boolean | null; fg_toggle?: boolean; fps?: number | null; provider_family?: "fsr" | "dlss" | "xess" | null; provider_name?: "FSR" | "DLSS" | "XeSS" | null; provider_version?: string | null; provider_source?: "optiscaler_log" | "unavailable"; provider_confidence?: "family_only" | "unknown" }>("get_upscaler_live");
-export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
+export interface LsfgProfile { name: string; multiplier: 2 | 3 | 4 | 5 | 6; flow_scale: number; performance: boolean }
 export interface EngineUpdate { state: "current" | "available" | "updated" | "deferred" | "failed" | "unmanaged"; version: string; available?: string }
 export const refreshFrameGenEngine = callable<[engine: "mako" | "lsfg", apply?: boolean], EngineUpdate>("refresh_framegen_engine");
 export interface LsfgStatus { version?: string | null; installed: boolean; foreign: boolean; foreign_backup?: boolean; cleared?: string[]; lossless: boolean; dll: string | null; profiles: Record<string, LsfgProfile> }
@@ -1425,7 +1425,7 @@ export const restoreForeignUpscaler = callable<[appid: string], { restored: stri
 export const getLsfgStatus = callable<[], LsfgStatus>("get_lsfg_status");
 export const installLsfg = callable<[], LsfgStatus>("install_lsfg");
 export const setLsfgGame = callable<[appid: string, config: Partial<LsfgProfile> | null], { env: Record<string, string>; profile: LsfgProfile | null }>("set_lsfg_game");
-export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: LsfgProfile["flow"]; performance: boolean }
+export interface MakoProfile { enabled?: boolean; scaling_enabled?: boolean; scaling_factor?: number; scaling_sharpness?: number; name?: string; mode: "fixed" | "adaptive"; multiplier: 2 | 3 | 4 | 5; target_fps: number; max_multiplier: 2 | 3 | 4 | 5; flow: "quality" | "balanced" | "performance" | "fastest"; performance: boolean }
 export interface MakoStatus { scaler_transition_pending?: boolean; spatial_ready?: boolean; installed: boolean; ready: boolean; supported: boolean; reason: string | null; dll: boolean; foreign: boolean; version: string | null; profiles: Record<string, MakoProfile> }
 export const getMakoStatus = callable<[appid?: string], MakoStatus>("get_mako_status");
 export const installMako = callable<[], MakoStatus>("install_mako");

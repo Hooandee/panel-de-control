@@ -37,7 +37,7 @@ it("never overlaps slow requests and ignores responses from a previous game", as
   expect(result.current.live?.result).toBe("active");
 });
 it("reads a Lossless profile without an OptiScaler installation and clears it after removal", async () => {
-  const profile = { multiplier: 2, flow: "balanced", performance: true };
+  const profile = { multiplier: 2, flow_scale: 0.75, performance: true };
   vi.mocked(getLsfgStatus).mockResolvedValue({ profiles: { "1": profile } } as never);
   const { result } = renderHook(() => useOverlayLive("1", false));
   await act(async () => {});

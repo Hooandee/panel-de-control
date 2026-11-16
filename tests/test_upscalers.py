@@ -966,6 +966,65 @@ def test_lsfg_installs_the_layer_and_writes_per_game_profiles(steam, tmp_path):
     assert not (home / ".local" / lsfg.LAYER_FILES[0]).exists() and not (home / lsfg.CONFIG).exists()
 
 
+def _lsfg_tool(steam, tmp_path):
+    home, _ = steam
+    library = home / ".local/share/Steam"
+    _write(library / "steamapps/appmanifest_993090.acf", '"AppState"\n{\n "appid" "993090"\n}\n')
+    _write(library / "steamapps/common/Lossless Scaling/lsfg-vk.dll", b"dll")
+    tool = lsfg.Lsfg(str(home), tmp_path / "state")
+    tool.install(_lsfg_bundle(tmp_path / "bundle"), "lsfg-vk-2.0.0")
+    return home, tool
+
+
+def _flow_scale(home):
+    import tomllib
+    return tomllib.loads((home / lsfg.CONFIG).read_text())["profile"][0]["flow_scale"]
+
+
+def test_lsfg_flow_scale_keeps_the_previous_value_when_untouched(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "performance": True})
+    assert _flow_scale(home) == 0.75
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "fastest", "performance": True})
+    assert _flow_scale(home) == 0.25
+
+
+def test_lsfg_flow_scale_writes_the_chosen_value(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    result = tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.85, "performance": False})
+    assert _flow_scale(home) == 0.85
+    assert result["profile"]["flow_scale"] == 0.85
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 0.85
+    tool.set_game("1", "Game", {"multiplier": 3, "flow_scale": 0.333, "performance": False})
+    assert _flow_scale(home) == 0.33
+
+
+def test_lsfg_flow_scale_accepts_the_lsfg_vk_range_and_nothing_else(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    for edge in (0.25, 1.0):
+        tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": edge})
+        assert _flow_scale(home) == edge
+    for bad in (0.24, 1.01, 0, -1, float("nan"), float("inf"), "0.5", True, None):
+        with pytest.raises(lsfg.LsfgError, match="lsfg_invalid"):
+            tool.set_game("1", "Game", {"multiplier": 2, "flow_scale": bad})
+    assert _flow_scale(home) == 1.0
+
+
+def test_lsfg_flow_scale_reads_a_profile_saved_with_a_preset(steam, tmp_path):
+    home, tool = _lsfg_tool(steam, tmp_path)
+    tool.set_game("1", "Game", {"multiplier": 2, "flow": "performance"})
+    data = tool._manifest()
+    data["profiles"]["1"] = {key: value for key, value in data["profiles"]["1"].items() if key != "flow_scale"}
+    data["profiles"]["1"]["flow"] = "quality"
+    tool._save(data)
+    assert tool.status()["profiles"]["1"]["flow_scale"] == 1.0
+    tool.set_game("2", "Other", {"multiplier": 2})
+    tool._write_config(tool._manifest())
+    import tomllib
+    scales = {p["name"]: p["flow_scale"] for p in tomllib.loads((home / lsfg.CONFIG).read_text())["profile"]}
+    assert scales == {"pdc-1": 1.0, "pdc-2": 0.75}
+
+
 def test_lsfg_never_writes_over_another_tools_setup(steam, tmp_path):
     home, _ = steam
     _write(home / lsfg.CONFIG, "version = 2\n[global]\nallow_fp16 = true\n")

@@ -539,6 +539,8 @@ export const ptBR: Record<string, string> = {
   "up.foreign.adopt": "Trocar pelo do Panel de Control",
   "up.lsfg.light": "Modo desempenho",
   "up.lsfg.lightHint": "Reduz o consumo da GPU em troca de qualidade.",
+  "up.lsfg.flowScale": "Escala de fluxo",
+  "up.lsfg.flowScaleHint": "Resolução em que o movimento é calculado (%). Menos: mais desempenho, menos qualidade.",
   "up.overlay.configured": "Configurado",
   "up.overlay.generating": "Gerando frames",
   "up.overlay.paused": "Pausado",

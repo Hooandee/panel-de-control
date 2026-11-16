@@ -197,7 +197,7 @@ class UpscalerService:
             try:
                 profile = self.lsfg.status().get("profiles", {}).get(str(appid))
                 event["applied_lsfg"] = {"enabled": profile is not None,
-                    **diagnostics.fields(profile, ("multiplier", "flow", "performance"))}
+                    **diagnostics.fields(profile, ("multiplier", "flow_scale", "performance"))}
             except Exception:
                 event["applied_lsfg"] = {"status": "unavailable"}
         if action == "mako_game":
