@@ -51,7 +51,7 @@ import { watchQamCover } from "./themes/qamCoverWatch";
 import { ControlCenter } from "./components/ControlCenter";
 import { ReportingBoundary } from "./components/ReportingBoundary";
 import { recordUiDiagnostic, startFrontendErrorReporting } from "./system/uiDiagnostics";
-import { setUiEventSink } from "./system/uiEvents";
+import { recordUiEvent as queueUiEvent, setUiEventSink } from "./system/uiEvents";
 import { startSteamPerformanceOwnership } from "./steam/performanceOwnership";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startCollectionsHeal } from "./steam/healCollections";
@@ -299,6 +299,7 @@ export default definePlugin(() => {
     power: createPowerPort(),
     notify: (title, body) => toaster.toast({ title, body }),
     translate,
+    recordEvent: (action, detail) => queueUiEvent("ambient", action, detail),
   });
 
   const content = (

@@ -9,7 +9,7 @@ import type { AmbientRuntime, AmbientSnapshot } from "../steam/runtime";
 import { FloatingPlayer } from "./FloatingPlayer";
 import { registerLibraryDock, setLibraryDockFocus } from "./libraryDock";
 import { setAmbientRuntime } from "./useAmbient";
-import { setUiEventSink } from "../../system/uiEvents";
+import { recordUiEvent, setUiEventSink } from "../../system/uiEvents";
 
 const platform = vi.hoisted(() => ({
   composition: null as number | null,
@@ -318,7 +318,7 @@ describe("FloatingPlayer fullscreen", () => {
     setUiEventSink((area, action, detail) => {
       if (area === "ambient") events.push({ action, detail });
     });
-    render(<FloatingPlayer />);
+    render(<FloatingPlayer recordEvent={(action, fields) => recordUiEvent("ambient", action, fields)} />);
     act(() => vi.advanceTimersByTime(1100));
     expect(events).toHaveLength(1);
     expect(JSON.parse(events[0]!.detail)).toMatchObject({

@@ -9,7 +9,6 @@ import { CONTROL_BUTTONS, CONTROL_IDLE_MS, GamepadButton, controlAction, keyToBu
 import { captureButtons } from "../../platform/buttonCapture";
 import { onQamLeftEdge, qamPanelWidth, subscribeQamSurface, type QamSurface } from "../../platform/qamSurface";
 import { subscribeVirtualKeyboard } from "../../platform/virtualKeyboard";
-import { recordUiEvent } from "../../system/uiEvents";
 import { floatingDiagnostics } from "../steam/floatingDiagnostics";
 import {
   cardWidth,
@@ -71,7 +70,11 @@ interface Drag {
  */
 const ENTRY_GUARD_MS = 400;
 
-export const FloatingPlayer: FC = () => {
+export interface FloatingPlayerProps {
+  recordEvent?: (action: string, fields: Record<string, unknown>) => void;
+}
+
+export const FloatingPlayer: FC<FloatingPlayerProps> = ({ recordEvent }) => {
   const { runtime, snapshot } = useAmbient();
   const { t } = useI18n();
   const dock = useLibraryDock();
@@ -135,12 +138,12 @@ export const FloatingPlayer: FC = () => {
   const videoRunning = video && (playing || player?.status === "loading" || player?.status === "retrying");
   const visible = !!player?.track && !keyboardShown && (libraryOpen ? !!dockElement : videoRunning || pillWanted || controlling);
   useEffect(() => {
-    if (!host || !view) return;
+    if (!host || !view || !recordEvent) return;
     const frame = view.requestAnimationFrame(() => {
-      recordUiEvent("ambient", "floating_keyboard", { ...floatingDiagnostics(view.document, keyboardShown) });
+      recordEvent("floating_keyboard", { ...floatingDiagnostics(view.document, keyboardShown) });
     });
     return () => view.cancelAnimationFrame(frame);
-  }, [host, keyboardShown, view]);
+  }, [host, keyboardShown, view, recordEvent]);
 
   const rightInset = qamOpen && surface ? qamPanelWidth(surface.document) ?? 0 : 0;
   const normalWidth = viewport ? cardWidth(viewport, rightInset, video, music?.videoScale ?? 40) : 0;

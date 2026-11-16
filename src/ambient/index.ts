@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { registerGlobal } from "../platform/globalComponent";
 
 import { registerCatalog } from "../i18n";
@@ -7,7 +8,7 @@ import { getAmbientThemeImages, keepAmbientThemeImages, registerAmbientThemeImag
 import { AmbientRuntime } from "./steam/runtime";
 import { AmbientThemeChannel } from "./steam/themeChannel";
 import { ThemeImages } from "./steam/themeImages";
-import { FloatingPlayer } from "./ui/FloatingPlayer";
+import { FloatingPlayer, type FloatingPlayerProps } from "./ui/FloatingPlayer";
 import { QamSidePlayer } from "./ui/QamSidePlayer";
 import { openThemeImagePicker } from "./ui/ThemeImagePicker";
 import { AMBIENT_STRINGS } from "./ui/strings";
@@ -25,6 +26,7 @@ export interface AmbientHost {
   power: PowerPort;
   notify: (title: string, body: string) => void;
   translate: (key: string, vars?: Record<string, string>) => string;
+  recordEvent?: FloatingPlayerProps["recordEvent"];
 }
 
 /** Starts the Ambient domain at plugin load; the returned function tears it down completely. */
@@ -40,7 +42,7 @@ export function startAmbient(host: AmbientHost): () => void {
   setAmbientRuntime(runtime);
   runtime.start().catch((error) => console.warn("[ambient:start_failed]", error));
   const sidePlayer = registerGlobal("PanelDeControlAmbientQamPlayer", QamSidePlayer);
-  const floating = registerGlobal("PanelDeControlAmbientFloating", FloatingPlayer);
+  const floating = registerGlobal("PanelDeControlAmbientFloating", () => createElement(FloatingPlayer, { recordEvent: host.recordEvent }));
   return () => {
     floating();
     sidePlayer();
