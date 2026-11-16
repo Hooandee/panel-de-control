@@ -105,3 +105,18 @@ def test_oversized_local_list_is_refused(library):
     lists = service.scan()["lists"]
     (folder / "tv.m3u8").write_bytes(b"#" * (9 * 1024 * 1024))
     assert service.playlist(lists[0]["id"])["error"] == "unreachable"
+
+
+def test_a_listed_file_that_the_scan_has_not_indexed_is_still_served(library):
+    service, folder = library
+    lists = service.scan()["lists"]
+    (folder / "radio" / "nuevo.mp3").write_bytes(b"n")
+    (folder / "tv.m3u8").write_text("#EXTM3U\n#EXTINF:-1,Nuevo\nradio/nuevo.mp3\n")
+    del service.media_url  # use the real resolver
+    service._ensure_server = lambda: True  # type: ignore[method-assign]
+    service._server = type("S", (), {
+        "url_for": staticmethod(lambda media: "http://127.0.0.1/media/" + media),
+        "stop": staticmethod(lambda: None),
+    })()
+    contents = service.playlist(lists[0]["id"])
+    assert [c["name"] for c in contents["channels"]] == ["Nuevo"]

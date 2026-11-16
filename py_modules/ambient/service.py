@@ -914,6 +914,7 @@ class AmbientService:
         media = local_media_id(real)
         with self._lock:
             self._list_media[media] = real
+            self._index[media] = real
         url = self.media_url(media)
         return {"url": url} if url else None
 
